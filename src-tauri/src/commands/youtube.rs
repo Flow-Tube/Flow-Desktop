@@ -367,6 +367,33 @@ fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
                 .filter_map(|track| track.approx_duration_ms),
         )
         .max()?;
+
+    // Log the codecs/resolutions that won selection so a "video frozen, audio
+    // plays" report (a missing system decoder on Linux, issue #29) is diagnosable
+    // from the logs alone — pairs with the caller's `video_id`.
+    let selected_video: Vec<String> = video_variants
+        .iter()
+        .map(|variant| {
+            format!(
+                "{} {}p {}kbps",
+                extract_codecs(variant.mime_type.as_deref()).unwrap_or_else(|| "?".to_string()),
+                variant.height.unwrap_or(0),
+                variant.bitrate.unwrap_or(0) / 1000
+            )
+        })
+        .collect();
+    let selected_audio: Vec<String> = audio_tracks
+        .iter()
+        .map(|track| extract_codecs(track.mime_type.as_deref()).unwrap_or_else(|| "?".to_string()))
+        .collect();
+    info!(
+        video_reps = selected_video.len(),
+        audio_reps = selected_audio.len(),
+        video = ?selected_video,
+        audio = ?selected_audio,
+        "synthetic DASH representation selection"
+    );
+
     let mut video_groups: Vec<(String, Vec<_>)> = Vec::new();
     for variant in &video_variants {
         let mime_type = extract_base_mime_type(variant.mime_type.as_deref())

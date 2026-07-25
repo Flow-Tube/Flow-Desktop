@@ -9,3 +9,13 @@ export function readLogs(): Promise<string> {
 export function clearLogs(): Promise<void> {
   return invokeBackend<void>("clear_logs");
 }
+
+/** Absolute path of the rolling log directory */
+export function getLogsDir(): Promise<string> {
+  return invokeBackend<string>("logs_dir_path");
+}
+
+/** Opens the rolling log directory in the OS file manager. */
+export function revealLogsFolder(): Promise<void> {
+  return invokeBackend<void>("reveal_logs_folder");
+}

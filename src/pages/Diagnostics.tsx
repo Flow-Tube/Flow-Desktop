@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { Copy, Trash2, Bug, RefreshCw } from "lucide-react";
+import { Copy, Trash2, Bug, RefreshCw, FolderOpen, Save } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { useDiagnostics } from "../lib/useDiagnostics";
+import { revealLogsFolder } from "../lib/api/diagnostics";
+import { writeBackupFile } from "../lib/api/files";
 import { openExternal } from "../lib/openExternal";
-import { confirmAction } from "../lib/dialogs";
+import { confirmAction, pickSaveFile } from "../lib/dialogs";
 import { getString } from "../lib/i18n/index";
 import { useUiStore } from "../store/useUiStore";
 
@@ -11,7 +13,7 @@ const GITHUB_ISSUES_URL = "https://github.com/FlowNeuro/Flow-Desktop/issues/new?
 
 export const Diagnostics: React.FC = () => {
   const showToast = useUiStore((state) => state.showToast);
-  const { text, loading, error, refresh, clear } = useDiagnostics();
+  const { text, logsDir, loading, error, refresh, clear } = useDiagnostics();
   const [busy, setBusy] = useState(false);
 
   const hasLogs = text.trim().length > 0;
@@ -42,6 +44,29 @@ export const Diagnostics: React.FC = () => {
       message: getString(copied ? "diagnostics_report_copied" : "diagnostics_report_opened"),
       variant: "success",
     });
+  };
+
+  const handleSave = async () => {
+    if (!hasLogs) return;
+    try {
+      const defaultName = `flow_logs_${new Date().toISOString().slice(0, 10)}.log`;
+      const savePath = await pickSaveFile(getString("diagnostics_save"), defaultName, [
+        { name: "Log", extensions: ["log", "txt"] },
+      ]);
+      if (!savePath) return;
+      await writeBackupFile(savePath, text);
+      showToast({ message: getString("diagnostics_saved"), variant: "success" });
+    } catch {
+      showToast({ message: getString("diagnostics_save_failed"), variant: "error" });
+    }
+  };
+
+  const handleOpenFolder = async () => {
+    try {
+      await revealLogsFolder();
+    } catch {
+      showToast({ message: getString("diagnostics_open_folder_failed"), variant: "error" });
+    }
   };
 
   const handleClear = async () => {
@@ -81,6 +106,14 @@ export const Diagnostics: React.FC = () => {
           <Copy size={14} />
           {getString("diagnostics_copy")}
         </Button>
+        <Button variant="secondary" size="sm" onClick={handleSave} disabled={!hasLogs}>
+          <Save size={14} />
+          {getString("diagnostics_save")}
+        </Button>
+        <Button variant="secondary" size="sm" onClick={handleOpenFolder}>
+          <FolderOpen size={14} />
+          {getString("diagnostics_open_folder")}
+        </Button>
         <Button variant="secondary" size="sm" onClick={handleReport} disabled={!hasLogs}>
           <Bug size={14} />
           {getString("diagnostics_report_github")}
@@ -94,6 +127,15 @@ export const Diagnostics: React.FC = () => {
           {getString("diagnostics_clear")}
         </Button>
       </div>
+
+      {logsDir && (
+        <p className="text-xs text-chrome-neutral-500">
+          {getString("diagnostics_folder_label")}{" "}
+          <code className="rounded bg-chrome-black/40 px-1.5 py-0.5 font-mono text-chrome-neutral-400">
+            {logsDir}
+          </code>
+        </p>
+      )}
 
       <div className="rounded-2xl border border-chrome-neutral-800 bg-surface-container-low overflow-hidden">
         <div className="px-5 py-3 border-b border-chrome-neutral-800/50 flex items-center justify-between">

@@ -205,6 +205,50 @@ jobs:
             ${{ matrix.args }}
             ${{ needs.prepare.outputs.is_prerelease == 'true' && '--config src-tauri/tauri.prerelease.conf.json' || '' }}
 
+      # EGL_BAD_PARAMETER fix (issue #40): strip the bundled libwayland-* libs,
+      # then RE-SIGN the changed bytes and clobber the release asset + its .sig.
+      # tauri-action already uploaded the originals; we overwrite them here. The
+      # updater manifest (latest.json) is patched in the separate
+      # patch-appimage-updater job — after every matrix leg has merged its
+      # platform — so a parallel macOS/Windows upload can't clobber it.
+      - name: Fix AppImage Wayland libs and re-sign
+        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu' && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.prepare.outputs.tag }}"
+          appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
+
+          # releaseAssetNamePattern can rename the uploaded asset, so resolve the
+          # actual x86_64 AppImage asset name and clobber it in place.
+          asset="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name | select(endswith(".AppImage")) | select(test("(x86_64|amd64|x64)"))' | head -n1)"
+          test -n "$asset" || { echo "no x86_64 .AppImage asset found on $tag"; exit 1; }
+          echo "Release asset: $asset"
+
+          bash scripts/fix-appimage-wayland.sh "$appimage"
+
+          cp "$appimage" "$asset"
+          rm -f "$asset.sig"
+          pnpm tauri signer sign "$asset"
+          gh release upload "$tag" "$asset" "$asset.sig" --clobber --repo "$GITHUB_REPOSITORY"
+
+          mkdir -p appimage-sig
+          cp "$asset.sig" appimage-sig/linux-x86_64.sig
+
+      - name: Upload re-signed AppImage signature for the updater patch
+        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu' && startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v7
+        with:
+          name: appimage-sig-linux-x86_64
+          path: appimage-sig/linux-x86_64.sig
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Verify AppImage bundles GStreamer codecs
         if: runner.os == 'Linux'
         shell: bash
@@ -267,3 +311,46 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
           if-no-files-found: error
           retention-days: 30
+
+  # Patch the re-signed AppImage signature into the combined updater manifest.
+  # Runs once, after every matrix leg has merged its platform into latest.json,
+  # so it operates on the full manifest and can't be clobbered by a parallel
+  # macOS/Windows upload (the reason the re-sign step above does NOT touch
+  # latest.json itself).
+  patch-appimage-updater:
+    name: Patch updater manifest with re-signed AppImage
+    needs: [prepare, publish]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download re-signed AppImage signature
+        uses: actions/download-artifact@v7
+        with:
+          name: appimage-sig-linux-x86_64
+          path: appimage-sig
+
+      - name: Patch latest.json with the re-signed AppImage signature
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.prepare.outputs.tag }}"
+          new_sig="$(cat appimage-sig/linux-x86_64.sig)"
+          test -n "$new_sig" || { echo "empty re-signed signature"; exit 1; }
+
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern latest.json --clobber
+
+          jq -e 'has("platforms") and (.platforms | has("linux-x86_64"))' latest.json >/dev/null \
+            || { echo "latest.json missing platforms.linux-x86_64"; exit 1; }
+
+          jq --arg sig "$new_sig" '
+            .platforms["linux-x86_64"].signature = $sig
+            | if .platforms["linux-x86_64-appimage"]
+              then .platforms["linux-x86_64-appimage"].signature = $sig else . end
+          ' latest.json > latest.json.tmp
+          mv latest.json.tmp latest.json
+
+          gh release upload "$tag" latest.json --clobber --repo "$GITHUB_REPOSITORY"

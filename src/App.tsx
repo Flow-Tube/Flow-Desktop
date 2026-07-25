@@ -10,6 +10,7 @@ import { useLikesStore } from "./store/useLikesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
+import { useStartupHealth } from "./lib/useStartupHealth";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
 import type { VideoSummary } from "./types/video";
 
@@ -66,6 +67,9 @@ function App() {
   const { addToQueue, setQueue } = usePlayerStore();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Clear the Linux startup-crash sentinel as soon as the app mounts
+  useStartupHealth();
 
   const [loadingOnboarding, setLoadingOnboarding] = useState(true);
 

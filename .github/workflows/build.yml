@@ -254,6 +254,17 @@ jobs:
       - name: Build nightly packages
         run: pnpm tauri build ${{ matrix.args }} --config src-tauri/tauri.nightly.generated.json
 
+      # Strip the bundled libwayland-* libs so the AppImage doesn't abort with
+      # EGL_BAD_PARAMETER on newer Mesa (issue #40). Nightly AppImages ship as
+      # plain artifacts (no updater signature), so no re-sign is needed here.
+      - name: Strip bundled Wayland libs from the AppImage
+        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu'
+        continue-on-error: true
+        shell: bash
+        run: |
+          appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
+          bash scripts/fix-appimage-wayland.sh "$appimage"
+
       - name: Verify AppImage bundles GStreamer codecs
         if: runner.os == 'Linux'
         shell: bash

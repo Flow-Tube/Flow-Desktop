@@ -108,3 +108,35 @@ pub fn clear_logs(app: tauri::AppHandle) -> Result<(), ErrorResponse> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn logs_dir_path(app: tauri::AppHandle) -> Result<String, ErrorResponse> {
+    let dir = logs_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(AppError::from)?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Opens the rolling log directory in the OS file manager. A reliable fallback
+/// on Linux/WebKitGTK, where `navigator.clipboard` copy can silently fail — the
+/// user can always grab the `flow*.log` files directly and attach them.
+#[tauri::command]
+pub fn reveal_logs_folder(app: tauri::AppHandle) -> Result<(), ErrorResponse> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = logs_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(AppError::from)?;
+    app.opener()
+        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|error| AppError::Internal(format!("Failed to open logs folder: {error}")))?;
+    Ok(())
+}
+
+/// Signals that the webview mounted and rendered successfully, clearing the
+/// Linux startup-crash sentinel so the next launch starts at tier 0 (see
+/// `linux_startup`). No-op on other platforms and when the sentinel is absent.
+#[tauri::command]
+pub fn startup_render_ok(app: tauri::AppHandle) {
+    #[cfg(target_os = "linux")]
+    crate::linux_startup::clear(&app.config().identifier);
+    #[cfg(not(target_os = "linux"))]
+    let _ = app;
+}

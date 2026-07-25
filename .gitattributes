@@ -4,3 +4,6 @@
 # modified"). Pin all SQL (migrations especially) to LF so checksums stay stable
 # and cross-platform.
 *.sql text eol=lf
+
+# Shell scripts must stay LF or bash chokes on CR line endings in CI.
+*.sh text eol=lf

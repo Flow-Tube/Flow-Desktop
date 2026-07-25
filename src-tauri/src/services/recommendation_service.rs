@@ -4,7 +4,7 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::db::recommendations;
 use crate::errors::AppResult;
@@ -980,9 +980,15 @@ impl RecommendationService {
             total_interactions = brain.total_interactions,
             preferred_topics = brain.preferred_topics.len(),
             mature_topics = mature_topics.len(),
+            "[discovery] starting query generation"
+        );
+        // The learned taste profile (topic scores + time-bucket topics) is a
+        // privacy-sensitive fingerprint of the user. Keep it out of the default
+        // INFO logs that get pasted verbatim into public bug reports — DEBUG only.
+        debug!(
             time_topics = ?time_topic_snapshot,
             topic_snapshot = ?mature_topic_snapshot,
-            "[discovery] starting query generation"
+            "[discovery] taste snapshot"
         );
         let mut queries: Vec<DiscoveryQuery> = Vec::new();
         let bonded_queries = Self::build_query_bonding_candidates(&brain);
@@ -992,10 +998,11 @@ impl RecommendationService {
                 .map(|query| query.query.clone())
                 .collect();
             info!(
-                bonded_queries = ?bonded_snapshot,
+                bonded = bonded_snapshot.len(),
                 total_interactions = brain.total_interactions,
                 "[discovery] added query bonding candidates"
             );
+            debug!(bonded_queries = ?bonded_snapshot, "[discovery] bonding candidates");
             queries.extend(bonded_queries);
         }
         let primary = mature_topics
@@ -1262,7 +1269,7 @@ impl RecommendationService {
                 .iter()
                 .any(|blocked_term| query.query.to_lowercase().contains(blocked_term))
             {
-                info!(
+                debug!(
                     strategy = query.strategy,
                     query = %query.query,
                     "[discovery] dropped blocked query"
@@ -1275,7 +1282,7 @@ impl RecommendationService {
                     match Self::sanitize_discovery_query(&enriched) {
                         Some(candidate) if !Self::is_broad_singleton_query(&candidate) => candidate,
                         _ => {
-                            info!(
+                            debug!(
                                 strategy = query.strategy,
                                 query = %query.query,
                                 "[discovery] dropped broad singleton query"
@@ -1292,7 +1299,7 @@ impl RecommendationService {
                     strategy: query.strategy,
                 });
             } else {
-                info!(
+                debug!(
                     strategy = query.strategy,
                     query = %query.query,
                     "[discovery] dropped empty query after sanitization"
@@ -1306,17 +1313,14 @@ impl RecommendationService {
             .collect();
         info!(
             generated = sanitized.len(),
-            queries = ?generated_snapshot,
             "[discovery] generated sanitized queries"
         );
+        debug!(queries = ?generated_snapshot, "[discovery] generated query detail");
 
         let mut deduped = Self::balance_discovery_queries(sanitized, mature_topics.len());
 
-        info!(
-            balanced = deduped.len(),
-            queries = ?deduped,
-            "[discovery] balanced query set"
-        );
+        info!(balanced = deduped.len(), "[discovery] balanced query set");
+        debug!(queries = ?deduped, "[discovery] balanced query detail");
 
         if brain.recent_query_tokens.len() > 0 && deduped.len() > 3 {
             let rotated: Vec<String> = deduped
@@ -1341,10 +1345,10 @@ impl RecommendationService {
                 info!(
                     before = deduped.len(),
                     after = rotated.len(),
-                    rotated_queries = ?rotated,
                     recent_sets = brain.recent_query_tokens.len(),
                     "[discovery] rotated overlapping query set"
                 );
+                debug!(rotated_queries = ?rotated, "[discovery] rotated query detail");
                 deduped = rotated;
             }
         }
@@ -1359,10 +1363,14 @@ impl RecommendationService {
             .take(RECENT_QUERY_TOKENS_MAX)
             .collect();
         info!(
-            final_queries = ?deduped,
-            final_token_sets = ?persisted_token_sets,
+            finalized = deduped.len(),
             stored_recent_query_sets = brain.recent_query_tokens.len(),
             "[discovery] finalized query generation"
+        );
+        debug!(
+            final_queries = ?deduped,
+            final_token_sets = ?persisted_token_sets,
+            "[discovery] finalized query detail"
         );
 
         Ok(deduped)

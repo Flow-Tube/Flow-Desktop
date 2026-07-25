@@ -78,7 +78,19 @@ On Linux, video decoding goes through WebKitGTK and the system GStreamer plugins
 - **`.deb`** — declares the codec plugins as dependencies. Install with `sudo apt install ./Flow_*.deb` so they are pulled in automatically.
 - **`.rpm`** — the freely licensed plugins are hard dependencies. On Fedora, H.264 decoding (`gstreamer1-libav`, `gstreamer1-plugins-bad-freeworld`) is only available from [RPM Fusion](https://rpmfusion.org/Configuration) for patent reasons: enable RPM Fusion and run `sudo dnf install gstreamer1-libav gstreamer1-plugins-bad-freeworld`, or use the AppImage instead.
 
-If the app opens to a blank or white window, that is the WebKitGTK DMABUF renderer failing on your graphics stack (common with NVIDIA proprietary drivers and some Wayland sessions). Flow disables it automatically; for debugging you can override with `WEBKIT_DISABLE_DMABUF_RENDERER=0`, and if a blank window still occurs, try `WEBKIT_DISABLE_COMPOSITING_MODE=1`.
+### Linux startup crashes and blank windows
+
+If the app opens to a blank or white window, that is usually the WebKitGTK DMABUF renderer failing on your graphics stack (common with NVIDIA proprietary drivers and some Wayland sessions). Flow disables it automatically and, if a launch still fails to render, **escalates GPU workarounds on the next launch on its own**: first forcing software compositing (`WEBKIT_DISABLE_COMPOSITING_MODE=1`), then falling back to X11/XWayland (`GDK_BACKEND=x11`). A clean launch resets this. You can still override any of these yourself — for example `WEBKIT_DISABLE_DMABUF_RENDERER=0` to re-enable the DMABUF renderer.
+
+If the app aborts on startup with `Could not create default EGL display: EGL_BAD_PARAMETER` (seen on some Arch-family / Mesa systems with the **AppImage**), that is a known Tauri AppImage packaging issue: a bundled `libwayland` client library conflicts with your system's newer Mesa/EGL stack. As an interim workaround, delete the bundled Wayland libraries and run the extracted app:
+
+```sh
+./Flow_*_linux_amd64.AppImage --appimage-extract
+rm squashfs-root/usr/lib/*wayland*so*
+./squashfs-root/AppRun
+```
+
+On Arch-family distributions the AUR package and the planned Flatpak build avoid this class of issue; prefer those when available.
 
 ---
 

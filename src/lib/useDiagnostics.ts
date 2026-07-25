@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { clearLogs, readLogs } from "./api/diagnostics";
+import { clearLogs, getLogsDir, readLogs } from "./api/diagnostics";
 import { getBackendErrorMessage } from "./api/errors";
 import { clearDiagnosticEvents, getDiagnosticEvents } from "./diagnostics";
 
@@ -13,6 +13,8 @@ function formatInAppEvents(): string {
 export interface DiagnosticsState {
   /** Combined backend file log + in-app event buffer, ready to copy. */
   text: string;
+  /** Absolute path of the log directory, for the "open folder" fallback. */
+  logsDir: string;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -26,6 +28,7 @@ export interface DiagnosticsState {
  */
 export function useDiagnostics(): DiagnosticsState {
   const [fileLogs, setFileLogs] = useState("");
+  const [logsDir, setLogsDir] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +36,10 @@ export function useDiagnostics(): DiagnosticsState {
     setLoading(true);
     setError(null);
     try {
-      setFileLogs(await readLogs());
+      // The dir lookup is a best-effort convenience; never let it fail the load.
+      const [logs, dir] = await Promise.all([readLogs(), getLogsDir().catch(() => "")]);
+      setFileLogs(logs);
+      setLogsDir(dir);
     } catch (caught) {
       setError(getBackendErrorMessage(caught));
     } finally {
@@ -58,5 +64,5 @@ export function useDiagnostics(): DiagnosticsState {
 
   const text = [fileLogs.trim(), formatInAppEvents()].filter(Boolean).join("\n\n");
 
-  return { text, loading, error, refresh, clear };
+  return { text, logsDir, loading, error, refresh, clear };
 }

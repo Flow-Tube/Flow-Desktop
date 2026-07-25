@@ -410,7 +410,11 @@ async fn gather_discovery(yt: &YoutubeService, rec: &RecommendationService) -> V
     if queries.is_empty() {
         queries = fallback_discovery_queries();
     }
-    tracing::info!("[shorts] discovery queries: {:?}", queries);
+    tracing::info!(
+        discovery_queries = queries.len(),
+        "[shorts] gathered discovery queries"
+    );
+    tracing::debug!("[shorts] discovery queries: {:?}", queries);
 
     let searches = queries
         .into_iter()

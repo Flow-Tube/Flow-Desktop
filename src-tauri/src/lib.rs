@@ -4,11 +4,15 @@
 
 mod api;
 mod bridge;
+#[cfg(target_os = "linux")]
+mod codec_probe;
 mod commands;
 mod config;
 mod db;
 mod errors;
 mod flow_neuro;
+#[cfg(target_os = "linux")]
+mod linux_startup;
 mod models;
 mod music_brain;
 mod security;
@@ -24,7 +28,9 @@ use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_watch_record,
     get_music_history, get_setting, get_watch_history, set_setting,
 };
-use commands::diagnostics::{clear_logs, log_frontend_event, read_logs};
+use commands::diagnostics::{
+    clear_logs, log_frontend_event, logs_dir_path, read_logs, reveal_logs_folder, startup_render_ok,
+};
 use commands::downloads::{
     DownloadManager, cancel_download, clear_downloads, create_download_collection,
     delete_download_collections, delete_downloads, get_download_formats, get_downloaded_video_ids,
@@ -140,6 +146,14 @@ fn init_tracing(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Resolve the embedded config up front so the Linux startup workarounds can
+    // key their crash sentinel to the real bundle identifier. Must run before any
+    // GTK/WebKitGTK init (which happens in `.build()` below).
+    let context = tauri::generate_context!();
+
+    #[cfg(target_os = "linux")]
+    let boot_report = linux_startup::begin(context.config().identifier.as_str());
+
     let mut builder = tauri::Builder::default();
 
     // Single-instance MUST be the first plugin. A second `flow://` launch is
@@ -180,7 +194,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .setup(|app| {
+        .setup(move |app| {
             // Resolve the app data dir first so file logging is live before any
             // other setup step can fail — otherwise an early failure would leave
             // no trace in the packaged app.
@@ -196,6 +210,21 @@ pub fn run() {
             if let Some(guard) = init_tracing(&app_data_dir) {
                 app.manage(std::sync::Mutex::new(guard));
             }
+
+            // Report which Linux GPU/Wayland workaround tier this launch applied,
+            // so it appears in bug reports. `prior_failed_boots > 0` means the
+            // previous launch never confirmed a render (a startup crash).
+            #[cfg(target_os = "linux")]
+            tracing::info!(
+                tier = boot_report.tier,
+                prior_failed_boots = boot_report.failed_boots,
+                "linux_startup_workarounds_applied"
+            );
+
+            // Probe system GStreamer decoders off-thread so a "video frozen"
+            // report is diagnosable from the logs even before playback.
+            #[cfg(target_os = "linux")]
+            std::thread::spawn(codec_probe::log_probe);
 
             // Let the BotGuard minter open a hidden WebView for a real-browser
             // poToken (falls back to the headless Node sidecar without this).
@@ -386,6 +415,9 @@ pub fn run() {
             log_frontend_event,
             read_logs,
             clear_logs,
+            logs_dir_path,
+            reveal_logs_folder,
+            startup_render_ok,
             set_player_fullscreen,
             // --- Shorts feed ---
             get_shorts_feed,
@@ -443,7 +475,7 @@ pub fn run() {
             clear_notifications,
             check_subscriptions_now
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Flow Desktop")
         .run(|app_handle, event| {
             // Flush the resident brain to disk on shutdown so the debounce window is never lost.

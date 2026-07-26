@@ -65,7 +65,7 @@ whatlang = "0.18"
 aes-gcm = "0.11"
 hkdf = "0.12"
 hmac = "0.12"
-sha2 = "0.10"
+sha2 = "0.11"
 rand = "0.8"
 zeroize = { version = "1", features = ["derive"] }
 # Local Sync (P2P) — transport: plaintext WebSocket (payload is AES-GCM encrypted), gzip

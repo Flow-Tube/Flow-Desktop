@@ -63,7 +63,7 @@ whatlang = "0.18"
 # Local Sync (P2P) — payload cryptography (FLOW-SYNC/1).
 # AES-256-GCM payload encryption with HKDF-derived directional keys and an HMAC-SHA256 SAS.
 aes-gcm = "0.11"
-hkdf = "0.12"
+hkdf = "0.13"
 hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"

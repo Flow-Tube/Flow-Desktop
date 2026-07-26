@@ -70,7 +70,7 @@ rand = "0.8"
 zeroize = { version = "1", features = ["derive"] }
 # Local Sync (P2P) — transport: plaintext WebSocket (payload is AES-GCM encrypted), gzip
 # compression (parity with Android java.util.zip), and LAN IP discovery for the QR.
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
 flate2 = "1"
 local-ip-address = "0.6"
 

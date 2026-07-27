@@ -40,10 +40,10 @@ export function ShortMetadata({
             <img
               src={avatar}
               alt=""
-              className="h-12 w-12 shrink-0 rounded-full object-cover shadow-lg"
+              className="h-12 w-12 shrink-0 rounded-full object-cover"
             />
           ) : (
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-container-high text-base font-bold text-chrome-neutral-300 shadow-lg">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-container-high text-base font-bold text-chrome-neutral-300">
               {channelName.charAt(0).toUpperCase()}
             </div>
           )}
@@ -72,12 +72,12 @@ export function ShortMetadata({
       </button>
 
       {viewStatText && (
-        <span className="w-fit rounded-full bg-chrome-white/10 px-2.5 py-1 text-xs font-semibold text-chrome-neutral-300 backdrop-blur-md">
+        <span className="w-fit rounded-full bg-chrome-black/60 px-2.5 py-1 text-xs font-semibold text-chrome-neutral-300">
           {viewStatText}
         </span>
       )}
 
-      <div className="inline-flex w-fit items-center gap-2 rounded-full bg-chrome-white/10 px-3 py-1.5 text-xs text-chrome-neutral-300 backdrop-blur-md">
+      <div className="inline-flex w-fit items-center gap-2 rounded-full bg-chrome-black/60 px-3 py-1.5 text-xs text-chrome-neutral-300">
         <Music2 className="h-3.5 w-3.5 shrink-0" />
         <span className="max-w-[220px] truncate lg:max-w-[240px]">
           Original audio - {channelName}

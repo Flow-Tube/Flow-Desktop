@@ -114,6 +114,10 @@ export function ShortVideoSurface({
   const suppressClickRef = useRef(false);
   const appliedInitialRateForRef = useRef<string | null>(null);
   const autoAdvanceFiredRef = useRef(false);
+  const mutedRef = useRef(muted);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
   const [fit, setFit] = useState<"cover" | "contain">("cover");
   const [userPaused, setUserPaused] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -265,12 +269,12 @@ export function ShortVideoSurface({
       teardown();
       video.src = videoUrl;
       video.loop = shouldLoop && !hasSeparateAudio;
-      video.muted = true;
+      video.muted = hasSeparateAudio ? true : mutedRef.current;
 
       if (audio && hasSeparateAudio && audioUrl) {
         audio.src = audioUrl;
         audio.loop = shouldLoop;
-        audio.muted = true;
+        audio.muted = mutedRef.current;
         audio.volume = 1;
         audio.playbackRate = playbackRate;
         audio.preservesPitch = true;
@@ -337,7 +341,7 @@ export function ShortVideoSurface({
       userPausedRef.current = false;
       teardown();
       video.loop = shouldLoop;
-      video.muted = true;
+      video.muted = mutedRef.current;
       const player = dashjs.MediaPlayer().create();
       const dashEvents = dashjs.MediaPlayer.events;
       const playDash = () => {
@@ -650,7 +654,7 @@ export function ShortVideoSurface({
       )}
       {settingsOpen && (
         <div
-          className="absolute left-4 top-16 z-40 w-[min(82vw,320px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover/80 p-2 text-chrome-white shadow-2xl backdrop-blur-xl"
+          className="absolute left-4 top-16 z-40 w-[min(82vw,320px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover p-2 text-chrome-white"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -789,7 +793,7 @@ export function ShortVideoSurface({
         shouldShowControls={settingsOpen}
       />
       {isBoosting && (
-        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/40 px-5 py-2 text-sm font-bold text-chrome-white backdrop-blur-md">
+        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/80 px-5 py-2 text-sm font-bold text-chrome-white">
           {longPressPlaybackRate}x
         </div>
       )}
@@ -800,7 +804,7 @@ export function ShortVideoSurface({
           onClick={togglePlayback}
           className="absolute inset-0 z-20 grid place-items-center bg-chrome-black/10 text-chrome-white"
         >
-          <span className="grid h-16 w-16 place-items-center rounded-full bg-chrome-black/55 shadow-xl backdrop-blur-md">
+          <span className="grid h-16 w-16 place-items-center rounded-full bg-chrome-black/80">
             <Play className="ml-1 h-8 w-8" fill="currentColor" />
           </span>
         </button>
@@ -818,7 +822,7 @@ export function ShortVideoSurface({
       )}
       {contextMenu && (
         <div
-          className="absolute z-50 w-[306px] overflow-hidden rounded-xl border border-chrome-white/10 bg-background/45 p-2 text-chrome-white shadow-2xl backdrop-blur-xl"
+          className="absolute z-50 w-[306px] overflow-hidden rounded-xl border border-chrome-white/10 bg-background p-2 text-chrome-white"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
@@ -874,12 +878,12 @@ export function ShortVideoSurface({
         </div>
       )}
       {copiedLabel && (
-        <div className="pointer-events-none absolute left-1/2 top-8 z-50 -translate-x-1/2 rounded-full bg-chrome-black/75 px-4 py-2 text-xs font-bold text-chrome-white shadow-xl backdrop-blur-md">
+        <div className="pointer-events-none absolute left-1/2 top-8 z-50 -translate-x-1/2 rounded-full bg-chrome-black/85 px-4 py-2 text-xs font-bold text-chrome-white">
           {copiedLabel}
         </div>
       )}
       {statsVisible && (
-        <div className="pointer-events-none absolute right-4 top-16 z-40 w-[min(82vw,300px)] rounded-xl border border-chrome-white/10 bg-chrome-black/70 p-3 text-xs font-semibold text-chrome-zinc-100 shadow-2xl backdrop-blur-md">
+        <div className="pointer-events-none absolute right-4 top-16 z-40 w-[min(82vw,300px)] rounded-xl border border-chrome-white/10 bg-chrome-black/85 p-3 text-xs font-semibold text-chrome-zinc-100">
           <div className="mb-2 text-sm font-black">Stats for nerds</div>
           <div className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1 text-chrome-zinc-300">
             <span className="text-chrome-zinc-500">Time</span>

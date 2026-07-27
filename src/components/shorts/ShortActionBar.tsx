@@ -245,13 +245,13 @@ function ActionButton({
         type="button"
         aria-label={ariaLabel}
         onClick={onClick}
-        className={`flex h-14 w-14 items-center justify-center rounded-full border border-chrome-white/5 bg-chrome-white/10 text-chrome-white shadow-lg backdrop-blur-md transition-all hover:bg-chrome-white/20 ${
+        className={`flex h-14 w-14 items-center justify-center rounded-full border border-chrome-white/10 bg-chrome-black/60 text-chrome-white transition-colors duration-200 ease-out hover:bg-chrome-black/80 ${
           active ? "text-primary" : ""
         }`}
       >
         {icon}
       </button>
-      <span className="mt-1 mb-2 h-4 text-xs font-semibold text-chrome-neutral-300 drop-shadow-md">
+      <span className="mt-1 mb-2 h-4 text-xs font-semibold text-chrome-neutral-300">
         {countText ?? ""}
       </span>
     </div>

@@ -48,6 +48,9 @@ const CACHE_TTL_SECONDS: u64 = 30 * 60;
 const MAX_UPSTREAM_RECOVERIES: u32 = 6;
 const MAX_HEADER_BYTES: usize = 32 * 1024;
 const LOCAL_FILE_CHUNK_BYTES: usize = 256 * 1024;
+const IMAGE_UPSTREAM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+static IMAGE_FETCH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(6);
 
 const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\n\
 Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n\
@@ -729,22 +732,32 @@ async fn relay_remote(
             None
         };
 
+        let is_image = session.content_type.starts_with("image/");
         let mut req = client
             .get(target_url)
             .header("User-Agent", &upstream_user_agent)
             .header("Accept-Encoding", "identity");
-        if session.content_type.starts_with("image/") {
+        if is_image {
             req = req
                 .header(
                     "Accept",
                     "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
                 )
                 .header("Origin", "https://music.youtube.com")
-                .header("Referer", "https://music.youtube.com/");
+                .header("Referer", "https://music.youtube.com/")
+                .timeout(IMAGE_UPSTREAM_TIMEOUT);
         }
         if let Some(rh) = &range_header {
             req = req.header("Range", rh);
         }
+
+        // Held for the whole relay so a slot covers the body too, not just the
+        // response head. Media is never gated here — only artwork.
+        let _image_slot = if is_image {
+            IMAGE_FETCH_SLOTS.acquire().await.ok()
+        } else {
+            None
+        };
 
         let response = match req.send().await {
             Ok(res) => res,

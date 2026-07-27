@@ -94,7 +94,7 @@ export function GlobalMusicDock() {
           )}
 
           {/* The pill (clips the edge progress bar to the rounded corners). */}
-          <div className="relative flex h-full items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high/95 px-4 shadow-2xl backdrop-blur-md">
+          <div className="relative flex h-full items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high px-4">
             {/* LEFT — artwork + meta (click to expand) */}
             <div className="flex w-1/3 min-w-0 items-center gap-3">
               <button

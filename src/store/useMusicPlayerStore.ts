@@ -9,6 +9,7 @@ import {
   type MusicAudioQuality,
 } from "../lib/api/music";
 import { getOfflineStream } from "../lib/api/downloads";
+import { seedOfflineLyrics } from "../lib/lyrics/offline";
 import { findDownloadedRecord } from "../lib/useDownloads";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
 import { normalizeBackendError } from "../lib/api/errors";
@@ -359,7 +360,16 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
         try {
           const offline = await getOfflineStream(videoId, "music");
           if (get().loadingStreamId !== videoId) return;
-          set({ loudnessDb: null, loadingStreamId: null });
+          // Cover art and lyrics were saved next to the audio at download time —
+          // use them so an offline track needs no network at all to display.
+          if (offline.lyrics) seedOfflineLyrics(videoId, offline.lyrics);
+          set({
+            loudnessDb: null,
+            loadingStreamId: null,
+            ...(offline.artworkUrl
+              ? { currentTrack: { ...track, thumbnail: offline.artworkUrl } }
+              : {}),
+          });
           musicAudioEngine.setLoudness(null, get().normalizationEnabled);
           await musicAudioEngine.load(offline.url);
           await musicAudioEngine.play();

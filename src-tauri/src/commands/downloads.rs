@@ -1779,6 +1779,39 @@ pub async fn clear_downloads(pool: State<'_, SqlitePool>) -> Result<(), ErrorRes
 pub struct OfflineStreamInfo {
     pub url: String,
     pub content_type: String,
+    /// Loopback URL for the cover art saved beside the media file, when present.
+    pub artwork_url: Option<String>,
+    /// Text of the lyrics saved beside the media file, when present.
+    pub lyrics: Option<String>,
+}
+
+/// Cover art and lyrics are written next to the media file when a download
+/// finishes (see `sidecars::write_sidecars`). They are located by convention
+/// rather than recorded in the database, so downloads saved before this was
+/// wired up are picked up too.
+async fn find_artwork_sidecar(media_path: &str) -> Option<(String, String)> {
+    for (extension, content_type) in [
+        ("jpg", "image/jpeg"),
+        ("png", "image/png"),
+        ("webp", "image/webp"),
+    ] {
+        let candidate = Path::new(media_path).with_extension(extension);
+        if tokio::fs::metadata(&candidate).await.is_ok() {
+            return Some((
+                candidate.to_string_lossy().into_owned(),
+                content_type.to_string(),
+            ));
+        }
+    }
+    None
+}
+
+async fn read_lyrics_sidecar(media_path: &str) -> Option<String> {
+    let path = Path::new(media_path).with_extension("lrc");
+    tokio::fs::read_to_string(path)
+        .await
+        .ok()
+        .filter(|text| !text.trim().is_empty())
 }
 
 /// Resolves a loopback URL that serves a downloaded file straight from disk, so
@@ -1813,9 +1846,20 @@ pub async fn get_offline_stream(
     );
     let port = streaming_manager.get_port();
 
+    let artwork_url = match find_artwork_sidecar(&record.file_path).await {
+        Some((path, image_type)) => {
+            let artwork_token = Uuid::new_v4().to_string();
+            streaming_manager.register_local_session(artwork_token.clone(), path, image_type);
+            Some(format!("http://127.0.0.1:{port}/stream/{artwork_token}"))
+        }
+        None => None,
+    };
+
     Ok(OfflineStreamInfo {
         url: format!("http://127.0.0.1:{port}/stream/{token}"),
         content_type,
+        artwork_url,
+        lyrics: read_lyrics_sidecar(&record.file_path).await,
     })
 }
 

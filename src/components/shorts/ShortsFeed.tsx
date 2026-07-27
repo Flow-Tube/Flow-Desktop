@@ -110,22 +110,25 @@ export function ShortsFeed() {
     slideRefs.current[index]?.scrollIntoView({ behavior: "instant", block: "start" });
   }, [items, videoId]);
 
-  const scrollToIndex = useCallback(
-    (index: number) => {
-      const clamped = Math.max(0, Math.min(index, items.length - 1));
-      slideRefs.current[clamped]?.scrollIntoView({ behavior: "smooth", block: "start" });
-    },
-    [items.length],
-  );
+  const feedStateRef = useRef({ activeIndex: 0, itemCount: 0 });
+  useEffect(() => {
+    feedStateRef.current = { activeIndex, itemCount: items.length };
+  }, [activeIndex, items.length]);
+
+  const scrollToIndex = useCallback((index: number) => {
+    const clamped = Math.max(0, Math.min(index, feedStateRef.current.itemCount - 1));
+    slideRefs.current[clamped]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const advanceToNext = useCallback(() => {
-    if (items.length === 0) return;
-    if (activeIndex >= items.length - 1) {
+    const { activeIndex: current, itemCount } = feedStateRef.current;
+    if (itemCount === 0) return;
+    if (current >= itemCount - 1) {
       void loadMore();
       return;
     }
-    scrollToIndex(activeIndex + 1);
-  }, [activeIndex, items.length, loadMore, scrollToIndex]);
+    scrollToIndex(current + 1);
+  }, [loadMore, scrollToIndex]);
 
   useEffect(() => {
     const active = items[activeIndex];

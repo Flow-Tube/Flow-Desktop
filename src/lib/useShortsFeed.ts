@@ -4,16 +4,23 @@ import { cleanChannelId, useFeedActionsStore } from "../store/useFeedActionsStor
 import { getShortsFeed, loadMoreShorts, resetShortsFeed } from "./api/shorts";
 import type { ShortItem, ShortsFeed } from "../types/shorts";
 
-function currentSubIds(): string[] {
+
+async function currentSubIds(): Promise<string[]> {
+  const store = useSubscriptionStore.getState();
+  if (store.subscriptions.length === 0) {
+    await store.loadSubscriptions();
+  }
   return useSubscriptionStore.getState().subscriptions.map((s) => s.id);
 }
 
 const inFlightFeeds = new Map<string, Promise<ShortsFeed>>();
-function dedupedGetFeed(subs: string[], seedId?: string): Promise<ShortsFeed> {
+function dedupedGetFeed(seedId?: string): Promise<ShortsFeed> {
   const key = seedId ?? "__home__";
   const existing = inFlightFeeds.get(key);
   if (existing) return existing;
-  const request = getShortsFeed(subs, seedId).finally(() => inFlightFeeds.delete(key));
+  const request = currentSubIds()
+    .then((subs) => getShortsFeed(subs, seedId))
+    .finally(() => inFlightFeeds.delete(key));
   inFlightFeeds.set(key, request);
   return request;
 }
@@ -99,10 +106,9 @@ export function useShortsFeed(
         cancelled = true;
       };
     }
-    dedupedGetFeed(currentSubIds(), seedId)
+    dedupedGetFeed(seedId)
       .then((feed) => {
         if (cancelled) return;
-        console.log("[shorts] feed loaded:", feed.items.length, "items, continuation:", feed.continuation);
         const mergedItems = mergeInitialItems(visibleFetchedShorts(feed.items), queuedItems);
         mergedItems.forEach((s) => seenIdsRef.current.add(s.id));
         setItems(mergedItems);
@@ -130,7 +136,7 @@ export function useShortsFeed(
     inFlightRef.current = true;
     setLoadingMore(true);
     try {
-      const feed = await loadMoreShorts(currentSubIds(), continuationRef.current);
+      const feed = await loadMoreShorts(await currentSubIds(), continuationRef.current);
       continuationRef.current = feed.continuation;
       const fresh = visibleFetchedShorts(feed.items).filter((s) => !seenIdsRef.current.has(s.id));
       if (fresh.length) {

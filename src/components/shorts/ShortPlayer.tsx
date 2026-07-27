@@ -127,7 +127,7 @@ export function ShortPlayer({
 
         <motion.div
           layout
-          className="flex h-[85vh] max-h-[850px] flex-row overflow-hidden rounded-2xl bg-chrome-black shadow-2xl ring-1 ring-chrome-white/10"
+          className="flex h-[85vh] max-h-[850px] flex-row overflow-hidden rounded-2xl bg-chrome-black ring-1 ring-chrome-white/10"
         >
           <div className="relative z-20 aspect-[9/16] h-full bg-chrome-black">
             <ShortVideoSurface

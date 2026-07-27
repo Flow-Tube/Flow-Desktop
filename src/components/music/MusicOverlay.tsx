@@ -105,7 +105,8 @@ export function MusicOverlay() {
 
   const musicError = useMusicPlayerError();
   const [eqOpen, setEqOpen] = useState(false);
-  const lyrics = useLyrics(currentTrack);
+  const overlayOpen = currentTrack !== null && viewState !== "dock";
+  const lyrics = useLyrics(overlayOpen ? currentTrack : null);
   const accent = useDominantColor(currentTrack?.thumbnail ?? null);
   const liked = Boolean(
     currentTrack && likedItems.some((item) => (
@@ -113,7 +114,7 @@ export function MusicOverlay() {
     )),
   );
 
-  const open = currentTrack !== null && viewState !== "dock";
+  const open = overlayOpen;
   const isQueue = viewState === "queue";
   const isLyrics = viewState === "lyrics";
   const loading = isBuffering || loadingStreamId !== null;

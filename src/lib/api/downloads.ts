@@ -137,6 +137,10 @@ export function clearDownloads(): Promise<void> {
 export interface OfflineStreamInfo {
   url: string;
   contentType: string;
+  /** Loopback URL for the cover art saved with the download, when present. */
+  artworkUrl: string | null;
+  /** Lyrics saved with the download, when present. */
+  lyrics: string | null;
 }
 
 export function getOfflineStream(

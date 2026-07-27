@@ -416,39 +416,20 @@ async fn gather_discovery(yt: &YoutubeService, rec: &RecommendationService) -> V
     );
     tracing::debug!("[shorts] discovery queries: {:?}", queries);
 
-    let searches = queries
-        .into_iter()
-        .take(MAX_DISCOVERY_QUERIES)
-        .map(|query| {
-            let request = SearchVideosRequest {
-                query,
-                duration: Some("short".to_string()),
-                ..SearchVideosRequest::default()
-            };
-            async move {
-                timeout(DISCOVERY_SEARCH_TIMEOUT, yt.search_videos(request))
-                    .await
-                    .ok()
-                    .and_then(Result::ok)
-            }
-        });
-
-    join_all(searches)
-        .await
-        .into_iter()
-        .flatten()
-        .flat_map(|response| {
-            response
-                .items
-                .into_iter()
-                .filter(is_short_candidate)
-                .take(SHORTS_PER_SEARCH)
-        })
-        .collect()
+    let queries: Vec<String> = queries.into_iter().take(MAX_DISCOVERY_QUERIES).collect();
+    run_discovery_searches(yt, queries, "discovery").await
 }
 
 async fn gather_fast_discovery_fallback(yt: &YoutubeService) -> Vec<VideoSummary> {
-    let searches = fallback_discovery_queries().into_iter().map(|query| {
+    run_discovery_searches(yt, fallback_discovery_queries(), "fallback").await
+}
+
+async fn run_discovery_searches(
+    yt: &YoutubeService,
+    queries: Vec<String>,
+    lane: &'static str,
+) -> Vec<VideoSummary> {
+    let searches = queries.into_iter().map(|query| {
         let request = SearchVideosRequest {
             query,
             duration: Some("short".to_string()),
@@ -462,18 +443,26 @@ async fn gather_fast_discovery_fallback(yt: &YoutubeService) -> Vec<VideoSummary
         }
     });
 
-    join_all(searches)
-        .await
-        .into_iter()
-        .flatten()
-        .flat_map(|response| {
+    let mut returned = 0usize;
+    let mut kept: Vec<VideoSummary> = Vec::new();
+    for response in join_all(searches).await.into_iter().flatten() {
+        returned += response.items.len();
+        kept.extend(
             response
                 .items
                 .into_iter()
                 .filter(is_short_candidate)
-                .take(SHORTS_PER_SEARCH)
-        })
-        .collect()
+                .take(SHORTS_PER_SEARCH),
+        );
+    }
+
+    tracing::info!(
+        lane,
+        returned,
+        kept = kept.len(),
+        "[shorts] discovery search results"
+    );
+    kept
 }
 
 fn fallback_discovery_queries() -> Vec<String> {
@@ -533,9 +522,10 @@ async fn gather_subscription_shorts(
 fn is_short_candidate(video: &VideoSummary) -> bool {
     video.id.len() == 11
         && !video.id.starts_with("channel:")
+        && !video.is_live
         && video
             .duration_seconds
-            .is_some_and(|seconds| (1..=SHORTS_DISCOVERY_MAX_DURATION).contains(&seconds))
+            .is_none_or(|seconds| (1..=SHORTS_DISCOVERY_MAX_DURATION).contains(&seconds))
 }
 
 #[cfg(test)]
@@ -596,7 +586,18 @@ mod tests {
         assert!(is_short_candidate(&video("01234567890", Some(30))));
         assert!(!is_short_candidate(&video("too_short", Some(30))));
         assert!(!is_short_candidate(&video("01234567890", Some(600))));
-        assert!(!is_short_candidate(&video("01234567890", None)));
+    }
+
+    #[test]
+    fn is_short_candidate_keeps_results_without_a_duration() {
+        assert!(is_short_candidate(&video("01234567890", None)));
+    }
+
+    #[test]
+    fn is_short_candidate_rejects_live_streams() {
+        let mut live = video("01234567890", None);
+        live.is_live = true;
+        assert!(!is_short_candidate(&live));
     }
 
     #[test]

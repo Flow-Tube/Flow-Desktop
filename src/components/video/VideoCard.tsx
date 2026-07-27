@@ -583,7 +583,7 @@ function VideoCardComponent({
     return (
       <div
         ref={cardRef}
-        className="group relative flex w-full gap-2 rounded-xl p-1.5 -m-1.5 transition-all duration-300"
+        className="group relative flex w-full gap-2 rounded-xl p-1.5 -m-1.5 transition-colors duration-200 ease-out"
         style={cardStyle}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -642,7 +642,7 @@ function VideoCardComponent({
         <div className="relative shrink-0">
           <button
             onClick={openMenuFromDots}
-            className="rounded-full p-1 text-chrome-neutral-500 opacity-0 transition-all duration-150 hover:bg-chrome-neutral-800 hover:text-chrome-neutral-200 group-hover:opacity-100"
+            className="rounded-full p-1 text-chrome-neutral-500 opacity-0 transition duration-150 ease-out hover:bg-chrome-neutral-800 hover:text-chrome-neutral-200 group-hover:opacity-100"
           >
             <MoreVertical size={18} />
           </button>
@@ -739,7 +739,7 @@ function VideoCardComponent({
           <button
             type="button"
             onClick={openMenuFromDots}
-            className="mt-0.5 rounded-full p-1 text-chrome-neutral-500 opacity-0 transition-all duration-150 hover:bg-chrome-neutral-800 hover:text-chrome-neutral-200 group-hover:opacity-100"
+            className="mt-0.5 rounded-full p-1 text-chrome-neutral-500 opacity-0 transition duration-150 ease-out hover:bg-chrome-neutral-800 hover:text-chrome-neutral-200 group-hover:opacity-100"
           >
             <MoreVertical size={18} />
           </button>
@@ -862,7 +862,7 @@ function VideoCardComponent({
         <div className="relative shrink-0">
           <button
             onClick={openMenuFromDots}
-            className="p-1 rounded-full text-chrome-zinc-500 hover:text-chrome-zinc-200 hover:bg-chrome-zinc-800 opacity-0 group-hover:opacity-100 transition-all duration-150 mt-0.5"
+            className="p-1 rounded-full text-chrome-zinc-500 hover:text-chrome-zinc-200 hover:bg-chrome-zinc-800 opacity-0 group-hover:opacity-100 transition duration-150 ease-out mt-0.5"
           >
             <MoreVertical size={18} />
           </button>

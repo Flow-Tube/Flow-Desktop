@@ -33,7 +33,13 @@ impl InnertubeClient {
         sequence_params: Option<String>,
         region: Option<String>,
     ) -> AppResult<ShortsFeed> {
+        let started = std::time::Instant::now();
         let visitor_data = self.fetch_visitor_data().await;
+        tracing::info!(
+            elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+            resolved = visitor_data.is_some(),
+            "[shorts] reel visitor_data step"
+        );
         let mut context = get_android_context(visitor_data);
         if let Some(region) = region.as_deref() {
             let cleaned = region.trim().to_ascii_uppercase();

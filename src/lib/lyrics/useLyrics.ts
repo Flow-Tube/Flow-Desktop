@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { SongItem } from "../../types/music";
 import type { LyricsEntry } from "./types";
 import { getLyrics, forceRefresh } from "./lyricsHelper";
+import { getOfflineLyrics } from "./offline";
 import { entriesAreSynced } from "./sync";
 
 interface LyricsState {
@@ -67,6 +68,19 @@ export function useLyrics(track: SongItem | null) {
       reqRef.current++;
       setState({ ...EMPTY });
       return;
+    }
+    // Show lyrics saved with a download immediately instead of making an offline
+    // listener wait out the whole provider chain. `load` keeps these visible
+    // while it runs, and a synced result still replaces them if one arrives.
+    const offline = getOfflineLyrics(videoIdOf(track));
+    if (offline) {
+      setState({
+        entries: offline,
+        plain: offline.map((entry) => entry.text).join("\n"),
+        isSynced: false,
+        providerName: "Downloaded",
+        loading: true,
+      });
     }
     void load(track);
   }, [track, load]);

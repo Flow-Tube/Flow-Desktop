@@ -247,7 +247,7 @@ export function GlobalVideoPlayer() {
       style={frameStyle}
     >
       {isFloating && (
-        <div className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/55 p-1 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+        <div className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
           <button
             type="button"
             aria-label="Expand video"

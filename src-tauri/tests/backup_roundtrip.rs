@@ -7,9 +7,7 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
-use flow_desktop_lib::commands::backup::{
-    SUBSCRIPTION_CHANNELS_KEY, export_backup, import_backup,
-};
+use flow_desktop_lib::commands::backup::{SUBSCRIPTION_CHANNELS_KEY, export_backup, import_backup};
 
 async fn memory_pool() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -89,8 +87,18 @@ async fn master_export_import_round_trips_into_an_empty_database() {
     let summary = import_backup(&target, &payload).await.unwrap();
 
     assert_eq!(history_count(&target).await, 1);
-    assert!(get_setting(&target, "liked_items").await.unwrap().contains("v1"));
-    assert!(get_setting(&target, "subscriptions").await.unwrap().contains("UCabc"));
+    assert!(
+        get_setting(&target, "liked_items")
+            .await
+            .unwrap()
+            .contains("v1")
+    );
+    assert!(
+        get_setting(&target, "subscriptions")
+            .await
+            .unwrap()
+            .contains("UCabc")
+    );
     assert_eq!(
         get_setting(&target, "autoplay_enabled").await.as_deref(),
         Some("false")

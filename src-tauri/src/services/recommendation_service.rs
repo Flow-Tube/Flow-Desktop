@@ -14,11 +14,10 @@ use crate::flow_neuro::scoring::{
     CHANNEL_SUPPRESSION_DAYS, FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona,
     IMPRESSION_CACHE_MAX, IdfSnapshot, JITTER_COLD_START, JITTER_NORMAL,
     ONBOARDING_WARMUP_INTERACTIONS, QUERY_OVERLAP_THRESHOLD, QUERY_ROTATION_FLOOR,
-    QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX,
-    SESSION_TOPIC_HISTORY_MAX, ScoredVideo, TimeBucket, TopicEvidence, UserBrain,
-    VIDEO_SUPPRESSION_DAYS, apply_smart_diversity, channel_inferred_blocked, classify_persona,
-    extract_features, get_topic_categories, is_generic_word, is_music_track, normalize_lemma,
-    strip_domain_tag, tokenize,
+    QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX, SESSION_TOPIC_HISTORY_MAX, ScoredVideo,
+    TimeBucket, TopicEvidence, UserBrain, VIDEO_SUPPRESSION_DAYS, apply_smart_diversity,
+    channel_inferred_blocked, classify_persona, extract_features, get_topic_categories,
+    is_generic_word, is_music_track, normalize_lemma, strip_domain_tag, tokenize,
 };
 use crate::flow_neuro::signals::{InteractionType, apply_interaction};
 use crate::models::video::{MusicHomeChip, MusicHomeSection, VideoSummary};
@@ -949,8 +948,7 @@ impl RecommendationService {
                         }
                         let intersection = tokens.intersection(recent).count();
                         let union = tokens.union(recent).count();
-                        union > 0
-                            && (intersection as f64 / union as f64) > QUERY_OVERLAP_THRESHOLD
+                        union > 0 && (intersection as f64 / union as f64) > QUERY_OVERLAP_THRESHOLD
                     })
             });
 
@@ -2451,8 +2449,7 @@ mod tests {
         // Oldest set fully overlaps the first query but sits outside the comparison window.
         recent.push(token_set("rust programming tutorial"));
 
-        let (rotated, _) =
-            RecommendationService::rotate_against_recent_queries(queries, &recent);
+        let (rotated, _) = RecommendationService::rotate_against_recent_queries(queries, &recent);
 
         assert!(rotated.contains(&"rust programming tutorial".to_string()));
     }
@@ -2460,8 +2457,7 @@ mod tests {
     #[test]
     fn rotation_never_shrinks_pool_below_floor_and_reports_saturation() {
         let queries = rotation_queries();
-        let recent: Vec<HashSet<String>> =
-            queries.iter().map(|query| token_set(query)).collect();
+        let recent: Vec<HashSet<String>> = queries.iter().map(|query| token_set(query)).collect();
 
         let (rotated, saturated) =
             RecommendationService::rotate_against_recent_queries(queries.clone(), &recent);
@@ -2477,8 +2473,7 @@ mod tests {
             .into_iter()
             .take(QUERY_ROTATION_FLOOR)
             .collect();
-        let recent: Vec<HashSet<String>> =
-            queries.iter().map(|query| token_set(query)).collect();
+        let recent: Vec<HashSet<String>> = queries.iter().map(|query| token_set(query)).collect();
 
         let (rotated, saturated) =
             RecommendationService::rotate_against_recent_queries(queries.clone(), &recent);

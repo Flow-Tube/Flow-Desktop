@@ -37,7 +37,7 @@ struct CachedResponse {
 #[derive(Clone)]
 pub struct StreamingManager {
     sessions: Arc<Mutex<HashMap<String, StreamSession>>>,
-    response_cache: Arc<Mutex<HashMap<String, CachedResponse>>>,
+    response_cache: Arc<Mutex<HashMap<String, Arc<CachedResponse>>>>,
     port: u16,
     sabr: SabrSessionManager,
 }
@@ -195,14 +195,14 @@ impl StreamingManager {
         None
     }
 
-    fn get_cached_response(&self, key: &str) -> Option<CachedResponse> {
+    fn get_cached_response(&self, key: &str) -> Option<Arc<CachedResponse>> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
         let mut cache = self.response_cache.lock().unwrap();
         cache.retain(|_, response| now.saturating_sub(response.cached_at) <= CACHE_TTL_SECONDS);
-        cache.get(key).cloned()
+        cache.get(key).map(Arc::clone)
     }
 
     fn store_cached_response(&self, key: String, response: CachedResponse) {
@@ -211,7 +211,7 @@ impl StreamingManager {
         }
 
         let mut cache = self.response_cache.lock().unwrap();
-        cache.insert(key, response);
+        cache.insert(key, Arc::new(response));
 
         let mut total_bytes: usize = cache.values().map(|cached| cached.body.len()).sum();
         while total_bytes > MAX_TOTAL_CACHE_BYTES {
@@ -358,7 +358,7 @@ async fn write_full_body(
 
 async fn write_cached_response(
     socket: &mut TcpStream,
-    cached: CachedResponse,
+    cached: &CachedResponse,
     head_only: bool,
 ) -> std::io::Result<()> {
     let mut response_headers = format!(
@@ -368,7 +368,7 @@ async fn write_cached_response(
         cached.content_type,
         cached.body.len()
     );
-    if let Some(content_range) = cached.content_range {
+    if let Some(content_range) = cached.content_range.as_deref() {
         response_headers.push_str(&format!("Content-Range: {content_range}\r\n"));
     }
     response_headers.push_str(&format!("Accept-Ranges: {}\r\n", cached.accept_ranges));
@@ -710,7 +710,7 @@ async fn relay_remote(
     let cache_key = format!("{target_url}|{range_key}");
 
     if let Some(cached) = manager.get_cached_response(&cache_key) {
-        return write_cached_response(socket, cached, head_only).await;
+        return write_cached_response(socket, &cached, head_only).await;
     }
 
     let mut headers_written = false;
@@ -826,9 +826,11 @@ async fn relay_remote(
                 || ct_lower.contains("dash+xml")
                 || ct_lower.contains("application/vnd.apple")
                 || ct_lower.contains("text/vtt");
+            let is_cacheable_kind = ct_lower.starts_with("image/");
 
             should_cache = status.is_success()
                 && !is_manifest
+                && is_cacheable_kind
                 && content_length_header.is_some()
                 && content_length_value > 0
                 && content_length_value <= MAX_CACHED_RESPONSE_BYTES

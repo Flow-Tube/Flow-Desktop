@@ -9,6 +9,7 @@ import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 
 const PREFETCH_WITHIN = 5;
 const STREAM_PRELOAD_RADIUS = 1;
+const RENDER_RADIUS = 2;
 
 export function ShortsFeed() {
   const { videoId } = useParams<{ videoId?: string }>();
@@ -165,30 +166,35 @@ export function ShortsFeed() {
         ref={containerRef}
         className="hide-scrollbar h-full w-full snap-y snap-mandatory overflow-y-auto"
       >
-        {items.map((short, index) => (
-          <section
-            key={short.id}
-            ref={(el) => {
-              slideRefs.current[index] = el;
-            }}
-            data-index={index}
-            className="h-full w-full snap-start"
-          >
-            <ShortPlayer
-              short={short}
-              active={index === activeIndex}
-              preload={Math.abs(index - activeIndex) <= STREAM_PRELOAD_RADIUS}
-              muted={muted}
-              playbackMode={playbackMode}
-              autoScrollSeconds={Number.isFinite(autoScrollSeconds) ? autoScrollSeconds : 10}
-              panelState={panelState}
-              onRequestPanel={setPanelState}
-              onToggleMute={() => setMuted((value) => !value)}
-              onRequestAdvance={advanceToNext}
-              onUnavailable={() => markUnavailable(short.id)}
-            />
-          </section>
-        ))}
+        {items.map((short, index) => {
+          const distance = Math.abs(index - activeIndex);
+          return (
+            <section
+              key={short.id}
+              ref={(el) => {
+                slideRefs.current[index] = el;
+              }}
+              data-index={index}
+              className="h-full w-full snap-start"
+            >
+              {distance <= RENDER_RADIUS && (
+                <ShortPlayer
+                  short={short}
+                  active={index === activeIndex}
+                  preload={distance <= STREAM_PRELOAD_RADIUS}
+                  muted={muted}
+                  playbackMode={playbackMode}
+                  autoScrollSeconds={Number.isFinite(autoScrollSeconds) ? autoScrollSeconds : 10}
+                  panelState={panelState}
+                  onRequestPanel={setPanelState}
+                  onToggleMute={() => setMuted((value) => !value)}
+                  onRequestAdvance={advanceToNext}
+                  onUnavailable={() => markUnavailable(short.id)}
+                />
+              )}
+            </section>
+          );
+        })}
       </div>
 
       <div className="absolute right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-3">

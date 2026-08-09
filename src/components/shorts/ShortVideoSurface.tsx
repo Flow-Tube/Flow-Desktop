@@ -24,6 +24,10 @@ import {
   parseCustomSpeedPresets,
   selectPreferredCaptionId,
 } from "../../lib/settings/playerRuntime";
+import {
+  AUDIO_DRIFT_TOLERANCE_SECONDS,
+  AUDIO_RESYNC_MIN_INTERVAL_MS,
+} from "../../lib/externalAudioSync";
 import type { CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleOverlay } from "../player/SubtitleOverlay";
 import { MediaScrubber } from "../ui/MediaScrubber";
@@ -114,6 +118,7 @@ export function ShortVideoSurface({
   const suppressClickRef = useRef(false);
   const appliedInitialRateForRef = useRef<string | null>(null);
   const autoAdvanceFiredRef = useRef(false);
+  const lastAudioResyncAtRef = useRef(0);
   const mutedRef = useRef(muted);
   useEffect(() => {
     mutedRef.current = muted;
@@ -280,10 +285,25 @@ export function ShortVideoSurface({
         audio.preservesPitch = true;
       }
 
+      const realignAudio = (force: boolean) => {
+        if (!audio || !hasSeparateAudio) return;
+        const now = performance.now();
+        if (!force) {
+          if (Math.abs(audio.currentTime - video.currentTime) <= AUDIO_DRIFT_TOLERANCE_SECONDS) return;
+          if (now - lastAudioResyncAtRef.current < AUDIO_RESYNC_MIN_INTERVAL_MS) return;
+          if (audio.seeking || audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+        }
+        lastAudioResyncAtRef.current = now;
+        try {
+          audio.currentTime = video.currentTime;
+        } catch {
+        }
+      };
+
       const playBoth = () => {
         if (userPausedRef.current) return;
         if (audio && hasSeparateAudio) {
-          audio.currentTime = video.currentTime;
+          realignAudio(false);
           void audio.play().catch(() => {});
         }
         void video.play().catch(() => {});
@@ -301,7 +321,10 @@ export function ShortVideoSurface({
 
       const loopBoth = () => {
         video.currentTime = 0;
-        if (audio && hasSeparateAudio) audio.currentTime = 0;
+        if (audio && hasSeparateAudio) {
+          lastAudioResyncAtRef.current = performance.now();
+          audio.currentTime = 0;
+        }
         playBoth();
       };
 
@@ -320,9 +343,8 @@ export function ShortVideoSurface({
       if (audio && hasSeparateAudio) {
         syncTimer = window.setInterval(() => {
           if (video.paused || audio.paused) return;
-          if (Math.abs(audio.currentTime - video.currentTime) > 0.25) {
-            audio.currentTime = video.currentTime;
-          }
+          if (audio.currentTime - video.currentTime > AUDIO_DRIFT_TOLERANCE_SECONDS) return;
+          realignAudio(false);
         }, 1_000);
       }
 
@@ -443,6 +465,7 @@ export function ShortVideoSurface({
       userPausedRef.current = false;
       setUserPaused(false);
       if (audio && hasSeparateAudio) {
+        lastAudioResyncAtRef.current = performance.now();
         audio.currentTime = video.currentTime;
         void audio.play().catch(() => {});
       }
@@ -581,6 +604,7 @@ export function ShortVideoSurface({
       const nextTime = Math.min(duration, Math.max(0, seconds));
       video.currentTime = nextTime;
       if (audio && hasSeparateAudio) {
+        lastAudioResyncAtRef.current = performance.now();
         audio.currentTime = nextTime;
         if (!video.paused && !userPausedRef.current) void audio.play().catch(() => {});
       }

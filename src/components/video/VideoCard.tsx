@@ -767,11 +767,11 @@ function VideoCardComponent({
         onClick={() => onPlay(video)}
       >
         {displayThumbnail ? (
-          <img 
+          <img
             ref={thumbnailRef}
-            src={displayThumbnail} 
-            alt={displayTitle} 
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            src={displayThumbnail}
+            alt={displayTitle}
+            className={`w-full h-full object-cover${IS_LINUX_RUNTIME ? "" : " transition-transform duration-300 group-hover:scale-[1.03]"}`}
             crossOrigin="anonymous"
             loading="lazy"
             decoding="async"

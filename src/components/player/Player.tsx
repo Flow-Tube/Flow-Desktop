@@ -15,6 +15,11 @@ import { SubtitleOverlay } from "./SubtitleOverlay";
 import { SETTINGS } from "../../lib/settings/schema";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import {
+  AUDIO_DRIFT_TOLERANCE_SECONDS,
+  AUDIO_RESYNC_MIN_INTERVAL_MS,
+  decideExternalAudioSync,
+} from "../../lib/externalAudioSync";
+import {
   formatPlaybackRate,
   normalizePlaybackRate,
   parseCustomSpeedPresets,
@@ -221,6 +226,8 @@ function extractCodecMimeType(mimeType?: string | null) {
 // probe there to avoid firing on transient first-frame delays elsewhere.
 const CODEC_PROBE_SECONDS = 4;
 
+const MAX_EXTERNAL_AUDIO_RECOVERIES = 2;
+
 function isVariantSupported(mimeType?: string | null) {
   const codecMimeType = extractCodecMimeType(mimeType);
   if (!codecMimeType) return true;
@@ -300,6 +307,12 @@ export const Player: React.FC<PlayerProps> = ({
   // Missing-video-codec probe (Linux/WebKitGTK): baseline playback position and dismissal.
   const codecProbeBaselineRef = useRef<number | null>(null);
   const codecWarningDismissedRef = useRef(false);
+  // External-audio clock bookkeeping (see AUDIO_DRIFT_TOLERANCE_SECONDS).
+  const lastAudioResyncAtRef = useRef(0);
+  const audioHoldRef = useRef(false);
+  const audioRecoveryAttemptsRef = useRef(0);
+  const attachedAudioIdentityRef = useRef<string | null>(null);
+  const videoProgressSampleRef = useRef<{ time: number; at: number } | null>(null);
 
   const {
     isPlaying,
@@ -1017,7 +1030,12 @@ export const Player: React.FC<PlayerProps> = ({
     const nextTime = Math.min(Math.max(time, 0), video.duration || duration || 0);
     video.currentTime = nextTime;
     if (audio) {
-      audio.currentTime = nextTime;
+      audioHoldRef.current = false;
+      lastAudioResyncAtRef.current = performance.now();
+      try {
+        audio.currentTime = nextTime;
+      } catch {
+      }
     }
     setCurrentTime(nextTime);
   }, [duration, setCurrentTime]);
@@ -1106,14 +1124,46 @@ export const Player: React.FC<PlayerProps> = ({
     setBufferedPct(Math.min(100, (bufferedEnd / video.duration) * 100));
   }, []);
 
+  const realignExternalAudioClock = useCallback(
+    (audio: HTMLAudioElement, video: HTMLVideoElement, force: boolean) => {
+      const now = performance.now();
+      if (!force) {
+        if (now - lastAudioResyncAtRef.current < AUDIO_RESYNC_MIN_INTERVAL_MS) return false;
+        if (audio.seeking || audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return false;
+      }
+      lastAudioResyncAtRef.current = now;
+      try {
+        audio.currentTime = video.currentTime;
+      } catch {
+        return false;
+      }
+      return true;
+    },
+    [],
+  );
+
+  const resumeExternalAudioPlayback = useCallback((audio: HTMLAudioElement, video: HTMLVideoElement) => {
+    if (!desiredPlayingRef.current || video.paused || video.ended) return;
+    void audio.play().catch(() => {});
+  }, []);
+
+  const isVideoAdvancing = useCallback((video: HTMLVideoElement, rate: number) => {
+    const now = performance.now();
+    const sample = videoProgressSampleRef.current;
+    if (!sample || now - sample.at < 400) {
+      if (!sample) videoProgressSampleRef.current = { time: video.currentTime, at: now };
+      return sample ? video.currentTime > sample.time : true;
+    }
+    const expected = ((now - sample.at) / 1000) * rate;
+    const advanced = video.currentTime - sample.time;
+    videoProgressSampleRef.current = { time: video.currentTime, at: now };
+    return advanced > expected * 0.5;
+  }, []);
+
   const syncExternalAudio = useCallback((hard = false) => {
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video || !audio || !usesExternalAudio) return;
-
-    if (mediaBufferingRef.current || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-      return;
-    }
 
     // WebKitGTK flushes the GStreamer audio pipeline on every playbackRate
     // assignment, so each write is an audible glitch there. Never write a
@@ -1125,21 +1175,67 @@ export const Player: React.FC<PlayerProps> = ({
       }
     };
 
-    const targetTime = video.currentTime;
-    const drift = audio.currentTime - targetTime;
-
-    if (hard || Math.abs(drift) > (IS_LINUX_RUNTIME ? 0.3 : 0.65)) {
-      audio.currentTime = targetTime;
+    if (hard) {
+      audioHoldRef.current = false;
+      realignExternalAudioClock(audio, video, true);
       applyAudioRate(playbackRate);
+      resumeExternalAudioPlayback(audio, video);
       return;
     }
 
-    if (!IS_LINUX_RUNTIME && Math.abs(drift) > 0.08 && !video.paused && !video.ended) {
-      applyAudioRate(clamp(playbackRate - drift * 0.12, playbackRate - 0.05, playbackRate + 0.05));
-    } else {
-      applyAudioRate(playbackRate);
+    if (mediaBufferingRef.current) {
+      if (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
+      mediaBufferingRef.current = false;
+      setIsBuffering(false);
     }
-  }, [playbackRate, usesExternalAudio]);
+    if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
+
+    const drift = audio.currentTime - video.currentTime;
+    const action = decideExternalAudioSync({
+      drift,
+      held: audioHoldRef.current,
+      videoAdvancing: isVideoAdvancing(video, playbackRate),
+      audioSeeking: audio.seeking,
+      audioReadyState: audio.readyState,
+      msSinceLastRealign: performance.now() - lastAudioResyncAtRef.current,
+    });
+
+    switch (action) {
+      case "steady":
+        if (!IS_LINUX_RUNTIME && Math.abs(drift) > 0.08 && !video.paused && !video.ended) {
+          applyAudioRate(clamp(playbackRate - drift * 0.12, playbackRate - 0.05, playbackRate + 0.05));
+        } else {
+          applyAudioRate(playbackRate);
+        }
+        return;
+      case "hold":
+        audioHoldRef.current = true;
+        audio.pause();
+        logPlayerEventRef.current("external-audio-hold", {
+          drift,
+          videoReadyState: video.readyState,
+        });
+        return;
+      case "resume":
+        audioHoldRef.current = false;
+        applyAudioRate(playbackRate);
+        resumeExternalAudioPlayback(audio, video);
+        return;
+      case "realign":
+        realignExternalAudioClock(audio, video, true);
+        applyAudioRate(playbackRate);
+        resumeExternalAudioPlayback(audio, video);
+        return;
+      case "wait":
+        return;
+    }
+  }, [
+    isVideoAdvancing,
+    playbackRate,
+    realignExternalAudioClock,
+    resumeExternalAudioPlayback,
+    usesExternalAudio,
+  ]);
 
   useEffect(() => {
     if (!usesExternalAudio || isSourceSwitching) return;
@@ -1492,15 +1588,14 @@ export const Player: React.FC<PlayerProps> = ({
         return;
       }
 
-      try {
-        audio.currentTime = video.currentTime;
-      } catch {
+      audioHoldRef.current = false;
+      if (Math.abs(audio.currentTime - video.currentTime) > AUDIO_DRIFT_TOLERANCE_SECONDS) {
+        realignExternalAudioClock(audio, video, false);
       }
-
-      audio.playbackRate = playbackRate;
-      if (desiredPlayingRef.current && !video.paused && !video.ended) {
-        void audio.play().catch(() => {});
+      if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
+        audio.playbackRate = playbackRate;
       }
+      resumeExternalAudioPlayback(audio, video);
 
       logPlayerEvent(eventName, {
         readyState: video.readyState,
@@ -1514,6 +1609,7 @@ export const Player: React.FC<PlayerProps> = ({
       lastSeekAtRef.current = Date.now();
       waitingSinceRef.current = null;
       stallCountRef.current = 0;
+      videoProgressSampleRef.current = null;
       const snapshot = qualitySwitchSnapshotRef.current;
       logPlayerEvent("html-video-seeking", {
         snapshotFromTime: snapshot?.fromTime,
@@ -1563,7 +1659,13 @@ export const Player: React.FC<PlayerProps> = ({
       video.removeEventListener("seeking", onVideoSeeking);
       video.removeEventListener("error", onVideoError);
     };
-  }, [logPlayerEvent, playbackRate, usesExternalAudio]);
+  }, [
+    logPlayerEvent,
+    playbackRate,
+    realignExternalAudioClock,
+    resumeExternalAudioPlayback,
+    usesExternalAudio,
+  ]);
 
   useEffect(() => {
     if (lastMediaIdentityRef.current === mediaIdentity) return;
@@ -1581,6 +1683,7 @@ export const Player: React.FC<PlayerProps> = ({
 
     mediaBufferingRef.current = false;
     setIsBuffering(false);
+    videoProgressSampleRef.current = null;
 
     if (targetTime > 0) {
       sourceSwitchingRef.current = true;
@@ -1633,11 +1736,22 @@ export const Player: React.FC<PlayerProps> = ({
     const audio = audioRef.current;
     if (!audio || !video || !usesExternalAudio || isSourceSwitching) return;
 
-    audio.currentTime = video.currentTime;
     audio.playbackRate = playbackRate;
     audio.preservesPitch = true;
     audio.volume = muted ? 0 : volume;
     audio.muted = muted || volume === 0;
+
+    const audioIdentity = `${mediaIdentity}|${selectedAudioTrack?.localUrl ?? ""}`;
+    if (attachedAudioIdentityRef.current !== audioIdentity) {
+      attachedAudioIdentityRef.current = audioIdentity;
+      audioHoldRef.current = false;
+      audioRecoveryAttemptsRef.current = 0;
+      lastAudioResyncAtRef.current = performance.now();
+      try {
+        audio.currentTime = video.currentTime;
+      } catch {
+      }
+    }
 
     if (isPlaying && !error) {
       void audio.play().catch(() => {});
@@ -1646,10 +1760,10 @@ export const Player: React.FC<PlayerProps> = ({
     error,
     isPlaying,
     isSourceSwitching,
+    mediaIdentity,
     muted,
     playbackRate,
     selectedAudioTrack?.localUrl,
-    src,
     usesExternalAudio,
     volume,
   ]);
@@ -1817,14 +1931,43 @@ export const Player: React.FC<PlayerProps> = ({
     const audio = audioRef.current;
     if (!video || !audio) return;
 
-    try {
-      audio.currentTime = video.currentTime;
-    } catch {
-    }
+    audioHoldRef.current = false;
+    realignExternalAudioClock(audio, video, true);
 
     if ((desiredPlayingRef.current || isPlaying) && usesExternalAudio && !isSourceSwitching) {
       void audio.play().catch(() => {});
     }
+  };
+
+  const handleAudioError = () => {
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    if (!video || !audio || !usesExternalAudio) return;
+
+    const attempts = audioRecoveryAttemptsRef.current + 1;
+    audioRecoveryAttemptsRef.current = attempts;
+    logPlayerEvent("external-audio-error", {
+      mediaError: audio.error ? { code: audio.error.code, message: audio.error.message } : null,
+      attempts,
+    });
+
+    if (attempts > MAX_EXTERNAL_AUDIO_RECOVERIES) {
+      fireRetrySourceRef.current("external-audio-error");
+      return;
+    }
+
+    const resumeAt = video.currentTime;
+    const onReloaded = () => {
+      audio.removeEventListener("loadedmetadata", onReloaded);
+      lastAudioResyncAtRef.current = performance.now();
+      try {
+        audio.currentTime = resumeAt;
+      } catch {
+      }
+      resumeExternalAudioPlayback(audio, video);
+    };
+    audio.addEventListener("loadedmetadata", onReloaded);
+    audio.load();
   };
 
   const CATEGORY_LABELS: Record<string, string> = {
@@ -1845,8 +1988,7 @@ export const Player: React.FC<PlayerProps> = ({
     if (!video) return;
 
     const [_, end] = segment.segment;
-    video.currentTime = end;
-    setCurrentTime(end);
+    seekTo(end);
 
     setNotifyToast(prev => prev ? { ...prev, visible: false } : null);
     if (notifyTimeoutRef.current !== null) {
@@ -1876,9 +2018,8 @@ export const Player: React.FC<PlayerProps> = ({
           if (action === "skip") {
             if (!skippedSegmentsRef.current.has(segment.UUID)) {
               skippedSegmentsRef.current.add(segment.UUID);
-              
-              video.currentTime = end;
-              setCurrentTime(end);
+
+              seekTo(end);
 
               const durationSkipped = Math.max(0, end - start);
               void incrementStats(segment.category as SponsorBlockCategory, durationSkipped);
@@ -2032,6 +2173,7 @@ export const Player: React.FC<PlayerProps> = ({
           src={selectedAudioTrack.localUrl}
           preload="auto"
           onLoadedMetadata={handleAudioLoadedMetadata}
+          onError={handleAudioError}
           className="hidden"
         />
       )}

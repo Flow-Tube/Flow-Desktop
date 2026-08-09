@@ -112,6 +112,7 @@ const computeAvailableSourceModes = (info: StreamInfo): SourceMode[] => {
     if (info.sabr?.available && info.sabr?.manifestUrl) modes.push("sabr-dash");
   }
   if (info.hlsManifestUrl && !modes.includes("hls")) modes.push("hls");
+  if (isLive && info.dashManifestUrl && !modes.includes("dash-native")) modes.push("dash-native");
   return modes;
 };
 
@@ -269,6 +270,17 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         const initialMode: SourceMode = availableModes[0] || "unavailable";
         attemptedModesRef.current.add(initialMode);
         setSourceMode(initialMode);
+
+        if (initialMode === "unavailable") {
+          setStreamError(
+            info.isLive
+              ? "This live broadcast did not return a playable manifest."
+              : "No playable source was returned for this video.",
+          );
+          setStreamErrorKind("streaming");
+          recordPlayerEvent(`video resolve produced no source (live=${info.isLive})`);
+          return;
+        }
 
         if (initialMode === "hls") {
           setHlsManifestUrl(info.hlsManifestUrl || null);

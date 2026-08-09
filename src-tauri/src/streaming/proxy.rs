@@ -332,6 +332,12 @@ async fn write_options(socket: &mut TcpStream) -> std::io::Result<()> {
 }
 
 // Write a complete in-memory body (200/inline/SABR segment).
+//
+// Every response this server writes closes the connection: `handle_connection`
+// serves exactly one request per socket. Saying anything else — or saying
+// nothing, which HTTP/1.1 reads as keep-alive — leaves the client holding a
+// connection that is already gone, and GStreamer's HTTP source (WebKitGTK's
+// media stack) reacts to that mid-stream by stalling rather than reconnecting.
 async fn write_full_body(
     socket: &mut TcpStream,
     content_type: &str,
@@ -367,8 +373,7 @@ async fn write_cached_response(
     }
     response_headers.push_str(&format!("Accept-Ranges: {}\r\n", cached.accept_ranges));
     response_headers.push_str(CORS_HEADERS);
-    response_headers
-        .push_str("Cache-Control: private, max-age=1800\r\nConnection: keep-alive\r\n\r\n");
+    response_headers.push_str("Cache-Control: private, max-age=1800\r\nConnection: close\r\n\r\n");
 
     socket.write_all(response_headers.as_bytes()).await?;
     if !head_only {
@@ -848,13 +853,8 @@ async fn relay_remote(
             } else {
                 response_headers.push_str("Cache-Control: private, max-age=1800\r\n");
             }
-            // With no Content-Length the body is delimited by connection close, so the client
-            // reads until EOF instead of mis-framing a keep-alive response.
-            if content_length_header.is_some() {
-                response_headers.push_str("Connection: keep-alive\r\n\r\n");
-            } else {
-                response_headers.push_str("Connection: close\r\n\r\n");
-            }
+            // Content-Length the body is delimited by that close anyway.
+            response_headers.push_str("Connection: close\r\n\r\n");
 
             socket.write_all(response_headers.as_bytes()).await?;
             headers_written = true;

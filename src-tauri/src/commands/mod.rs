@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod db;
 pub mod diagnostics;
 pub mod downloads;

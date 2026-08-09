@@ -18,6 +18,7 @@ import { PlaylistShelf } from "../components/shelf/PlaylistShelf";
 import { PostShelf } from "../components/shelf/PostShelf";
 import { getWatchHistory } from "../lib/api/db";
 import { usePublishTitle } from "../lib/usePublishTitle";
+import { getString } from "../lib/i18n/index";
 
 interface ChannelProps {
   onPlay: (video: VideoSummary) => void;
@@ -164,6 +165,8 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
   
   const [items, setItems] = useState<ChannelItem[]>([]);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [heroError, setHeroError] = useState(false);
+  const [heroRetryToken, setHeroRetryToken] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingTab, setLoadingTab] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -227,18 +230,20 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
 
     const loadHero = async () => {
       setLoading(true);
+      setHeroError(false);
       try {
         const details = await getChannelDetails(channelId);
         setChannelInfo(details);
       } catch (err) {
         console.error("Failed to load channel details", err);
+        setHeroError(true);
       } finally {
         setLoading(false);
       }
     };
 
     loadHero();
-  }, [channelId]);
+  }, [channelId, heroRetryToken]);
 
   const cacheKey = activeSearchQuery 
     ? "" 
@@ -381,6 +386,23 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
 
   if (loading && !channelInfo) {
     return <ChannelPageSkeleton />;
+  }
+
+  if (heroError && !channelInfo) {
+    return (
+      <div className="flex flex-grow flex-col items-center justify-center gap-4 bg-background px-6 py-24 text-center">
+        <h2 className="text-2xl font-bold tracking-tight text-chrome-neutral-100">
+          {getString("channel_unavailable_title")}
+        </h2>
+        <p className="max-w-md text-sm text-chrome-neutral-400">{getString("channel_unavailable_body")}</p>
+        <button
+          onClick={() => setHeroRetryToken((token) => token + 1)}
+          className="rounded-full bg-surface-container-high px-5 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
+        >
+          {getString("retry")}
+        </button>
+      </div>
+    );
   }
 
   const handleSearchSubmit = () => {

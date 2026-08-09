@@ -189,12 +189,12 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const [settingsPane, setSettingsPane] = useState<SettingsPane>("root");
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [submitAtSeconds, setSubmitAtSeconds] = useState(0);
-  const [hoverTime, setHoverTime] = useState<number | null>(null);
-  const [hoverPct, setHoverPct] = useState(0);
   const chapterPillRef = useRef<HTMLButtonElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
   const timeTextRef = useRef<HTMLDivElement>(null);
+  const hoverPillRef = useRef<HTMLDivElement>(null);
+  const hoverTextRef = useRef<HTMLSpanElement>(null);
 
   const segments = React.useMemo(() => {
     if (isLive || !chapters || chapters.length === 0) {
@@ -218,10 +218,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     });
     return capped;
   }, [chapters, duration, isLive]);
-
-  const hoverChapter = hoverTime !== null
-    ? segments?.find((c) => hoverTime >= c.startSeconds && hoverTime <= c.endSeconds)
-    : null;
 
   useEffect(() => {
     let animId: number;
@@ -333,6 +329,31 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     }
   }, [settingsOpen]);
 
+  const updateHoverPreview = (clientX: number, trackEl?: HTMLElement) => {
+    const pill = hoverPillRef.current;
+    if (!pill || isLive || !(duration > 0)) return;
+    const track =
+      trackEl ?? containerRef.current?.querySelector<HTMLElement>("[data-progress-track]");
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    // Clamp so the pill keeps tracking at the track edges during a drag.
+    const x = Math.min(rect.width, Math.max(0, clientX - rect.left));
+    pill.style.left = `${x}px`;
+    pill.style.opacity = "1";
+    if (hoverTextRef.current) {
+      const time = (x / rect.width) * duration;
+      const chapter = segments?.find((c) => time >= c.startSeconds && time <= c.endSeconds);
+      hoverTextRef.current.textContent = chapter?.title
+        ? `${formatTime(time)} • ${chapter.title}`
+        : formatTime(time);
+    }
+  };
+
+  const hideHoverPreview = () => {
+    if (hoverPillRef.current) hoverPillRef.current.style.opacity = "0";
+  };
+
   useEffect(() => {
     if (!isScrubbing) return;
 
@@ -346,6 +367,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         1,
         Math.max(0, (e.clientX - rect.left) / rect.width)
       );
+      updateHoverPreview(e.clientX, track);
       if (isLive) {
         const video = containerRef.current?.querySelector("video");
         if (!video || !video.seekable.length) return;
@@ -358,6 +380,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     };
 
     const handlePointerUp = () => {
+      hideHoverPreview();
       setIsScrubbing(false);
     };
 
@@ -394,13 +417,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   };
 
   const handleProgressMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const ratio = Math.min(
-      1,
-      Math.max(0, (event.clientX - rect.left) / rect.width)
-    );
-    setHoverPct(ratio * 100);
-    setHoverTime(ratio * (duration || 0));
+    updateHoverPreview(event.clientX, event.currentTarget);
   };
 
   const renderSettingRow = (
@@ -448,7 +465,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             data-progress-track
             className="group/seekbar relative flex h-6 cursor-pointer items-center"
             onMouseMove={handleProgressMove}
-            onMouseLeave={() => setHoverTime(null)}
+            onMouseLeave={() => {
+              // During a drag the document-level pointermove owns the pill.
+              if (!isScrubbing) hideHoverPreview();
+            }}
             onMouseDown={(event) => {
               setIsScrubbing(true);
               handlePointerSeek(event.clientX);
@@ -536,19 +556,16 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               <div className="relative h-3.5 w-3.5 rounded-full border-[3px] border-primary bg-chrome-white shadow-md shadow-chrome-black/40" />
             </div>
 
-            {/* Hover Preview Tooltip */}
-            {hoverTime !== null && duration > 0 && !isLive && (
+            {/* Hover preview pill — always mounted so the imperative position
+                writes land before it fades in; only opacity animates. */}
+            {!isLive && (
               <div
-                className="absolute bottom-8 -translate-x-1/2 flex flex-col items-center pointer-events-none z-50 transition-all duration-75"
-                style={{ left: `${hoverPct}%` }}
+                ref={hoverPillRef}
+                className="absolute bottom-8 -translate-x-1/2 flex flex-col items-center pointer-events-none z-50 opacity-0 transition-opacity duration-75"
+                style={{ left: 0 }}
               >
-                
-                <div className="bg-chrome-black/30 border border-chrome-white/10 px-2 py-1 rounded-full text-chrome-white min-w-max text-center backdrop-blur-sm flex flex-col gap-0.5 leading-tight">
-                  {hoverChapter && (
-                    <span className="text-[12px] font-medium font-sans">
-                      {formatTime(hoverTime)} • {hoverChapter.title}
-                    </span>
-                  )}
+                <div className="bg-chrome-black/80 border border-chrome-white/10 px-2 py-1 rounded-full text-chrome-white min-w-max text-center flex flex-col gap-0.5 leading-tight">
+                  <span ref={hoverTextRef} className="text-[12px] font-medium font-sans" />
                 </div>
               </div>
             )}

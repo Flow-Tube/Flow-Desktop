@@ -32,11 +32,14 @@ export type SearchCategory =
   | 'podcasts'
   | 'episodes';
 
-export type SearchSortBy = 'relevance' | 'date' | 'views';
+export type SearchSortBy = 'relevance' | 'date' | 'views' | 'rating';
+
+export type SearchFeatureFilter = 'any' | 'hd' | '4k' | 'subtitles' | 'creative_commons' | 'hdr';
 
 export interface AdvancedFilters {
-  uploadDate: 'any' | 'today' | 'week' | 'month';
-  duration: 'any' | 'short' | 'long'; // short = <4min, long = >20min
+  uploadDate: 'any' | 'hour' | 'today' | 'week' | 'month' | 'year';
+  duration: 'any' | 'short' | 'medium' | 'long'; // short = <4min, medium = 4-20min, long = >20min
+  feature: SearchFeatureFilter;
 }
 
 export type TopResult =
@@ -263,6 +266,7 @@ export function useCombinedSearch(
   const [filters, setFilters] = useState<AdvancedFilters>({
     uploadDate: 'any',
     duration: 'any',
+    feature: 'any',
   });
 
   const [results, setResults] = useState<CombinedSearchResults>(emptyResults);
@@ -374,7 +378,8 @@ export function useCombinedSearch(
             sortBy: sortRef.current,
             uploadDate: adv.uploadDate,
             duration: adv.duration,
-            feature: isLive ? 'live' : undefined,
+            // Innertube takes a single feature param, so the Live category wins.
+            feature: isLive ? 'live' : adv.feature !== 'any' ? adv.feature : undefined,
           });
           if (!alive()) return;
 

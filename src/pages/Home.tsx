@@ -175,6 +175,12 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const requestSequenceRef = useRef(0);
   const lastImpressionSignatureRef = useRef<string>("");
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreObserverRef = useRef<IntersectionObserver | null>(null);
+  // IntersectionObserver only reports transitions, so once the sentinel is intersecting it
+  // never fires again on its own — every deferred re-attempt must consult this flag.
+  const sentinelIntersectingRef = useRef(false);
+  const loadMoreRetryTimerRef = useRef<number | null>(null);
+  const handleLoadMoreRef = useRef<((options?: { manual?: boolean }) => Promise<void>) | null>(null);
   const loadingMoreRef = useRef(false);
   const initialDiscoverHydratingRef = useRef(false);
   const videosRef = useRef<VideoSummary[]>([]);
@@ -397,7 +403,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     });
 
     const fallback = fallbackCandidates.filter((video) => !currentIds.has(video.id));
-    return capPerChannel([...currentVideos, ...(preferred.length > 0 ? preferred : fallback)], 3);
+    const batch = preferred.length > 0 ? preferred : fallback;
+    // Cap only the incoming batch: re-capping the accumulated feed silently dropped every
+    // future video from any channel that had ever reached the cap, shrinking appends to zero.
+    return [...currentVideos, ...capPerChannel(batch, 3)];
   };
 
   const mixRankedLanes = (
@@ -410,6 +419,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     const finalMix: VideoSummary[] = [];
     const usedVideos = new Set<string>();
     const recentChannels = new Set<string>();
+    const recentChannelWindow: string[] = [];
     type LaneName = "subscriptions" | "discovery" | "related" | "viral";
     const relatedTarget = relatedLane.length > 0 ? Math.round(quotas.discoveryLimit * 0.4) : 0;
     const discoveryTarget = Math.max(0, quotas.discoveryLimit - relatedTarget);
@@ -447,12 +457,13 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       finalMix.push(candidate);
       usedVideos.add(candidate.id);
       recentChannels.add(channelKey);
-      if (recentChannels.size > 6) {
-        const firstIndex = finalMix.length - 6;
-        const firstCandidate = firstIndex >= 0 ? finalMix[firstIndex] : undefined;
-        const first = firstCandidate?.channelId ?? firstCandidate?.id;
-        if (first) {
-          recentChannels.delete(first);
+      recentChannelWindow.push(channelKey);
+      if (recentChannelWindow.length > 6) {
+        const evicted = recentChannelWindow.shift();
+        // relaxChannel pushes can duplicate a key inside the window — only forget the
+        // channel once its last occurrence leaves.
+        if (evicted && !recentChannelWindow.includes(evicted)) {
+          recentChannels.delete(evicted);
         }
       }
       return true;
@@ -811,7 +822,29 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     return [];
   };
 
-  const handleLoadMore = async () => {
+  const clearLoadMoreRetryTimer = () => {
+    if (loadMoreRetryTimerRef.current !== null) {
+      window.clearTimeout(loadMoreRetryTimerRef.current);
+      loadMoreRetryTimerRef.current = null;
+    }
+  };
+
+  // The observer never re-fires for an already-intersecting sentinel, so every path that
+  // declines a trigger while it may still be intersecting schedules exactly one deferred
+  // re-attempt (single timer — no stacking).
+  const scheduleLoadMoreRetry = (delayMs: number) => {
+    if (loadMoreRetryTimerRef.current !== null) {
+      return;
+    }
+    loadMoreRetryTimerRef.current = window.setTimeout(() => {
+      loadMoreRetryTimerRef.current = null;
+      if (sentinelIntersectingRef.current) {
+        void handleLoadMoreRef.current?.();
+      }
+    }, delayMs);
+  };
+
+  const handleLoadMore = async (options?: { manual?: boolean }) => {
     if (
       activeTab !== "discover" ||
       loadingMoreRef.current ||
@@ -821,9 +854,18 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       loading ||
       !hasMoreDiscover
     ) {
+      if (activeTab === "discover" && homeFeedEnabled && hasMoreDiscover) {
+        scheduleLoadMoreRetry(400);
+      }
       return;
     }
-    if (Date.now() < loadMoreBackoffUntilRef.current) {
+    if (options?.manual) {
+      // An explicit click is unambiguous user intent — it overrides the auto-load backoff.
+      loadMoreBackoffUntilRef.current = 0;
+      loadMoreMissesRef.current = 0;
+      clearLoadMoreRetryTimer();
+    } else if (Date.now() < loadMoreBackoffUntilRef.current) {
+      scheduleLoadMoreRetry(loadMoreBackoffUntilRef.current - Date.now() + 50);
       return;
     }
 
@@ -846,12 +888,13 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         });
       }
 
+      // Two queries per page (not three): the pool refreshes less often, so the backend's
+      // rotation memory saturates far slower while result volume stays ample.
       const queryA = queryPool[discoveryIndexRef.current];
       const queryB = queryPool[discoveryIndexRef.current + 1];
-      const queryC = queryPool[discoveryIndexRef.current + 2];
-      discoveryIndexRef.current += 3;
+      discoveryIndexRef.current += 2;
 
-      const searchQueries = [queryA, queryB, queryC].filter(
+      const searchQueries = [queryA, queryB].filter(
         (query): query is string => typeof query === "string" && query.length > 0,
       );
       const finalQueries = searchQueries;
@@ -865,7 +908,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
 
       const [rawDiscoveryVideos, rawSubscriptionVideos, subscriptionRotationVideos, personalizedMusicVideos, relatedVideos] = await Promise.all([
         withTimeout(
-          fetchDiscoveryPool(finalQueries, "load-more-discovery-pool", 3),
+          fetchDiscoveryPool(finalQueries, "load-more-discovery-pool", 2),
           LOAD_MORE_SOURCE_TIMEOUT_MS,
           [] as VideoSummary[],
           "load-more-discovery",
@@ -896,13 +939,17 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         ),
       ]);
 
+      // Minimum 12: on late pages nearly everything is session-seen, and a strict
+      // unseen-only filter collapsed the pools to zero and armed the backoff forever.
       const filteredDiscovery = filterDiscoveryLane(
         preferSessionFreshVideos(
           filterFeedVideos([...personalizedMusicVideos, ...relatedVideos, ...rawDiscoveryVideos], watchedIdsRef.current),
+          12,
         ),
       );
       const filteredSubscriptions = preferSessionFreshVideos(
         filterFeedVideos([...subscriptionRotationVideos, ...rawSubscriptionVideos], watchedIdsRef.current),
+        12,
       );
 
       logHomeFeed("load-more-pools", {
@@ -955,17 +1002,17 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         sample: summarizeVideosForLog(dedupedBatch),
       });
 
-      let appendedVideos: VideoSummary[] = [];
-      setVideos((currentVideos) => {
-        const nextVideos = appendUniqueVideos(currentVideos, dedupedBatch);
-        appendedVideos = nextVideos.slice(currentVideos.length);
-        if (activeTab === "discover") {
-          updateCache("discover", nextVideos);
-        }
-        return nextVideos;
-      });
+      // Computed outside the setVideos updater: reading a captured variable back out of an
+      // updater only works on React's eager-state fast path (any queued update yields []
+      // and falsely arms the backoff), and side effects inside it double-fire in StrictMode.
+      const currentVideos = videosRef.current;
+      const nextVideos = appendUniqueVideos(currentVideos, dedupedBatch);
+      const appendedVideos = nextVideos.slice(currentVideos.length);
 
       if (appendedVideos.length > 0) {
+        videosRef.current = nextVideos;
+        setVideos(nextVideos);
+        updateCache("discover", nextVideos);
         loadMoreMissesRef.current = 0;
         loadMoreBackoffUntilRef.current = 0;
         setHasMoreDiscover(true);
@@ -994,6 +1041,9 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
+      // If the appended rows didn't push the sentinel out of the viewport, the observer
+      // stays silent — re-check after layout settles (backoff, if armed, gates the retry).
+      scheduleLoadMoreRetry(250);
     }
   };
 
@@ -1184,7 +1234,9 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       setContinueWatchingVideos(buildContinueWatchingVideos(watchedHistory));
       watchedIdsRef.current = watchedIds;
       discoveryQueriesRef.current = queryCandidates;
-      discoveryIndexRef.current = 3;
+      // The initial discover pool consumes queries 0-3 (queryLimit 4) — load-more starts
+      // after them so page one doesn't re-run a query whose results are all session-seen.
+      discoveryIndexRef.current = 4;
       loadMoreMissesRef.current = 0;
       loadMoreBackoffUntilRef.current = 0;
       setHasMoreDiscover(true);
@@ -1549,41 +1601,61 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     });
   }, [activeTab, loading, videos, isHidden]);
 
+  // handleLoadMore closes over per-render state, so the mount-once observer reaches it
+  // through a ref that always points at the latest render's closure.
   useEffect(() => {
-    if (
-      activeTab !== "discover" ||
-      !homeFeedEnabled ||
-      loading ||
-      loadingMore ||
-      !hasMoreDiscover ||
-      typeof IntersectionObserver === "undefined"
-    ) {
-      return;
-    }
+    handleLoadMoreRef.current = handleLoadMore;
+  });
 
-    const root = scrollContainerRef.current;
-    const target = loadMoreSentinelRef.current;
-    if (!root || !target) {
+  // Registered once and left mounted: rebuilding the observer from a dep array meant that
+  // any guarded early-return (no setState, no re-render) left an already-intersecting
+  // sentinel that could never fire again, permanently killing auto-load (issue #33).
+  // Gating state is checked inside handleLoadMore instead.
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") {
       return;
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const shouldLoad = entries.some((entry) => entry.isIntersecting);
-        if (shouldLoad) {
-          void handleLoadMore();
+        const latest = entries[entries.length - 1];
+        sentinelIntersectingRef.current = latest?.isIntersecting ?? false;
+        if (sentinelIntersectingRef.current) {
+          void handleLoadMoreRef.current?.();
         }
       },
       {
-        root,
+        root: scrollContainerRef.current,
         rootMargin: "0px 0px 320px 0px",
-        threshold: 0.1,
+        threshold: 0,
       },
     );
 
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [activeTab, hasMoreDiscover, homeFeedEnabled, loading, loadingMore, videos.length]);
+    loadMoreObserverRef.current = observer;
+    if (loadMoreSentinelRef.current) {
+      observer.observe(loadMoreSentinelRef.current);
+    }
+    return () => {
+      loadMoreObserverRef.current = null;
+      sentinelIntersectingRef.current = false;
+      observer.disconnect();
+      clearLoadMoreRetryTimer();
+    };
+  }, []);
+
+  // The sentinel div mounts and unmounts with loading/empty states — a callback ref keeps
+  // the persistent observer attached to whichever node currently exists.
+  const attachLoadMoreSentinel = useCallback((node: HTMLDivElement | null) => {
+    const observer = loadMoreObserverRef.current;
+    if (loadMoreSentinelRef.current && observer) {
+      observer.unobserve(loadMoreSentinelRef.current);
+    }
+    loadMoreSentinelRef.current = node;
+    sentinelIntersectingRef.current = false;
+    if (node && observer) {
+      observer.observe(node);
+    }
+  }, []);
 
   useEffect(() => {
     if (activeTab !== "discover" || !homeFeedEnabled || loading || loadingMore || videos.length > 0) {
@@ -1622,7 +1694,13 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     setContinueWatchingVideos((current) => current.filter((video) => video.id !== videoId));
   };
 
-  const visibleVideos = capPerChannel(videos.filter((video) => !isHidden(video)), 3);
+  // The render-time cap must scale with feed length: a fixed whole-feed cap made appended
+  // videos from any channel already at the cap invisible, so the grid stopped growing even
+  // though load-more was succeeding.
+  const visibleVideos = capPerChannel(
+    videos.filter((video) => !isHidden(video)),
+    3 + Math.floor(videos.length / 24),
+  );
   const visibleContinueWatchingVideos = continueWatchingEnabled
     ? continueWatchingVideos.filter((video) => !isHidden(video))
     : [];
@@ -1672,9 +1750,9 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
 
           {activeTab === "discover" && (
             <div className="flex flex-col items-center gap-3 pb-20">
-              <div ref={loadMoreSentinelRef} className="h-px w-full" />
+              <div ref={attachLoadMoreSentinel} className="h-px w-full" />
               <button
-                onClick={() => void handleLoadMore()}
+                onClick={() => void handleLoadMore({ manual: true })}
                 disabled={loadingMore}
                 className="inline-flex items-center gap-2 rounded-2xl border border-chrome-zinc-800 bg-chrome-zinc-900/40 px-5 py-3 text-sm font-semibold text-chrome-zinc-300 transition-all hover:border-chrome-zinc-700 hover:text-chrome-white disabled:cursor-not-allowed disabled:opacity-50"
               >

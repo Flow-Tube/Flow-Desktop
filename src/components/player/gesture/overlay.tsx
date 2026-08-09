@@ -11,6 +11,7 @@ import {
   Repeat1,
 } from "lucide-react";
 import type { PlaybackRate } from "../../../store/usePlayerStore";
+import { copyText } from "../../../lib/clipboard";
 
 export type PlayerSeekFeedback = {
   id: number;
@@ -65,21 +66,6 @@ function formatTime(seconds: number) {
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 }
 
-async function copyText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  textarea.remove();
-}
 
 export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   videoRef,

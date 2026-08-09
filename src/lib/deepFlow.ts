@@ -46,15 +46,30 @@ export function getDeepFlowRemainingMs(
   activatedAt = Number(getSettingValue(SETTINGS.DEEP_FLOW_ACTIVATED_AT)),
   expireHours = Number(getSettingValue(SETTINGS.DEEP_FLOW_EXPIRE_HOURS)),
 ): number | null {
-  if (!active || !activatedAt || expireHours === DEEP_FLOW_NEVER_EXPIRES_HOURS) return null;
+  if (!active) return null;
+  if (!activatedAt) return 0;
+  if (expireHours === DEEP_FLOW_NEVER_EXPIRES_HOURS) return null;
   return activatedAt + expireHours * 3_600_000 - Date.now();
 }
+
+let healingCorruptState = false;
 
 export function isDeepFlowCurrentlyActive(): boolean {
   const active = getSettingValue(SETTINGS.DEEP_FLOW_ACTIVE) === "true";
   if (!active) return false;
 
-  const remainingMs = getDeepFlowRemainingMs(active);
+  const activatedAt = Number(getSettingValue(SETTINGS.DEEP_FLOW_ACTIVATED_AT));
+  if (!activatedAt) {
+    if (!healingCorruptState) {
+      healingCorruptState = true;
+      void setSettingValue(SETTINGS.DEEP_FLOW_ACTIVE, "false").finally(() => {
+        healingCorruptState = false;
+      });
+    }
+    return false;
+  }
+
+  const remainingMs = getDeepFlowRemainingMs(active, activatedAt);
   return remainingMs === null || remainingMs > 0;
 }
 

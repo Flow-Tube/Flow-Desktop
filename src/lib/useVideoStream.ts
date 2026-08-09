@@ -181,6 +181,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
   const streamInfoRef = useRef<StreamInfo | null>(null);
   const attemptedModesRef = useRef<Set<SourceMode>>(new Set());
+  const stallExhaustedCyclesRef = useRef(0);
 
   const publishCaptions = useCallback(
     (tracks: CaptionTrack[]) => {
@@ -197,6 +198,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       setLoadingStream(true);
       setStreamError(null);
       setStreamErrorKind(null);
+      stallExhaustedCyclesRef.current = 0;
       recordPlayerEvent(`video resolve start: ${currentVideo.id}`);
       setStreamUrl(null);
       setDashManifestUrl(null);
@@ -386,9 +388,18 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
           setStreamError("Playback failed on all available sources for this video.");
           setStreamErrorKind("streaming");
           recordPlayerEvent("video playback failed: all sources exhausted");
-        } else {
-          console.warn("[Watch] stall on last available source; continuing to buffer", { reason });
+          return;
         }
+        // First exhausted stall cycle: let the last source keep buffering.
+        // On repeat, surface a real error instead of an endless spinner.
+        stallExhaustedCyclesRef.current += 1;
+        if (stallExhaustedCyclesRef.current < 2) {
+          console.warn("[Watch] stall on last available source; continuing to buffer", { reason });
+          return;
+        }
+        setStreamError("Playback failed on all available sources for this video.");
+        setStreamErrorKind("streaming");
+        recordPlayerEvent("video playback failed: repeated stalls with all sources exhausted");
         return;
       }
 
@@ -425,6 +436,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     setSelectedQualityId("auto");
     setStreamError(null);
     setStreamErrorKind(null);
+    stallExhaustedCyclesRef.current = 0;
     recordPlayerEvent(`video hard retry: ${currentVideo.id}`);
     void getStreamInfo(currentVideo.id)
       .then((info) => {

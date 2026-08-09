@@ -111,6 +111,8 @@ export const SETTINGS = {
   DOWNLOAD_THREADS: "download_threads",
   DOWNLOAD_LOCATION: "download_location",
   MUSIC_DOWNLOAD_LOCATION: "music_download_location",
+  DOWNLOAD_THUMBNAILS_ENABLED: "download_thumbnails_enabled",
+  DOWNLOAD_THUMBNAIL_MODE: "download_thumbnail_mode",
 
   AUTO_BACKUP_FREQUENCY: "auto_backup_frequency",
   AUTO_BACKUP_TYPE: "auto_backup_type",
@@ -268,7 +270,9 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.NOTIFICATION_CHECK_INTERVAL, "content", "360", "wired", ["15", "30", "60", "180", "360", "720", "1440"]),
   bool(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, "content", true, "wired"),
   str(SETTINGS.TRENDING_REGION, "content", "US", "persisted-only"),
-  bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired"),
+  // Session state, not a preference: exporting it can permanently mute history recording
+  // on the restoring device (its paired activated_at timestamp is internal too).
+  bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired", "internal"),
   num(SETTINGS.DEEP_FLOW_ACTIVATED_AT, "content", 0, "wired", 0, undefined, "internal"),
   str(SETTINGS.DEEP_FLOW_EXPIRE_HOURS, "content", "4", "wired", ["0", "1", "2", "4", "6", "8", "12", "24"]),
   bool(SETTINGS.DEEP_FLOW_SAVE_HISTORY, "content", false, "wired"),
@@ -297,6 +301,8 @@ export const SETTING_DEFINITIONS = [
   num(SETTINGS.DOWNLOAD_THREADS, "downloads", 3, "wired", 1, 8),
   str(SETTINGS.DOWNLOAD_LOCATION, "downloads", "", "wired"),
   str(SETTINGS.MUSIC_DOWNLOAD_LOCATION, "downloads", "", "wired"),
+  bool(SETTINGS.DOWNLOAD_THUMBNAILS_ENABLED, "downloads", true, "wired"),
+  str(SETTINGS.DOWNLOAD_THUMBNAIL_MODE, "downloads", "SIDECAR", "wired", ["SIDECAR", "EMBED", "BOTH"]),
 
   str(SETTINGS.AUTO_BACKUP_FREQUENCY, "data", "NONE", "persisted-only", ["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
   str(SETTINGS.AUTO_BACKUP_TYPE, "data", "APP_DATA", "wired", ["APP_DATA", "BRAIN", "MASTER"]),

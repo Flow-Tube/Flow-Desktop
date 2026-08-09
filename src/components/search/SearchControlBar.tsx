@@ -45,20 +45,34 @@ export function SearchControlBar({
     { value: 'relevance', label: getString('search_sort_relevance') },
     { value: 'date', label: getString('search_sort_date') },
     { value: 'views', label: getString('search_sort_views') },
+    { value: 'rating', label: getString('search_sort_rating') },
   ];
   const uploadOptions: { value: AdvancedFilters['uploadDate']; label: string }[] = [
     { value: 'any', label: getString('search_uploaded_any') },
+    { value: 'hour', label: getString('search_uploaded_hour') },
     { value: 'today', label: getString('search_uploaded_today') },
     { value: 'week', label: getString('search_uploaded_week') },
     { value: 'month', label: getString('search_uploaded_month') },
+    { value: 'year', label: getString('search_uploaded_year') },
   ];
   const durationOptions: { value: AdvancedFilters['duration']; label: string }[] = [
     { value: 'any', label: getString('search_length_any') },
     { value: 'short', label: getString('search_length_short') },
+    { value: 'medium', label: getString('search_length_medium') },
     { value: 'long', label: getString('search_length_long') },
+  ];
+  const featureOptions: { value: AdvancedFilters['feature']; label: string }[] = [
+    { value: 'any', label: getString('search_feature_any') },
+    { value: 'hd', label: getString('search_feature_hd') },
+    { value: '4k', label: getString('search_feature_4k') },
+    { value: 'subtitles', label: getString('search_feature_subtitles') },
+    { value: 'creative_commons', label: getString('search_feature_creative_commons') },
+    { value: 'hdr', label: getString('search_feature_hdr') },
   ];
 
   const showAdvanced = filterType === 'videos' || filterType === 'live';
+  // The Live category already consumes Innertube's single feature slot.
+  const showFeatureFilter = filterType === 'videos';
 
   return (
     <div className="sticky top-0 z-10 mb-6 flex items-center justify-between gap-4 py-3">
@@ -95,6 +109,14 @@ export function SearchControlBar({
             options={durationOptions}
             onChange={(duration) => onFiltersChange({ ...filters, duration })}
           />
+          {showFeatureFilter && (
+            <FilterSelect
+              label={getString('search_feature_label')}
+              value={filters.feature}
+              options={featureOptions}
+              onChange={(feature) => onFiltersChange({ ...filters, feature })}
+            />
+          )}
         </div>
       )}
     </div>

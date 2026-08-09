@@ -28,6 +28,7 @@ import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
   AUDIO_RESYNC_MIN_INTERVAL_MS,
 } from "../../lib/externalAudioSync";
+import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import type { CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleOverlay } from "../player/SubtitleOverlay";
 import { MediaScrubber } from "../ui/MediaScrubber";
@@ -137,8 +138,6 @@ export function ShortVideoSurface({
 
   const playbackRate = usePlayerStore((state) => state.playbackRate);
   const setPlaybackRate = usePlayerStore((state) => state.setPlaybackRate);
-  const subtitleStyle = usePlayerStore((state) => state.subtitleStyle);
-  const setSubtitleStyle = usePlayerStore((state) => state.setSubtitleStyle);
   const rememberPlaybackSpeed = useAppSettingsStore((state) => state.values[SETTINGS.REMEMBER_PLAYBACK_SPEED] === "true");
   const playbackSpeedSetting = useAppSettingsStore((state) => state.values[SETTINGS.PLAYBACK_SPEED] ?? "1.0");
   const customSpeedsEnabled = useAppSettingsStore((state) => state.values[SETTINGS.CUSTOM_SPEEDS_ENABLED] === "true");
@@ -147,8 +146,8 @@ export function ShortVideoSurface({
   const speedSliderEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SPEED_SLIDER_ENABLED] === "true");
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
-  const subtitleFontSizeSetting = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLE_FONT_SIZE] ?? "14");
-  const subtitleBold = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLE_BOLD] !== "false");
+
+  useSubtitleSettingsSync();
 
   const defaultPlaybackRate = normalizePlaybackRate(playbackSpeedSetting);
   const longPressPlaybackRate = normalizePlaybackRate(longPressSpeedSetting, 2);
@@ -203,17 +202,6 @@ export function ShortVideoSurface({
       audio.preservesPitch = true;
     }
   }, [playbackRate, videoUrl, audioUrl]);
-
-  useEffect(() => {
-    const nextFontSize = Number(subtitleFontSizeSetting);
-    const normalizedFontSize = Number.isFinite(nextFontSize) ? nextFontSize : 14;
-    if (subtitleStyle.fontSize === normalizedFontSize && subtitleStyle.isBold === subtitleBold) return;
-    setSubtitleStyle({
-      ...subtitleStyle,
-      fontSize: normalizedFontSize,
-      isBold: subtitleBold,
-    });
-  }, [setSubtitleStyle, subtitleBold, subtitleFontSizeSetting, subtitleStyle]);
 
   useEffect(() => {
     if (!subtitlesEnabled) {

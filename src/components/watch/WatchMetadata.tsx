@@ -9,6 +9,8 @@ import { useDownloadStore } from "../../store/useDownloadStore";
 import { useIsDownloaded } from "../../lib/useDownloads";
 import { useVideoReactions } from "../../lib/useVideoReactions";
 import { formatCount } from "../../lib/utils";
+import { copyText } from "../../lib/clipboard";
+import { useUiStore } from "../../store/useUiStore";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
@@ -44,6 +46,14 @@ export function WatchMetadata({
 
   const goToChannel = () => {
     if (channelId) navigate(`/channel/${channelId}`);
+  };
+
+  const shareVideo = async () => {
+    const copied = await copyText(`https://www.youtube.com/watch?v=${currentVideo.id}`);
+    useUiStore.getState().showToast({
+      message: getString(copied ? "share_link_copied" : "share_link_copy_failed"),
+      variant: copied ? "success" : "error",
+    });
   };
 
   const likeLabel =
@@ -144,7 +154,7 @@ export function WatchMetadata({
             </button>
           </div>
 
-          <Button variant="tonal">
+          <Button variant="tonal" onClick={() => void shareVideo()}>
             <Share2 size={18} />
             {getString("share")}
           </Button>

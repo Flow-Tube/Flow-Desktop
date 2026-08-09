@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, Check, Download, Loader2, RotateCcw, Upload } from "lucide-react";
 import type { UserBrain } from "../../lib/api/recommendation";
 import {
@@ -156,7 +157,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
         </button>
       </div>
 
-      {showConfirmReset && (
+      {showConfirmReset && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-background)]/80 p-4">
           <div className="w-full max-w-md rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-6">
             <div className="flex items-start gap-3">
@@ -189,7 +190,8 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );

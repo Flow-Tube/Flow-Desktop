@@ -159,7 +159,7 @@
 }
 
 .animate-pane-in {
-  animation: pane-fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: pane-fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slide-up {

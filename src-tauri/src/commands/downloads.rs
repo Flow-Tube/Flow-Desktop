@@ -767,6 +767,7 @@ async fn run_download(mut context: DownloadContext, app: AppHandle) {
                 context.video_id.as_deref(),
                 context.thumbnail_url.as_deref(),
                 &emitter,
+                &context.pool,
             )
             .await;
             record_completed_download(&context).await;
@@ -981,6 +982,7 @@ async fn run_adaptive_download(
                 context.video_id.as_deref(),
                 context.thumbnail_url.as_deref(),
                 &emitter,
+                &context.pool,
             )
             .await;
             record_completed_download(&context).await;

@@ -16,7 +16,9 @@ export function WatchLayout({ player, metadata, description, comments, sidebar }
             {comments}
           </div>
 
-          <div className="flex w-full flex-col gap-5 lg:col-start-3 lg:row-start-2">{sidebar}</div>
+          <div className="flex w-full min-h-0 flex-col gap-5 overscroll-contain lg:sticky lg:top-6 lg:col-start-3 lg:row-start-2 lg:max-h-[calc(100vh-6.5rem)] lg:self-start lg:overflow-y-auto">
+            {sidebar}
+          </div>
         </div>
       </div>
     );
@@ -32,7 +34,9 @@ export function WatchLayout({ player, metadata, description, comments, sidebar }
           {comments}
         </div>
 
-        <div className="flex w-full flex-col gap-5 lg:sticky lg:top-6 lg:self-start">{sidebar}</div>
+        <div className="flex w-full min-h-0 flex-col gap-5 overscroll-contain lg:sticky lg:top-6 lg:max-h-[calc(100vh-6.5rem)] lg:self-start lg:overflow-y-auto">
+          {sidebar}
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   ChevronDown,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useUiStore } from '../../store/useUiStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
-import { useSubscriptionStore } from '../../store/useSubscriptionStore';
+import { useSubscriptionStore, type SubscribedChannel } from '../../store/useSubscriptionStore';
 import { SidebarItem } from '../ui/SidebarItem';
 import { SidebarNavIcon, type SidebarNavIconName } from '../ui/SidebarNavIcon';
 import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
@@ -15,6 +15,7 @@ import { getString } from '../../lib/i18n/index';
 import { SETTINGS } from '../../lib/settings/schema';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { useSubscriptionAvatarHydration } from '../../lib/useSubscriptionAvatarHydration';
 
 const SUBS_DEFAULT_LIMIT = 7;
 
@@ -24,8 +25,21 @@ type SidebarProps = {
 
 function SidebarAvatar({ src }: { src?: string | null }) {
   const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
-  if (!imageSrc) return <div className="w-6 h-6 rounded-full bg-surface-container-high" />;
-  return <img src={imageSrc} alt="" className="w-6 h-6 rounded-full object-cover" />;
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [imageSrc]);
+
+  if (!imageSrc || failed) return <div className="w-6 h-6 rounded-full bg-surface-container-high" />;
+  return (
+    <img
+      src={imageSrc}
+      alt=""
+      className="w-6 h-6 rounded-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 function CompactRailItem({
@@ -99,10 +113,14 @@ function SectionHeader({
   label,
   to,
   onClick,
+  collapsed,
+  onToggleCollapse,
 }: {
   label: string;
   to?: string;
   onClick?: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const inner = (
     <>
@@ -111,37 +129,99 @@ function SectionHeader({
     </>
   );
 
-  if (to) {
-    return (
-      <NavLink
-        to={to}
-        onClick={onClick}
-        className={({ isActive }) =>
-          `group flex items-center gap-2 px-5 py-2 mt-2 text-base font-semibold cursor-pointer mx-2 rounded-lg transition-colors ${
-            isActive
-              ? 'text-[var(--color-primary)]'
-              : 'text-chrome-neutral-100 hover:bg-surface-container-low'
-          }`
-        }
-      >
-        {inner}
-      </NavLink>
-    );
-  }
-
-  return (
+  const header = to ? (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) =>
+        `group flex flex-1 items-center gap-2 px-5 py-2 text-base font-semibold cursor-pointer rounded-lg transition-colors ${
+          isActive
+            ? 'text-[var(--color-primary)]'
+            : 'text-chrome-neutral-100 hover:bg-surface-container-low'
+        }`
+      }
+    >
+      {inner}
+    </NavLink>
+  ) : (
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-2 px-5 py-2 mt-2 text-base font-semibold text-chrome-neutral-100 cursor-pointer hover:bg-surface-container-low mx-2 rounded-lg"
+      className="group flex flex-1 items-center gap-2 px-5 py-2 text-base font-semibold text-chrome-neutral-100 cursor-pointer hover:bg-surface-container-low rounded-lg"
     >
       {inner}
     </button>
   );
+
+  return (
+    <div className="mx-2 mt-2 flex items-center">
+      {header}
+      {onToggleCollapse && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
+          aria-label={getString(collapsed ? 'sidebar_section_expand' : 'sidebar_section_collapse')}
+          className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-chrome-neutral-400 transition-colors hover:bg-surface-container-low hover:text-chrome-neutral-100"
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ease-out ${collapsed ? '-rotate-90' : ''}`}
+          />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SubscriptionsNav({
+  subscriptions,
+  subsExpanded,
+  onToggleExpanded,
+  closeOverlay,
+}: {
+  subscriptions: SubscribedChannel[];
+  subsExpanded: boolean;
+  onToggleExpanded: () => void;
+  closeOverlay?: () => void;
+}) {
+  const visibleSubs = useMemo(
+    () => (subsExpanded ? subscriptions : subscriptions.slice(0, SUBS_DEFAULT_LIMIT)),
+    [subscriptions, subsExpanded],
+  );
+  useSubscriptionAvatarHydration(visibleSubs);
+
+  return (
+    <nav className="mt-1 flex flex-col">
+      <div className={subsExpanded ? 'max-h-[45vh] overflow-y-auto' : ''}>
+        {visibleSubs.map((channel) => (
+          <SidebarItem
+            key={channel.id}
+            to={`/channel/${channel.id}`}
+            icon={
+              channel.avatarUrl ? (
+                <SidebarAvatar src={channel.avatarUrl} />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-surface-container-high" />
+              )
+            }
+            label={channel.name}
+            onClick={closeOverlay}
+          />
+        ))}
+      </div>
+      {subscriptions.length > SUBS_DEFAULT_LIMIT && (
+        <SidebarItem
+          icon={subsExpanded ? <ChevronUp className="h-5 w-5 shrink-0" /> : <ChevronDown className="h-5 w-5 shrink-0" />}
+          label={subsExpanded ? getString('sidebar_show_less') : getString('sidebar_show_more')}
+          onClick={onToggleExpanded}
+        />
+      )}
+    </nav>
+  );
 }
 
 export function Sidebar({ mode = 'normal' }: SidebarProps) {
-  const { isSidebarExpanded, setWatchSidebarOpen } = useUiStore();
+  const { isSidebarExpanded, isSubsSectionCollapsed, toggleSubsSection, setWatchSidebarOpen } = useUiStore();
   const { subscriptions } = useSubscriptionStore();
   const location = useLocation();
   const [subsExpanded, setSubsExpanded] = useState(false);
@@ -180,13 +260,10 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   }
 
   const closeOverlay = isOverlay ? () => setWatchSidebarOpen(false) : undefined;
-  const visibleSubs = subsExpanded
-    ? subscriptions
-    : subscriptions.slice(0, SUBS_DEFAULT_LIMIT);
 
   return (
     <aside
-      className={`flex h-full w-64 shrink-0 flex-col overflow-y-auto hide-scrollbar bg-background py-3 ${
+      className={`flex h-full w-64 shrink-0 flex-col overflow-y-auto bg-background py-3 ${
         isOverlay ? '' : 'hidden sm:flex'
       }`}
     >
@@ -203,31 +280,21 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
 
       {/* Subscriptions */}
       <section>
-        <SectionHeader label={getString('sidebar_subscriptions')} to="/subscriptions" onClick={closeOverlay} />
-        <nav className="mt-1 flex flex-col">
-          {visibleSubs.map((channel) => (
-            <SidebarItem
-              key={channel.id}
-              to={`/channel/${channel.id}`}
-              icon={
-                channel.avatarUrl ? (
-                  <SidebarAvatar src={channel.avatarUrl} />
-                ) : (
-                  <div className="w-6 h-6 rounded-full bg-surface-container-high" />
-                )
-              }
-              label={channel.name}
-              onClick={closeOverlay}
-            />
-          ))}
-          {subscriptions.length > SUBS_DEFAULT_LIMIT && (
-            <SidebarItem
-              icon={subsExpanded ? <ChevronUp className="h-5 w-5 shrink-0" /> : <ChevronDown className="h-5 w-5 shrink-0" />}
-              label={subsExpanded ? getString('sidebar_show_less') : getString('sidebar_show_more')}
-              onClick={() => setSubsExpanded(!subsExpanded)}
-            />
-          )}
-        </nav>
+        <SectionHeader
+          label={getString('sidebar_subscriptions')}
+          to="/subscriptions"
+          onClick={closeOverlay}
+          collapsed={isSubsSectionCollapsed}
+          onToggleCollapse={toggleSubsSection}
+        />
+        {!isSubsSectionCollapsed && (
+          <SubscriptionsNav
+            subscriptions={subscriptions}
+            subsExpanded={subsExpanded}
+            onToggleExpanded={() => setSubsExpanded(!subsExpanded)}
+            closeOverlay={closeOverlay}
+          />
+        )}
       </section>
 
       <hr className="border-chrome-neutral-800/50 my-3 mx-4" />

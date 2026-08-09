@@ -89,23 +89,12 @@ const YOUTUBE_VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
 
 export async function getReturnYouTubeDislike(videoId: string): Promise<RydData | null> {
   if (!YOUTUBE_VIDEO_ID.test(videoId)) return null;
+  if (!(await isTauriEnv())) return null;
 
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`https://returnyoutubedislikeapi.com/votes?videoId=${videoId}`, {
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      if (res.status === 404) return null;
-      throw new Error(`RYD API error: ${res.status}`);
-    }
-    const data = await res.json();
-    return data as RydData;
+    return await invokeBackend<RydData | null>("get_return_youtube_dislike", { videoId });
   } catch (error) {
     console.warn("Failed to fetch RYD data", error);
     return null;
-  } finally {
-    window.clearTimeout(timeout);
   }
 }

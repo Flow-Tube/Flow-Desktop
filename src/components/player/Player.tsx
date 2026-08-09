@@ -19,6 +19,7 @@ import {
   AUDIO_RESYNC_MIN_INTERVAL_MS,
   decideExternalAudioSync,
 } from "../../lib/externalAudioSync";
+import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -29,6 +30,7 @@ import {
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
   createWindowFullscreenController,
+  watchNativeFullscreenExit,
   type WindowFullscreenController,
 } from "../../lib/windowFullscreen";
 
@@ -228,6 +230,9 @@ const CODEC_PROBE_SECONDS = 4;
 
 const MAX_EXTERNAL_AUDIO_RECOVERIES = 2;
 
+// Per media identity; reset once a fragment or manifest actually loads.
+const MAX_HLS_FATAL_RECOVERY_ATTEMPTS = 3;
+
 function isVariantSupported(mimeType?: string | null) {
   const codecMimeType = extractCodecMimeType(mimeType);
   if (!codecMimeType) return true;
@@ -310,6 +315,10 @@ export const Player: React.FC<PlayerProps> = ({
   // External-audio clock bookkeeping (see AUDIO_DRIFT_TOLERANCE_SECONDS).
   const lastAudioResyncAtRef = useRef(0);
   const audioHoldRef = useRef(false);
+  // A source swap stamps lastAudioResyncAtRef several times (seek, attach,
+  // loadedmetadata hard-sync), which used to rate-limit away the one realign
+  // that matters when the new source finally reaches canplay.
+  const postSwitchRealignPendingRef = useRef(false);
   const audioRecoveryAttemptsRef = useRef(0);
   const attachedAudioIdentityRef = useRef<string | null>(null);
   const videoProgressSampleRef = useRef<{ time: number; at: number } | null>(null);
@@ -329,8 +338,6 @@ export const Player: React.FC<PlayerProps> = ({
     isTheaterMode,
     setIsTheaterMode,
     sponsorBlockSegments,
-    subtitleStyle,
-    setSubtitleStyle,
     videoPlayerMode,
     enterVideoPip,
     expandVideoPlayer,
@@ -349,8 +356,6 @@ export const Player: React.FC<PlayerProps> = ({
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
-  const subtitleFontSizeSetting = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLE_FONT_SIZE] ?? "14");
-  const subtitleBold = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLE_BOLD] !== "false");
   const manualPipButtonEnabled = useAppSettingsStore((state) => state.values[SETTINGS.MANUAL_PIP_BUTTON_ENABLED] !== "false");
   const miniPlayerShowSkipControls = useAppSettingsStore((state) => state.values[SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS] !== "false");
   const miniPlayerShowNextPrevControls = useAppSettingsStore((state) => state.values[SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS] !== "false");
@@ -840,16 +845,7 @@ export const Player: React.FC<PlayerProps> = ({
     void setSettingValue(SETTINGS.VIDEO_LOOP_ENABLED, String(!videoLoopEnabled));
   }, [videoLoopEnabled]);
 
-  useEffect(() => {
-    const nextFontSize = Number(subtitleFontSizeSetting);
-    const normalizedFontSize = Number.isFinite(nextFontSize) ? nextFontSize : 14;
-    if (subtitleStyle.fontSize === normalizedFontSize && subtitleStyle.isBold === subtitleBold) return;
-    setSubtitleStyle({
-      ...subtitleStyle,
-      fontSize: normalizedFontSize,
-      isBold: subtitleBold,
-    });
-  }, [setSubtitleStyle, subtitleBold, subtitleFontSizeSetting, subtitleStyle]);
+  useSubtitleSettingsSync();
 
   useEffect(() => {
     if (!subtitlesEnabled) {
@@ -903,7 +899,7 @@ export const Player: React.FC<PlayerProps> = ({
   }, [onRetrySource]);
 
   const fireRetrySource = useCallback((reason: string) => {
-    if (retrySourceFiredRef.current) return;
+    if (retrySourceFiredRef.current && !reason.startsWith("buffering-stall")) return;
     retrySourceFiredRef.current = true;
     logPlayerEventRef.current("source-mode-fallback", { reason, sourceMode });
     onRetrySourceRef.current?.(reason);
@@ -970,7 +966,6 @@ export const Player: React.FC<PlayerProps> = ({
 
   useEffect(() => {
     if (!isPlaying || !!error) return;
-    if (isDashPlayback || isHlsPlayback) return;
 
     const interval = window.setInterval(() => {
       const video = videoRef.current;
@@ -989,19 +984,27 @@ export const Player: React.FC<PlayerProps> = ({
       }
 
       const waitingSince = waitingSinceRef.current;
-      const stalledLongEnough = waitingSince !== null && Date.now() - waitingSince > 12000;
+      // Startup gets a much longer leash than a mid-playback stall: live
+      // manifests + init + first segments arrive through the loopback proxy
+      // (one TCP connection per request) and can take well over 12s before
+      // the first frame without anything being wrong.
+      const started = playbackStartAtRef.current !== null;
+      const stallThresholdMs = started ? 12000 : 45000;
+      const stalledLongEnough = waitingSince !== null && Date.now() - waitingSince > stallThresholdMs;
 
       if (stalledLongEnough && bufferedAhead < 0.5 && video.readyState < 3) {
         logPlayerEventRef.current("source-watchdog-trip", {
           bufferedAhead,
           waitedMs: waitingSince ? Date.now() - waitingSince : 0,
           stallCount: stallCountRef.current,
+          phase: started ? "playback" : "startup",
         });
+        waitingSinceRef.current = Date.now();
         fireRetrySourceRef.current("buffering-stall");
       }
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [isPlaying, error, isDashPlayback, isScrubbing]);
+  }, [isPlaying, error, isScrubbing]);
 
   const revealControls = useCallback(() => {
     setControlsVisible(true);
@@ -1066,7 +1069,8 @@ export const Player: React.FC<PlayerProps> = ({
 
     if (!video) return;
     if (shouldPlay && (isDashPlayback || isHlsPlayback || src) && !error) {
-      void video.play().catch(() => {
+      void video.play().catch((cause) => {
+        if ((cause as DOMException | null)?.name === "AbortError") return;
         desiredPlayingRef.current = false;
         setIsPlaying(false);
       });
@@ -1092,6 +1096,32 @@ export const Player: React.FC<PlayerProps> = ({
 
   const syncNativeFullscreen = useCallback((active: boolean) => {
     return windowFullscreenControllerRef.current?.sync(active) ?? Promise.resolve();
+  }, []);
+
+  useEffect(() => {
+    const controller = windowFullscreenControllerRef.current;
+    if (!controller) return;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    watchNativeFullscreenExit(
+      controller,
+      () => usePlayerStore.getState().isVideoFullscreen,
+      () => usePlayerStore.getState().setIsVideoFullscreen(false),
+    )
+      .then((dispose) => {
+        if (disposed) dispose();
+        else unlisten = dispose;
+      })
+      .catch(() => {
+        // Not running under Tauri (tests/dev shells): fullscreen still works,
+        // only OS-initiated exits go untracked.
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
   }, []);
 
   const toggleFullscreen = useCallback(() => {
@@ -1183,18 +1213,18 @@ export const Player: React.FC<PlayerProps> = ({
       return;
     }
 
-    if (mediaBufferingRef.current) {
-      if (video.paused || video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
+    const videoStarved = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
+    if (mediaBufferingRef.current && !video.paused && !videoStarved) {
       mediaBufferingRef.current = false;
       setIsBuffering(false);
     }
-    if (video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) return;
 
     const drift = audio.currentTime - video.currentTime;
     const action = decideExternalAudioSync({
       drift,
       held: audioHoldRef.current,
       videoAdvancing: isVideoAdvancing(video, playbackRate),
+      videoStarved,
       audioSeeking: audio.seeking,
       audioReadyState: audio.readyState,
       msSinceLastRealign: performance.now() - lastAudioResyncAtRef.current,
@@ -1457,12 +1487,9 @@ export const Player: React.FC<PlayerProps> = ({
         : url;
 
     if (!Hls.isSupported()) {
-      video.src = hlsManifestUrl;
-      logPlayerEventRef.current("hls-native-attach", { hlsManifestUrl });
-      return () => {
-        video.removeAttribute("src");
-        video.load();
-      };
+      logPlayerEventRef.current("hls-mse-unsupported", { hlsManifestUrl });
+      fireRetrySourceRef.current("hls:mse-unsupported");
+      return;
     }
 
     const DefaultLoader = Hls.DefaultConfig.loader as any;
@@ -1485,10 +1512,16 @@ export const Player: React.FC<PlayerProps> = ({
       loader: ProxyLoader as unknown as typeof Hls.DefaultConfig.loader,
     });
     hlsPlayerRef.current = hls;
+    let fatalRecoveryAttempts = 0;
+    let destroyedAfterFatal = false;
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      fatalRecoveryAttempts = 0;
       logPlayerEventRef.current("hls-manifest-parsed", { levels: hls.levels.length });
       if (desiredPlayingRef.current) void video.play().catch(() => {});
+    });
+    hls.on(Hls.Events.FRAG_LOADED, () => {
+      fatalRecoveryAttempts = 0;
     });
     hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
       const frag = data?.frag;
@@ -1519,10 +1552,26 @@ export const Player: React.FC<PlayerProps> = ({
         }
         return;
       }
-      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-        hls.startLoad();
-      } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-        hls.recoverMediaError();
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR || data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        fatalRecoveryAttempts += 1;
+        if (fatalRecoveryAttempts > MAX_HLS_FATAL_RECOVERY_ATTEMPTS) {
+          // startLoad()/recoverMediaError() were looping unbounded on a dead
+          // stream; give up and let the normal source fallback run.
+          logPlayerEventRef.current("hls-fatal-recovery-exhausted", {
+            details: data.details,
+            attempts: fatalRecoveryAttempts,
+          });
+          destroyedAfterFatal = true;
+          if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
+          hls.destroy();
+          fireRetrySourceRef.current(`hls:fatal:${data.details}`);
+          return;
+        }
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          hls.startLoad();
+        } else {
+          hls.recoverMediaError();
+        }
       } else {
         fireRetrySourceRef.current(`hls:${data.details}`);
       }
@@ -1532,7 +1581,7 @@ export const Player: React.FC<PlayerProps> = ({
     hls.attachMedia(video);
 
     return () => {
-      hls.destroy();
+      if (!destroyedAfterFatal) hls.destroy();
       if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
     };
   }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
@@ -1552,6 +1601,9 @@ export const Player: React.FC<PlayerProps> = ({
       if (waitingSinceRef.current === null) waitingSinceRef.current = Date.now();
       stallCountRef.current += 1;
       if (usesExternalAudio) {
+        // Record the pause as a hold so the drift policy agrees with the event
+        // path and releases it through its resume rules.
+        audioHoldRef.current = true;
         audioRef.current?.pause();
       }
       logPlayerEvent("html-video-waiting", {
@@ -1566,6 +1618,7 @@ export const Player: React.FC<PlayerProps> = ({
       if (waitingSinceRef.current === null) waitingSinceRef.current = Date.now();
       stallCountRef.current += 1;
       if (usesExternalAudio) {
+        audioHoldRef.current = true;
         audioRef.current?.pause();
       }
       logPlayerEvent("html-video-stalled", {
@@ -1590,8 +1643,9 @@ export const Player: React.FC<PlayerProps> = ({
 
       audioHoldRef.current = false;
       if (Math.abs(audio.currentTime - video.currentTime) > AUDIO_DRIFT_TOLERANCE_SECONDS) {
-        realignExternalAudioClock(audio, video, false);
+        realignExternalAudioClock(audio, video, postSwitchRealignPendingRef.current);
       }
+      postSwitchRealignPendingRef.current = false;
       if (Math.abs(audio.playbackRate - playbackRate) > 0.001) {
         audio.playbackRate = playbackRate;
       }
@@ -1684,6 +1738,7 @@ export const Player: React.FC<PlayerProps> = ({
     mediaBufferingRef.current = false;
     setIsBuffering(false);
     videoProgressSampleRef.current = null;
+    postSwitchRealignPendingRef.current = true;
 
     if (targetTime > 0) {
       sourceSwitchingRef.current = true;
@@ -1718,7 +1773,8 @@ export const Player: React.FC<PlayerProps> = ({
 
     desiredPlayingRef.current = isPlaying;
     if (isPlaying && (isDashPlayback || isHlsPlayback || src) && !error) {
-      void video.play().catch(() => {
+      void video.play().catch((cause) => {
+        if ((cause as DOMException | null)?.name === "AbortError") return;
         desiredPlayingRef.current = false;
         setIsPlaying(false);
       });
@@ -1827,6 +1883,7 @@ export const Player: React.FC<PlayerProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
 
       switch (event.key.toLowerCase()) {
         case " ":
@@ -2137,7 +2194,13 @@ export const Player: React.FC<PlayerProps> = ({
             });
             return;
           }
-          if (desiredPlayingRef.current && src && !error && !video?.ended && !sourceSwitchingRef.current) {
+          if (sourceSwitchingRef.current) {
+            logPlayerEvent("video-pause-during-source-switch", {
+              pausedAt: video?.currentTime,
+            });
+            return;
+          }
+          if (desiredPlayingRef.current && src && !error && !video?.ended) {
             setTimeout(() => {
               if (desiredPlayingRef.current) {
                 void videoRef.current?.play().catch(() => {});

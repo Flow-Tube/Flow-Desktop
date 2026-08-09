@@ -83,11 +83,18 @@ export function MediaScrubber({
   const isEdge = variant === "edge";
   const isLg = size === "lg";
 
-  const hitH = isEdge ? "h-2 items-end" : isLg ? "h-5 items-center" : "h-4 items-center";
-  const trackH = isEdge ? "h-[2px]" : "h-1";
+  const hitH = isEdge ? "h-4 items-end" : isLg ? "h-5 items-center" : "h-4 items-center";
+  const trackH = isEdge
+    ? dragging
+      ? "h-1.5"
+      : "h-[2px] transition-[height] duration-150 ease-out group-hover/scrub:h-1.5"
+    : "h-1";
   const trackShape = isEdge ? "bg-chrome-neutral-800" : "rounded-full bg-chrome-neutral-800";
   const fillShape = isEdge ? "" : "rounded-full";
-  const thumbSize = isLg ? "h-3.5 w-3.5" : "h-3 w-3";
+  const thumbSize = isEdge ? "h-2 w-2" : isLg ? "h-3.5 w-3.5" : "h-3 w-3";
+  const thumbPosition = isEdge
+    ? "bottom-[3px] translate-y-1/2"
+    : "top-1/2 -translate-y-1/2";
 
   const bar = (
     <div
@@ -111,14 +118,12 @@ export function MediaScrubber({
           style={{ width: `${pct}%` }}
         />
       </div>
-      {!isEdge && (
-        <span
-          className={`pointer-events-none absolute top-1/2 ${thumbSize} -translate-x-1/2 -translate-y-1/2 rounded-full bg-chrome-white transition-opacity duration-150 ${
-            dragging ? "opacity-100" : "opacity-0 group-hover/scrub:opacity-100"
-          }`}
-          style={{ left: `${pct}%` }}
-        />
-      )}
+      <span
+        className={`pointer-events-none absolute ${thumbPosition} ${thumbSize} -translate-x-1/2 rounded-full bg-chrome-white transition-opacity duration-150 ${
+          dragging ? "opacity-100" : "opacity-0 group-hover/scrub:opacity-100"
+        }`}
+        style={{ left: `${pct}%` }}
+      />
     </div>
   );
 

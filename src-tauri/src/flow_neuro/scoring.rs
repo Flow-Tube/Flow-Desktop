@@ -181,6 +181,12 @@ pub const IMPLICIT_DISINTEREST_PENALTY_HEAVY: f64 = 0.10;
 pub const IMPLICIT_DISINTEREST_PENALTY_LIGHT: f64 = 0.30;
 pub const RECENT_QUERY_TOKENS_MAX: usize = 20;
 pub const QUERY_OVERLAP_THRESHOLD: f64 = 0.4;
+// Rotation compares new discovery queries against only the most recent few persisted token
+// sets, and never rotates the pool below a floor: comparing against the full history made
+// rotation monotonic, so the persisted pool self-poisoned down to a repeating rump set and
+// the Home feed's load-more starved permanently (issue #33).
+pub const QUERY_ROTATION_RECENT_WINDOW: usize = 6;
+pub const QUERY_ROTATION_FLOOR: usize = 5;
 pub const RELEVANCE_FLOOR_MIN_INTERACTIONS: i32 = 80;
 pub const RELEVANCE_FLOOR_SEVERE_THRESHOLD: f64 = 0.05;
 pub const RELEVANCE_FLOOR_MODERATE_THRESHOLD: f64 = 0.10;

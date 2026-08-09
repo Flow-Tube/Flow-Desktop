@@ -6,7 +6,7 @@ mod api;
 mod bridge;
 #[cfg(target_os = "linux")]
 mod codec_probe;
-mod commands;
+pub mod commands;
 mod config;
 mod db;
 mod errors;
@@ -24,6 +24,7 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use api::innertube::InnertubeClient;
+use commands::backup::{export_backup_data, import_backup_data};
 use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_watch_record,
     get_music_history, get_setting, get_watch_history, set_setting,
@@ -74,7 +75,7 @@ use commands::youtube::{
     get_live_chat, get_music_album, get_music_artist, get_music_charts, get_music_explore,
     get_music_home, get_music_lyrics, get_music_related, get_personalized_music_recommendations,
     get_playlist_details, get_post_comments, get_related_videos, get_sabr_debug_state,
-    get_search_suggestions, get_sponsorblock_segments, get_stream_info,
+    get_return_youtube_dislike, get_search_suggestions, get_sponsorblock_segments, get_stream_info,
     get_subscription_rotation_feed, get_subscription_rss_feed, get_trending_videos,
     get_video_details, parse_subscription_export, refresh_music_home, resolve_channel_id,
     search_music, search_videos, stream_subscription_rss_feed, submit_sponsorblock_segment,
@@ -366,6 +367,8 @@ pub fn run() {
             get_setting,
             set_setting,
             write_backup_file,
+            export_backup_data,
+            import_backup_data,
             get_download_formats,
             start_download,
             cancel_download,
@@ -400,6 +403,7 @@ pub fn run() {
             get_sponsorblock_segments,
             submit_sponsorblock_segment,
             get_dearrow_override,
+            get_return_youtube_dislike,
             get_music_home,
             refresh_music_home,
             get_personalized_music_recommendations,

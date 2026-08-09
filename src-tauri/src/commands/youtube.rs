@@ -1144,6 +1144,17 @@ pub async fn get_dearrow_override(
     }
 }
 
+/// RYD is a graceful-degradation integration: fetch failures resolve to
+/// `Ok(None)` so the frontend simply omits the dislike counter. Only an
+/// invalid video ID is a real error.
+#[tauri::command]
+pub async fn get_return_youtube_dislike(
+    video_id: String,
+) -> Result<Option<crate::api::ryd::RydVotes>, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    Ok(crate::api::ryd::fetch_ryd_votes(&video_id).await)
+}
+
 #[tauri::command]
 pub async fn get_music_home(
     youtube_service: State<'_, YoutubeService>,

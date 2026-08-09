@@ -1,3 +1,5 @@
+import { openExternal } from "./openExternal";
+
 const parseTimestampToSeconds = (ts: string): number => {
   const parts = ts.split(":").map(Number);
   if (parts.length === 3) return (parts[0] || 0) * 3600 + (parts[1] || 0) * 60 + (parts[2] || 0);
@@ -23,7 +25,12 @@ export function linkifyText(text: string) {
           target="_blank"
           rel="noopener noreferrer"
           className="cursor-pointer font-medium text-primary hover:underline"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            // WebView2 swallows target="_blank" navigation; route through the opener plugin.
+            e.preventDefault();
+            e.stopPropagation();
+            void openExternal(urlPart);
+          }}
         >
           {urlPart}
         </a>

@@ -57,6 +57,8 @@ export function GlobalVideoPlayer() {
   const autoPipEnabled = useAppSettingsStore((s) => s.values[SETTINGS.AUTO_PIP_ENABLED] !== "false");
 
   const [slotBounds, setSlotBounds] = useState<PlayerBounds | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const lastSlotBoundsRef = useRef<PlayerBounds | null>(null);
   const previousPathRef = useRef(location.pathname);
   const previousVideoIdRef = useRef(currentVideo?.id ?? null);
 
@@ -117,19 +119,45 @@ export function GlobalVideoPlayer() {
   useEffect(() => {
     if (isFloating || isVideoFullscreen || !currentVideo) return;
 
-    const sync = () => setSlotBounds((prev) => {
+    const writeFrameBounds = (bounds: PlayerBounds) => {
+      const frame = frameRef.current;
+      if (!frame) return;
+      frame.style.top = `${bounds.top}px`;
+      frame.style.left = `${bounds.left}px`;
+      frame.style.width = `${bounds.width}px`;
+      frame.style.height = `${bounds.height}px`;
+    };
+
+    const sync = () => {
       const next = readSlotBounds();
-      if (!next) return prev; 
-      return boundsEqual(prev, next) ? prev : next;
-    });
+      if (!next) return;
+      const prev = lastSlotBoundsRef.current;
+      lastSlotBoundsRef.current = next;
+      writeFrameBounds(next);
+      if (!prev || prev.width !== next.width || prev.height !== next.height) {
+        setSlotBounds((old) => (boundsEqual(old, next) ? old : next));
+      }
+    };
 
     sync();
     const slot = document.querySelector<HTMLElement>("[data-flow-watch-player-slot='true']");
     const observer = new ResizeObserver(sync);
     if (slot) observer.observe(slot);
     window.addEventListener("resize", sync);
-    document.addEventListener("scroll", sync, true);
 
+    let scrollRaf: number | null = null;
+    const onScroll = () => {
+      if (scrollRaf !== null) return;
+      scrollRaf = window.requestAnimationFrame(() => {
+        scrollRaf = null;
+        sync();
+      });
+    };
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+
+    // Late layout (fonts, images, side panels) can move the slot for a few
+    // frames after a route/mode change; each settle tick also writes
+    // imperatively through sync().
     let settleCount = 0;
     let settleRaf = window.requestAnimationFrame(function settle() {
       sync();
@@ -139,7 +167,8 @@ export function GlobalVideoPlayer() {
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", sync);
-      document.removeEventListener("scroll", sync, true);
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      if (scrollRaf !== null) window.cancelAnimationFrame(scrollRaf);
       window.cancelAnimationFrame(settleRaf);
     };
   }, [isFloating, isVideoFullscreen, currentVideo, location.pathname]);
@@ -237,6 +266,7 @@ export function GlobalVideoPlayer() {
 
   return (
     <div
+      ref={frameRef}
       className={
         isVideoFullscreen
           ? "fixed z-[300] overflow-hidden bg-chrome-black"

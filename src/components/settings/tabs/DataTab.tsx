@@ -53,10 +53,16 @@ export function DataTab() {
     }
   };
 
+  const scopeDescriptions: Record<string, string> = {
+    APP_DATA: getString('settings_backup_scope_app_data_desc'),
+    BRAIN: getString('settings_backup_scope_brain_desc'),
+    MASTER: getString('settings_backup_scope_master_desc'),
+  };
+
   const handleExport = async () => {
     try {
       const jsonStr = await buildSettingsBackupJson(backupType as SettingsBackupScope);
-      const defaultName = `flow_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      const defaultName = `flow_backup_${backupType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.json`;
 
       if (await isTauriEnv()) {
         const savePath = await pickSaveFile(getString('settings_export_data'), defaultName, [{ name: 'JSON', extensions: ['json'] }]);
@@ -89,7 +95,7 @@ export function DataTab() {
             { value: 'WEEKLY', label: getString('settings_backup_weekly') }, { value: 'MONTHLY', label: getString('settings_backup_monthly') },
           ]} />
         </SettingItem>
-        <SettingItem title={getString('settings_backup_scope')} description={getString('settings_backup_scope_desc')}>
+        <SettingItem title={getString('settings_backup_scope')} description={scopeDescriptions[backupType] ?? getString('settings_backup_scope_desc')}>
           <Select value={backupType} onChange={setBackupType} options={[
             { value: 'APP_DATA', label: getString('settings_backup_scope_app_data') }, { value: 'BRAIN', label: getString('settings_backup_scope_brain') }, { value: 'MASTER', label: getString('settings_backup_scope_master') },
           ]} />

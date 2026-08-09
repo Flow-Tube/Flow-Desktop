@@ -13,7 +13,8 @@ use crate::flow_neuro::ranker;
 use crate::flow_neuro::scoring::{
     CHANNEL_SUPPRESSION_DAYS, FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona,
     IMPRESSION_CACHE_MAX, IdfSnapshot, JITTER_COLD_START, JITTER_NORMAL,
-    ONBOARDING_WARMUP_INTERACTIONS, QUERY_OVERLAP_THRESHOLD, RECENT_QUERY_TOKENS_MAX,
+    ONBOARDING_WARMUP_INTERACTIONS, QUERY_OVERLAP_THRESHOLD, QUERY_ROTATION_FLOOR,
+    QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX,
     SESSION_TOPIC_HISTORY_MAX, ScoredVideo, TimeBucket, TopicEvidence, UserBrain,
     VIDEO_SUPPRESSION_DAYS, apply_smart_diversity, channel_inferred_blocked, classify_persona,
     extract_features, get_topic_categories, is_generic_word, is_music_track, normalize_lemma,
@@ -925,6 +926,49 @@ impl RecommendationService {
         balanced.into_iter().map(|query| query.query).collect()
     }
 
+    fn rotate_against_recent_queries(
+        queries: Vec<String>,
+        recent_query_tokens: &[HashSet<String>],
+    ) -> (Vec<String>, bool) {
+        if recent_query_tokens.is_empty() || queries.len() <= QUERY_ROTATION_FLOOR {
+            return (queries, false);
+        }
+
+        let (fresh, overlapping): (Vec<String>, Vec<String>) =
+            queries.iter().cloned().partition(|query| {
+                let tokens: HashSet<String> = tokenize(query).into_iter().collect();
+                if tokens.is_empty() {
+                    return true;
+                }
+                !recent_query_tokens
+                    .iter()
+                    .take(QUERY_ROTATION_RECENT_WINDOW)
+                    .any(|recent| {
+                        if recent.is_empty() {
+                            return false;
+                        }
+                        let intersection = tokens.intersection(recent).count();
+                        let union = tokens.union(recent).count();
+                        union > 0
+                            && (intersection as f64 / union as f64) > QUERY_OVERLAP_THRESHOLD
+                    })
+            });
+
+        let saturated = fresh.len() < QUERY_ROTATION_FLOOR;
+        if overlapping.is_empty() {
+            return (fresh, saturated);
+        }
+
+        let mut rotated = fresh;
+        for query in overlapping {
+            if rotated.len() >= QUERY_ROTATION_FLOOR {
+                break;
+            }
+            rotated.push(query);
+        }
+        (rotated, saturated)
+    }
+
     fn calculate_adaptive_jitter(total_interactions: i32, feed_overlap_ratio: f64) -> f64 {
         if total_interactions < ONBOARDING_WARMUP_INTERACTIONS {
             JITTER_COLD_START
@@ -1322,35 +1366,21 @@ impl RecommendationService {
         info!(balanced = deduped.len(), "[discovery] balanced query set");
         debug!(queries = ?deduped, "[discovery] balanced query detail");
 
-        if brain.recent_query_tokens.len() > 0 && deduped.len() > 3 {
-            let rotated: Vec<String> = deduped
-                .iter()
-                .filter(|query| {
-                    let tokens: HashSet<String> = tokenize(query).into_iter().collect();
-                    if tokens.is_empty() {
-                        return true;
-                    }
-                    !brain.recent_query_tokens.iter().any(|recent| {
-                        if recent.is_empty() {
-                            return false;
-                        }
-                        let intersection = tokens.intersection(recent).count();
-                        let union = tokens.union(recent).count();
-                        union > 0 && (intersection as f64 / union as f64) > QUERY_OVERLAP_THRESHOLD
-                    })
-                })
-                .cloned()
-                .collect();
-            if rotated.len() >= deduped.len() / 3 {
-                info!(
-                    before = deduped.len(),
-                    after = rotated.len(),
-                    recent_sets = brain.recent_query_tokens.len(),
-                    "[discovery] rotated overlapping query set"
-                );
-                debug!(rotated_queries = ?rotated, "[discovery] rotated query detail");
-                deduped = rotated;
-            }
+        let before_rotation = deduped.len();
+        let (rotated, rotation_saturated) =
+            Self::rotate_against_recent_queries(deduped, &brain.recent_query_tokens);
+        deduped = rotated;
+        if rotation_saturated {
+            brain.recent_query_tokens.clear();
+        }
+        if deduped.len() != before_rotation {
+            info!(
+                before = before_rotation,
+                after = deduped.len(),
+                saturated = rotation_saturated,
+                "[discovery] rotated overlapping query set"
+            );
+            debug!(rotated_queries = ?deduped, "[discovery] rotated query detail");
         }
 
         let persisted_token_sets: Vec<Vec<String>> =
@@ -2368,5 +2398,92 @@ mod tests {
         assert_eq!(quotas.discovery_limit, 16);
         assert_eq!(quotas.viral_limit, 3);
         assert!(quotas.viral_limit < quotas.discovery_limit);
+    }
+
+    fn rotation_queries() -> Vec<String> {
+        [
+            "rust programming tutorial",
+            "guitar fingerstyle lesson",
+            "homemade pizza dough",
+            "astronomy telescope basics",
+            "woodworking dovetail joints",
+            "marathon training plan",
+        ]
+        .iter()
+        .map(|query| query.to_string())
+        .collect()
+    }
+
+    fn token_set(text: &str) -> HashSet<String> {
+        tokenize(text).into_iter().collect()
+    }
+
+    #[test]
+    fn rotation_keeps_full_set_when_memory_is_empty() {
+        let queries = rotation_queries();
+
+        let (rotated, saturated) =
+            RecommendationService::rotate_against_recent_queries(queries.clone(), &[]);
+
+        assert_eq!(rotated, queries);
+        assert!(!saturated);
+    }
+
+    #[test]
+    fn rotation_filters_queries_overlapping_recent_window() {
+        let queries = rotation_queries();
+        let recent = vec![token_set("rust programming tutorial")];
+
+        let (rotated, saturated) =
+            RecommendationService::rotate_against_recent_queries(queries, &recent);
+
+        assert!(!rotated.contains(&"rust programming tutorial".to_string()));
+        assert_eq!(rotated.len(), 5);
+        assert!(!saturated);
+    }
+
+    #[test]
+    fn rotation_ignores_token_sets_beyond_recent_window() {
+        let queries = rotation_queries();
+        let mut recent: Vec<HashSet<String>> = (0..QUERY_ROTATION_RECENT_WINDOW)
+            .map(|index| token_set(&format!("carpentry birdhouse plans variant{index}")))
+            .collect();
+        // Oldest set fully overlaps the first query but sits outside the comparison window.
+        recent.push(token_set("rust programming tutorial"));
+
+        let (rotated, _) =
+            RecommendationService::rotate_against_recent_queries(queries, &recent);
+
+        assert!(rotated.contains(&"rust programming tutorial".to_string()));
+    }
+
+    #[test]
+    fn rotation_never_shrinks_pool_below_floor_and_reports_saturation() {
+        let queries = rotation_queries();
+        let recent: Vec<HashSet<String>> =
+            queries.iter().map(|query| token_set(query)).collect();
+
+        let (rotated, saturated) =
+            RecommendationService::rotate_against_recent_queries(queries.clone(), &recent);
+
+        assert_eq!(rotated.len(), QUERY_ROTATION_FLOOR);
+        assert_eq!(rotated, queries[..QUERY_ROTATION_FLOOR].to_vec());
+        assert!(saturated);
+    }
+
+    #[test]
+    fn rotation_skips_small_pools_entirely() {
+        let queries: Vec<String> = rotation_queries()
+            .into_iter()
+            .take(QUERY_ROTATION_FLOOR)
+            .collect();
+        let recent: Vec<HashSet<String>> =
+            queries.iter().map(|query| token_set(query)).collect();
+
+        let (rotated, saturated) =
+            RecommendationService::rotate_against_recent_queries(queries.clone(), &recent);
+
+        assert_eq!(rotated, queries);
+        assert!(!saturated);
     }
 }

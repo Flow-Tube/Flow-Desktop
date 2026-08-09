@@ -1,4 +1,6 @@
 import { getSetting } from "../api/db";
+import { isTauriEnv } from "../api/env";
+import { invokeBackend } from "../api/errors";
 import { getAppMetadata, type AppMetadata } from "../appMetadata";
 import {
   SETTING_DEFINITIONS_BY_KEY,
@@ -8,16 +10,42 @@ import {
 } from "./schema";
 import { isSettingKey, normalizeSettingValue, validateSettingValue } from "./values";
 
-export const SETTINGS_BACKUP_SCHEMA_VERSION = 1;
+export const SETTINGS_BACKUP_SCHEMA_VERSION = 2;
+/** v1 files (settings blob only) must keep importing unchanged. */
+const SUPPORTED_BACKUP_SCHEMA_VERSIONS: ReadonlySet<number> = new Set([1, 2]);
 
 export type SettingsBackupScope = "APP_DATA" | "BRAIN" | "MASTER";
 
+/** The backend's full-fidelity export: sync-collection records keyed by wire key. */
+export type BackupCollections = Record<string, unknown[]>;
+
+interface BackupCollectionsExport {
+  deviceId: string;
+  scope: string;
+  collections: BackupCollections;
+}
+
+export interface BackupCollectionImportStat {
+  collection: string;
+  added: number;
+  updated: number;
+  skipped: number;
+  tombstoned: number;
+}
+
+export interface BackupImportSummary {
+  collections: BackupCollectionImportStat[];
+}
+
 export interface SettingsBackup {
-  schemaVersion: typeof SETTINGS_BACKUP_SCHEMA_VERSION;
+  schemaVersion: number;
   app: AppMetadata;
   exportedAt: string;
   scope: SettingsBackupScope;
   settings: Record<string, unknown>;
+  /** Present since schemaVersion 2: the backend export in the sync wire representation. */
+  collections?: BackupCollections;
+  deviceId?: string;
 }
 
 export interface ValidatedSettingsBackup {
@@ -81,13 +109,48 @@ async function collectSettings(): Promise<Record<string, unknown>> {
 export async function buildSettingsBackup(
   scope: SettingsBackupScope = "APP_DATA",
 ): Promise<SettingsBackup> {
-  return {
+  const backup: SettingsBackup = {
     schemaVersion: SETTINGS_BACKUP_SCHEMA_VERSION,
     app: await getAppMetadata(),
     exportedAt: new Date().toISOString(),
     scope,
     settings: await collectSettings(),
   };
+
+  if (await isTauriEnv()) {
+    const exported = await invokeBackend<BackupCollectionsExport>("export_backup_data", {
+      scope,
+    });
+    backup.collections = exported.collections;
+    backup.deviceId = exported.deviceId;
+  }
+
+  return backup;
+}
+
+/** Restore a v2 backup's collections through the backend sync apply pipeline. */
+export async function importBackupCollections(
+  collections: BackupCollections,
+): Promise<BackupImportSummary> {
+  return invokeBackend<BackupImportSummary>("import_backup_data", {
+    payload: { collections },
+  });
+}
+
+/**
+ * Pull the v2 `collections` payload out of a parsed backup file, tolerantly: non-array
+ * entries are dropped, and `null` is returned when there is nothing importable (v1 files,
+ * foreign JSON).
+ */
+export function extractBackupCollections(value: unknown): BackupCollections | null {
+  if (!isRecord(value)) return null;
+  if (!isRecord(value.collections)) return null;
+
+  const collections: BackupCollections = {};
+  for (const [key, records] of Object.entries(value.collections)) {
+    if (Array.isArray(records)) collections[key] = records;
+  }
+  return Object.keys(collections).length > 0 ? collections : null;
 }
 
 export async function buildSettingsBackupJson(
@@ -99,7 +162,12 @@ export async function buildSettingsBackupJson(
 
 export function validateSettingsBackup(value: unknown): ValidatedSettingsBackup | null {
   if (!isRecord(value)) return null;
-  if (value.schemaVersion !== SETTINGS_BACKUP_SCHEMA_VERSION) return null;
+  if (
+    typeof value.schemaVersion !== "number" ||
+    !SUPPORTED_BACKUP_SCHEMA_VERSIONS.has(value.schemaVersion)
+  ) {
+    return null;
+  }
   if (!isRecord(value.settings)) return null;
 
   const settings: Partial<Record<SettingKey, string>> = {};

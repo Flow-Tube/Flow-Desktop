@@ -4,13 +4,25 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 
 use super::{DownloadMediaKind, ProgressEmitter};
 use crate::commands::youtube::fetch_sponsorblock_segments;
+use crate::db::settings::get_setting;
 use crate::services::music_service::MusicService;
 
 const IMAGE_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+const THUMBNAILS_ENABLED_KEY: &str = "download_thumbnails_enabled";
+const THUMBNAIL_MODE_KEY: &str = "download_thumbnail_mode";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ThumbnailMode {
+    Sidecar,
+    Embed,
+    Both,
+}
 
 pub async fn write_sidecars(
     app: &AppHandle,
@@ -19,13 +31,9 @@ pub async fn write_sidecars(
     video_id: Option<&str>,
     thumbnail_url: Option<&str>,
     emitter: &ProgressEmitter,
+    pool: &SqlitePool,
 ) {
-    if let Some(url) = thumbnail_url.map(str::trim).filter(|url| !url.is_empty()) {
-        match download_poster(media_path, url).await {
-            Ok(path) => emitter.log(format!("Saved poster image to `{}`", path.display())),
-            Err(error) => emitter.log(format!("Could not save the poster image: {error}")),
-        }
-    }
+    write_poster(media_kind, media_path, thumbnail_url, emitter, pool).await;
 
     let Some(video_id) = video_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return;
@@ -52,7 +60,78 @@ pub async fn write_sidecars(
     }
 }
 
-async fn download_poster(media_path: &Path, url: &str) -> Result<PathBuf, String> {
+async fn write_poster(
+    media_kind: DownloadMediaKind,
+    media_path: &Path,
+    thumbnail_url: Option<&str>,
+    emitter: &ProgressEmitter,
+    pool: &SqlitePool,
+) {
+    let Some(url) = thumbnail_url.map(str::trim).filter(|url| !url.is_empty()) else {
+        return;
+    };
+
+    let enabled = get_setting(pool, THUMBNAILS_ENABLED_KEY)
+        .await
+        .ok()
+        .flatten()
+        .map(|value| value != "false")
+        .unwrap_or(true);
+    if !enabled {
+        return;
+    }
+    let mode = match get_setting(pool, THUMBNAIL_MODE_KEY)
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+    {
+        Some("EMBED") => ThumbnailMode::Embed,
+        Some("BOTH") => ThumbnailMode::Both,
+        _ => ThumbnailMode::Sidecar,
+    };
+
+    let (bytes, extension) = match fetch_poster(url).await {
+        Ok(poster) => poster,
+        Err(error) => {
+            emitter.log(format!("Could not fetch the poster image: {error}"));
+            return;
+        }
+    };
+
+    // Embedding is only tractable for taggable audio containers; video downloads
+    // (WebM/MKV/fMP4 video) always fall back to a sidecar file.
+    let wants_embed = mode != ThumbnailMode::Sidecar
+        && matches!(
+            media_kind,
+            DownloadMediaKind::Music | DownloadMediaKind::Audio
+        );
+    let mut embedded = false;
+    if wants_embed {
+        match embed_poster(media_path.to_path_buf(), bytes.clone(), extension).await {
+            Ok(()) => {
+                embedded = true;
+                emitter.log("Embedded cover art into the media file");
+            }
+            Err(error) => {
+                emitter.log(format!(
+                    "Could not embed cover art (saving separately instead): {error}"
+                ));
+            }
+        }
+    }
+
+    // EMBED falls back to a sidecar when embedding fails or is unsupported, so
+    // the artwork is never silently lost.
+    if mode != ThumbnailMode::Embed || !embedded {
+        match write_poster_file(media_path, &bytes, extension).await {
+            Ok(path) => emitter.log(format!("Saved poster image to `{}`", path.display())),
+            Err(error) => emitter.log(format!("Could not save the poster image: {error}")),
+        }
+    }
+}
+
+async fn fetch_poster(url: &str) -> Result<(Vec<u8>, &'static str), String> {
     let client = reqwest::Client::builder()
         .user_agent(IMAGE_USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
@@ -75,11 +154,60 @@ async fn download_poster(media_path: &Path, url: &str) -> Result<PathBuf, String
     if bytes.is_empty() {
         return Err("image was empty".to_string());
     }
+    Ok((bytes.to_vec(), extension))
+}
+
+async fn write_poster_file(
+    media_path: &Path,
+    bytes: &[u8],
+    extension: &'static str,
+) -> Result<PathBuf, String> {
     let path = media_path.with_extension(extension);
-    tokio::fs::write(&path, &bytes)
+    tokio::fs::write(&path, bytes)
         .await
         .map_err(|error| format!("could not write image: {error}"))?;
     Ok(path)
+}
+
+async fn embed_poster(
+    media_path: PathBuf,
+    bytes: Vec<u8>,
+    extension: &'static str,
+) -> Result<(), String> {
+    use lofty::config::WriteOptions;
+    use lofty::file::TaggedFileExt;
+    use lofty::picture::{MimeType, Picture, PictureType};
+    use lofty::probe::Probe;
+    use lofty::tag::{Tag, TagExt};
+
+    // MP4 `covr` and ID3 `APIC` only reliably support JPEG/PNG payloads.
+    let mime = match extension {
+        "jpg" => MimeType::Jpeg,
+        "png" => MimeType::Png,
+        other => return Err(format!("{other} artwork is not supported for embedding")),
+    };
+
+    tokio::task::spawn_blocking(move || {
+        let tagged = Probe::open(&media_path)
+            .map_err(|error| format!("could not probe media file: {error}"))?
+            .read()
+            .map_err(|error| format!("could not read media file: {error}"))?;
+        let mut tag = tagged
+            .primary_tag()
+            .cloned()
+            .unwrap_or_else(|| Tag::new(tagged.primary_tag_type()));
+        tag.remove_picture_type(PictureType::CoverFront);
+        tag.push_picture(Picture::new_unchecked(
+            PictureType::CoverFront,
+            Some(mime),
+            None,
+            bytes,
+        ));
+        tag.save_to_path(&media_path, WriteOptions::default())
+            .map_err(|error| format!("could not write cover art: {error}"))
+    })
+    .await
+    .map_err(|error| format!("embed task failed: {error}"))?
 }
 
 fn poster_extension(response: &reqwest::Response, url: &str) -> &'static str {

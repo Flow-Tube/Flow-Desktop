@@ -15,6 +15,8 @@ export function DownloadsTab() {
   const [threads, setThreads] = useNumberPref(SETTINGS.DOWNLOAD_THREADS, 3);
   const [downloadPath, setDownloadPath] = usePreference(SETTINGS.DOWNLOAD_LOCATION, '');
   const [musicPath, setMusicPath] = usePreference(SETTINGS.MUSIC_DOWNLOAD_LOCATION, '');
+  const [thumbnailsEnabled, setThumbnailsEnabled] = useBoolPref(SETTINGS.DOWNLOAD_THUMBNAILS_ENABLED, true);
+  const [thumbnailMode, setThumbnailMode] = usePreference(SETTINGS.DOWNLOAD_THUMBNAIL_MODE, 'SIDECAR');
 
   const downloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_LOCATION);
   const musicDownloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.MUSIC_DOWNLOAD_LOCATION);
@@ -49,6 +51,19 @@ export function DownloadsTab() {
           <Select value={String(threads)} onChange={(v) => setThreads(Number(v))} disabled={isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_THREADS)} options={[
             { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' },
             { value: '4', label: '4' }, { value: '6', label: '6' }, { value: '8', label: '8' },
+          ]} />
+        </SettingItem>
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('settings_group_thumbnails')}>
+        <SettingItem title={getString('settings_download_thumbnails')} description={getString('settings_download_thumbnails_desc')}>
+          <ToggleSwitch checked={thumbnailsEnabled} onChange={setThumbnailsEnabled} />
+        </SettingItem>
+        <SettingItem title={getString('settings_thumbnail_mode')} description={getString('settings_thumbnail_mode_desc')} disabled={!thumbnailsEnabled}>
+          <Select value={thumbnailMode} onChange={setThumbnailMode} disabled={!thumbnailsEnabled} options={[
+            { value: 'SIDECAR', label: getString('thumbnail_mode_sidecar') },
+            { value: 'EMBED', label: getString('thumbnail_mode_embed') },
+            { value: 'BOTH', label: getString('thumbnail_mode_both') },
           ]} />
         </SettingItem>
       </SettingsGroup>

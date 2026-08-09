@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Check, AlertCircle, FolderHeart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
 import { unzipSync } from "fflate";
 import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
 import { useHistoryStore } from "../store/useHistoryStore";
@@ -13,14 +13,36 @@ import {
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { parseSubscriptionExport } from "../lib/api/youtube";
 import { getString } from "../lib/i18n/index";
-import { validateSettingsBackup } from "../lib/settings/backup";
-import type { SettingKey } from "../lib/settings/schema";
-import { setSettingValue } from "../store/useAppSettingsStore";
+import {
+  extractBackupCollections,
+  importBackupCollections,
+  validateSettingsBackup,
+  type BackupCollections,
+} from "../lib/settings/backup";
+import { SETTINGS, type SettingKey } from "../lib/settings/schema";
+import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
+import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../store/useLikesStore";
+import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
+import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "../lib/playlistLibrary";
 import type { VideoSummary } from "../types/video";
 import type { WatchHistoryRecord } from "../types/db";
 
 interface ParseChannelResult { id: string; name: string; }
 interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
+
+/// A backend collection restore writes SQLite directly, so the Zustand-cached stores must
+/// reload afterwards (mirrors the sync session's `sync://refresh` handling).
+async function refreshStoresAfterRestore() {
+  await useAppSettingsStore.getState().loadSettings();
+  useLikesStore.setState({ loaded: false });
+  await useLikesStore.getState().load();
+  window.dispatchEvent(new Event(LIKES_LIBRARY_UPDATED_EVENT));
+  await useAlbumLibraryStore.getState().load();
+  window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
+  await useSubscriptionStore.getState().loadSubscriptions();
+  await useSubscriptionStore.getState().loadSubscriptionGroups();
+  void useHistoryStore.getState().load(true);
+}
 
 export const ImportData: React.FC = () => {
   const navigate = useNavigate();
@@ -31,6 +53,7 @@ export const ImportData: React.FC = () => {
   const [importHistory, setImportHistory] = useState(true);
   const [importNeuro, setImportNeuro] = useState(true);
   const [importSettings, setImportSettings] = useState(true);
+  const [importLikes, setImportLikes] = useState(true);
 
   const [importState, setImportState] = useState<"idle" | "reading" | "parsing" | "saving" | "success" | "error">("idle");
   const [progress, setProgress] = useState(0);
@@ -42,6 +65,7 @@ export const ImportData: React.FC = () => {
   const [historyCount, setHistoryCount] = useState(0);
   const [neuroCount, setNeuroCount] = useState(0);
   const [settingsCount, setSettingsCount] = useState(0);
+  const [likesCount, setLikesCount] = useState(0);
 
   const { subscribe } = useSubscriptionStore();
 
@@ -133,7 +157,7 @@ export const ImportData: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportState("reading"); setProgress(15); setStatusMessage(getString("import_reading")); setErrorMessage("");
-    setSubsCount(0); setPlaylistsCount(0); setHistoryCount(0); setNeuroCount(0); setSettingsCount(0);
+    setSubsCount(0); setPlaylistsCount(0); setHistoryCount(0); setNeuroCount(0); setSettingsCount(0); setLikesCount(0);
     const isZip = file.name.endsWith(".zip");
     const reader = new FileReader();
     reader.onprogress = (event) => { if (event.lengthComputable) setProgress(15 + Math.round((event.loaded / event.total) * 20)); };
@@ -177,6 +201,55 @@ export const ImportData: React.FC = () => {
           setSettingsCount(importedSettingsCount);
         }
 
+        // Flow v2 backup: restore the full-fidelity collections (watch history, brains,
+        // likes, playlists, subscriptions) through the backend sync apply pipeline. On
+        // failure fall back to the legacy fuzzy parsers below rather than aborting.
+        let restoredViaCollections = false;
+        const backupCollections = isJson && backupData ? extractBackupCollections(backupData) : null;
+        if (backupCollections) {
+          const collectionAllowed = (key: string): boolean => {
+            switch (key) {
+              case "watch_history": return importHistory;
+              case "flow_neuro_brain":
+              case "music_brain": return importNeuro;
+              case "subscriptions":
+              case "subscription_channels": return importSubs;
+              case "playlists": return importPlaylists;
+              case "likes": return importLikes;
+              case "settings": return importSettings;
+              default: return false;
+            }
+          };
+          const selected: BackupCollections = {};
+          for (const [key, records] of Object.entries(backupCollections)) {
+            if (collectionAllowed(key)) selected[key] = records;
+          }
+          if (Object.keys(selected).length > 0) {
+            setStatusMessage(getString("import_restoring_collections"));
+            setProgress(68);
+            try {
+              const summary = await importBackupCollections(selected);
+              restoredViaCollections = true;
+              const restoredOf = (name: string) => {
+                const stat = summary.collections.find((s) => s.collection === name);
+                return stat ? stat.added + stat.updated : 0;
+              };
+              timelineCount = restoredOf("watch_history");
+              setHistoryCount(timelineCount);
+              subbedCount = restoredOf("subscription_channels") + restoredOf("subscriptions");
+              setSubsCount(subbedCount);
+              playCount = restoredOf("playlists");
+              setPlaylistsCount(playCount);
+              setLikesCount(restoredOf("likes"));
+              if (restoredOf("flow_neuro_brain") + restoredOf("music_brain") > 0) setNeuroCount(1);
+              setProgress(90);
+              await refreshStoresAfterRestore();
+            } catch (err) {
+              console.error("Backend collection restore failed; falling back to legacy parsing", err);
+            }
+          }
+        }
+
         let brainToImport: unknown | null = null;
         if (isJson && backupData) brainToImport = extractFlowNeuroBrainCandidate(backupData);
         if (importNeuro && brainToImport && isFlowNeuroBrainCandidate(brainToImport)) {
@@ -185,7 +258,7 @@ export const ImportData: React.FC = () => {
           setNeuroCount(1);
         }
 
-        if (importSubs) {
+        if (importSubs && !restoredViaCollections) {
           let parsedSubs: ParseChannelResult[] = [];
           if (isJson && backupData && !backupData.isFreeTubeHistory) parsedSubs = parseJsonSubscriptions(backupData);
           else if (!isJson && !isHtml) { const arr = await parseSubscriptionExport(text); parsedSubs = arr.map(([id, name]) => ({ id, name })); }
@@ -196,7 +269,7 @@ export const ImportData: React.FC = () => {
           }
         }
 
-        if (importPlaylists && isJson && backupData?.playlists && Array.isArray(backupData.playlists)) {
+        if (importPlaylists && !restoredViaCollections && isJson && backupData?.playlists && Array.isArray(backupData.playlists)) {
           setStatusMessage(getString("import_restoring_playlists"));
           const pj = await getSetting("user_playlists"); const existing: LocalPlaylist[] = pj ? JSON.parse(pj) : [];
           const crossRefs = backupData.playlistVideos || []; const vids = backupData.videos || [];
@@ -211,7 +284,7 @@ export const ImportData: React.FC = () => {
           setPlaylistsCount(playCount);
         }
 
-        if (importHistory) {
+        if (importHistory && !restoredViaCollections) {
           let ph: WatchHistoryRecord[] = [];
           if (isJson && backupData) { if (backupData.isFreeTubeHistory) ph = parseFreeTubeWatchHistory(backupData.rawText); else if (backupData.viewHistory && Array.isArray(backupData.viewHistory)) ph = backupData.viewHistory.map((item: any) => ({ videoId: item.videoId, title: item.title || "Watched Video", channelName: item.channelName || "Unknown", watchDate: typeof item.timestamp === "number" ? new Date(item.timestamp).toISOString() : new Date().toISOString(), watchDurationSeconds: item.position ? Math.round(item.position / 1000) : 0, totalDurationSeconds: item.duration ? Math.round(item.duration / 1000) : 0 })); else ph = parseJsonWatchHistory(backupData); }
           else if (isHtml) ph = parseHtmlWatchHistory(text);
@@ -240,6 +313,12 @@ export const ImportData: React.FC = () => {
           }
         }
 
+        // Defense against the Deep Flow restore trap: an imported active flag without its
+        // (internal, never-exported) activation timestamp would otherwise mute watch-history
+        // recording and FlowNeuro learning indefinitely.
+        await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVE, "false");
+        await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVATED_AT, "0");
+
         setProgress(100); setImportState("success");
       } catch (err: any) { console.error("Import failure", err); setImportState("error"); setErrorMessage(err?.message || getString("import_file_not_recognized")); }
     };
@@ -253,6 +332,7 @@ export const ImportData: React.FC = () => {
     { key: "subs", label: getString("import_subscriptions"), desc: getString("import_subscriptions_desc"), icon: <Tv size={16} />, checked: importSubs, toggle: () => setImportSubs(!importSubs) },
     { key: "playlists", label: getString("import_playlists"), desc: getString("import_playlists_desc"), icon: <FolderHeart size={16} />, checked: importPlaylists, toggle: () => setImportPlaylists(!importPlaylists) },
     { key: "history", label: getString("import_watch_history"), desc: getString("import_watch_history_desc"), icon: <History size={16} />, checked: importHistory, toggle: () => setImportHistory(!importHistory) },
+    { key: "likes", label: getString("import_likes"), desc: getString("import_likes_desc"), icon: <Heart size={16} />, checked: importLikes, toggle: () => setImportLikes(!importLikes) },
     { key: "neuro", label: getString("import_neuro_profile"), desc: getString("import_neuro_profile_desc"), icon: <Brain size={16} />, checked: importNeuro, toggle: () => setImportNeuro(!importNeuro) },
   ];
 
@@ -353,6 +433,7 @@ export const ImportData: React.FC = () => {
                   {subsCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_subscriptions")}</span><span className="font-mono text-chrome-neutral-200">{subsCount}</span></div>}
                   {playlistsCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_playlists")}</span><span className="font-mono text-chrome-neutral-200">{playlistsCount}</span></div>}
                   {historyCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_watch_history")}</span><span className="font-mono text-chrome-neutral-200">{historyCount}</span></div>}
+                  {likesCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_likes")}</span><span className="font-mono text-chrome-neutral-200">{likesCount}</span></div>}
                   {settingsCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_settings")}</span><span className="font-mono text-chrome-neutral-200">{settingsCount}</span></div>}
                   {neuroCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_neuro_profile")}</span><span className="font-mono text-chrome-neutral-200">{getString("ok")}</span></div>}
                 </div>

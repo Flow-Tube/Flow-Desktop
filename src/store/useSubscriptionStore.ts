@@ -34,6 +34,8 @@ interface SubscriptionState {
 const SUBSCRIPTIONS_KEY = "subscriptions";
 const SUBSCRIPTION_GROUPS_KEY = "subscription_groups";
 
+const LEGACY_SEED_IDS = new Set(["UCsBjURrdU234nU351gVEfTA", "UCwRxwjk_c_92sAMeX4JzW4w"]);
+
 function cleanChannelId(channelId: string) {
   return channelId.replace("channel:", "");
 }
@@ -67,16 +69,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     set({ loading: true });
     try {
       const subsJson = await getSetting(SUBSCRIPTIONS_KEY);
-      if (subsJson) {
-        set({ subscriptions: JSON.parse(subsJson), loading: false });
-      } else {
-        const defaults = [
-          { id: "UCsBjURrdU234nU351gVEfTA", name: "Fireship" },
-          { id: "UCwRxwjk_c_92sAMeX4JzW4w", name: "Linus Tech Tips" }
-        ];
-        await persistSubscriptions(defaults);
-        set({ subscriptions: defaults, loading: false });
+      const parsed: SubscribedChannel[] = subsJson ? JSON.parse(subsJson) : [];
+      const cleaned = parsed.filter((channel) => !LEGACY_SEED_IDS.has(channel.id));
+      if (cleaned.length !== parsed.length) {
+        await persistSubscriptions(cleaned);
       }
+      set({ subscriptions: cleaned, loading: false });
     } catch (e) {
       console.error("Failed to load subscriptions in store", e);
       set({ loading: false });

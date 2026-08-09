@@ -57,4 +57,22 @@ describe("decideExternalAudioSync", () => {
   it("still holds a stalled video's audio even while rate-limited", () => {
     expect(decide({ drift: 3, videoAdvancing: false, msSinceLastRealign: 0 })).toBe("hold");
   });
+
+  it("treats a starved video as not-advancing even if its clock moved recently", () => {
+    // Right after a quality switch the progress sampler still reports the old
+    // clock as advancing; readyState is the immediate signal that it is not.
+    expect(decide({ drift: 0.6, videoStarved: true })).toBe("hold");
+    expect(decide({ drift: 5, videoStarved: true, msSinceLastRealign: 0 })).toBe("hold");
+  });
+
+  it("does not release a hold while the video is still starved", () => {
+    expect(decide({ held: true, drift: 0.05, videoStarved: true })).toBe("wait");
+    expect(decide({ held: true, drift: 0.05, videoStarved: false })).toBe("resume");
+  });
+
+  it("still realigns audio that fell behind a starved video", () => {
+    // Moving audio forward onto a stalled clock cannot loop: only rewinding
+    // audio that ran ahead can.
+    expect(decide({ drift: -2, videoStarved: true })).toBe("realign");
+  });
 });

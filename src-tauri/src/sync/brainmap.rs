@@ -48,7 +48,30 @@ fn bucket_to_string(b: &TimeBucket) -> String {
         .unwrap_or_default()
 }
 fn string_to_bucket(s: &str) -> Option<TimeBucket> {
-    serde_json::from_value(serde_json::Value::String(s.to_string())).ok()
+    if let Ok(bucket) = serde_json::from_value(serde_json::Value::String(s.to_string())) {
+        return Some(bucket);
+    }
+    let normalized: String = s
+        .chars()
+        .filter(|c| *c != '_')
+        .flat_map(char::to_lowercase)
+        .collect();
+    match normalized.as_str() {
+        "weekdaymorning" => Some(TimeBucket::WeekdayMorning),
+        "weekdayafternoon" => Some(TimeBucket::WeekdayAfternoon),
+        "weekdayevening" => Some(TimeBucket::WeekdayEvening),
+        "weekdaynight" => Some(TimeBucket::WeekdayNight),
+        "weekendmorning" => Some(TimeBucket::WeekendMorning),
+        "weekendafternoon" => Some(TimeBucket::WeekendAfternoon),
+        "weekendevening" => Some(TimeBucket::WeekendEvening),
+        "weekendnight" => Some(TimeBucket::WeekendNight),
+        _ => None,
+    }
+}
+
+#[must_use]
+pub fn canonical_bucket_key(key: &str) -> Option<String> {
+    string_to_bucket(key).map(|bucket| bucket_to_string(&bucket))
 }
 
 // ---- ContentVector ⇄ ContentVectorWire -------------------------------------------------------

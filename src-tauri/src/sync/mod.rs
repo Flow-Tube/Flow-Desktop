@@ -2,6 +2,7 @@ pub mod apply;
 pub mod brainmap;
 pub mod canonical;
 pub mod codec;
+pub mod compat;
 pub mod crypto;
 pub mod error;
 pub mod export;

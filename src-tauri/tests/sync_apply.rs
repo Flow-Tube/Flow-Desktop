@@ -571,3 +571,60 @@ async fn apply_music_brain_merges_into_effective() {
     let blocked: Vec<String> = serde_json::from_value(brain["blocked_artists"].clone()).unwrap();
     assert!(blocked.contains(&"UCspam".to_string()) && blocked.contains(&"UCbad".to_string()));
 }
+
+#[tokio::test]
+async fn an_android_shaped_brain_record_applies_instead_of_rolling_back_everything() {
+    // Regression for issue #46. Flow for Android sends the brain with its counters, sets, LWW-maps
+    // and flags at the top level and its G-Counters wrapped in `perDevice`. The strict decoder
+    // failed with `invalid type: map, expected u64`, and because apply is one transaction that
+    // rollback took *every* collection with it — the phone reported success while the desktop
+    // imported nothing. The record below is shaped exactly as `BrainMapper.toCanonical` emits it.
+    let pool = memory_pool().await;
+    seed_setting(
+        &pool,
+        "user_neuro_brain",
+        r#"{"idf_total_documents":100,"total_interactions":50,"blocked_topics":["politics"]}"#,
+    )
+    .await;
+
+    let android_record = format!(
+        r#"{{"schema":13,"deviceId":"{PEER}","hlc":"1000:0:{PEER}",
+            "vectors":{{"globalVector":{{"topics":{{"coding":0.5}},"duration":0.5,"pacing":0.4,"complexity":0.6,"isLive":0.0}},
+                        "timeVectors":{{"WEEKDAY_EVENING":{{"topics":{{"music":0.9}},"duration":0.5,"pacing":0.5,"complexity":0.5,"isLive":0.0}}}}}},
+            "idfTotalDocuments":{{"perDevice":{{"{PEER}":200}}}},
+            "totalInteractions":{{"perDevice":{{"{PEER}":25}}}},
+            "idfWordFrequency":{{"music":{{"perDevice":{{"{PEER}":3}}}}}},
+            "watchHistoryMap":{{"vid1":0.75}},
+            "suppressedVideoIds":{{"vidbad":1784462799000}},
+            "blockedTopics":["gaming"],
+            "hasCompletedOnboarding":true}}"#
+    );
+
+    let payload = StagedCollection {
+        collection: Collection::FlowNeuroBrain,
+        ndjson: android_record.replace(['\n', ' '], "").into_bytes(),
+        record_count: 1,
+        hash: "android-brain-1".to_string(),
+    };
+    apply_payload(&pool, OUR, PEER, &[payload]).await.unwrap();
+
+    let brain: serde_json::Value =
+        serde_json::from_str(&read_setting(&pool, "user_neuro_brain").await).unwrap();
+    // The `perDevice` wrapper is unwrapped and the counter merges without double-counting.
+    assert_eq!(brain["idf_total_documents"], 300); // local 100 + phone 200
+    assert_eq!(brain["total_interactions"], 75); // local 50 + phone 25
+    // Top-level sets/maps/flags reach their grouped homes instead of being silently dropped.
+    let blocked: Vec<String> = serde_json::from_value(brain["blocked_topics"].clone()).unwrap();
+    assert!(blocked.contains(&"politics".to_string()) && blocked.contains(&"gaming".to_string()));
+    assert_eq!(brain["watch_history_map"]["vid1"], 0.75);
+    assert!(brain["suppressed_video_ids"].get("vidbad").is_some());
+    assert_eq!(brain["has_completed_onboarding"], true);
+    assert!(brain["global_vector"]["topics"].get("coding").is_some());
+    // Android's SCREAMING_SNAKE bucket key maps onto our own spelling.
+    assert!(
+        brain["time_vectors"]["WeekdayEvening"]["topics"]
+            .get("music")
+            .is_some(),
+        "the phone's time-of-day vector must survive the bucket-name difference"
+    );
+}

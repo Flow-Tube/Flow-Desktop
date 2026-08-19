@@ -99,21 +99,106 @@ pub async fn connect(
     Ok(WsChannel::new(ws))
 }
 
-/// Best-effort LAN IPv4 for the QR code: skips loopback, link-local (169.254.x), and the
-/// Docker-ish 172.16–172.31 range. Returns the first plausible address, or `None`.
-pub fn lan_ip() -> Option<String> {
-    let ifas = local_ip_address::list_afinet_netifas().ok()?;
-    for (_name, ip) in ifas {
-        if let IpAddr::V4(v4) = ip {
-            if v4.is_loopback() || v4.is_link_local() {
-                continue;
-            }
-            let o = v4.octets();
-            if o[0] == 172 && (16..=31).contains(&o[1]) {
-                continue;
-            }
-            return Some(v4.to_string());
-        }
+/// Interface-name prefixes that mean "virtual, container, or VPN adapter". Matched on the start of
+/// the lowercased name so `wg0-mullvad`, `tun0` and `utun3` are caught without false-positiving on
+/// an arbitrary substring.
+const VIRTUAL_IFACE_PREFIXES: [&str; 8] = ["tun", "tap", "utun", "wg", "ppp", "veth", "br-", "zt"];
+
+/// Distinctive fragments that mean the same thing but can appear anywhere in the (often verbose)
+/// Windows/macOS adapter name, e.g. `vEthernet (WSL)`.
+const VIRTUAL_IFACE_SUBSTRINGS: [&str; 8] = [
+    "docker",
+    "virbr",
+    "vboxnet",
+    "vmnet",
+    "tailscale",
+    "vethernet",
+    "mullvad",
+    "wsl",
+];
+
+/// One candidate address for the QR, with the interface it came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanCandidate {
+    pub interface: String,
+    pub ip: String,
+    /// True when the interface looks virtual/VPN — such an address is only ever a last resort.
+    pub virtual_iface: bool,
+}
+
+fn is_virtual_iface(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    VIRTUAL_IFACE_PREFIXES.iter().any(|p| n.starts_with(p))
+        || VIRTUAL_IFACE_SUBSTRINGS.iter().any(|s| n.contains(s))
+}
+
+/// How plausible this address is as "reachable from another device on the same LAN" — lower is
+/// better. `None` rejects the address outright.
+fn address_rank(name: &str, v4: std::net::Ipv4Addr) -> Option<u8> {
+    if v4.is_loopback() || v4.is_link_local() || v4.is_unspecified() || v4.is_multicast() {
+        return None;
     }
-    None
+    let o = v4.octets();
+    let range_rank = match o {
+        [192, 168, _, _] => 0,
+        [10, ..] => 1,
+        // Docker's default bridge (172.17/16) is demoted rather than rejected, so a host whose only
+        // address really is in it still gets a QR.
+        [172, 17, _, _] => 4,
+        [172, b, _, _] if (16..=31).contains(&b) => 2,
+        // CGNAT / Tailscale — routable for that overlay, almost never the LAN the phone is on.
+        [100, b, _, _] if (64..=127).contains(&b) => 5,
+        // A public address: unusual, but some networks hand them out on the same L2 segment.
+        _ => 3,
+    };
+    // A physical interface always beats a virtual one, whatever the range: a VirtualBox host-only
+    // 192.168.56.1 is unreachable, while a physical CGNAT address at least might work.
+    Some(if is_virtual_iface(name) {
+        8 + range_rank
+    } else {
+        range_rank
+    })
+}
+
+/// Rank `interfaces` (as returned by [`local_ip_address::list_afinet_netifas`]) into QR candidates,
+/// best first. Split out from [`lan_ip_candidates`] so the selection policy is testable without
+/// real network interfaces.
+///
+/// Ordering matters because the winner is what the QR tells the phone to dial. The old "first
+/// address that isn't loopback/link-local" rule handed out whatever the OS happened to enumerate
+/// first, which with a VPN up is frequently the tunnel address (Mullvad allocates from `10.64/10`)
+/// — an address that exists only inside the tunnel, so the phone's connection never arrives and the
+/// desktop logs nothing at all (issue #41). Preference order mirrors Android's `LanAddress.resolve`
+/// so both ends of a pair pick comparably.
+pub fn rank_lan_candidates(interfaces: Vec<(String, IpAddr)>) -> Vec<LanCandidate> {
+    let mut ranked: Vec<(u8, LanCandidate)> = interfaces
+        .into_iter()
+        .filter_map(|(name, ip)| {
+            let IpAddr::V4(v4) = ip else { return None };
+            let rank = address_rank(&name, v4)?;
+            Some((
+                rank,
+                LanCandidate {
+                    virtual_iface: is_virtual_iface(&name),
+                    interface: name,
+                    ip: v4.to_string(),
+                },
+            ))
+        })
+        .collect();
+    // Stable, so equally-ranked addresses keep the OS enumeration order.
+    ranked.sort_by_key(|(rank, _)| *rank);
+    ranked.into_iter().map(|(_, c)| c).collect()
+}
+
+/// Every plausible LAN IPv4 on this host, best first — see [`rank_lan_candidates`].
+pub fn lan_ip_candidates() -> Vec<LanCandidate> {
+    local_ip_address::list_afinet_netifas()
+        .map(rank_lan_candidates)
+        .unwrap_or_default()
+}
+
+/// Best-effort LAN IPv4 for the QR code. See [`lan_ip_candidates`] for how the winner is chosen.
+pub fn lan_ip() -> Option<String> {
+    lan_ip_candidates().into_iter().next().map(|c| c.ip)
 }

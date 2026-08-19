@@ -169,11 +169,27 @@ pub fn encode_chunk(header: &ChunkHeader, ndjson: &[u8]) -> Vec<u8> {
 }
 
 /// Decode a CHUNK plaintext body into `(header, ndjson_slice)`.
+///
+/// A frame with **no** newline is read as a header-only chunk (empty body) rather than rejected:
+/// Flow for Android through v2.2.0 builds an empty collection's chunk as `StringBuilder(header)`
+/// and only appends `'\n'` *before each record*, so a zero-record collection arrives as bare header
+/// JSON. Rejecting it killed every phone→desktop sync where any selected collection was empty
+/// (issues #30/#49). `encode_chunk` still always writes the separator, so what we emit stays
+/// spec-exact (`FLOW-SYNC/1` §7); only what we accept is widened.
 pub fn decode_chunk(plaintext: &[u8]) -> Result<(ChunkHeader, &[u8]), SyncError> {
-    let nl = plaintext
-        .iter()
-        .position(|&b| b == b'\n')
-        .ok_or_else(|| SyncError::Codec("chunk frame missing header newline".into()))?;
-    let header: ChunkHeader = serde_json::from_slice(&plaintext[..nl])?;
-    Ok((header, &plaintext[nl + 1..]))
+    let (header_bytes, body) = match plaintext.iter().position(|&b| b == b'\n') {
+        Some(nl) => (&plaintext[..nl], &plaintext[nl + 1..]),
+        None => (plaintext, &plaintext[plaintext.len()..]),
+    };
+    let header: ChunkHeader = serde_json::from_slice(header_bytes)?;
+    if body.is_empty() {
+        tracing::debug!(
+            target: "flow::sync::codec",
+            seq = header.seq,
+            last = header.last,
+            separator_present = plaintext.len() != header_bytes.len(),
+            "decoded an empty chunk body"
+        );
+    }
+    Ok((header, body))
 }

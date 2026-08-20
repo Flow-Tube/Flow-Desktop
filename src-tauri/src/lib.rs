@@ -13,7 +13,7 @@ mod errors;
 mod flow_neuro;
 #[cfg(target_os = "linux")]
 mod linux_startup;
-mod models;
+pub mod models;
 mod music_brain;
 mod security;
 mod services;

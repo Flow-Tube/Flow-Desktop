@@ -216,3 +216,120 @@ fn every_track_carries_the_fetching_user_agent() {
         "the proxy fetches audio with the UA of the client that minted the URL"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Dubbed-language selection
+// ---------------------------------------------------------------------------
+
+use flow_desktop_lib::api::innertube::extractors::player::select_playable_audio_tracks;
+
+/// Real VISIONOS responses, with every signed URL replaced by a placeholder.
+fn fixture(name: &str) -> Value {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name);
+    serde_json::from_str(&std::fs::read_to_string(&path).expect("fixture")).expect("valid json")
+}
+
+/// The container half of a mime type, e.g. `audio/webm` out of
+/// `audio/webm; codecs="opus"`.
+fn container_of(mime: Option<&str>) -> String {
+    mime.and_then(|mime| mime.split(';').next())
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn every_dubbed_language_is_offered_once() {
+    let data = fixture("visionos_dubbed_streaming_data.json");
+    let selected = select_playable_audio_tracks(&collect_audio_tracks(&data, UA));
+
+    assert!(
+        selected.len() > 15,
+        "this response carries 20 languages, got {}",
+        selected.len()
+    );
+
+    let mut languages: Vec<_> = selected
+        .iter()
+        .map(|track| {
+            track
+                .language_code
+                .clone()
+                .unwrap_or_else(|| track.label.clone())
+        })
+        .collect();
+    let before = languages.len();
+    languages.sort();
+    languages.dedup();
+    assert_eq!(
+        before,
+        languages.len(),
+        "one entry per language, no duplicates"
+    );
+}
+
+/// All alternates must share a container: the manifest declares them as sibling
+/// AdaptationSets, and a container change forces the media engine to rebuild its
+/// audio source buffer mid-stream.
+#[test]
+fn all_offered_languages_share_one_container() {
+    let data = fixture("visionos_dubbed_streaming_data.json");
+    let selected = select_playable_audio_tracks(&collect_audio_tracks(&data, UA));
+
+    let mut containers: Vec<String> = selected
+        .iter()
+        .map(|track| container_of(track.mime_type.as_deref()))
+        .collect();
+    containers.sort();
+    containers.dedup();
+    assert_eq!(containers.len(), 1, "mixed containers: {containers:?}");
+}
+
+#[test]
+fn the_original_track_leads_and_stays_default() {
+    let data = fixture("visionos_dubbed_streaming_data.json");
+    let selected = select_playable_audio_tracks(&collect_audio_tracks(&data, UA));
+
+    assert!(selected[0].is_default, "the original sorts first");
+    assert!(
+        selected[0].label.contains("original"),
+        "expected the original track, got {:?}",
+        selected[0].label
+    );
+    assert_eq!(
+        selected.iter().filter(|track| track.is_default).count(),
+        1,
+        "exactly one default across all languages"
+    );
+}
+
+#[test]
+fn every_offered_track_is_playable() {
+    let data = fixture("visionos_dubbed_streaming_data.json");
+    let selected = select_playable_audio_tracks(&collect_audio_tracks(&data, UA));
+
+    for track in &selected {
+        assert!(track.available, "{} must be selectable", track.label);
+        assert!(!track.local_url.is_empty(), "{} needs a URL", track.label);
+        // The synthetic DASH manifest needs SegmentBase ranges for every rung.
+        assert!(
+            track.init_range_start.is_some() && track.index_range_start.is_some(),
+            "{} needs byte ranges to appear in the manifest",
+            track.label
+        );
+    }
+}
+
+/// A video with no dubs must still resolve to exactly one playable track — this is
+/// the shape that was playing silently before the default-flag fix.
+#[test]
+fn a_single_language_response_still_yields_one_track() {
+    let data = fixture("visionos_single_language_streaming_data.json");
+    let selected = select_playable_audio_tracks(&collect_audio_tracks(&data, UA));
+
+    assert_eq!(selected.len(), 1, "no dubs means one track");
+    assert!(selected[0].is_default);
+    assert!(selected[0].available);
+    assert!(selected[0].init_range_start.is_some());
+}

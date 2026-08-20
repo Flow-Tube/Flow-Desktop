@@ -893,6 +893,79 @@ pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<Aud
     tracks
 }
 
+pub fn select_playable_audio_tracks(tracks: &[AudioTrack]) -> Vec<AudioTrack> {
+    let language_key = |track: &AudioTrack| -> String {
+        track
+            .language_code
+            .clone()
+            .unwrap_or_else(|| track.label.clone())
+    };
+    let container = |track: &AudioTrack| -> String {
+        track
+            .mime_type
+            .as_deref()
+            .and_then(|mime| mime.split(';').next())
+            .unwrap_or_default()
+            .to_string()
+    };
+
+    // What the original track resolves to when it is the only one considered.
+    let preferred_container = tracks
+        .iter()
+        .filter(|track| track.is_default)
+        .max_by_key(|track| track.bitrate.unwrap_or(0))
+        .map(container);
+
+    let mut by_language: Vec<(String, AudioTrack)> = Vec::new();
+    for track in tracks {
+        let key = language_key(track);
+        let in_preferred_container = preferred_container
+            .as_ref()
+            .is_none_or(|preferred| container(track) == *preferred);
+        // (container matches, bitrate) — a language that cannot offer the shared
+        // container still gets its best format rather than vanishing from the menu.
+        let rank = (in_preferred_container, track.bitrate.unwrap_or(0));
+
+        match by_language
+            .iter_mut()
+            .find(|(existing, _)| *existing == key)
+        {
+            Some((_, existing)) => {
+                let existing_rank = (
+                    preferred_container
+                        .as_ref()
+                        .is_none_or(|preferred| container(existing) == *preferred),
+                    existing.bitrate.unwrap_or(0),
+                );
+                if rank > existing_rank {
+                    *existing = track.clone();
+                }
+            }
+            None => by_language.push((key, track.clone())),
+        }
+    }
+
+    let mut selected: Vec<AudioTrack> = by_language
+        .into_iter()
+        .map(|(_, track)| track)
+        .map(|mut track| {
+            // Every surviving track carries a direct URL that googlevideo serves,
+            // so all of them are offerable; `available` only ever marks a track the
+            // player must refuse.
+            track.available = true;
+            track
+        })
+        .collect();
+
+    selected.sort_by(|a, b| {
+        b.is_default
+            .cmp(&a.is_default)
+            .then_with(|| a.label.cmp(&b.label))
+    });
+
+    selected
+}
+
 fn audio_track_language_code(audio_track: &Value, id: &str) -> Option<String> {
     if let Some(language_code) = audio_track["languageCode"]
         .as_str()
@@ -1714,16 +1787,17 @@ impl InnertubeClient {
         // Return expiration time and user-agent string joined by | delimiter
         let composite_expires_at = format!("{}|{}", expires_in_seconds, winning_client.user_agent);
 
-        // Offer only the original audio track. Dubbed/translated languages are
-        // delivered as progressive direct URLs that googlevideo 403s for sustained
-        // playback in this environment, so they are not surfaced.
+        // Offer every dubbed language alongside the original. VISIONOS serves these
+        // as direct URLs googlevideo streams in full — the earlier iPadOS-sourced
+        // dubs were the ones it refused, and those are no longer how they are
+        // fetched.
         let download_audio_tracks = collect_audio_tracks(streaming_data, winning_client.user_agent);
-        let mut audio_tracks = download_audio_tracks.clone();
-        if let Some(idx) = audio_tracks.iter().position(|track| track.is_default) {
-            audio_tracks = vec![audio_tracks.swap_remove(idx)];
-        } else {
-            audio_tracks.truncate(1);
-        }
+        let audio_tracks = select_playable_audio_tracks(&download_audio_tracks);
+        debug!(
+            video_id = %video_id_trimmed,
+            languages = audio_tracks.len(),
+            "Resolved selectable audio tracks"
+        );
 
         // Extract SABR metadata (safe: never fails the request, only annotates).
         // SABR is retained only as the original-audio bot-wall fallback.

@@ -272,14 +272,18 @@ fn escape_xml_attr(value: &str) -> String {
         .replace('>', "&gt;")
 }
 
-fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
+/// Build a DASH manifest for responses YouTube serves without one.
+///
+/// Public so `tests/dash_manifest.rs` can assert the audio contract the player
+/// depends on; nothing outside this module calls it.
+pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
     let has_segment_ranges =
         |init_s: Option<u64>, init_e: Option<u64>, idx_s: Option<u64>, idx_e: Option<u64>| {
             init_s.is_some() && init_e.is_some() && idx_s.is_some() && idx_e.is_some()
         };
     let is_mp4 = |mime: Option<&str>| mime.map(|m| m.contains("mp4")).unwrap_or(false);
 
-    let usable_audio: Vec<_> = stream_info
+    let audio_tracks: Vec<_> = stream_info
         .audio_tracks
         .iter()
         .filter(|track| {
@@ -292,33 +296,6 @@ fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
                 )
         })
         .collect();
-
-    // Only the original (default) audio is offered, but never let a missing
-    // default flag mean *no* audio: emitting no manifest drops playback to the
-    // progressive URL, and the clients that omit the flag are the same ones that
-    // serve no muxed format — so the fallback is a video-only stream, silent.
-    let default_audio: Vec<_> = usable_audio
-        .iter()
-        .copied()
-        .filter(|track| track.is_default)
-        .collect();
-    let audio_tracks = if default_audio.is_empty() {
-        usable_audio
-    } else {
-        default_audio
-    };
-
-    let mp4_audio_tracks: Vec<_> = audio_tracks
-        .iter()
-        .copied()
-        .filter(|track| is_mp4(track.mime_type.as_deref()))
-        .collect();
-
-    let audio_tracks = if mp4_audio_tracks.is_empty() {
-        audio_tracks
-    } else {
-        mp4_audio_tracks
-    };
 
     if audio_tracks.is_empty() {
         return None;
@@ -464,7 +441,7 @@ fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
         ));
         manifest.push_str(&format!(
             "        <BaseURL>{}</BaseURL>\n",
-            audio_track.local_url
+            escape_xml_attr(&audio_track.local_url)
         ));
         manifest.push_str(&format!(
             "        <SegmentBase indexRange=\"{}-{}\">\n",
@@ -499,7 +476,7 @@ fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
             ));
             manifest.push_str(&format!(
                 "        <BaseURL>{}</BaseURL>\n",
-                variant.local_url
+                escape_xml_attr(&variant.local_url)
             ));
             manifest.push_str(&format!(
                 "        <SegmentBase indexRange=\"{}-{}\">\n",

@@ -380,6 +380,11 @@ function PairingState() {
       </div>
       {!expired && <p className="mt-2 font-mono text-xs text-chrome-neutral-500">{getString("sync_expires_in", remaining)}</p>}
 
+      <p className="mt-6 font-mono text-xs text-chrome-neutral-500">
+        {getString("sync_host_address", `${hostInfo.ip}:${hostInfo.port}`)}
+      </p>
+      <p className="mt-1 max-w-xs text-xs text-chrome-neutral-600">{getString("sync_host_address_hint")}</p>
+
       <button
         type="button"
         onClick={() => void cancel()}

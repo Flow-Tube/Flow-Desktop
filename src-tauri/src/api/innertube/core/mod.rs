@@ -1,4 +1,5 @@
 pub mod botguard;
+pub mod clients;
 pub mod context;
 pub mod http;
 pub mod utils;

@@ -1,4 +1,5 @@
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     detect_lockup_is_live, detect_video_is_live, extract_channel_id_from_video_renderer,
     normalize_youtube_image_url, parse_duration_seconds, parse_mixed_number_word_to_long,
@@ -1046,7 +1047,7 @@ impl InnertubeClient {
         });
 
         let res = self
-            .post_innertube("browse", "WEB", "2.20260120.01.00", &mut payload)
+            .post_innertube("browse", &clients::WEB, &mut payload)
             .await?;
 
         debug!(
@@ -1335,7 +1336,7 @@ impl InnertubeClient {
         };
 
         let res = self
-            .post_innertube("browse", "WEB", "2.20260120.01.00", &mut payload)
+            .post_innertube("browse", &clients::WEB, &mut payload)
             .await?;
         let (items, next_page_token, sort_latest_token, sort_popular_token, sort_oldest_token) =
             extract_videos_from_browse(&res);

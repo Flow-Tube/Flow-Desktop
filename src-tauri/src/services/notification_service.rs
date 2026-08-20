@@ -46,7 +46,7 @@ fn now_millis() -> i64 {
 
 fn build_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .user_agent(crate::api::http::BROWSER_USER_AGENT)
         .timeout(Duration::from_secs(30))
         .build()
         .unwrap_or_default()

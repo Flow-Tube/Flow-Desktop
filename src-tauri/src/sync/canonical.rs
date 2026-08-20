@@ -178,7 +178,10 @@ impl<'de> Deserialize<'de> for Hlc {
 /// counts, interaction totals, play counts) **idempotent on re-sync** while still summing the
 /// genuinely-disjoint history of distinct devices — the precise fix for the double-counting bug
 /// in a naive weighted-average merge.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Wire form is the map itself (`{"<device>": 12}`). `Deserialize` is hand-written in
+/// [`crate::sync::compat`] so a peer that wraps it differently is still understood.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct GCounter(pub BTreeMap<String, u64>);
 
@@ -224,11 +227,12 @@ impl GCounter {
 ///
 /// Used for blocklists / preferences / seen-sets, where "blocked on either device ⇒ blocked"
 /// but an explicit unblock must still propagate.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Deserialize` is hand-written in [`crate::sync::compat`] so a peer that sends a bare member
+/// array (no stamps) is still understood.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct OrSet {
-    #[serde(default)]
     pub adds: BTreeMap<String, Hlc>,
-    #[serde(default)]
     pub removes: BTreeMap<String, Hlc>,
 }
 
@@ -283,7 +287,9 @@ impl OrSet {
 
 /// A last-write-wins register keyed by `Hlc`. The higher stamp wins; the `device_id` tiebreaker
 /// inside `Hlc` makes the resolution deterministic and loss-free under clock skew.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// `Deserialize` is hand-written in [`crate::sync::compat`] so a peer that sends an unstamped bare
+/// value is still understood.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Lww<T> {
     pub value: T,
     pub hlc: Hlc,
@@ -430,16 +436,19 @@ pub struct SettingEntry {
 // ===========================================================================================
 
 /// A topic vector plus optional scalar "dimensions" (duration/pacing/complexity/isLive on some
-/// platforms). Kept flexible so both the desktop and Android `ContentVector` shapes map in.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+/// platforms). Kept flexible so both the desktop and Android `ContentVector` shapes map in — the
+/// hand-written `Deserialize` in [`crate::sync::compat`] is what accepts Android's inline dims.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ContentVectorWire {
     pub topics: BTreeMap<String, f64>,
     pub dims: BTreeMap<String, f64>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+/// `Deserialize` is hand-written in [`crate::sync::compat`], which rewrites `time_vectors` keys
+/// into this platform's bucket spelling.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BrainVectors {
     pub global_vector: ContentVectorWire,
     pub time_vectors: BTreeMap<String, ContentVectorWire>,
@@ -529,8 +538,11 @@ pub struct BrainFlags {
 /// deterministically across all known device snapshots.
 /// Device-local/derived fields (`consecutive_skips`, `last_persona`, `persona_stability`,
 /// `recent_query_tokens`) are intentionally **not** part of the wire model.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+///
+/// `Deserialize` is hand-written in [`crate::sync::compat`]: it accepts this grouped layout and the
+/// flat one Flow for Android sends.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FlowNeuroBrainSnapshot {
     pub schema: i32,
     pub device_id: String,

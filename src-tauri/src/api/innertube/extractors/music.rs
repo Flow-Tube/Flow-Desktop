@@ -1,6 +1,7 @@
 use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     extract_channel_id_from_music_renderer, map_related_content_to_video_summary,
     parse_duration_seconds,
@@ -41,7 +42,7 @@ impl InnertubeClient {
         }
 
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
 
         let mut lyrics_text = String::new();
@@ -122,7 +123,7 @@ impl InnertubeClient {
         }
 
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
 
         let mut related_items = Vec::new();
@@ -230,7 +231,7 @@ impl InnertubeClient {
         });
 
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
         let tracks = parse_music_album_json(&res);
 
@@ -242,7 +243,7 @@ impl InnertubeClient {
             "browseId": "FEmusic_home"
         });
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
 
         // 1. Parse chips
@@ -477,7 +478,7 @@ impl InnertubeClient {
             "browseId": artist_browse_id
         });
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
         let mut artist_page = parse_music_artist_json(&res)?;
         artist_page.artist.id = artist_browse_id.to_string();
@@ -489,7 +490,7 @@ impl InnertubeClient {
             "browseId": "FEmusic_explore"
         });
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
         parse_music_explore_json(&res)
     }
@@ -506,7 +507,7 @@ impl InnertubeClient {
             })
         };
         let res = self
-            .post_innertube("browse", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("browse", &clients::WEB_REMIX, &mut payload)
             .await?;
         parse_music_charts_json(&res)
     }

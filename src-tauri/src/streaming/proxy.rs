@@ -7,6 +7,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, error, info, warn};
 
 use super::sabr::{SabrError, SabrSessionManager, SabrTrack};
+use crate::api::innertube::core::clients;
 
 #[derive(Clone)]
 pub enum StreamSessionKind {
@@ -57,38 +58,33 @@ Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n\
 Access-Control-Allow-Headers: Range, Content-Type, Origin, Accept\r\n\
 Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges\r\n";
 
-// Per-client media User-Agents. googlevideo validates that the UA fetching a
-// stream matches the client (`c=`) that minted the URL; a mismatch (e.g. a web
-// UA on a `c=IOS` URL) is a known cause of 403s.
-const MEDIA_UA_ANDROID_VR: &str = "com.google.android.apps.youtube.vr.oculus/1.61.48 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1; Cronet/132.0.6808.3)";
-const MEDIA_UA_IOS: &str =
-    "com.google.ios.youtube/19.29.1 (iPhone14,5; U; CPU iOS 17_5_1 like Mac OS X; en_US)";
-const MEDIA_UA_ANDROID: &str = "com.google.android.youtube/19.29.37 (Linux; U; Android 14) gzip";
-const MEDIA_UA_WEB: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
-// Resolve the upstream User-Agent from a googlevideo URL's `c=` client param,
-// mirroring the mobile player's `YouTubeHttpDataSource.resolveYouTubeUserAgent`.
-// Falls back to the session UA when the URL carries no recognizable `c=` (e.g.
-// manifest/caption proxy URLs).
-fn user_agent_for_media_url(url: &str, fallback: &str) -> String {
-    let client = reqwest::Url::parse(url).ok().and_then(|parsed| {
-        parsed
-            .query_pairs()
-            .find(|(key, _)| key == "c")
-            .map(|(_, value)| value.into_owned())
-    });
-    match client.as_deref() {
-        Some("ANDROID_VR") => MEDIA_UA_ANDROID_VR.to_string(),
-        Some("IOS") => MEDIA_UA_IOS.to_string(),
-        Some("ANDROID") | Some("ANDROID_CREATOR") => MEDIA_UA_ANDROID.to_string(),
-        Some("WEB")
-        | Some("MWEB")
-        | Some("WEB_REMIX")
-        | Some("WEB_CREATOR")
-        | Some("TVHTML5")
-        | Some("TVHTML5_SIMPLY_EMBEDDED_PLAYER") => MEDIA_UA_WEB.to_string(),
-        _ => fallback.to_string(),
+// googlevideo validates that the UA fetching a stream matches the client (`c=`)
+// that minted the URL; a mismatch (e.g. a web UA on a `c=IOS` URL) is a known
+// cause of 403s.
+//
+// The session UA is the one the winning client actually used, recorded at
+// extraction time, so it is authoritative and used whenever it is set. The `c=`
+// lookup is the fallback for URLs registered without one (manifest and caption
+// proxy routes), and reads the same client registry the request was built from —
+// previously these were hand-copied constants that had drifted a version behind.
+fn user_agent_for_media_url(url: &str, session_user_agent: &str) -> String {
+    if !session_user_agent.is_empty() {
+        return session_user_agent.to_string();
     }
+
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|parsed| {
+            parsed
+                .query_pairs()
+                .find(|(key, _)| key == "c")
+                .map(|(_, value)| value.into_owned())
+        })
+        .and_then(|name| clients::by_name(&name))
+        .map_or_else(
+            || clients::WEB.user_agent.to_string(),
+            |client| client.user_agent.to_string(),
+        )
 }
 
 impl StreamingManager {

@@ -1,4 +1,5 @@
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     best_video_thumbnail_url, extract_channel_id_from_video_renderer,
     parse_mixed_number_word_to_long,
@@ -307,7 +308,7 @@ impl InnertubeClient {
         };
 
         let res = self
-            .post_innertube("browse", "WEB", "2.20260120.01.00", &mut payload)
+            .post_innertube("browse", &clients::WEB, &mut payload)
             .await?;
 
         let title = extract_playlist_title(&res);

@@ -12,8 +12,6 @@ use crate::commands::youtube::fetch_sponsorblock_segments;
 use crate::db::settings::get_setting;
 use crate::services::music_service::MusicService;
 
-const IMAGE_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
 const THUMBNAILS_ENABLED_KEY: &str = "download_thumbnails_enabled";
 const THUMBNAIL_MODE_KEY: &str = "download_thumbnail_mode";
 
@@ -133,7 +131,7 @@ async fn write_poster(
 
 async fn fetch_poster(url: &str) -> Result<(Vec<u8>, &'static str), String> {
     let client = reqwest::Client::builder()
-        .user_agent(IMAGE_USER_AGENT)
+        .user_agent(crate::api::http::BROWSER_USER_AGENT)
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
         .build()

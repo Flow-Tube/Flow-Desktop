@@ -22,7 +22,6 @@ use crate::services::music_service::MusicService;
 use crate::streaming::proxy::StreamingManager;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
-const IMAGE_PROXY_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 // --- Browse ---------------------------------------------------------------
 
@@ -412,7 +411,7 @@ pub async fn proxy_image_url(
         token.clone(),
         upstream_url.clone(),
         image_content_type(&upstream_url),
-        IMAGE_PROXY_UA.to_string(),
+        crate::api::http::BROWSER_USER_AGENT.to_string(),
     );
 
     Ok(format!(

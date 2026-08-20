@@ -1147,6 +1147,8 @@
   "sync_expires_in": "Expires in %ss",
   "sync_expired": "Code expired",
   "sync_preparing": "Preparing…",
+  "sync_host_address": "This PC: %s",
+  "sync_host_address_hint": "The other device must be able to reach this address. If it can't connect, check that both devices are on the same network and that a VPN or firewall isn't blocking it.",
   "sync_cancel": "Cancel",
 
   "sync_camera_error": "Could not start the camera. Paste the code manually instead, or check camera permissions.",

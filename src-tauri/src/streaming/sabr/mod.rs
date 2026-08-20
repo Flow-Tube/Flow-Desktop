@@ -37,6 +37,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+use crate::api::innertube::core::clients;
 use engine::{SabrEngine, SabrEngineConfig};
 
 // Immutable inputs needed to drive a SABR session, assembled by extraction.
@@ -67,73 +68,32 @@ pub struct ClientProfile {
 }
 
 impl ClientProfile {
-    // The iOS profile (client id 5) — the client our extractor most reliably
-    // gets a `serverAbrStreamingUrl` from today.
-    pub fn ios() -> Self {
+    /// Derive the SABR identity from the registry entry of the client whose player
+    /// response opened the session, so the two can never disagree.
+    #[must_use]
+    pub fn from_client(client: &clients::YouTubeClient) -> Self {
         Self {
-            client_name_id: 5,
-            client_version: "19.29.1".into(),
-            user_agent:
-                "com.google.ios.youtube/19.29.1 (iPhone14,5; U; CPU iOS 17_5_1 like Mac OS X; en_US)"
-                    .into(),
-            device_make: "Apple".into(),
-            device_model: "iPhone14,5".into(),
-            os_name: "iOS".into(),
-            os_version: "17.5.1".into(),
+            client_name_id: client.client_name_id(),
+            client_version: client.version.to_string(),
+            user_agent: client.user_agent.to_string(),
+            device_make: client.device_make.unwrap_or_default().to_string(),
+            device_model: client.device_model.unwrap_or_default().to_string(),
+            os_name: client.os_name.unwrap_or_default().to_string(),
+            os_version: client.os_version.unwrap_or_default().to_string(),
         }
     }
 
-    // The iPadOS profile (IOS client id 5, iPad build) — the client that reliably
-    // exposes multi-language (dubbed) audio formats plus a SABR streaming URL.
-    pub fn ipados() -> Self {
-        Self {
-            client_name_id: 5,
-            client_version: "21.03.3".into(),
-            user_agent:
-                "com.google.ios.youtube/21.03.3 (iPad7,6; U; CPU iPadOS 17_7_10 like Mac OS X; en-US)"
-                    .into(),
-            device_make: "Apple".into(),
-            device_model: "iPad7,6".into(),
-            os_name: "iPadOS".into(),
-            os_version: "17.7.10.21H450".into(),
-        }
-    }
-
-    pub fn android_vr() -> Self {
-        Self {
-            client_name_id: 28,
-            client_version: "1.61.48".into(),
-            user_agent:
-                "com.google.android.apps.youtube.vr.oculus/1.61.48 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1; Cronet/132.0.6808.3)"
-                    .into(),
-            device_make: "Oculus".into(),
-            device_model: "Quest 3".into(),
-            os_name: "Android".into(),
-            os_version: "12".into(),
-        }
-    }
-
-    // Pick a profile from the InnerTube client name the player response came from.
+    /// Resolve by InnerTube client name, for callers that only have the name a
+    /// media URL carries. Unknown names fall back to WEB, which is what an
+    /// unrecognized `c=` parameter most likely is.
+    #[must_use]
     pub fn from_client_name(client_name: &str) -> Self {
-        match client_name {
-            "IOS" => Self::ios(),
-            "ANDROID_VR" => Self::android_vr(),
-            _ => Self::web(),
-        }
+        Self::from_client(clients::by_name(client_name).unwrap_or(&clients::WEB))
     }
 
-    pub fn web() -> Self {
-        Self {
-            client_name_id: 1,
-            client_version: "2.20240101.00.00".into(),
-            user_agent:
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    .into(),
-            device_make: String::new(),
-            device_model: String::new(),
-            os_name: "Windows".into(),
-            os_version: "10.0".into(),
-        }
+    #[cfg(test)]
+    pub fn ios() -> Self {
+        Self::from_client(&clients::IOS)
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     detect_video_is_live, extract_channel_id_from_video_renderer, extract_continuation_token,
     normalize_youtube_image_url, parse_duration_seconds,
@@ -319,7 +320,7 @@ impl InnertubeClient {
         };
 
         let res = self
-            .post_innertube("search", "WEB", "2.20260120.01.00", &mut payload)
+            .post_innertube("search", &clients::WEB, &mut payload)
             .await?;
         let (items, next_page_token) = parse_innertube_search(res);
 
@@ -383,7 +384,7 @@ impl InnertubeClient {
         }
 
         let res = self
-            .post_innertube("search", "WEB_REMIX", "67", &mut payload)
+            .post_innertube("search", &clients::WEB_REMIX, &mut payload)
             .await?;
         let items = parse_music_search_json(&res);
 

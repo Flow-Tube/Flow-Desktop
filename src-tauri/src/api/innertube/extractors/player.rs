@@ -1,8 +1,6 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
-use crate::api::innertube::core::context::{
-    get_android_context, get_android_vr_context, get_ios_context,
-};
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     collect_related_content_items, dedupe_related_content_items,
     extract_channel_id_from_video_renderer, extract_text_from_value, thumbnail_url_from_array,
@@ -19,15 +17,45 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, warn};
 
-const ANDROID_VR_USER_AGENT: &str = "com.google.android.apps.youtube.vr.oculus/1.61.48 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1; Cronet/132.0.6808.3)";
-const ANDROID_USER_AGENT: &str = "com.google.android.youtube/21.03.38 (Linux; U; Android 14) gzip";
-const IOS_USER_AGENT: &str =
-    "com.google.ios.youtube/19.29.1 (iPhone14,5; U; CPU iOS 17_5_1 like Mac OS X; en_US)";
-// Only referenced by the SABR live smoke test below.
-#[cfg(test)]
-const IPADOS_USER_AGENT: &str =
-    "com.google.ios.youtube/21.03.3 (iPad7,6; U; CPU iPadOS 17_7_10 like Mac OS X; en-US)";
-const WEB_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+/// How long any single client gets before the ladder moves on. A stuck client
+/// must not hold up first frame when the next one down would have answered.
+const PER_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(6000);
+
+/// Client ladder for playback, best first.
+///
+/// VISIONOS leads because googlevideo serves its formats without a PO token and
+/// without an `n` parameter — it needs neither an attestation Flow cannot mint nor
+/// an nsig solver Flow does not have. The rest are unattested: they still answer,
+/// but googlevideo now stops serving them partway in, so they rank below it and
+/// exist to keep degraded playback working rather than none.
+///
+/// Deliberately excludes the web-family clients (WEB, TVHTML5_*): their formats
+/// arrive ciphered and `n`-throttled, and with no JS solver every URL they return
+/// would be rejected by `validate_stream_url` after the round trip was already
+/// paid. The in-page WebView recovery is how a WEB response is obtained instead.
+const PLAYER_CLIENT_LADDER: &[&clients::YouTubeClient] = &[
+    &clients::VISIONOS,
+    &clients::ANDROID_VR,
+    &clients::ANDROID_VR_NO_AUTH,
+    &clients::ANDROID,
+    &clients::IOS,
+];
+
+/// Clients asked for a live broadcast's HLS/DASH manifest when the winning
+/// client returned none. A live stream plays from its manifest, so this only
+/// needs a client that exposes one — not one with a usable direct ladder.
+const LIVE_MANIFEST_CLIENTS: &[&clients::YouTubeClient] = &[
+    &clients::IOS,
+    &clients::VISIONOS,
+    &clients::TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+];
+
+/// The winning client of a ladder walk, plus what it was attested with.
+struct PlayerAttempt {
+    response: Value,
+    client: &'static clients::YouTubeClient,
+    po_token: Option<String>,
+}
 
 fn parse_timestamp(s: &str) -> Option<u64> {
     let cleaned: String = s
@@ -252,13 +280,6 @@ fn check_needs_reload(val: &Value) -> bool {
         }
     }
     false
-}
-
-fn is_terminal_playability_status(status: &str) -> bool {
-    matches!(
-        status.to_ascii_uppercase().as_str(),
-        "LIVE_STREAM_OFFLINE" | "UNPLAYABLE" | "ERROR"
-    )
 }
 
 /// Collects the human-readable reason from a playability status, combining the
@@ -714,8 +735,42 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
 // Build the audio track list from a player response's `adaptiveFormats`. The PO
 // token is never appended to these GVS media URLs (it belongs only on the player
 // request body and the SABR `StreamerContext`); a stale/wrong `&pot=` 403s.
-fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<AudioTrack> {
-    let mut tracks_by_key: HashMap<String, AudioTrack> = HashMap::new();
+/// One audio format plus the signals used to choose between duplicates of it.
+///
+/// Needed because a client can return the same itag more than once: VISIONOS
+/// ships a plain copy and an `xtags`-tagged variant (descriptive/dubbed content)
+/// of every audio itag, and both carry identical identity fields, so they collide
+/// on the same dedup key.
+struct AudioCandidate {
+    track: AudioTrack,
+    /// `audioIsDefault` as the response stated it, if it stated anything at all.
+    declared_default: Option<bool>,
+    is_auto_dubbed: bool,
+    has_xtags: bool,
+}
+
+impl AudioCandidate {
+    /// Preference order between two formats that share an identity key, best last.
+    ///
+    /// The plain twin outranks the `xtags` one regardless of bitrate: googlevideo
+    /// refuses sustained playback on the tagged variants, so a higher bitrate there
+    /// buys a stream that dies partway in.
+    fn rank(&self) -> (bool, bool, bool, u64) {
+        (
+            !self.has_xtags,
+            self.declared_default.unwrap_or(false),
+            !self.is_auto_dubbed,
+            self.track.bitrate.unwrap_or(0),
+        )
+    }
+}
+
+/// Resolve the audio tracks a player response offers, one per audio identity.
+///
+/// Public so `tests/audio_tracks.rs` can exercise the duplicate-resolution rules
+/// against real response shapes; nothing outside extraction calls it.
+pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<AudioTrack> {
+    let mut candidates_by_key: HashMap<String, AudioCandidate> = HashMap::new();
 
     if let Some(adaptive_formats) = streaming_data["adaptiveFormats"].as_array() {
         for format in adaptive_formats {
@@ -755,9 +810,14 @@ fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<AudioTr
             let (init_range_start, init_range_end) = parse_range_value(&format["initRange"]);
             let (index_range_start, index_range_end) = parse_range_value(&format["indexRange"]);
             let is_auto_dubbed = audio_track["isAutoDubbed"].as_bool().unwrap_or(false);
-            let is_default = audio_track["audioIsDefault"]
-                .as_bool()
-                .unwrap_or_else(|| !is_auto_dubbed && tracks_by_key.is_empty());
+            // Only the response's own claim — never position in the list. Deriving
+            // it positionally meant the flag could be silently dropped when a later
+            // duplicate replaced the entry holding it, leaving no default at all.
+            let declared_default = audio_track["audioIsDefault"].as_bool();
+            let has_xtags = format["xtags"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty());
+            let is_default = declared_default.unwrap_or(false);
             let mime_type = format["mimeType"].as_str().map(ToOwned::to_owned);
             let track_key = audio_track_identity_key(
                 audio_track,
@@ -765,37 +825,64 @@ fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<AudioTr
                 language_code.as_deref(),
                 mime_type.as_deref(),
             );
-            let track = AudioTrack {
-                id: format!("{id}-{itag}"),
-                label,
-                language_code,
-                audio_track_type: Some(
-                    if is_default { "original" } else { "alternate" }.to_string(),
-                ),
-                local_url,
-                mime_type,
-                bitrate,
-                content_length: parse_content_length(format),
-                is_default,
-                available: is_default,
-                init_range_start,
-                init_range_end,
-                index_range_start,
-                index_range_end,
-                approx_duration_ms: parse_approx_duration_ms(format),
-                user_agent: Some(user_agent.to_string()),
+            let candidate = AudioCandidate {
+                track: AudioTrack {
+                    id: format!("{id}-{itag}"),
+                    label,
+                    language_code,
+                    audio_track_type: Some(
+                        if is_default { "original" } else { "alternate" }.to_string(),
+                    ),
+                    local_url,
+                    mime_type,
+                    bitrate,
+                    content_length: parse_content_length(format),
+                    is_default,
+                    available: is_default,
+                    init_range_start,
+                    init_range_end,
+                    index_range_start,
+                    index_range_end,
+                    approx_duration_ms: parse_approx_duration_ms(format),
+                    user_agent: Some(user_agent.to_string()),
+                },
+                declared_default,
+                is_auto_dubbed,
+                has_xtags,
             };
 
-            match tracks_by_key.get(&track_key) {
-                Some(existing) if existing.bitrate.unwrap_or(0) >= track.bitrate.unwrap_or(0) => {}
+            match candidates_by_key.get(&track_key) {
+                Some(existing) if existing.rank() >= candidate.rank() => {}
                 _ => {
-                    tracks_by_key.insert(track_key, track);
+                    candidates_by_key.insert(track_key, candidate);
                 }
             }
         }
     }
 
-    let mut tracks: Vec<_> = tracks_by_key.into_values().collect();
+    let mut candidates: Vec<AudioCandidate> = candidates_by_key.into_values().collect();
+    candidates.sort_by(|a, b| b.rank().cmp(&a.rank()));
+
+    // Many responses never flag a default at all — VISIONOS omits `audioTrack`
+    // entirely on videos with no dubs. Promote the best candidate rather than
+    // returning a list with no default: `build_synthetic_dash_manifest` selects on
+    // that flag, and with nothing marked it emits no manifest, which degrades
+    // playback to a video-only stream with no audio at all.
+    if !candidates
+        .iter()
+        .any(|candidate| candidate.track.is_default)
+    {
+        if let Some(best) = candidates.first_mut() {
+            best.track.is_default = true;
+            best.track.available = true;
+            best.track.audio_track_type = Some("original".to_string());
+        }
+    }
+
+    let mut tracks: Vec<AudioTrack> = candidates
+        .into_iter()
+        .map(|candidate| candidate.track)
+        .collect();
     tracks.sort_by(|a, b| {
         b.is_default
             .cmp(&a.is_default)
@@ -804,6 +891,79 @@ fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<AudioTr
     });
 
     tracks
+}
+
+pub fn select_playable_audio_tracks(tracks: &[AudioTrack]) -> Vec<AudioTrack> {
+    let language_key = |track: &AudioTrack| -> String {
+        track
+            .language_code
+            .clone()
+            .unwrap_or_else(|| track.label.clone())
+    };
+    let container = |track: &AudioTrack| -> String {
+        track
+            .mime_type
+            .as_deref()
+            .and_then(|mime| mime.split(';').next())
+            .unwrap_or_default()
+            .to_string()
+    };
+
+    // What the original track resolves to when it is the only one considered.
+    let preferred_container = tracks
+        .iter()
+        .filter(|track| track.is_default)
+        .max_by_key(|track| track.bitrate.unwrap_or(0))
+        .map(container);
+
+    let mut by_language: Vec<(String, AudioTrack)> = Vec::new();
+    for track in tracks {
+        let key = language_key(track);
+        let in_preferred_container = preferred_container
+            .as_ref()
+            .is_none_or(|preferred| container(track) == *preferred);
+        // (container matches, bitrate) — a language that cannot offer the shared
+        // container still gets its best format rather than vanishing from the menu.
+        let rank = (in_preferred_container, track.bitrate.unwrap_or(0));
+
+        match by_language
+            .iter_mut()
+            .find(|(existing, _)| *existing == key)
+        {
+            Some((_, existing)) => {
+                let existing_rank = (
+                    preferred_container
+                        .as_ref()
+                        .is_none_or(|preferred| container(existing) == *preferred),
+                    existing.bitrate.unwrap_or(0),
+                );
+                if rank > existing_rank {
+                    *existing = track.clone();
+                }
+            }
+            None => by_language.push((key, track.clone())),
+        }
+    }
+
+    let mut selected: Vec<AudioTrack> = by_language
+        .into_iter()
+        .map(|(_, track)| track)
+        .map(|mut track| {
+            // Every surviving track carries a direct URL that googlevideo serves,
+            // so all of them are offerable; `available` only ever marks a track the
+            // player must refuse.
+            track.available = true;
+            track
+        })
+        .collect();
+
+    selected.sort_by(|a, b| {
+        b.is_default
+            .cmp(&a.is_default)
+            .then_with(|| a.label.cmp(&b.label))
+    });
+
+    selected
 }
 
 fn audio_track_language_code(audio_track: &Value, id: &str) -> Option<String> {
@@ -976,7 +1136,7 @@ fn build_sabr_metadata(
     video_id: &str,
     visitor_data: Option<String>,
     po_token: Option<String>,
-    client_name: &str,
+    client: &clients::YouTubeClient,
     duration_seconds: Option<u64>,
 ) -> (Option<SabrStreamInfo>, Option<SabrSessionDescriptor>) {
     let server_url = extract_server_abr_url(streaming_data);
@@ -990,7 +1150,7 @@ fn build_sabr_metadata(
     // Observability: one structured line capturing SABR-capability inputs.
     info!(
         video_id = %video_id,
-        client = %client_name,
+        client = %client.name,
         sabr_url_present = server_url.is_some(),
         ustreamer_config_present = !ustreamer_config.is_empty(),
         po_token_present = po_token.is_some(),
@@ -1063,7 +1223,7 @@ fn build_sabr_metadata(
             visitor_data,
             po_token,
             ustreamer_config,
-            client_profile: ClientProfile::from_client_name(client_name),
+            client_profile: ClientProfile::from_client(client),
             duration_ms,
             formats,
         })
@@ -1072,6 +1232,141 @@ fn build_sabr_metadata(
     };
 
     (Some(info), descriptor)
+}
+
+impl InnertubeClient {
+    /// Walk `ladder` in order, returning the first client whose player response is
+    /// playable.
+    ///
+    /// A definitive restriction (age-gated, private, paid, geo-blocked) seen on any
+    /// client is recorded in `deferred_restriction` so the caller can surface that
+    /// specific reason instead of a generic failure once the ladder is exhausted.
+    async fn try_player_ladder(
+        &self,
+        video_id: &str,
+        ladder: &[&'static clients::YouTubeClient],
+        visitor_data: Option<&str>,
+        deferred_restriction: &mut Option<AppError>,
+    ) -> Option<PlayerAttempt> {
+        for client in ladder {
+            // Only a client whose attestation platform Flow can actually run gets a
+            // token. Injecting a BotGuard token into an IOS/ANDROID_VR/VISIONOS
+            // request is a claim googlevideo validates and refuses, which makes it
+            // strictly worse than sending nothing.
+            let po_token = if client.accepts_web_po_token() {
+                let binding = visitor_data
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or(video_id);
+                generate_po_token(binding).await
+            } else {
+                None
+            };
+
+            let mut response = match self
+                .request_player(video_id, client, visitor_data, po_token.as_deref(), None)
+                .await
+            {
+                Some(value) => value,
+                None => continue,
+            };
+
+            // A `needs reload` response clears if the request looks like it came
+            // from the short link rather than the watch page.
+            if check_needs_reload(&response) {
+                let referer = format!("https://youtu.be/{video_id}");
+                match self
+                    .request_player(
+                        video_id,
+                        client,
+                        visitor_data,
+                        po_token.as_deref(),
+                        Some(&referer),
+                    )
+                    .await
+                {
+                    Some(retry) => response = retry,
+                    None => continue,
+                }
+            }
+
+            let status = response["playabilityStatus"]["status"]
+                .as_str()
+                .unwrap_or_default();
+            if status.eq_ignore_ascii_case("OK") {
+                debug!(video_id = %video_id, client = client.name, "Player ladder resolved");
+                return Some(PlayerAttempt {
+                    response,
+                    client,
+                    po_token,
+                });
+            }
+
+            let mapped = map_playability_error(&response["playabilityStatus"]);
+            if is_definitive_restriction(&mapped) {
+                deferred_restriction.get_or_insert(mapped);
+            }
+            warn!(
+                video_id = %video_id,
+                client = client.name,
+                status = %status,
+                "Player client returned a non-OK status, trying the next one"
+            );
+        }
+        None
+    }
+
+    /// One `player` request as `client`, carrying whatever that client's profile
+    /// asks for: signature timestamp, embed URL, PO token.
+    async fn request_player(
+        &self,
+        video_id: &str,
+        client: &clients::YouTubeClient,
+        visitor_data: Option<&str>,
+        po_token: Option<&str>,
+        referer: Option<&str>,
+    ) -> Option<Value> {
+        let mut context = client.player_context(visitor_data, po_token, None);
+        if client.is_embedded {
+            context["thirdParty"] = serde_json::json!({
+                "embedUrl": format!("https://www.youtube.com/watch?v={video_id}")
+            });
+        }
+
+        let mut payload = serde_json::json!({
+            "context": context,
+            "videoId": video_id,
+            "contentCheckOk": true,
+            "racyCheckOk": true,
+        });
+        if let Some(timestamp) = client.signature_timestamp() {
+            payload["playbackContext"] = serde_json::json!({
+                "contentPlaybackContext": {
+                    "referer": referer.unwrap_or("https://www.youtube.com"),
+                    "signatureTimestamp": timestamp
+                }
+            });
+        }
+        if let Some(referer) = referer {
+            payload["custom_referer"] = serde_json::json!(referer);
+        }
+
+        match tokio::time::timeout(
+            PER_CLIENT_TIMEOUT,
+            self.post_innertube("player", client, &mut payload),
+        )
+        .await
+        {
+            Ok(Ok(value)) => Some(value),
+            Ok(Err(error)) => {
+                warn!(video_id = %video_id, client = client.name, %error, "Player request failed");
+                None
+            }
+            Err(_) => {
+                warn!(video_id = %video_id, client = client.name, "Player request timed out");
+                None
+            }
+        }
+    }
 }
 
 impl InnertubeClient {
@@ -1084,119 +1379,27 @@ impl InnertubeClient {
         // Initialize visitor session token
         let visitor_data = self.fetch_visitor_data().await;
 
-        let mut vr_payload = serde_json::json!({
-            "context": get_android_vr_context(visitor_data.clone()),
-            "videoId": video_id_trimmed,
-            "contentCheckOk": true,
-            "racyCheckOk": true
-        });
-
-        let mut res = self
-            .post_innertube("player", "ANDROID_VR", "1.61.48", &mut vr_payload)
+        let mut deferred_restriction: Option<AppError> = None;
+        let attempt = self
+            .try_player_ladder(
+                video_id_trimmed,
+                PLAYER_CLIENT_LADDER,
+                visitor_data.as_deref(),
+                &mut deferred_restriction,
+            )
             .await;
 
-        let mut should_fallback_to_ios = false;
-        let mut recovered_with_android = false;
-        let mut android_recovery = None;
-        if let Ok(ref val) = res {
-            if check_needs_reload(val) {
-                should_fallback_to_ios = true;
-            } else if let Some(status) = val["playabilityStatus"]["status"].as_str() {
-                if !status.eq_ignore_ascii_case("OK") {
-                    if is_terminal_playability_status(status) {
-                        warn!(status = %status, video_id = %video_id_trimmed, "ANDROID_VR details request returned a terminal playability status; trying ANDROID fallback");
-                        let mut android_payload = serde_json::json!({
-                            "context": get_android_context(visitor_data.clone()),
-                            "videoId": video_id_trimmed,
-                            "contentCheckOk": true,
-                            "racyCheckOk": true
-                        });
-                        if let Ok(Ok(android_res)) = tokio::time::timeout(
-                            std::time::Duration::from_millis(1500),
-                            self.post_innertube(
-                                "player",
-                                "ANDROID",
-                                "21.03.38",
-                                &mut android_payload,
-                            ),
-                        )
-                        .await
-                        {
-                            if android_res["playabilityStatus"]["status"]
-                                .as_str()
-                                .map(|status| status.eq_ignore_ascii_case("OK"))
-                                .unwrap_or(false)
-                            {
-                                android_recovery = Some(android_res);
-                                should_fallback_to_ios = false;
-                                recovered_with_android = true;
-                            }
-                        }
-                        if !recovered_with_android {
-                            return Err(map_playability_error(&val["playabilityStatus"]));
-                        }
-                    }
-                    if !recovered_with_android {
-                        warn!(status = %status, video_id = %video_id_trimmed, "ANDROID_VR details request returned a non-OK playability status, falling back to IOS");
-                        should_fallback_to_ios = true;
-                    }
-                }
+        let res = match attempt {
+            Some(attempt) => attempt.response,
+            None => {
+                return Err(deferred_restriction.unwrap_or_else(|| {
+                    AppError::Extractor(format!(
+                        "No client could load details for video {video_id_trimmed}"
+                    ))
+                }));
             }
-        } else {
-            warn!(video_id = %video_id_trimmed, "ANDROID_VR details request failed, falling back to IOS");
-            should_fallback_to_ios = true;
-        }
-        if let Some(android_res) = android_recovery {
-            res = Ok(android_res);
-        }
+        };
 
-        if should_fallback_to_ios {
-            let mut ios_payload = serde_json::json!({
-                "context": get_ios_context(visitor_data.clone(), None),
-                "videoId": video_id_trimmed,
-                "contentCheckOk": true,
-                "racyCheckOk": true,
-                "playbackContext": {
-                    "contentPlaybackContext": {
-                        "referer": "https://www.youtube.com",
-                        "signatureTimestamp": 19550
-                    }
-                }
-            });
-
-            let mut ios_res = self
-                .post_innertube("player", "IOS", "19.29.1", &mut ios_payload)
-                .await;
-
-            let mut needs_retry = false;
-            if let Ok(ref val) = ios_res {
-                if check_needs_reload(val) {
-                    needs_retry = true;
-                }
-            }
-
-            if needs_retry {
-                let mut retry_payload = serde_json::json!({
-                    "context": get_ios_context(visitor_data, None),
-                    "videoId": video_id_trimmed,
-                    "contentCheckOk": true,
-                    "racyCheckOk": true,
-                    "playbackContext": {
-                        "contentPlaybackContext": {
-                            "referer": format!("https://youtu.be/{}", video_id_trimmed),
-                            "signatureTimestamp": 19550
-                        }
-                    },
-                    "custom_referer": format!("https://youtu.be/{}", video_id_trimmed)
-                });
-                ios_res = self
-                    .post_innertube("player", "IOS", "19.29.1", &mut retry_payload)
-                    .await;
-            }
-            res = ios_res;
-        }
-
-        let res = res?;
         check_playability_status(&res["playabilityStatus"])?;
 
         let details = &res["videoDetails"];
@@ -1227,7 +1430,7 @@ impl InnertubeClient {
             "videoId": &id
         });
         if let Ok(next_res) = self
-            .post_innertube("next", "WEB", "2.20260120.01.00", &mut next_payload)
+            .post_innertube("next", &clients::WEB, &mut next_payload)
             .await
         {
             let mut primary_info = &serde_json::Value::Null;
@@ -1384,7 +1587,7 @@ impl InnertubeClient {
         });
 
         let next_res = self
-            .post_innertube("next", "WEB", "2.20260120.01.00", &mut payload)
+            .post_innertube("next", &clients::WEB, &mut payload)
             .await?;
         let mut related = Vec::new();
         collect_related_content_items(
@@ -1412,138 +1615,31 @@ impl InnertubeClient {
         let visitor_data = self.fetch_visitor_data().await;
         let mut visitor_data_for_sabr = visitor_data.clone();
 
-        // 2. Prefer ANDROID_VR first for faster playback and keep IOS as a signed fallback.
-        let mut vr_payload = serde_json::json!({
-            "context": get_android_vr_context(visitor_data.clone()),
-            "videoId": video_id_trimmed,
-            "contentCheckOk": true,
-            "racyCheckOk": true
-        });
-
-        let mut res = self
-            .post_innertube("player", "ANDROID_VR", "1.61.48", &mut vr_payload)
+        // 2. Walk the client ladder; the first playable response wins.
+        let mut deferred_restriction: Option<AppError> = None;
+        let attempt = self
+            .try_player_ladder(
+                video_id_trimmed,
+                PLAYER_CLIENT_LADDER,
+                visitor_data.as_deref(),
+                &mut deferred_restriction,
+            )
             .await;
 
-        let mut should_fallback_to_ios = false;
-        let mut current_user_agent = ANDROID_VR_USER_AGENT;
-        let mut sabr_client_name = "ANDROID_VR";
-        let mut po_token_used: Option<String> = None;
-        let mut recovered_with_android = false;
-        let mut android_recovery = None;
-        let mut deferred_restriction: Option<AppError> = None;
-
-        if let Ok(ref val) = res {
-            if check_needs_reload(val) {
-                should_fallback_to_ios = true;
-            } else if let Some(status) = val["playabilityStatus"]["status"].as_str() {
-                if !status.eq_ignore_ascii_case("OK") {
-                    if is_terminal_playability_status(status) {
-                        warn!(status = %status, video_id = %video_id_trimmed, "ANDROID_VR returned a terminal playability status; trying ANDROID Shorts fallback");
-                        let mut android_payload = serde_json::json!({
-                            "context": get_android_context(visitor_data.clone()),
-                            "videoId": video_id_trimmed,
-                            "contentCheckOk": true,
-                            "racyCheckOk": true
-                        });
-                        if let Ok(Ok(android_res)) = tokio::time::timeout(
-                            std::time::Duration::from_millis(1500),
-                            self.post_innertube(
-                                "player",
-                                "ANDROID",
-                                "21.03.38",
-                                &mut android_payload,
-                            ),
-                        )
-                        .await
-                        {
-                            if android_res["playabilityStatus"]["status"]
-                                .as_str()
-                                .map(|status| status.eq_ignore_ascii_case("OK"))
-                                .unwrap_or(false)
-                            {
-                                android_recovery = Some(android_res);
-                                recovered_with_android = true;
-                                should_fallback_to_ios = false;
-                                current_user_agent = ANDROID_USER_AGENT;
-                                sabr_client_name = "ANDROID";
-                            }
-                        }
-                        if !recovered_with_android {
-                            return Err(map_playability_error(&val["playabilityStatus"]));
-                        }
-                    }
-                    if !recovered_with_android {
-                        warn!(status = %status, video_id = %video_id_trimmed, "ANDROID_VR returned a non-OK playability status, falling back to IOS");
-                        let mapped = map_playability_error(&val["playabilityStatus"]);
-                        if is_definitive_restriction(&mapped) {
-                            deferred_restriction.get_or_insert(mapped);
-                        }
-                        should_fallback_to_ios = true;
-                    }
-                }
-            }
-        } else {
-            warn!(video_id = %video_id_trimmed, "ANDROID_VR player request failed, falling back to IOS");
-            should_fallback_to_ios = true;
-        }
-        if let Some(android_res) = android_recovery {
-            res = Ok(android_res);
-        }
-
-        if should_fallback_to_ios {
-            // Bind the PO token to the session visitor data so it is valid both
-            // in the player request and when echoed on the GVS media URLs.
-            let pot_binding = visitor_data_for_sabr
-                .as_deref()
-                .filter(|value| !value.is_empty())
-                .unwrap_or(video_id_trimmed);
-            let po_token = generate_po_token(pot_binding).await;
-            po_token_used = po_token.clone();
-            sabr_client_name = "IOS";
-            let mut ios_payload = serde_json::json!({
-                "context": get_ios_context(visitor_data.clone(), po_token.clone()),
-                "videoId": video_id_trimmed,
-                "contentCheckOk": true,
-                "racyCheckOk": true,
-                "playbackContext": {
-                    "contentPlaybackContext": {
-                        "referer": "https://www.youtube.com",
-                        "signatureTimestamp": 19550
-                    }
-                }
-            });
-            let mut ios_res = self
-                .post_innertube("player", "IOS", "19.29.1", &mut ios_payload)
-                .await;
-
-            let mut needs_retry = false;
-            if let Ok(ref val) = ios_res {
-                if check_needs_reload(val) {
-                    needs_retry = true;
-                }
-            }
-
-            if needs_retry {
-                let mut retry_payload = serde_json::json!({
-                    "context": get_ios_context(visitor_data, po_token),
-                    "videoId": video_id_trimmed,
-                    "contentCheckOk": true,
-                    "racyCheckOk": true,
-                    "playbackContext": {
-                        "contentPlaybackContext": {
-                            "referer": format!("https://youtu.be/{}", video_id_trimmed),
-                            "signatureTimestamp": 19550
-                        }
-                    },
-                    "custom_referer": format!("https://youtu.be/{}", video_id_trimmed)
-                });
-                ios_res = self
-                    .post_innertube("player", "IOS", "19.29.1", &mut retry_payload)
-                    .await;
-            }
-            res = ios_res;
-            current_user_agent = IOS_USER_AGENT;
-        }
+        let mut winning_client = attempt
+            .as_ref()
+            .map_or(&clients::VISIONOS, |attempt| attempt.client);
+        let mut po_token_used = attempt
+            .as_ref()
+            .and_then(|attempt| attempt.po_token.clone());
+        let mut res = match attempt {
+            Some(attempt) => Ok(attempt.response),
+            None => Err(deferred_restriction.take().unwrap_or_else(|| {
+                AppError::Extractor(format!(
+                    "No client could resolve a stream for video {video_id_trimmed}"
+                ))
+            })),
+        };
 
         let res_is_ok = matches!(&res, Ok(value)
             if value["playabilityStatus"]["status"]
@@ -1575,8 +1671,7 @@ impl InnertubeClient {
                         .filter(|value| !value.is_empty())
                         .unwrap_or(video_id_trimmed);
                     po_token_used = generate_po_token(pot_binding).await;
-                    sabr_client_name = "WEB";
-                    current_user_agent = WEB_USER_AGENT;
+                    winning_client = &clients::WEB;
                     res = Ok(web_res);
                 }
             }
@@ -1609,36 +1704,26 @@ impl InnertubeClient {
             .as_str()
             .map(ToOwned::to_owned);
 
-        // Live broadcasts are served through the HLS/DASH manifest, not a progressive variant.
-        // The IOS client reliably exposes a live HLS manifest, so fetch it when the primary
-        // client returned none.
+        // Live broadcasts play from the HLS/DASH manifest, not a progressive variant.
+        // When the winning client exposed none, ask the clients that reliably do.
+        // A restriction seen here is discarded: the video already resolved, so a
+        // missing manifest is not the reason to fail it.
         if is_live && hls_manifest_url.is_none() {
-            let pot_binding = visitor_data_for_sabr
-                .as_deref()
-                .filter(|value| !value.is_empty())
-                .unwrap_or(video_id_trimmed);
-            let po_token = generate_po_token(pot_binding).await;
-            let mut live_payload = serde_json::json!({
-                "context": get_ios_context(visitor_data_for_sabr.clone(), po_token),
-                "videoId": video_id_trimmed,
-                "contentCheckOk": true,
-                "racyCheckOk": true,
-                "playbackContext": {
-                    "contentPlaybackContext": {
-                        "referer": "https://www.youtube.com",
-                        "signatureTimestamp": 19550
-                    }
-                }
-            });
-            if let Ok(live_res) = self
-                .post_innertube("player", "IOS", "19.29.1", &mut live_payload)
+            let mut discarded: Option<AppError> = None;
+            if let Some(live) = self
+                .try_player_ladder(
+                    video_id_trimmed,
+                    LIVE_MANIFEST_CLIENTS,
+                    visitor_data_for_sabr.as_deref(),
+                    &mut discarded,
+                )
                 .await
             {
-                if let Some(hls) = live_res["streamingData"]["hlsManifestUrl"].as_str() {
+                if let Some(hls) = live.response["streamingData"]["hlsManifestUrl"].as_str() {
                     hls_manifest_url = Some(hls.to_string());
                 }
                 if dash_manifest_url.is_none() {
-                    if let Some(dash) = live_res["streamingData"]["dashManifestUrl"].as_str() {
+                    if let Some(dash) = live.response["streamingData"]["dashManifestUrl"].as_str() {
                         dash_manifest_url = Some(dash.to_string());
                     }
                 }
@@ -1700,18 +1785,19 @@ impl InnertubeClient {
             .unwrap_or(21600); // Default 6 hours
 
         // Return expiration time and user-agent string joined by | delimiter
-        let composite_expires_at = format!("{}|{}", expires_in_seconds, current_user_agent);
+        let composite_expires_at = format!("{}|{}", expires_in_seconds, winning_client.user_agent);
 
-        // Offer only the original audio track. Dubbed/translated languages are
-        // delivered as progressive direct URLs that googlevideo 403s for sustained
-        // playback in this environment, so they are not surfaced.
-        let download_audio_tracks = collect_audio_tracks(streaming_data, current_user_agent);
-        let mut audio_tracks = download_audio_tracks.clone();
-        if let Some(idx) = audio_tracks.iter().position(|track| track.is_default) {
-            audio_tracks = vec![audio_tracks.swap_remove(idx)];
-        } else {
-            audio_tracks.truncate(1);
-        }
+        // Offer every dubbed language alongside the original. VISIONOS serves these
+        // as direct URLs googlevideo streams in full — the earlier iPadOS-sourced
+        // dubs were the ones it refused, and those are no longer how they are
+        // fetched.
+        let download_audio_tracks = collect_audio_tracks(streaming_data, winning_client.user_agent);
+        let audio_tracks = select_playable_audio_tracks(&download_audio_tracks);
+        debug!(
+            video_id = %video_id_trimmed,
+            languages = audio_tracks.len(),
+            "Resolved selectable audio tracks"
+        );
 
         // Extract SABR metadata (safe: never fails the request, only annotates).
         // SABR is retained only as the original-audio bot-wall fallback.
@@ -1722,7 +1808,7 @@ impl InnertubeClient {
             video_id_trimmed,
             visitor_data_for_sabr,
             po_token_used,
-            sabr_client_name,
+            winning_client,
             duration_seconds,
         );
 
@@ -1748,7 +1834,6 @@ impl InnertubeClient {
 #[cfg(test)]
 mod sabr_live_smoke {
     use super::*;
-    use crate::api::innertube::core::context::get_ipados_context;
     use crate::streaming::sabr::engine::{SabrEngine, SabrEngineConfig};
     use crate::streaming::sabr::selector::{CodecSupport, select_formats};
     use crate::streaming::sabr::session::RequestMode;
@@ -1756,15 +1841,7 @@ mod sabr_live_smoke {
     use std::sync::Arc;
 
     fn ipados_profile() -> ClientProfile {
-        ClientProfile {
-            client_name_id: 5,
-            client_version: "21.03.3".into(),
-            user_agent: IPADOS_USER_AGENT.into(),
-            device_make: "Apple".into(),
-            device_model: "iPad7,6".into(),
-            os_name: "iPadOS".into(),
-            os_version: "17.7.10.21H450".into(),
-        }
+        ClientProfile::from_client(&clients::IPADOS)
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1795,14 +1872,18 @@ mod sabr_live_smoke {
         );
 
         let mut payload = serde_json::json!({
-            "context": get_ipados_context(visitor_data.clone(), po_token.clone()),
+            "context": clients::IPADOS.player_context(
+                visitor_data.as_deref(),
+                po_token.as_deref(),
+                None,
+            ),
             "videoId": video_id,
             "contentCheckOk": true,
             "racyCheckOk": true,
             "playbackContext": { "contentPlaybackContext": { "signatureTimestamp": 19550 } }
         });
         let res = client
-            .post_innertube("player", "IOS", "21.03.3", &mut payload)
+            .post_innertube("player", &clients::IPADOS, &mut payload)
             .await
             .expect("ipados player request");
         let streaming_data = &res["streamingData"];
@@ -1950,7 +2031,6 @@ mod sabr_live_smoke {
 #[cfg(test)]
 mod sabr_client_probe {
     use super::*;
-    use crate::api::innertube::core::context::get_ipados_context;
     use crate::streaming::sabr::engine::{SabrEngine, SabrEngineConfig};
     use crate::streaming::sabr::selector::{CodecSupport, derive_audio_tracks, select_formats};
     use crate::streaming::sabr::session::RequestMode;
@@ -1959,47 +2039,36 @@ mod sabr_client_probe {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    struct Candidate {
-        label: &'static str,
-        client_name: &'static str,
-        client_version: &'static str,
-        client_name_id: i32,
-        user_agent: &'static str,
-    }
-
-    fn context_for(c: &Candidate, visitor: Option<String>, pot: Option<String>) -> Value {
-        if c.client_name == "IOS" {
-            return get_ipados_context(visitor, pot);
-        }
-        let mut client = serde_json::json!({
-            "clientName": c.client_name,
-            "clientVersion": c.client_version,
-            "hl": "en",
-            "gl": "US",
-            "utcOffsetMinutes": 0,
-        });
-        if let Some(vd) = visitor {
-            client["visitorData"] = Value::String(vd);
-        }
-        let mut ctx = serde_json::json!({
-            "client": client,
-            "playbackContext": { "contentPlaybackContext": { "signatureTimestamp": 19550 } },
-        });
-        if let Some(token) = pot {
-            ctx["serviceIntegrityDimensions"] = serde_json::json!({ "poToken": token });
+    /// Builds the context straight from the registry, so the probe measures the
+    /// same identity the app actually sends rather than a copy of it.
+    ///
+    /// `pot` is passed through `player_context`, which drops it for any client
+    /// whose attestation platform a BotGuard token is not valid for — so a run
+    /// with `send_pot = true` on an iOS/Android client is the control case
+    /// showing that omitting the token changes nothing for them.
+    fn context_for(
+        client: &clients::YouTubeClient,
+        visitor: Option<String>,
+        pot: Option<String>,
+    ) -> Value {
+        let mut ctx = client.player_context(visitor.as_deref(), pot.as_deref(), None);
+        if let Some(timestamp) = client.signature_timestamp() {
+            ctx["playbackContext"] = serde_json::json!({
+                "contentPlaybackContext": { "signatureTimestamp": timestamp }
+            });
         }
         ctx
     }
 
-    async fn raw_player(video_id: &str, c: &Candidate, ctx: Value) -> Option<Value> {
+    async fn raw_player(video_id: &str, c: &clients::YouTubeClient, ctx: Value) -> Option<Value> {
         let payload = serde_json::json!({
             "context": ctx, "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true,
         });
         let r = reqwest::Client::new()
             .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
             .header(reqwest::header::USER_AGENT, c.user_agent)
-            .header("X-YouTube-Client-Name", c.client_name_id.to_string())
-            .header("X-YouTube-Client-Version", c.client_version)
+            .header("X-YouTube-Client-Name", c.client_id)
+            .header("X-YouTube-Client-Version", c.version)
             .header("Origin", "https://www.youtube.com")
             .header("Referer", "https://www.youtube.com")
             .header("Cookie", "SOCS=CAE=")
@@ -2051,48 +2120,27 @@ mod sabr_client_probe {
         // (candidate, send_pot) — the GVS/SABR endpoint validates the web pot
         // regardless of client, so the question is which client+pot combination
         // sustains a SABR stream past the attestation grace window.
-        let android = Candidate {
-            label: "ANDROID",
-            client_name: "ANDROID",
-            client_version: "21.03.38",
-            client_name_id: 3,
-            user_agent: "com.google.android.youtube/21.03.38 (Linux; U; Android 14) gzip",
-        };
-        let ipados = Candidate {
-            label: "iPadOS",
-            client_name: "IOS",
-            client_version: "21.03.3",
-            client_name_id: 5,
-            user_agent: "com.google.ios.youtube/21.03.3 (iPad7,6; U; CPU iPadOS 17_7_10 like Mac OS X; en-US)",
-        };
-        let candidates: [(&Candidate, bool); 4] = [
-            (&android, true),
-            (&android, false),
-            (&ipados, true),
-            (&ipados, false),
+        // VISIONOS leads the real ladder, so it is the one whose sustain behaviour
+        // matters most here; the other two are the unattested clients it replaced.
+        let candidates: [(&clients::YouTubeClient, bool); 6] = [
+            (&clients::VISIONOS, false),
+            (&clients::VISIONOS, true),
+            (&clients::ANDROID, true),
+            (&clients::ANDROID, false),
+            (&clients::IPADOS, true),
+            (&clients::IPADOS, false),
         ];
 
         for (c, send_pot) in candidates {
             let use_pot = if send_pot { pot.clone() } else { None };
             println!(
-                "==== {} ({} v{}) pot={} ====",
-                c.label, c.client_name, c.client_version, send_pot
+                "==== {} v{} pot_offered={} pot_sent={} ====",
+                c.name,
+                c.version,
+                send_pot,
+                send_pot && c.accepts_web_po_token()
             );
-            let ctx = if c.client_name == "ANDROID" {
-                let mut client_obj = serde_json::json!({
-                    "clientName": "ANDROID", "clientVersion": c.client_version, "hl": "en", "gl": "US", "utcOffsetMinutes": 0
-                });
-                if let Some(vd) = visitor_data.clone() {
-                    client_obj["visitorData"] = Value::String(vd);
-                }
-                let mut ctx = serde_json::json!({ "client": client_obj });
-                if let Some(t) = &use_pot {
-                    ctx["serviceIntegrityDimensions"] = serde_json::json!({ "poToken": t });
-                }
-                ctx
-            } else {
-                context_for(c, visitor_data.clone(), use_pot.clone())
-            };
+            let ctx = context_for(c, visitor_data.clone(), use_pot.clone());
             let res = match raw_player(&video_id, c, ctx).await {
                 Some(v) => v,
                 None => {
@@ -2154,15 +2202,7 @@ mod sabr_client_probe {
                 visitor_data: visitor_data.clone(),
                 po_token: use_pot.clone(),
                 ustreamer_config,
-                client_profile: ClientProfile {
-                    client_name_id: c.client_name_id,
-                    client_version: c.client_version.into(),
-                    user_agent: c.user_agent.into(),
-                    device_make: String::new(),
-                    device_model: String::new(),
-                    os_name: String::new(),
-                    os_version: String::new(),
-                },
+                client_profile: ClientProfile::from_client(c),
                 duration_ms,
                 formats,
             };

@@ -2,7 +2,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-mod api;
+pub mod api;
 mod bridge;
 #[cfg(target_os = "linux")]
 mod codec_probe;
@@ -13,7 +13,7 @@ mod errors;
 mod flow_neuro;
 #[cfg(target_os = "linux")]
 mod linux_startup;
-mod models;
+pub mod models;
 mod music_brain;
 mod security;
 mod services;

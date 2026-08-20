@@ -449,7 +449,15 @@ pub async fn start_host(
     let sas = compute_sas(&master, &session_id);
 
     let (listener, port) = transport::bind().await?;
-    let ip = transport::lan_ip().ok_or_else(|| {
+    // Log every candidate, not just the winner: when a pairing fails with "connection error" and no
+    // inbound TCP on this side, the address we advertised is the first thing to check (issue #41).
+    let candidates = transport::lan_ip_candidates();
+    tracing::info!(
+        target: "flow::sync::session",
+        candidates = ?candidates.iter().map(|c| format!("{}={}{}", c.interface, c.ip, if c.virtual_iface { " (virtual)" } else { "" })).collect::<Vec<_>>(),
+        "LAN address candidates, best first"
+    );
+    let ip = candidates.into_iter().next().map(|c| c.ip).ok_or_else(|| {
         SyncError::Transport("no usable LAN IPv4 address found (are you on Wi-Fi/LAN?)".into())
     })?;
     let expires_at = now_s() + HOST_TTL.as_secs();

@@ -102,17 +102,23 @@ fn random_bytes_never_panic_the_decoder() {
 
 #[test]
 fn decode_chunk_handles_edge_shapes() {
-    // No newline at all → error, no panic.
+    // Not a newline in sight and not JSON either → error, no panic.
     assert!(decode_chunk(b"no-newline-here").is_err());
-    // Valid header then empty ndjson (newline is the last byte).
     let header = ChunkHeader {
         collection: None,
         seq: 0,
         last: true,
     };
-    let mut body = serde_json::to_vec(&header).unwrap();
+    let header_json = serde_json::to_vec(&header).unwrap();
+    // Valid header then empty ndjson (newline is the last byte).
+    let mut body = header_json.clone();
     body.push(b'\n');
     let (h, nd) = decode_chunk(&body).unwrap();
+    assert!(h.last);
+    assert!(nd.is_empty());
+    // Header with no separator at all: Flow for Android ≤ 2.2.0 frames a zero-record collection
+    // this way, so it must decode as an empty chunk rather than fail the session (issues #30/#49).
+    let (h, nd) = decode_chunk(&header_json).unwrap();
     assert!(h.last);
     assert!(nd.is_empty());
     // Garbage header JSON before the newline → error.

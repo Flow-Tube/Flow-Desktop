@@ -21,7 +21,7 @@ use crate::music_brain::model::MusicBrain;
 use crate::sync::brainmap;
 use crate::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, Hlc, Like, MusicBrainSnapshot, Playlist, SettingEntry,
-    SubscriptionGroup, WatchHistoryRecord,
+    SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchInsert, WatchRow};
@@ -109,6 +109,10 @@ pub async fn apply_payload(
             }
             Collection::Subscriptions => (
                 apply_subscriptions(&mut tx, our_device_id, &sc.ndjson).await?,
+                true,
+            ),
+            Collection::SubscribedChannels => (
+                apply_subscribed_channels(&mut tx, our_device_id, &sc.ndjson).await?,
                 true,
             ),
 
@@ -453,6 +457,58 @@ async fn apply_subscriptions(
     Ok(stat)
 }
 
+async fn apply_subscribed_channels(
+    tx: &mut Transaction<'_, Sqlite>,
+    device_id: &str,
+    ndjson: &[u8],
+) -> Result<ApplyStats, SyncError> {
+    let incoming = parse_ndjson::<SubscribedChannel>(ndjson)?;
+    let now = now_ms();
+    let node = crate::sync::canonical::short_device_id(device_id);
+
+    let existing_raw = get_setting(tx, mapping::SUBSCRIBED_CHANNELS_SETTING_KEY).await?;
+    let tombstones = match get_setting(tx, mapping::SUBSCRIPTION_TOMBSTONES_SETTING_KEY).await? {
+        Some(raw) => mapping::parse_subscription_tombstones(&raw),
+        None => BTreeMap::new(),
+    };
+    let local = mapping::parse_subscribed_channels_blob(
+        existing_raw.as_deref().unwrap_or("[]"),
+        &tombstones,
+        &node,
+    );
+    let local_map: BTreeMap<String, SubscribedChannel> = local
+        .iter()
+        .map(|c| (c.channel_id.clone(), c.clone()))
+        .collect();
+
+    let merged = merge::merge_subscribed_channels(local, incoming);
+
+    let mut stat = ApplyStats {
+        collection_key: Collection::SubscribedChannels.key().to_string(),
+        ..Default::default()
+    };
+    for channel in &merged {
+        match local_map.get(&channel.channel_id) {
+            Some(before) if before == channel => stat.skipped += 1,
+            Some(before) if channel.deleted && !before.deleted => stat.tombstoned += 1,
+            Some(_) => stat.updated += 1,
+            None if channel.deleted => stat.skipped += 1,
+            None => stat.added += 1,
+        }
+    }
+
+    let (live_blob, tombstone_blob) =
+        mapping::subscribed_channels_to_blob(&merged, existing_raw.as_deref(), now);
+    set_setting(tx, mapping::SUBSCRIBED_CHANNELS_SETTING_KEY, &live_blob).await?;
+    set_setting(
+        tx,
+        mapping::SUBSCRIPTION_TOMBSTONES_SETTING_KEY,
+        &tombstone_blob,
+    )
+    .await?;
+    Ok(stat)
+}
+
 async fn get_setting_with_time(
     tx: &mut Transaction<'_, Sqlite>,
     key: &str,
@@ -595,6 +651,16 @@ async fn backup_snapshot(
             Collection::Subscriptions => {
                 let raw = setting_value(pool, mapping::SUBSCRIPTION_GROUPS_SETTING_KEY).await?;
                 obj.insert("subscription_groups".to_string(), serde_json::json!(raw));
+            }
+            Collection::SubscribedChannels => {
+                let raw = setting_value(pool, mapping::SUBSCRIBED_CHANNELS_SETTING_KEY).await?;
+                obj.insert("subscriptions".to_string(), serde_json::json!(raw));
+                let tombs =
+                    setting_value(pool, mapping::SUBSCRIPTION_TOMBSTONES_SETTING_KEY).await?;
+                obj.insert(
+                    "subscription_tombstones".to_string(),
+                    serde_json::json!(tombs),
+                );
             }
             #[allow(unreachable_patterns)]
             _ => {}

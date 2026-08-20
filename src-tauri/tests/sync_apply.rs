@@ -8,8 +8,8 @@ use sqlx::sqlite::SqlitePoolOptions;
 use flow_desktop_lib::sync::apply::apply_payload;
 use flow_desktop_lib::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, GCounter, Hlc, Like, LikeKind, LikeState,
-    MusicBrainSnapshot, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry, SubscriptionGroup,
-    WatchHistoryRecord,
+    MusicBrainSnapshot, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry, SubscribedChannel,
+    SubscriptionGroup, WatchHistoryRecord,
 };
 use flow_desktop_lib::sync::mapping;
 use flow_desktop_lib::sync::protocol::StagedCollection;
@@ -627,4 +627,186 @@ async fn an_android_shaped_brain_record_applies_instead_of_rolling_back_everythi
             .is_some(),
         "the phone's time-of-day vector must survive the bucket-name difference"
     );
+}
+
+// --------------------------------------------------------------------------------------------
+// subscribed_channels (FLOW-SYNC/1 §10.0) — the channels themselves, with unsubscribe tombstones.
+// --------------------------------------------------------------------------------------------
+
+/// A realistic epoch-ms base: tombstones are pruned against wall-clock `now`, so toy stamps would
+/// read as decades old and be dropped before they could be asserted on.
+const T0: u64 = 1_781_000_000_000;
+
+fn channel(id: &str, name: &str, offset: u64, deleted: bool) -> SubscribedChannel {
+    let at = T0 + offset;
+    SubscribedChannel {
+        channel_id: id.to_string(),
+        name: name.to_string(),
+        avatar_url: if name.is_empty() {
+            String::new()
+        } else {
+            format!("https://cdn/{id}.jpg")
+        },
+        subscribed_at_ms: if deleted { 0 } else { at },
+        is_music: false,
+        hlc: Hlc::new(at, 0, PEER),
+        deleted,
+    }
+}
+
+fn channels_payload(records: &[SubscribedChannel]) -> StagedCollection {
+    StagedCollection {
+        collection: Collection::SubscribedChannels,
+        ndjson: ndjson_of(records),
+        record_count: records.len() as u64,
+        hash: format!("chan-{}", records.len()),
+    }
+}
+
+async fn seed_channels(pool: &SqlitePool, blob: &str) {
+    seed_setting(pool, "subscriptions", blob).await;
+}
+
+async fn live_ids(pool: &SqlitePool) -> Vec<String> {
+    let raw = read_setting(pool, "subscriptions").await;
+    serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+        .unwrap()
+        .into_iter()
+        .filter_map(|v| v["id"].as_str().map(str::to_string))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_newer_unsubscribe_from_the_peer_removes_the_local_subscription() {
+    let pool = memory_pool().await;
+    seed_channels(
+        &pool,
+        r#"[{"id":"UCx","name":"Cool","avatarUrl":"a.jpg","subscribedAt":1781000001000}]"#,
+    )
+    .await;
+
+    apply_payload(
+        &pool,
+        OUR,
+        PEER,
+        &[channels_payload(&[channel("UCx", "", 2000, true)])],
+    )
+    .await
+    .unwrap();
+
+    assert!(live_ids(&pool).await.is_empty(), "the unsubscribe must win");
+    // and it is remembered, so a third device hears about it too
+    let tombs: serde_json::Value =
+        serde_json::from_str(&read_setting(&pool, "subscription_tombstones").await).unwrap();
+    assert_eq!(tombs["UCx"], T0 + 2000);
+}
+
+#[tokio::test]
+async fn an_older_unsubscribe_does_not_remove_a_newer_subscription() {
+    let pool = memory_pool().await;
+    seed_channels(
+        &pool,
+        r#"[{"id":"UCx","name":"Cool","avatarUrl":"a.jpg","subscribedAt":1781000005000}]"#,
+    )
+    .await;
+
+    apply_payload(
+        &pool,
+        OUR,
+        PEER,
+        &[channels_payload(&[channel("UCx", "", 1000, true)])],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(live_ids(&pool).await, vec!["UCx".to_string()]);
+}
+
+#[tokio::test]
+async fn a_peer_record_without_metadata_does_not_blank_the_channel() {
+    // A tombstone carries no display metadata, and a bare re-subscribe from a third device may not
+    // either — merging must take the non-empty side or the channel turns into a nameless row.
+    let pool = memory_pool().await;
+    seed_channels(
+        &pool,
+        r#"[{"id":"UCx","name":"Cool","avatarUrl":"a.jpg","subscribedAt":1781000001000}]"#,
+    )
+    .await;
+
+    apply_payload(
+        &pool,
+        OUR,
+        PEER,
+        &[channels_payload(&[channel("UCx", "", 9000, false)])],
+    )
+    .await
+    .unwrap();
+
+    let raw = read_setting(&pool, "subscriptions").await;
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&raw).unwrap();
+    assert_eq!(entries[0]["name"], "Cool");
+    assert_eq!(entries[0]["avatarUrl"], "a.jpg");
+}
+
+#[tokio::test]
+async fn a_tombstone_for_a_channel_we_never_had_is_still_retained() {
+    // Otherwise the unsubscribe dies here and never reaches a third device that does follow it.
+    let pool = memory_pool().await;
+    seed_channels(&pool, "[]").await;
+
+    apply_payload(
+        &pool,
+        OUR,
+        PEER,
+        &[channels_payload(&[channel("UCghost", "", 2000, true)])],
+    )
+    .await
+    .unwrap();
+
+    let tombs: serde_json::Value =
+        serde_json::from_str(&read_setting(&pool, "subscription_tombstones").await).unwrap();
+    assert_eq!(tombs["UCghost"], T0 + 2000);
+    assert!(live_ids(&pool).await.is_empty());
+}
+
+#[tokio::test]
+async fn applying_channels_preserves_device_local_fields() {
+    // `subscriberCountText` is not on the wire. Rebuilding the entry from the canonical record
+    // instead of patching it would silently wipe it on every sync.
+    let pool = memory_pool().await;
+    seed_channels(
+        &pool,
+        r#"[{"id":"UCx","name":"Old","avatarUrl":"a.jpg","subscribedAt":1781000001000,"subscriberCountText":"1.2M subscribers"}]"#,
+    )
+    .await;
+
+    apply_payload(
+        &pool,
+        OUR,
+        PEER,
+        &[channels_payload(&[channel("UCx", "New", 4000, false)])],
+    )
+    .await
+    .unwrap();
+
+    let raw = read_setting(&pool, "subscriptions").await;
+    let entries: Vec<serde_json::Value> = serde_json::from_str(&raw).unwrap();
+    assert_eq!(entries[0]["name"], "New", "the newer name still wins");
+    assert_eq!(entries[0]["subscriberCountText"], "1.2M subscribers");
+}
+
+#[tokio::test]
+async fn re_applying_a_channel_payload_is_a_no_op() {
+    let pool = memory_pool().await;
+    seed_channels(&pool, "[]").await;
+    let payload = channels_payload(&[channel("UCx", "Cool", 3000, false)]);
+
+    apply_payload(&pool, OUR, PEER, std::slice::from_ref(&payload))
+        .await
+        .unwrap();
+    let after_first = read_setting(&pool, "subscriptions").await;
+    apply_payload(&pool, OUR, PEER, &[payload]).await.unwrap();
+
+    assert_eq!(read_setting(&pool, "subscriptions").await, after_first);
+    assert_eq!(live_ids(&pool).await, vec!["UCx".to_string()]);
 }

@@ -19,7 +19,7 @@ use crate::services::recommendation_service::RecommendationService;
 use crate::sync::apply;
 use crate::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, Like, MusicBrainSnapshot, Playlist, SettingEntry,
-    SubscriptionGroup, WatchHistoryRecord,
+    SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::codec;
 use crate::sync::error::SyncError;
@@ -73,6 +73,7 @@ fn scope_collections(scope: &str) -> Option<Vec<Collection>> {
             Collection::Likes,
             Collection::Settings,
             Collection::Subscriptions,
+            Collection::SubscribedChannels,
         ]),
         "MASTER" => Some(Collection::ALL.to_vec()),
         _ => None,
@@ -117,6 +118,7 @@ fn filter_parseable(collection: Collection, values: &[Value]) -> (Vec<Value>, u6
         Collection::FlowNeuroBrain => ok::<FlowNeuroBrainSnapshot>(v, |s| !s.device_id.is_empty()),
         Collection::MusicBrain => ok::<MusicBrainSnapshot>(v, |s| !s.device_id.is_empty()),
         Collection::Subscriptions => ok::<SubscriptionGroup>(v, |g| !g.name.is_empty()),
+        Collection::SubscribedChannels => ok::<SubscribedChannel>(v, |c| !c.channel_id.is_empty()),
     };
     let kept: Vec<Value> = values.iter().filter(|v| parses(v)).cloned().collect();
     let dropped = (values.len() - kept.len()) as u64;

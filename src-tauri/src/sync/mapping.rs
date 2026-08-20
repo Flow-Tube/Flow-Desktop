@@ -9,14 +9,14 @@
 //! * `playlists` / `likes` — stored as frontend-authored JSON blobs in `settings`
 //!   (`user_playlists`, `liked_items`); they need lossless Rust mirrors of the TS shapes.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::sync::canonical::{
-    Hlc, Like, LikeKind, LikeState, Playlist, PlaylistItem, PlaylistOrigin, SubscriptionGroup,
-    WatchHistoryRecord,
+    Hlc, Like, LikeKind, LikeState, Playlist, PlaylistItem, PlaylistOrigin, SubscribedChannel,
+    SubscriptionGroup, WatchHistoryRecord,
 };
 
 /// Frontend settings key holding the liked-items JSON array.
@@ -25,6 +25,16 @@ pub const LIKES_SETTING_KEY: &str = "liked_items";
 pub const PLAYLISTS_SETTING_KEY: &str = "user_playlists";
 pub const ALBUMS_SETTING_KEY: &str = "saved_albums";
 pub const SUBSCRIPTION_GROUPS_SETTING_KEY: &str = "subscription_groups";
+/// Frontend settings key holding the followed-channel JSON array (the channels themselves, as
+/// opposed to the folders in [`SUBSCRIPTION_GROUPS_SETTING_KEY`]).
+pub const SUBSCRIBED_CHANNELS_SETTING_KEY: &str = "subscriptions";
+/// Unsubscribe tombstones, `{channelId: epochMs}`. Persisted rather than derived: a channel that is
+/// simply absent is indistinguishable from one this device never followed, so without this the peer
+/// would re-add everything the user just unsubscribed from (`FLOW-SYNC/1` §10.0).
+pub const SUBSCRIPTION_TOMBSTONES_SETTING_KEY: &str = "subscription_tombstones";
+/// How long an unsubscribe tombstone is retained before pruning. Matches Android so the two sides
+/// forget at the same rate.
+pub const TOMBSTONE_TTL_MS: u64 = 365 * 24 * 60 * 60 * 1000;
 /// Reserved cross-device id for the protected "Watch Later" playlist.
 pub const WATCH_LATER_SYNC_ID: &str = "reserved:watch-later";
 
@@ -69,6 +79,136 @@ pub fn parse_subscription_groups_blob(raw: &str, hlc: &Hlc) -> Vec<SubscriptionG
             }
         })
         .collect()
+}
+
+fn channel_str(entry: &Value, key: &str) -> String {
+    entry
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Read the frontend's followed-channel array into canonical records, appending a tombstone for
+/// every unsubscribe we still remember. A tombstone for a channel that is live again is dropped —
+/// the live record is the newer truth.
+pub fn parse_subscribed_channels_blob(
+    raw: &str,
+    tombstones: &BTreeMap<String, u64>,
+    node: &str,
+) -> Vec<SubscribedChannel> {
+    let entries: Vec<Value> = serde_json::from_str(raw).unwrap_or_default();
+    let mut out: Vec<SubscribedChannel> = Vec::with_capacity(entries.len() + tombstones.len());
+    let mut live: BTreeSet<String> = BTreeSet::new();
+
+    for entry in &entries {
+        let channel_id = channel_str(entry, "id");
+        if channel_id.trim().is_empty() {
+            continue;
+        }
+        let subscribed_at_ms = entry
+            .get("subscribedAt")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        live.insert(channel_id.clone());
+        out.push(SubscribedChannel {
+            hlc: Hlc::new(subscribed_at_ms, 0, node),
+            channel_id,
+            name: channel_str(entry, "name"),
+            avatar_url: channel_str(entry, "avatarUrl"),
+            subscribed_at_ms,
+            is_music: entry
+                .get("isMusic")
+                .and_then(Value::as_bool)
+                .unwrap_or_default(),
+            deleted: false,
+        });
+    }
+
+    for (channel_id, &at) in tombstones {
+        if live.contains(channel_id) {
+            continue;
+        }
+        out.push(SubscribedChannel {
+            channel_id: channel_id.clone(),
+            hlc: Hlc::new(at, 0, node),
+            deleted: true,
+            ..SubscribedChannel::default()
+        });
+    }
+
+    out.sort_by(|a, b| a.channel_id.cmp(&b.channel_id));
+    out
+}
+
+pub fn parse_subscription_tombstones(raw: &str) -> BTreeMap<String, u64> {
+    serde_json::from_str::<BTreeMap<String, u64>>(raw).unwrap_or_default()
+}
+
+/// Project merged channels back into the frontend blob plus the tombstone map.
+///
+/// `existing_raw` is the blob being replaced: entries are patched in place rather than rebuilt, so
+/// device-local fields the wire does not carry (`subscriberCountText`, and anything the frontend
+/// adds later) survive a sync instead of being silently reset.
+pub fn subscribed_channels_to_blob(
+    merged: &[SubscribedChannel],
+    existing_raw: Option<&str>,
+    now_ms: u64,
+) -> (String, String) {
+    let existing: BTreeMap<String, Value> = existing_raw
+        .and_then(|raw| serde_json::from_str::<Vec<Value>>(raw).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|e| {
+            let id = channel_str(&e, "id");
+            (!id.is_empty()).then_some((id, e))
+        })
+        .collect();
+
+    let mut live: Vec<Value> = Vec::new();
+    let mut tombstones: BTreeMap<String, u64> = BTreeMap::new();
+
+    for channel in merged {
+        if channel.channel_id.trim().is_empty() {
+            continue;
+        }
+        if channel.deleted {
+            // Keep a tombstone even for a channel this device never had, so the unsubscribe still
+            // reaches a third device that does have it. Prune once it is older than the TTL.
+            if now_ms.saturating_sub(channel.hlc.physical_ms) <= TOMBSTONE_TTL_MS {
+                tombstones.insert(channel.channel_id.clone(), channel.hlc.physical_ms);
+            }
+            continue;
+        }
+        let mut entry = existing
+            .get(&channel.channel_id)
+            .cloned()
+            .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+        if let Some(obj) = entry.as_object_mut() {
+            obj.insert("id".into(), Value::String(channel.channel_id.clone()));
+            if !channel.name.is_empty() {
+                obj.insert("name".into(), Value::String(channel.name.clone()));
+            }
+            if !channel.avatar_url.is_empty() {
+                obj.insert(
+                    "avatarUrl".into(),
+                    Value::String(channel.avatar_url.clone()),
+                );
+            }
+            if channel.subscribed_at_ms > 0 {
+                obj.insert("subscribedAt".into(), Value::from(channel.subscribed_at_ms));
+            }
+            if channel.is_music {
+                obj.insert("isMusic".into(), Value::Bool(true));
+            }
+        }
+        live.push(entry);
+    }
+
+    (
+        serde_json::to_string(&live).unwrap_or_else(|_| "[]".to_string()),
+        serde_json::to_string(&tombstones).unwrap_or_else(|_| "{}".to_string()),
+    )
 }
 
 pub fn subscription_groups_to_blob(groups: &[SubscriptionGroup]) -> String {

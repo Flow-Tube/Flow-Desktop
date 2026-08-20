@@ -29,7 +29,7 @@ use crate::sync::canonical::{
     AffinityWire, BrainCounters, BrainFlags, BrainLwwMaps, BrainPerVideo, BrainSets, BrainVectors,
     ContentVectorWire, FlowNeuroBrainSnapshot, GCounter, Hlc, Like, LikeKind, Lww,
     MusicBrainSnapshot, OrSet, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
-    SubscriptionGroup, TrackMetaWire, WatchHistoryRecord,
+    SubscribedChannel, SubscriptionGroup, TrackMetaWire, WatchHistoryRecord,
 };
 
 // ===========================================================================================
@@ -396,19 +396,67 @@ fn merge_one_subscription(a: &SubscriptionGroup, b: &SubscriptionGroup) -> Subsc
 
     SubscriptionGroup {
         channel_ids,
-        deleted: tombstone_wins(a, b),
+        deleted: tombstone_wins(a.deleted, &a.hlc, b.deleted, &b.hlc),
         hlc: Hlc::max(&a.hlc, &b.hlc),
         name: a.name.clone(),
         sort_order,
     }
 }
 
-fn tombstone_wins(a: &SubscriptionGroup, b: &SubscriptionGroup) -> bool {
-    match (a.deleted, b.deleted) {
+/// Tombstone resolution for two records with the same key: when exactly one side is a tombstone it
+/// wins iff its stamp is `>=` the live record's. That is what makes a later delete remove the record
+/// on the peer while a later re-create restores it.
+fn tombstone_wins(a_deleted: bool, a_hlc: &Hlc, b_deleted: bool, b_hlc: &Hlc) -> bool {
+    match (a_deleted, b_deleted) {
         (true, true) => true,
         (false, false) => false,
-        (true, false) => a.hlc >= b.hlc,
-        (false, true) => b.hlc >= a.hlc,
+        (true, false) => a_hlc >= b_hlc,
+        (false, true) => b_hlc >= a_hlc,
+    }
+}
+
+// ===========================================================================================
+// Subscribed channels
+// ===========================================================================================
+
+/// Merge the followed-channel lists (`FLOW-SYNC/1` §10.0). Per-record LWW by `hlc` with tombstones.
+pub fn merge_subscribed_channels(
+    a: Vec<SubscribedChannel>,
+    b: Vec<SubscribedChannel>,
+) -> Vec<SubscribedChannel> {
+    let mut map: BTreeMap<String, SubscribedChannel> = a
+        .into_iter()
+        .filter(|c| !c.channel_id.is_empty())
+        .map(|c| (c.channel_id.clone(), c))
+        .collect();
+    for c in b.into_iter().filter(|c| !c.channel_id.is_empty()) {
+        match map.get_mut(&c.channel_id) {
+            Some(e) => *e = merge_one_channel(e, &c),
+            None => {
+                map.insert(c.channel_id.clone(), c);
+            }
+        }
+    }
+    map.into_values().collect()
+}
+
+fn merge_one_channel(a: &SubscribedChannel, b: &SubscribedChannel) -> SubscribedChannel {
+    let (win, lose) = if a_wins(a, &a.hlc, b, &b.hlc) {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    let pick = |w: &String, l: &String| if w.is_empty() { l.clone() } else { w.clone() };
+    SubscribedChannel {
+        channel_id: a.channel_id.clone(),
+        // A tombstone carries no display metadata, so the winner may legitimately be blank — take
+        // the other side's value rather than blanking the channel on a re-subscribe.
+        name: pick(&win.name, &lose.name),
+        avatar_url: pick(&win.avatar_url, &lose.avatar_url),
+        subscribed_at_ms: a.subscribed_at_ms.max(b.subscribed_at_ms),
+        is_music: a.is_music || b.is_music,
+        hlc: Hlc::max(&a.hlc, &b.hlc),
+        deleted: tombstone_wins(a.deleted, &a.hlc, b.deleted, &b.hlc),
     }
 }
 

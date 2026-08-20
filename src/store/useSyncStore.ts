@@ -43,6 +43,9 @@ async function applyRefresh(collections: string[]) {
         window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
       }
     }
+    if (collections.includes("subscribed_channels")) {
+      await useSubscriptionStore.getState().loadSubscriptions();
+    }
     if (collections.includes("subscriptions")) {
       await useSubscriptionStore.getState().loadSubscriptionGroups();
     }

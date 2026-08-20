@@ -48,6 +48,7 @@ pub async fn export_collections(
             Collection::FlowNeuroBrain => export_flow_neuro(pool, device_id).await?,
             Collection::MusicBrain => export_music(pool, device_id).await?,
             Collection::Subscriptions => export_subscriptions(pool, device_id).await?,
+            Collection::SubscribedChannels => export_subscribed_channels(pool, device_id).await?,
         };
         out.push(OutgoingCollection { collection, ndjson });
     }
@@ -161,6 +162,25 @@ async fn export_subscriptions(pool: &SqlitePool, device_id: &str) -> Result<Vec<
     };
     groups.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(to_ndjson(&groups))
+}
+
+/// Followed channels plus the unsubscribe tombstones we still remember (`FLOW-SYNC/1` §10.0).
+/// Record stamps come from `subscribedAt` / the tombstone time, not from now, so subscribe and
+/// unsubscribe resolve by when each actually happened.
+async fn export_subscribed_channels(
+    pool: &SqlitePool,
+    device_id: &str,
+) -> Result<Vec<u8>, SyncError> {
+    let node = crate::sync::canonical::short_device_id(device_id);
+    let tombstones = match get_setting(pool, mapping::SUBSCRIPTION_TOMBSTONES_SETTING_KEY).await? {
+        Some(raw) => mapping::parse_subscription_tombstones(&raw),
+        None => std::collections::BTreeMap::new(),
+    };
+    let channels = match get_setting(pool, mapping::SUBSCRIBED_CHANNELS_SETTING_KEY).await? {
+        Some(raw) => mapping::parse_subscribed_channels_blob(&raw, &tombstones, &node),
+        None => Vec::new(),
+    };
+    Ok(to_ndjson(&channels))
 }
 
 async fn export_settings(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {

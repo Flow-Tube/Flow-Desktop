@@ -31,6 +31,7 @@ const COLLECTION_STRINGS: Record<string, { title: StringKey; desc: StringKey }> 
   settings: { title: "sync_collection_settings", desc: "sync_collection_settings_desc" },
   flow_neuro_brain: { title: "sync_collection_flow_neuro_brain", desc: "sync_collection_flow_neuro_brain_desc" },
   music_brain: { title: "sync_collection_music_brain", desc: "sync_collection_music_brain_desc" },
+  subscribed_channels: { title: "sync_collection_subscribed_channels", desc: "sync_collection_subscribed_channels_desc" },
   subscriptions: { title: "sync_collection_subscriptions", desc: "sync_collection_subscriptions_desc" },
 };
 

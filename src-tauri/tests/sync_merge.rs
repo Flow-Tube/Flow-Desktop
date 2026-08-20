@@ -10,8 +10,8 @@ use rand::{Rng, SeedableRng};
 
 use flow_desktop_lib::sync::canonical::{
     AffinityWire, FlowNeuroBrainSnapshot, GCounter, Hlc, Like, LikeKind, LikeState, Lww,
-    MusicBrainSnapshot, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry, SubscriptionGroup,
-    WatchHistoryRecord,
+    MusicBrainSnapshot, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry, SubscribedChannel,
+    SubscriptionGroup, WatchHistoryRecord,
 };
 use flow_desktop_lib::sync::merge;
 
@@ -203,6 +203,31 @@ fn subscriptions_merge_obeys_crdt_laws() {
         sets.push(v);
     }
     assert_laws(&sets, merge::merge_subscriptions);
+}
+
+#[test]
+fn subscribed_channels_merge_obeys_crdt_laws() {
+    let mut r = StdRng::seed_from_u64(106);
+    let mut sets: Vec<Vec<SubscribedChannel>> = Vec::new();
+    for _ in 0..6 {
+        let mut v = Vec::new();
+        for id in ["UCa", "UCb", "UCc"] {
+            if r.gen_bool(0.75) {
+                let stamp = hlc(&mut r);
+                v.push(SubscribedChannel {
+                    channel_id: id.to_string(),
+                    name: format!("name-{}", r.gen_range(0..3)),
+                    avatar_url: String::new(),
+                    subscribed_at_ms: stamp.physical_ms,
+                    is_music: r.gen_bool(0.3),
+                    hlc: stamp,
+                    deleted: r.gen_bool(0.3),
+                });
+            }
+        }
+        sets.push(v);
+    }
+    assert_laws(&sets, merge::merge_subscribed_channels);
 }
 
 // --------------------------------------------------------------------------------------------

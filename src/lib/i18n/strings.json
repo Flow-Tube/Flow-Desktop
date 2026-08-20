@@ -1134,8 +1134,10 @@
   "sync_collection_flow_neuro_brain_desc": "Your FlowNeuro taste profile",
   "sync_collection_music_brain": "Music taste",
   "sync_collection_music_brain_desc": "Artist affinities and listening history",
+  "sync_collection_subscribed_channels": "Subscriptions",
+  "sync_collection_subscribed_channels_desc": "The channels you follow",
   "sync_collection_subscriptions": "Subscription groups",
-  "sync_collection_subscriptions_desc": "Your channel folders",
+  "sync_collection_subscriptions_desc": "The folders you sort your channels into",
 
   "sync_pair_scan_title": "Scan this with your phone",
   "sync_pair_scan_subtitle": "Open Flow on the other device and scan to receive your data.",

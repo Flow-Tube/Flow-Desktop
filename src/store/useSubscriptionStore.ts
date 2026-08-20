@@ -6,7 +6,14 @@ export interface SubscribedChannel {
   name: string;
   avatarUrl?: string;
   subscriberCountText?: string;
+  /** Epoch ms. Doubles as this record's sync clock, so a subscribe/unsubscribe race resolves by
+   *  when each actually happened (FLOW-SYNC/1 §10.0). */
+  subscribedAt?: number;
+  isMusic?: boolean;
 }
+
+/** The subscription fields a metadata refresh may overwrite. */
+type SubscriptionTextField = "name" | "avatarUrl" | "subscriberCountText";
 
 export interface SubscriptionGroup {
   name: string;
@@ -33,6 +40,9 @@ interface SubscriptionState {
 
 const SUBSCRIPTIONS_KEY = "subscriptions";
 const SUBSCRIPTION_GROUPS_KEY = "subscription_groups";
+/** Unsubscribes we still remember, `{channelId: epochMs}` — see `recordUnsubscribe`. */
+const SUBSCRIPTION_TOMBSTONES_KEY = "subscription_tombstones";
+const TOMBSTONE_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 const LEGACY_SEED_IDS = new Set(["UCsBjURrdU234nU351gVEfTA", "UCwRxwjk_c_92sAMeX4JzW4w"]);
 
@@ -46,6 +56,42 @@ function cleanGroup(group: SubscriptionGroup, sortOrder: number): SubscriptionGr
     channelIds: Array.from(new Set(group.channelIds.map(cleanChannelId).filter(Boolean))),
     sortOrder,
   };
+}
+
+async function readTombstones(): Promise<Record<string, number>> {
+  try {
+    const raw = await getSetting(SUBSCRIPTION_TOMBSTONES_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Drop tombstones past the TTL so the store can't grow without bound. */
+function pruneTombstones(tombstones: Record<string, number>, now: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(tombstones).filter(([, at]) => typeof at === "number" && now - at <= TOMBSTONE_TTL_MS),
+  );
+}
+
+/**
+ * Remember an unsubscribe. A channel that is simply absent is indistinguishable from one this
+ * device never followed, so without a tombstone the next sync would put it straight back.
+ */
+async function recordUnsubscribe(channelId: string) {
+  const now = Date.now();
+  const next = pruneTombstones(await readTombstones(), now);
+  next[channelId] = now;
+  await setSetting(SUBSCRIPTION_TOMBSTONES_KEY, JSON.stringify(next));
+}
+
+/** Re-subscribing clears the tombstone, otherwise the peer would keep removing the channel. */
+async function clearTombstone(channelId: string) {
+  const tombstones = await readTombstones();
+  if (!(channelId in tombstones)) return;
+  delete tombstones[channelId];
+  await setSetting(SUBSCRIPTION_TOMBSTONES_KEY, JSON.stringify(pruneTombstones(tombstones, Date.now())));
 }
 
 async function persistSubscriptions(subscriptions: SubscribedChannel[]) {
@@ -71,10 +117,18 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       const subsJson = await getSetting(SUBSCRIPTIONS_KEY);
       const parsed: SubscribedChannel[] = subsJson ? JSON.parse(subsJson) : [];
       const cleaned = parsed.filter((channel) => !LEGACY_SEED_IDS.has(channel.id));
-      if (cleaned.length !== parsed.length) {
-        await persistSubscriptions(cleaned);
+      // Channels saved before sync existed carry no timestamp, which would read as "epoch" and lose
+      // to any tombstone the peer still holds — silently unsubscribing the user. Stamping them now
+      // is the honest answer (this is when we first knew) and errs toward keeping the subscription.
+      const now = Date.now();
+      const backfilled = cleaned.map((channel) =>
+        channel.subscribedAt ? channel : { ...channel, subscribedAt: now },
+      );
+      const changed = cleaned.length !== parsed.length || backfilled.some((c, i) => c !== cleaned[i]);
+      if (changed) {
+        await persistSubscriptions(backfilled);
       }
-      set({ subscriptions: cleaned, loading: false });
+      set({ subscriptions: backfilled, loading: false });
     } catch (e) {
       console.error("Failed to load subscriptions in store", e);
       set({ loading: false });
@@ -85,13 +139,17 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     const { subscriptions } = get();
     const cleanId = cleanChannelId(channelId);
     const existing = subscriptions.find((c) => c.id === cleanId);
+    await clearTombstone(cleanId);
     if (existing) {
       if (avatarUrl && !existing.avatarUrl) {
         await get().updateSubscription(cleanId, { avatarUrl });
       }
       return;
     }
-    const updated = [...subscriptions, { id: cleanId, name: channelName, avatarUrl }];
+    const updated = [
+      ...subscriptions,
+      { id: cleanId, name: channelName, avatarUrl, subscribedAt: Date.now() },
+    ];
     set({ subscriptions: updated });
     await persistSubscriptions(updated);
   },
@@ -111,6 +169,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     );
     set({ subscriptions: updated });
     await persistSubscriptions(updated);
+    await recordUnsubscribe(cleanId);
     set({ subscriptionGroups: updatedGroups });
     await persistGroups(updatedGroups);
   },
@@ -135,10 +194,9 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       if (!patch) return channel;
 
       let merged = channel;
-      for (const [key, value] of Object.entries(patch) as [
-        keyof Omit<SubscribedChannel, "id">,
-        string | undefined,
-      ][]) {
+      // Only the display-text fields are patchable here; `subscribedAt`/`isMusic` are set by
+      // subscribe/unsubscribe and by the sync merge, never by a metadata refresh.
+      for (const [key, value] of Object.entries(patch) as [SubscriptionTextField, string | undefined][]) {
         if (value !== undefined && merged[key] !== value) {
           if (merged === channel) merged = { ...channel };
           merged[key] = value;

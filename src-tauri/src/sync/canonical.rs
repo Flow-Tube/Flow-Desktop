@@ -23,11 +23,12 @@ pub enum Collection {
     FlowNeuroBrain,
     MusicBrain,
     Subscriptions,
+    SubscribedChannels,
 }
 
 impl Collection {
     /// Every collection, in a stable order (used to iterate capabilities/selection).
-    pub const ALL: [Collection; 7] = [
+    pub const ALL: [Collection; 8] = [
         Collection::WatchHistory,
         Collection::Playlists,
         Collection::Likes,
@@ -35,6 +36,7 @@ impl Collection {
         Collection::FlowNeuroBrain,
         Collection::MusicBrain,
         Collection::Subscriptions,
+        Collection::SubscribedChannels,
     ];
 
     /// The stable wire key (matches the `snake_case` serde form), e.g. `"watch_history"`.
@@ -47,6 +49,7 @@ impl Collection {
             Collection::FlowNeuroBrain => "flow_neuro_brain",
             Collection::MusicBrain => "music_brain",
             Collection::Subscriptions => "subscriptions",
+            Collection::SubscribedChannels => "subscribed_channels",
         }
     }
 }
@@ -615,4 +618,33 @@ pub struct SubscriptionGroup {
     pub hlc: Hlc,
     pub name: String,
     pub sort_order: i32,
+}
+
+// ===========================================================================================
+// Collection: subscribed channels
+// ===========================================================================================
+
+/// One followed channel (`FLOW-SYNC/1` §10.0). Distinct from [`SubscriptionGroup`], which only
+/// carries the *folders* — a group can express neither a subscription that belongs to no group nor
+/// an unsubscribe, which is why the channels need their own collection.
+///
+/// Merged per-record LWW by `hlc` with tombstones, so subscribe-vs-unsubscribe resolves by when
+/// each actually happened. A tombstone carries no display metadata, hence the non-empty-wins rule
+/// on `name`/`avatar_url` in `merge::merge_subscribed_channels`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SubscribedChannel {
+    /// Record key; canonical sort order is `channel_id` ascending.
+    pub channel_id: String,
+    pub name: String,
+    pub avatar_url: String,
+    /// Epoch ms the user subscribed. Merge takes the max.
+    pub subscribed_at_ms: u64,
+    /// OR-merged, never flipped off (the music↔video leak rule).
+    pub is_music: bool,
+    /// Degenerate `(subscribed_at_ms, 0, node)` for a live record, `(unsubscribed_at_ms, 0, node)`
+    /// for a tombstone.
+    pub hlc: Hlc,
+    /// `true` = unsubscribed.
+    pub deleted: bool,
 }

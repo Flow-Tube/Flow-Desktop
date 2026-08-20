@@ -15,7 +15,8 @@ use serde::de::DeserializeOwned;
 
 use flow_desktop_lib::sync::canonical::{
     FlowNeuroBrainSnapshot, Like, LikeKind, LikeState, MusicBrainSnapshot, Playlist,
-    PlaylistOrigin, SettingEntry, SubscriptionGroup, WatchHistoryRecord, to_canonical_json,
+    PlaylistOrigin, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
+    to_canonical_json,
 };
 use flow_desktop_lib::sync::frames::CapabilitiesFrame;
 
@@ -139,6 +140,36 @@ fn subscriptions_fixture_locks() {
     );
     assert_eq!(groups[0].sort_order, 0);
     assert!(!groups[0].deleted);
+}
+
+#[test]
+fn subscribed_channels_fixture_locks() {
+    let channels: Vec<SubscribedChannel> = load_stable("subscribed_channels.json");
+    assert_eq!(channels.len(), 2);
+    assert_eq!(channels[0].channel_id, "UCabc");
+    assert_eq!(channels[0].subscribed_at_ms, 1_781_000_000_000);
+    assert!(!channels[0].deleted);
+    // An unsubscribe is shipped as a tombstone carrying no display metadata.
+    assert!(channels[1].deleted);
+    assert!(channels[1].name.is_empty());
+}
+
+#[test]
+fn subscribed_channel_canonical_bytes_match_android() {
+    let channel = SubscribedChannel {
+        channel_id: "UCabc".to_string(),
+        name: "Some Channel".to_string(),
+        avatar_url: "https://cdn.example/UCabc.jpg".to_string(),
+        subscribed_at_ms: 1_781_000_000_000,
+        is_music: false,
+        hlc: "1781000000000:0:deviceaa".parse().unwrap(),
+        deleted: false,
+    };
+    let json = String::from_utf8(to_canonical_json(&channel)).unwrap();
+    assert_eq!(
+        json,
+        r#"{"avatarUrl":"https://cdn.example/UCabc.jpg","channelId":"UCabc","deleted":false,"hlc":"1781000000000:0:deviceaa","isMusic":false,"name":"Some Channel","subscribedAtMs":1781000000000}"#
+    );
 }
 
 #[test]

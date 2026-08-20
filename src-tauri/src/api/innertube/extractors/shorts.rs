@@ -2,7 +2,7 @@ use base64::Engine;
 use serde_json::{Value, json};
 
 use crate::api::innertube::InnertubeClient;
-use crate::api::innertube::core::context::get_android_context;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::normalize_youtube_image_url;
 use crate::errors::AppResult;
 use crate::models::shorts::{ShortItem, ShortsFeed};
@@ -26,7 +26,7 @@ impl InnertubeClient {
     ///
     /// Home feed: `sequence_params = None`. Seeded from a video:
     /// `params = Some(encode_reel_seed_params(id))`. Next page: `sequence_params = Some(token)`.
-    /// The iOS client is used because it returns the portrait overlay renderers.
+    /// ANDROID is used because it returns the portrait overlay renderers.
     pub async fn get_shorts_sequence(
         &self,
         params: Option<String>,
@@ -40,13 +40,12 @@ impl InnertubeClient {
             resolved = visitor_data.is_some(),
             "[shorts] reel visitor_data step"
         );
-        let mut context = get_android_context(visitor_data);
-        if let Some(region) = region.as_deref() {
-            let cleaned = region.trim().to_ascii_uppercase();
-            if cleaned.len() == 2 && cleaned.chars().all(|c| c.is_ascii_alphabetic()) {
-                context["client"]["gl"] = json!(cleaned);
-            }
-        }
+        let region = region
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_ascii_uppercase)
+            .filter(|value| value.len() == 2 && value.chars().all(|c| c.is_ascii_alphabetic()));
+        let context = clients::ANDROID.context(visitor_data.as_deref(), region.as_deref());
 
         let mut payload = json!({ "context": context });
         if let Some(params) = params {
@@ -61,12 +60,7 @@ impl InnertubeClient {
         }
 
         let res = self
-            .post_innertube(
-                "reel/reel_watch_sequence",
-                "ANDROID",
-                "21.03.38",
-                &mut payload,
-            )
+            .post_innertube("reel/reel_watch_sequence", &clients::ANDROID, &mut payload)
             .await?;
 
         let feed = parse_reel_sequence(&res);

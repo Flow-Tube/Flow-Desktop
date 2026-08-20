@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     extract_text_from_value, parse_mixed_number_word_to_long, thumbnail_url_from_array,
 };
@@ -525,7 +526,7 @@ impl InnertubeClient {
         debug!(video_id = %video_id_trimmed, has_page_token = page_token.is_some(), "[get_comments] Starting comments fetch");
 
         let res = self
-            .post_innertube("next", "WEB", "2.20260120.01.00", &mut payload)
+            .post_innertube("next", &clients::WEB, &mut payload)
             .await?;
         let mut comments_res = parse_comments_json(&res);
 
@@ -552,7 +553,7 @@ impl InnertubeClient {
                     "continuation": token
                 });
                 let next_res = self
-                    .post_innertube("next", "WEB", "2.20260120.01.00", &mut next_payload)
+                    .post_innertube("next", &clients::WEB, &mut next_payload)
                     .await?;
                 comments_res = parse_comments_json(&next_res);
                 if comments_res.comment_count_text.is_none() {
@@ -584,7 +585,7 @@ impl InnertubeClient {
             let mut payload = serde_json::json!({
                 "continuation": token
             });
-            self.post_innertube("browse", "WEB", "2.20260120.01.00", &mut payload)
+            self.post_innertube("browse", &clients::WEB, &mut payload)
                 .await?
         } else {
             let mut payload = serde_json::json!({
@@ -595,7 +596,7 @@ impl InnertubeClient {
             } else {
                 payload["canonicalBaseUrl"] = serde_json::json!(format!("/post/{post_id_trimmed}"));
             }
-            self.post_innertube("browse", "WEB", "2.20260120.01.00", &mut payload)
+            self.post_innertube("browse", &clients::WEB, &mut payload)
                 .await?
         };
 
@@ -611,7 +612,7 @@ impl InnertubeClient {
                     "continuation": token
                 });
                 let next_res = self
-                    .post_innertube("browse", "WEB", "2.20260120.01.00", &mut next_payload)
+                    .post_innertube("browse", &clients::WEB, &mut next_payload)
                     .await?;
                 comments_res = parse_comments_json(&next_res);
                 if comments_res.comment_count_text.is_none() {

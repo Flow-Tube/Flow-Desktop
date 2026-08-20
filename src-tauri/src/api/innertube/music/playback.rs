@@ -20,10 +20,6 @@ use crate::api::innertube::core::botguard::generate_po_token;
 use crate::errors::{AppError, AppResult};
 use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 
-/// Desktop iOS/Android signed-client signature timestamp (matches the value the
-/// working video path uses for `IOS`).
-const SIGNATURE_TIMESTAMP: i64 = 19550;
-
 impl InnertubeClient {
     /// Resolve a playable, audio-only stream for a music `video_id` by trying
     /// each direct-audio client in turn. Returns the raw upstream URL + the
@@ -43,18 +39,19 @@ impl InnertubeClient {
         let mut last_error: Option<AppError> = None;
 
         for client in clients::DIRECT_AUDIO_CLIENTS {
-            // iOS-family clients get a PO token (sidecar) + signatureTimestamp,
-            // mirroring the video path's IOS fallback. Android/VR need neither.
-            let (sts, pot) = if client.is_ios_family {
+            // Only a client Flow can attest gets a token, and it is bound to the same
+            // visitor data the request carries — a token bound to anything else is
+            // rejected, which is what binding it to the video id used to do here.
+            let pot = if client.use_web_po_tokens {
                 if po_token.is_none() {
-                    po_token = generate_po_token(video_id).await;
+                    let binding = visitor.as_deref().unwrap_or(video_id);
+                    po_token = generate_po_token(binding).await;
                 }
-                (Some(SIGNATURE_TIMESTAMP), po_token.as_deref())
-            } else if client.use_signature_timestamp {
-                (Some(SIGNATURE_TIMESTAMP), None)
+                po_token.as_deref()
             } else {
-                (None, None)
+                None
             };
+            let sts = client.signature_timestamp();
 
             let res = match self
                 .music_player(client, video_id, sts, pot, visitor.as_deref())

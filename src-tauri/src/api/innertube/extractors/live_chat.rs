@@ -2,10 +2,10 @@ use serde_json::Value;
 use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::errors::AppResult;
 use crate::models::live_chat::{LiveChatMessage, LiveChatResponse, LiveChatSegment};
 
-const CLIENT_VERSION: &str = "2.20260120.01.00";
 const DEFAULT_POLL_MS: u64 = 2000;
 const MIN_POLL_MS: u64 = 1000;
 const MAX_POLL_MS: u64 = 6000;
@@ -200,7 +200,7 @@ impl InnertubeClient {
     async fn get_live_chat_seed(&self, video_id: &str) -> AppResult<(Option<String>, bool)> {
         let mut payload = serde_json::json!({ "videoId": video_id });
         let res = self
-            .post_innertube("next", "WEB", CLIENT_VERSION, &mut payload)
+            .post_innertube("next", &clients::WEB, &mut payload)
             .await?;
         Ok((extract_seed_continuation(&res), extract_is_replay(&res)))
     }
@@ -233,12 +233,7 @@ impl InnertubeClient {
 
         let mut payload = serde_json::json!({ "continuation": token });
         let res = self
-            .post_innertube(
-                "live_chat/get_live_chat",
-                "WEB",
-                CLIENT_VERSION,
-                &mut payload,
-            )
+            .post_innertube("live_chat/get_live_chat", &clients::WEB, &mut payload)
             .await?;
         let (messages, next, polling_interval_ms) = parse_live_chat_page(&res);
 

@@ -2,7 +2,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-mod api;
+pub mod api;
 mod bridge;
 #[cfg(target_os = "linux")]
 mod codec_probe;

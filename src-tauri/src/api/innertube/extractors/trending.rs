@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     best_video_thumbnail_url, build_related_content_from_lockup, detect_video_is_live,
     extract_channel_id_from_video_renderer, extract_text_from_value, normalize_youtube_image_url,
@@ -10,7 +11,6 @@ use crate::errors::{AppError, AppResult};
 use crate::models::video::VideoSummary;
 use serde_json::{Value, json};
 
-const WEB_VERSION: &str = "2.20260120.01.00";
 const TRENDING_VIDEOS_PARAMS: &str = "4gIOGgxtb3N0X3BvcHVsYXI%3D";
 const GAMING_CHANNEL_ID: &str = "UCOpNcN46UbXVtpKMrmU4Abg";
 const GAMING_PARAMS: &str = "Egh0cmVuZGluZw%3D%3D";
@@ -87,7 +87,7 @@ impl InnertubeClient {
         payload["params"] = json!(TRENDING_VIDEOS_PARAMS);
 
         let response = self
-            .post_innertube("browse", "WEB", WEB_VERSION, &mut payload)
+            .post_innertube("browse", &clients::WEB, &mut payload)
             .await?;
         let mut videos = Vec::new();
 
@@ -116,7 +116,7 @@ impl InnertubeClient {
         payload["params"] = json!(params);
 
         let response = self
-            .post_innertube("browse", "WEB", WEB_VERSION, &mut payload)
+            .post_innertube("browse", &clients::WEB, &mut payload)
             .await?;
         let mut videos = Vec::new();
 
@@ -134,16 +134,9 @@ impl InnertubeClient {
     }
 
     async fn fetch_charts(&self, chart_type: &str, region: &str) -> AppResult<Vec<VideoSummary>> {
+        let client = &clients::WEB_MUSIC_ANALYTICS;
         let payload = json!({
-            "context": {
-                "client": {
-                    "clientName": "WEB_MUSIC_ANALYTICS",
-                    "clientVersion": "2.0",
-                    "hl": "en",
-                    "gl": region,
-                    "utcOffsetMinutes": 0
-                }
-            },
+            "context": client.context(None, Some(region)),
             "browseId": "FEmusic_analytics_charts_home",
             "query": format!(
                 "perspective=CHART_DETAILS&chart_params_country_code={region}&chart_params_chart_type={chart_type}"
@@ -153,12 +146,9 @@ impl InnertubeClient {
         let response = self
             .client
             .post(CHARTS_ENDPOINT)
-            .header(
-                reqwest::header::USER_AGENT,
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            )
-            .header("X-YouTube-Client-Name", "31")
-            .header("X-YouTube-Client-Version", "2.0")
+            .header(reqwest::header::USER_AGENT, client.user_agent)
+            .header("X-YouTube-Client-Name", client.client_id)
+            .header("X-YouTube-Client-Version", client.version)
             .header("Origin", "https://charts.youtube.com")
             .header("Referer", "https://charts.youtube.com")
             .header("Cookie", "SOCS=CAE=")
@@ -196,17 +186,7 @@ fn sanitize_region(region: &str) -> String {
 }
 
 fn web_payload(region: &str) -> Value {
-    json!({
-        "context": {
-            "client": {
-                "clientName": "WEB",
-                "clientVersion": WEB_VERSION,
-                "hl": "en",
-                "gl": region,
-                "utcOffsetMinutes": 0
-            }
-        }
-    })
+    json!({ "context": clients::WEB.context(None, Some(region)) })
 }
 
 fn collect_videos_from_value(value: &Value, videos: &mut Vec<VideoSummary>) {

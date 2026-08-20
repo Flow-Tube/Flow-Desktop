@@ -1,6 +1,7 @@
 use tauri::State;
 use tracing::info;
 
+use crate::api::innertube::core::clients;
 use crate::errors::ErrorResponse;
 use crate::models::channel::{ChannelDetails, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
@@ -278,13 +279,11 @@ fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
         };
     let is_mp4 = |mime: Option<&str>| mime.map(|m| m.contains("mp4")).unwrap_or(false);
 
-    let audio_tracks: Vec<_> = stream_info
+    let usable_audio: Vec<_> = stream_info
         .audio_tracks
         .iter()
         .filter(|track| {
-            // Only the original (default) audio is offered; carry it in the manifest.
-            track.is_default
-                && !track.local_url.is_empty()
+            !track.local_url.is_empty()
                 && has_segment_ranges(
                     track.init_range_start,
                     track.init_range_end,
@@ -293,6 +292,21 @@ fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String> {
                 )
         })
         .collect();
+
+    // Only the original (default) audio is offered, but never let a missing
+    // default flag mean *no* audio: emitting no manifest drops playback to the
+    // progressive URL, and the clients that omit the flag are the same ones that
+    // serve no muxed format — so the fallback is a video-only stream, silent.
+    let default_audio: Vec<_> = usable_audio
+        .iter()
+        .copied()
+        .filter(|track| track.is_default)
+        .collect();
+    let audio_tracks = if default_audio.is_empty() {
+        usable_audio
+    } else {
+        default_audio
+    };
 
     let mp4_audio_tracks: Vec<_> = audio_tracks
         .iter()
@@ -569,10 +583,13 @@ pub async fn get_stream_info(
 
     let parts: Vec<&str> = stream_info.expires_at.split('|').collect();
     let clean_expires_at = parts[0].to_string();
-    let dynamic_user_agent = parts.get(1).map(|&s| s.to_string()).unwrap_or_else(|| {
-        "com.google.ios.youtube/19.29.1 (iPhone14,5; U; CPU iOS 17_5_1 like Mac OS X; en_US)"
-            .to_string()
-    });
+    // Extraction appends the winning client's User-Agent to `expires_at`; the
+    // fallback is the client that leads the ladder, so a missing suffix still
+    // fetches with an identity the registry knows rather than a stale literal.
+    let dynamic_user_agent = parts
+        .get(1)
+        .map(|&s| s.to_string())
+        .unwrap_or_else(|| clients::VISIONOS.user_agent.to_string());
     let proxy_port = streaming_manager.get_port();
 
     if let Some(manifest_url) = stream_info
@@ -656,7 +673,7 @@ pub async fn get_stream_info(
             caption_token.clone(),
             caption.url.clone(),
             "text/vtt; charset=utf-8".to_string(),
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
+            crate::api::http::BROWSER_USER_AGENT.to_string(),
         );
 
         caption.url = format!("http://127.0.0.1:{}/stream/{}", proxy_port, caption_token);

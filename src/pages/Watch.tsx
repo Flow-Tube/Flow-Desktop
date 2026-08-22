@@ -13,6 +13,7 @@ import {
 } from "../lib/api/youtube";
 import { getSponsorBlockSegments, getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
 import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
+import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { setSetting } from "../lib/api/db";
 import { seekToTime } from "../lib/linkify";
 import { getString } from "../lib/i18n/index";
@@ -55,6 +56,7 @@ export function Watch() {
 
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   const setQueue = usePlayerStore((s) => s.setQueue);
+  const enrichCurrentVideo = usePlayerStore((s) => s.enrichCurrentVideo);
   const playQueueItem = usePlayerStore((s) => s.playQueueItem);
   const dearrowData = usePlayerStore((s) => s.dearrowData);
   const rydData = usePlayerStore((s) => s.rydData);
@@ -101,36 +103,28 @@ export function Watch() {
       return;
     }
 
-    let cancelled = false;
+    // A cold open — a deep link, a reload, a notification — knows the id and
+    // nothing else. Playback needs only the id, so the player is handed a stub
+    // and starts resolving immediately; the title and channel are filled in from
+    // the details request below once it answers. The old order made every cold
+    // open pay for metadata before the first byte.
     setPageError(null);
-    void (async () => {
-      try {
-        const details = await getVideoDetails(videoId);
-        if (cancelled) return;
-        setQueue(
-          [
-            {
-              id: details.id,
-              title: details.title,
-              channelName: details.channelName,
-              thumbnailUrl: details.thumbnailUrl,
-              durationSeconds: details.durationSeconds,
-              channelId: details.channelId,
-            },
-          ],
-          0,
-        );
-      } catch (e) {
-        if (cancelled) return;
-        console.error("Failed to load details on watch page initialization", e);
-        setPageError(getString("watch_error_body"));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    setQueue([{ id: videoId, title: "", channelName: "" }], 0);
   }, [videoId, currentVideo, playQueueItem, setQueue, retryNonce, offlineRecord]);
+
+  // Fills in the stub a cold open started with. Details are fetched once, by the
+  // effect below, so this never costs a request of its own.
+  useEffect(() => {
+    if (!videoId || !videoDetails || videoDetails.id !== videoId) return;
+    if (!currentVideo || currentVideo.id !== videoId || currentVideo.title) return;
+    enrichCurrentVideo(videoId, {
+      title: videoDetails.title,
+      channelName: videoDetails.channelName,
+      thumbnailUrl: videoDetails.thumbnailUrl,
+      durationSeconds: videoDetails.durationSeconds,
+      channelId: videoDetails.channelId,
+    });
+  }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
 
   useEffect(() => {
     if (!videoId) return;
@@ -140,6 +134,11 @@ export function Watch() {
     setChannelDetails(cachedWatchPage?.channelDetails ?? null);
     setVideoDetails(cachedWatchPage?.videoDetails ?? null);
     setRelatedVideos(cachedWatchPage?.relatedVideos ?? []);
+    // Related content is fetched only after playback starts, so hold its
+    // skeleton up meanwhile rather than showing an empty rail.
+    setRelatedLoading(
+      relatedVideosEnabled && !offlineRecord && !cachedWatchPage?.relatedVideos?.length,
+    );
 
     if (offlineRecord) {
       setAutoplayCandidates([]);
@@ -147,41 +146,87 @@ export function Watch() {
       return;
     }
 
+    // Details share the player response playback just resolved, so this is a
+    // cache hit rather than a second client ladder — and chapters, description
+    // and the live flag are all read from it. SponsorBlock stays on this pass
+    // too: a segment starting at 0:00 has to be known before playback reaches it.
     const loadVideoMeta = async () => {
       try {
-        const detailsRes = cachedWatchPage?.videoDetails ?? await getVideoDetails(videoId);
+        const detailsRes = cachedWatchPage?.videoDetails ?? (await getVideoDetails(videoId));
         setVideoDetails(detailsRes);
         setWatchPageCache(videoId, { videoDetails: detailsRes });
-        if (detailsRes.channelId) {
-          if (cachedWatchPage?.channelDetails) {
-            setChannelDetails(cachedWatchPage.channelDetails);
-            return;
-          }
-          try {
-            const channel = await getChannelDetails(detailsRes.channelId);
-            setChannelDetails(channel);
-            setWatchPageCache(videoId, { channelDetails: channel });
-          } catch (err) {
-            console.warn("Failed to load channel details", err);
-          }
-        }
       } catch (err) {
         console.warn("Failed to load extra details", err);
+        // A cold open is still holding a stub with nothing but an id. Drop it so
+        // the page shows its error state rather than a player bound to a video
+        // nothing is known about.
+        const stub = usePlayerStore.getState().currentVideo;
+        if (stub?.id === videoId && !stub.title) {
+          setPageError(getString("watch_error_body"));
+          usePlayerStore.getState().clearQueue();
+        }
       }
     };
 
-    const loadFossMetadata = async () => {
+    const loadSponsorBlock = async () => {
       try {
         await loadSettings();
         const settings = useSettingsStore.getState();
-        const [dearrow, ryd, segments] = await Promise.all([
+        if (!settings.sponsorBlockEnabled) {
+          setSponsorBlockSegments([]);
+          return;
+        }
+        setSponsorBlockSegments(
+          await getSponsorBlockSegments(videoId, settings.serverUrl).catch(() => []),
+        );
+      } catch (e) {
+        console.warn("Failed SponsorBlock loading process", e);
+      }
+    };
+
+    void loadVideoMeta();
+    void loadSponsorBlock();
+  }, [
+    videoId,
+    retryNonce,
+    setSponsorBlockSegments,
+    setAutoplayCandidates,
+    setWatchPageCache,
+    loadSettings,
+    relatedVideosEnabled,
+    offlineRecord,
+  ]);
+
+  // Everything below is page furniture, not playback. Each item costs its own
+  // request, and opening them all while the player is still resolving puts them
+  // in direct competition with the first media buffer — so they wait until
+  // playback has actually started (or the grace period in the hook expires).
+  const playbackSettled = usePlaybackSettled(videoId);
+
+  useEffect(() => {
+    if (!videoId || !playbackSettled) return;
+    const currentCache = usePlayerStore.getState().watchPageCache;
+    const cachedWatchPage = currentCache?.videoId === videoId ? currentCache : null;
+
+    if (offlineRecord) {
+      setAutoplayCandidates([]);
+      setRelatedLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadReactionMetadata = async () => {
+      try {
+        await loadSettings();
+        const settings = useSettingsStore.getState();
+        const [dearrow, ryd] = await Promise.all([
           settings.dearrowEnabled ? getDeArrowOverride(videoId).catch(() => null) : Promise.resolve(null),
           settings.rytdEnabled ? getReturnYouTubeDislike(videoId).catch(() => null) : Promise.resolve(null),
-          settings.sponsorBlockEnabled ? getSponsorBlockSegments(videoId, settings.serverUrl).catch(() => []) : Promise.resolve([]),
         ]);
+        if (cancelled) return;
         setDearrowData(dearrow);
         setRydData(ryd);
-        setSponsorBlockSegments(segments);
       } catch (e) {
         console.warn("Failed FOSS metadata loading process", e);
       }
@@ -204,32 +249,61 @@ export function Watch() {
       setRelatedLoading(true);
       try {
         const related = await getRelatedVideos(videoId);
+        if (cancelled) return;
         setRelatedVideos(related);
         setWatchPageCache(videoId, { relatedVideos: related });
       } catch (err) {
         console.warn("Failed to load related content", err);
+        if (cancelled) return;
         setRelatedVideos([]);
         setAutoplayCandidates([]);
       } finally {
-        setRelatedLoading(false);
+        if (!cancelled) setRelatedLoading(false);
       }
     };
 
-    void loadVideoMeta();
-    void loadFossMetadata();
+    void loadReactionMetadata();
     void loadRelated();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     videoId,
+    playbackSettled,
     retryNonce,
     setDearrowData,
     setRydData,
-    setSponsorBlockSegments,
     setAutoplayCandidates,
     setWatchPageCache,
     loadSettings,
     relatedVideosEnabled,
     offlineRecord,
   ]);
+
+  // Keyed on the channel id rather than run with the block above, because that
+  // id only exists once the details request has answered.
+  const channelIdForDetails = videoDetails?.channelId ?? currentVideo?.channelId ?? null;
+  useEffect(() => {
+    if (!videoId || !playbackSettled || offlineRecord || !channelIdForDetails) return;
+    if (channelDetails) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const channel = await getChannelDetails(channelIdForDetails);
+        if (cancelled) return;
+        setChannelDetails(channel);
+        setWatchPageCache(videoId, { channelDetails: channel });
+      } catch (err) {
+        console.warn("Failed to load channel details", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videoId, playbackSettled, offlineRecord, channelIdForDetails, channelDetails, setWatchPageCache]);
 
   const isHidden = useFeedHiddenFilter();
   // The watch page bypassed the feed block filter, so blocked/suppressed channels resurfaced
@@ -311,7 +385,7 @@ export function Watch() {
         />
       }
       description={<DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />}
-      comments={commentsEnabled && !offlineRecord ? (
+      comments={commentsEnabled && !offlineRecord && playbackSettled ? (
         <Suspense fallback={<div className="h-32" />}>
           <CommentsSection videoId={videoId} />
         </Suspense>

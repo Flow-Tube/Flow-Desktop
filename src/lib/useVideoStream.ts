@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { getStreamInfo } from "./api/youtube";
+import { invalidateStreamInfo, resolveStreamInfo } from "./streamResolution";
 import { classifyPlayerError } from "./playerError";
 import { recordPlayerEvent } from "./playerDiagnostics";
 import { getOfflineStream } from "./api/downloads";
@@ -182,6 +182,9 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const streamInfoRef = useRef<StreamInfo | null>(null);
   const attemptedModesRef = useRef<Set<SourceMode>>(new Set());
   const stallExhaustedCyclesRef = useRef(0);
+  // Resolution is asynchronous and a user can switch videos mid-flight; only the
+  // newest load may write state, so a late answer never overwrites a newer one.
+  const loadTokenRef = useRef(0);
 
   const publishCaptions = useCallback(
     (tracks: CaptionTrack[]) => {
@@ -193,6 +196,9 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
   useEffect(() => {
     if (!currentVideo || currentVideo.id !== videoId) return;
+
+    const loadToken = ++loadTokenRef.current;
+    const isCurrentLoad = () => loadTokenRef.current === loadToken;
 
     const loadStream = async () => {
       setLoadingStream(true);
@@ -210,8 +216,17 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       setSourceMode("unavailable");
       setResumeTime(0);
       try {
+        // The downloads library is a SQLite read and stream resolution is a
+        // network round trip. When the library still has to load, overlap the
+        // two instead of paying them back to back — first frame only ever waits
+        // on the slower of the pair. Once it is loaded the offline check is
+        // synchronous, so a saved video still costs no network at all.
+        let streamRequest: Promise<StreamInfo> | null = null;
         if (!useDownloadsLibraryStore.getState().loaded) {
+          streamRequest = resolveStreamInfo(currentVideo.id);
+          streamRequest.catch(() => {});
           await useDownloadsLibraryStore.getState().ensureLoaded();
+          if (!isCurrentLoad()) return;
         }
 
         // A saved video plays straight from disk — no stream resolution, no
@@ -219,6 +234,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         if (findDownloadedRecord(currentVideo.id, "video")) {
           try {
             const offline = await getOfflineStream(currentVideo.id, "video");
+            if (!isCurrentLoad()) return;
             streamInfoRef.current = null;
             attemptedModesRef.current = new Set(["direct"]);
             setSelectedQualityId("auto");
@@ -227,7 +243,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
             setStreamUrl(offline.url);
             setIsPlaying(true);
             if (shouldRecordWatchHistory()) {
-              await addWatchRecord({
+              void addWatchRecord({
                 videoId: currentVideo.id,
                 title: currentVideo.title,
                 channelName: currentVideo.channelName,
@@ -236,7 +252,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
                 watchDurationSeconds: 0,
                 totalDurationSeconds: currentVideo.durationSeconds ?? 0,
                 isMusic: isMusicVideo(currentVideo),
-              });
+              }).catch((err) => console.warn("Failed to record watch history", err));
             }
             return;
           } catch (offlineError) {
@@ -244,7 +260,8 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
           }
         }
 
-        const info = await getStreamInfo(currentVideo.id);
+        const info = await (streamRequest ?? resolveStreamInfo(currentVideo.id));
+        if (!isCurrentLoad()) return;
         streamInfoRef.current = info;
         attemptedModesRef.current = new Set();
         setStreamVariants(info.variants || []);
@@ -304,8 +321,9 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
         setIsPlaying(true);
 
+        // The history write is a SQLite round trip nothing on screen waits for.
         if (shouldRecordWatchHistory()) {
-          await addWatchRecord({
+          void addWatchRecord({
             videoId: currentVideo.id,
             title: currentVideo.title,
             channelName: currentVideo.channelName,
@@ -316,9 +334,10 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
             ),
             totalDurationSeconds: currentVideo.durationSeconds ?? 0,
             isMusic: isMusicVideo(currentVideo),
-          });
+          }).catch((err) => console.warn("Failed to record watch history", err));
         }
       } catch (err) {
+        if (!isCurrentLoad()) return;
         setStreamUrl(null);
         setStreamVariants([]);
         publishCaptions([]);
@@ -333,7 +352,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         recordPlayerEvent(`video resolve failed: ${info.kind} (${info.rawMessage})`);
         console.error("Failed to load stream URL", err);
       } finally {
-        setLoadingStream(false);
+        if (isCurrentLoad()) setLoadingStream(false);
       }
     };
 
@@ -438,7 +457,10 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     setStreamErrorKind(null);
     stallExhaustedCyclesRef.current = 0;
     recordPlayerEvent(`video hard retry: ${currentVideo.id}`);
-    void getStreamInfo(currentVideo.id)
+    // A hard retry exists because the resolved URLs stopped working, so it has
+    // to walk a fresh client ladder rather than be handed the same answer again.
+    invalidateStreamInfo(currentVideo.id);
+    void resolveStreamInfo(currentVideo.id, { refresh: true })
       .then((info) => {
         streamInfoRef.current = info;
         attemptedModesRef.current = new Set();

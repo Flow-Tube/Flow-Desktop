@@ -7,6 +7,7 @@ import {
   saveLocalWatchProgress,
   clearLocalWatchProgress,
 } from "../../lib/useVideoStream";
+import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { logInteraction } from "../../lib/api/recommendation";
 import { addWatchRecord } from "../../lib/api/db";
 import { isMusicVideo } from "../../lib/utils";
@@ -19,6 +20,10 @@ import { copyPlayerReport } from "../../lib/playerDiagnostics";
 import { openExternal } from "../../lib/openExternal";
 import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
+
+/** How close to the end the next video is resolved. Long enough to cover a slow
+ * client ladder, short enough that a video abandoned early never triggers it. */
+const NEXT_VIDEO_PREFETCH_LEAD_SECONDS = 20;
 
 /**
  * Owns stream resolution (via useVideoStream) and all playback feedback —
@@ -42,6 +47,28 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
 
   const lastProgressPersistedAtRef = useRef(0);
   const latestProgressRef = useRef<{ time: number; duration: number } | null>(null);
+  const prefetchedNextForRef = useRef<string | null>(null);
+
+  /** Warm whatever plays after this video, once the end is close enough that it
+   * is likely to be reached. An advance then starts from a resolved stream
+   * rather than opening one after the current video has already stopped. */
+  const prefetchNextVideo = useCallback(
+    (time: number, mediaDuration: number) => {
+      if (!currentVideo || !autoplayEnabled || repeatMode === "one") return;
+      if (prefetchedNextForRef.current === currentVideo.id) return;
+      if (!(mediaDuration > 0) || mediaDuration - time > NEXT_VIDEO_PREFETCH_LEAD_SECONDS) return;
+
+      const { queue, currentIndex, autoplayCandidates } = usePlayerStore.getState();
+      const upcoming = queue[currentIndex + 1] ?? autoplayCandidates[0] ?? null;
+      prefetchedNextForRef.current = currentVideo.id;
+      if (upcoming) prefetchStreamInfo(upcoming.id);
+    },
+    [autoplayEnabled, currentVideo, repeatMode],
+  );
+
+  useEffect(() => {
+    prefetchedNextForRef.current = null;
+  }, [currentVideo?.id]);
 
   const resolvedChannelId =
     videoDetails?.channelId || currentVideo?.channelId || currentVideo?.id || "";
@@ -51,6 +78,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       const nextDuration = mediaDuration || currentVideo?.durationSeconds || 1;
       setCurrentTime(time);
       setDuration(nextDuration);
+      prefetchNextVideo(time, nextDuration);
 
       if (!currentVideo) return;
       latestProgressRef.current = { time, duration: nextDuration };
@@ -94,7 +122,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
         });
       }
     },
-    [currentVideo, resolvedChannelId, setCurrentTime, setDuration, videoDetails],
+    [currentVideo, prefetchNextVideo, resolvedChannelId, setCurrentTime, setDuration, videoDetails],
   );
 
   useEffect(() => {

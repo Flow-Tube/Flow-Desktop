@@ -1,14 +1,18 @@
 import { create } from "zustand";
 
-import type { SongItem } from "../types/music";
+import type { MusicStreamInfo, SongItem } from "../types/music";
 import {
-  getMusicStream,
   getMusicQueueContinuation,
   getMusicWatchQueue,
   rankMusicCandidates,
   type MusicAudioQuality,
 } from "../lib/api/music";
 import { getOfflineStream } from "../lib/api/downloads";
+import {
+  invalidateMusicStream,
+  prefetchMusicStream,
+  resolveMusicStream,
+} from "../lib/musicStreamResolution";
 import { seedOfflineLyrics } from "../lib/lyrics/offline";
 import { findDownloadedRecord } from "../lib/useDownloads";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
@@ -220,6 +224,7 @@ interface MusicPlayerState {
   // --- internal: driven by the root <audio> controller (element → store) ---
   _ensureRadio: () => Promise<void>;
   _loadIndex: (index: number) => Promise<void>;
+  _prefetchUpcoming: () => void;
   _syncTime: (progress: number, duration: number) => void;
   _reflectPlaying: (isPlaying: boolean) => void;
   _setBuffering: (isBuffering: boolean) => void;
@@ -350,8 +355,17 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     // Prefetch the radio station ahead of time so the queue never dead-ends.
     void get()._ensureRadio();
 
+    const audioQuality = getMusicAudioQualitySetting();
+
     try {
+      // The downloads library is a SQLite read and resolution is a network round
+      // trip; when the library still has to load, overlap the two rather than
+      // paying them in sequence. Once loaded the offline check is synchronous,
+      // so a saved track still needs no network.
+      let streamRequest: Promise<MusicStreamInfo> | null = null;
       if (!useDownloadsLibraryStore.getState().loaded) {
+        streamRequest = resolveMusicStream(videoId, audioQuality);
+        streamRequest.catch(() => {});
         await useDownloadsLibraryStore.getState().ensureLoaded();
         if (get().loadingStreamId !== videoId) return;
       }
@@ -373,19 +387,21 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
           musicAudioEngine.setLoudness(null, get().normalizationEnabled);
           await musicAudioEngine.load(offline.url);
           await musicAudioEngine.play();
+          get()._prefetchUpcoming();
           return;
         } catch (offlineError) {
           console.warn("Offline track unavailable, falling back to stream", offlineError);
         }
       }
 
-      const info = await getMusicStream(videoId, getMusicAudioQualitySetting());
+      const info = await (streamRequest ?? resolveMusicStream(videoId, audioQuality));
       if (get().loadingStreamId !== videoId) return;
 
       set({ loudnessDb: info.loudnessDb, loadingStreamId: null });
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
       await musicAudioEngine.load(info.audioUrl);
       await musicAudioEngine.play();
+      get()._prefetchUpcoming();
     } catch (e) {
       if (get().loadingStreamId !== videoId) return;
       const normalized = normalizeBackendError(e);
@@ -438,9 +454,37 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     });
   },
 
+  // Which track plays next depends on shuffle and repeat, so ask the same
+  // question the transport does rather than assuming the following index.
+  _prefetchUpcoming: () => {
+    const { queue, currentIndex, isShuffle, repeatMode } = get();
+    if (queue.length === 0 || currentIndex < 0) return;
+    // Shuffle picks its next track at random on advance, so there is nothing to
+    // warm; repeat-one replays what is already loaded.
+    if (isShuffle || repeatMode === "one") return;
+
+    const nextIndex = currentIndex + 1;
+    const upcoming =
+      nextIndex < queue.length
+        ? queue[nextIndex]
+        : repeatMode === "all"
+          ? queue[0]
+          : null;
+    if (!upcoming) return;
+
+    const upcomingId = videoIdOf(upcoming);
+    // A downloaded track plays from disk; resolving it would be a wasted request.
+    if (findDownloadedRecord(upcomingId, "audio")) return;
+    prefetchMusicStream(upcomingId, getMusicAudioQualitySetting());
+  },
+
   retryCurrentTrack: () => {
-    const { currentIndex } = get();
+    const { currentIndex, queue } = get();
     if (currentIndex < 0) return;
+    // The retry exists because the resolved URL stopped working, so it must not
+    // be handed the same cached answer again.
+    const track = queue[currentIndex];
+    if (track) invalidateMusicStream(videoIdOf(track));
     set({ streamError: null, streamErrorKind: null });
     recordPlayerEvent(`music retry: index ${currentIndex}`);
     void get()._loadIndex(currentIndex);
@@ -675,6 +719,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   _onPlaybackError: () => {
     if (get().loadingStreamId !== null) return;
     recordPlayerEvent("music playback error (media element)");
+    // The element rejected the URL it was given, so drop it rather than let any
+    // later attempt be served the same dead one from cache.
+    const track = get().currentTrack;
+    if (track) invalidateMusicStream(videoIdOf(track));
     set({ isPlaying: false, streamError: PLAYBACK_ERROR_FALLBACK, streamErrorKind: "streaming" });
   },
 }));

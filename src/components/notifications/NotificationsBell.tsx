@@ -10,6 +10,7 @@ import {
   type NotificationRecord,
 } from "../../lib/api/notifications";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { getString } from "../../lib/i18n/index";
 
 function startOfDay(timestamp: number): number {
@@ -157,7 +158,10 @@ export function NotificationsBell() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     let active = true;
-    void onNotificationActivated((videoId) => navigate(`/watch/${videoId}`)).then((fn) => {
+    void onNotificationActivated((videoId) => {
+      prefetchStreamInfo(videoId);
+      navigate(`/watch/${videoId}`);
+    }).then((fn) => {
       if (active) unlisten = fn;
       else fn();
     });
@@ -186,6 +190,7 @@ export function NotificationsBell() {
   const handleOpenVideo = useCallback(
     (videoId: string) => {
       closePanel();
+      prefetchStreamInfo(videoId);
       navigate(`/watch/${videoId}`);
     },
     [closePanel, navigate],

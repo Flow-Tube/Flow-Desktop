@@ -546,13 +546,14 @@ pub async fn get_related_videos(
 #[tracing::instrument(skip_all, fields(video_id = %video_id))]
 pub async fn get_stream_info(
     video_id: String,
+    refresh: Option<bool>,
     youtube_service: State<'_, YoutubeService>,
     streaming_manager: State<'_, StreamingManager>,
 ) -> Result<StreamInfo, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
     let mut stream_info = youtube_service
-        .get_stream_info(&video_id)
+        .get_stream_info(&video_id, refresh.unwrap_or(false))
         .await
         .map_err(ErrorResponse::from)?;
 

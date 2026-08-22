@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { VideoSummary } from "../types/video";
 
-vi.mock("../lib/api/youtube", () => ({
-  getMusicLyrics: vi.fn().mockResolvedValue(null),
-  getMusicRelated: vi.fn().mockResolvedValue([]),
+vi.mock("../lib/streamResolution", () => ({
+  prefetchStreamInfo: vi.fn(),
 }));
 
 import { usePlayerStore } from "./usePlayerStore";

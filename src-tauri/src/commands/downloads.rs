@@ -44,7 +44,7 @@ pub async fn get_download_formats(
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
     let stream_info = youtube_service
-        .get_stream_info(&video_id)
+        .get_stream_info(&video_id, false)
         .await
         .map_err(ErrorResponse::from)?;
     let dynamic_user_agent = stream_info

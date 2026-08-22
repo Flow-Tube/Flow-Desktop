@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useShortsFeed } from "../../lib/useShortsFeed";
+import { prefetchShortStreams } from "../../lib/useShortStream";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { ShortPlayer } from "./ShortPlayer";
@@ -95,10 +96,25 @@ export function ShortsFeed() {
     setPanelState("none");
   }, [activeIndex]);
 
+  // Resolve the Shorts a swipe is about to reach, ahead of the pager mounting a
+  // player for them. Forward first — that is where a swipe almost always goes —
+  // and one back so returning is instant too.
+  useEffect(() => {
+    if (items.length === 0) return;
+    prefetchShortStreams([
+      items[activeIndex + 1]?.id,
+      items[activeIndex + 2]?.id,
+      items[activeIndex - 1]?.id,
+    ]);
+  }, [activeIndex, items]);
+
   useEffect(() => {
     syncedRouteVideoIdRef.current = null;
     setActiveIndex(0);
     slideRefs.current[0]?.scrollIntoView({ behavior: "instant", block: "start" });
+    // Start on the Short that was opened, not on whichever request the feed
+    // source happens to need first — playback is not gated on the queue loading.
+    prefetchShortStreams([videoId]);
   }, [videoId]);
 
   useEffect(() => {

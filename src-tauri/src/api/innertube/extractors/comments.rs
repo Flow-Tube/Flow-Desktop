@@ -5,7 +5,8 @@ use tracing::debug;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
-    extract_text_from_value, parse_mixed_number_word_to_long, thumbnail_url_from_array,
+    extract_text_from_value, normalize_youtube_image_url, parse_mixed_number_word_to_long,
+    thumbnail_url_from_array,
 };
 use crate::errors::{AppError, AppResult};
 use crate::models::comment::{Comment, CommentsResponse};
@@ -260,9 +261,8 @@ fn collect_comments_from_value(
                     .unwrap_or("Anonymous")
                     .to_string();
 
-                let author_thumbnail = renderer["authorThumbnail"]["thumbnails"][0]["url"]
-                    .as_str()
-                    .map(|s| s.to_string());
+                let author_thumbnail =
+                    thumbnail_url_from_array(&renderer["authorThumbnail"]["thumbnails"]);
 
                 let mut text = String::new();
                 if let Some(runs) = renderer["contentText"]["runs"].as_array() {
@@ -331,9 +331,8 @@ fn collect_comments_from_value(
                 .unwrap_or("Anonymous")
                 .to_string();
 
-            let author_thumbnail = renderer["authorThumbnail"]["thumbnails"][0]["url"]
-                .as_str()
-                .map(|s| s.to_string());
+            let author_thumbnail =
+                thumbnail_url_from_array(&renderer["authorThumbnail"]["thumbnails"]);
 
             let mut text = String::new();
             if let Some(runs) = renderer["contentText"]["runs"].as_array() {
@@ -455,7 +454,13 @@ fn build_comment_from_view_model(
     }
 
     let text = extract_text_from_value(&properties["content"]).unwrap_or_default();
-    let author_thumbnail = thumbnail_url_from_array(&entity_payload["avatar"]["image"]["sources"]);
+    // The avatar moved: current responses carry it as a plain string on the
+    // author and drop the `avatar` object entirely. Both shapes are read so a
+    // response of either vintage still renders a picture.
+    let author_thumbnail = author["avatarThumbnailUrl"]
+        .as_str()
+        .map(normalize_youtube_image_url)
+        .or_else(|| thumbnail_url_from_array(&entity_payload["avatar"]["image"]["sources"]));
 
     let reply_count = toolbar["replyCount"]
         .as_str()
@@ -622,5 +627,87 @@ impl InnertubeClient {
         }
 
         Ok(comments_res)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_comment_from_view_model, parse_comments_json};
+    use std::collections::HashMap;
+
+    fn view_model() -> serde_json::Value {
+        serde_json::json!({ "commentKey": "key-1", "toolbarStateKey": "toolbar-1" })
+    }
+
+    fn payloads(entity: serde_json::Value) -> HashMap<String, serde_json::Value> {
+        HashMap::from([(
+            "key-1".to_string(),
+            serde_json::json!({ "commentEntityPayload": entity }),
+        )])
+    }
+
+    #[test]
+    fn reads_the_avatar_from_the_author_string() {
+        let comment = build_comment_from_view_model(
+            &view_model(),
+            None,
+            &payloads(serde_json::json!({
+                "properties": { "commentId": "c1", "content": { "content": "hi" } },
+                "author": {
+                    "displayName": "Someone",
+                    "channelId": "UC123",
+                    "avatarThumbnailUrl": "https://yt3.ggpht.com/abc=s88-c-k-c0x00ffffff-no-rj"
+                }
+            })),
+        )
+        .expect("comment");
+
+        assert_eq!(
+            comment.author_thumbnail.as_deref(),
+            Some("https://yt3.ggpht.com/abc=s512")
+        );
+    }
+
+    #[test]
+    fn still_reads_the_avatar_from_the_older_sources_array() {
+        let comment = build_comment_from_view_model(
+            &view_model(),
+            None,
+            &payloads(serde_json::json!({
+                "properties": { "commentId": "c1", "content": { "content": "hi" } },
+                "author": { "displayName": "Someone" },
+                "avatar": { "image": { "sources": [{ "url": "https://yt3.ggpht.com/legacy=s48" }] } }
+            })),
+        )
+        .expect("comment");
+
+        assert_eq!(
+            comment.author_thumbnail.as_deref(),
+            Some("https://yt3.ggpht.com/legacy=s512")
+        );
+    }
+
+    #[test]
+    fn legacy_comment_renderer_takes_the_largest_thumbnail() {
+        let response = serde_json::json!({
+            "contents": { "twoColumnWatchNextResults": { "results": { "results": { "contents": [
+                { "commentThreadRenderer": { "comment": { "commentRenderer": {
+                    "commentId": "c2",
+                    "authorText": { "simpleText": "Someone" },
+                    "contentText": { "runs": [{ "text": "hi" }] },
+                    "authorThumbnail": { "thumbnails": [
+                        { "url": "https://yt3.ggpht.com/small=s48" },
+                        { "url": "https://yt3.ggpht.com/large=s176" }
+                    ]}
+                }}}}
+            ]}}}}
+        });
+
+        let parsed = parse_comments_json(&response);
+        assert_eq!(parsed.comments.len(), 1);
+        assert_eq!(
+            parsed.comments[0].author_thumbnail.as_deref(),
+            Some("https://yt3.ggpht.com/large=s512")
+        );
     }
 }

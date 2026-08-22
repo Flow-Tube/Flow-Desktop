@@ -2180,6 +2180,10 @@ export const Player: React.FC<PlayerProps> = ({
         onLoadedMetadata={handleLoadedMetadata}
         onProgress={updateBuffered}
         onTimeUpdate={handleTimeUpdate}
+        onPlaying={() => {
+          const activeVideoId = usePlayerStore.getState().currentVideo?.id;
+          if (activeVideoId) usePlayerStore.getState().markPlaybackStarted(activeVideoId);
+        }}
         onPlay={() => {
           desiredPlayingRef.current = true;
           setHasStartedPlayback(true);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getStreamInfo } from "./api/youtube";
+import { invalidateStreamInfo, prefetchStreamInfo, resolveStreamInfo } from "./streamResolution";
 import { codecRank } from "./codecPreference";
 import { SETTINGS } from "./settings/schema";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
@@ -13,12 +13,6 @@ interface ShortPlaybackSource {
   videoUrl: string | null;
   audioUrl: string | null;
 }
-
-const streamCache = new Map<string, ShortPlaybackSource>();
-const inFlightStreams = new Map<string, Promise<ShortPlaybackSource>>();
-const streamInfoCache = new Map<string, StreamInfo>();
-const inFlightStreamInfo = new Map<string, Promise<StreamInfo>>();
-let resolveChain: Promise<unknown> = Promise.resolve();
 
 function isMp4(mime?: string | null): boolean {
   return !!mime && mime.toLowerCase().includes("mp4");
@@ -192,48 +186,19 @@ export function selectShortPlaybackSource(info: StreamInfo, qualityIdOrLabel = "
 }
 
 function fetchShortStreamInfo(videoId: string): Promise<StreamInfo> {
-  const cached = streamInfoCache.get(videoId);
-  if (cached) return Promise.resolve(cached);
-
-  const existing = inFlightStreamInfo.get(videoId);
-  if (existing) return existing;
-
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("stream resolve timed out")), RESOLVE_TIMEOUT_MS),
-  );
-
-  const request = Promise.race([getStreamInfo(videoId), timeout]).then((info) => {
-    streamInfoCache.set(videoId, info);
-    return info;
-  });
-  const tracked = request.finally(() => inFlightStreamInfo.delete(videoId));
-  inFlightStreamInfo.set(videoId, tracked);
-  return tracked;
+  return resolveStreamInfo(videoId, { timeoutMs: RESOLVE_TIMEOUT_MS });
 }
 
-export function resolveShortStream(videoId: string): Promise<ShortPlaybackSource> {
-  const cached = streamCache.get(videoId);
-  if (cached) return Promise.resolve(cached);
-
-  const existing = inFlightStreams.get(videoId);
-  if (existing) return existing;
-
-  const request = resolveChain.then(async () => {
-    const cached = streamCache.get(videoId);
-    if (cached) return cached;
-    const info = await fetchShortStreamInfo(videoId);
-    const source = selectShortPlaybackSource(info);
-    streamCache.set(videoId, source);
-    return source;
-  });
-  resolveChain = request.then(
-    () => {},
-    () => {},
-  );
-
-  const tracked = request.finally(() => inFlightStreams.delete(videoId));
-  inFlightStreams.set(videoId, tracked);
-  return tracked;
+/**
+ * Warms the streams for the Shorts a swipe is about to reach.
+ *
+ * The pager only mounts a player once a Short is close enough to the active
+ * index, so without this every swipe pays a full resolve before the first frame.
+ * Warming is bounded and single-flighted in [prefetchStreamInfo], so the active
+ * Short's own resolve is never queued behind a neighbour's.
+ */
+export function prefetchShortStreams(videoIds: readonly (string | null | undefined)[]) {
+  for (const videoId of videoIds) prefetchStreamInfo(videoId);
 }
 
 function visibleShortQualities(variants: StreamVariant[]): StreamVariant[] {
@@ -294,10 +259,7 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
       setVariants([]);
       setCaptions([]);
       streamInfoRef.current = null;
-      streamCache.delete(videoId);
-      streamInfoCache.delete(videoId);
-      inFlightStreams.delete(videoId);
-      inFlightStreamInfo.delete(videoId);
+      invalidateStreamInfo(videoId);
     }
     if (!shouldLoad) return;
     let cancelled = false;
@@ -306,9 +268,7 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
     const preferredQualityId = preferredShortsQuality === "Auto" ? "Auto" : preferredShortsQuality;
     setSelectedQualityId(preferredQualityId === "Auto" ? "auto" : preferredQualityId);
 
-    resolveChain = resolveChain.then(() => undefined, () => undefined).then(() => fetchShortStreamInfo(videoId));
-    const request = resolveChain as Promise<StreamInfo>;
-    request
+    fetchShortStreamInfo(videoId)
       .then((info) => {
         if (cancelled) return;
         applyStreamInfo(info, preferredQualityId);

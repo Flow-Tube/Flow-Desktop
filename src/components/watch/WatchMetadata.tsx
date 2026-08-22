@@ -36,7 +36,12 @@ export function WatchMetadata({
   const channelId = videoData?.channelId || currentVideo.channelId || channelDetails?.id || "";
   const channelName =
     videoData?.channelName || currentVideo.channelName || channelDetails?.name || getString("watch_unknown_channel");
-  const avatarUrl = useProxiedImageUrl(upgradeAvatarUrl(channelDetails?.avatarUrl || null)) || null;
+  // The channel request now runs after playback has started, so prefer whatever
+  // avatar the feed card already carried until it answers.
+  const avatarUrl =
+    useProxiedImageUrl(
+      upgradeAvatarUrl(channelDetails?.avatarUrl || currentVideo.channelAvatarUrl || null),
+    ) || null;
   const subscriberText = channelDetails?.subscriberCountText || "";
 
   const dearrowTitle = dearrowEnabled ? dearrowData?.title ?? null : null;
@@ -97,8 +102,12 @@ export function WatchMetadata({
               {currentVideo.title}
             </span>
           </h1>
-        ) : (
+        ) : primaryTitle ? (
           <h1 className="text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
+        ) : (
+          // A cold open starts playback from the video id alone; the title lands
+          // a moment later. A placeholder bar reads better than an empty heading.
+          <div className="h-7 w-3/5 animate-pulse rounded-md bg-chrome-neutral-800" aria-hidden />
         )}
         {showBadge && (
           <span title={getString("watch_dearrow_badge_hint")} className="mt-1 shrink-0 text-primary/70">

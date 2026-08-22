@@ -38,8 +38,8 @@ impl YoutubeService {
         self.extractor.get_related_videos(video_id).await
     }
 
-    pub async fn get_stream_info(&self, video_id: &str) -> AppResult<StreamInfo> {
-        self.extractor.get_stream_info(video_id).await
+    pub async fn get_stream_info(&self, video_id: &str, refresh: bool) -> AppResult<StreamInfo> {
+        self.extractor.get_stream_info(video_id, refresh).await
     }
 
     pub async fn get_channel_details(&self, channel_id: &str) -> AppResult<ChannelDetails> {

@@ -7,6 +7,7 @@ import Logo from '../common/Logo';
 import { IconButton } from '../ui/IconButton';
 import { getSearchSuggestions, resolveChannelId } from '../../lib/api/youtube';
 import { parseYoutubeUrl } from '../../lib/youtubeUrl';
+import { prefetchStreamInfo } from '../../lib/streamResolution';
 import { SETTINGS } from '../../lib/settings/schema';
 import { getString } from '../../lib/i18n/index';
 import { toggleDeepFlow } from '../../lib/deepFlow';
@@ -83,6 +84,7 @@ export function Topbar() {
     if (parsed) {
       switch (parsed.kind) {
         case 'video':
+          prefetchStreamInfo(parsed.videoId);
           navigate(`/watch/${parsed.videoId}`);
           return;
         case 'playlist':

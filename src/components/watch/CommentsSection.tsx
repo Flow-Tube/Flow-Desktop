@@ -5,7 +5,17 @@ import { useVideoComments } from "../../lib/useVideoComments";
 import { linkifyText } from "../../lib/linkify";
 import { formatCount } from "../../lib/utils";
 import { getString } from "../../lib/i18n/index";
+import { upgradeAvatarUrl } from "../../lib/thumbnails";
+import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import type { CommentsSectionProps } from "./types";
+
+/** Comment avatars arrive from YouTube at 88px; every other avatar in the app is
+ * upgraded and proxied the same way, so they match instead of looking soft. */
+function CommentAvatar({ src, author }: { src: string | null | undefined; author: string | null | undefined }) {
+  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src, 128));
+  if (!imageSrc) return <>{author?.charAt(0)?.toUpperCase() || "?"}</>;
+  return <img src={imageSrc} className="h-full w-full object-cover" alt="" loading="lazy" />;
+}
 
 function CommentText({ text, className = "text-sm mt-1 text-chrome-neutral-200 whitespace-pre-wrap" }: { text: string; className?: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,11 +73,7 @@ export function CommentsSection({
                   }`}
                   onClick={() => c.authorChannelId && navigate(`/channel/${c.authorChannelId}`)}
                 >
-                  {c.authorThumbnail ? (
-                    <img src={c.authorThumbnail} className="h-full w-full object-cover" alt="" />
-                  ) : (
-                    c.author?.charAt(0)?.toUpperCase() || "?"
-                  )}
+                  <CommentAvatar src={c.authorThumbnail} author={c.author} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2 text-sm font-bold text-chrome-neutral-100">
@@ -109,11 +115,7 @@ export function CommentsSection({
                             }`}
                             onClick={() => reply.authorChannelId && navigate(`/channel/${reply.authorChannelId}`)}
                           >
-                            {reply.authorThumbnail ? (
-                              <img src={reply.authorThumbnail} className="h-full w-full object-cover" alt="" />
-                            ) : (
-                              reply.author?.charAt(0)?.toUpperCase() || "?"
-                            )}
+                            <CommentAvatar src={reply.authorThumbnail} author={reply.author} />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline gap-2 font-bold text-chrome-neutral-100">

@@ -17,6 +17,7 @@ import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import { useUiStore } from "../../store/useUiStore";
 import { SETTINGS } from "../../lib/settings/schema";
 import { buildShortQueue, shortSummaryToItem } from "../../lib/shortsQueue";
+import { prefetchStreamInfo } from "../../lib/streamResolution";
 import {
   isShortSaved,
   removeShortFromLibrary,
@@ -72,6 +73,9 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
   }, [short.id]);
 
   const playShort = () => {
+    // Resolution starts on the click rather than after the route has changed and
+    // the player has mounted; the surface that plays it joins this request.
+    prefetchStreamInfo(short.id);
     if (disableShortsPlayer) {
       navigate(`/watch/${short.id}`);
       return;

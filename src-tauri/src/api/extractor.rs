@@ -20,7 +20,9 @@ pub trait YoutubeExtractor: Send + Sync {
 
     async fn get_related_videos(&self, video_id: &str) -> AppResult<Vec<RelatedContentItem>>;
 
-    async fn get_stream_info(&self, video_id: &str) -> AppResult<StreamInfo>;
+    /// `refresh` forces a fresh `player` walk, bypassing the response reused
+    /// across the other calls one video open makes.
+    async fn get_stream_info(&self, video_id: &str, refresh: bool) -> AppResult<StreamInfo>;
 
     async fn get_channel_details(&self, channel_id: &str) -> AppResult<ChannelDetails>;
 

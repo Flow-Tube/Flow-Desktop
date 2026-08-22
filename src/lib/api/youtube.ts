@@ -127,7 +127,7 @@ export async function getRelatedVideos(videoId: string): Promise<RelatedContentI
   return invokeBackend<RelatedContentItem[]>("get_related_videos", { videoId });
 }
 
-export async function getStreamInfo(videoId: string): Promise<StreamInfo> {
+export async function getStreamInfo(videoId: string, refresh = false): Promise<StreamInfo> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning public fallback stream link.");
     return {
@@ -169,7 +169,7 @@ export async function getStreamInfo(videoId: string): Promise<StreamInfo> {
       dashManifestUrl: null,
     };
   }
-  return invokeBackend<StreamInfo>("get_stream_info", { videoId });
+  return invokeBackend<StreamInfo>("get_stream_info", { videoId, refresh });
 }
 
 export interface SabrDebugState {

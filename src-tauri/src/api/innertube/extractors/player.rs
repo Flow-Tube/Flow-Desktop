@@ -15,11 +15,26 @@ use crate::streaming::sabr::selector::{CodecSupport, SabrFormat, select_formats}
 use crate::streaming::sabr::{ClientProfile, SabrSessionDescriptor};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 /// How long any single client gets before the ladder moves on. A stuck client
 /// must not hold up first frame when the next one down would have answered.
 const PER_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(6000);
+
+/// How long a resolved `player` response stays reusable.
+///
+/// Opening one video asks for the same response more than once: playback
+/// resolves it, the metadata around the player asks again, and the prefetch
+/// fired on click makes a third. The URLs it carries stay valid for hours, so a
+/// window this short only ever collapses the requests belonging to a single
+/// open — it is not a content cache.
+const PLAYER_RESPONSE_TTL: Duration = Duration::from_secs(120);
+
+/// Cap on retained responses. A player response is a large JSON document and
+/// nothing beyond the few videos currently in flight is ever asked for again.
+const PLAYER_RESPONSE_CACHE_CAPACITY: usize = 12;
 
 /// Client ladder for playback, best first.
 ///
@@ -55,6 +70,66 @@ struct PlayerAttempt {
     response: Value,
     client: &'static clients::YouTubeClient,
     po_token: Option<String>,
+}
+
+struct CachedPlayerAttempt {
+    response: Value,
+    client: &'static clients::YouTubeClient,
+    po_token: Option<String>,
+    resolved_at: Instant,
+}
+
+/// Successful ladder walks, keyed by video id. Only an `OK` response is stored,
+/// so a restricted or unplayable video always walks the ladder again and keeps
+/// reporting its own `AppError` variant rather than a cached generic failure.
+fn player_response_cache() -> &'static Mutex<HashMap<String, CachedPlayerAttempt>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, CachedPlayerAttempt>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn cached_player_attempt(video_id: &str) -> Option<PlayerAttempt> {
+    let mut cache = player_response_cache().lock().ok()?;
+    let entry = cache.get(video_id)?;
+    if entry.resolved_at.elapsed() >= PLAYER_RESPONSE_TTL {
+        cache.remove(video_id);
+        return None;
+    }
+    Some(PlayerAttempt {
+        response: entry.response.clone(),
+        client: entry.client,
+        po_token: entry.po_token.clone(),
+    })
+}
+
+fn store_player_attempt(video_id: &str, attempt: &PlayerAttempt) {
+    let Ok(mut cache) = player_response_cache().lock() else {
+        return;
+    };
+    cache.retain(|_, entry| entry.resolved_at.elapsed() < PLAYER_RESPONSE_TTL);
+    if cache.len() >= PLAYER_RESPONSE_CACHE_CAPACITY {
+        if let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, entry)| entry.resolved_at)
+            .map(|(key, _)| key.clone())
+        {
+            cache.remove(&oldest);
+        }
+    }
+    cache.insert(
+        video_id.to_string(),
+        CachedPlayerAttempt {
+            response: attempt.response.clone(),
+            client: attempt.client,
+            po_token: attempt.po_token.clone(),
+            resolved_at: Instant::now(),
+        },
+    );
+}
+
+fn invalidate_player_response(video_id: &str) {
+    if let Ok(mut cache) = player_response_cache().lock() {
+        cache.remove(video_id);
+    }
 }
 
 fn parse_timestamp(s: &str) -> Option<u64> {
@@ -1235,6 +1310,40 @@ fn build_sabr_metadata(
 }
 
 impl InnertubeClient {
+    /// The playback ladder walk every caller for a given video shares.
+    ///
+    /// Playback and the metadata around it need the same `player` response, and
+    /// they ask for it within moments of each other. Going through here means
+    /// the second ask is answered from memory instead of paying a second walk
+    /// that would compete with the first buffer for the same connection pool.
+    async fn resolve_player_attempt(
+        &self,
+        video_id: &str,
+        visitor_data: Option<&str>,
+        deferred_restriction: &mut Option<AppError>,
+        refresh: bool,
+    ) -> Option<PlayerAttempt> {
+        if refresh {
+            invalidate_player_response(video_id);
+        } else if let Some(cached) = cached_player_attempt(video_id) {
+            debug!(video_id = %video_id, client = cached.client.name, "Reusing in-flight player response");
+            return Some(cached);
+        }
+
+        let attempt = self
+            .try_player_ladder(
+                video_id,
+                PLAYER_CLIENT_LADDER,
+                visitor_data,
+                deferred_restriction,
+            )
+            .await;
+        if let Some(attempt) = attempt.as_ref() {
+            store_player_attempt(video_id, attempt);
+        }
+        attempt
+    }
+
     /// Walk `ladder` in order, returning the first client whose player response is
     /// playable.
     ///
@@ -1381,11 +1490,11 @@ impl InnertubeClient {
 
         let mut deferred_restriction: Option<AppError> = None;
         let attempt = self
-            .try_player_ladder(
+            .resolve_player_attempt(
                 video_id_trimmed,
-                PLAYER_CLIENT_LADDER,
                 visitor_data.as_deref(),
                 &mut deferred_restriction,
+                false,
             )
             .await;
 
@@ -1605,7 +1714,7 @@ impl InnertubeClient {
         Ok(dedupe_related_content_items(related))
     }
 
-    pub async fn get_stream_info(&self, video_id: &str) -> AppResult<StreamInfo> {
+    pub async fn get_stream_info(&self, video_id: &str, refresh: bool) -> AppResult<StreamInfo> {
         let video_id_trimmed = video_id.trim();
         if video_id_trimmed.is_empty() {
             return Err(AppError::Validation("Video ID cannot be empty".into()));
@@ -1618,11 +1727,11 @@ impl InnertubeClient {
         // 2. Walk the client ladder; the first playable response wins.
         let mut deferred_restriction: Option<AppError> = None;
         let attempt = self
-            .try_player_ladder(
+            .resolve_player_attempt(
                 video_id_trimmed,
-                PLAYER_CLIENT_LADDER,
                 visitor_data.as_deref(),
                 &mut deferred_restriction,
+                refresh,
             )
             .await;
 

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { CaptionTrack, RelatedContentItem, VideoDetails, VideoSummary } from "../types/video";
-import { getMusicLyrics, getMusicRelated } from "../lib/api/youtube";
+import { prefetchStreamInfo } from "../lib/streamResolution";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
 
@@ -65,10 +65,6 @@ interface PlayerState {
   playbackRate: PlaybackRate;
   queue: VideoSummary[];
   currentIndex: number;
-  lyrics: string | null;
-  lyricsLoading: boolean;
-  related: VideoSummary[];
-  relatedLoading: boolean;
   repeatMode: RepeatMode;
   isShuffle: boolean;
   playMode: PlayMode;
@@ -79,6 +75,10 @@ interface PlayerState {
   isVideoFullscreen: boolean;
   watchPageCache: WatchPageCache | null;
   autoplayCandidates: VideoSummary[];
+  /** The video the media element has actually begun rendering. Work that is not
+   * playback — related content, channel info, comments — waits on this so it
+   * never competes with the first buffer. */
+  playbackStartedVideoId: string | null;
 
   isTheaterMode: boolean;
   sponsorBlockSegments: SponsorBlockSegment[];
@@ -87,6 +87,9 @@ interface PlayerState {
   captions: CaptionTrack[];
 
   setCurrentVideo: (video: VideoSummary | null) => void;
+  /** Fill in fields of the playing video that arrived after playback started —
+   * a cold open plays from the id alone and gets its title/channel afterwards. */
+  enrichCurrentVideo: (videoId: string, patch: Partial<VideoSummary>) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setVolume: (volume: number) => void;
   setPlaybackRate: (playbackRate: PlaybackRate) => void;
@@ -103,10 +106,10 @@ interface PlayerState {
   setAutoplayCandidates: (videos: VideoSummary[]) => void;
   clearUpcoming: () => void;
   setPlayMode: (mode: PlayMode) => void;
-  loadTrackMetadata: (videoId: string) => Promise<void>;
   clearQueue: () => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
+  markPlaybackStarted: (videoId: string) => void;
   enterVideoPip: (intent: VideoPipIntent) => void;
   expandVideoPlayer: () => void;
   dismissVideoPlayer: () => void;
@@ -134,10 +137,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackRate: 1,
   queue: [],
   currentIndex: -1,
-  lyrics: null,
-  lyricsLoading: false,
-  related: [],
-  relatedLoading: false,
   repeatMode: "none",
   isShuffle: false,
   playMode: "video",
@@ -148,6 +147,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isVideoFullscreen: false,
   watchPageCache: null,
   autoplayCandidates: [],
+  playbackStartedVideoId: null,
 
   isTheaterMode: getSavedTheaterMode(),
   sponsorBlockSegments: [],
@@ -167,14 +167,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
+      ...(isNew ? { playbackStartedVideoId: null } : {}),
     });
-    
+
     if (video && isNew) {
       const isSong = video.viewCountText === "Song" || video.viewCountText === "Album Track" || video.channelName.toLowerCase().includes("topic") || video.durationSeconds && video.durationSeconds < 360;
       set({ playMode: isSong ? "music" : "video" });
-      
-      get().loadTrackMetadata(video.id);
+      prefetchStreamInfo(video.id);
     }
+  },
+
+  enrichCurrentVideo: (videoId, patch) => {
+    const { currentVideo, queue } = get();
+    if (!currentVideo || currentVideo.id !== videoId) return;
+    set({
+      currentVideo: { ...currentVideo, ...patch },
+      queue: queue.map((item) => (item.id === videoId ? { ...item, ...patch } : item)),
+    });
   },
 
   setIsPlaying: (isPlaying) => set({ isPlaying }),
@@ -202,10 +211,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...(isNew ? { autoplayCandidates: [] } : {}),
       currentTime: 0,
       duration: nextVideo?.durationSeconds ?? 0,
+      ...(isNew ? { playbackStartedVideoId: null } : {}),
     });
-    if (nextVideo) {
-      get().loadTrackMetadata(nextVideo.id);
-    }
+    // Every surface that opens a video funnels through here, so warming the
+    // stream from this one place lets resolution overlap with the route change
+    // and the watch page's own mount instead of following them.
+    if (nextVideo) prefetchStreamInfo(nextVideo.id);
   },
 
   addToQueue: (video) => {
@@ -280,8 +291,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       duration: item.durationSeconds ?? 0,
       watchPageCache: null,
       autoplayCandidates: [],
+      playbackStartedVideoId: null,
     });
-    get().loadTrackMetadata(item.id);
+    prefetchStreamInfo(item.id);
   },
 
   playNext: (allowAutoplayFallback = false) => {
@@ -341,8 +353,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           isPlaying: true,
           currentTime: 0,
           duration: prevItem.durationSeconds ?? 0,
+          playbackStartedVideoId: null,
         });
-        get().loadTrackMetadata(prevItem.id);
+        prefetchStreamInfo(prevItem.id);
       }
     } else if (repeatMode === "all") {
       const lastIndex = queue.length - 1;
@@ -354,8 +367,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           isPlaying: true,
           currentTime: 0,
           duration: lastItem.durationSeconds ?? 0,
+          playbackStartedVideoId: null,
         });
-        get().loadTrackMetadata(lastItem.id);
+        prefetchStreamInfo(lastItem.id);
       }
     } else {
       set({ currentTime: 0 });
@@ -405,25 +419,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setPlayMode: (playMode) => set({ playMode }),
 
-  loadTrackMetadata: async (videoId) => {
-    set({ lyricsLoading: true, relatedLoading: true, lyrics: null, related: [] });
-    try {
-      const [lyricsRes, relatedRes] = await Promise.all([
-        getMusicLyrics(videoId),
-        getMusicRelated(videoId),
-      ]);
-      set({
-        lyrics: lyricsRes,
-        related: relatedRes,
-        lyricsLoading: false,
-        relatedLoading: false,
-      });
-    } catch (e) {
-      console.error("Failed to load track metadata", e);
-      set({ lyricsLoading: false, relatedLoading: false });
-    }
-  },
-
   clearQueue: () => set({
     queue: [],
     currentIndex: -1,
@@ -436,12 +431,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     isVideoFullscreen: false,
     watchPageCache: null,
     autoplayCandidates: [],
+    playbackStartedVideoId: null,
     isChaptersPanelOpen: false,
     isQueuePanelOpen: false,
   }),
   
   setCurrentTime: (currentTime) => set({ currentTime }),
   setDuration: (duration) => set({ duration }),
+  markPlaybackStarted: (videoId) => {
+    if (get().playbackStartedVideoId === videoId) return;
+    if (get().currentVideo?.id !== videoId) return;
+    set({ playbackStartedVideoId: videoId });
+  },
   enterVideoPip: (videoPipIntent) => {
     if (!get().currentVideo) return;
     set({ videoPlayerMode: "pip", videoPipIntent, isVideoFullscreen: false });

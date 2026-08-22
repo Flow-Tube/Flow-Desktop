@@ -8,6 +8,7 @@ import { getMusicQueue } from "./api/music";
 import { addWatchRecord } from "./api/db";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import { seekToTime } from "./linkify";
+import { prefetchStreamInfo } from "./streamResolution";
 import { getString } from "./i18n/index";
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
@@ -186,6 +187,7 @@ export function useDeepLinkHandoff() {
         // its own error state if the video is unavailable.
       }
 
+      prefetchStreamInfo(handoff.v);
       navigate(`/watch/${handoff.v}`);
       if (handoff.t && handoff.t > 0) applyStartOffset(handoff.t);
     },

@@ -66,14 +66,6 @@ const logHomeFeed = (stage: string, details: Record<string, unknown>) => {
   console.info(`[home-feed] ${stage}`, details);
 };
 
-const getHomeGridColumnCount = () => {
-  if (typeof window === "undefined") return 4;
-  if (window.innerWidth >= 1024) return 4;
-  if (window.innerWidth >= 768) return 3;
-  if (window.innerWidth >= 640) return 2;
-  return 1;
-};
-
 const buildContinueWatchingVideos = (history: WatchHistoryRecord[]): VideoSummary[] => {
   const hiddenIds = getHiddenContinueWatchingIds();
   const seenIds = new Set<string>();
@@ -169,7 +161,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const [, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [continueWatchingVideos, setContinueWatchingVideos] = useState<VideoSummary[]>([]);
-  const [gridColumnCount, setGridColumnCount] = useState(getHomeGridColumnCount);
   const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const requestSequenceRef = useRef(0);
@@ -1534,16 +1525,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     videosRef.current = videos;
   }, [videos]);
 
-  useEffect(() => {
-    const handleResize = () => {
-      setGridColumnCount(getHomeGridColumnCount());
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
   const refreshContinueWatching = useCallback(async () => {
     if (!continueWatchingEnabled) {
       setContinueWatchingVideos([]);
@@ -1706,9 +1687,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     : [];
   const shouldInsertContinueShelf =
     homeFeedEnabled && !loading && visibleVideos.length > 0 && visibleContinueWatchingVideos.length > 0;
-  const continueShelfInsertAfterIndex = shouldInsertContinueShelf
-    ? Math.min(visibleVideos.length - 1, Math.max(0, gridColumnCount - 1))
-    : undefined;
 
   return (
     <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
@@ -1735,7 +1713,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
             videos={visibleVideos}
             onPlay={handlePlayVideo}
             onAddToQueue={onAddToQueue}
-            insertAfterIndex={continueShelfInsertAfterIndex}
             insertNode={shouldInsertContinueShelf ? (
               <VideoShelf
                 title={getString("continue_watching_shelf_title")}

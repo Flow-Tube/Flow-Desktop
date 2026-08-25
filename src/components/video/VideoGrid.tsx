@@ -1,8 +1,8 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useRef, type ReactNode } from 'react';
 import type { VideoSummary } from '../../types/video';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
-import { useGridStyle } from '../../lib/useGridColumns';
+import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -11,7 +11,7 @@ interface VideoGridProps {
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
   onRemoveFromHistory?: (videoId: string) => void;
-  insertAfterIndex?: number;
+  /** Slotted in full-width directly under the first row of cards. */
   insertNode?: ReactNode;
   getVideoKey?: (video: VideoSummary, index: number) => string;
   variant?: "default" | "history";
@@ -40,18 +40,26 @@ export function VideoGrid({
   onPlay,
   onAddToQueue,
   onRemoveFromHistory,
-  insertAfterIndex,
   insertNode,
   getVideoKey,
   variant = "default",
   hideChannelAvatar,
 }: VideoGridProps) {
+  const gridRef = useRef<HTMLDivElement>(null);
   const gridStyle = useGridStyle();
+  const columns = useResolvedGridColumns(gridRef, gridStyle);
   const gridClass = "flow-grid gap-y-8 pb-8";
+
+  /*
+    The slot goes after the last card of the first row, whatever the resolved
+    column count is — a fixed index would leave the row's leftovers stranded on
+    a second row above the slot. -1 until the grid has been measured.
+  */
+  const insertAfterIndex = insertNode && columns > 0 ? Math.min(columns, videos.length) - 1 : -1;
 
   if (loading) {
     return (
-      <div className={gridClass} style={gridStyle}>
+      <div ref={gridRef} className={gridClass} style={gridStyle}>
         {Array.from({ length: skeletonCount }).map((_, i) => (
           <VideoCardSkeleton key={`skeleton-${i}`} />
         ))}
@@ -60,7 +68,7 @@ export function VideoGrid({
   }
 
   return (
-    <div className={gridClass} style={gridStyle}>
+    <div ref={gridRef} className={gridClass} style={gridStyle}>
       {videos.map((video, index) => (
         <Fragment key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}>
           {/*
@@ -80,7 +88,7 @@ export function VideoGrid({
               hideChannelAvatar={hideChannelAvatar}
             />
           </div>
-          {insertNode && insertAfterIndex === index ? (
+          {insertAfterIndex === index ? (
             <div className="col-span-full">
               {insertNode}
             </div>

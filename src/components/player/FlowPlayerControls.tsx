@@ -30,6 +30,7 @@ import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { getString } from "../../lib/i18n/index";
+import { Slider } from "../ui/Slider";
 import { videoCodecLabel } from "../../lib/settings/playerRuntime";
 
 export interface FlowPlayerControlsProps {
@@ -617,20 +618,20 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     <Volume2 size={19} />
                   )}
                 </button>
-                <input
-                  aria-label="Volume"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={muted ? 0 : volume}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    setVolume(value);
-                    setMuted(value === 0);
-                  }}
-                  className="h-1 w-0 accent-chrome-white opacity-0 transition-all group-hover/volume:w-20 group-hover/volume:opacity-100"
-                />
+                <div className="w-0 overflow-hidden opacity-0 transition-all group-hover/volume:w-20 group-hover/volume:opacity-100">
+                  <Slider
+                    aria-label="Volume"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={muted ? 0 : volume}
+                    onChange={(value) => {
+                      setVolume(value);
+                      setMuted(value === 0);
+                    }}
+                  />
+                </div>
+
               </div>
 
               <div className="ml-1 flex items-center gap-1.5">

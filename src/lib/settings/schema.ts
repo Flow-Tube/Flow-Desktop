@@ -31,6 +31,7 @@ export interface SettingDefinition {
 export const SETTINGS = {
   THEME_ID: "theme_id",
   THEME_VARIANT: "theme_variant",
+  EXPRESSIVE_SLIDERS_ENABLED: "expressive_sliders_enabled",
   CUSTOM_THEMES: "custom_themes",
 
   AUTOPLAY_ENABLED: "autoplay_enabled",
@@ -221,6 +222,7 @@ const QUALITY_VALUES = ["Auto", "2160p", "1440p", "1080p", "720p", "480p", "360p
 export const SETTING_DEFINITIONS = [
   str(SETTINGS.THEME_ID, "appearance", "default", "wired"),
   str(SETTINGS.THEME_VARIANT, "appearance", "dark", "wired", ["light", "dark", "amoled"]),
+  bool(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, "appearance", true, "wired"),
   json(SETTINGS.CUSTOM_THEMES, "appearance", "[]", "wired"),
 
   bool(SETTINGS.AUTOPLAY_ENABLED, "player", true, "wired"),

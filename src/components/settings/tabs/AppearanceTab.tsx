@@ -3,6 +3,9 @@ import { Plus } from "lucide-react";
 import { CustomThemeEditor } from "../../theme/CustomThemeEditor";
 import { ThemePreview } from "../../theme/ThemePreview";
 import { Button } from "../../ui/Button";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
+import { useBoolPref } from "../../../lib/usePreference";
+import { SETTINGS } from "../../../lib/settings/schema";
 import { getString } from "../../../lib/i18n/index";
 import {
   BUILTIN_THEMES,
@@ -22,6 +25,7 @@ export function AppearanceTab() {
     saveCustomThemes,
   } = useTheme();
   const [editingTheme, setEditingTheme] = useState<CustomThemeDefinition | null>(null);
+  const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
 
   const createTheme = () => {
     const id = `custom-${crypto.randomUUID()}`;
@@ -70,6 +74,14 @@ export function AppearanceTab() {
             </Button>
           ))}
         </div>
+      </section>
+
+      <section className="mt-8 flex items-center justify-between gap-6 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+        <div className="min-w-0">
+          <h2 className="text-base font-medium text-chrome-neutral-200">{getString("settings_expressive_sliders")}</h2>
+          <p className="mt-1 text-sm text-chrome-neutral-400">{getString("settings_expressive_sliders_desc")}</p>
+        </div>
+        <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
       </section>
 
       <section className="mt-8">

@@ -285,7 +285,7 @@ export function MusicOverlay() {
               />
               <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-chrome-neutral-950/90 via-chrome-neutral-950/50 to-transparent px-6 pb-10 pt-24">
                 <div className="w-full max-w-2xl">
-                  <MusicScrubber size="lg" showTimes countdown />
+                  <MusicScrubber size="lg" showTimes countdown expressive />
                 </div>
                 <div className="flex items-center justify-center gap-8">
                   <HapticButton
@@ -399,7 +399,7 @@ export function MusicOverlay() {
                 </div>
 
                 {/* scrubber row */}
-                <MusicScrubber size="lg" showTimes countdown />
+                <MusicScrubber size="lg" showTimes countdown expressive />
 
                 {/* playback row */}
                 <div className="flex w-full items-center justify-between">

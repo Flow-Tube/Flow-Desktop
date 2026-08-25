@@ -11,6 +11,7 @@ import {
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { Chip } from "../ui/Chip";
 import { getString } from "../../lib/i18n/index";
+import { Slider } from "../ui/Slider";
 
 const PRESETS: EqPresetName[] = ["flat", "bass", "vocal", "treble", "electronic", "acoustic"];
 
@@ -96,14 +97,13 @@ export function EqPanel({
                 <span className="font-mono text-[10px] tabular-nums text-chrome-neutral-500">
                   {formatGain(eqGains[i])}
                 </span>
-                <input
-                  type="range"
-                  className="eq-range"
+                <Slider
+                  orientation="vertical"
                   min={-EQ_MAX_GAIN_DB}
                   max={EQ_MAX_GAIN_DB}
                   step={1}
                   value={eqGains[i] ?? 0}
-                  onChange={(e) => setEqBand(i, Number(e.target.value))}
+                  onChange={(gain) => setEqBand(i, gain)}
                   aria-label={`${band.label} Hz`}
                 />
                 <span className="text-[10px] text-chrome-neutral-500">{band.label}</span>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { CustomThemeEditor } from "../../theme/CustomThemeEditor";
 import { ThemePreview } from "../../theme/ThemePreview";
+import { Button } from "../../ui/Button";
 import { getString } from "../../../lib/i18n/index";
 import {
   BUILTIN_THEMES,
@@ -51,10 +52,10 @@ export function AppearanceTab() {
           <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString("settings_appearance")}</h1>
           <p className="mt-2 text-sm text-chrome-neutral-400">{getString("theme_page_description")}</p>
         </div>
-        <button type="button" onClick={createTheme} disabled={customThemes.length >= 24} className="flex cursor-pointer items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] transition-colors disabled:cursor-not-allowed disabled:opacity-40">
+        <Button onClick={createTheme} disabled={customThemes.length >= 24}>
           <Plus size={17} />
           {getString("theme_create")}
-        </button>
+        </Button>
       </div>
 
       <section className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
@@ -64,9 +65,9 @@ export function AppearanceTab() {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {THEME_VARIANTS.map((item) => (
-            <button key={item} type="button" onClick={() => void setVariant(item)} className={`cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition-colors ${variant === item ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "bg-surface-container-high text-chrome-neutral-300 hover:bg-surface-container-highest"}`}>
+            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)}>
               {getString(`theme_variant_${item}` as Parameters<typeof getString>[0])}
-            </button>
+            </Button>
           ))}
         </div>
       </section>

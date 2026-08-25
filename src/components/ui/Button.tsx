@@ -1,20 +1,28 @@
-import { ButtonHTMLAttributes } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+/*
+  The same press feedback the player's transport buttons use, so a click feels
+  identical wherever it happens. Deliberately just the tap squash — no shape
+  morph, no spring-back overshoot.
+*/
+const PRESS = { scale: 0.9 };
+const PRESS_SPRING = { type: 'spring' as const, stiffness: 400, damping: 17 };
+
+export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref'> {
   variant?: 'primary' | 'secondary' | 'tonal' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
 }
 
-export function Button({ 
-  children, 
-  variant = 'primary', 
-  size = 'md', 
-  className = '', 
-  disabled, 
-  ...props 
+export function Button({
+  children,
+  variant = 'primary',
+  size = 'md',
+  className = '',
+  disabled,
+  ...props
 }: ButtonProps) {
   const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors duration-200 ease-out focus:outline-none disabled:opacity-50 disabled:pointer-events-none';
-  
+
   const variants = {
     primary: 'bg-[var(--color-primary)] text-[var(--color-on-primary)] hover:opacity-90',
     secondary: 'bg-surface-container-high text-chrome-neutral-200 hover:bg-surface-container-highest',
@@ -31,12 +39,14 @@ export function Button({
   };
 
   return (
-    <button 
+    <motion.button
       className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={disabled}
+      whileTap={disabled ? undefined : PRESS}
+      transition={PRESS_SPRING}
       {...props}
     >
       {children}
-    </button>
+    </motion.button>
   );
 }

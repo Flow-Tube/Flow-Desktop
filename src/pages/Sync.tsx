@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 
+import { Button } from "../components/ui/Button";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { useSyncStore } from "../store/useSyncStore";
 import { SYNC_COLLECTIONS, type ManifestInfo, type StatInfo } from "../lib/api/sync";
@@ -386,13 +387,9 @@ function PairingState() {
       </p>
       <p className="mt-1 max-w-xs text-xs text-chrome-neutral-600">{getString("sync_host_address_hint")}</p>
 
-      <button
-        type="button"
-        onClick={() => void cancel()}
-        className="mt-10 flex items-center gap-2 rounded-full bg-surface-container-high px-6 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
-      >
+      <Button variant="secondary" onClick={() => void cancel()} className="mt-10 px-6">
         <X className="h-4 w-4" /> {getString("sync_cancel")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -514,13 +511,9 @@ function MessageScreen({ icon, title, message }: { icon: React.ReactNode; title:
       {icon}
       <h2 className="text-base font-medium text-chrome-neutral-100">{title}</h2>
       {message && <p className="text-sm text-chrome-neutral-400">{message}</p>}
-      <button
-        type="button"
-        onClick={() => void reset()}
-        className="flex items-center gap-2 rounded-full bg-surface-container-high px-6 py-2.5 text-sm font-medium text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
-      >
+      <Button variant="secondary" onClick={() => void reset()} className="px-6">
         <RotateCcw className="h-4 w-4" /> {getString("sync_start_over")}
-      </button>
+      </Button>
     </CenteredCard>
   );
 }

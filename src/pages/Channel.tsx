@@ -4,6 +4,7 @@ import { Loader2, X } from "lucide-react";
 import { getChannelDetails, getChannelTab } from "../lib/api/youtube";
 import type { ChannelDetails, ChannelItem } from "../types/video";
 import { ChannelHero } from "../components/channel/ChannelHero";
+import { Button } from "../components/ui/Button";
 import { ChannelTabs, TabId } from "../components/channel/ChannelTabs";
 import { 
   ChannelShortsGrid, 
@@ -399,12 +400,9 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
           {getString("channel_unavailable_title")}
         </h2>
         <p className="max-w-md text-sm text-chrome-neutral-400">{getString("channel_unavailable_body")}</p>
-        <button
-          onClick={() => setHeroRetryToken((token) => token + 1)}
-          className="rounded-full bg-surface-container-high px-5 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
-        >
+        <Button variant="secondary" onClick={() => setHeroRetryToken((token) => token + 1)}>
           {getString("retry")}
-        </button>
+        </Button>
       </div>
     );
   }

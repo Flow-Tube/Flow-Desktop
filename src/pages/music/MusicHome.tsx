@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 import { CategoryChips } from '../../components/layout/CategoryChips';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { MusicShelf } from '../../components/music/MusicShelf';
+import { Button } from '../../components/ui/Button';
 import { useMusicChipFilter, useMusicHome } from '../../lib/useMusicHome';
 import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
@@ -127,13 +128,9 @@ export default function MusicHome() {
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
           <AlertTriangle className="h-8 w-8 text-chrome-neutral-500" />
           <p className="text-sm text-chrome-neutral-400">{getString('music_error_generic')}</p>
-          <button
-            type="button"
-            onClick={() => void reload()}
-            className="rounded-full bg-surface-container-high px-4 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
-          >
+          <Button variant="secondary" onClick={() => void reload()}>
             {getString('music_retry')}
-          </button>
+          </Button>
         </div>
       );
     }

@@ -1,8 +1,8 @@
-import { useState, type ButtonHTMLAttributes } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Music2, Play, Plus } from 'lucide-react';
 
-import { Button } from '../../components/ui/Button';
+import { Button, type ButtonProps } from '../../components/ui/Button';
 import { AlbumTrackRow } from '../../components/music/AlbumTrackRow';
 import { ArtistSkeleton } from '../../components/music/ArtistSkeleton';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
@@ -43,19 +43,19 @@ function ArtistActionButton({
   children,
   className,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonProps) {
   return (
-    <button
-      type="button"
+    <Button
+      size="lg"
       className={cx(
-        'inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold transition-colors duration-200 ease-out disabled:pointer-events-none disabled:opacity-50',
+        'text-sm font-semibold',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
       {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 

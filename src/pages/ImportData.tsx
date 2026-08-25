@@ -1,6 +1,8 @@
 import React, { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
+import { Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
+import { SettingsGroup } from "../components/settings/SettingsGroup";
+import { SettingItem } from "../components/settings/SettingItem";
+import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { unzipSync } from "fflate";
 import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
 import { useHistoryStore } from "../store/useHistoryStore";
@@ -45,7 +47,6 @@ async function refreshStoresAfterRestore() {
 }
 
 export const ImportData: React.FC = () => {
-  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [importSubs, setImportSubs] = useState(true);
@@ -345,78 +346,57 @@ export const ImportData: React.FC = () => {
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6 pb-20 bg-[var(--color-background)]">
-      <div className="border-b border-[var(--color-outline-variant)] pb-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/settings")} className="p-2 border border-chrome-neutral-800 hover:border-chrome-neutral-700 bg-surface-container-low hover:bg-surface-container rounded-xl text-chrome-neutral-400 hover:text-chrome-neutral-200 transition-colors duration-200 ease-out cursor-pointer">
-            <ArrowLeft size={16} />
-          </button>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-[var(--color-on-surface)]">{getString("import_title")}</h1>
-            <p className="text-xs text-[var(--color-on-surface-variant)] mt-1">{getString("import_subtitle")}</p>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto w-full max-w-[1600px] px-6 py-8 pb-20 md:px-8">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString("import_title")}</h1>
+        <p className="mt-1 text-sm text-chrome-neutral-400">{getString("import_subtitle")}</p>
+      </header>
 
       <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".zip,.json,.xml,.opml,.csv,.txt,.html" className="hidden" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8 items-start">
-        <div className="space-y-6 lg:max-h-[calc(100vh-180px)] lg:overflow-y-auto pr-2 scrollbar-none">
+      <div className="grid grid-cols-12 gap-4 md:gap-6">
+        <div className="col-span-12 space-y-6 lg:col-span-7">
           {importState === "idle" && (
-            <div className="bg-surface-container-low rounded-2xl border border-chrome-neutral-800 overflow-hidden">
-              <div className="px-5 py-3 border-b border-chrome-neutral-800/50">
-                <h3 className="text-xs uppercase tracking-widest text-chrome-neutral-500 font-semibold">{getString("import_data_to_import")}</h3>
-              </div>
-              <div className="divide-y divide-chrome-neutral-800/50">
-                {toggleItems.map((item) => (
-                  <div key={item.key} onClick={item.toggle} className="flex items-center justify-between px-5 py-3.5 hover:bg-surface-container transition-colors duration-200 ease-out cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <span className={item.checked ? "text-[var(--color-primary)]" : "text-chrome-neutral-500"}>{item.icon}</span>
-                      <div>
-                        <div className="text-sm font-medium text-chrome-neutral-200">{item.label}</div>
-                        <div className="text-xs text-chrome-neutral-400 mt-0.5">{item.desc}</div>
-                      </div>
-                    </div>
-                    <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${item.checked ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-chrome-white" : "border-chrome-neutral-700 bg-surface-container-high"}`}>
-                      {item.checked && <Check size={10} strokeWidth={3} />}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SettingsGroup title={getString("import_data_to_import")}>
+              {toggleItems.map((item) => (
+                <SettingItem key={item.key} icon={item.icon} title={item.label} description={item.desc}>
+                  <ToggleSwitch checked={item.checked} onChange={item.toggle} />
+                </SettingItem>
+              ))}
+            </SettingsGroup>
           )}
 
           <div
             onClick={handleCardClick}
-            className={`border border-dashed rounded-2xl flex flex-col items-center justify-center text-center transition-colors duration-200 ease-out cursor-pointer min-h-[280px] ${
-              ["reading", "parsing", "saving"].includes(importState) ? "border-chrome-neutral-800 bg-surface-container-low pointer-events-none"
+            className={`flex min-h-[280px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed text-center transition-colors duration-200 ease-out ${
+              ["reading", "parsing", "saving"].includes(importState) ? "pointer-events-none border-chrome-neutral-800 bg-surface-container-low"
               : importState === "success" ? "border-chrome-emerald-900 bg-surface-container-low hover:bg-surface-container"
               : importState === "error" ? "border-chrome-red-900 bg-surface-container-low hover:bg-surface-container"
-              : "border-chrome-neutral-700 bg-surface-container-low hover:bg-surface-container hover:border-chrome-neutral-600"
+              : "border-chrome-neutral-700 bg-surface-container-low hover:border-chrome-neutral-600 hover:bg-surface-container"
             }`}
           >
             {importState === "idle" && (
               <div className="space-y-3 p-8">
-                <div className="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center border border-chrome-neutral-800 mx-auto">
-                  <Upload className="w-5 h-5 text-chrome-neutral-400" />
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-chrome-neutral-800 bg-surface-container-high">
+                  <Upload className="h-5 w-5 text-chrome-neutral-400" />
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-base font-medium text-chrome-neutral-200">{getString("import_select_file")}</h4>
-                  <p className="text-xs text-chrome-neutral-400 max-w-sm mx-auto">{getString("import_supported_formats")}</p>
+                  <p className="mx-auto max-w-sm text-xs text-chrome-neutral-400">{getString("import_supported_formats")}</p>
                 </div>
               </div>
             )}
 
             {["reading", "parsing", "saving"].includes(importState) && (
               <div className="w-full max-w-md space-y-4 px-8 py-8">
-                <div className="flex justify-between items-center text-xs font-medium text-chrome-neutral-400">
+                <div className="flex items-center justify-between text-xs font-medium text-chrome-neutral-400">
                   <span>{statusMessage}</span>
                   <span className="font-mono text-chrome-neutral-300">{progress}%</span>
                 </div>
-                <div className="w-full h-1 bg-surface-container-high rounded-full overflow-hidden">
+                <div className="h-1 w-full overflow-hidden rounded-full bg-surface-container-high">
                   <div className="h-full bg-[var(--color-primary)] transition-all duration-300 ease-out" style={{ width: `${progress}%` }} />
                 </div>
-                <div className="flex items-center justify-center gap-2 text-chrome-neutral-500 text-xs">
+                <div className="flex items-center justify-center gap-2 text-xs text-chrome-neutral-500">
                   <Loader2 size={12} className="animate-spin" />
                   {getString("import_processing")}
                 </div>
@@ -425,17 +405,17 @@ export const ImportData: React.FC = () => {
 
             {importState === "success" && (
               <div className="space-y-3 p-8">
-                <div className="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center border border-chrome-emerald-900 mx-auto">
-                  <Check className="w-5 h-5 text-chrome-emerald-500" />
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-chrome-emerald-900 bg-surface-container-high">
+                  <Check className="h-5 w-5 text-chrome-emerald-500" />
                 </div>
                 <h4 className="text-base font-medium text-chrome-neutral-200">{getString("import_complete")}</h4>
-                <div className="text-xs text-chrome-neutral-400 max-w-xs mx-auto space-y-1">
-                  {subsCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_subscriptions")}</span><span className="font-mono text-chrome-neutral-200">{subsCount}</span></div>}
-                  {playlistsCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_playlists")}</span><span className="font-mono text-chrome-neutral-200">{playlistsCount}</span></div>}
-                  {historyCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_watch_history")}</span><span className="font-mono text-chrome-neutral-200">{historyCount}</span></div>}
-                  {likesCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_likes")}</span><span className="font-mono text-chrome-neutral-200">{likesCount}</span></div>}
-                  {settingsCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_settings")}</span><span className="font-mono text-chrome-neutral-200">{settingsCount}</span></div>}
-                  {neuroCount > 0 && <div className="flex justify-between bg-surface-container-high px-3 py-2 rounded-lg"><span>{getString("import_neuro_profile")}</span><span className="font-mono text-chrome-neutral-200">{getString("ok")}</span></div>}
+                <div className="mx-auto max-w-xs space-y-1 text-xs text-chrome-neutral-400">
+                  {subsCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_subscriptions")}</span><span className="font-mono text-chrome-neutral-200">{subsCount}</span></div>}
+                  {playlistsCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_playlists")}</span><span className="font-mono text-chrome-neutral-200">{playlistsCount}</span></div>}
+                  {historyCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_watch_history")}</span><span className="font-mono text-chrome-neutral-200">{historyCount}</span></div>}
+                  {likesCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_likes")}</span><span className="font-mono text-chrome-neutral-200">{likesCount}</span></div>}
+                  {settingsCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_settings")}</span><span className="font-mono text-chrome-neutral-200">{settingsCount}</span></div>}
+                  {neuroCount > 0 && <div className="flex justify-between rounded-lg bg-surface-container-high px-3 py-2"><span>{getString("import_neuro_profile")}</span><span className="font-mono text-chrome-neutral-200">{getString("ok")}</span></div>}
                 </div>
                 <p className="text-xs text-chrome-neutral-500">{getString("import_click_another")}</p>
               </div>
@@ -443,41 +423,32 @@ export const ImportData: React.FC = () => {
 
             {importState === "error" && (
               <div className="space-y-3 p-8">
-                <div className="w-12 h-12 rounded-2xl bg-surface-container-high flex items-center justify-center border border-chrome-red-900 mx-auto">
-                  <AlertCircle className="w-5 h-5 text-chrome-red-400" />
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-chrome-red-900 bg-surface-container-high">
+                  <AlertCircle className="h-5 w-5 text-chrome-red-400" />
                 </div>
                 <h4 className="text-base font-medium text-chrome-red-400">{getString("import_failed")}</h4>
-                <p className="text-xs text-chrome-neutral-400 max-w-sm mx-auto">{errorMessage || getString("import_file_not_recognized")}</p>
+                <p className="mx-auto max-w-sm text-xs text-chrome-neutral-400">{errorMessage || getString("import_file_not_recognized")}</p>
                 <p className="text-xs text-chrome-neutral-500">{getString("import_try_another")}</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="lg:sticky lg:top-24 space-y-6">
-          <div className="bg-surface-container-low rounded-2xl border border-chrome-neutral-800 overflow-hidden">
-            <div className="px-5 py-3 border-b border-chrome-neutral-800/50">
-              <h3 className="text-xs uppercase tracking-widest text-chrome-neutral-500 font-semibold">{getString("import_supported_formats_title")}</h3>
-            </div>
-            <div className="divide-y divide-chrome-neutral-800/50">
-              {formatItems.map((f) => (
-                <div key={f.label} className="flex items-center gap-3 px-5 py-3">
-                  <FileText size={14} className="text-chrome-neutral-500 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-chrome-neutral-200">{f.label}</div>
-                    <div className="text-xs text-chrome-neutral-500">{f.ext}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="col-span-12 space-y-6 lg:col-span-5">
+          <SettingsGroup title={getString("import_supported_formats_title")}>
+            {formatItems.map((format) => (
+              <SettingItem key={format.label} icon={<FileText size={16} />} title={format.label}>
+                <span className="font-mono text-xs text-chrome-neutral-500">{format.ext}</span>
+              </SettingItem>
+            ))}
+          </SettingsGroup>
 
-          <div className="bg-surface-container-low rounded-2xl border border-chrome-neutral-800 p-5">
-            <div className="flex items-center gap-2 mb-3">
+          <div className="rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+            <div className="mb-3 flex items-center gap-2">
               <Database size={14} className="text-chrome-neutral-400" />
-              <h4 className="text-xs uppercase tracking-widest text-chrome-neutral-500 font-semibold">{getString("import_flowneuro_card_title")}</h4>
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">{getString("import_flowneuro_card_title")}</h4>
             </div>
-            <p className="text-xs text-chrome-neutral-400 leading-relaxed">
+            <p className="text-xs leading-relaxed text-chrome-neutral-400">
               {getString("import_flowneuro_card_body")}
             </p>
           </div>

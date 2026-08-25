@@ -295,6 +295,184 @@
   .music-wave-bar {
     animation: none;
   }
+
+  /* The wash animates through inline styles, so reduced motion has to outrank them. */
+  .color-wash {
+    transform: none !important;
+    transition: opacity 120ms linear !important;
+  }
+}
+
+/*
+  Material 3 Expressive slider.
+
+  The 3px handle sits inside a 6px gap cut out of the track, and that gap has to
+  show the surface behind it rather than a colour — so the two track segments are
+  positioned off `--m3-fill` (0..1) instead of being painted as one gradient.
+  Handle position is measured from its centre so narrowing it on press stays
+  symmetric.
+*/
+.m3-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 1.75rem;
+  touch-action: none;
+}
+
+.m3-slider__track {
+  position: absolute;
+  height: 0.75rem;
+  border-radius: 9999px;
+}
+
+.m3-slider__track--active {
+  left: 0;
+  width: max(0px, calc(var(--m3-fill) * (100% - 3px) - 6px));
+  background-color: var(--color-primary);
+}
+
+.m3-slider__track--inactive {
+  left: calc(var(--m3-fill) * (100% - 3px) + 9px);
+  right: 0;
+  background-color: var(--color-surface-container-highest);
+}
+
+.m3-slider__handle {
+  position: absolute;
+  left: calc(1.5px + var(--m3-fill) * (100% - 3px));
+  transform: translateX(-50%);
+  width: 3px;
+  height: 1.5rem;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+  transition: width 120ms ease-out;
+}
+
+.m3-slider[data-pressed="true"] .m3-slider__handle {
+  width: 2px;
+}
+
+/* Marks the end of travel; pointless once the handle has reached it. */
+.m3-slider__stop {
+  position: absolute;
+  right: 6px;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background-color: var(--color-primary);
+}
+
+/* The real control: invisible, but keeps native dragging, keyboard and a11y. */
+.m3-slider__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.m3-slider__input:disabled {
+  cursor: not-allowed;
+}
+
+.m3-slider[data-disabled="true"] {
+  opacity: 0.5;
+}
+
+/* Progressive enhancement — `:has()` is missing on older WebKitGTK builds. */
+.m3-slider:has(.m3-slider__input:focus-visible) .m3-slider__handle {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/*
+  Vertical variant (EQ bands). Same geometry rotated: the fill grows from the
+  bottom, so every offset is measured from `bottom` instead of `left`. The
+  hidden input keeps the writing-mode pair the EQ sliders already used, which is
+  what makes a native range drag bottom-to-top.
+*/
+.m3-slider--vertical {
+  width: 1.25rem;
+  height: 6.5rem;
+  justify-content: center;
+}
+
+.m3-slider--vertical .m3-slider__track {
+  left: 50%;
+  height: auto;
+  width: 0.75rem;
+  transform: translateX(-50%);
+}
+
+.m3-slider--vertical .m3-slider__track--active {
+  top: auto;
+  bottom: 0;
+  height: max(0px, calc(var(--m3-fill) * (100% - 3px) - 6px));
+}
+
+.m3-slider--vertical .m3-slider__track--inactive {
+  top: 0;
+  left: 50%;
+  right: auto;
+  bottom: calc(var(--m3-fill) * (100% - 3px) + 9px);
+}
+
+.m3-slider--vertical .m3-slider__handle {
+  left: 50%;
+  top: auto;
+  bottom: calc(1.5px + var(--m3-fill) * (100% - 3px));
+  width: 1.25rem;
+  height: 3px;
+  transform: translate(-50%, 50%);
+  transition: height 120ms ease-out;
+}
+
+.m3-slider--vertical[data-pressed="true"] .m3-slider__handle {
+  width: 1.25rem;
+  height: 2px;
+}
+
+.m3-slider--vertical .m3-slider__stop {
+  right: auto;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+}
+
+.m3-slider--vertical .m3-slider__input {
+  writing-mode: vertical-lr;
+  direction: rtl;
+}
+
+/* The pre-expressive look, kept for the Settings opt-out. */
+.m3-slider-legacy {
+  width: 100%;
+  height: 0.25rem;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.m3-slider-legacy--vertical {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 1.25rem;
+  height: 6.5rem;
+  background: transparent;
+}
+
+.m3-slider-legacy:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m3-slider__handle {
+    transition: none;
+  }
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */
@@ -339,22 +517,6 @@
   max-width: none !important;
   max-height: none !important;
   object-fit: contain !important;
-}
-
-.eq-range {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 1.25rem;
-  height: 6.5rem;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-  background: transparent;
-}
-
-.eq-range:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  border-radius: 9999px;
 }
 
 /*

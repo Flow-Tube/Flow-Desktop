@@ -7,6 +7,7 @@ interface MusicScrubberProps {
   showTimes?: boolean;
   countdown?: boolean;
   className?: string;
+  expressive?: boolean;
 }
 
 export function MusicScrubber({
@@ -15,6 +16,7 @@ export function MusicScrubber({
   showTimes = false,
   countdown = false,
   className = "",
+  expressive = false,
 }: MusicScrubberProps) {
   const progress = useMusicPlayerStore((s) => s.progress);
   const duration = useMusicPlayerStore((s) => s.duration);
@@ -30,6 +32,7 @@ export function MusicScrubber({
       showTimes={showTimes}
       countdown={countdown}
       className={className}
+      expressive={expressive}
     />
   );
 }

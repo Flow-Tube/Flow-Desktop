@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import type React from "react";
 
 import { getString } from "../../lib/i18n/index";
 import { formatTime } from "../../lib/musicFormat";
+import { useExpressiveSliders } from "../../lib/useExpressiveSliders";
 
 interface MediaScrubberProps {
   progress: number;
@@ -14,6 +15,8 @@ interface MediaScrubberProps {
   countdown?: boolean;
   ariaLabel?: string;
   className?: string;
+  /** Opt in to the Material 3 Expressive look; ignored when the user turns it off. */
+  expressive?: boolean;
 }
 
 export function MediaScrubber({
@@ -26,7 +29,10 @@ export function MediaScrubber({
   countdown = false,
   ariaLabel = getString("music_seek"),
   className = "",
+  expressive = false,
 }: MediaScrubberProps) {
+  const expressiveEnabled = useExpressiveSliders();
+  const isExpressive = expressive && expressiveEnabled;
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dragRatio, setDragRatio] = useState(0);
@@ -96,20 +102,36 @@ export function MediaScrubber({
     ? "bottom-[3px] translate-y-1/2"
     : "top-1/2 -translate-y-1/2";
 
-  const bar = (
+  const sliderProps = {
+    ref: trackRef,
+    role: "slider" as const,
+    tabIndex: 0,
+    "aria-label": ariaLabel,
+    "aria-valuemin": 0,
+    "aria-valuemax": Math.round(duration),
+    "aria-valuenow": Math.round(ratio * duration),
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: endDrag,
+    onPointerCancel: endDrag,
+    onKeyDown,
+  };
+
+  const bar = isExpressive ? (
     <div
-      ref={trackRef}
-      role="slider"
-      tabIndex={0}
-      aria-label={ariaLabel}
-      aria-valuemin={0}
-      aria-valuemax={Math.round(duration)}
-      aria-valuenow={Math.round(ratio * duration)}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onKeyDown={onKeyDown}
+      {...sliderProps}
+      className="m3-slider flex-1 cursor-pointer outline-none"
+      data-pressed={dragging}
+      style={{ "--m3-fill": ratio } as CSSProperties}
+    >
+      <span className="m3-slider__track m3-slider__track--active" />
+      <span className="m3-slider__track m3-slider__track--inactive" />
+      {ratio < 0.97 && <span className="m3-slider__stop" />}
+      <span className="m3-slider__handle" />
+    </div>
+  ) : (
+    <div
+      {...sliderProps}
       className={`group/scrub relative flex ${hitH} flex-1 cursor-pointer touch-none outline-none`}
     >
       <div className={`relative ${trackH} w-full overflow-hidden ${trackShape}`}>

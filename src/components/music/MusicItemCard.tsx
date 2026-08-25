@@ -6,6 +6,8 @@ import { useActiveDownloadForVideo, useIsDownloaded } from '../../lib/useDownloa
 import { downloadAlbum, useCollectionDownloadState } from '../../lib/useCollectionDownloads';
 import { upgradeAvatarUrl, upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { extractDominantColorFromImage, useDominantColor } from '../../lib/useDominantColor';
+import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
+import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
@@ -144,11 +146,6 @@ function useSongLike(track: SongItem | null | undefined) {
   };
 
   return { liked, toggle };
-}
-
-function colorBackground(color: { r: number; g: number; b: number } | null): React.CSSProperties {
-  if (!color) return { background: 'color-mix(in srgb, var(--color-chrome-zinc-800) 50%, transparent)' };
-  return { background: `rgba(${color.r}, ${color.g}, ${color.b}, 0.22)` };
 }
 
 function albumSubtitle(item: AlbumItem): string {
@@ -303,6 +300,8 @@ function SquareCard({
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const showToast = useUiStore((s) => s.showToast);
   const albumDownload = useCollectionDownloadState(albumBrowseId ?? undefined, "album");
+  const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 320));
+  const wash = useHoverWashColor(washSrc);
   const menuActions: MusicMenuAction[] = isTrack
     ? [
         {
@@ -384,13 +383,16 @@ function SquareCard({
       onClick={onOpen}
       onKeyDown={onKey(onOpen)}
       onContextMenu={menu.openMenuFromContext}
+      onMouseEnter={wash.onMouseEnter}
+      onMouseLeave={wash.onMouseLeave}
       className={cx(
-        'group relative flex cursor-pointer flex-col gap-3',
+        `group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`,
         fill ? 'w-full' : 'w-40 md:w-48 lg:w-56',
         'rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
     >
+      <ColorWash active={wash.isHovered} color={wash.color} radius="rounded-2xl" bleed={6} />
       <div className="relative w-full aspect-square">
         <Artwork
           src={thumbnail}
@@ -472,19 +474,25 @@ function VideoCard16x9({
   className?: string;
   fill?: boolean;
 }) {
+  const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 480));
+  const wash = useHoverWashColor(washSrc);
+
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpen ?? onPlay}
       onKeyDown={onKey(onOpen ?? onPlay)}
+      onMouseEnter={wash.onMouseEnter}
+      onMouseLeave={wash.onMouseLeave}
       className={cx(
-        'group flex cursor-pointer flex-col gap-3',
+        `group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`,
         fill ? 'w-full' : 'w-[260px] md:w-[300px]',
         'rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
     >
+      <ColorWash active={wash.isHovered} color={wash.color} radius="rounded-2xl" bleed={6} />
       <div className="relative aspect-video w-full">
         <Artwork
           src={thumbnail}
@@ -527,19 +535,25 @@ function CircleCard({
   className?: string;
   fill?: boolean;
 }) {
+  const washSrc = useProxiedImageUrl(upgradeAvatarUrl(thumbnail));
+  const wash = useHoverWashColor(washSrc);
+
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={onKey(onOpen)}
+      onMouseEnter={wash.onMouseEnter}
+      onMouseLeave={wash.onMouseLeave}
       className={cx(
-        'group flex cursor-pointer flex-col items-center gap-3 text-center',
+        `group ${COLOR_WASH_HOST} flex cursor-pointer flex-col items-center gap-3 text-center`,
         fill ? 'w-full' : 'w-32 md:w-40',
         'rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
     >
+      <ColorWash active={wash.isHovered} color={wash.color} radius="rounded-2xl" bleed={6} />
       <div className={cx('aspect-square shrink-0', fill ? 'w-full' : 'w-32 md:w-40')}>
         <Artwork
           src={thumbnail}
@@ -654,13 +668,13 @@ function ListRow({
         resolveColor();
       }}
       onMouseLeave={() => setIsHovered(false)}
-      style={isHighlighted ? colorBackground(activeColor) : undefined}
       className={cx(
-        'group relative flex w-full cursor-pointer items-center gap-4 rounded-lg p-2 transition-colors duration-200 ease-out',
+        `group ${COLOR_WASH_HOST} flex w-full cursor-pointer items-center gap-4 rounded-lg p-2`,
         'outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
     >
+      <ColorWash active={isHighlighted} color={activeColor} radius="rounded-lg" spread="row" />
       <div className="relative h-12 w-12 shrink-0">
         <Artwork
           src={item.thumbnail}

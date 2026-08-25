@@ -5,6 +5,7 @@ import { getString } from '../../lib/i18n/index';
 import { artistsText, formatTime } from '../../lib/musicFormat';
 import { upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { extractDominantColorFromImage, useDominantColor } from '../../lib/useDominantColor';
+import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
@@ -48,11 +49,6 @@ function ExplicitBadge() {
       E
     </span>
   );
-}
-
-function colorBackground(color: { r: number; g: number; b: number } | null): React.CSSProperties {
-  if (!color) return { background: 'color-mix(in srgb, var(--color-chrome-zinc-800) 50%, transparent)' };
-  return { background: `rgba(${color.r}, ${color.g}, ${color.b}, 0.22)` };
 }
 
 function videoIdOf(track: SongItem): string {
@@ -257,11 +253,11 @@ export function AlbumTrackRow({
           onPlay(track);
         }
       }}
-      style={isHighlighted ? colorBackground(activeColor) : undefined}
       className={`group flex cursor-pointer items-center rounded-lg px-4 py-2 transition-colors duration-200 ease-out ${
         isCurrent ? 'bg-surface-container-low' : ''
-      } relative`}
+      } ${COLOR_WASH_HOST}`}
     >
+      <ColorWash active={isHighlighted} color={activeColor} radius="rounded-lg" spread="row" />
       <div className="relative grid w-12 shrink-0 place-items-center">
         {showEq ? (
           <PlayingWave className="text-[var(--color-primary)]" />

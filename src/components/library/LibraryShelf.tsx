@@ -2,6 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { Button } from "../ui/Button";
+import { ShelfScroller } from "../ui/ShelfScroller";
 
 interface LibraryShelfProps {
   /** Section heading, e.g. "History". */
@@ -44,14 +46,10 @@ export const LibraryShelf: React.FC<LibraryShelfProps> = ({
           {title}
         </h2>
 
-        <button
-          type="button"
-          onClick={() => navigate(viewAllTo)}
-          className="flex items-center gap-1 rounded-full bg-surface-container-high px-4 py-1.5 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
-        >
+        <Button variant="secondary" size="sm" onClick={() => navigate(viewAllTo)} className="gap-1 px-4 text-sm">
           {getString("library_view_all")}
           <ChevronRight className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Shelf body — swiper of cards, or the MD3 empty state */}
@@ -63,9 +61,9 @@ export const LibraryShelf: React.FC<LibraryShelfProps> = ({
           </p>
         </div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto snap-x hide-scrollbar pb-4">
+        <ShelfScroller className="flex gap-4 snap-x px-3 -mx-3 pt-3 -mt-2 pb-4">
           {children}
-        </div>
+        </ShelfScroller>
       )}
     </section>
   );

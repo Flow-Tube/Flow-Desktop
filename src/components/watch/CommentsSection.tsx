@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, ThumbsUp } from "lucide-react";
+import { Button } from "../ui/Button";
 import { useVideoComments } from "../../lib/useVideoComments";
 import { linkifyText } from "../../lib/linkify";
 import { formatCount } from "../../lib/utils";
@@ -161,10 +162,11 @@ export function CommentsSection({
 
           {thread.nextPageToken && (
             <div className="flex justify-center pt-4">
-              <button
+              <Button
+                variant="outline"
                 onClick={thread.loadMore}
                 disabled={thread.loadingMore}
-                className="flex items-center gap-2 rounded-full border border-chrome-neutral-800 bg-transparent px-6 py-2 text-sm font-semibold transition-colors hover:bg-surface-container disabled:opacity-50"
+                className="px-6 font-semibold"
               >
                 {thread.loadingMore ? (
                   <>
@@ -174,7 +176,7 @@ export function CommentsSection({
                 ) : (
                   getString("watch_load_more_comments")
                 )}
-              </button>
+              </Button>
             </div>
           )}
         </div>

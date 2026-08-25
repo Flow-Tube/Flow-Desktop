@@ -1,8 +1,8 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useRef, type ReactNode } from 'react';
 import type { VideoSummary } from '../../types/video';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
-import { useGridStyle } from '../../lib/useGridColumns';
+import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -11,7 +11,7 @@ interface VideoGridProps {
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
   onRemoveFromHistory?: (videoId: string) => void;
-  insertAfterIndex?: number;
+  /** Slotted in full-width directly under the first row of cards. */
   insertNode?: ReactNode;
   getVideoKey?: (video: VideoSummary, index: number) => string;
   variant?: "default" | "history";
@@ -40,18 +40,26 @@ export function VideoGrid({
   onPlay,
   onAddToQueue,
   onRemoveFromHistory,
-  insertAfterIndex,
   insertNode,
   getVideoKey,
   variant = "default",
   hideChannelAvatar,
 }: VideoGridProps) {
+  const gridRef = useRef<HTMLDivElement>(null);
   const gridStyle = useGridStyle();
+  const columns = useResolvedGridColumns(gridRef, gridStyle);
   const gridClass = "flow-grid gap-y-8 pb-8";
+
+  /*
+    The slot goes after the last card of the first row, whatever the resolved
+    column count is — a fixed index would leave the row's leftovers stranded on
+    a second row above the slot. -1 until the grid has been measured.
+  */
+  const insertAfterIndex = insertNode && columns > 0 ? Math.min(columns, videos.length) - 1 : -1;
 
   if (loading) {
     return (
-      <div className={gridClass} style={gridStyle}>
+      <div ref={gridRef} className={gridClass} style={gridStyle}>
         {Array.from({ length: skeletonCount }).map((_, i) => (
           <VideoCardSkeleton key={`skeleton-${i}`} />
         ))}
@@ -60,16 +68,17 @@ export function VideoGrid({
   }
 
   return (
-    <div className={gridClass} style={gridStyle}>
+    <div ref={gridRef} className={gridClass} style={gridStyle}>
       {videos.map((video, index) => (
         <Fragment key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}>
           {/*
             content-visibility lets the browser skip layout/paint for offscreen
             cards — feeds can hold hundreds, and Linux composites on the CPU.
-            The p-1.5/-m-1.5 mirrors the card's hover bleed so the containment
-            paint clip lands exactly on the card's expanded edge.
+            The p-2/-m-2 nets to zero but widens the containment paint clip
+            past the card's own hover bleed, so the colour wash still has room
+            at the peak of its expansion — even at two columns on a wide window.
           */}
-          <div className="flow-grid-card p-1.5 -m-1.5">
+          <div className="flow-grid-card p-2 -m-2">
             <VideoCard
               video={video}
               onPlay={onPlay}
@@ -79,7 +88,7 @@ export function VideoGrid({
               hideChannelAvatar={hideChannelAvatar}
             />
           </div>
-          {insertNode && insertAfterIndex === index ? (
+          {insertAfterIndex === index ? (
             <div className="col-span-full">
               {insertNode}
             </div>

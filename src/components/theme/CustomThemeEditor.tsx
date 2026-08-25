@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { Button } from "../ui/Button";
 import {
   THEME_VARIANTS,
   type CustomThemeDefinition,
@@ -71,9 +72,9 @@ export function CustomThemeEditor({ theme, onCancel, onSave }: CustomThemeEditor
 
           <div className="mt-6 flex gap-2" role="tablist" aria-label={getString("theme_variant") }>
             {THEME_VARIANTS.map((item) => (
-              <button key={item} type="button" role="tab" aria-selected={variant === item} onClick={() => setVariant(item)} className={`cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition-colors ${variant === item ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "bg-surface-container-high text-chrome-neutral-300 hover:bg-surface-container-highest"}`}>
+              <Button key={item} role="tab" aria-selected={variant === item} variant={variant === item ? "primary" : "secondary"} onClick={() => setVariant(item)}>
                 {getString(`theme_variant_${item}` as Parameters<typeof getString>[0])}
-              </button>
+              </Button>
             ))}
           </div>
 
@@ -93,8 +94,8 @@ export function CustomThemeEditor({ theme, onCancel, onSave }: CustomThemeEditor
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-4">
-          <button type="button" onClick={onCancel} className="cursor-pointer rounded-full bg-surface-container-high px-4 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest">{getString("theme_cancel")}</button>
-          <button type="button" disabled={!draft.name.trim()} onClick={() => onSave({ ...draft, name: draft.name.trim() })} className="cursor-pointer rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] transition-colors disabled:cursor-not-allowed disabled:opacity-40">{getString("theme_save")}</button>
+          <Button variant="secondary" onClick={onCancel}>{getString("theme_cancel")}</Button>
+          <Button disabled={!draft.name.trim()} onClick={() => onSave({ ...draft, name: draft.name.trim() })}>{getString("theme_save")}</Button>
         </footer>
       </div>
     </div>

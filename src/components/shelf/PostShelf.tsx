@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import React from "react";
+import { ShelfScroller } from "../ui/ShelfScroller";
 import { PostCard } from "../video/PostCard";
 import type { PostSummary } from "../../types/video";
 
@@ -12,51 +12,10 @@ export const PostShelf: React.FC<PostShelfProps> = ({
   title,
   posts,
 }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const checkScrollLimits = () => {
-    if (!scrollRef.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-    setCanScrollLeft(scrollLeft > 2);
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
-  };
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      checkScrollLimits();
-      el.addEventListener("scroll", checkScrollLimits);
-      window.addEventListener("resize", checkScrollLimits);
-    }
-    
-    const timer = setTimeout(checkScrollLimits, 200);
-    
-    return () => {
-      if (el) {
-        el.removeEventListener("scroll", checkScrollLimits);
-        window.removeEventListener("resize", checkScrollLimits);
-      }
-      clearTimeout(timer);
-    };
-  }, [posts]);
-
-  const handleScroll = (direction: "left" | "right") => {
-    if (scrollRef.current) {
-      const { scrollLeft, clientWidth } = scrollRef.current;
-      const scrollAmount = direction === "left" ? -clientWidth * 0.75 : clientWidth * 0.75;
-      scrollRef.current.scrollTo({
-        left: scrollLeft + scrollAmount,
-        behavior: "smooth",
-      });
-    }
-  };
-
   if (!posts || posts.length === 0) return null;
 
   return (
-    <div className="relative group/shelf flex flex-col gap-4 py-4 border-b border-chrome-zinc-900 last:border-0">
+    <div className="relative flex flex-col gap-4 py-4 border-b border-chrome-zinc-900 last:border-0">
       {/* Shelf Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-chrome-zinc-100 tracking-tight flex items-center gap-2">
@@ -67,48 +26,19 @@ export const PostShelf: React.FC<PostShelfProps> = ({
         </h2>
       </div>
 
-      {/* Shelf Slider Area */}
-      <div className="relative w-full overflow-visible">
-        {/* Left Navigation Chevron */}
-        {canScrollLeft && (
-          <button
-            onClick={() => handleScroll("left")}
-            className="absolute left-0 top-[40%] -translate-y-1/2 -ml-2 sm:-ml-4 z-20 flex items-center justify-center w-10 h-10 rounded-full bg-chrome-black/80 hover:bg-chrome-black border border-chrome-zinc-800 text-chrome-zinc-200 hover:text-chrome-white opacity-0 group-hover/shelf:opacity-100 transition duration-200 ease-out transform active:scale-90 hover:scale-105 pointer-events-auto cursor-pointer"
-            aria-label="Scroll left"
+      <ShelfScroller className="flex gap-4 px-3 -mx-3 pt-3 -mt-2 pb-3">
+        {posts.map((post) => (
+          <div
+            key={post.id}
+            className="w-[320px] sm:w-[480px] shrink-0 transform transition-transform duration-300 hover:translate-y-[-2px] flex"
           >
-            <ChevronLeft size={20} strokeWidth={2.5} />
-          </button>
-        )}
-
-        {/* Scrollable Container */}
-        <div
-          ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scroll-smooth scrollbar-none pb-2 px-1 -mx-1"
-        >
-          {posts.map((post) => (
-            <div
-              key={post.id}
-              className="w-[320px] sm:w-[480px] shrink-0 transform transition-transform duration-300 hover:translate-y-[-2px] flex"
-            >
-              {/* Force clean layout for cards in a row */}
-              <div className="w-full h-full flex flex-col mb-0 select-text">
-                <PostCard post={post} />
-              </div>
+            {/* Force clean layout for cards in a row */}
+            <div className="w-full h-full flex flex-col mb-0 select-text">
+              <PostCard post={post} />
             </div>
-          ))}
-        </div>
-
-        {/* Right Navigation Chevron */}
-        {canScrollRight && (
-          <button
-            onClick={() => handleScroll("right")}
-            className="absolute right-0 top-[40%] -translate-y-1/2 -mr-2 sm:-mr-4 z-20 flex items-center justify-center w-10 h-10 rounded-full bg-chrome-black/80 hover:bg-chrome-black border border-chrome-zinc-800 text-chrome-zinc-200 hover:text-chrome-white opacity-0 group-hover/shelf:opacity-100 transition duration-200 ease-out transform active:scale-90 hover:scale-105 pointer-events-auto cursor-pointer"
-            aria-label="Scroll right"
-          >
-            <ChevronRight size={20} strokeWidth={2.5} />
-          </button>
-        )}
-      </div>
+          </div>
+        ))}
+      </ShelfScroller>
     </div>
   );
 };

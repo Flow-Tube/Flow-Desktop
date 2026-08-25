@@ -31,6 +31,7 @@ export interface SettingDefinition {
 export const SETTINGS = {
   THEME_ID: "theme_id",
   THEME_VARIANT: "theme_variant",
+  EXPRESSIVE_SLIDERS_ENABLED: "expressive_sliders_enabled",
   CUSTOM_THEMES: "custom_themes",
 
   AUTOPLAY_ENABLED: "autoplay_enabled",
@@ -55,6 +56,7 @@ export const SETTINGS = {
   ADAPTIVE_PLAYER_SIZE_ENABLED: "adaptive_player_size_enabled",
   AUTO_PIP_ENABLED: "auto_pip_enabled",
   MANUAL_PIP_BUTTON_ENABLED: "manual_pip_button_enabled",
+  MUSIC_PLAYER_BACKGROUND: "music_player_background",
   LYRICS_PROVIDER_ORDER: "lyrics_provider_order",
   LYRICS_PROVIDER_ENABLED_STATES: "lyrics_provider_enabled_states",
 
@@ -220,6 +222,7 @@ const QUALITY_VALUES = ["Auto", "2160p", "1440p", "1080p", "720p", "480p", "360p
 export const SETTING_DEFINITIONS = [
   str(SETTINGS.THEME_ID, "appearance", "default", "wired"),
   str(SETTINGS.THEME_VARIANT, "appearance", "dark", "wired", ["light", "dark", "amoled"]),
+  bool(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, "appearance", true, "wired"),
   json(SETTINGS.CUSTOM_THEMES, "appearance", "[]", "wired"),
 
   bool(SETTINGS.AUTOPLAY_ENABLED, "player", true, "wired"),
@@ -244,6 +247,8 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, "player", true, "persisted-only"),
   bool(SETTINGS.AUTO_PIP_ENABLED, "player", true, "wired"),
   bool(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, "player", true, "wired"),
+  str(SETTINGS.MUSIC_PLAYER_BACKGROUND, "player", "blur_gradient", "wired",
+    ["blur_gradient", "blur", "gradient", "default"]),
   str(SETTINGS.LYRICS_PROVIDER_ORDER, "player", "", "wired"),
   json(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, "player", "{}", "wired"),
 

@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useLayoutEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react';
 import { SETTINGS } from './settings/schema';
 import { useNumberPref } from './usePreference';
 
@@ -41,4 +41,45 @@ export function useGridStyle({ density = 'video', gapRem = 1 }: GridStyleOptions
       '--flow-grid-gap': `${gapRem}rem`,
     } as CSSProperties;
   }, [columns, density, gapRem]);
+}
+
+/**
+ * How many cards actually share a row right now.
+ *
+ * `.flow-grid` fills with `auto-fill`, so the user's column preference is only
+ * a ceiling — a narrow window sheds columns rather than shrinking cards. Only
+ * the resolved track list knows the real count, so anything that has to line up
+ * with a row boundary (a shelf slotted into the feed) has to measure it.
+ *
+ * Returns 0 until the first measurement lands.
+ */
+export function useResolvedGridColumns(
+  ref: RefObject<HTMLElement | null>,
+  style: CSSProperties,
+): number {
+  const [columns, setColumns] = useState(0);
+
+  // Layout effect, not a passive one: the count decides where a row break goes,
+  // and correcting that after paint would visibly reshuffle the feed.
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const measure = () => {
+      // A laid-out grid always reports used track sizes in px; anything else
+      // (`none`, an unresolved `repeat()`) means there is nothing to count yet.
+      const tracks = getComputedStyle(element).gridTemplateColumns;
+      const next = tracks.split(' ').filter((track) => track.endsWith('px')).length;
+      setColumns((previous) => (previous === next ? previous : next));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+    // `style` carries the column preference, which changes the track count
+    // without changing the element's size — the observer alone would miss it.
+  }, [ref, style]);
+
+  return columns;
 }

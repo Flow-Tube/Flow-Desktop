@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ListVideo, Plus, X } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { Button } from "../ui/Button";
 import {
   addVideoToStoredPlaylist,
   createStoredPlaylist,
@@ -196,20 +197,23 @@ export function AddToPlaylistModal() {
               className="w-full rounded-lg border border-chrome-neutral-800 bg-surface-container-low px-3 py-2 text-sm text-chrome-neutral-100 outline-none transition-colors placeholder:text-chrome-neutral-500 focus:border-chrome-neutral-700"
             />
             <div className="flex items-center justify-end gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={() => setCreating(false)}
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-chrome-neutral-300 transition-colors hover:bg-surface-container-high"
+                variant="ghost"
+                size="sm"
+                className="text-sm text-chrome-neutral-300"
               >
                 {getString("cancel")}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={!newName.trim()}
-                className="rounded-full bg-[var(--color-primary)] px-4 py-1.5 text-sm font-medium text-[var(--color-on-primary)] transition-colors hover:opacity-90 disabled:opacity-50"
+                size="sm"
+                className="px-4 text-sm"
               >
                 {getString("playlist_create")}
-              </button>
+              </Button>
             </div>
           </form>
         ) : (

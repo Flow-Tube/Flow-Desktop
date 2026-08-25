@@ -120,8 +120,8 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
   }, [visibleGroups, filter, expandedGroups, hasMore, loadingMore]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full shrink-0">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden py-6">
+      <div className="mx-auto w-full shrink-0 px-4 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-5 border-b border-chrome-neutral-800 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100 lg:text-4xl">
@@ -166,31 +166,35 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
       </div>
 
       {loading ? (
-        <div className="flex flex-1 flex-col items-center justify-center py-32">
+        <div className="flex flex-1 flex-col items-center justify-center py-32 px-4 sm:px-6 lg:px-8">
           <Loader2 className="h-9 w-9 animate-spin text-[var(--color-primary)]" />
           <p className="mt-4 text-sm font-medium text-chrome-neutral-500">
             {getString("history_loading")}
           </p>
         </div>
       ) : history.length === 0 ? (
-        <div className="mx-auto mt-8 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-chrome-neutral-800 bg-surface-container-low p-10 text-center">
-          <Clock className="mb-4 h-12 w-12 text-chrome-neutral-700" />
-          <h3 className="font-bold text-chrome-neutral-300">{getString("empty_watch_history")}</h3>
-          <p className="mt-1 max-w-sm text-sm text-chrome-neutral-500">
-            {getString("empty_watch_history_body")}
-          </p>
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mt-8 flex w-full flex-col items-center justify-center rounded-2xl border border-dashed border-chrome-neutral-800 bg-surface-container-low p-10 text-center">
+            <Clock className="mb-4 h-12 w-12 text-chrome-neutral-700" />
+            <h3 className="font-bold text-chrome-neutral-300">{getString("empty_watch_history")}</h3>
+            <p className="mt-1 max-w-sm text-sm text-chrome-neutral-500">
+              {getString("empty_watch_history_body")}
+            </p>
+          </div>
         </div>
       ) : visibleGroups.length === 0 ? (
-        <div className="mx-auto mt-8 w-full rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
-          <p className="text-sm font-medium text-chrome-neutral-300">
-            No history results match your search.
-          </p>
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mt-8 w-full rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
+            <p className="text-sm font-medium text-chrome-neutral-300">
+              No history results match your search.
+            </p>
+          </div>
         </div>
       ) : (
         <VList
           ref={listRef}
           onScroll={handleListScroll}
-          className="mx-auto mt-8 w-full flex-1 min-h-0"
+          className="mt-8 w-full flex-1 min-h-0 px-4 sm:px-6 lg:px-8"
         >
           {groupItems}
         </VList>

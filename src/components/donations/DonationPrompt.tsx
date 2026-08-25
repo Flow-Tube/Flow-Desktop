@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Heart } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { Button } from "../ui/Button";
 import {
   DONATION_PROMPT_SHOW_DELAY_MS,
   disableDonationPrompt,
@@ -115,30 +116,18 @@ function DonationPromptDialog({
         </div>
 
         <div className="mt-6 flex flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={onSupport}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-3 text-sm font-semibold text-[var(--color-on-primary)] transition-opacity duration-200 ease-out hover:opacity-90"
-          >
+          <Button onClick={onSupport} className="font-semibold">
             <Heart className="h-4 w-4" />
             {getString("donation_prompt_support")}
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={onLater}
-            className="rounded-full px-4 py-2.5 text-sm font-medium text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high"
-          >
+          <Button variant="ghost" onClick={onLater}>
             {getString("donation_prompt_later")}
-          </button>
+          </Button>
 
-          <button
-            type="button"
-            onClick={onNever}
-            className="rounded-full px-4 py-2.5 text-sm font-medium text-chrome-neutral-500 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-300"
-          >
+          <Button variant="ghost" onClick={onNever} className="text-chrome-neutral-500 hover:text-chrome-neutral-300">
             {getString("donation_prompt_never")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

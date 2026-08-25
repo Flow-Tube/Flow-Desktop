@@ -28,6 +28,8 @@ import { usePlayerStore } from '../../store/usePlayerStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useDownloadsLibraryStore } from '../../store/useDownloadsLibraryStore';
 import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
+import { extractDominantColorFromImage, type Rgb } from '../../lib/useDominantColor';
+import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -78,52 +80,6 @@ function getTitleClampStyle(maxLines: string | undefined): React.CSSProperties |
   };
 }
 
-// ─── Thumbnail Color Extraction ────────────────────────────────
-
-function extractDominantColor(img: HTMLImageElement): string | null {
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return null;
-
-    const sampleSize = 16;
-    canvas.width = sampleSize;
-    canvas.height = sampleSize;
-    ctx.drawImage(img, 0, 0, sampleSize, sampleSize);
-
-    const imageData = ctx.getImageData(0, 0, sampleSize, sampleSize).data;
-
-    let totalR = 0, totalG = 0, totalB = 0, count = 0;
-    for (let i = 0; i < imageData.length; i += 4) {
-      const r = imageData[i] ?? 0;
-      const g = imageData[i + 1] ?? 0;
-      const b = imageData[i + 2] ?? 0;
-
-      const brightness = (r + g + b) / 3;
-      if (brightness < 30 || brightness > 230) continue;
-
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      if (max - min < 20) continue;
-
-      totalR += r;
-      totalG += g;
-      totalB += b;
-      count++;
-    }
-
-    if (count === 0) return null;
-
-    const avgR = Math.round(totalR / count);
-    const avgG = Math.round(totalG / count);
-    const avgB = Math.round(totalB / count);
-
-    return `${avgR}, ${avgG}, ${avgB}`;
-  } catch {
-    return null;
-  }
-}
-
 function VideoCardComponent({
   video,
   onPlay,
@@ -152,7 +108,7 @@ function VideoCardComponent({
   const [overriddenThumbnail, setOverriddenThumbnail] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
-  const [dominantColor, setDominantColor] = useState<string | null>(null);
+  const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isSavedToWatchLater, setIsSavedToWatchLater] = useState(false);
   const [thumbnailCandidateIndex, setThumbnailCandidateIndex] = useState(0);
@@ -244,7 +200,7 @@ function VideoCardComponent({
     if (IS_LINUX_RUNTIME) return;
     if (!dominantColor && thumbnailRef.current) {
       if (thumbnailRef.current.complete) {
-        const color = extractDominantColor(thumbnailRef.current);
+        const color = extractDominantColorFromImage(thumbnailRef.current);
         if (color) {
           setDominantColor(color);
         }
@@ -267,7 +223,7 @@ function VideoCardComponent({
     }
 
     if (!IS_LINUX_RUNTIME && isHovered && !dominantColor) {
-      const color = extractDominantColor(img);
+      const color = extractDominantColorFromImage(img);
       if (color) {
         setDominantColor(color);
       }
@@ -306,12 +262,6 @@ function VideoCardComponent({
   const handleThumbnailError = useCallback(() => {
     setThumbnailCandidateIndex((idx) => Math.min(idx + 1, Math.max(0, thumbnailCandidates.length - 1)));
   }, [thumbnailCandidates.length]);
-
-  const cardStyle: React.CSSProperties = isHovered
-    ? (dominantColor
-      ? { background: `rgba(${dominantColor}, 0.2)` }
-      : { background: 'color-mix(in srgb, var(--color-chrome-zinc-800) 50%, transparent)' })
-    : { background: 'transparent' };
 
   const handleSubscribeToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -583,12 +533,12 @@ function VideoCardComponent({
     return (
       <div
         ref={cardRef}
-        className="group relative flex w-full gap-2 rounded-xl p-1.5 -m-1.5 transition-colors duration-200 ease-out"
-        style={cardStyle}
+        className={`group ${COLOR_WASH_HOST} flex w-full gap-2 rounded-xl p-1.5 -m-1.5`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onContextMenu={handleContextMenu}
       >
+        <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
         <div
           className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container"
           onClick={() => onPlay(video)}
@@ -663,9 +613,12 @@ function VideoCardComponent({
     return (
       <div
         ref={cardRef}
-        className="group relative flex w-full flex-row items-center gap-4 rounded-xl px-1 py-2 transition-colors duration-200 ease-out hover:bg-chrome-neutral-800/40"
+        className={`group ${COLOR_WASH_HOST} flex w-full flex-row items-center gap-4 rounded-xl px-1 py-2`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onContextMenu={handleContextMenu}
       >
+        <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
         {showDragHandle ? (
           <button
             type="button"
@@ -692,9 +645,11 @@ function VideoCardComponent({
         >
           {displayThumbnail ? (
             <img
+              ref={thumbnailRef}
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
+              crossOrigin="anonymous"
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -755,13 +710,12 @@ function VideoCardComponent({
   return (
     <div
       ref={cardRef}
-      className="video-card flex flex-col gap-3 group relative rounded-xl p-1.5 -m-1.5 transition-colors duration-200 ease-out"
-      style={cardStyle}
+      className={`video-card flex flex-col gap-3 group ${COLOR_WASH_HOST} rounded-xl p-1.5 -m-1.5`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onContextMenu={handleContextMenu}
     >
-
+      <ColorWash active={isHovered} color={dominantColor} alpha={0.2} />
       <div
         className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer"
         onClick={() => onPlay(video)}

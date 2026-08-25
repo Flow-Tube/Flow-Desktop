@@ -3,6 +3,7 @@ import { Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { getString } from "../../lib/i18n/index";
+import { Slider } from "../ui/Slider";
 
 export function VolumePopover({ open }: { open: boolean }) {
   const volume = useMusicPlayerStore((s) => s.volume);
@@ -32,16 +33,14 @@ export function VolumePopover({ open }: { open: boolean }) {
           >
             {shown === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
-          <input
-            type="range"
+          <Slider
             min={0}
             max={1}
             step={0.01}
             value={shown}
-            onChange={(e) => setVolume(Number(e.target.value))}
+            onChange={setVolume}
             aria-label={getString("music_volume")}
-            style={{ accentColor: "var(--color-primary)" }}
-            className="h-1 flex-1 cursor-pointer"
+            className="flex-1"
           />
           <span className="w-8 shrink-0 text-right font-mono text-xs tabular-nums text-chrome-neutral-400">
             {Math.round(shown * 100)}

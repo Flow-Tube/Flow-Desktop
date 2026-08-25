@@ -1,4 +1,5 @@
 import { Copy, Heart } from "lucide-react";
+import { Button } from "../components/ui/Button";
 import { getString } from "../lib/i18n/index";
 import { openExternal } from "../lib/openExternal";
 import { useUiStore } from "../store/useUiStore";
@@ -142,14 +143,10 @@ export default function Donations() {
               {getString("donations_patreon_desc")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void openExternal(PATREON_URL)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-sm font-medium text-[var(--color-on-primary)] transition-opacity duration-200 ease-out hover:opacity-90"
-          >
+          <Button onClick={() => void openExternal(PATREON_URL)} className="shrink-0 px-5">
             <Heart className="h-4 w-4" />
             {getString("donations_patreon_button")}
-          </button>
+          </Button>
         </div>
       </section>
 

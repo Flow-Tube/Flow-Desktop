@@ -1,6 +1,6 @@
 FLOW DESKTOP CHANGE LOG
 VERSION: 0.1.1-beta
-DATE: 2026-08-22
+DATE: 2026-08-25
 STATUS: PRE-RELEASE
 
 ABOUT
@@ -21,6 +21,7 @@ LIVESTREAMS
 HOME FEED
 - Fixed the Home feed permanently stopping its auto-loading on scroll after a while, with "Load More" sometimes doing nothing or adding only a couple of videos (#33). Restarting the app did not help, because the feed's search rotation had painted itself into a corner and remembered it; that is fixed too.
 - Clicking "Load More" now always responds, and later pages keep delivering a full batch instead of thinning out.
+- Fixed the row of videos above "Continue watching" splitting onto a second line after changing the videos-per-row setting. It now always shows exactly the number you picked, and drops to fewer only when the window is genuinely too narrow for them.
 
 SUBSCRIPTIONS
 - Removed two placeholder channels (Fireship, Linus Tech Tips) that appeared pre-subscribed on fresh installs and led to a blank page when clicked. Existing installs are cleaned up automatically.
@@ -49,6 +50,7 @@ PLAYER
 - Dislike counts (Return YouTube Dislike) now appear in installed builds; they were blocked by the app's security policy and only worked in development.
 - Fixed external audio dropping out after seeking, pausing, or changing quality.
 - The suggested-videos panel on the watch page scrolls independently of the video, description, and comments.
+- The suggested-videos panel no longer shows a scrollbar down its side.
 - Downloaded music now plays fully offline. The cover art and lyrics already saved with each download are used instead of being fetched again, so tracks start promptly and still show artwork and lyrics with no connection.
 - Smoother scrolling on Home and Subscriptions.
 
@@ -59,14 +61,28 @@ SHORTS
 
 SEARCH
 - More filters on the results page: sort by rating, "Last hour" and "This year" upload windows, a 4-20 minute length option, and a features filter (HD, 4K, Subtitles/CC, Creative Commons, HDR).
+- Fixed the search box offering suggestions for something other than what you had just typed. Any query containing an accent or a non-Latin script failed to load suggestions at all, silently leaving the previous query's list on screen; a slow reply could also overwrite a newer one.
+- Suggestions can now be moved through with the arrow keys, chosen with Enter and dismissed with Escape, and a long list scrolls instead of running off the screen.
 
 MUSIC
 - The mini-player timeline thickens under the cursor and shows a position dot, making it comfortable to scrub.
+- Shuffle and repeat now clearly show when they are on. The button fills with a colour drawn from the current artwork instead of only recolouring the icon, which was easy to miss - and on some tracks invisible against the background.
+- New Music Player Background setting with four styles - Blur + Gradient, Blurred Artwork, Palette Gradient and Default Surface - matching Flow for Android.
+
+INTERFACE
+- Hovering a card now grows its artwork colour outward from the centre rather than simply switching it on, with a softer, springier transition.
+- That artwork-coloured hover reaches the cards that never had it: playlists, music albums and artists, channels, and the videos listed inside a playlist.
+- Fixed the hover colour being clipped at the edges of shelves and rows - noticeably on the first card of a row - on Home, History, Library, the music and artist pages, and the suggested-videos panel.
+- Every shelf now has left and right arrows for moving through it. The music, Library and Subscriptions shelves had none, and the ones that did have them did not all look the same.
+- Toggle switches have been redesigned: larger, with a tick when on and a cross when off, and they react to being pressed.
+- Buttons across the app now respond to a click the way the player's controls always have.
+- Volume, the equaliser and the music player's seek bar use a new slider design with a thicker track and a slim handle. If you prefer the old one, turn off Settings > Appearance > Expressive sliders. The video, Shorts and mini-player seek bars are unchanged.
 
 BACKUPS AND DATA
 - Backups now actually contain your data. Previously a Flow backup file held only settings - watch history, subscriptions, playlists, likes, and the recommendation brains were silently left out, which is why restores came back crippled. The App data / Brain / Everything choice now does exactly what it says, and restoring shows a summary of what came back.
 - Fixed restoring a backup being able to leave Deep Flow silently stuck on forever, which stopped watch-history recording and FlowNeuro learning without any visible sign.
 - The Reset Brain confirmation now appears centred on screen instead of buried in the middle of the page.
+- The Import data page was rebuilt to match the rest of Settings, and its in-page back button removed now that the top bar handles going back.
 
 DOWNLOADS
 - New thumbnail options in Settings: turn artwork saving on or off, and choose between a separate image file, embedding it in the media file, or both. Music and audio downloads embed cover art directly; video downloads always use a separate file.

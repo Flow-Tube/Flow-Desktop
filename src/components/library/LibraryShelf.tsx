@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { Button } from "../ui/Button";
+import { ShelfScroller } from "../ui/ShelfScroller";
 
 interface LibraryShelfProps {
   /** Section heading, e.g. "History". */
@@ -60,9 +61,9 @@ export const LibraryShelf: React.FC<LibraryShelfProps> = ({
           </p>
         </div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto snap-x hide-scrollbar px-3 -mx-3 pt-3 -mt-2 pb-4">
+        <ShelfScroller className="flex gap-4 snap-x px-3 -mx-3 pt-3 -mt-2 pb-4">
           {children}
-        </div>
+        </ShelfScroller>
       )}
     </section>
   );

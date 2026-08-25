@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { getString } from '../../lib/i18n/index';
+import { ShelfScroller } from '../ui/ShelfScroller';
 
 interface MusicShelfProps<T> {
   title: string;
@@ -67,7 +68,7 @@ export function MusicShelf<T>({
       </div>
       )}
 
-      <div className="flex snap-x gap-6 overflow-x-auto hide-scrollbar px-3 -mx-3 pt-3 -mt-2 pb-6">
+      <ShelfScroller className="flex snap-x gap-6 px-3 -mx-3 pt-3 -mt-2 pb-6">
         {loading
           ? Array.from({ length: skeletonCount }).map((_, i) => (
               <ShelfSkeleton key={i} shape={skeletonShape} />
@@ -77,7 +78,7 @@ export function MusicShelf<T>({
                 {renderItem(item, i)}
               </div>
             ))}
-      </div>
+      </ShelfScroller>
     </section>
   );
 }

@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 import { CategoryChips } from '../../components/layout/CategoryChips';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { MusicShelf } from '../../components/music/MusicShelf';
+import { ShelfScroller } from '../../components/ui/ShelfScroller';
 import { Button } from '../../components/ui/Button';
 import { useMusicChipFilter, useMusicHome } from '../../lib/useMusicHome';
 import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
@@ -189,7 +190,7 @@ export default function MusicHome() {
             <h2 className="mb-3 px-1 text-xl font-bold tracking-tight text-chrome-neutral-100">
               {getString('music_quick_picks')}
             </h2>
-            <div className="grid auto-cols-[88%] grid-flow-col grid-rows-3 gap-x-4 gap-y-1 overflow-x-auto hide-scrollbar snap-x px-3 -mx-3 pt-3 -mt-2 pb-4 sm:auto-cols-[46%] lg:auto-cols-[31%] xl:auto-cols-[23.5%]">
+            <ShelfScroller className="grid auto-cols-[88%] grid-flow-col grid-rows-3 gap-x-4 gap-y-1 snap-x px-3 -mx-3 pt-3 -mt-2 pb-4 sm:auto-cols-[46%] lg:auto-cols-[31%] xl:auto-cols-[23.5%]">
               {quickPicks.map((track) => (
                 <MusicItemCard
                   key={track.videoId ?? track.id}
@@ -200,7 +201,7 @@ export default function MusicHome() {
                   onMenu={() => addToQueue(track)}
                 />
               ))}
-            </div>
+            </ShelfScroller>
           </section>
         )}
 

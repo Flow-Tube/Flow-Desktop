@@ -350,6 +350,8 @@
   "theme_variant_description": "Every palette includes a light, dark, and AMOLED treatment.",
   "settings_expressive_sliders": "Expressive sliders",
   "settings_expressive_sliders_desc": "Use the Material 3 Expressive slider style for volume, the equaliser and the music seek bar",
+  "shelf_scroll_left": "Scroll left",
+  "shelf_scroll_right": "Scroll right",
   "theme_variant_light": "Light",
   "theme_variant_dark": "Dark",
   "theme_variant_amoled": "AMOLED",

@@ -1,5 +1,6 @@
 import type { SubscribedChannel } from '../../store/useSubscriptionStore';
 import { QuickAccessAvatar } from './QuickAccessAvatar';
+import { ShelfScroller } from '../ui/ShelfScroller';
 
 export interface ChannelSwiperProps {
   channels: SubscribedChannel[];
@@ -15,7 +16,7 @@ export function ChannelSwiper({
   onSelectChannel,
 }: ChannelSwiperProps) {
   return (
-    <div className="flex flex-row gap-4 overflow-x-auto py-4 snap-x hide-scrollbar">
+    <ShelfScroller className="flex flex-row gap-4 py-4 snap-x">
       {channels.map((channel) => (
         <QuickAccessAvatar
           key={channel.id}
@@ -26,6 +27,6 @@ export function ChannelSwiper({
           onClick={() => onSelectChannel?.(channel)}
         />
       ))}
-    </div>
+    </ShelfScroller>
   );
 }

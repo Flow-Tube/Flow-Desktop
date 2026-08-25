@@ -12,6 +12,8 @@ import {
 import { downloadPlaylist } from '../../lib/useCollectionDownloads';
 import { useUiStore } from '../../store/useUiStore';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
+import { useHoverWashColor } from '../../lib/useHoverWashColor';
 
 interface PlaylistCardProps {
   playlist: PlaylistSummary & {
@@ -105,6 +107,7 @@ export function PlaylistCard({
   const [isSaved, setIsSaved] = useState(Boolean(isInLibrary));
   const cardRef = useRef<HTMLDivElement>(null);
   const showToast = useUiStore((state) => state.showToast);
+  const wash = useHoverWashColor(playlist.thumbnailUrl);
   const isProtected = Boolean(playlist.isProtected) || isProtectedPlaylistId(playlist.id);
 
   const resolvedVideoCount = typeof playlist.videoCount === 'number' && playlist.videoCount > 0
@@ -267,7 +270,9 @@ export function PlaylistCard({
   return (
     <div
       ref={cardRef}
-      className="group relative flex cursor-pointer flex-col gap-3"
+      className={`group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`}
+      onMouseEnter={wash.onMouseEnter}
+      onMouseLeave={wash.onMouseLeave}
       onClick={() => {
         if (onClick) {
           onClick(playlist);
@@ -277,6 +282,8 @@ export function PlaylistCard({
       }}
       onContextMenu={handleContextMenu}
     >
+      <ColorWash active={wash.isHovered} color={wash.color} alpha={0.2} bleed={6} />
+
       <StackedPlaylistThumbnail
         thumbnailUrl={playlist.thumbnailUrl}
         title={playlist.title}

@@ -67,7 +67,7 @@ export function MusicShelf<T>({
       </div>
       )}
 
-      <div className="flex snap-x gap-6 overflow-x-auto hide-scrollbar pb-6">
+      <div className="flex snap-x gap-6 overflow-x-auto hide-scrollbar px-3 -mx-3 pt-3 -mt-2 pb-6">
         {loading
           ? Array.from({ length: skeletonCount }).map((_, i) => (
               <ShelfSkeleton key={i} shape={skeletonShape} />

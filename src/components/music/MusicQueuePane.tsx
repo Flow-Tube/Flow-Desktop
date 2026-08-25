@@ -145,7 +145,7 @@ export function MusicQueuePane() {
       </div>
 
       {/* Scroll area */}
-      <div className="hide-scrollbar -mr-1 flex-1 overflow-y-auto pr-1">
+      <div className="hide-scrollbar -mx-1 flex-1 overflow-y-auto px-1">
         {currentTrack && (
           <>
             <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-widest text-chrome-neutral-600">

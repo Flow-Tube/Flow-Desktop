@@ -44,11 +44,27 @@ export interface ColorWashProps {
   alpha?: number;
   /** How far the wash collapses at rest — `row` for wide, short hosts. */
   spread?: ColorWashSpread;
+  /**
+   * Pixels the wash extends past the host on every side, for a halo around a
+   * card that owns its own width. Padding plus a negative margin cannot do this
+   * on a host with an explicit width: a fixed width simply shrinks by the
+   * padding, and `w-full` over-constrains the box so the right margin is
+   * dropped and the card slides sideways.
+   */
+  bleed?: number;
 }
 
 /** Artwork-tinted hover layer that expands from the centre of its host. */
-export function ColorWash({ active, color, radius = 'rounded-xl', alpha = 0.22, spread = 'card' }: ColorWashProps) {
+export function ColorWash({
+  active,
+  color,
+  radius = 'rounded-xl',
+  alpha = 0.22,
+  spread = 'card',
+  bleed = 0,
+}: ColorWashProps) {
   const style: CSSProperties = {
+    inset: bleed ? `-${bleed}px` : 0,
     zIndex: -1,
     background: color ? `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})` : NEUTRAL_WASH,
     opacity: active ? 1 : 0,
@@ -56,5 +72,5 @@ export function ColorWash({ active, color, radius = 'rounded-xl', alpha = 0.22, 
     transition: IS_LINUX_RUNTIME ? LINUX_FADE : active ? EXPAND : COLLAPSE,
   };
 
-  return <span aria-hidden className={`color-wash pointer-events-none absolute inset-0 ${radius}`} style={style} />;
+  return <span aria-hidden className={`color-wash pointer-events-none absolute ${radius}`} style={style} />;
 }

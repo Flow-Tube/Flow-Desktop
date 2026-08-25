@@ -613,9 +613,12 @@ function VideoCardComponent({
     return (
       <div
         ref={cardRef}
-        className="group relative flex w-full flex-row items-center gap-4 rounded-xl px-1 py-2 transition-colors duration-200 ease-out hover:bg-chrome-neutral-800/40"
+        className={`group ${COLOR_WASH_HOST} flex w-full flex-row items-center gap-4 rounded-xl px-1 py-2`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onContextMenu={handleContextMenu}
       >
+        <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
         {showDragHandle ? (
           <button
             type="button"
@@ -642,9 +645,11 @@ function VideoCardComponent({
         >
           {displayThumbnail ? (
             <img
+              ref={thumbnailRef}
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
+              crossOrigin="anonymous"
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}

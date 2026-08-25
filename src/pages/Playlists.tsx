@@ -7,6 +7,7 @@ import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { Select } from "../components/ui/Select";
+import { useGridStyle } from "../lib/useGridColumns";
 import {
   getPlaylistTimestamp,
   loadStoredPlaylists,
@@ -29,6 +30,7 @@ const FILTERS: PlaylistFilter[] = ["All", "Owned", "Saved"];
 const SORTS: PlaylistSort[] = ["Recently Added", "Oldest", "A-Z"];
 
 export const Playlists: React.FC<PlaylistsProps> = ({ onPlay: _onPlay }) => {
+  const gridStyle = useGridStyle({ gapRem: 1.5 });
   const navigate = useNavigate();
   const [playlists, setPlaylists] = useState<LocalPlaylist[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -214,7 +216,7 @@ export const Playlists: React.FC<PlaylistsProps> = ({ onPlay: _onPlay }) => {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="flow-grid gap-y-6" style={gridStyle}>
               {visiblePlaylists.map((playlist) => (
                 <PlaylistCard
                   key={playlist.id}

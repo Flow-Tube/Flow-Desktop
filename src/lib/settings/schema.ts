@@ -59,6 +59,7 @@ export const SETTINGS = {
   LYRICS_PROVIDER_ENABLED_STATES: "lyrics_provider_enabled_states",
 
   VIDEO_TITLE_MAX_LINES: "video_title_max_lines",
+  GRID_COLUMNS: "grid_columns",
   DOWNLOAD_DIALOG_STYLE: "download_dialog_style",
   HOME_FEED_ENABLED: "home_feed_enabled",
   SHOW_APP_LOGO_ICON: "show_app_logo_icon",
@@ -247,6 +248,7 @@ export const SETTING_DEFINITIONS = [
   json(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, "player", "{}", "wired"),
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
+  num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),
   str(SETTINGS.DOWNLOAD_DIALOG_STYLE, "content", "FULL", "wired", ["FULL", "COMPACT"]),
   bool(SETTINGS.HOME_FEED_ENABLED, "content", true, "wired"),
   bool(SETTINGS.SHOW_APP_LOGO_ICON, "content", true, "wired"),

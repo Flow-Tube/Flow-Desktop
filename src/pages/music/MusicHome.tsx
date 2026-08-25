@@ -10,6 +10,7 @@ import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { getString } from '../../lib/i18n/index';
+import { useGridStyle } from '../../lib/useGridColumns';
 import type { AlbumItem, ArtistItem, PlaylistItem, SongItem, YTItem } from '../../types/music';
 
 const songsOf = (items: YTItem[]): SongItem[] =>
@@ -28,6 +29,7 @@ function SquareSkeleton({ fill }: { fill?: boolean }) {
 }
 
 export default function MusicHome() {
+  const gridStyle = useGridStyle({ density: 'dense' });
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
@@ -140,7 +142,7 @@ export default function MusicHome() {
       const items = visible(chipFilter.items.filter(renderable));
       const songContext = songsOf(items);
       return (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="flow-grid gap-y-6" style={gridStyle}>
           {chipFilter.loading && items.length === 0
             ? Array.from({ length: 18 }).map((_, i) => <SquareSkeleton key={i} fill />)
             : items.map((item, i) => <div key={i}>{renderCard(item, songContext, true)}</div>)}

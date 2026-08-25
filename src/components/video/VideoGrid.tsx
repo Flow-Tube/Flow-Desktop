@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from 'react';
 import type { VideoSummary } from '../../types/video';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
+import { useGridStyle } from '../../lib/useGridColumns';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -45,11 +46,12 @@ export function VideoGrid({
   variant = "default",
   hideChannelAvatar,
 }: VideoGridProps) {
-  const gridClass = "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-8 pb-8";
+  const gridStyle = useGridStyle();
+  const gridClass = "flow-grid gap-y-8 pb-8";
 
   if (loading) {
     return (
-      <div className={gridClass}>
+      <div className={gridClass} style={gridStyle}>
         {Array.from({ length: skeletonCount }).map((_, i) => (
           <VideoCardSkeleton key={`skeleton-${i}`} />
         ))}
@@ -58,7 +60,7 @@ export function VideoGrid({
   }
 
   return (
-    <div className={gridClass}>
+    <div className={gridClass} style={gridStyle}>
       {videos.map((video, index) => (
         <Fragment key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}>
           {/*
@@ -67,7 +69,7 @@ export function VideoGrid({
             The p-1.5/-m-1.5 mirrors the card's hover bleed so the containment
             paint clip lands exactly on the card's expanded edge.
           */}
-          <div className="[content-visibility:auto] [contain-intrinsic-size:auto_19rem] p-1.5 -m-1.5">
+          <div className="flow-grid-card p-1.5 -m-1.5">
             <VideoCard
               video={video}
               onPlay={onPlay}

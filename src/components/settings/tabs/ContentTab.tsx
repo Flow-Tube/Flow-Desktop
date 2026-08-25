@@ -14,10 +14,12 @@ import {
 } from '../../../lib/deepFlow';
 import { useAppSettingsStore } from '../../../store/useAppSettingsStore';
 import { REGION_OPTIONS } from '../../../lib/regionOptions';
+import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridColumns';
 
 export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
+  const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
   const [downloadDialogStyle, setDownloadDialogStyle] = usePreference(SETTINGS.DOWNLOAD_DIALOG_STYLE, 'FULL');
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);
@@ -85,6 +87,21 @@ export function ContentTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_layout')}>
+        <SettingItem
+          title={getString('settings_grid_columns')}
+          description={getString('settings_grid_columns_desc', gridColumns)}
+          disabled={isSettingDisabledUntilWired(SETTINGS.GRID_COLUMNS)}
+        >
+          <Select
+            value={String(gridColumns)}
+            onChange={(value) => setGridColumns(Number(value))}
+            disabled={isSettingDisabledUntilWired(SETTINGS.GRID_COLUMNS)}
+            options={GRID_COLUMN_OPTIONS.map((count) => ({
+              value: String(count),
+              label: getString('settings_grid_columns_option', count),
+            }))}
+          />
+        </SettingItem>
         <SettingItem title={getString('settings_video_title_lines')} description={getString('settings_video_title_lines_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_TITLE_MAX_LINES)}>
           <Select value={String(titleMaxLines)} onChange={(v) => setTitleMaxLines(Number(v))} disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_TITLE_MAX_LINES)} options={[
             { value: '0', label: getString('settings_option_unlimited') }, { value: '1', label: getString('settings_option_one_line') }, { value: '2', label: getString('settings_option_two_lines') }, { value: '3', label: getString('settings_option_three_lines') },

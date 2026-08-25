@@ -13,6 +13,7 @@ import { useInfiniteScroll } from '../../lib/useInfiniteScroll';
 import { getString } from '../../lib/i18n/index';
 import { upgradeAvatarUrl, upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { useGridStyle } from '../../lib/useGridColumns';
 import type {
   SearchCategory,
   TopResult,
@@ -46,13 +47,15 @@ function toPlaylistSummary(p: PlaylistItem): PlaylistSummary {
   };
 }
 
-const SQUARE_GRID = 'grid grid-cols-3 gap-x-4 gap-y-8 md:grid-cols-4 lg:grid-cols-6';
-const WIDE_GRID = 'grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+// Column count and card floor come from the user's grid preference (useGridStyle).
+const RESULT_GRID = 'flow-grid gap-y-8';
 
 type ArtistOrChannel = { kind: 'artist'; item: ArtistItem } | { kind: 'channel'; item: VideoSummary };
 
 export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResultsProps) {
   const navigate = useNavigate();
+  const squareGridStyle = useGridStyle({ density: 'dense' });
+  const wideGridStyle = useGridStyle();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   const addSongToQueue = useMusicPlayerStore((s) => s.addToQueue);
 
@@ -310,7 +313,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
       {filterType === 'albums' && (
         <>
-          <div className={SQUARE_GRID}>
+          <div className={RESULT_GRID} style={squareGridStyle}>
             {r.albums.map((a) => (
               <MusicItemCard key={a.browseId} variant="album" item={a} fill onPlay={() => openAlbum(a)} onOpen={() => openAlbum(a)} />
             ))}
@@ -321,7 +324,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
       {filterType === 'playlists' && (
         <>
-          <div className={WIDE_GRID}>
+          <div className={RESULT_GRID} style={wideGridStyle}>
             {r.playlists.map((p) => (
               <PlaylistCard key={p.id} playlist={toPlaylistSummary(p)} onClick={() => openPlaylist(p)} />
             ))}
@@ -332,7 +335,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
       {filterType === 'podcasts' && (
         <>
-          <div className={SQUARE_GRID}>
+          <div className={RESULT_GRID} style={squareGridStyle}>
             {r.podcasts.map((p) => (
               <MusicItemCard key={p.id} variant="podcast" item={p} fill />
             ))}
@@ -343,7 +346,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
       {filterType === 'episodes' && (
         <>
-          <div className={SQUARE_GRID}>
+          <div className={RESULT_GRID} style={squareGridStyle}>
             {r.episodes.map((e) => (
               <MusicItemCard key={e.id} variant="episode" item={e} fill />
             ))}
@@ -354,7 +357,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
       {filterType === 'artists' && (
         <>
-          <div className={SQUARE_GRID}>
+          <div className={RESULT_GRID} style={squareGridStyle}>
             {r.artists.map((a) => (
               <ArtistCard key={a.id} artist={a} fill onOpen={() => openArtist(a)} />
             ))}
@@ -538,7 +541,7 @@ function SkeletonRows({ count }: { count: number }) {
 }
 
 function SkeletonCardGrid({ shape, count }: { shape: 'square' | 'circle' | 'video'; count: number }) {
-  const gridCls = shape === 'video' ? WIDE_GRID : SQUARE_GRID;
+  const gridStyle = useGridStyle({ density: shape === 'video' ? 'video' : 'dense' });
   const media =
     shape === 'video'
       ? 'aspect-video rounded-xl'
@@ -546,7 +549,7 @@ function SkeletonCardGrid({ shape, count }: { shape: 'square' | 'circle' | 'vide
         ? 'aspect-square rounded-full'
         : 'aspect-square rounded-xl';
   return (
-    <div className={gridCls}>
+    <div className={RESULT_GRID} style={gridStyle}>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className={cx('flex flex-col gap-3', shape === 'circle' && 'items-center')}>
           <ShimmerBlock className={cx('w-full', media)} />

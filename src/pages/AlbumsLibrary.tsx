@@ -7,6 +7,7 @@ import { Select } from "../components/ui/Select";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { MusicItemCard } from "../components/music/MusicItemCard";
+import { useGridStyle } from "../lib/useGridColumns";
 import {
   albumDetailPath,
   storedAlbumToItem,
@@ -30,6 +31,7 @@ const albumTimestamp = (album: StoredAlbum): number => {
 };
 
 export const AlbumsLibrary: React.FC = () => {
+  const gridStyle = useGridStyle({ density: "dense", gapRem: 1.5 });
   const navigate = useNavigate();
   const albums = useAlbumLibraryStore((s) => s.albums);
   const loaded = useAlbumLibraryStore((s) => s.loaded);
@@ -146,7 +148,7 @@ export const AlbumsLibrary: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="flow-grid gap-y-6" style={gridStyle}>
             {visibleAlbums.map((album) => (
               <MusicItemCard
                 key={album.id}

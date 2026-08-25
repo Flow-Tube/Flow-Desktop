@@ -7,6 +7,7 @@ import type {
   PlaylistSummary, 
   PostSummary 
 } from "../../types/video";
+import { useGridStyle } from "../../lib/useGridColumns";
 
 // --- Shorts Grid ---
 
@@ -15,10 +16,11 @@ interface ChannelShortsGridProps {
 }
 
 export const ChannelShortsGrid: React.FC<ChannelShortsGridProps> = ({ shorts }) => {
+  const gridStyle = useGridStyle({ density: "dense" });
   if (!shorts.length) return null;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+    <div className="flow-grid gap-y-4" style={gridStyle}>
       {shorts.map((short) => (
         <ShortCard
           key={short.id}
@@ -37,10 +39,11 @@ interface ChannelPlaylistsGridProps {
 }
 
 export const ChannelPlaylistsGrid: React.FC<ChannelPlaylistsGridProps> = ({ playlists }) => {
+  const gridStyle = useGridStyle({ gapRem: 1.5 });
   if (!playlists.length) return null;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <div className="flow-grid gap-y-6" style={gridStyle}>
       {playlists.map((playlist) => (
         <PlaylistCard key={playlist.id} playlist={playlist} />
       ))}

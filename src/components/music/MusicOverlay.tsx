@@ -42,6 +42,9 @@ import { AmbientBackdrop } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
 import { useLyrics } from "../../lib/lyrics/useLyrics";
 import { useDominantColor } from "../../lib/useDominantColor";
+import { accentForeground, accentSurface } from "../../lib/accentColor";
+import { upgradeMusicImageUrl } from "../../lib/thumbnails";
+import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 
 const TOP_BTN =
   "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
@@ -53,7 +56,6 @@ const META_BTN =
 
 const SIDE = "grid h-11 w-11 place-items-center rounded-full transition-colors duration-200 ease-out";
 const SIDE_IDLE = `${SIDE} text-chrome-neutral-300 hover:bg-surface-container-high hover:text-chrome-neutral-100`;
-const SIDE_ACTIVE = `${SIDE} text-[var(--color-primary)] hover:bg-surface-container-high`;
 
 const LAYOUT_SPRING = { type: "spring" as const, stiffness: 320, damping: 36, mass: 0.9 };
 
@@ -107,7 +109,20 @@ export function MusicOverlay() {
   const [eqOpen, setEqOpen] = useState(false);
   const overlayOpen = currentTrack !== null && viewState !== "dock";
   const lyrics = useLyrics(overlayOpen ? currentTrack : null);
-  const accent = useDominantColor(currentTrack?.thumbnail ?? null);
+  /*
+    Sample the URL the artwork actually renders, not the raw field: YouTube
+    Music hands back protocol-relative and unsized image URLs, and a bare `//`
+    src resolves against the Tauri page origin as http, which `img-src https:`
+    then blocks — the load fails and the accent silently falls back to the
+    theme colour. Going through the same helpers as `MusicArtwork` normalises
+    the URL and reuses its cache entry instead of fetching a second copy.
+  */
+  const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
+  const accent = useDominantColor(accentSrc);
+  const accentActive = {
+    color: accentForeground(accent),
+    backgroundColor: accentSurface(accent),
+  };
   const liked = Boolean(
     currentTrack && likedItems.some((item) => (
       item.kind === "music" && item.id === (currentTrack.videoId ?? currentTrack.id)
@@ -388,7 +403,8 @@ export function MusicOverlay() {
                     onClick={toggleShuffle}
                     aria-label={getString("music_shuffle")}
                     aria-pressed={isShuffle}
-                    className={isShuffle ? SIDE_ACTIVE : SIDE_IDLE}
+                    className={isShuffle ? SIDE : SIDE_IDLE}
+                    style={isShuffle ? accentActive : undefined}
                   >
                     <Shuffle className="h-5 w-5" />
                   </HapticButton>
@@ -431,7 +447,8 @@ export function MusicOverlay() {
                       repeatMode === "one" ? getString("music_repeat_one") : getString("music_repeat")
                     }
                     aria-pressed={repeatMode !== "none"}
-                    className={repeatMode !== "none" ? SIDE_ACTIVE : SIDE_IDLE}
+                    className={repeatMode !== "none" ? SIDE : SIDE_IDLE}
+                    style={repeatMode !== "none" ? accentActive : undefined}
                   >
                     {repeatMode === "one" ? (
                       <Repeat1 className="h-5 w-5" />

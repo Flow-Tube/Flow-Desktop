@@ -28,10 +28,13 @@ import { MusicArtwork } from "./MusicArtwork";
 import { MusicScrubber } from "./MusicScrubber";
 import { EqPanel } from "./EqPanel";
 import { VolumePopover } from "./VolumePopover";
+import { useDominantColor } from "../../lib/useDominantColor";
+import { accentForeground, accentSurface } from "../../lib/accentColor";
+import { upgradeMusicImageUrl } from "../../lib/thumbnails";
+import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 
 const GHOST = "grid h-9 w-9 place-items-center rounded-full transition-colors duration-200 ease-out";
 const GHOST_IDLE = `${GHOST} text-chrome-neutral-400 hover:text-chrome-neutral-100`;
-const GHOST_ACTIVE = `${GHOST} text-[var(--color-primary)]`;
 
 export function GlobalMusicDock() {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
@@ -56,6 +59,14 @@ export function GlobalMusicDock() {
   const { errorInfo, onRetry, onCopyLogs, onOpenInBrowser } = useMusicPlayerError();
 
   const [popover, setPopover] = useState<null | "eq" | "vol">(null);
+
+  // Same artwork URL the overlay samples, so this reads a warm cache entry.
+  const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
+  const accent = useDominantColor(accentSrc);
+  const accentActive = {
+    color: accentForeground(accent),
+    backgroundColor: accentSurface(accent),
+  };
 
   const loading = isBuffering || loadingStreamId !== null;
   const muted = isMuted || volume === 0;
@@ -127,7 +138,8 @@ export function GlobalMusicDock() {
                 onClick={toggleShuffle}
                 aria-label={getString("music_shuffle")}
                 aria-pressed={isShuffle}
-                className={isShuffle ? GHOST_ACTIVE : GHOST_IDLE}
+                className={isShuffle ? GHOST : GHOST_IDLE}
+                style={isShuffle ? accentActive : undefined}
               >
                 <Shuffle className="h-[18px] w-[18px]" />
               </HapticButton>
@@ -168,7 +180,8 @@ export function GlobalMusicDock() {
                   repeatMode === "one" ? getString("music_repeat_one") : getString("music_repeat")
                 }
                 aria-pressed={repeatMode !== "none"}
-                className={repeatMode !== "none" ? GHOST_ACTIVE : GHOST_IDLE}
+                className={repeatMode !== "none" ? GHOST : GHOST_IDLE}
+                style={repeatMode !== "none" ? accentActive : undefined}
               >
                 {repeatMode === "one" ? (
                   <Repeat1 className="h-[18px] w-[18px]" />
@@ -209,7 +222,8 @@ export function GlobalMusicDock() {
                 onClick={() => setPopover((p) => (p === "eq" ? null : "eq"))}
                 aria-label={getString("music_equalizer")}
                 aria-pressed={popover === "eq"}
-                className={popover === "eq" || eqEnabled ? GHOST_ACTIVE : GHOST_IDLE}
+                className={popover === "eq" || eqEnabled ? GHOST : GHOST_IDLE}
+                style={popover === "eq" || eqEnabled ? accentActive : undefined}
               >
                 <SlidersHorizontal className="h-[18px] w-[18px]" />
               </HapticButton>

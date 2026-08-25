@@ -28,6 +28,7 @@ export function PlayerTab() {
   const [speedSlider, setSpeedSlider] = useBoolPref(SETTINGS.SPEED_SLIDER_ENABLED, false);
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
+  const [musicBackground, setMusicBackground] = usePreference(SETTINGS.MUSIC_PLAYER_BACKGROUND);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -183,6 +184,14 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
+        </SettingItem>
+        <SettingItem title={getString('settings_music_player_background')} description={getString('settings_music_player_background_desc')}>
+          <Select value={musicBackground} onChange={setMusicBackground} options={[
+            { value: 'blur_gradient', label: getString('settings_music_player_background_blur_gradient') },
+            { value: 'blur', label: getString('settings_music_player_background_blur') },
+            { value: 'gradient', label: getString('settings_music_player_background_gradient') },
+            { value: 'default', label: getString('settings_music_player_background_default') },
+          ]} />
         </SettingItem>
       </SettingsGroup>
     </div>

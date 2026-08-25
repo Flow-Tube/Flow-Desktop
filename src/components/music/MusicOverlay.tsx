@@ -38,13 +38,15 @@ import { MusicArtwork } from "./MusicArtwork";
 import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
 import { MusicLyrics } from "./MusicLyrics";
-import { AmbientBackdrop } from "./AmbientBackdrop";
+import { AmbientBackdrop, isMusicBackgroundStyle } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
 import { useLyrics } from "../../lib/lyrics/useLyrics";
 import { useDominantColor } from "../../lib/useDominantColor";
 import { accentForeground, accentSurface } from "../../lib/accentColor";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { usePreference } from "../../lib/usePreference";
+import { SETTINGS } from "../../lib/settings/schema";
 
 const TOP_BTN =
   "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
@@ -119,6 +121,8 @@ export function MusicOverlay() {
   */
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
   const accent = useDominantColor(accentSrc);
+  const [backgroundPref] = usePreference(SETTINGS.MUSIC_PLAYER_BACKGROUND);
+  const backgroundStyle = isMusicBackgroundStyle(backgroundPref) ? backgroundPref : "blur_gradient";
   const accentActive = {
     color: accentForeground(accent),
     backgroundColor: accentSurface(accent),
@@ -194,7 +198,7 @@ export function MusicOverlay() {
           transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
           className="fixed inset-x-0 bottom-0 top-8 z-[60] flex flex-col overflow-hidden bg-chrome-neutral-950"
         >
-          <AmbientBackdrop src={currentTrack.thumbnail} accent={accent} />
+          <AmbientBackdrop src={currentTrack.thumbnail} accent={accent} style={backgroundStyle} />
 
           {/* TOP BAR */}
           <div className="absolute top-0 z-20 flex w-full items-center justify-between p-6">

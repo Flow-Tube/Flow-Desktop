@@ -540,6 +540,12 @@
   "settings_fullscreen_title_desc": "Show video title during fullscreen playback",
   "settings_adaptive_player": "Adaptive Player Size",
   "settings_adaptive_player_desc": "Scale viewport to match video aspect ratio",
+  "settings_music_player_background": "Music Player Background",
+  "settings_music_player_background_desc": "How the full-screen music player fills the space behind the artwork",
+  "settings_music_player_background_blur_gradient": "Blur + Gradient",
+  "settings_music_player_background_blur": "Blurred Artwork",
+  "settings_music_player_background_gradient": "Palette Gradient",
+  "settings_music_player_background_default": "Default Surface",
 
   "settings_group_layout": "Layout",
   "settings_grid_columns": "Grid Columns",

@@ -55,6 +55,7 @@ export const SETTINGS = {
   ADAPTIVE_PLAYER_SIZE_ENABLED: "adaptive_player_size_enabled",
   AUTO_PIP_ENABLED: "auto_pip_enabled",
   MANUAL_PIP_BUTTON_ENABLED: "manual_pip_button_enabled",
+  MUSIC_PLAYER_BACKGROUND: "music_player_background",
   LYRICS_PROVIDER_ORDER: "lyrics_provider_order",
   LYRICS_PROVIDER_ENABLED_STATES: "lyrics_provider_enabled_states",
 
@@ -244,6 +245,8 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, "player", true, "persisted-only"),
   bool(SETTINGS.AUTO_PIP_ENABLED, "player", true, "wired"),
   bool(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, "player", true, "wired"),
+  str(SETTINGS.MUSIC_PLAYER_BACKGROUND, "player", "blur_gradient", "wired",
+    ["blur_gradient", "blur", "gradient", "default"]),
   str(SETTINGS.LYRICS_PROVIDER_ORDER, "player", "", "wired"),
   json(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, "player", "{}", "wired"),
 

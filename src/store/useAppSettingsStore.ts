@@ -22,6 +22,10 @@ interface AppSettingsState {
   loading: boolean;
   lastError: string | null;
   loadSettings: () => Promise<void>;
+  /** Adopts values another window already read and validated, so a window that
+   * has to start playing immediately does not wait on one SQLite round trip per
+   * setting first. */
+  hydrateSettings: (values: SettingsValues) => void;
   setSettingValue: (key: SettingKey, value: string) => Promise<boolean>;
 }
 
@@ -87,6 +91,10 @@ export const useAppSettingsStore = create<AppSettingsState>((set, get) => ({
         lastError: error instanceof Error ? error.message : String(error),
       });
     }
+  },
+
+  hydrateSettings: (values) => {
+    set({ values: { ...defaultValues(), ...values }, loaded: true, lastError: null });
   },
 
   setSettingValue: async (key, value) => {

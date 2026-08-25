@@ -6,6 +6,7 @@ pub mod files;
 pub mod music;
 pub mod music_brain;
 pub mod notifications;
+pub mod pip;
 pub mod recommendation;
 pub mod shorts;
 pub mod sync;

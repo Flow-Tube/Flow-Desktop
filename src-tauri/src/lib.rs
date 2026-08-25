@@ -57,6 +57,10 @@ use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
     get_unread_notification_count, mark_notifications_read,
 };
+use commands::pip::{
+    PIP_WINDOW_LABEL, PipState, close_pip_window, focus_main_window, open_pip_window, pip_session,
+    pip_window_ready, set_pip_always_on_top,
+};
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, complete_onboarding,
     generate_discovery_queries, get_brain_snapshot, get_feed_quotas, get_flow_persona,
@@ -300,6 +304,7 @@ pub fn run() {
             app.manage(ShortsService::new());
             app.manage(DownloadManager::default());
             app.manage(PlayerFullscreenState::default());
+            app.manage(PipState::default());
 
             // Initialize and manage streaming proxy
             let (streaming_manager, proxy_listener) = streaming::proxy::StreamingManager::new();
@@ -331,6 +336,19 @@ pub fn run() {
                         let _ = window.unminimize();
                         let _ = window.show();
                         let _ = window.set_focus();
+                    }
+                });
+            }
+
+            // The pop-out player is a second top-level window, so closing the
+            // main window would otherwise leave Flow running headless behind it.
+            if let Some(main_window) = app.get_webview_window("main") {
+                let handle = app.handle().clone();
+                main_window.on_window_event(move |event| {
+                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                        if let Some(pip) = handle.get_webview_window(PIP_WINDOW_LABEL) {
+                            let _ = pip.destroy();
+                        }
                     }
                 });
             }
@@ -423,6 +441,13 @@ pub fn run() {
             reveal_logs_folder,
             startup_render_ok,
             set_player_fullscreen,
+            // --- Pop-out (picture-in-picture) player window ---
+            open_pip_window,
+            pip_session,
+            close_pip_window,
+            set_pip_always_on_top,
+            pip_window_ready,
+            focus_main_window,
             // --- Shorts feed ---
             get_shorts_feed,
             load_more_shorts,

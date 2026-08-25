@@ -8,7 +8,13 @@ export type PlaybackRate = number;
 export type RepeatMode = "none" | "one" | "all";
 export type QueueAddResult = "added" | "duplicate";
 export type PlayMode = "video" | "music";
-export type VideoPlayerMode = "watch" | "pip";
+/**
+ * `pip` is the mini player surface itself — the in-app floating frame in the
+ * main window, and the whole viewport inside the pop-out window. `window` is
+ * what the *main* window shows while a pop-out owns playback: no media element
+ * of its own, so the two windows never decode the same video at once.
+ */
+export type VideoPlayerMode = "watch" | "pip" | "window";
 export type VideoPipIntent = "auto" | "manual";
 
 export interface WatchPageCache {
@@ -73,6 +79,15 @@ interface PlayerState {
   videoPlayerMode: VideoPlayerMode;
   videoPipIntent: VideoPipIntent | null;
   isVideoFullscreen: boolean;
+  /** Playback handed over by the other window, consumed by whichever player
+   * mounts next so a handoff resumes exactly where — and how — it left off.
+   * Kept in memory rather than written to the saved-progress store, which Deep
+   * Flow disables. */
+  pipHandoff: { videoId: string; positionSeconds: number; playing: boolean } | null;
+  /** True while this window is decoding a video the *other* window is still
+   * playing out loud — the pop-out warming up behind a handoff. It silences the
+   * media element without touching the user's mute or volume. */
+  isHandoffSilent: boolean;
   watchPageCache: WatchPageCache | null;
   autoplayCandidates: VideoSummary[];
   /** The video the media element has actually begun rendering. Work that is not
@@ -111,7 +126,19 @@ interface PlayerState {
   setDuration: (duration: number) => void;
   markPlaybackStarted: (videoId: string) => void;
   enterVideoPip: (intent: VideoPipIntent) => void;
+  /** Playback moved to the pop-out OS window; this window stops rendering it. */
+  enterVideoWindowPip: () => void;
   expandVideoPlayer: () => void;
+  setPipHandoff: (videoId: string, positionSeconds: number, playing: boolean) => void;
+  setHandoffSilent: (isHandoffSilent: boolean) => void;
+  consumePipHandoff: (videoId: string) => { positionSeconds: number; playing: boolean } | null;
+  /** Mirrors playback owned by the other window without taking it over. */
+  applyPipRemoteState: (patch: {
+    video?: VideoSummary;
+    currentTime?: number;
+    duration?: number;
+    isPlaying?: boolean;
+  }) => void;
   dismissVideoPlayer: () => void;
   setIsVideoFullscreen: (fullscreen: boolean) => void;
   setWatchPageCache: (videoId: string, cache: Partial<Omit<WatchPageCache, "videoId" | "updatedAt">>) => void;
@@ -145,6 +172,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   videoPlayerMode: "watch",
   videoPipIntent: null,
   isVideoFullscreen: false,
+  pipHandoff: null,
+  isHandoffSilent: false,
   watchPageCache: null,
   autoplayCandidates: [],
   playbackStartedVideoId: null,
@@ -429,6 +458,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     videoPlayerMode: "watch",
     videoPipIntent: null,
     isVideoFullscreen: false,
+    pipHandoff: null,
+    isHandoffSilent: false,
     watchPageCache: null,
     autoplayCandidates: [],
     playbackStartedVideoId: null,
@@ -447,9 +478,54 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!get().currentVideo) return;
     set({ videoPlayerMode: "pip", videoPipIntent, isVideoFullscreen: false });
   },
+  enterVideoWindowPip: () => {
+    if (!get().currentVideo) return;
+    set({ videoPlayerMode: "window", videoPipIntent: "manual", isVideoFullscreen: false });
+  },
   expandVideoPlayer: () => {
     if (!get().currentVideo) return;
     set({ videoPlayerMode: "watch", videoPipIntent: null });
+  },
+  setPipHandoff: (videoId, positionSeconds, playing) => {
+    const safePosition =
+      Number.isFinite(positionSeconds) && positionSeconds > 0 ? positionSeconds : 0;
+    set({ pipHandoff: { videoId, positionSeconds: safePosition, playing } });
+  },
+  setHandoffSilent: (isHandoffSilent) => set({ isHandoffSilent }),
+  consumePipHandoff: (videoId) => {
+    const handoff = get().pipHandoff;
+    if (!handoff || handoff.videoId !== videoId) return null;
+    set({ pipHandoff: null });
+    return { positionSeconds: handoff.positionSeconds, playing: handoff.playing };
+  },
+  applyPipRemoteState: ({ video, currentTime, duration, isPlaying }) => {
+    const { queue } = get();
+    const patch: Partial<PlayerState> = {};
+
+    if (video) {
+      // An autoplay advance inside the pop-out can pull in a video this window
+      // never had, so the queue grows to match rather than losing the entry.
+      const existingIndex = queue.findIndex((item) => item.id === video.id);
+      if (existingIndex >= 0) {
+        patch.queue = queue.map((item, index) => (index === existingIndex ? video : item));
+        patch.currentIndex = existingIndex;
+      } else {
+        patch.queue = [...queue, video];
+        patch.currentIndex = queue.length;
+      }
+      patch.currentVideo = video;
+      patch.duration = video.durationSeconds ?? 0;
+      patch.watchPageCache = null;
+      patch.autoplayCandidates = [];
+      patch.playbackStartedVideoId = null;
+      patch.currentTime = 0;
+    }
+
+    if (currentTime !== undefined) patch.currentTime = currentTime;
+    if (duration !== undefined && duration > 0) patch.duration = duration;
+    if (isPlaying !== undefined) patch.isPlaying = isPlaying;
+
+    set(patch);
   },
   dismissVideoPlayer: () => get().clearQueue(),
   setIsVideoFullscreen: (isVideoFullscreen) => set({ isVideoFullscreen }),

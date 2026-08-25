@@ -13,7 +13,7 @@ import { filterByPreferredCodec, selectPreferredStreamVariant } from "./settings
 import { codecRank } from "./codecPreference";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import type { AudioTrack, CaptionTrack, StreamInfo, StreamVariant } from "../types/video";
+import type { AudioTrack, CaptionTrack, StreamInfo, StreamVariant, VideoSummary } from "../types/video";
 
 export type SourceMode = "hls" | "dash-native" | "sabr-dash" | "direct" | "unavailable";
 
@@ -59,6 +59,23 @@ export const clearLocalWatchProgress = (videoId: string) => {
   } catch (error) {
     console.warn("Failed to clear watch progress", error);
   }
+};
+
+/**
+ * Where playback should pick up, and whether it should be running when it does.
+ * A handoff between the main window and the pop-out player wins over saved
+ * progress: it is exact, it carries the paused state the user chose, and it
+ * survives Deep Flow, which suppresses the saved-progress write entirely.
+ */
+const resolveHandoff = (video: VideoSummary, isLive: boolean) => {
+  const handoff = usePlayerStore.getState().consumePipHandoff(video.id);
+  if (handoff) {
+    return { resumeTime: isLive ? 0 : handoff.positionSeconds, playing: handoff.playing };
+  }
+  return {
+    resumeTime: isLive ? 0 : readSavedWatchProgress(video.id, video.durationSeconds ?? 0),
+    playing: true,
+  };
 };
 
 const selectVariantByBandwidth = (
@@ -238,10 +255,11 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
             streamInfoRef.current = null;
             attemptedModesRef.current = new Set(["direct"]);
             setSelectedQualityId("auto");
-            setResumeTime(readSavedWatchProgress(currentVideo.id, currentVideo.durationSeconds ?? 0));
+            const offlineHandoff = resolveHandoff(currentVideo, false);
+            setResumeTime(offlineHandoff.resumeTime);
             setSourceMode("direct");
             setStreamUrl(offline.url);
-            setIsPlaying(true);
+            setIsPlaying(offlineHandoff.playing);
             if (shouldRecordWatchHistory()) {
               void addWatchRecord({
                 videoId: currentVideo.id,
@@ -281,9 +299,8 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         setSelectedQualityId(initialQualityId);
 
         // A live broadcast has no meaningful resume point.
-        setResumeTime(
-          info.isLive ? 0 : readSavedWatchProgress(currentVideo.id, currentVideo.durationSeconds ?? 0),
-        );
+        const handoff = resolveHandoff(currentVideo, !!info.isLive);
+        setResumeTime(handoff.resumeTime);
 
         const availableModes = computeAvailableSourceModes(info);
         const initialMode: SourceMode = availableModes[0] || "unavailable";
@@ -319,7 +336,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
           setStreamUrl(pickDirectVariantUrl(info, initialQualityId, preferredCodec));
         }
 
-        setIsPlaying(true);
+        setIsPlaying(handoff.playing);
 
         // The history write is a SQLite round trip nothing on screen waits for.
         if (shouldRecordWatchHistory()) {

@@ -20,6 +20,7 @@ import {
   decideExternalAudioSync,
 } from "../../lib/externalAudioSync";
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
+import { openPopoutPlayer } from "../../lib/pipHandoff";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -356,7 +357,11 @@ export const Player: React.FC<PlayerProps> = ({
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
+  // Silences this player while it warms up behind a handoff the other window is
+  // still playing out loud; user mute and volume stay untouched.
+  const isHandoffSilent = usePlayerStore((state) => state.isHandoffSilent);
   const manualPipButtonEnabled = useAppSettingsStore((state) => state.values[SETTINGS.MANUAL_PIP_BUTTON_ENABLED] !== "false");
+  const popoutPipEnabled = useAppSettingsStore((state) => state.values[SETTINGS.PIP_SEPARATE_WINDOW] !== "false");
   const miniPlayerShowSkipControls = useAppSettingsStore((state) => state.values[SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS] !== "false");
   const miniPlayerShowNextPrevControls = useAppSettingsStore((state) => state.values[SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS] !== "false");
   const showFullscreenTitle = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_FULLSCREEN_TITLE] === "true");
@@ -1140,8 +1145,24 @@ export const Player: React.FC<PlayerProps> = ({
       setIsFullscreen(false);
       void syncNativeFullscreen(false);
     }
+    if (popoutPipEnabled) {
+      // Falls back to the in-app mini player if the OS window cannot be opened,
+      // rather than leaving the click with nothing to show for it.
+      void openPopoutPlayer().then((opened) => {
+        if (!opened) enterVideoPip("manual");
+      });
+      return;
+    }
     enterVideoPip("manual");
-  }, [enterVideoPip, expandVideoPlayer, isFullscreen, setIsFullscreen, syncNativeFullscreen, videoPlayerMode]);
+  }, [
+    enterVideoPip,
+    expandVideoPlayer,
+    isFullscreen,
+    popoutPipEnabled,
+    setIsFullscreen,
+    syncNativeFullscreen,
+    videoPlayerMode,
+  ]);
 
   const updateBuffered = useCallback(() => {
     const video = videoRef.current;
@@ -1828,14 +1849,14 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
-    const effectiveMuted = muted || sbMuted;
+    const effectiveMuted = muted || sbMuted || isHandoffSilent;
     video.volume = usesExternalAudio ? 0 : (effectiveMuted ? 0 : volume);
     video.muted = usesExternalAudio || effectiveMuted || volume === 0;
     if (audio) {
       audio.volume = effectiveMuted ? 0 : volume;
       audio.muted = effectiveMuted || volume === 0;
     }
-  }, [muted, sbMuted, usesExternalAudio, volume]);
+  }, [isHandoffSilent, muted, sbMuted, usesExternalAudio, volume]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1929,6 +1950,9 @@ export const Player: React.FC<PlayerProps> = ({
         case "t":
           setIsTheaterMode(!isTheaterMode);
           break;
+        case "i":
+          togglePictureInPicture();
+          break;
       }
       revealControls();
     };
@@ -1947,6 +1971,7 @@ export const Player: React.FC<PlayerProps> = ({
     setMuted,
     setVolume,
     toggleFullscreen,
+    togglePictureInPicture,
     togglePlay,
     volume,
   ]);

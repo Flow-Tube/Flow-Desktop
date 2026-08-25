@@ -6,6 +6,7 @@ import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { SETTINGS } from "../../lib/settings/schema";
 import { FlowPlayerCore } from "./FlowPlayerCore";
+import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
 
 type PlayerBounds = {
   top: number;
@@ -51,9 +52,6 @@ export function GlobalVideoPlayer() {
   const enterVideoPip = usePlayerStore((s) => s.enterVideoPip);
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
   const dismissVideoPlayer = usePlayerStore((s) => s.dismissVideoPlayer);
-  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const playNext = usePlayerStore((s) => s.playNext);
-  const playPrevious = usePlayerStore((s) => s.playPrevious);
   const autoPipEnabled = useAppSettingsStore((s) => s.values[SETTINGS.AUTO_PIP_ENABLED] !== "false");
 
   const [slotBounds, setSlotBounds] = useState<PlayerBounds | null>(null);
@@ -63,6 +61,9 @@ export function GlobalVideoPlayer() {
   const previousVideoIdRef = useRef(currentVideo?.id ?? null);
 
   const isFloating = videoPlayerMode === "pip";
+  // The pop-out window owns playback in this mode, so this window renders no
+  // media element — two decoding the same video would double audio and CPU.
+  const isPoppedOut = videoPlayerMode === "window";
   const cachedDetails =
     currentVideo && watchPageCache?.videoId === currentVideo.id
       ? watchPageCache.videoDetails
@@ -80,44 +81,11 @@ export function GlobalVideoPlayer() {
     }
   }, [currentVideo?.id, location.pathname, navigate]);
 
-  useEffect(() => {
-    if (!currentVideo || !("mediaSession" in navigator)) return;
-
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentVideo.title,
-        artist: currentVideo.channelName,
-        artwork: currentVideo.thumbnailUrl
-          ? [{ src: currentVideo.thumbnailUrl }]
-          : undefined,
-      });
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch (error) {
-      console.warn("Failed to update media session metadata", error);
-    }
-
-    try {
-      navigator.mediaSession.setActionHandler("play", () => setIsPlaying(true));
-      navigator.mediaSession.setActionHandler("pause", () => setIsPlaying(false));
-      navigator.mediaSession.setActionHandler("nexttrack", () => playNext(true));
-      navigator.mediaSession.setActionHandler("previoustrack", playPrevious);
-    } catch (error) {
-      console.warn("Failed to configure media session actions", error);
-    }
-
-    return () => {
-      for (const action of ["play", "pause", "nexttrack", "previoustrack"] as MediaSessionAction[]) {
-        try {
-          navigator.mediaSession.setActionHandler(action, null);
-        } catch {
-          // Some WebViews expose Media Session but not every action.
-        }
-      }
-    };
-  }, [currentVideo, isPlaying, playNext, playPrevious, setIsPlaying]);
+  // While the pop-out owns playback it also owns the OS transport controls.
+  useMediaSessionMetadata(!isPoppedOut);
 
   useEffect(() => {
-    if (isFloating || isVideoFullscreen || !currentVideo) return;
+    if (isFloating || isPoppedOut || isVideoFullscreen || !currentVideo) return;
 
     const writeFrameBounds = (bounds: PlayerBounds) => {
       const frame = frameRef.current;
@@ -171,7 +139,7 @@ export function GlobalVideoPlayer() {
       if (scrollRaf !== null) window.cancelAnimationFrame(scrollRaf);
       window.cancelAnimationFrame(settleRaf);
     };
-  }, [isFloating, isVideoFullscreen, currentVideo, location.pathname]);
+  }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo, location.pathname]);
 
   useEffect(() => {
     const previousPath = previousPathRef.current;
@@ -188,7 +156,7 @@ export function GlobalVideoPlayer() {
       return;
     }
 
-    if (prevWatchId === currentVideo.id && videoPlayerMode !== "pip") {
+    if (prevWatchId === currentVideo.id && videoPlayerMode === "watch") {
       if (isPlaying && autoPipEnabled) {
         enterVideoPip("auto");
       } else {
@@ -262,7 +230,7 @@ export function GlobalVideoPlayer() {
     [videoIdForPlayer, cachedDetails],
   );
 
-  if (!currentVideo) return null;
+  if (!currentVideo || isPoppedOut) return null;
 
   return (
     <div

@@ -42,8 +42,8 @@ function readCache(videoId: string): StreamInfo | null {
   return entry.info;
 }
 
-function writeCache(videoId: string, info: StreamInfo) {
-  cache.set(videoId, { info, resolvedAt: Date.now() });
+function writeCache(videoId: string, info: StreamInfo, resolvedAt = Date.now()) {
+  cache.set(videoId, { info, resolvedAt });
   for (const [key, entry] of cache) {
     if (Date.now() - entry.resolvedAt >= STREAM_INFO_TTL_MS) cache.delete(key);
   }
@@ -136,6 +136,27 @@ export function prefetchStreamInfo(videoId: string | null | undefined) {
   prefetchQueue.unshift(videoId);
   if (prefetchQueue.length > MAX_CONCURRENT_PREFETCH * 2) prefetchQueue.length = MAX_CONCURRENT_PREFETCH * 2;
   drainPrefetchQueue();
+}
+
+/** The cached resolve for [videoId], with the age needed to hand it to another
+ * window without resetting its TTL. */
+export function readStreamInfoEntry(videoId: string): CacheEntry | null {
+  const entry = cache.get(videoId);
+  if (!entry) return null;
+  return Date.now() - entry.resolvedAt >= STREAM_INFO_TTL_MS ? null : entry;
+}
+
+/**
+ * Adopts a resolve performed by another window. The pop-out player runs in its
+ * own JS context with a cold cache, and re-resolving would walk the whole client
+ * ladder again for a stream the main window already holds. The original
+ * `resolvedAt` travels with it so an inherited entry expires on schedule instead
+ * of being revived.
+ */
+export function primeStreamInfo(videoId: string, info: StreamInfo, resolvedAt: number) {
+  if (!Number.isFinite(resolvedAt)) return;
+  if (Date.now() - resolvedAt >= STREAM_INFO_TTL_MS) return;
+  writeCache(videoId, info, resolvedAt);
 }
 
 export function invalidateStreamInfo(videoId: string) {

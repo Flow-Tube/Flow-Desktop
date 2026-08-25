@@ -134,3 +134,40 @@ describe("prefetchStreamInfo", () => {
     await expect(mod.resolveStreamInfo("a")).rejects.toThrow(/age-restricted/);
   });
 });
+
+describe("cross-window stream priming", () => {
+  it("lets an adopted resolve serve the player without re-resolving", async () => {
+    const getStreamInfo = vi.fn().mockResolvedValue(makeInfo("fresh"));
+    const mod = await loadModule(getStreamInfo);
+
+    const inherited = makeInfo("inherited");
+    mod.primeStreamInfo("a", inherited, Date.now());
+
+    await expect(mod.resolveStreamInfo("a")).resolves.toBe(inherited);
+    expect(getStreamInfo).not.toHaveBeenCalled();
+  });
+
+  it("keeps the original age so an inherited resolve is not revived past its TTL", async () => {
+    const getStreamInfo = vi.fn().mockResolvedValue(makeInfo("fresh"));
+    const mod = await loadModule(getStreamInfo);
+
+    // Older than the reuse window: adopting it would hand the player a proxy
+    // session that may already be gone.
+    mod.primeStreamInfo("a", makeInfo("stale"), Date.now() - 10 * 60_000);
+
+    await mod.resolveStreamInfo("a");
+    expect(getStreamInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes a cached entry with its age so it can be handed to another window", async () => {
+    const getStreamInfo = vi.fn().mockResolvedValue(makeInfo("a"));
+    const mod = await loadModule(getStreamInfo);
+
+    expect(mod.readStreamInfoEntry("a")).toBeNull();
+    const resolved = await mod.resolveStreamInfo("a");
+
+    const entry = mod.readStreamInfoEntry("a");
+    expect(entry?.info).toBe(resolved);
+    expect(entry?.resolvedAt).toBeTypeOf("number");
+  });
+});

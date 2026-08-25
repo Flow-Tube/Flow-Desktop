@@ -50,6 +50,7 @@ import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
 import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
 import { MusicOverlay } from "./components/music/MusicOverlay";
 import { GlobalVideoPlayer } from "./components/watch/GlobalVideoPlayer";
+import { PipWindowController } from "./components/pip/PipWindowController";
 import { AddToAlbumModal } from "./components/music/AddToAlbumModal";
 import { AddTracksToAlbumModal } from "./components/music/AddTracksToAlbumModal";
 import { AddToPlaylistModal } from "./components/playlist/AddToPlaylistModal";
@@ -227,6 +228,7 @@ function App() {
       </Routes>
       </div>
       <GlobalVideoPlayer />
+      <PipWindowController />
       <GlobalMusicAudio />
       <LayoutGroup>
         <GlobalMusicDock />

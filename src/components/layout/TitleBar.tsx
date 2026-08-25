@@ -5,6 +5,7 @@ import { Copy, Minus, Square, X } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { usePageTitleStore } from "../../store/usePageTitleStore";
+import { WindowResizeEdges } from "../ui/WindowResizeEdges";
 
 const appWindow = getCurrentWindow();
 
@@ -84,33 +85,6 @@ function useResolvedTitle(): ResolvedTitle {
   }, [pathname, search, musicOverlayOpen, trackTitle, currentVideoId, currentVideoTitle, override]);
 }
 
-// Undecorated windows on Windows lose the native resize borders, so we recreate
-// them with thin hit-areas that hand the drag off to the OS via startResizeDragging.
-const RESIZE_EDGES = [
-  { dir: "North", cls: "top-0 inset-x-0 h-[3px] cursor-ns-resize" },
-  { dir: "South", cls: "bottom-0 inset-x-0 h-[3px] cursor-ns-resize" },
-  { dir: "West", cls: "inset-y-0 left-0 w-[3px] cursor-ew-resize" },
-  { dir: "East", cls: "inset-y-0 right-0 w-[3px] cursor-ew-resize" },
-  { dir: "NorthWest", cls: "top-0 left-0 h-2.5 w-2.5 cursor-nwse-resize" },
-  { dir: "NorthEast", cls: "top-0 right-0 h-2.5 w-2.5 cursor-nesw-resize" },
-  { dir: "SouthWest", cls: "bottom-0 left-0 h-2.5 w-2.5 cursor-nesw-resize" },
-  { dir: "SouthEast", cls: "bottom-0 right-0 h-2.5 w-2.5 cursor-nwse-resize" },
-] as const;
-
-function ResizeEdges() {
-  return (
-    <>
-      {RESIZE_EDGES.map((edge) => (
-        <div
-          key={edge.dir}
-          className={`fixed z-[200] ${edge.cls}`}
-          onMouseDown={() => void appWindow.startResizeDragging(edge.dir as any).catch(() => {})}
-        />
-      ))}
-    </>
-  );
-}
-
 export function TitleBar() {
   const [isMaximized, setIsMaximized] = useState(false);
   const { text, section } = useResolvedTitle();
@@ -181,7 +155,7 @@ export function TitleBar() {
           </button>
         </div>
       </div>
-      <ResizeEdges />
+      <WindowResizeEdges />
     </>
   );
 }

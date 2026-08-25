@@ -295,6 +295,12 @@
   .music-wave-bar {
     animation: none;
   }
+
+  /* The wash animates through inline styles, so reduced motion has to outrank them. */
+  .color-wash {
+    transform: none !important;
+    transition: opacity 120ms linear !important;
+  }
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */

@@ -66,10 +66,11 @@ export function VideoGrid({
           {/*
             content-visibility lets the browser skip layout/paint for offscreen
             cards — feeds can hold hundreds, and Linux composites on the CPU.
-            The p-1.5/-m-1.5 mirrors the card's hover bleed so the containment
-            paint clip lands exactly on the card's expanded edge.
+            The p-2/-m-2 nets to zero but widens the containment paint clip
+            past the card's own hover bleed, so the colour wash still has room
+            at the peak of its expansion — even at two columns on a wide window.
           */}
-          <div className="flow-grid-card p-1.5 -m-1.5">
+          <div className="flow-grid-card p-2 -m-2">
             <VideoCard
               video={video}
               onPlay={onPlay}

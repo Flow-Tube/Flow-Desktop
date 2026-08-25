@@ -87,7 +87,7 @@ export const ShortsShelf: React.FC<ShortsShelfProps> = ({
         {/* Scrollable Container */}
         <div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scroll-smooth scrollbar-none pb-2 px-1 -mx-1"
+          className="flex gap-4 overflow-x-auto scroll-smooth scrollbar-none px-3 -mx-3 pt-3 -mt-2 pb-3"
         >
           {shorts.map((short) => (
             <ShortCard

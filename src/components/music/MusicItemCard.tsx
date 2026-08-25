@@ -6,6 +6,7 @@ import { useActiveDownloadForVideo, useIsDownloaded } from '../../lib/useDownloa
 import { downloadAlbum, useCollectionDownloadState } from '../../lib/useCollectionDownloads';
 import { upgradeAvatarUrl, upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { extractDominantColorFromImage, useDominantColor } from '../../lib/useDominantColor';
+import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
@@ -144,11 +145,6 @@ function useSongLike(track: SongItem | null | undefined) {
   };
 
   return { liked, toggle };
-}
-
-function colorBackground(color: { r: number; g: number; b: number } | null): React.CSSProperties {
-  if (!color) return { background: 'color-mix(in srgb, var(--color-chrome-zinc-800) 50%, transparent)' };
-  return { background: `rgba(${color.r}, ${color.g}, ${color.b}, 0.22)` };
 }
 
 function albumSubtitle(item: AlbumItem): string {
@@ -654,13 +650,13 @@ function ListRow({
         resolveColor();
       }}
       onMouseLeave={() => setIsHovered(false)}
-      style={isHighlighted ? colorBackground(activeColor) : undefined}
       className={cx(
-        'group relative flex w-full cursor-pointer items-center gap-4 rounded-lg p-2 transition-colors duration-200 ease-out',
+        `group ${COLOR_WASH_HOST} flex w-full cursor-pointer items-center gap-4 rounded-lg p-2`,
         'outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}
     >
+      <ColorWash active={isHighlighted} color={activeColor} radius="rounded-lg" spread="row" />
       <div className="relative h-12 w-12 shrink-0">
         <Artwork
           src={item.thumbnail}

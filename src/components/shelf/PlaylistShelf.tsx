@@ -85,7 +85,7 @@ export const PlaylistShelf: React.FC<PlaylistShelfProps> = ({
         {/* Scrollable Container */}
         <div
           ref={scrollRef}
-          className="flex gap-6 overflow-x-auto scroll-smooth scrollbar-none pb-2 pt-2 px-1 -mx-1"
+          className="flex gap-6 overflow-x-auto scroll-smooth scrollbar-none px-3 -mx-3 pt-3 -mt-1 pb-3"
         >
           {playlists.map((playlist) => (
             <div

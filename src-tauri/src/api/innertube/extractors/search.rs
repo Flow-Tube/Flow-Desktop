@@ -4,6 +4,7 @@ use crate::api::innertube::core::utils::{
     detect_video_is_live, extract_channel_id_from_video_renderer, extract_continuation_token,
     normalize_youtube_image_url, parse_duration_seconds,
 };
+use crate::api::http::shared_client;
 use crate::api::innertube::parsers::parse_music_search_json;
 use crate::errors::{AppError, AppResult};
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
@@ -333,13 +334,15 @@ impl InnertubeClient {
 
     pub async fn get_search_suggestions(&self, query: &str) -> AppResult<Vec<String>> {
         let encoded_query = custom_url_encode(query);
+        // `oe=utf-8` is load-bearing: without it this endpoint answers in
+        // ISO-8859-1, and every suggestion carrying an accent, a curly quote or
+        // any non-Latin script comes back as mojibake.
         let url = format!(
-            "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&xhr=t&q={}",
+            "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&xhr=t&ie=utf-8&oe=utf-8&q={}",
             encoded_query
         );
 
-        let client = reqwest::Client::new();
-        let res = client
+        let res = shared_client()
             .get(&url)
             .header("Origin", "https://www.youtube.com")
             .header("Referer", "https://www.youtube.com")
@@ -347,20 +350,31 @@ impl InnertubeClient {
             .await
             .map_err(|e| AppError::Extractor(format!("Network error suggestions: {}", e)))?;
 
-        let val: Value = res
-            .json()
+        // Decoded through `text()` rather than `json()` on purpose: it honours the
+        // charset the response declares, so a legacy encoding still decodes instead
+        // of failing the whole request on bytes that are not valid UTF-8.
+        let body = res
+            .text()
             .await
+            .map_err(|e| AppError::Extractor(format!("Read error suggestions: {}", e)))?;
+
+        let val: Value = serde_json::from_str(&body)
             .map_err(|e| AppError::Extractor(format!("JSON error suggestions: {}", e)))?;
 
-        let mut suggestions = Vec::new();
+        let mut suggestions: Vec<String> = Vec::new();
         if let Some(arr) = val.get(1).and_then(|v| v.as_array()) {
             for item in arr {
-                if let Some(suggestion_str) = item.get(0).and_then(|s| s.as_str()) {
-                    let cleaned = suggestion_str.trim().to_string();
-                    if !cleaned.is_empty() {
-                        suggestions.push(cleaned);
-                    }
+                let Some(text) = item.get(0).and_then(|s| s.as_str()) else {
+                    continue;
+                };
+                let cleaned = text.trim();
+                // The endpoint repeats entries that differ only by casing or spacing.
+                if cleaned.is_empty()
+                    || suggestions.iter().any(|existing| existing.eq_ignore_ascii_case(cleaned))
+                {
+                    continue;
                 }
+                suggestions.push(cleaned.to_string());
             }
         }
         Ok(suggestions)

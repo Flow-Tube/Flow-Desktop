@@ -1,10 +1,10 @@
+use crate::api::http::shared_client;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     detect_video_is_live, extract_channel_id_from_video_renderer, extract_continuation_token,
     normalize_youtube_image_url, parse_duration_seconds,
 };
-use crate::api::http::shared_client;
 use crate::api::innertube::parsers::parse_music_search_json;
 use crate::errors::{AppError, AppResult};
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
@@ -370,7 +370,9 @@ impl InnertubeClient {
                 let cleaned = text.trim();
                 // The endpoint repeats entries that differ only by casing or spacing.
                 if cleaned.is_empty()
-                    || suggestions.iter().any(|existing| existing.eq_ignore_ascii_case(cleaned))
+                    || suggestions
+                        .iter()
+                        .any(|existing| existing.eq_ignore_ascii_case(cleaned))
                 {
                     continue;
                 }

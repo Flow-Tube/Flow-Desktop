@@ -19,6 +19,7 @@ import { PostShelf } from "../components/shelf/PostShelf";
 import { getWatchHistory } from "../lib/api/db";
 import { usePublishTitle } from "../lib/usePublishTitle";
 import { getString } from "../lib/i18n/index";
+import { useGridStyle } from "../lib/useGridColumns";
 
 interface ChannelProps {
   onPlay: (video: VideoSummary) => void;
@@ -46,6 +47,7 @@ type SortFilterId = "latest" | "popular" | "oldest";
 // --- SKELETON LOADERS ---
 
 function ChannelPageSkeleton() {
+  const gridStyle = useGridStyle();
   return (
     <div className="flex-grow pb-24 bg-background relative animate-pulse">
       {/* Banner Skeleton */}
@@ -75,7 +77,7 @@ function ChannelPageSkeleton() {
 
       {/* Grid Content Skeleton */}
       <div className=" mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-x-4 gap-y-8 pb-8">
+        <div className="flow-grid gap-y-8 pb-8" style={gridStyle}>
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex flex-col gap-3">
               <div className="w-full aspect-video rounded-xl bg-chrome-zinc-800" />
@@ -95,8 +97,9 @@ function ChannelPageSkeleton() {
 }
 
 function ShortsGridSkeleton() {
+  const gridStyle = useGridStyle({ density: "dense" });
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+    <div className="flow-grid gap-y-4" style={gridStyle}>
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="flex flex-col gap-2">
           <div className="relative w-full aspect-[9/16] rounded-xl bg-chrome-zinc-800 animate-pulse border border-chrome-zinc-800/50" />
@@ -108,8 +111,9 @@ function ShortsGridSkeleton() {
 }
 
 function PlaylistsGridSkeleton() {
+  const gridStyle = useGridStyle({ gapRem: 1.5 });
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+    <div className="flow-grid gap-y-6" style={gridStyle}>
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="flex flex-col gap-3">
           <div className="relative w-full aspect-video rounded-xl mt-3 bg-chrome-zinc-800 animate-pulse border border-chrome-zinc-800/50">

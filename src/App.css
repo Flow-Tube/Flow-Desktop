@@ -356,3 +356,41 @@
   outline-offset: 2px;
   border-radius: 9999px;
 }
+
+/*
+  Adaptive content grids.
+
+  `--flow-grid-columns` is the ceiling the user picked in Settings, not a fixed
+  count: each track is at least `--flow-grid-card-min` wide, so a window too
+  narrow for that many columns sheds columns instead of squashing cards. The
+  `100% / n - gap` min is deliberately a hair under the exact per-track width —
+  the slack keeps sub-pixel rounding from dropping the last track on a window
+  that is wide enough.
+
+  auto-fill, not auto-fit: a half-empty last row must keep the same track width
+  as the full rows above it instead of stretching to fill.
+*/
+.flow-grid {
+  display: grid;
+  column-gap: var(--flow-grid-gap, 1rem);
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(
+      max(
+        var(--flow-grid-card-min, 13rem),
+        calc(100% / var(--flow-grid-columns, 4) - var(--flow-grid-gap, 1rem))
+      ),
+      1fr
+    )
+  );
+}
+
+/*
+  Offscreen feed cards are skipped by content-visibility, so their placeholder
+  height has to track the column count — a stale guess makes the scrollbar jump
+  as cards paint in. 0.5625 is the 16:9 thumbnail; the addend is the meta row.
+*/
+.flow-grid-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(100vw / var(--flow-grid-columns, 4) * 0.5625 + 4.5rem);
+}

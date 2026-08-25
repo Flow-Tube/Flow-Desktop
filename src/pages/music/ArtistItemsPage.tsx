@@ -7,6 +7,7 @@ import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { useArtistItems } from '../../lib/useArtistPage';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { getString } from '../../lib/i18n/index';
+import { useGridStyle } from '../../lib/useGridColumns';
 import type { SongItem, YTItem } from '../../types/music';
 
 const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
@@ -14,6 +15,7 @@ const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
 type ItemKind = 'songs' | 'albums';
 
 function GridSkeleton({ kind }: { kind: ItemKind }) {
+  const gridStyle = useGridStyle({ density: 'dense' });
   const count = 12;
   if (kind === 'songs') {
     return (
@@ -31,7 +33,7 @@ function GridSkeleton({ kind }: { kind: ItemKind }) {
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="flow-grid gap-y-6" style={gridStyle}>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="flex animate-pulse flex-col gap-3">
           <div className="aspect-square w-full rounded-xl bg-surface-container-low" />
@@ -44,6 +46,7 @@ function GridSkeleton({ kind }: { kind: ItemKind }) {
 }
 
 export default function ArtistItemsPage() {
+  const gridStyle = useGridStyle({ density: 'dense' });
   const [sp] = useSearchParams();
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
@@ -130,7 +133,7 @@ export default function ArtistItemsPage() {
           </div>
         </>
       ) : (
-        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="flow-grid gap-y-6" style={gridStyle}>
           {collections.map((item, i) =>
             item.type === 'album' ? (
               <MusicItemCard

@@ -6,6 +6,7 @@ import { Select } from "../components/ui/Select";
 import { ShortCard } from "../components/shorts/ShortCard";
 import { ShortsIcon } from "../components/ui/ShortsIcon";
 import { getString } from "../lib/i18n/index";
+import { useGridStyle } from "../lib/useGridColumns";
 import {
   loadSavedShorts,
   SAVED_SHORTS_LIBRARY_UPDATED_EVENT,
@@ -19,6 +20,7 @@ const FILTERS: ShortsFilter[] = ["All", "Channels"];
 const SORTS: ShortsSort[] = ["Recently Saved", "A-Z"];
 
 export const SavedShorts: React.FC = () => {
+  const gridStyle = useGridStyle({ density: "dense" });
   const [shorts, setShorts] = useState<ShortVideoSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -129,7 +131,7 @@ export const SavedShorts: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="flow-grid gap-y-4" style={gridStyle}>
             {visibleShorts.map((short) => (
               <ShortCard
                 key={short.id}

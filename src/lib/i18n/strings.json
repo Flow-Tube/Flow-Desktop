@@ -542,6 +542,9 @@
   "settings_adaptive_player_desc": "Scale viewport to match video aspect ratio",
 
   "settings_group_layout": "Layout",
+  "settings_grid_columns": "Grid Columns",
+  "settings_grid_columns_desc": "Up to %s videos per row — narrower windows automatically use fewer",
+  "settings_grid_columns_option": "%s per row",
   "settings_video_title_lines": "Video Title Lines",
   "settings_video_title_lines_desc": "Max lines for video titles (0 = unlimited)",
   "settings_download_dialog": "Download Dialog",

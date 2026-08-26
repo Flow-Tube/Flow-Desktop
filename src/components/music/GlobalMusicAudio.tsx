@@ -7,6 +7,11 @@ import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import type { SongItem } from "../../types/music";
 
 const HISTORY_PERSIST_MS = 5000;
+/**
+ * Media-time delta below which a progress write is skipped. A seek always
+ * exceeds it, so scrubbing still lands immediately.
+ */
+const PROGRESS_SYNC_STEP_S = 0.25;
 
 export function GlobalMusicAudio() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -59,13 +64,35 @@ export function GlobalMusicAudio() {
   useEffect(() => {
     if (!isPlaying) return;
     let raf = 0;
+    let lastSyncedTime = -1;
+    let lastSyncedDuration = -1;
     const tick = () => {
       const el = audioRef.current;
       if (el) {
-        useMusicPlayerStore.getState()._syncTime(el.currentTime, el.duration);
         const duration = Number.isFinite(el.duration)
           ? el.duration
           : lastProgressRef.current.duration;
+
+        /*
+          A store write notifies every subscriber, so each one costs a selector
+          run across the whole music UI — and MusicItemCard holds six of them per
+          card. At 60 Hz that was tens of thousands of evaluations a second to
+          move a progress bar by a fraction of a pixel. The only consumer of
+          `progress` is MusicScrubber, whose bar and second-granularity time
+          readout cannot show more than this; the lyrics canvas reads the audio
+          engine directly and keeps full frame accuracy.
+        */
+        if (
+          Math.abs(el.currentTime - lastSyncedTime) >= PROGRESS_SYNC_STEP_S ||
+          duration !== lastSyncedDuration
+        ) {
+          lastSyncedTime = el.currentTime;
+          lastSyncedDuration = duration;
+          useMusicPlayerStore.getState()._syncTime(el.currentTime, el.duration);
+        }
+
+        // Tracked every frame regardless: history persistence and the
+        // beforeunload flush want the true position, not the last synced one.
         lastProgressRef.current = { time: el.currentTime, duration };
 
         const now = Date.now();

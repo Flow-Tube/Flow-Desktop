@@ -6,7 +6,7 @@ import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, 
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getDeArrowOverride } from '../../lib/api/foss';
+import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
 import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
@@ -100,8 +100,6 @@ function VideoCardComponent({
   const openVideoDownload = useDownloadStore((s) => s.openVideo);
   const removeDownloads = useDownloadsLibraryStore((s) => s.remove);
   const isDownloaded = useIsDownloaded(video.id);
-  const [overriddenTitle, setOverriddenTitle] = useState<string | null>(null);
-  const [overriddenThumbnail, setOverriddenThumbnail] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
@@ -142,40 +140,15 @@ function VideoCardComponent({
   );
   const resolvedAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.channelAvatarUrl || hookAvatarUrl));
   const channelCardAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.thumbnailUrl));
+  // Cached and de-duplicated across cards and remounts by the hook; this used to
+  // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
+  const dearrowOverride = useDeArrowOverride(isChannel ? null : video.id, dearrowEnabled);
+  const overriddenTitle = dearrowOverride?.title || null;
+  const overriddenThumbnail = dearrowOverride?.thumbnailUrl || null;
+
   const displayTitle = overriddenTitle || video.title;
   const thumbnailCandidates = resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl);
   const displayThumbnail = thumbnailCandidates[thumbnailCandidateIndex] || overriddenThumbnail || video.thumbnailUrl;
-
-  useEffect(() => {
-    const isValidVideoId = video.id && video.id.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(video.id);
-    if (isChannel || !isValidVideoId || !video.id) {
-      setOverriddenTitle(null);
-      setOverriddenThumbnail(null);
-      return;
-    }
-    
-    if (!dearrowEnabled) {
-      setOverriddenTitle(null);
-      setOverriddenThumbnail(null);
-      return;
-    }
-
-    let active = true;
-    getDeArrowOverride(video.id).then((override) => {
-      if (!active) return;
-      if (override) {
-        setOverriddenTitle(override.title || null);
-        setOverriddenThumbnail(override.thumbnailUrl || null);
-      } else {
-        setOverriddenTitle(null);
-        setOverriddenThumbnail(null);
-      }
-    }).catch((err) => {
-      console.error("Failed to load DeArrow override for", video.id, err);
-    });
-
-    return () => { active = false; };
-  }, [video.id, isChannel, dearrowEnabled]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);

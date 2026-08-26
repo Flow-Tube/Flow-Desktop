@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { clearLogs, getLogsDir, readLogs } from "./api/diagnostics";
 import { getBackendErrorMessage } from "./api/errors";
-import { clearDiagnosticEvents, getDiagnosticEvents } from "./diagnostics";
+import { clearDiagnosticEvents, formatDiagnosticEvent, getDiagnosticEvents } from "./diagnostics";
 
 function formatInAppEvents(): string {
   const events = getDiagnosticEvents();
   if (events.length === 0) return "";
-  const lines = events.map((event) => `${event.at}  [${event.scope}]  ${event.message}`);
+  const lines = events.map(formatDiagnosticEvent);
   return `===== In-app events (${events.length}) =====\n${lines.join("\n")}`;
 }
 

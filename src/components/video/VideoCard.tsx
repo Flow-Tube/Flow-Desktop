@@ -198,12 +198,13 @@ function VideoCardComponent({
     // webviews, janky on Linux's CPU path (and it fires while the cursor
     // sweeps across cards mid-scroll). The color-mix fallback covers Linux.
     if (IS_LINUX_RUNTIME) return;
-    if (!dominantColor && thumbnailRef.current) {
-      if (thumbnailRef.current.complete) {
-        const color = extractDominantColorFromImage(thumbnailRef.current);
-        if (color) {
-          setDominantColor(color);
-        }
+    const thumbnail = thumbnailRef.current;
+    // `complete` alone is true for a broken image too — the same
+    // `complete && naturalWidth` pair the music cards use.
+    if (!dominantColor && thumbnail?.complete && thumbnail.naturalWidth > 0) {
+      const color = extractDominantColorFromImage(thumbnail);
+      if (color) {
+        setDominantColor(color);
       }
     }
   }, [dominantColor]);

@@ -1768,9 +1768,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
             onPlay={handlePlayVideo}
             onAddToQueue={onAddToQueue}
             insertNode={continueShelfNode}
-            // The discover feed is the one grid that grows without bound, and it
-            // owns this page's whole scroll below the header.
-            virtualized
           />
 
           {activeTab === "discover" && (

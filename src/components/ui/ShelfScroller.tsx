@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getString } from '../../lib/i18n/index';
+import { createFrameScheduler, type FrameScheduler } from '../../lib/frameScheduler';
 
 const NAV_BUTTON =
   'absolute top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 cursor-pointer place-items-center rounded-full border border-chrome-neutral-800 bg-surface-container-high text-chrome-neutral-300 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100 group-hover/shelfnav:opacity-100';
@@ -36,18 +37,14 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
     a `useLayoutEffect` with no dependency list and so forced a *synchronous*
     layout before paint on every render of any parent.
   */
-  const frameRef = useRef<number | null>(null);
-  const scheduleMeasure = useCallback(() => {
-    if (frameRef.current !== null) return;
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = null;
-      measure();
-    });
-  }, [measure]);
+  const schedulerRef = useRef<FrameScheduler | null>(null);
+  if (schedulerRef.current === null) {
+    schedulerRef.current = createFrameScheduler(() => measure());
+  }
+  const scheduler = schedulerRef.current;
+  const scheduleMeasure = useCallback(() => scheduler.schedule(), [scheduler]);
 
-  useEffect(() => () => {
-    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-  }, []);
+  useEffect(() => () => scheduler.cancel(), [scheduler]);
 
   // No dependency list: re-measuring after every render is what keeps the arrows
   // right when items are added or removed. The arrows are opacity-0 until the

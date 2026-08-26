@@ -42,6 +42,14 @@ export interface VideoCardProps {
   isDragActive?: boolean;
 }
 
+/*
+  CORS mode exists solely so the hover wash can read the thumbnail's pixels back
+  off a canvas. That readback is disabled on Linux (WebKitGTK composites on the
+  CPU), where the only thing the attribute still buys is a stricter fetch that
+  cannot reuse a plain cached image.
+*/
+const THUMBNAIL_CROSS_ORIGIN = IS_LINUX_RUNTIME ? undefined : 'anonymous';
+
 function formatDuration(seconds?: number | null) {
   if (!seconds) return '';
   const h = Math.floor(seconds / 3600);
@@ -506,7 +514,7 @@ function VideoCardComponent({
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
-              crossOrigin="anonymous"
+              crossOrigin={THUMBNAIL_CROSS_ORIGIN}
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -606,7 +614,7 @@ function VideoCardComponent({
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
-              crossOrigin="anonymous"
+              crossOrigin={THUMBNAIL_CROSS_ORIGIN}
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -683,7 +691,7 @@ function VideoCardComponent({
             src={displayThumbnail}
             alt={displayTitle}
             className={`w-full h-full object-cover${IS_LINUX_RUNTIME ? "" : " transition-transform duration-300 group-hover:scale-[1.03]"}`}
-            crossOrigin="anonymous"
+            crossOrigin={THUMBNAIL_CROSS_ORIGIN}
             loading="lazy"
             decoding="async"
             onLoad={handleThumbnailLoad}

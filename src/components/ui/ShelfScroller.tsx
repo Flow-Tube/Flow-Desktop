@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getString } from '../../lib/i18n/index';
 
@@ -29,25 +29,46 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
     setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
   }, []);
 
+  /*
+    Every trigger below reads scroll geometry, which forces layout. Coalescing
+    them into one read per frame matters most for the scroll listener — it fired
+    per event, unthrottled — and for the post-render re-measure, which used to be
+    a `useLayoutEffect` with no dependency list and so forced a *synchronous*
+    layout before paint on every render of any parent.
+  */
+  const frameRef = useRef<number | null>(null);
+  const scheduleMeasure = useCallback(() => {
+    if (frameRef.current !== null) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      measure();
+    });
+  }, [measure]);
+
+  useEffect(() => () => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+  }, []);
+
   // No dependency list: re-measuring after every render is what keeps the arrows
-  // right when items are added or removed.
-  useLayoutEffect(measure);
+  // right when items are added or removed. The arrows are opacity-0 until the
+  // shelf is hovered, so resolving them a frame after paint is not visible.
+  useEffect(scheduleMeasure);
 
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
 
-    element.addEventListener('scroll', measure, { passive: true });
-    window.addEventListener('resize', measure);
+    element.addEventListener('scroll', scheduleMeasure, { passive: true });
+    window.addEventListener('resize', scheduleMeasure);
     // Thumbnails land after mount and change scrollWidth without a re-render.
-    const settle = window.setTimeout(measure, 200);
+    const settle = window.setTimeout(scheduleMeasure, 200);
 
     return () => {
-      element.removeEventListener('scroll', measure);
-      window.removeEventListener('resize', measure);
+      element.removeEventListener('scroll', scheduleMeasure);
+      window.removeEventListener('resize', scheduleMeasure);
       window.clearTimeout(settle);
     };
-  }, [measure]);
+  }, [scheduleMeasure]);
 
   const scrollByPage = (direction: -1 | 1) => {
     const element = scrollRef.current;

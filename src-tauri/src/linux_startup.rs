@@ -151,7 +151,10 @@ mod tests {
     fn tier_1_drops_the_gpu_paths_that_blank_the_window() {
         assert_eq!(
             keys(1),
-            vec!["__NV_DISABLE_EXPLICIT_SYNC", "WEBKIT_DISABLE_DMABUF_RENDERER"],
+            vec![
+                "__NV_DISABLE_EXPLICIT_SYNC",
+                "WEBKIT_DISABLE_DMABUF_RENDERER"
+            ],
         );
     }
 

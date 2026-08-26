@@ -9,6 +9,7 @@ import { useAlbumLibraryStore } from "./store/useAlbumLibraryStore";
 import { useLikesStore } from "./store/useLikesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
+import { useWatchLaterStore } from "./store/useWatchLaterStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
 import { useStartupHealth } from "./lib/useStartupHealth";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
@@ -90,6 +91,7 @@ function App() {
     void useLikesStore.getState().load();
     void useDownloadsLibraryStore.getState().load();
     void useDownloadCollectionsLibraryStore.getState().load();
+    void useWatchLaterStore.getState().load();
   }, []);
 
   // Check onboarding state from sqlite db setting

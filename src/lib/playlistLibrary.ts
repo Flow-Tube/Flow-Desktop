@@ -342,11 +342,6 @@ export const addVideoToStoredPlaylist = async (
   return updatedPlaylist;
 };
 
-export const isVideoInWatchLater = async (videoId: string) => {
-  const watchLater = await getStoredPlaylistById(WATCH_LATER_PLAYLIST_ID);
-  return Boolean(watchLater?.tracks.some((track) => track.id === videoId));
-};
-
 export const addVideoToWatchLater = async (video: VideoSummary) => {
   const playlists = await loadStoredPlaylists();
   const nextPlaylists = playlists.map((playlist) => {

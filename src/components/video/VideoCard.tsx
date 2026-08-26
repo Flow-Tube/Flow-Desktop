@@ -17,11 +17,7 @@ import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { getString } from '../../lib/i18n/index';
-import {
-  addVideoToWatchLater,
-  isVideoInWatchLater,
-  removeVideoFromWatchLater,
-} from '../../lib/playlistLibrary';
+import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useUiStore } from '../../store/useUiStore';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
@@ -110,7 +106,6 @@ function VideoCardComponent({
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);
-  const [isSavedToWatchLater, setIsSavedToWatchLater] = useState(false);
   const [thumbnailCandidateIndex, setThumbnailCandidateIndex] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const thumbnailRef = useRef<HTMLImageElement>(null);
@@ -127,22 +122,12 @@ function VideoCardComponent({
     if (video.isLive) markLive(video.id);
   }, [video.id, video.isLive, markLive]);
 
-  useEffect(() => {
-    if (isChannel) return;
-
-    let active = true;
-    isVideoInWatchLater(video.id)
-      .then((saved) => {
-        if (active) setIsSavedToWatchLater(saved);
-      })
-      .catch((error) => {
-        console.warn("Failed to read Watch Later state", error);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [isChannel, video.id]);
+  // A synchronous lookup against the shared set. Resolving this per card cost an
+  // IPC round trip plus a parse of the whole playlist library, several hundred
+  // times over, to label a single context-menu entry.
+  const isSavedToWatchLater = useWatchLaterStore((s) => s.ids.has(video.id));
+  const saveToWatchLater = useWatchLaterStore((s) => s.add);
+  const removeFromWatchLater = useWatchLaterStore((s) => s.remove);
 
   const dearrowEnabled = useSettingsStore((s) => s.dearrowEnabled);
   const titleClampStyle = getTitleClampStyle(
@@ -306,8 +291,7 @@ function VideoCardComponent({
   const handleToggleWatchLater = async () => {
     try {
       if (isSavedToWatchLater) {
-        await removeVideoFromWatchLater(video.id);
-        setIsSavedToWatchLater(false);
+        await removeFromWatchLater(video.id);
         showToast({
           variant: "success",
           message: getString("video_removed_from_watch_later"),
@@ -315,8 +299,7 @@ function VideoCardComponent({
         return;
       }
 
-      await addVideoToWatchLater(video);
-      setIsSavedToWatchLater(true);
+      await saveToWatchLater(video);
       showToast({
         variant: "success",
         message: getString("video_saved_to_watch_later"),

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { extractDominantColorFromImage } from "./useDominantColor";
 
@@ -24,11 +24,9 @@ describe("extractDominantColorFromImage", () => {
     under a sweeping cursor.
   */
   it("returns null for a broken image that still reports complete", () => {
-    const getContext = vi.fn();
     const broken = imageStub({ naturalWidth: 0, naturalHeight: 0 });
 
     expect(extractDominantColorFromImage(broken)).toBeNull();
-    expect(getContext).not.toHaveBeenCalled();
   });
 
   it("returns null for an image that has not finished loading", () => {

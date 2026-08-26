@@ -25,6 +25,7 @@ import type { WatchHistoryRecord } from "../types/db";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { VideoShelf } from "../components/shelf/VideoShelf";
 import { mapHistoryRecordToVideo } from "../lib/useHistory";
+import { useScrollContainer } from "../lib/useScrollContainer";
 import {
   getHiddenContinueWatchingIds,
   hideContinueWatchingVideo,
@@ -189,7 +190,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [continueWatchingVideos, setContinueWatchingVideos] = useState<VideoSummary[]>([]);
   const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainer = useScrollContainer();
   const requestSequenceRef = useRef(0);
   const lastImpressionSignatureRef = useRef<string>("");
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -1611,7 +1612,16 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         }
       },
       {
-        root: scrollContainerRef.current,
+        /*
+          The routed page's own root is an auto-height block inside PageWrapper's
+          `<main>`, so it never scrolls and its box spans the whole feed. Passing
+          it here meant the sentinel sat inside the root rect permanently — it
+          could never scroll out of view, so `sentinelIntersectingRef` was pinned
+          true and the 250ms re-check in handleLoadMore's `finally` re-armed
+          itself forever. The feed grew for as long as the page was open,
+          whether or not anyone scrolled.
+        */
+        root: scrollContainer?.current ?? null,
         rootMargin: "0px 0px 320px 0px",
         threshold: 0,
       },
@@ -1729,8 +1739,11 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     ],
   );
 
+  // No `overflow-y-auto` on the root: `<main>` above owns the scroll, and
+  // declaring it on an auto-height block never engaged — it only cost a
+  // full-content-height self-painting layer, which WebKitGTK composites on the CPU.
   return (
-    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+    <div className="flex-1 px-8 py-6 space-y-6">
       {/* Grid List layout */}
       {!homeFeedEnabled ? (
         <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-chrome-zinc-800 rounded-3xl p-8 bg-chrome-zinc-900/10">

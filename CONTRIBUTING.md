@@ -19,7 +19,7 @@ This project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By partic
 
 ## Before you start
 
-- Search [existing issues](https://github.com/A-EDev/flow-desktop/issues) and pull requests first to avoid duplicates.
+- Search [existing issues](https://github.com/Flow-Tube/Flow-Desktop/issues) and pull requests first to avoid duplicates.
 - For anything beyond a small fix, open an issue (or comment on an existing one) to discuss the approach **before** writing code. This avoids wasted effort on changes that may not be a good fit.
 - Keep pull requests focused. One logical change per PR is far easier to review and merge than a large, mixed one.
 

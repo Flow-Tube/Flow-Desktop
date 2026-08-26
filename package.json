@@ -7,9 +7,9 @@
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/A-EDev/flow-desktop.git"
+    "url": "https://github.com/Flow-Tube/Flow-Desktop.git"
   },
-  "homepage": "https://github.com/A-EDev/flow-desktop",
+  "homepage": "https://github.com/Flow-Tube/Flow-Desktop",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {

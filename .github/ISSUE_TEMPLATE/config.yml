@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions and troubleshooting
-    url: https://github.com/A-EDev/flow-desktop/discussions
+    url: https://github.com/Flow-Tube/Flow-Desktop/discussions
     about: Ask for setup help or discuss ideas that are not yet actionable bug reports.
   - name: Security vulnerability
-    url: https://github.com/A-EDev/flow-desktop/security/advisories/new
+    url: https://github.com/Flow-Tube/Flow-Desktop/security/advisories/new
     about: Privately report vulnerabilities. Do not disclose security issues in a public issue.

@@ -36,7 +36,7 @@
     },
     "updater": {
       "endpoints": [
-        "https://github.com/A-EDev/flow-desktop/releases/latest/download/latest.json"
+        "https://github.com/Flow-Tube/Flow-Desktop/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ3NjQyOEVCREQxMjY5MjkKUldRcGFSTGQ2eWhrMThHMzB3Y29Tc3JsTFhpOGJqR1lGY0M0Z01DaVlzL01zNXhLTWUzUDdxcFIK",
       "windows": {

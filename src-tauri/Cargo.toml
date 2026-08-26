@@ -1,6 +1,6 @@
 [package]
 name = "flow"
-version = "0.1.0-beta"
+version = "0.1.0-beta2"
 description = "Privacy-first YouTube and YouTube Music desktop companion to Flow for Android, powered by the native local FlowNeuro recommendation engine"
 authors = ["A-EDev"]
 edition = "2024"

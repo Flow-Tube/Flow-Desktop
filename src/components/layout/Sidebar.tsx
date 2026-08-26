@@ -221,7 +221,10 @@ function SubscriptionsNav({
 }
 
 export function Sidebar({ mode = 'normal' }: SidebarProps) {
-  const { isSidebarExpanded, isSubsSectionCollapsed, toggleSubsSection, setWatchSidebarOpen } = useUiStore();
+  const isSidebarExpanded = useUiStore((s) => s.isSidebarExpanded);
+  const isSubsSectionCollapsed = useUiStore((s) => s.isSubsSectionCollapsed);
+  const toggleSubsSection = useUiStore((s) => s.toggleSubsSection);
+  const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
   const { subscriptions } = useSubscriptionStore();
   const location = useLocation();
   const [subsExpanded, setSubsExpanded] = useState(false);

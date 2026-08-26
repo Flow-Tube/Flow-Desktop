@@ -14,7 +14,9 @@ import { toggleDeepFlow } from '../../lib/deepFlow';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 
 export function Topbar() {
-  const { toggleSidebar, toggleWatchSidebar, setSearchQuery } = useUiStore();
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const toggleWatchSidebar = useUiStore((s) => s.toggleWatchSidebar);
+  const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const [localSearch, setLocalSearch] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);

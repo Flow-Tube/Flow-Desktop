@@ -6,7 +6,11 @@ import { useUiStore } from '../../store/useUiStore';
 
 export function PageWrapper() {
   const location = useLocation();
-  const { isWatchSidebarOpen, setWatchSidebarOpen } = useUiStore();
+  // Per-field, not a bare `useUiStore()`: the store also carries `searchQuery`,
+  // so a selectorless subscription re-rendered the whole routed page — feed and
+  // every mounted card included — on each keystroke in the search box.
+  const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
+  const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
   const isWatchPage = location.pathname.startsWith('/watch/');
   const isSettingsPage = location.pathname.startsWith('/settings');
   const isPlaylistDetailsPage =

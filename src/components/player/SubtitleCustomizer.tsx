@@ -21,7 +21,8 @@ const backgroundColors = [
 ];
 
 export const SubtitleCustomizer: React.FC = () => {
-  const { subtitleStyle, setSubtitleStyle } = usePlayerStore();
+  const subtitleStyle = usePlayerStore((s) => s.subtitleStyle);
+  const setSubtitleStyle = usePlayerStore((s) => s.setSubtitleStyle);
 
   const handleUpdate = (updated: Partial<SubtitleStyle>) => {
     setSubtitleStyle({

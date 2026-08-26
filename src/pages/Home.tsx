@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { Loader2, ChevronDown } from "lucide-react";
 import {
   getChannelTab,
@@ -146,6 +146,33 @@ const loadPersistedDiscoverFeed = async (): Promise<VideoSummary[] | null> => {
   }))
 );
 
+/*
+  Module scope, not inside the component: these feed the memoised render-time
+  derivation below, and a fresh closure per render would invalidate its cache on
+  every render — which is exactly what the memo exists to prevent.
+*/
+const capPerChannel = (items: VideoSummary[], maxPerChannel = 3) => {
+  const counts = new Map<string, number>();
+  return items.filter((video) => {
+    const key = video.channelId ?? video.id;
+    const count = counts.get(key) ?? 0;
+    if (count >= maxPerChannel) return false;
+    counts.set(key, count + 1);
+    return true;
+  });
+};
+
+const uniqueByVideoId = (items: VideoSummary[]) => {
+  const seen = new Set<string>();
+  return items.filter((video) => {
+    if (seen.has(video.id)) {
+      return false;
+    }
+    seen.add(video.id);
+    return true;
+  });
+};
+
 export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const [activeTab] = useState<"discover" | "trending">("discover");
   const [videos, setVideos] = useState<VideoSummary[]>([]);
@@ -185,28 +212,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const watchedIdsRef = useRef<Set<string>>(new Set());
   const sessionSeenOrderRef = useRef<string[]>([]);
   const sessionSeenIdsRef = useRef<Set<string>>(new Set());
-
-  const capPerChannel = (items: VideoSummary[], maxPerChannel = 3) => {
-    const counts = new Map<string, number>();
-    return items.filter((video) => {
-      const key = video.channelId ?? video.id;
-      const count = counts.get(key) ?? 0;
-      if (count >= maxPerChannel) return false;
-      counts.set(key, count + 1);
-      return true;
-    });
-  };
-
-  const uniqueByVideoId = (items: VideoSummary[]) => {
-    const seen = new Set<string>();
-    return items.filter((video) => {
-      if (seen.has(video.id)) {
-        return false;
-      }
-      seen.add(video.id);
-      return true;
-    });
-  };
 
   const updateCache = (tab: "discover" | "trending", nextVideos: VideoSummary[]) => {
     homeFeedCache[tab] = {
@@ -1650,7 +1655,12 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     return () => window.clearTimeout(retry);
   }, [activeTab, homeFeedEnabled, loading, loadingMore, videos.length]);
 
-  const handlePlayVideo = async (video: VideoSummary) => {
+  /*
+    Every handler below reaches a card as a prop, and the feed holds hundreds of
+    them, so an unstable identity here is what decides whether `React.memo` on
+    VideoCard can bail out at all.
+  */
+  const handlePlayVideo = useCallback(async (video: VideoSummary) => {
     onPlay(video);
     try {
       await logInteraction(
@@ -1668,25 +1678,56 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     } catch (err) {
       console.warn("Failed to log interaction", err);
     }
-  };
+  }, [onPlay]);
 
-  const handleRemoveFromContinueWatching = (videoId: string) => {
+  const handleRemoveFromContinueWatching = useCallback((videoId: string) => {
     hideContinueWatchingVideo(videoId);
     setContinueWatchingVideos((current) => current.filter((video) => video.id !== videoId));
-  };
+  }, []);
 
   // The render-time cap must scale with feed length: a fixed whole-feed cap made appended
   // videos from any channel already at the cap invisible, so the grid stopped growing even
   // though load-more was succeeding.
-  const visibleVideos = capPerChannel(
-    videos.filter((video) => !isHidden(video)),
-    3 + Math.floor(videos.length / 24),
+  //
+  // Memoised because the result is the grid's `videos` prop: recomputing it re-filters and
+  // re-caps the entire feed and hands VideoGrid a new array on every render of this page.
+  const visibleVideos = useMemo(
+    () => capPerChannel(
+      videos.filter((video) => !isHidden(video)),
+      3 + Math.floor(videos.length / 24),
+    ),
+    [videos, isHidden],
   );
-  const visibleContinueWatchingVideos = continueWatchingEnabled
-    ? continueWatchingVideos.filter((video) => !isHidden(video))
-    : [];
+  const visibleContinueWatchingVideos = useMemo(
+    () => (continueWatchingEnabled
+      ? continueWatchingVideos.filter((video) => !isHidden(video))
+      : []),
+    [continueWatchingEnabled, continueWatchingVideos, isHidden],
+  );
   const shouldInsertContinueShelf =
     homeFeedEnabled && !loading && visibleVideos.length > 0 && visibleContinueWatchingVideos.length > 0;
+
+  // The shelf is the grid's `insertNode`; rebuilding the element every render would
+  // remount it under the first row on each pass.
+  const continueShelfNode = useMemo(
+    () => (shouldInsertContinueShelf ? (
+      <VideoShelf
+        title={getString("continue_watching_shelf_title")}
+        videos={visibleContinueWatchingVideos}
+        onPlay={handlePlayVideo}
+        onAddToQueue={onAddToQueue}
+        onRemoveFromContinueWatching={handleRemoveFromContinueWatching}
+        variant="continue"
+      />
+    ) : null),
+    [
+      shouldInsertContinueShelf,
+      visibleContinueWatchingVideos,
+      handlePlayVideo,
+      onAddToQueue,
+      handleRemoveFromContinueWatching,
+    ],
+  );
 
   return (
     <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
@@ -1713,16 +1754,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
             videos={visibleVideos}
             onPlay={handlePlayVideo}
             onAddToQueue={onAddToQueue}
-            insertNode={shouldInsertContinueShelf ? (
-              <VideoShelf
-                title={getString("continue_watching_shelf_title")}
-                videos={visibleContinueWatchingVideos}
-                onPlay={handlePlayVideo}
-                onAddToQueue={onAddToQueue}
-                onRemoveFromContinueWatching={handleRemoveFromContinueWatching}
-                variant="continue"
-              />
-            ) : null}
+            insertNode={continueShelfNode}
           />
 
           {activeTab === "discover" && (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { usePlayerStore } from "./store/usePlayerStore";
 import { useFeedActionsStore } from "./store/useFeedActionsStore";
@@ -65,7 +65,14 @@ import { ThemeController } from "./lib/useTheme";
 import "./App.css";
 
 function App() {
-  const { addToQueue, setQueue } = usePlayerStore();
+  /*
+    Selected one action at a time, never destructured off a bare `usePlayerStore()`:
+    a selectorless subscription re-renders this component — and with it every route,
+    feed and card below it — on every `currentTime` write, which the player emits
+    about four times a second for the whole of playback.
+  */
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const setQueue = usePlayerStore((s) => s.setQueue);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -102,14 +109,19 @@ function App() {
     checkOnboarding();
   }, [navigate, location.pathname]);
 
-  const handlePlayVideo = (video: VideoSummary) => {
+  /*
+    Stable identities matter here beyond the usual hygiene: these are handed down
+    to every page and end up as the `onPlay`/`onAddToQueue` prop of every card, so
+    a fresh closure per render defeats `React.memo(VideoCard)` for the whole feed.
+  */
+  const handlePlayVideo = useCallback((video: VideoSummary) => {
     setQueue([video], 0);
     navigate(`/watch/${video.id}`);
-  };
+  }, [setQueue, navigate]);
 
-  const handleAddToQueue = (video: VideoSummary) => {
+  const handleAddToQueue = useCallback((video: VideoSummary) => {
     addToQueue(video);
-  };
+  }, [addToQueue]);
 
   if (loadingOnboarding) {
     return (

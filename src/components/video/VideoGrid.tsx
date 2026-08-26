@@ -1,4 +1,4 @@
-import { Fragment, useRef, type ReactNode } from 'react';
+import { Fragment, memo, useRef, type ReactNode } from 'react';
 import type { VideoSummary } from '../../types/video';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
@@ -33,7 +33,7 @@ function VideoCardSkeleton() {
   );
 }
 
-export function VideoGrid({
+function VideoGridComponent({
   videos = [],
   loading = false,
   skeletonCount = 12,
@@ -98,3 +98,10 @@ export function VideoGrid({
     </div>
   );
 }
+
+/*
+  The grid rebuilds an element per card, so a page that re-renders for an unrelated
+  reason should not walk a feed of several hundred. Callers pass the play/queue
+  handlers straight down from App, so the shallow compare holds.
+*/
+export const VideoGrid = memo(VideoGridComponent);

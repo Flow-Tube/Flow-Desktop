@@ -65,16 +65,44 @@ export function useResolvedGridColumns(
     const element = ref.current;
     if (!element) return;
 
+    let lastInlineSize = -1;
+
     const measure = () => {
       // A laid-out grid always reports used track sizes in px; anything else
       // (`none`, an unresolved `repeat()`) means there is nothing to count yet.
       const tracks = getComputedStyle(element).gridTemplateColumns;
-      const next = tracks.split(' ').filter((track) => track.endsWith('px')).length;
-      setColumns((previous) => (previous === next ? previous : next));
+      const widths = tracks.split(' ').filter((track) => track.endsWith('px'));
+      setColumns((previous) => (previous === widths.length ? previous : widths.length));
+
+      /*
+        Publish the used track width so `contain-intrinsic-size` can placehold an
+        unrendered card at its real height. The CSS fallback has to guess from
+        `100vw`, which counts the sidebar and page padding it does not occupy —
+        overshooting every card that has not been rendered yet, so the scrollbar
+        shrinks continuously as you scroll and cards correct themselves.
+      */
+      const trackWidth = Number.parseFloat(widths[0] ?? '');
+      if (Number.isFinite(trackWidth) && trackWidth > 0) {
+        element.style.setProperty('--flow-grid-track-w', `${trackWidth}px`);
+      }
     };
 
     measure();
-    const observer = new ResizeObserver(measure);
+
+    const observer = new ResizeObserver((entries) => {
+      /*
+        Width is the only thing that can change the track count or their size.
+        Height changes constantly — every card that scrolls into view and gets
+        laid out by `content-visibility` grows the grid — and reacting to those
+        meant a `getComputedStyle` read throughout every scroll.
+      */
+      const entry = entries[entries.length - 1];
+      const inlineSize = entry?.contentBoxSize?.[0]?.inlineSize ?? entry?.contentRect.width;
+      if (inlineSize === undefined) return;
+      if (inlineSize === lastInlineSize) return;
+      lastInlineSize = inlineSize;
+      measure();
+    });
     observer.observe(element);
     return () => observer.disconnect();
     // `style` carries the column preference, which changes the track count

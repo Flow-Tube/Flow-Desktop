@@ -6,7 +6,7 @@ import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, 
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getDeArrowOverride } from '../../lib/api/foss';
+import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
 import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
@@ -17,11 +17,7 @@ import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { getString } from '../../lib/i18n/index';
-import {
-  addVideoToWatchLater,
-  isVideoInWatchLater,
-  removeVideoFromWatchLater,
-} from '../../lib/playlistLibrary';
+import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useUiStore } from '../../store/useUiStore';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
@@ -45,6 +41,14 @@ export interface VideoCardProps {
   };
   isDragActive?: boolean;
 }
+
+/*
+  CORS mode exists solely so the hover wash can read the thumbnail's pixels back
+  off a canvas. That readback is disabled on Linux (WebKitGTK composites on the
+  CPU), where the only thing the attribute still buys is a stricter fetch that
+  cannot reuse a plain cached image.
+*/
+const THUMBNAIL_CROSS_ORIGIN = IS_LINUX_RUNTIME ? undefined : 'anonymous';
 
 function formatDuration(seconds?: number | null) {
   if (!seconds) return '';
@@ -104,13 +108,10 @@ function VideoCardComponent({
   const openVideoDownload = useDownloadStore((s) => s.openVideo);
   const removeDownloads = useDownloadsLibraryStore((s) => s.remove);
   const isDownloaded = useIsDownloaded(video.id);
-  const [overriddenTitle, setOverriddenTitle] = useState<string | null>(null);
-  const [overriddenThumbnail, setOverriddenThumbnail] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);
-  const [isSavedToWatchLater, setIsSavedToWatchLater] = useState(false);
   const [thumbnailCandidateIndex, setThumbnailCandidateIndex] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const thumbnailRef = useRef<HTMLImageElement>(null);
@@ -127,22 +128,12 @@ function VideoCardComponent({
     if (video.isLive) markLive(video.id);
   }, [video.id, video.isLive, markLive]);
 
-  useEffect(() => {
-    if (isChannel) return;
-
-    let active = true;
-    isVideoInWatchLater(video.id)
-      .then((saved) => {
-        if (active) setIsSavedToWatchLater(saved);
-      })
-      .catch((error) => {
-        console.warn("Failed to read Watch Later state", error);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [isChannel, video.id]);
+  // A synchronous lookup against the shared set. Resolving this per card cost an
+  // IPC round trip plus a parse of the whole playlist library, several hundred
+  // times over, to label a single context-menu entry.
+  const isSavedToWatchLater = useWatchLaterStore((s) => s.ids.has(video.id));
+  const saveToWatchLater = useWatchLaterStore((s) => s.add);
+  const removeFromWatchLater = useWatchLaterStore((s) => s.remove);
 
   const dearrowEnabled = useSettingsStore((s) => s.dearrowEnabled);
   const titleClampStyle = getTitleClampStyle(
@@ -157,40 +148,15 @@ function VideoCardComponent({
   );
   const resolvedAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.channelAvatarUrl || hookAvatarUrl));
   const channelCardAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.thumbnailUrl));
+  // Cached and de-duplicated across cards and remounts by the hook; this used to
+  // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
+  const dearrowOverride = useDeArrowOverride(isChannel ? null : video.id, dearrowEnabled);
+  const overriddenTitle = dearrowOverride?.title || null;
+  const overriddenThumbnail = dearrowOverride?.thumbnailUrl || null;
+
   const displayTitle = overriddenTitle || video.title;
   const thumbnailCandidates = resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl);
   const displayThumbnail = thumbnailCandidates[thumbnailCandidateIndex] || overriddenThumbnail || video.thumbnailUrl;
-
-  useEffect(() => {
-    const isValidVideoId = video.id && video.id.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(video.id);
-    if (isChannel || !isValidVideoId || !video.id) {
-      setOverriddenTitle(null);
-      setOverriddenThumbnail(null);
-      return;
-    }
-    
-    if (!dearrowEnabled) {
-      setOverriddenTitle(null);
-      setOverriddenThumbnail(null);
-      return;
-    }
-
-    let active = true;
-    getDeArrowOverride(video.id).then((override) => {
-      if (!active) return;
-      if (override) {
-        setOverriddenTitle(override.title || null);
-        setOverriddenThumbnail(override.thumbnailUrl || null);
-      } else {
-        setOverriddenTitle(null);
-        setOverriddenThumbnail(null);
-      }
-    }).catch((err) => {
-      console.error("Failed to load DeArrow override for", video.id, err);
-    });
-
-    return () => { active = false; };
-  }, [video.id, isChannel, dearrowEnabled]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -198,12 +164,13 @@ function VideoCardComponent({
     // webviews, janky on Linux's CPU path (and it fires while the cursor
     // sweeps across cards mid-scroll). The color-mix fallback covers Linux.
     if (IS_LINUX_RUNTIME) return;
-    if (!dominantColor && thumbnailRef.current) {
-      if (thumbnailRef.current.complete) {
-        const color = extractDominantColorFromImage(thumbnailRef.current);
-        if (color) {
-          setDominantColor(color);
-        }
+    const thumbnail = thumbnailRef.current;
+    // `complete` alone is true for a broken image too — the same
+    // `complete && naturalWidth` pair the music cards use.
+    if (!dominantColor && thumbnail?.complete && thumbnail.naturalWidth > 0) {
+      const color = extractDominantColorFromImage(thumbnail);
+      if (color) {
+        setDominantColor(color);
       }
     }
   }, [dominantColor]);
@@ -305,8 +272,7 @@ function VideoCardComponent({
   const handleToggleWatchLater = async () => {
     try {
       if (isSavedToWatchLater) {
-        await removeVideoFromWatchLater(video.id);
-        setIsSavedToWatchLater(false);
+        await removeFromWatchLater(video.id);
         showToast({
           variant: "success",
           message: getString("video_removed_from_watch_later"),
@@ -314,8 +280,7 @@ function VideoCardComponent({
         return;
       }
 
-      await addVideoToWatchLater(video);
-      setIsSavedToWatchLater(true);
+      await saveToWatchLater(video);
       showToast({
         variant: "success",
         message: getString("video_saved_to_watch_later"),
@@ -549,7 +514,7 @@ function VideoCardComponent({
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
-              crossOrigin="anonymous"
+              crossOrigin={THUMBNAIL_CROSS_ORIGIN}
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -649,7 +614,7 @@ function VideoCardComponent({
               src={displayThumbnail}
               alt={displayTitle}
               className="h-full w-full object-cover"
-              crossOrigin="anonymous"
+              crossOrigin={THUMBNAIL_CROSS_ORIGIN}
               loading="lazy"
               decoding="async"
               onLoad={handleThumbnailLoad}
@@ -726,7 +691,7 @@ function VideoCardComponent({
             src={displayThumbnail}
             alt={displayTitle}
             className={`w-full h-full object-cover${IS_LINUX_RUNTIME ? "" : " transition-transform duration-300 group-hover:scale-[1.03]"}`}
-            crossOrigin="anonymous"
+            crossOrigin={THUMBNAIL_CROSS_ORIGIN}
             loading="lazy"
             decoding="async"
             onLoad={handleThumbnailLoad}

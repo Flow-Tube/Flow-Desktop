@@ -1,6 +1,6 @@
 import { getAppMetadata } from "./appMetadata";
 import { getSystemMetadata } from "./systemMetadata";
-import { getDiagnosticEvents, recordDiagnostic } from "./diagnostics";
+import { formatDiagnosticEvent, getDiagnosticEvents, recordDiagnostic } from "./diagnostics";
 import type { PlayerErrorInfo } from "./playerError";
 
 export function recordPlayerEvent(message: string): void {
@@ -56,9 +56,7 @@ export async function buildPlayerReport(ctx: PlayerReportContext): Promise<strin
 
   const recentEvents = section(
     "Recent events",
-    getDiagnosticEvents()
-      .slice(-40)
-      .map((entry) => `${entry.at}  [${entry.scope}] ${entry.message}`),
+    getDiagnosticEvents().slice(-40).map(formatDiagnosticEvent),
   );
 
   return [`Flow Desktop — playback diagnostics`, environment, failure, recentEvents]

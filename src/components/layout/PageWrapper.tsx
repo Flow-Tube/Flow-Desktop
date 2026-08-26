@@ -3,10 +3,15 @@ import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useUiStore } from '../../store/useUiStore';
+import { ScrollContainerContext } from '../../lib/useScrollContainer';
 
 export function PageWrapper() {
   const location = useLocation();
-  const { isWatchSidebarOpen, setWatchSidebarOpen } = useUiStore();
+  // Per-field, not a bare `useUiStore()`: the store also carries `searchQuery`,
+  // so a selectorless subscription re-rendered the whole routed page — feed and
+  // every mounted card included — on each keystroke in the search box.
+  const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
+  const setWatchSidebarOpen = useUiStore((s) => s.setWatchSidebarOpen);
   const isWatchPage = location.pathname.startsWith('/watch/');
   const isSettingsPage = location.pathname.startsWith('/settings');
   const isPlaylistDetailsPage =
@@ -37,7 +42,14 @@ export function PageWrapper() {
               : "flex-1 overflow-y-auto"
           }
         >
-          <Outlet />
+          {/*
+            Pages cannot find this element on their own — they render inside it,
+            and their own root is an auto-height block whose overflow never
+            engages. Anything needing the real scrollport reads it from here.
+          */}
+          <ScrollContainerContext.Provider value={mainRef}>
+            <Outlet />
+          </ScrollContainerContext.Provider>
         </main>
       </div>
       {(isWatchPage || isSettingsPage) && isWatchSidebarOpen && (

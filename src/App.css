@@ -554,5 +554,15 @@
 */
 .flow-grid-card {
   content-visibility: auto;
-  contain-intrinsic-size: auto calc(100vw / var(--flow-grid-columns, 4) * 0.5625 + 4.5rem);
+  /*
+    `--flow-grid-track-w` is the used track width, published by
+    `useResolvedGridColumns` from the same measurement that resolves the column
+    count. The `100vw` fallback covers the frames before that lands, but it is
+    only a guess: it counts the sidebar and page padding the grid does not
+    occupy, so it overshoots and the scrollbar creeps as cards render and
+    correct themselves.
+  */
+  contain-intrinsic-size: auto calc(
+    var(--flow-grid-track-w, calc(100vw / var(--flow-grid-columns, 4))) * 0.5625 + 4.5rem
+  );
 }

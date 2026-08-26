@@ -18,19 +18,30 @@ type ColorBucket = {
 };
 
 export function extractDominantColorFromImage(img: HTMLImageElement): Rgb | null {
+  /*
+    `complete` is not "loaded": it is also true for a broken image, because the
+    fetch finished — it just finished by failing. Drawing one throws
+    InvalidStateError ("no image data"), so the decoded size is the only honest
+    readiness test. Callers reach this from mouseenter, where a throw per card
+    under a sweeping cursor turns one dead thumbnail into an error storm.
+  */
+  if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0) return null;
+
   const size = 32;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
-  ctx.drawImage(img, 0, 0, size, size);
 
   let data: Uint8ClampedArray;
   try {
+    ctx.drawImage(img, 0, 0, size, size);
     data = ctx.getImageData(0, 0, size, size).data;
   } catch {
-    return null; // tainted canvas (no CORS) — caller falls back
+    // Tainted canvas (no CORS), or the image broke between the check and the
+    // draw — the caller falls back to the neutral wash either way.
+    return null;
   }
 
   const buckets = new Map<string, ColorBucket>();

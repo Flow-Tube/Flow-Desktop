@@ -247,7 +247,7 @@ export const SubtitleOverlay: React.FC<SubtitleOverlayProps> = ({
   const [captionCues, setCaptionCues] = useState<CaptionCue[]>([]);
   const [lastActiveCueText, setLastActiveCueText] = useState<string | null>(null);
   
-  const { subtitleStyle } = usePlayerStore();
+  const subtitleStyle = usePlayerStore((s) => s.subtitleStyle);
 
   useEffect(() => {
     console.log(

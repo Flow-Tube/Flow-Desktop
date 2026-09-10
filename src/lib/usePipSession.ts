@@ -180,6 +180,8 @@ export function usePipSession() {
         store.setCurrentTime(payload.positionSeconds);
         seekToTime(payload.positionSeconds);
       }
+      if (Number.isFinite(payload.volume)) store.setVolume(payload.volume);
+      store.setMuted(payload.muted);
       clearSilenceFallback();
       store.setHandoffSilent(false);
     }).catch(() => null);
@@ -189,12 +191,14 @@ export function usePipSession() {
   }, [clearSilenceFallback]);
 
   const handBack = useCallback((expand: boolean) => {
-    const { currentVideo, currentTime, isPlaying } = usePlayerStore.getState();
+    const { currentVideo, currentTime, isPlaying, volume, muted } = usePlayerStore.getState();
     if (!currentVideo) return Promise.resolve();
     return emit(PIP_EVENTS.handback, {
       videoId: currentVideo.id,
       positionSeconds: currentTime,
       playing: isPlaying,
+      volume,
+      muted,
       expand,
     } satisfies PipHandbackPayload).catch(() => {});
   }, []);

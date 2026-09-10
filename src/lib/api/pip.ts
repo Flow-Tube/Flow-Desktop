@@ -46,6 +46,8 @@ export interface PipHandbackPayload {
   videoId: string;
   positionSeconds: number;
   playing: boolean;
+  volume: number;
+  muted: boolean;
   /** True when the user asked to return to the full player rather than just closing. */
   expand: boolean;
 }
@@ -53,6 +55,8 @@ export interface PipHandbackPayload {
 /** Main → pop-out: stop shadowing, this is the exact position to continue from. */
 export interface PipTakeoverPayload {
   positionSeconds: number;
+  volume: number;
+  muted: boolean;
 }
 
 export const PIP_EVENTS = {

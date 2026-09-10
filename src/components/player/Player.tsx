@@ -11,6 +11,7 @@ import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../.
 import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
+import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import {
   PlayerGestureOverlay,
   type PlayerSeekFeedback,
@@ -335,6 +336,8 @@ export const Player: React.FC<PlayerProps> = ({
     setIsPlaying,
     volume,
     setVolume,
+    muted,
+    setMuted,
     playbackRate,
     setPlaybackRate,
     currentTime,
@@ -351,6 +354,8 @@ export const Player: React.FC<PlayerProps> = ({
     isVideoFullscreen: isFullscreen,
     setIsVideoFullscreen: setIsFullscreen,
   } = usePlayerStore();
+
+  usePersistedPlayerVolume();
 
   const autoplayEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AUTOPLAY_ENABLED] !== "false");
   const videoLoopEnabled = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOOP_ENABLED] === "true");
@@ -425,7 +430,6 @@ export const Player: React.FC<PlayerProps> = ({
 
   const [controlsVisible, setControlsVisible] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [muted, setMuted] = useState(false);
   const [ambientMode] = useState(true);
   const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
   const {

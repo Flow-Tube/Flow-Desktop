@@ -123,6 +123,8 @@ export async function openPopoutPlayer(): Promise<boolean> {
 
   await emit(PIP_EVENTS.takeover, {
     positionSeconds: current.currentTime,
+    volume: current.volume,
+    muted: current.muted,
   } satisfies PipTakeoverPayload).catch(() => {});
 
   usePlayerStore.getState().enterVideoWindowPip();

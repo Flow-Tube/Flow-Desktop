@@ -93,6 +93,8 @@ export function usePipController() {
 
         store.setPipHandoff(video.id, payload.positionSeconds, payload.playing);
         store.setCurrentTime(payload.positionSeconds);
+        if (Number.isFinite(payload.volume)) store.setVolume(payload.volume);
+        store.setMuted(payload.muted);
         store.expandVideoPlayer();
         if (payload.expand) navigateRef.current(`/watch/${video.id}`);
       }),

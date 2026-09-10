@@ -1214,5 +1214,6 @@
   "stats_volume": "Volume",
   "stats_volume_muted": "Muted",
   "stats_ready_state": "Ready state",
-  "stats_captions": "Captions"
+  "stats_captions": "Captions",
+  "subtitles_track_unavailable": "This subtitle track could not be loaded"
 }

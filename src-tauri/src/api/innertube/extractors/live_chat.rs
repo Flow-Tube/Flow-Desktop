@@ -8,7 +8,7 @@ use crate::models::live_chat::{LiveChatMessage, LiveChatResponse, LiveChatSegmen
 
 const DEFAULT_POLL_MS: u64 = 2000;
 const MIN_POLL_MS: u64 = 1000;
-const MAX_POLL_MS: u64 = 6000;
+const MAX_POLL_MS: u64 = 15000;
 
 fn extract_seed_continuation(res: &Value) -> Option<String> {
     res["contents"]["twoColumnWatchNextResults"]["conversationBar"]["liveChatRenderer"]

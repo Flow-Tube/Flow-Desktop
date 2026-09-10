@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown } from "lucide-react";
+import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown, RotateCw } from "lucide-react";
 import { useLiveChat } from "../../lib/useLiveChat";
 import { getString } from "../../lib/i18n/index";
 import type { LiveChatMessage, LiveChatSegment } from "../../types/video";
@@ -125,7 +125,7 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
 }
 
 export function LiveChat({ videoId }: LiveChatProps) {
-  const { messages, loading, ended } = useLiveChat(videoId, true);
+  const { messages, loading, ended, reconnect } = useLiveChat(videoId, true);
 
   const listRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
@@ -153,10 +153,21 @@ export function LiveChat({ videoId }: LiveChatProps) {
       <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800 px-4 py-3">
         <Radio size={16} className="text-primary" />
         <h3 className="text-base font-medium text-chrome-neutral-200">{getString("live_chat_title")}</h3>
-        <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-          {getString("live_badge")}
-        </span>
+        {ended ? (
+          <button
+            type="button"
+            onClick={reconnect}
+            className="ml-auto flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold text-chrome-neutral-300 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
+          >
+            <RotateCw size={12} />
+            {getString("live_chat_reconnect")}
+          </button>
+        ) : (
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary">
+            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+            {getString("live_badge")}
+          </span>
+        )}
       </div>
 
       <div className="relative min-h-0 flex-1">

@@ -1197,5 +1197,6 @@
   "player_codec_missing_command_hint": "On Debian/Ubuntu, install them and restart Flow:",
   "player_codec_missing_dismiss": "Dismiss",
   "player_quality_switch_in": "%s in %ss",
-  "player_quality_switching": "Switching to %s"
+  "player_quality_switching": "Switching to %s",
+  "live_chat_reconnect": "Reconnect"
 }

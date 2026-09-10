@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getLiveChat } from "./api/youtube";
 import type { LiveChatMessage } from "../types/video";
 
 const MAX_MESSAGES = 200;
 const MAX_SEEN_IDS = 1500;
 const RETRY_MS = 3000;
+const MAX_RETRY_MS = 30000;
 const MAX_FAILURES = 6;
+const MAX_RESEEDS = 3;
 const MIN_POLL_MS = 800;
 
 export interface LiveChatState {
@@ -13,24 +15,37 @@ export interface LiveChatState {
   loading: boolean;
   // Chat is unavailable for this video, or its stream has closed.
   ended: boolean;
+  reconnect: () => void;
 }
 
 /**
  * Polls YouTube's native live chat for `videoId` while `enabled`. Seeds the continuation token
  * on the first call, then walks the continuation chain at the server-recommended cadence,
  * de-duplicating by message id and capping the in-memory backlog.
+ *
+ * A chain that runs out of continuations is re-seeded rather than treated as the end of chat:
+ * YouTube drops the chain on its own often enough that giving up on the first gap leaves a live
+ * stream with a dead panel. Only a chain that will not re-seed is reported as ended.
  */
 export function useLiveChat(videoId: string | undefined, enabled: boolean): LiveChatState {
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const seenRef = useRef<Set<string>>(new Set());
+  const backlogKeyRef = useRef<string | null>(null);
+
+  const reconnect = useCallback(() => setReconnectNonce((value) => value + 1), []);
 
   useEffect(() => {
-    setMessages([]);
+    // A reconnect resumes the same conversation, so only a different video clears the backlog.
+    if (backlogKeyRef.current !== videoId) {
+      backlogKeyRef.current = videoId ?? null;
+      seenRef.current = new Set();
+      setMessages([]);
+    }
     setEnded(false);
-    seenRef.current = new Set();
 
     if (!videoId || !enabled) {
       setLoading(false);
@@ -41,6 +56,7 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
     let timer: ReturnType<typeof setTimeout> | null = null;
     let continuation: string | null = null;
     let failures = 0;
+    let reseeds = 0;
     setLoading(true);
 
     const schedule = (delay: number) => {
@@ -53,7 +69,6 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
       try {
         const page = await getLiveChat(videoId, continuation);
         if (cancelled) return;
-        failures = 0;
         setLoading(false);
 
         const fresh = page.messages.filter((m) => !seenRef.current.has(m.id));
@@ -68,11 +83,19 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
           });
         }
 
-        // No further continuation means the chat had none to begin with or has now closed.
         if (!page.continuation) {
-          setEnded(true);
+          if (reseeds >= MAX_RESEEDS) {
+            setEnded(true);
+            return;
+          }
+          reseeds += 1;
+          continuation = null;
+          schedule(RETRY_MS);
           return;
         }
+
+        failures = 0;
+        reseeds = 0;
         continuation = page.continuation;
         schedule(Math.max(MIN_POLL_MS, page.pollingIntervalMs || 2000));
       } catch (err) {
@@ -84,7 +107,9 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
           setEnded(true);
           return;
         }
-        schedule(RETRY_MS);
+        // Backing off matters more than reconnecting fast: YouTube throttles a
+        // chat that keeps hammering it, and a fixed retry never lets that clear.
+        schedule(Math.min(MAX_RETRY_MS, RETRY_MS * 2 ** (failures - 1)));
       }
     };
 
@@ -94,7 +119,7 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [videoId, enabled]);
+  }, [videoId, enabled, reconnectNonce]);
 
-  return { messages, loading, ended };
+  return { messages, loading, ended, reconnect };
 }

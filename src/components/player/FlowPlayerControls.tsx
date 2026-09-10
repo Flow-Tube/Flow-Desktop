@@ -803,7 +803,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   setSettingsPane("root");
                 }
               }}
-              className="flex h-10 items-center gap-2 rounded-md px-1 text-sm font-bold hover:bg-chrome-white/10 text-left"
+              className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md pl-2 pr-3 text-sm font-bold hover:bg-chrome-white/10 text-left"
             >
               <ChevronLeft size={18} />
               {settingsPane === "speed"

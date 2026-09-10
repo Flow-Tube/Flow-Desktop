@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, Volume2, VolumeX } from "lucide-react";
+import { Loader2, Volume1, Volume2, VolumeX } from "lucide-react";
 import { getReturnYouTubeDislike, type RydData } from "../../lib/api/foss";
 import { useShortDetails } from "../../lib/useShortDetails";
 import { useVideoComments } from "../../lib/useVideoComments";
@@ -12,6 +12,7 @@ import { ShortVideoSurface } from "./ShortVideoSurface";
 import { ShortMetadata } from "./ShortMetadata";
 import { ShortActionBar } from "./ShortActionBar";
 import { ShortSidePanel } from "./ShortSidePanel";
+import { Slider } from "../ui/Slider";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 
 const SIDE_PANEL_WIDTH = 560;
@@ -21,11 +22,13 @@ interface ShortPlayerProps {
   active: boolean;
   preload: boolean;
   muted: boolean;
+  volume: number;
   playbackMode: string;
   autoScrollSeconds: number;
   panelState: ShortsPanelState;
   onRequestPanel: (panel: ShortsPanelState) => void;
   onToggleMute: () => void;
+  onVolumeChange: (volume: number) => void;
   onRequestAdvance: () => void;
   onUnavailable: () => void;
 }
@@ -35,11 +38,13 @@ export function ShortPlayer({
   active,
   preload,
   muted,
+  volume,
   playbackMode,
   autoScrollSeconds,
   panelState,
   onRequestPanel,
   onToggleMute,
+  onVolumeChange,
   onRequestAdvance,
   onUnavailable,
 }: ShortPlayerProps) {
@@ -142,6 +147,7 @@ export function ShortPlayer({
               poster={thumbnail}
               active={active}
               muted={muted}
+              volume={volume}
               playbackMode={playbackMode}
               autoScrollSeconds={autoScrollSeconds}
               onRequestAdvance={onRequestAdvance}
@@ -164,14 +170,32 @@ export function ShortPlayer({
             )}
 
             {active && (
-              <button
-                type="button"
-                aria-label={muted ? "Unmute" : "Mute"}
-                onClick={onToggleMute}
-                className="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-chrome-black/55 text-chrome-white transition-colors duration-200 ease-out hover:bg-chrome-black/75"
-              >
-                {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-              </button>
+              <div className="group/volume absolute right-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pr-3">
+                <button
+                  type="button"
+                  aria-label={muted ? "Unmute" : "Mute"}
+                  onClick={onToggleMute}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-chrome-white"
+                >
+                  {muted || volume === 0 ? (
+                    <VolumeX className="h-5 w-5" />
+                  ) : volume < 0.55 ? (
+                    <Volume1 className="h-5 w-5" />
+                  ) : (
+                    <Volume2 className="h-5 w-5" />
+                  )}
+                </button>
+                <div className="w-0 overflow-hidden opacity-0 transition-all group-hover/volume:w-24 group-hover/volume:opacity-100">
+                  <Slider
+                    aria-label="Volume"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={muted ? 0 : volume}
+                    onChange={onVolumeChange}
+                  />
+                </div>
+              </div>
             )}
           </div>
 

@@ -44,6 +44,7 @@ interface ShortVideoSurfaceProps {
   poster?: string;
   active: boolean;
   muted: boolean;
+  volume: number;
   playbackMode: string;
   autoScrollSeconds: number;
   onRequestAdvance?: () => void;
@@ -103,6 +104,7 @@ export function ShortVideoSurface({
   poster,
   active,
   muted,
+  volume,
   playbackMode,
   autoScrollSeconds,
   onRequestAdvance,
@@ -121,9 +123,18 @@ export function ShortVideoSurface({
   const autoAdvanceFiredRef = useRef(false);
   const lastAudioResyncAtRef = useRef(0);
   const mutedRef = useRef(muted);
+  const volumeRef = useRef(volume);
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    if (video) video.volume = volume;
+    if (audio) audio.volume = volume;
+  }, [volume]);
   const [fit, setFit] = useState<"cover" | "contain">("cover");
   const [userPaused, setUserPaused] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -263,12 +274,13 @@ export function ShortVideoSurface({
       video.src = videoUrl;
       video.loop = shouldLoop && !hasSeparateAudio;
       video.muted = hasSeparateAudio ? true : mutedRef.current;
+      video.volume = volumeRef.current;
 
       if (audio && hasSeparateAudio && audioUrl) {
         audio.src = audioUrl;
         audio.loop = shouldLoop;
         audio.muted = mutedRef.current;
-        audio.volume = 1;
+        audio.volume = volumeRef.current;
         audio.playbackRate = playbackRate;
         audio.preservesPitch = true;
       }
@@ -352,6 +364,7 @@ export function ShortVideoSurface({
       teardown();
       video.loop = shouldLoop;
       video.muted = mutedRef.current;
+      video.volume = volumeRef.current;
       const player = dashjs.MediaPlayer().create();
       const dashEvents = dashjs.MediaPlayer.events;
       const playDash = () => {

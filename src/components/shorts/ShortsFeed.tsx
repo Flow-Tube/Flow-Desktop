@@ -5,6 +5,7 @@ import { useShortsFeed } from "../../lib/useShortsFeed";
 import { prefetchShortStreams } from "../../lib/useShortStream";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { usePlayerStore } from "../../store/usePlayerStore";
 import { ShortPlayer } from "./ShortPlayer";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 
@@ -41,6 +42,8 @@ export function ShortsFeed() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [panelState, setPanelState] = useState<ShortsPanelState>("none");
   const [muted, setMuted] = useState(true);
+  const volume = usePlayerStore((state) => state.volume);
+  const setVolume = usePlayerStore((state) => state.setVolume);
   const [unavailableIds, setUnavailableIds] = useState<Set<string>>(new Set());
   const playbackMode = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_PLAYBACK_MODE] ?? "loop");
   const autoScrollSeconds = useAppSettingsStore((state) => Number(state.values[SETTINGS.SHORTS_AUTO_SCROLL_SECONDS] ?? "10"));
@@ -199,11 +202,16 @@ export function ShortsFeed() {
                   active={index === activeIndex}
                   preload={distance <= STREAM_PRELOAD_RADIUS}
                   muted={muted}
+                  volume={volume}
                   playbackMode={playbackMode}
                   autoScrollSeconds={Number.isFinite(autoScrollSeconds) ? autoScrollSeconds : 10}
                   panelState={panelState}
                   onRequestPanel={setPanelState}
                   onToggleMute={() => setMuted((value) => !value)}
+                  onVolumeChange={(value) => {
+                    setVolume(value);
+                    setMuted(value === 0);
+                  }}
                   onRequestAdvance={advanceToNext}
                   onUnavailable={() => markUnavailable(short.id)}
                 />

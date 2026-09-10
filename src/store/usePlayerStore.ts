@@ -69,6 +69,7 @@ interface PlayerState {
   isPlaying: boolean;
   volume: number;
   muted: boolean;
+  isVideoFullscreenTransitioning: boolean;
   playbackRate: PlaybackRate;
   queue: VideoSummary[];
   currentIndex: number;
@@ -109,6 +110,7 @@ interface PlayerState {
   setIsPlaying: (isPlaying: boolean) => void;
   setVolume: (volume: number) => void;
   setMuted: (muted: boolean | ((previous: boolean) => boolean)) => void;
+  setIsVideoFullscreenTransitioning: (transitioning: boolean) => void;
   setPlaybackRate: (playbackRate: PlaybackRate) => void;
   setQueue: (queue: VideoSummary[], startIndex?: number) => void;
   addToQueue: (video: VideoSummary) => QueueAddResult;
@@ -164,6 +166,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   volume: 1,
   muted: false,
+  isVideoFullscreenTransitioning: false,
   playbackRate: 1,
   queue: [],
   currentIndex: -1,
@@ -224,6 +227,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setMuted: (muted) =>
     set((state) => ({ muted: typeof muted === "function" ? muted(state.muted) : muted })),
+
+  setIsVideoFullscreenTransitioning: (isVideoFullscreenTransitioning) =>
+    set({ isVideoFullscreenTransitioning }),
 
   setPlaybackRate: (playbackRate) => set({ playbackRate: Math.min(4, Math.max(0.25, playbackRate)) }),
 

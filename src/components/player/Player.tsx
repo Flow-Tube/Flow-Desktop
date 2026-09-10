@@ -134,6 +134,8 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
   }
 }
 
+const FULLSCREEN_SETTLE_MS = 120;
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 type AmbientSample = {
@@ -368,6 +370,7 @@ export const Player: React.FC<PlayerProps> = ({
     expandVideoPlayer,
     isVideoFullscreen: isFullscreen,
     setIsVideoFullscreen: setIsFullscreen,
+    setIsVideoFullscreenTransitioning,
   } = usePlayerStore();
 
   usePersistedPlayerVolume();
@@ -1234,9 +1237,16 @@ export const Player: React.FC<PlayerProps> = ({
 
   const toggleFullscreen = useCallback(() => {
     const active = !isFullscreen;
-    setIsFullscreen(active);
-    void syncNativeFullscreen(active);
-  }, [isFullscreen, setIsFullscreen, syncNativeFullscreen]);
+    // The layout follows the native window rather than leading it: flipping the
+    // CSS first showed the video stretched across the pre-transition viewport,
+    // and on Windows the unmaximize step of the transition flashed a restored
+    // window through it. The cover hides the resize either way.
+    setIsVideoFullscreenTransitioning(true);
+    void syncNativeFullscreen(active).finally(() => {
+      setIsFullscreen(active);
+      setTimeout(() => setIsVideoFullscreenTransitioning(false), FULLSCREEN_SETTLE_MS);
+    });
+  }, [isFullscreen, setIsFullscreen, setIsVideoFullscreenTransitioning, syncNativeFullscreen]);
 
   const togglePictureInPicture = useCallback(() => {
     if (videoPlayerMode === "pip") {

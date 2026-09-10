@@ -48,6 +48,7 @@ export function GlobalVideoPlayer() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const videoPlayerMode = usePlayerStore((s) => s.videoPlayerMode);
   const isVideoFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
+  const isVideoFullscreenTransitioning = usePlayerStore((s) => s.isVideoFullscreenTransitioning);
   const watchPageCache = usePlayerStore((s) => s.watchPageCache);
   const enterVideoPip = usePlayerStore((s) => s.enterVideoPip);
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
@@ -233,38 +234,44 @@ export function GlobalVideoPlayer() {
   if (!currentVideo || isPoppedOut) return null;
 
   return (
-    <div
-      ref={frameRef}
-      className={
-        isVideoFullscreen
-          ? "fixed z-[300] overflow-hidden bg-chrome-black"
-          : isFloating
-          ? "group fixed z-50 overflow-hidden rounded-xl bg-chrome-black shadow-2xl ring-1 ring-chrome-white/10"
-          : "fixed z-30 bg-chrome-black"
-      }
-      style={frameStyle}
-    >
-      {isFloating && (
-        <div className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
-          <button
-            type="button"
-            aria-label="Expand video"
-            onClick={expandFromFloating}
-            className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
-          >
-            <Maximize2 size={16} />
-          </button>
-          <button
-            type="button"
-            aria-label="Close video"
-            onClick={dismissVideoPlayer}
-            className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
-          >
-            <X size={16} />
-          </button>
-        </div>
+    <>
+      <div
+        ref={frameRef}
+        className={
+          isVideoFullscreen
+            ? "fixed z-[300] overflow-hidden bg-chrome-black"
+            : isFloating
+            ? "group fixed z-50 overflow-hidden rounded-xl bg-chrome-black shadow-2xl ring-1 ring-chrome-white/10"
+            : "fixed z-30 bg-chrome-black"
+        }
+        style={frameStyle}
+      >
+        {isFloating && (
+          <div className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
+            <button
+              type="button"
+              aria-label="Expand video"
+              onClick={expandFromFloating}
+              className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
+            >
+              <Maximize2 size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="Close video"
+              onClick={dismissVideoPlayer}
+              className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        <div className="group h-full w-full">{playerNode}</div>
+      </div>
+
+      {isVideoFullscreenTransitioning && (
+        <div className="pointer-events-none fixed inset-0 z-[400] bg-chrome-black" />
       )}
-      <div className="group h-full w-full">{playerNode}</div>
-    </div>
+    </>
   );
 }

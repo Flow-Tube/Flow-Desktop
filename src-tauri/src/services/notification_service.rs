@@ -248,7 +248,7 @@ pub async fn poll_subscriptions(app: &AppHandle, pool: &sqlx::SqlitePool) -> App
     if let Err(error) = app.emit(NEW_NOTIFICATIONS_EVENT, &created) {
         tracing::warn!(%error, "Failed to emit new-notifications event");
     }
-    post_native_toast(app, &client, &pending).await;
+    post_native_toast(app, client, &pending).await;
 
     Ok(created.len())
 }

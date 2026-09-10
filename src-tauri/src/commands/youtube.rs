@@ -1,5 +1,5 @@
 use tauri::State;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::api::innertube::core::clients;
 use crate::errors::ErrorResponse;
@@ -1494,28 +1494,28 @@ pub async fn fetch_subtitles(
     url: String,
     streaming_manager: State<'_, StreamingManager>,
 ) -> Result<String, ErrorResponse> {
-    info!("[fetch_subtitles] Requested fetch for: {}", url);
+    debug!("[fetch_subtitles] Requested fetch for: {}", url);
 
     if let Ok(parsed_url) = reqwest::Url::parse(&url) {
         let path = parsed_url.path();
         if let Some(token) = path.strip_prefix("/stream/") {
             let token = token.trim_start_matches('/');
-            info!(
+            debug!(
                 "[fetch_subtitles] Local proxy URL detected. Extracted token: {}",
                 token
             );
             if let Some(session) = streaming_manager.get_session(token) {
-                info!(
+                debug!(
                     "[fetch_subtitles] Found stream session for token: {}",
                     token
                 );
                 match session.kind {
                     crate::streaming::proxy::StreamSessionKind::Remote { remote_url } => {
-                        info!("[fetch_subtitles] Remote URL session found: {}", remote_url);
+                        debug!("[fetch_subtitles] Remote URL session found: {}", remote_url);
                         let user_agent = if session.user_agent.is_empty() {
                             crate::api::http::BROWSER_USER_AGENT
                         } else {
-                            info!(
+                            debug!(
                                 "[fetch_subtitles] Using session User-Agent: {}",
                                 session.user_agent
                             );
@@ -1542,14 +1542,14 @@ pub async fn fetch_subtitles(
                             ))
                         })?;
 
-                        info!(
+                        debug!(
                             "[fetch_subtitles] Successfully fetched remote subtitles. Length: {} bytes",
                             text.len()
                         );
                         return Ok(text);
                     }
                     crate::streaming::proxy::StreamSessionKind::Inline { body } => {
-                        info!(
+                        debug!(
                             "[fetch_subtitles] Inline session found with {} bytes.",
                             body.len()
                         );
@@ -1572,7 +1572,7 @@ pub async fn fetch_subtitles(
                     }
                 }
             } else {
-                info!(
+                debug!(
                     "[fetch_subtitles] No active/expired session found in StreamingManager for token: {}",
                     token
                 );
@@ -1580,7 +1580,7 @@ pub async fn fetch_subtitles(
         }
     }
 
-    info!(
+    debug!(
         "[fetch_subtitles] Falling back to direct URL fetch: {}",
         url
     );
@@ -1597,7 +1597,7 @@ pub async fn fetch_subtitles(
         .await
         .map_err(|e| crate::errors::AppError::Extractor(format!("Read error: {}", e)))?;
 
-    info!(
+    debug!(
         "[fetch_subtitles] Direct fetch successful. Length: {} bytes",
         text.len()
     );

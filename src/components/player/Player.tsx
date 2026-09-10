@@ -12,6 +12,7 @@ import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
+import { recordPlayerEvent } from "../../lib/playerDiagnostics";
 import {
   PlayerGestureOverlay,
   type PlayerSeekFeedback,
@@ -135,6 +136,7 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
 }
 
 const FULLSCREEN_SETTLE_MS = 120;
+const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -645,7 +647,8 @@ export const Player: React.FC<PlayerProps> = ({
       selectedQualityId,
       ...payload,
     });
-    console.log(`[Player] ${event}`, entry);
+    if (import.meta.env.DEV) console.log(`[Player] ${event}`, entry);
+    recordPlayerEvent(`${event} ${JSON.stringify(entry)}`.slice(0, PLAYER_LOG_MAX_CHARS));
     const globalWindow = window as Window & {
       __FLOW_PLAYER_LOGS__?: Array<{ event: string; payload: Record<string, unknown>; at: string }>;
     };

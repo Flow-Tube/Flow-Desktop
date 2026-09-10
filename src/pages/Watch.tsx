@@ -74,6 +74,7 @@ export function Watch() {
   const { loadSubscriptions } = useSubscriptionStore();
   const commentsEnabled = useAppSettingsStore((state) => state.values[SETTINGS.COMMENTS_ENABLED] !== "false");
   const relatedVideosEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_RELATED_VIDEOS] !== "false");
+  const liveChatEnabled = useAppSettingsStore((state) => state.values[SETTINGS.LIVE_CHAT_ENABLED] !== "false");
 
   const [channelDetails, setChannelDetails] = useState<any>(null);
   const [videoDetails, setVideoDetails] = useState<any>(null);
@@ -392,7 +393,7 @@ export function Watch() {
       ) : null}
       sidebar={
         <>
-          {videoDetails?.isLive && <LiveChat videoId={videoId} />}
+          {videoDetails?.isLive && liveChatEnabled && <LiveChat videoId={videoId} />}
 
           {isQueuePanelOpen && (
             <div className="h-[min(720px,calc(100vh-140px))] min-h-[450px] w-full shrink-0">

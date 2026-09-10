@@ -1198,5 +1198,7 @@
   "player_codec_missing_dismiss": "Dismiss",
   "player_quality_switch_in": "%s in %ss",
   "player_quality_switching": "Switching to %s",
-  "live_chat_reconnect": "Reconnect"
+  "live_chat_reconnect": "Reconnect",
+  "settings_live_chat": "Live chat",
+  "settings_live_chat_desc": "Show the chat panel on livestreams that have one"
 }

@@ -28,6 +28,7 @@ export function ContentTab() {
   const [continueWatching, setContinueWatching] = useBoolPref(SETTINGS.CONTINUE_WATCHING_ENABLED, true);
   const [comments, setComments] = useBoolPref(SETTINGS.COMMENTS_ENABLED, true);
   const [relatedVideos, setRelatedVideos] = useBoolPref(SETTINGS.SHOW_RELATED_VIDEOS, true);
+  const [liveChat, setLiveChat] = useBoolPref(SETTINGS.LIVE_CHAT_ENABLED, true);
   const [hideWatched, setHideWatched] = useBoolPref(SETTINGS.HIDE_WATCHED_VIDEOS, false);
   const [disableShorts, setDisableShorts] = useBoolPref(SETTINGS.DISABLE_SHORTS_PLAYER, false);
   const [shortsNav, setShortsNav] = useBoolPref(SETTINGS.SHORTS_NAVIGATION_ENABLED, true);
@@ -123,6 +124,7 @@ export function ContentTab() {
       <SettingsGroup title={getString('settings_group_content')}>
         <SettingItem title={getString('settings_comments')} description={getString('settings_comments_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)}><ToggleSwitch checked={comments} onChange={setComments} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_related_videos')} description={getString('settings_related_videos_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)}><ToggleSwitch checked={relatedVideos} onChange={setRelatedVideos} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)} /></SettingItem>
+        <SettingItem title={getString('settings_live_chat')} description={getString('settings_live_chat_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)}><ToggleSwitch checked={liveChat} onChange={setLiveChat} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched')} description={getString('settings_hide_watched_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)}><ToggleSwitch checked={hideWatched} onChange={setHideWatched} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_disable_shorts_player')} description={getString('settings_disable_shorts_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.DISABLE_SHORTS_PLAYER)}><ToggleSwitch checked={disableShorts} onChange={setDisableShorts} disabled={isSettingDisabledUntilWired(SETTINGS.DISABLE_SHORTS_PLAYER)} /></SettingItem>
         <SettingItem title={getString('settings_shorts_playback_mode')} description={getString('settings_shorts_playback_mode_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_PLAYBACK_MODE)}>

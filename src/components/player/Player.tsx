@@ -1071,6 +1071,7 @@ export const Player: React.FC<PlayerProps> = ({
     showSeekFeedback(delta > 0 ? "forward" : "backward", Math.abs(delta));
   }, [currentTime, seekTo, showSeekFeedback]);
 
+
   useEffect(() => {
     const handleExternalSeek = (e: Event) => {
       const customEvent = e as CustomEvent<{ time: number }>;
@@ -1111,6 +1112,49 @@ export const Player: React.FC<PlayerProps> = ({
     setPlaybackDesired(video ? video.paused : !isPlaying);
     revealControls();
   }, [isPlaying, revealControls, setPlaybackDesired]);
+
+  const toggleCaptions = useCallback(() => {
+    setSelectedCaptionId((current) =>
+      current === "off"
+        ? selectPreferredCaptionId(captions, preferredSubtitleLanguage) ?? "off"
+        : "off",
+    );
+  }, [captions, preferredSubtitleLanguage]);
+
+  const nudgeSubtitleFontSize = useCallback((delta: number) => {
+    const { subtitleStyle: current, setSubtitleStyle } = usePlayerStore.getState();
+    const fontSize = Math.min(32, Math.max(12, current.fontSize + delta));
+    if (fontSize === current.fontSize) return;
+    setSubtitleStyle({ ...current, fontSize });
+  }, []);
+
+  const stepFrame = useCallback((direction: 1 | -1) => {
+    const video = videoRef.current;
+    if (!video || isLive) return;
+    setPlaybackDesired(false);
+    const frameDuration = 1 / (selectedQuality?.fps || 30);
+    seekTo(video.currentTime + direction * frameDuration);
+  }, [isLive, seekTo, selectedQuality, setPlaybackDesired]);
+
+  const stepPlaybackRate = useCallback((direction: 1 | -1) => {
+    const nextRate = direction === 1
+      ? configuredSpeedOptions.find((rate) => rate > playbackRate)
+      : [...configuredSpeedOptions].reverse().find((rate) => rate < playbackRate);
+    if (nextRate !== undefined) selectPlaybackRate(nextRate);
+  }, [configuredSpeedOptions, playbackRate, selectPlaybackRate]);
+
+  const jumpChapter = useCallback((direction: 1 | -1) => {
+    if (chapters.length === 0) return;
+    const video = videoRef.current;
+    const time = video?.currentTime ?? currentTime;
+    if (direction === 1) {
+      const next = chapters.find((chapter) => chapter.startSeconds > time + 0.5);
+      seekTo(next ? next.startSeconds : video?.duration ?? duration);
+      return;
+    }
+    const passed = chapters.filter((chapter) => chapter.startSeconds < time - 2);
+    seekTo(passed.length > 0 ? passed[passed.length - 1]!.startSeconds : 0);
+  }, [chapters, currentTime, duration, seekTo]);
 
   const windowFullscreenControllerRef = useRef<WindowFullscreenController | null>(null);
   if (!windowFullscreenControllerRef.current) {
@@ -1978,6 +2022,59 @@ export const Player: React.FC<PlayerProps> = ({
         case "i":
           togglePictureInPicture();
           break;
+        case "c":
+          event.preventDefault();
+          toggleCaptions();
+          break;
+        case "+":
+        case "=":
+          event.preventDefault();
+          nudgeSubtitleFontSize(1);
+          break;
+        case "-":
+          event.preventDefault();
+          nudgeSubtitleFontSize(-1);
+          break;
+        case ",":
+          event.preventDefault();
+          stepFrame(-1);
+          break;
+        case ".":
+          event.preventDefault();
+          stepFrame(1);
+          break;
+        case "<":
+          event.preventDefault();
+          stepPlaybackRate(-1);
+          break;
+        case ">":
+          event.preventDefault();
+          stepPlaybackRate(1);
+          break;
+        case "[":
+          event.preventDefault();
+          jumpChapter(-1);
+          break;
+        case "]":
+          event.preventDefault();
+          jumpChapter(1);
+          break;
+        case "home":
+          event.preventDefault();
+          seekTo(0);
+          break;
+        case "end":
+          event.preventDefault();
+          seekTo(duration);
+          break;
+        default: {
+          const digit = Number(event.key);
+          if (event.key.length === 1 && Number.isInteger(digit) && !isLive && duration > 0) {
+            event.preventDefault();
+            seekTo((duration * digit) / 10);
+          }
+          break;
+        }
       }
       revealControls();
     };
@@ -1993,10 +2090,17 @@ export const Player: React.FC<PlayerProps> = ({
     seekBy,
     seekIntervalSeconds,
     seekTo,
+    duration,
+    isLive,
+    jumpChapter,
+    nudgeSubtitleFontSize,
     setIsTheaterMode,
     setMuted,
     setVolume,
     showVolumeFeedback,
+    stepFrame,
+    stepPlaybackRate,
+    toggleCaptions,
     toggleFullscreen,
     togglePictureInPicture,
     togglePlay,

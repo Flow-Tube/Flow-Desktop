@@ -110,6 +110,12 @@ type DashPlayerController = {
   getTracksFor?: (type: string) => DashTrackInfo[];
   getCurrentTrackFor?: (type: string) => DashTrackInfo | null;
   setCurrentTrack?: (track: DashTrackInfo) => void;
+  getDashMetrics?: () => { getCurrentBufferLevel: (type: string) => number } | null;
+};
+
+type PendingQualitySwitch = {
+  label: string;
+  etaSeconds: number | null;
 };
 
 type QualitySwitchSnapshot = {
@@ -118,6 +124,15 @@ type QualitySwitchSnapshot = {
   fromTime: number;
   targetQualityId: string;
 };
+
+function readBufferedAheadSeconds(player: DashPlayerController): number | null {
+  try {
+    const level = player.getDashMetrics?.()?.getCurrentBufferLevel("video");
+    return typeof level === "number" && Number.isFinite(level) ? Math.round(level) : null;
+  } catch {
+    return null;
+  }
+}
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -357,6 +372,7 @@ export const Player: React.FC<PlayerProps> = ({
 
   usePersistedPlayerVolume();
 
+
   const autoplayEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AUTOPLAY_ENABLED] !== "false");
   const videoLoopEnabled = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOOP_ENABLED] === "true");
   const rememberPlaybackSpeed = useAppSettingsStore((state) => state.values[SETTINGS.REMEMBER_PLAYBACK_SPEED] === "true");
@@ -454,6 +470,21 @@ export const Player: React.FC<PlayerProps> = ({
   const [seekFeedback, setSeekFeedback] = useState<PlayerSeekFeedback | null>(null);
   const [volumeFeedback, setVolumeFeedback] = useState<PlayerVolumeFeedback | null>(null);
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
+  const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
+
+  const qualitySwitchPending = pendingQualitySwitch !== null;
+  useEffect(() => {
+    if (!qualitySwitchPending) return;
+    const timer = setInterval(() => {
+      const player = dashPlayerRef.current;
+      if (!player) return;
+      const etaSeconds = readBufferedAheadSeconds(player);
+      setPendingQualitySwitch((current) =>
+        !current || current.etaSeconds === etaSeconds ? current : { ...current, etaSeconds },
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [qualitySwitchPending]);
 
   const isDashPlayback = !!dashManifestUrl;
   const isHlsPlayback = !!hlsManifestUrl && !isDashPlayback;
@@ -703,6 +734,10 @@ export const Player: React.FC<PlayerProps> = ({
       fromTime: video.currentTime,
       targetQualityId: targetRepresentation.id,
     };
+    setPendingQualitySwitch({
+      label: targetRepresentation.height ? `${targetRepresentation.height}p` : selectedQuality.qualityLabel,
+      etaSeconds: readBufferedAheadSeconds(player),
+    });
     if (qualitySwitchTimeoutRef.current) {
       clearTimeout(qualitySwitchTimeoutRef.current);
     }
@@ -713,6 +748,7 @@ export const Player: React.FC<PlayerProps> = ({
         });
         qualitySwitchSnapshotRef.current = null;
       }
+      setPendingQualitySwitch(null);
     }, 8000);
 
     try {
@@ -729,6 +765,7 @@ export const Player: React.FC<PlayerProps> = ({
       player.setRepresentationForTypeById("video", targetRepresentation.id, false);
     } catch (switchError) {
       qualitySwitchSnapshotRef.current = null;
+      setPendingQualitySwitch(null);
       if (qualitySwitchTimeoutRef.current) {
         clearTimeout(qualitySwitchTimeoutRef.current);
         qualitySwitchTimeoutRef.current = null;
@@ -1437,6 +1474,7 @@ export const Player: React.FC<PlayerProps> = ({
       if (currentRep && currentRep.height) {
         setActiveQualityLabel(`${currentRep.height}p`);
       }
+      setPendingQualitySwitch(null);
 
       if (snapshot && video.currentTime < Math.max(1, snapshot.fromTime - 2)) {
         const rewindTime = snapshot.fromTime;
@@ -2416,6 +2454,14 @@ export const Player: React.FC<PlayerProps> = ({
         onRevealControls={revealControls}
         isCompact={isPipMode}
       />
+
+      {pendingQualitySwitch && (
+        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/30 px-4 py-1.5 text-xs font-bold text-chrome-white backdrop-blur-md animate-fade-in">
+          {pendingQualitySwitch.etaSeconds && pendingQualitySwitch.etaSeconds > 1
+            ? getString("player_quality_switch_in", pendingQualitySwitch.label, pendingQualitySwitch.etaSeconds)
+            : getString("player_quality_switching", pendingQualitySwitch.label)}
+        </div>
+      )}
 
       {/* buffering spinner */}
       {isBuffering && !isLoading && !error && (

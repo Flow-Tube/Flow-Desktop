@@ -333,7 +333,6 @@
   "playlist_add_modal_create": "Create new playlist",
   "playlist_name_placeholder": "e.g. Weekend queue",
   "playlist_create": "Create",
-
   "settings_title": "Settings",
   "settings_appearance": "Appearance",
   "settings_player": "Player",
@@ -344,7 +343,6 @@
   "settings_downloads": "Downloads",
   "settings_data_backup": "Data & Backup",
   "settings_about": "About",
-
   "theme_page_description": "Choose a palette and tune how Flow looks in light, dark, and pure-black modes.",
   "theme_variant": "Theme variant",
   "theme_variant_description": "Every palette includes a light, dark, and AMOLED treatment.",
@@ -404,7 +402,6 @@
   "theme_description_sage": "Muted forest green that stays calm and soft.",
   "theme_description_caffeine": "Coffee tones balanced with cream and espresso.",
   "theme_description_claude": "Warm clay accents on paper-like surfaces.",
-
   "settings_option_default": "Default",
   "settings_option_original": "Original",
   "settings_option_large": "Large",
@@ -454,7 +451,6 @@
   "settings_save_failed_message": "Your previous value was restored. Try again in a moment.",
   "settings_invalid_value_title": "Invalid setting",
   "settings_invalid_value_message": "That value is not allowed for this setting.",
-
   "taste_title": "Taste Management",
   "taste_subtitle": "Manage the topics FlowNeuro should seek out or avoid when shaping your recommendations.",
   "taste_interests_tab": "Interests",
@@ -484,7 +480,6 @@
   "taste_quick_block_desc": "Common topics people often remove from recommendations.",
   "taste_no_block_suggestions": "All quick suggestions are already blocked.",
   "taste_unblock_topic": "Unblock topic",
-
   "settings_group_playback": "Playback",
   "settings_autoplay": "Autoplay",
   "settings_autoplay_desc": "Automatically play the next video",
@@ -496,7 +491,6 @@
   "settings_stable_volume_desc": "Normalize audio volume levels across videos",
   "settings_volume_boost": "Volume Boost",
   "settings_volume_boost_desc": "Allow volume above 100%",
-
   "settings_group_speed": "Speed",
   "settings_remember_speed": "Remember Speed",
   "settings_remember_speed_desc": "Restore last used playback speed on next video",
@@ -509,11 +503,9 @@
   "settings_long_press_speed_desc": "Playback speed during hold gesture",
   "settings_speed_slider": "Speed Slider",
   "settings_speed_slider_desc": "Show a continuous speed slider instead of presets",
-
   "settings_group_seek": "Seek",
   "settings_seek_interval": "Seek Interval",
   "settings_seek_interval_desc": "Seconds to skip forward or backward",
-
   "settings_group_subtitles": "Subtitles",
   "settings_closed_captions": "Closed Captions",
   "settings_closed_captions_desc": "Enable subtitles by default",
@@ -526,13 +518,11 @@
   "settings_lyrics_ordered": "Tried in order",
   "settings_lyrics_provider_enabled": "Enabled for lyric lookup",
   "settings_lyrics_provider_disabled": "Skipped during lyric lookup",
-
   "settings_group_mini_player": "Mini Player",
   "settings_skip_controls": "Skip Controls",
   "settings_skip_controls_desc": "Show seek jump buttons in mini player",
   "settings_next_previous": "Next / Previous",
   "settings_next_previous_desc": "Show track navigation in mini player",
-
   "settings_group_pip": "Picture-in-Picture",
   "settings_auto_pip": "Auto PiP",
   "settings_auto_pip_desc": "Enter PiP when navigating away from the player",
@@ -544,7 +534,6 @@
   "settings_pip_always_on_top_desc": "Hold the pop-out player above other apps",
   "settings_pip_on_minimize": "Pop Out When Minimized",
   "settings_pip_on_minimize_desc": "Keep playing in the pop-out when you minimize Flow",
-
   "pip_window_title": "Mini player",
   "pip_window_empty": "Nothing is playing",
   "pip_window_loading": "Starting playback…",
@@ -554,7 +543,6 @@
   "pip_window_unpin": "Stop keeping on top",
   "watch_playing_in_popout": "Playing in the pop-out mini player",
   "watch_playing_in_popout_action": "Bring it back",
-
   "settings_group_player_appearance": "Player Appearance",
   "settings_fullscreen_title": "Fullscreen Title",
   "settings_fullscreen_title_desc": "Show video title during fullscreen playback",
@@ -566,7 +554,6 @@
   "settings_music_player_background_blur": "Blurred Artwork",
   "settings_music_player_background_gradient": "Palette Gradient",
   "settings_music_player_background_default": "Default Surface",
-
   "settings_group_layout": "Layout",
   "settings_grid_columns": "Grid Columns",
   "settings_grid_columns_desc": "Up to %s videos per row — narrower windows automatically use fewer",
@@ -575,7 +562,6 @@
   "settings_video_title_lines_desc": "Max lines for video titles (0 = unlimited)",
   "settings_download_dialog": "Download Dialog",
   "settings_download_dialog_desc": "Style of the download options menu",
-
   "settings_group_feed": "Feed",
   "settings_home_feed": "Home Feed",
   "settings_home_feed_desc": "Show home page recommendations",
@@ -588,7 +574,6 @@
   "settings_continue_watching": "Continue Watching",
   "settings_continue_watching_desc": "Show Continue Watching shelf",
   "continue_watching_shelf_title": "Continue Watching",
-
   "settings_group_content": "Content",
   "settings_comments": "Comments",
   "settings_comments_desc": "Enable the comments panel",
@@ -605,13 +590,11 @@
   "settings_shorts_playback_auto_interval": "Auto-scroll after timer",
   "settings_shorts_auto_scroll_seconds": "Shorts Auto-scroll Timer",
   "settings_shorts_auto_scroll_seconds_desc": "Advance after %s seconds when the Short is longer than the timer",
-
   "settings_group_nav_tabs": "Navigation Tabs",
   "settings_shorts_tab": "Shorts Tab",
   "settings_music_tab": "Music Tab",
   "settings_categories_tab": "Categories Tab",
   "settings_categories_tab_desc": "Add an Explore/Categories tab",
-
   "settings_group_notifications": "Notifications",
   "settings_notifications_enabled": "Subscription Notifications",
   "settings_notifications_enabled_desc": "Notify me when subscribed channels upload new videos",
@@ -624,19 +607,16 @@
   "settings_notification_interval_6h": "Every 6 hours",
   "settings_notification_interval_12h": "Every 12 hours",
   "settings_notification_interval_24h": "Once a day",
-
   "settings_group_subscriptions": "Subscriptions",
   "settings_refresh_startup": "Refresh on Startup",
   "settings_refresh_startup_desc": "Fetch new videos when the app opens",
   "settings_show_videos": "Show Videos",
   "settings_show_shorts": "Show Shorts",
   "settings_show_live": "Show Live Streams",
-
   "settings_group_region": "Region",
   "settings_region_picker": "Region Picker",
   "settings_region_picker_desc": "Show globe icon in Explore header",
   "settings_trending_region": "Trending Region",
-
   "settings_group_video_quality": "Video Quality",
   "settings_default_resolution": "Default Resolution",
   "settings_default_resolution_desc": "Video quality for standard playback",
@@ -650,7 +630,6 @@
   "settings_music_audio_quality_desc": "Bit-rate priority for music streams",
   "settings_audio_track_language": "Audio Track Language",
   "settings_audio_track_language_desc": "Preferred language for multi-audio tracks",
-
   "settings_group_buffer_profile": "Buffer Profile",
   "settings_buffering_strategy": "Buffering Strategy",
   "settings_buffering_strategy_desc": "Pre-configured buffering parameters",
@@ -675,7 +654,6 @@
   "settings_proxy_username": "Username",
   "settings_proxy_username_desc": "Optional authentication",
   "settings_proxy_password": "Password",
-
   "settings_group_download_quality": "Quality",
   "settings_download_quality": "Download Quality",
   "settings_download_quality_desc": "Default video quality for downloads",
@@ -698,7 +676,6 @@
   "thumbnail_mode_sidecar": "Separate file",
   "thumbnail_mode_embed": "Embed in file",
   "thumbnail_mode_both": "Embed + separate file",
-
   "settings_group_auto_backup": "Auto Backup",
   "settings_backup_frequency": "Backup Frequency",
   "settings_backup_frequency_desc": "Schedule automatic background backups",
@@ -725,7 +702,6 @@
   "settings_clear_confirm": "Clear watch history, subscriptions, and saved playlists? This cannot be undone.",
   "settings_clear_success": "Local data cleared",
   "settings_clear_failed": "Failed to clear local data",
-
   "settings_about_subtitle": "Desktop companion to Flow for Android, powered by the local FlowNeuro engine",
   "settings_group_app": "App",
   "settings_version": "Version",
@@ -757,7 +733,6 @@
   "settings_unknown": "Unknown",
   "settings_source_tauri": "Tauri runtime",
   "settings_source_fallback": "Browser fallback",
-
   "import_title": "Import Database",
   "import_subtitle": "Restore subscriptions, playlists, and watch history from a backup file",
   "import_data_to_import": "Data to import",
@@ -803,7 +778,6 @@
   "import_format_opml": "OPML Subscriptions",
   "import_flowneuro_card_title": "FlowNeuro",
   "import_flowneuro_card_body": "When watch history or subscriptions are imported, the local recommendation engine automatically seeds interest profiles from titles, keywords, and creators.",
-
   "sidebar_flowneuron": "FlowNeuro",
   "sidebar_shorts": "Shorts",
   "shorts_link_copied": "Link copied to clipboard",
@@ -836,7 +810,6 @@
   "sidebar_section_collapse": "Collapse section",
   "sidebar_section_expand": "Expand section",
   "sidebar_support": "Support Flow",
-
   "donations_title": "Support Flow",
   "donations_subtitle": "Flow is free, open-source software built by an independent developer. There are no ads, no trackers, and no Flow account. Your support keeps it that way.",
   "donations_patreon_title": "Become a member",
@@ -850,14 +823,12 @@
   "donations_copy_failed": "Could not copy address",
   "donations_qr_alt": "%s donation QR code",
   "donations_thank_you": "Thank you for helping keep Flow independent.",
-
   "donation_prompt_title": "Enjoying Flow?",
   "donation_prompt_message": "Flow is free and ad-free, maintained by one independent developer. If it has earned a place in your day, a small contribution helps keep it growing.",
   "donation_prompt_methods": "Patreon · BTC · ETH · SOL · USDT · XMR",
   "donation_prompt_support": "Support Flow",
   "donation_prompt_later": "Maybe later",
   "donation_prompt_never": "Don't ask again",
-
   "updater_update_available": "Update available",
   "updater_new_version": "Version %s is ready to install",
   "updater_current_version": "you have %s",
@@ -877,7 +848,6 @@
   "settings_checking": "Checking…",
   "settings_auto_update": "Check on startup",
   "settings_auto_update_desc": "Automatically look for new releases when Flow starts",
-
   "music_play": "Play",
   "music_more_options": "More options",
   "music_like_track": "Like track",
@@ -930,7 +900,6 @@
   "music_from_community": "From the community",
   "music_popular_artists": "Popular artists",
   "music_fans_also_like": "Fans of %s also like",
-
   "music_taste_title": "Music taste",
   "music_taste_desc": "Your local music profile — learned entirely on-device from what you listen to.",
   "music_top_artists": "Top artists",
@@ -951,13 +920,11 @@
   "music_affinity": "Affinity",
   "music_plays": "Plays",
   "music_liked": "Liked",
-
   "music_mood_all": "All",
   "music_mood_workout": "Workout",
   "music_mood_focus": "Focus",
   "music_mood_relax": "Relax",
   "music_mood_podcasts": "Podcasts",
-
   "music_pause": "Pause",
   "music_next": "Next",
   "music_previous": "Previous",
@@ -981,7 +948,6 @@
   "music_lyrics_unavailable": "Lyrics not available",
   "music_resync": "Resync",
   "music_refresh_lyrics": "Refresh lyrics",
-
   "music_artist_popular": "Popular",
   "music_artist_albums": "Albums",
   "music_artist_singles": "Singles & EPs",
@@ -1004,7 +970,6 @@
   "music_streams_column": "Streams",
   "music_time_column": "Time",
   "music_collection_unavailable": "Couldn't load this.",
-
   "search_cat_all": "All",
   "search_cat_videos": "Videos",
   "search_cat_songs": "Songs",
@@ -1014,13 +979,11 @@
   "search_cat_live": "Live",
   "search_cat_podcasts": "Podcasts",
   "search_cat_episodes": "Episodes",
-
   "search_sort_label": "Sort",
   "search_sort_relevance": "Relevance",
   "search_sort_date": "Upload date",
   "search_sort_views": "View count",
   "search_sort_rating": "Rating",
-
   "search_uploaded_label": "Uploaded",
   "search_uploaded_any": "Any time",
   "search_uploaded_hour": "Last hour",
@@ -1028,13 +991,11 @@
   "search_uploaded_week": "This week",
   "search_uploaded_month": "This month",
   "search_uploaded_year": "This year",
-
   "search_length_label": "Length",
   "search_length_any": "Any",
   "search_length_short": "Under 4 min",
   "search_length_medium": "4–20 min",
   "search_length_long": "Over 20 min",
-
   "search_feature_label": "Features",
   "search_feature_any": "Any",
   "search_feature_hd": "HD",
@@ -1042,7 +1003,6 @@
   "search_feature_subtitles": "Subtitles/CC",
   "search_feature_creative_commons": "Creative Commons",
   "search_feature_hdr": "HDR",
-
   "search_top_result": "Top result",
   "search_section_songs": "Songs",
   "search_section_videos": "Videos",
@@ -1051,7 +1011,6 @@
   "search_section_artists_channels": "Artists & Channels",
   "search_section_podcasts": "Podcasts",
   "search_section_episodes": "Episodes",
-
   "search_see_all_songs": "See all songs",
   "search_see_all_videos": "See all videos",
   "search_see_all_live": "See all live",
@@ -1059,24 +1018,20 @@
   "search_see_all_playlists": "See all playlists",
   "search_see_all_podcasts": "See all podcasts",
   "search_see_all_episodes": "See all episodes",
-
   "search_action_play": "Play",
   "search_action_open": "Open",
   "search_action_view_channel": "View channel",
-
   "search_empty_title": "Start exploring",
   "search_empty_body": "Search for videos, songs, albums, artists or channels to stream natively in pristine quality.",
   "search_error_title": "Something went wrong",
   "search_no_results_title": "No results for \"%s\"",
   "search_no_results_body": "Try a different search term or category.",
-
   "search_role_channel": "Channel",
   "search_role_artist": "Artist",
   "search_subscribe": "Subscribe",
   "search_subscribed": "Subscribed",
   "search_follow": "Follow",
   "search_following": "Following",
-
   "watch_dislike": "Dislike",
   "watch_dearrow_badge_hint": "Title cleaned by DeArrow",
   "watch_unknown_channel": "Unknown channel",
@@ -1109,7 +1064,6 @@
   "watch_retry_proxy": "Retry with Proxy",
   "watch_go_back": "Go Back",
   "watch_back_home": "Back to Home",
-
   "deep_flow_mode_title": "Deep Flow Mode",
   "deep_flow_mode_subtitle": "Pause learning and browse without shaping your FlowNeuro profile.",
   "deep_flow_learning_paused": "Learning paused",
@@ -1132,16 +1086,13 @@
   "deep_flow_duration_hours": "%s hours",
   "deep_flow_topbar_enable": "Enable Deep Flow",
   "deep_flow_topbar_disable": "Disable Deep Flow",
-
   "sync_page_title": "Flow Sync",
   "sync_page_subtitle": "Move playlists, history, likes and your taste profile between your devices — over your local network, end-to-end encrypted, no account needed.",
   "sync_this_device": "This device",
-
   "sync_send_title": "Send Data",
   "sync_send_subtitle": "Show a code for another device to scan.",
   "sync_send_list_label": "What to send",
   "sync_generate_code": "Generate Sync Code",
-
   "sync_receive_title": "Receive Data",
   "sync_receive_subtitle": "Scan or paste a code from another device.",
   "sync_scan_camera": "Scan with Camera",
@@ -1150,7 +1101,6 @@
   "sync_connect": "Connect",
   "sync_show_qr_button": "No camera? Show a QR to scan",
   "sync_show_qr_hint": "This device shows a code; the other device scans it and sends its data here.",
-
   "sync_collection_watch_history": "Watch history",
   "sync_collection_watch_history_desc": "Everything you've watched, with progress",
   "sync_collection_playlists": "Playlists",
@@ -1167,7 +1117,6 @@
   "sync_collection_subscribed_channels_desc": "The channels you follow",
   "sync_collection_subscriptions": "Subscription groups",
   "sync_collection_subscriptions_desc": "The folders you sort your channels into",
-
   "sync_pair_scan_title": "Scan this with your phone",
   "sync_pair_scan_subtitle": "Open Flow on the other device and scan to receive your data.",
   "sync_pair_receive_title": "Show this to the other device",
@@ -1181,12 +1130,10 @@
   "sync_host_address": "This PC: %s",
   "sync_host_address_hint": "The other device must be able to reach this address. If it can't connect, check that both devices are on the same network and that a VPN or firewall isn't blocking it.",
   "sync_cancel": "Cancel",
-
   "sync_camera_error": "Could not start the camera. Paste the code manually instead, or check camera permissions.",
   "sync_stop_camera": "Stop camera",
   "sync_paste_is_sas": "That's the verification code, not the sync code. Scan the QR with the camera, or paste the full sync data (it starts with \"{\").",
   "sync_paste_invalid": "This doesn't look like a sync code. Scan the QR with the camera instead.",
-
   "sync_consent_merge_title": "Merge data from %s?",
   "sync_consent_allow_title": "Allow %s to sync?",
   "sync_consent_merge_subtitle": "Review what will be merged into this device.",
@@ -1196,10 +1143,8 @@
   "sync_deny": "Deny",
   "sync_merge": "Merge",
   "sync_allow": "Allow",
-
   "sync_connecting": "Connecting to the other device…",
   "sync_syncing": "Syncing your data…",
-
   "sync_complete_title": "Sync complete",
   "sync_complete_sent": "Your data was sent successfully.",
   "sync_done": "Done",
@@ -1208,13 +1153,11 @@
   "sync_stat_updated": "%s updated",
   "sync_stat_removed": "%s removed",
   "sync_stat_uptodate": "up to date",
-
   "sync_declined_title": "Sync was declined",
   "sync_declined_body": "No data was transferred.",
   "sync_failed_title": "Sync failed",
   "sync_failed_body": "Something went wrong.",
   "sync_start_over": "Start over",
-
   "player_resolving_stream": "Resolving stream",
   "player_error_retry": "Retry",
   "player_error_copy_logs": "Copy logs",
@@ -1252,5 +1195,7 @@
   "player_codec_missing_title": "Video codecs missing",
   "player_codec_missing_hint": "Audio is playing but your system can't decode the video. Flow needs the GStreamer video codecs, which aren't installed.",
   "player_codec_missing_command_hint": "On Debian/Ubuntu, install them and restart Flow:",
-  "player_codec_missing_dismiss": "Dismiss"
+  "player_codec_missing_dismiss": "Dismiss",
+  "player_quality_switch_in": "%s in %ss",
+  "player_quality_switching": "Switching to %s"
 }

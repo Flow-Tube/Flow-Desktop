@@ -1,4 +1,7 @@
-import type { SponsorBlockCategory } from "../../store/useSettingsStore";
+import {
+  SPONSORBLOCK_CATEGORIES,
+  type SponsorBlockCategory,
+} from "../store/useSettingsStore";
 
 export interface SponsorBlockCategoryMeta {
   /** Full label used in settings rows. */
@@ -55,3 +58,12 @@ export const SB_CATEGORY_META: Record<SponsorBlockCategory, SponsorBlockCategory
     description: "Sponsored trips or exclusive-access segments.",
   },
 };
+
+export function sponsorBlockCategoryLabel(category: string): string {
+  return SB_CATEGORY_META[category as SponsorBlockCategory]?.name ?? category;
+}
+
+export const SB_SUBMIT_CATEGORIES = SPONSORBLOCK_CATEGORIES.map((category) => ({
+  value: category,
+  label: SB_CATEGORY_META[category].name,
+}));

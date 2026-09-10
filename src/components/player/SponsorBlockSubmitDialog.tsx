@@ -8,18 +8,7 @@ import { Button } from "../ui/Button";
 import { TextInput } from "../ui/TextInput";
 import { Select } from "../ui/Select";
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
-
-const SUBMIT_CATEGORIES = [
-  { value: "sponsor", label: "Sponsor" },
-  { value: "intro", label: "Intro / intermission" },
-  { value: "outro", label: "Outro / credits" },
-  { value: "selfpromo", label: "Self-promotion" },
-  { value: "interaction", label: "Interaction reminder" },
-  { value: "music_offtopic", label: "Non-music section" },
-  { value: "filler", label: "Filler / tangent" },
-  { value: "preview", label: "Preview / recap" },
-  { value: "exclusive_access", label: "Exclusive access" },
-];
+import { SB_SUBMIT_CATEGORIES } from "../../lib/sponsorBlockCategories";
 
 function formatTimestamp(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
@@ -172,7 +161,7 @@ export function SponsorBlockSubmitDialog({
 
         <div className="mt-4 space-y-1.5">
           <span className="block text-xs font-medium text-chrome-neutral-400">Category</span>
-          <Select value={category} onChange={setCategory} options={SUBMIT_CATEGORIES} className="w-full" />
+          <Select value={category} onChange={setCategory} options={SB_SUBMIT_CATEGORIES} className="w-full" />
         </div>
 
         {error && <p className="mt-3 text-xs text-chrome-red-400">{error}</p>}

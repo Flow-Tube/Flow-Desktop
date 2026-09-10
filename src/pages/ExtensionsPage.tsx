@@ -12,7 +12,7 @@ import { Button } from "../components/ui/Button";
 import { TextInput } from "../components/ui/TextInput";
 import { SponsorBlockCategoryRow } from "../components/extensions/SponsorBlockCategoryRow";
 import { SponsorBlockStatsDashboard } from "../components/extensions/SponsorBlockStatsDashboard";
-import { SB_CATEGORY_META } from "../components/extensions/sponsorBlockCategories";
+import { SB_CATEGORY_META } from "../lib/sponsorBlockCategories";
 import { useSponsorBlockCategoryStats } from "../lib/useSponsorBlockCategoryStats";
 import { SETTINGS } from "../lib/settings/schema";
 import { isSettingDisabledUntilWired } from "../lib/settings/values";

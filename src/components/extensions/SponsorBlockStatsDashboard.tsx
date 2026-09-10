@@ -18,7 +18,7 @@ import {
   type SponsorBlockCategory,
 } from "../../store/useSettingsStore";
 import type { SponsorBlockCategoryStat } from "../../lib/useSponsorBlockCategoryStats";
-import { SB_CATEGORY_META } from "./sponsorBlockCategories";
+import { SB_CATEGORY_META } from "../../lib/sponsorBlockCategories";
 
 interface CategoryDatum {
   key: SponsorBlockCategory;

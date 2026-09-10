@@ -29,6 +29,7 @@ import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../.
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
+import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
 import { Slider } from "../ui/Slider";
 import { videoCodecLabel } from "../../lib/settings/playerRuntime";
@@ -196,6 +197,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const timeTextRef = useRef<HTMLDivElement>(null);
   const hoverPillRef = useRef<HTMLDivElement>(null);
   const hoverTextRef = useRef<HTMLSpanElement>(null);
+  const hoverSegmentRef = useRef<HTMLSpanElement>(null);
+  const hoverSegmentDotRef = useRef<HTMLSpanElement>(null);
+  const hoverSegmentLabelRef = useRef<HTMLSpanElement>(null);
 
   const segments = React.useMemo(() => {
     if (isLive || !chapters || chapters.length === 0) {
@@ -342,12 +346,26 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     const x = Math.min(rect.width, Math.max(0, clientX - rect.left));
     pill.style.left = `${x}px`;
     pill.style.opacity = "1";
+    const time = (x / rect.width) * duration;
     if (hoverTextRef.current) {
-      const time = (x / rect.width) * duration;
       const chapter = segments?.find((c) => time >= c.startSeconds && time <= c.endSeconds);
       hoverTextRef.current.textContent = chapter?.title
         ? `${formatTime(time)} • ${chapter.title}`
         : formatTime(time);
+    }
+    if (hoverSegmentRef.current && hoverSegmentDotRef.current && hoverSegmentLabelRef.current) {
+      const sbSegment = sponsorBlockEnabled
+        ? sponsorBlockSegments.find(
+            (candidate) => time >= candidate.segment[0] && time <= candidate.segment[1],
+          )
+        : undefined;
+      hoverSegmentRef.current.style.display = sbSegment ? "flex" : "none";
+      if (sbSegment) {
+        hoverSegmentDotRef.current.style.backgroundColor =
+          sponsorBlockColors[sbSegment.category as SponsorBlockCategory] ||
+          "var(--color-chrome-red-500)";
+        hoverSegmentLabelRef.current.textContent = sponsorBlockCategoryLabel(sbSegment.category);
+      }
     }
   };
 
@@ -565,8 +583,15 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 className="absolute bottom-8 -translate-x-1/2 flex flex-col items-center pointer-events-none z-50 opacity-0 transition-opacity duration-75"
                 style={{ left: 0 }}
               >
-                <div className="bg-chrome-black/80 border border-chrome-white/10 px-2 py-1 rounded-full text-chrome-white min-w-max text-center flex flex-col gap-0.5 leading-tight">
+                <div className="bg-chrome-black/80 border border-chrome-white/10 px-2 py-1 rounded-2xl text-chrome-white min-w-max text-center flex flex-col items-center gap-0.5 leading-tight">
                   <span ref={hoverTextRef} className="text-[12px] font-medium font-sans" />
+                  <span
+                    ref={hoverSegmentRef}
+                    className="hidden items-center gap-1.5 text-[11px] font-semibold font-sans text-chrome-white/85"
+                  >
+                    <span ref={hoverSegmentDotRef} className="h-2 w-2 shrink-0 rounded-full" />
+                    <span ref={hoverSegmentLabelRef} />
+                  </span>
                 </div>
               </div>
             )}

@@ -10,6 +10,7 @@ import { useSettingsStore, type SponsorBlockCategory, type SponsorBlockAction } 
 import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../../types/video";
 import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
+import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import {
   PlayerGestureOverlay,
   type PlayerSeekFeedback,
@@ -2078,18 +2079,6 @@ export const Player: React.FC<PlayerProps> = ({
     audio.load();
   };
 
-  const CATEGORY_LABELS: Record<string, string> = {
-    sponsor: "Sponsor",
-    intro: "Intro / Intermission",
-    outro: "Outro / Credits",
-    selfpromo: "Self-Promotion",
-    interaction: "Interaction Reminder",
-    music_offtopic: "Non-Music Filler",
-    filler: "Filler Content",
-    preview: "Preview / Recap",
-    exclusive_access: "Exclusive Access",
-  };
-
   const handleSkipNotifySegment = (segment: any) => {
     if (!segment) return;
     const video = videoRef.current;
@@ -2147,7 +2136,7 @@ export const Player: React.FC<PlayerProps> = ({
             if (!notifiedSegmentsRef.current.has(segment.UUID)) {
               notifiedSegmentsRef.current.add(segment.UUID);
               
-              const catLabel = CATEGORY_LABELS[segment.category] || segment.category;
+              const catLabel = sponsorBlockCategoryLabel(segment.category);
               setNotifyToast({
                 segment,
                 categoryName: catLabel,
@@ -2442,7 +2431,7 @@ export const Player: React.FC<PlayerProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
           <span className="text-xs font-bold text-chrome-neutral-200">
-            SponsorBlock Muted ({CATEGORY_LABELS[currentSBMuteSegment || ""] || currentSBMuteSegment || "Filler"})
+            SponsorBlock Muted ({sponsorBlockCategoryLabel(currentSBMuteSegment || "filler")})
           </span>
         </div>
       )}

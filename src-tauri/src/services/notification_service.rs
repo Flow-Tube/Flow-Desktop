@@ -44,14 +44,6 @@ fn now_millis() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-fn build_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .user_agent(crate::api::http::BROWSER_USER_AGENT)
-        .timeout(Duration::from_secs(30))
-        .build()
-        .unwrap_or_default()
-}
-
 async fn master_enabled(pool: &sqlx::SqlitePool) -> bool {
     !matches!(
         db::settings::get_setting(pool, KEY_MASTER_ENABLED).await,
@@ -203,10 +195,10 @@ pub async fn poll_subscriptions(app: &AppHandle, pool: &sqlx::SqlitePool) -> App
         return Ok(0);
     }
 
-    let client = build_client();
+    let client = crate::api::http::shared_client();
     let mut pending: Vec<PendingNotification> = Vec::new();
     for chunk in targets.chunks(CHANNEL_CHUNK) {
-        let fetches = chunk.iter().map(|sub| check_channel(&client, pool, sub));
+        let fetches = chunk.iter().map(|sub| check_channel(client, pool, sub));
         for result in futures_util::future::join_all(fetches).await {
             match result {
                 Ok(Some(entry)) => pending.push(entry),

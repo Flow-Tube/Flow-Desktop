@@ -758,17 +758,19 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <PictureInPicture2 size={19} />
                 </button>
               )}
-              <button
-                type="button"
-                title="Theater mode"
-                onClick={() => setIsTheaterMode(!isTheaterMode)}
-                className={cx(
-                  "grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10",
-                  isTheaterMode && "bg-chrome-white/15"
-                )}
-              >
-                {isTheaterMode ? <Shrink size={19} /> : <Expand size={19} />}
-              </button>
+              {!isFullscreen && (
+                <button
+                  type="button"
+                  title="Theater mode"
+                  onClick={() => setIsTheaterMode(!isTheaterMode)}
+                  className={cx(
+                    "grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10",
+                    isTheaterMode && "bg-chrome-white/15"
+                  )}
+                >
+                  {isTheaterMode ? <Shrink size={19} /> : <Expand size={19} />}
+                </button>
+              )}
               <button
                 type="button"
                 title="Fullscreen"

@@ -1948,7 +1948,7 @@ export const Player: React.FC<PlayerProps> = ({
           toggleFullscreen();
           break;
         case "t":
-          setIsTheaterMode(!isTheaterMode);
+          if (!isFullscreen) setIsTheaterMode(!isTheaterMode);
           break;
         case "i":
           togglePictureInPicture();

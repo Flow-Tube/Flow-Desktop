@@ -601,6 +601,16 @@ export function ShortVideoSurface({
     [duration, hasSeparateAudio],
   );
 
+  useEffect(() => {
+    if (!active) return;
+    const handleExternalSeek = (event: Event) => {
+      const detail = (event as CustomEvent<{ time?: number }>).detail;
+      if (typeof detail?.time === "number") seekTo(detail.time);
+    };
+    window.addEventListener("flow-player-seek", handleExternalSeek);
+    return () => window.removeEventListener("flow-player-seek", handleExternalSeek);
+  }, [active, seekTo]);
+
   return (
     <div className="relative h-full w-full">
       <video

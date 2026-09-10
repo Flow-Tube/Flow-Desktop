@@ -2441,6 +2441,10 @@ export const Player: React.FC<PlayerProps> = ({
         duration={duration}
         seekFeedback={seekFeedback}
         volumeFeedback={volumeFeedback}
+        qualityLabel={selectedQualityId === "auto" ? activeQualityLabel : selectedQuality?.qualityLabel}
+        mimeType={selectedQuality?.mimeType}
+        bitrate={selectedQuality?.bitrate}
+        captionCount={captions.length}
         seekIntervalSeconds={seekIntervalSeconds}
         longPressPlaybackRate={longPressPlaybackRate}
         loopEnabled={videoLoopEnabled}

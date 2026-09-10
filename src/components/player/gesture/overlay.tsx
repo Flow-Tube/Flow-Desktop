@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
+import { StatsForNerds } from "../StatsForNerds";
 
 export type PlayerSeekFeedback = {
   id: number;
@@ -48,6 +49,10 @@ type PlayerGestureOverlayProps = {
   duration: number;
   seekFeedback: PlayerSeekFeedback | null;
   volumeFeedback: PlayerVolumeFeedback | null;
+  qualityLabel?: string | null;
+  mimeType?: string | null;
+  bitrate?: number | null;
+  captionCount?: number;
   seekIntervalSeconds: number;
   longPressPlaybackRate: PlaybackRate;
   loopEnabled: boolean;
@@ -87,6 +92,10 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   duration,
   seekFeedback,
   volumeFeedback,
+  qualityLabel,
+  mimeType,
+  bitrate,
+  captionCount,
   seekIntervalSeconds,
   longPressPlaybackRate,
   loopEnabled,
@@ -399,19 +408,18 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {statsVisible && (
-        <div className="pointer-events-none absolute right-5 top-5 z-40 w-[min(92vw,320px)] rounded-xl border border-chrome-white/10 bg-chrome-black/70 p-3 text-xs font-semibold text-chrome-zinc-100 shadow-2xl backdrop-blur-md animate-fade-in">
-          <div className="mb-2 text-sm font-black">Stats for nerds</div>
-          <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1 text-chrome-zinc-300">
-            <span className="text-chrome-zinc-500">Time</span>
-            <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-            <span className="text-chrome-zinc-500">Speed</span>
-            <span>{playbackRate}x</span>
-            <span className="text-chrome-zinc-500">Resolution</span>
-            <span>{videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : "Unknown"}</span>
-            <span className="text-chrome-zinc-500">Ready state</span>
-            <span>{videoRef.current?.readyState ?? "Unknown"}</span>
-          </div>
-        </div>
+        <StatsForNerds
+          videoRef={videoRef}
+          currentTime={currentTime}
+          duration={duration}
+          playbackRate={playbackRate}
+          qualityLabel={qualityLabel}
+          mimeType={mimeType}
+          bitrate={bitrate}
+          captionCount={captionCount}
+          compact={isCompact}
+          className="right-5 top-5"
+        />
       )}
     </>
   );

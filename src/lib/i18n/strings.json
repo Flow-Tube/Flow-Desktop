@@ -1200,5 +1200,19 @@
   "player_quality_switching": "Switching to %s",
   "live_chat_reconnect": "Reconnect",
   "settings_live_chat": "Live chat",
-  "settings_live_chat_desc": "Show the chat panel on livestreams that have one"
+  "settings_live_chat_desc": "Show the chat panel on livestreams that have one",
+  "stats_title": "Stats for nerds",
+  "stats_time": "Time",
+  "stats_resolution": "Resolution",
+  "stats_quality": "Quality",
+  "stats_frames": "Frames",
+  "stats_frames_dropped_of": "dropped of",
+  "stats_buffer_health": "Buffer health",
+  "stats_bitrate": "Bitrate",
+  "stats_codec": "Codec",
+  "stats_speed": "Speed",
+  "stats_volume": "Volume",
+  "stats_volume_muted": "Muted",
+  "stats_ready_state": "Ready state",
+  "stats_captions": "Captions"
 }

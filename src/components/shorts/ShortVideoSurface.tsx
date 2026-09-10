@@ -31,6 +31,7 @@ import {
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import type { CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleOverlay } from "../player/SubtitleOverlay";
+import { StatsForNerds } from "../player/StatsForNerds";
 import { MediaScrubber } from "../ui/MediaScrubber";
 
 interface ShortVideoSurfaceProps {
@@ -164,11 +165,9 @@ export function ShortVideoSurface({
   const longPressPlaybackRate = normalizePlaybackRate(longPressSpeedSetting, 2);
   const speedOptions = parseCustomSpeedPresets(customSpeedPresets, customSpeedsEnabled);
   const selectedCaption = captions.find((caption) => caption.id === selectedCaptionId) ?? null;
+  const selectedVariant = qualities.find((quality) => quality.id === selectedQualityId) ?? null;
   const selectedQualityLabel =
-    selectedQualityId === "auto"
-      ? "Auto"
-      : qualities.find((quality) => quality.id === selectedQualityId)?.qualityLabel ||
-        selectedQualityId;
+    selectedQualityId === "auto" ? "Auto" : selectedVariant?.qualityLabel || selectedQualityId;
 
   const useDirect = !!videoUrl;
   const hasSeparateAudio = useDirect && !!audioUrl && audioUrl !== videoUrl;
@@ -918,21 +917,18 @@ export function ShortVideoSurface({
         </div>
       )}
       {statsVisible && (
-        <div className="pointer-events-none absolute right-4 top-16 z-40 w-[min(82vw,300px)] rounded-xl border border-chrome-white/10 bg-chrome-black/85 p-3 text-xs font-semibold text-chrome-zinc-100">
-          <div className="mb-2 text-sm font-black">Stats for nerds</div>
-          <div className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1 text-chrome-zinc-300">
-            <span className="text-chrome-zinc-500">Time</span>
-            <span>{formatTime(progress)} / {formatTime(duration)}</span>
-            <span className="text-chrome-zinc-500">Speed</span>
-            <span>{playbackRate}x</span>
-            <span className="text-chrome-zinc-500">Quality</span>
-            <span>{selectedQualityLabel}</span>
-            <span className="text-chrome-zinc-500">Resolution</span>
-            <span>{videoRef.current ? `${videoRef.current.videoWidth}x${videoRef.current.videoHeight}` : "Unknown"}</span>
-            <span className="text-chrome-zinc-500">Captions</span>
-            <span>{captions.length}</span>
-          </div>
-        </div>
+        <StatsForNerds
+          videoRef={videoRef}
+          currentTime={progress}
+          duration={duration}
+          playbackRate={playbackRate}
+          qualityLabel={selectedQualityLabel}
+          mimeType={selectedVariant?.mimeType}
+          bitrate={selectedVariant?.bitrate}
+          captionCount={captions.length}
+          compact
+          className="right-4 top-16"
+        />
       )}
       <audio ref={audioRef} preload="auto" />
     </div>

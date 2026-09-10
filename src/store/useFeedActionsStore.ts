@@ -42,11 +42,11 @@ interface FeedActionsState {
  * A single word matches on word boundaries so "ass" cannot block "class"; a
  * phrase matches anywhere, which is what someone typing one expects.
  */
+const WORD_CHAR = "[\\p{L}\\p{N}]";
+
 function keywordMatches(haystack: string, keyword: string): boolean {
-  if (/^[\p{L}\p{N}]+$/u.test(keyword)) {
-    return new RegExp(`(?<![\p{L}\p{N}])${keyword}(?![\p{L}\p{N}])`, "u").test(haystack);
-  }
-  return haystack.includes(keyword);
+  if (!new RegExp(`^${WORD_CHAR}+$`, "u").test(keyword)) return haystack.includes(keyword);
+  return new RegExp(`(?<!${WORD_CHAR})${keyword}(?!${WORD_CHAR})`, "u").test(haystack);
 }
 
 export function matchBlockedKeyword(video: VideoSummary, keywords: string[]): string | null {

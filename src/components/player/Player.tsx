@@ -275,6 +275,21 @@ function formatPlayerLogPayload(payload: Record<string, unknown>) {
   );
 }
 
+/**
+ * dash.js event payloads carry live representation objects that reference their
+ * own segment list, so JSON.stringify throws on them. Only scalars carry
+ * diagnostic value here anyway.
+ */
+function summarizePlayerLogPayload(payload: Record<string, unknown>): string {
+  return Object.entries(payload)
+    .map(([key, value]) => {
+      if (Array.isArray(value)) return `${key}=[${value.length}]`;
+      if (typeof value === "object") return `${key}={}`;
+      return `${key}=${String(value)}`;
+    })
+    .join(" ");
+}
+
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -648,7 +663,7 @@ export const Player: React.FC<PlayerProps> = ({
       ...payload,
     });
     if (import.meta.env.DEV) console.log(`[Player] ${event}`, entry);
-    recordPlayerEvent(`${event} ${JSON.stringify(entry)}`.slice(0, PLAYER_LOG_MAX_CHARS));
+    recordPlayerEvent(`${event} ${summarizePlayerLogPayload(entry)}`.slice(0, PLAYER_LOG_MAX_CHARS));
     const globalWindow = window as Window & {
       __FLOW_PLAYER_LOGS__?: Array<{ event: string; payload: Record<string, unknown>; at: string }>;
     };

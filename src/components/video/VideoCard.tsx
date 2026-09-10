@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
-import { useFeedActionsStore } from '../../store/useFeedActionsStore';
+import { useBlockedKeywordMatch, useFeedActionsStore } from '../../store/useFeedActionsStore';
+import { useBlockedRevealStore } from '../../lib/blockedContent';
+import { BlockedVideoCard } from './BlockedVideoCard';
 import { useLiveStore } from '../../store/useLiveStore';
 import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, Download, User } from 'lucide-react';
 import type { VideoSummary } from '../../types/video';
@@ -793,4 +795,22 @@ function VideoCardComponent({
   );
 }
 
-export const VideoCard = React.memo(VideoCardComponent);
+function VideoCardGate(props: VideoCardProps) {
+  const matchBlockedKeyword = useBlockedKeywordMatch();
+  const revealedVideoIds = useBlockedRevealStore((s) => s.revealedVideoIds);
+  const keyword = matchBlockedKeyword(props.video);
+
+  if (!keyword || revealedVideoIds.has(props.video.id)) {
+    return <VideoCardComponent {...props} />;
+  }
+
+  return (
+    <BlockedVideoCard
+      video={props.video}
+      keyword={keyword}
+      listLayout={props.variant === 'list' || props.variant === 'compact'}
+    />
+  );
+}
+
+export const VideoCard = React.memo(VideoCardGate);

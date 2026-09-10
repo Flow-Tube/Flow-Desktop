@@ -8,6 +8,8 @@ import {
 } from "../lib/api/recommendation";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
 import type { VideoSummary } from "../types/video";
+import { SETTINGS } from "../lib/settings/schema";
+import { useAppSettingsStore } from "./useAppSettingsStore";
 
 // Global recommendation-feedback state shared by every video card, mirroring the mobile
 // FeedInvalidationBus: card menus call the actions here, and feeds filter against the sets, so a
@@ -17,6 +19,7 @@ const DISMISSED_CAP = 2000;
 const BLOCKED_CAP = 500;
 const SUPPRESSED_CHANNEL_CAP = 500;
 const WATCHED_CAP = 2000;
+const KEYWORD_CAP = 200;
 const CHANNEL_SUPPRESSION_MS = 14 * 24 * 60 * 60 * 1000;
 
 interface FeedActionsState {
@@ -24,12 +27,36 @@ interface FeedActionsState {
   blockedChannelIds: Set<string>;
   suppressedChannelIds: Map<string, number>;
   watchedVideoIds: Set<string>;
+  blockedKeywords: string[];
   loaded: boolean;
   load: () => Promise<void>;
   notInterested: (video: VideoSummary) => Promise<void>;
   blockChannel: (video: VideoSummary) => Promise<void>;
   markWatched: (video: VideoSummary) => Promise<void>;
   moreLikeThis: (video: VideoSummary) => Promise<void>;
+  addBlockedKeyword: (keyword: string) => void;
+  removeBlockedKeyword: (keyword: string) => void;
+}
+
+/**
+ * A single word matches on word boundaries so "ass" cannot block "class"; a
+ * phrase matches anywhere, which is what someone typing one expects.
+ */
+function keywordMatches(haystack: string, keyword: string): boolean {
+  if (/^[\p{L}\p{N}]+$/u.test(keyword)) {
+    return new RegExp(`(?<![\p{L}\p{N}])${keyword}(?![\p{L}\p{N}])`, "u").test(haystack);
+  }
+  return haystack.includes(keyword);
+}
+
+export function matchBlockedKeyword(video: VideoSummary, keywords: string[]): string | null {
+  if (keywords.length === 0) return null;
+  const haystack = `${video.title ?? ""} ${video.channelName ?? ""}`.toLowerCase();
+  return keywords.find((keyword) => keywordMatches(haystack, keyword)) ?? null;
+}
+
+export function normalizeKeyword(keyword: string): string {
+  return keyword.trim().toLowerCase();
 }
 
 function addCapped(set: Set<string>, value: string, cap: number): Set<string> {
@@ -72,7 +99,7 @@ function meta(video: VideoSummary) {
 
 export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
   const persist = () => {
-    const { dismissedVideoIds, blockedChannelIds, suppressedChannelIds, watchedVideoIds } = get();
+    const { dismissedVideoIds, blockedChannelIds, suppressedChannelIds, watchedVideoIds, blockedKeywords } = get();
     const activeSuppressed = activeSuppressedChannels(suppressedChannelIds);
     void setSetting(
       STORE_KEY,
@@ -81,6 +108,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
         blocked: [...blockedChannelIds],
         suppressedChannels: [...activeSuppressed.entries()],
         watched: [...watchedVideoIds],
+        keywords: blockedKeywords,
       }),
     ).catch((e) => console.warn("Failed to persist feed actions", e));
   };
@@ -90,6 +118,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
     blockedChannelIds: new Set(),
     suppressedChannelIds: new Map(),
     watchedVideoIds: new Set(),
+    blockedKeywords: [],
     loaded: false,
 
     load: async () => {
@@ -102,6 +131,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
             blocked?: string[];
             suppressedChannels?: [string, number][] | Record<string, number>;
             watched?: string[];
+            keywords?: string[];
           };
           const rawSuppressed = parsed.suppressedChannels;
           const suppressedEntries = Array.isArray(rawSuppressed)
@@ -118,6 +148,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
               ),
             ),
             watchedVideoIds: new Set(parsed.watched ?? []),
+            blockedKeywords: (parsed.keywords ?? []).map(normalizeKeyword).filter(Boolean),
             loaded: true,
           });
           return;
@@ -225,6 +256,21 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
         console.warn("Failed to record more like this", e);
       }
     },
+
+    addBlockedKeyword: (keyword) => {
+      const normalized = normalizeKeyword(keyword);
+      if (!normalized || get().blockedKeywords.includes(normalized)) return;
+      const next = [...get().blockedKeywords, normalized];
+      set({ blockedKeywords: next.length > KEYWORD_CAP ? next.slice(next.length - KEYWORD_CAP) : next });
+      persist();
+    },
+
+    removeBlockedKeyword: (keyword) => {
+      const normalized = normalizeKeyword(keyword);
+      if (!get().blockedKeywords.includes(normalized)) return;
+      set({ blockedKeywords: get().blockedKeywords.filter((entry) => entry !== normalized) });
+      persist();
+    },
   };
 });
 
@@ -235,13 +281,24 @@ export function useFeedHiddenFilter({ hideWatched = true }: { hideWatched?: bool
   const blocked = useFeedActionsStore((s) => s.blockedChannelIds);
   const suppressed = useFeedActionsStore((s) => s.suppressedChannelIds);
   const watched = useFeedActionsStore((s) => s.watchedVideoIds);
+  const keywords = useFeedActionsStore((s) => s.blockedKeywords);
+  const hideBlocked = useAppSettingsStore(
+    (state) => state.values[SETTINGS.BLOCKED_CONTENT_MODE] === "hide",
+  );
   const activeSuppressed = useMemo(() => activeSuppressedChannels(suppressed), [suppressed]);
   return useCallback(
     (video: VideoSummary) => {
       if (dismissed.has(video.id) || (hideWatched && watched.has(video.id))) return true;
+      if (hideBlocked && matchBlockedKeyword(video, keywords)) return true;
       const channelId = cleanChannelId(video.channelId);
       return channelId.length > 0 && (blocked.has(channelId) || activeSuppressed.has(channelId));
     },
-    [dismissed, blocked, activeSuppressed, watched, hideWatched],
+    [dismissed, blocked, activeSuppressed, watched, hideWatched, hideBlocked, keywords],
   );
+}
+
+/// Reactive lookup for the card overlay: the keyword that blocked a video, or null.
+export function useBlockedKeywordMatch() {
+  const keywords = useFeedActionsStore((s) => s.blockedKeywords);
+  return useCallback((video: VideoSummary) => matchBlockedKeyword(video, keywords), [keywords]);
 }

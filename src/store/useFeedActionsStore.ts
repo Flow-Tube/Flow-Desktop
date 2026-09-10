@@ -297,7 +297,6 @@ export function useFeedHiddenFilter({ hideWatched = true }: { hideWatched?: bool
   );
 }
 
-/// Reactive lookup for the card overlay: the keyword that blocked a video, or null.
 export function useBlockedKeywordMatch() {
   const keywords = useFeedActionsStore((s) => s.blockedKeywords);
   return useCallback((video: VideoSummary) => matchBlockedKeyword(video, keywords), [keywords]);

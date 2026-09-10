@@ -10,7 +10,11 @@ import { useSettingsStore, type SponsorBlockCategory, type SponsorBlockAction } 
 import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../../types/video";
 import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
-import { PlayerGestureOverlay, type PlayerSeekFeedback } from "./gesture/overlay";
+import {
+  PlayerGestureOverlay,
+  type PlayerSeekFeedback,
+  type PlayerVolumeFeedback,
+} from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
 import { SETTINGS } from "../../lib/settings/schema";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
@@ -301,6 +305,7 @@ export const Player: React.FC<PlayerProps> = ({
   const qualitySwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaBufferingRef = useRef(false);
   const seekFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ambientSampleKeyRef = useRef(DEFAULT_AMBIENT_SAMPLE.key);
   // Stall watchdog / source-fallback bookkeeping.
@@ -442,6 +447,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
   const [isSourceSwitching, setIsSourceSwitching] = useState(false);
   const [seekFeedback, setSeekFeedback] = useState<PlayerSeekFeedback | null>(null);
+  const [volumeFeedback, setVolumeFeedback] = useState<PlayerVolumeFeedback | null>(null);
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
 
   const isDashPlayback = !!dashManifestUrl;
@@ -879,6 +885,9 @@ export const Player: React.FC<PlayerProps> = ({
       if (seekFeedbackTimerRef.current) {
         clearTimeout(seekFeedbackTimerRef.current);
       }
+      if (volumeFeedbackTimerRef.current) {
+        clearTimeout(volumeFeedbackTimerRef.current);
+      }
     };
   }, []);
 
@@ -1028,6 +1037,14 @@ export const Player: React.FC<PlayerProps> = ({
     if (seekFeedbackTimerRef.current) clearTimeout(seekFeedbackTimerRef.current);
     seekFeedbackTimerRef.current = setTimeout(() => {
       setSeekFeedback(null);
+    }, 1200);
+  }, []);
+
+  const showVolumeFeedback = useCallback((nextVolume: number, nextMuted: boolean) => {
+    setVolumeFeedback({ id: Date.now(), volume: nextVolume, muted: nextMuted });
+    if (volumeFeedbackTimerRef.current) clearTimeout(volumeFeedbackTimerRef.current);
+    volumeFeedbackTimerRef.current = setTimeout(() => {
+      setVolumeFeedback(null);
     }, 1200);
   }, []);
 
@@ -1926,17 +1943,24 @@ export const Player: React.FC<PlayerProps> = ({
           event.preventDefault();
           seekBy(seekIntervalSeconds);
           break;
-        case "arrowup":
+        case "arrowup": {
           event.preventDefault();
-          setVolume(volume + 0.05);
+          const raised = Math.min(1, volume + 0.05);
+          setVolume(raised);
           setMuted(false);
+          showVolumeFeedback(raised, false);
           break;
-        case "arrowdown":
+        }
+        case "arrowdown": {
           event.preventDefault();
-          setVolume(volume - 0.05);
+          const lowered = Math.max(0, volume - 0.05);
+          setVolume(lowered);
+          showVolumeFeedback(lowered, muted);
           break;
+        }
         case "m":
           setMuted((value) => !value);
+          showVolumeFeedback(volume, !muted);
           break;
         case "escape":
           if (isFullscreen) {
@@ -1963,6 +1987,7 @@ export const Player: React.FC<PlayerProps> = ({
     currentTime,
     isFullscreen,
     isTheaterMode,
+    muted,
     revealControls,
     seekBy,
     seekIntervalSeconds,
@@ -1970,6 +1995,7 @@ export const Player: React.FC<PlayerProps> = ({
     setIsTheaterMode,
     setMuted,
     setVolume,
+    showVolumeFeedback,
     toggleFullscreen,
     togglePictureInPicture,
     togglePlay,
@@ -2279,6 +2305,7 @@ export const Player: React.FC<PlayerProps> = ({
         currentTime={currentTime}
         duration={duration}
         seekFeedback={seekFeedback}
+        volumeFeedback={volumeFeedback}
         seekIntervalSeconds={seekIntervalSeconds}
         longPressPlaybackRate={longPressPlaybackRate}
         loopEnabled={videoLoopEnabled}

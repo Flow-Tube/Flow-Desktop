@@ -330,6 +330,7 @@ export const Player: React.FC<PlayerProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerInsideRef = useRef(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skippedSegmentsRef = useRef<Set<string>>(new Set());
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
@@ -471,6 +472,8 @@ export const Player: React.FC<PlayerProps> = ({
   }, [bufferProfile, maxBufferSetting, minBufferSetting, rebufferSetting, startupBufferSetting]);
 
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [cursorHidden, setCursorHidden] = useState(false);
+  const [hasFocusedControl, setHasFocusedControl] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ambientMode] = useState(true);
   const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
@@ -957,6 +960,9 @@ export const Player: React.FC<PlayerProps> = ({
       if (volumeFeedbackTimerRef.current) {
         clearTimeout(volumeFeedbackTimerRef.current);
       }
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current);
+      }
     };
   }, []);
 
@@ -1089,12 +1095,67 @@ export const Player: React.FC<PlayerProps> = ({
     return () => window.clearInterval(interval);
   }, [isPlaying, error, isScrubbing]);
 
+  const canAutoHidePointer =
+    isPlaying &&
+    !settingsOpen &&
+    !isScrubbing &&
+    !hasFocusedControl &&
+    !isPipMode &&
+    !isLoading &&
+    !error &&
+    !errorInfo;
+
+  const clearHideTimer = useCallback(() => {
+    if (!hideTimerRef.current) return;
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+  }, []);
+
   const revealControls = useCallback(() => {
     setControlsVisible(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    setCursorHidden(false);
+    clearHideTimer();
+    if (!canAutoHidePointer || !pointerInsideRef.current) return;
     hideTimerRef.current = setTimeout(() => {
+      hideTimerRef.current = null;
       setControlsVisible(false);
+      if (pointerInsideRef.current) setCursorHidden(true);
     }, 2400);
+  }, [canAutoHidePointer, clearHideTimer]);
+
+  useEffect(() => {
+    setCursorHidden(false);
+    clearHideTimer();
+
+    if (pointerInsideRef.current) revealControls();
+  }, [canAutoHidePointer, clearHideTimer, isFullscreen, mediaIdentity, revealControls]);
+
+  const handlePointerEnter = useCallback(() => {
+    pointerInsideRef.current = true;
+    revealControls();
+  }, [revealControls]);
+
+  const handlePointerLeave = useCallback(() => {
+    pointerInsideRef.current = false;
+    clearHideTimer();
+    setCursorHidden(false);
+    setControlsVisible(false);
+  }, [clearHideTimer]);
+
+  const handleFocusCapture = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    setCursorHidden(false);
+    clearHideTimer();
+    setControlsVisible(true);
+    setHasFocusedControl(event.target !== event.currentTarget);
+  }, [clearHideTimer]);
+
+  const handleBlurCapture = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    setHasFocusedControl(
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget) &&
+      nextTarget !== event.currentTarget,
+    );
   }, []);
 
   const showSeekFeedback = useCallback((direction: PlayerSeekFeedback["direction"], seconds: number) => {
@@ -2393,12 +2454,18 @@ export const Player: React.FC<PlayerProps> = ({
       ref={containerRef}
       id="flow-player-root"
       data-fullscreen={isFullscreen || undefined}
-      className={cx("group/player", playerRootClasses)}
+      className={cx(
+        "group/player",
+        cursorHidden && "cursor-none [&_*]:!cursor-none",
+        playerRootClasses,
+      )}
       tabIndex={0}
-      onMouseMove={revealControls}
-      onMouseLeave={() => {
-        setControlsVisible(false);
-      }}
+      onPointerEnter={handlePointerEnter}
+      onPointerMove={revealControls}
+      onPointerDown={revealControls}
+      onPointerLeave={handlePointerLeave}
+      onFocusCapture={handleFocusCapture}
+      onBlurCapture={handleBlurCapture}
     >
       {showAmbient && (
         <div

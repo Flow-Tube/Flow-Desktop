@@ -100,10 +100,25 @@ Rules:
 ## Building
 
 ```bash
-pnpm install          # once, or after dependency changes
-pnpm tauri dev         # run the app (frontend + Rust backend) for manual testing
-pnpm build             # tsc typecheck + vite build (frontend only)
+pnpm install --frozen-lockfile # once, or after dependency changes
+pnpm desktop:dev              # run the app (frontend + Rust backend) for manual testing
+pnpm build                    # tsc typecheck + vite build (frontend only)
+pnpm desktop:build            # build local native packages without release updater signing
+pnpm desktop:install          # macOS: build, then replace /Applications/Flow.app safely
 cd src-tauri && cargo build   # backend compile check (run cargo from src-tauri/)
 ```
 
 If a build fails, fix the reported errors and rebuild before proceeding — don't paper over a `tsc` or `cargo` error.
+
+### Local desktop workflow
+
+- `pnpm desktop:dev` is the normal edit/test loop. It keeps Vite and the Tauri process running until manually stopped, so agents must not invoke it when persistent processes are forbidden.
+- `pnpm desktop:build` merges `src-tauri/tauri.local.conf.json`, which disables updater artifact creation. This is intentional: a local build must not require the private updater signing key. On macOS it produces `src-tauri/target/release/bundle/macos/Flow.app` and a DMG under `src-tauri/target/release/bundle/dmg/`.
+- `pnpm desktop:install` is macOS-only. It runs the local desktop build, stages the new bundle under `/Applications`, gracefully closes a running installed copy only when the build is ready, swaps it with `/Applications/Flow.app`, restores the previous app if the swap fails, and reopens Flow when it was running before the swap.
+- After any source, asset, dependency, or configuration change that affects locally testable desktop behavior, agents must run the relevant checks and then execute `pnpm desktop:install` before their final response. This requirement also applies when Flow is already open: the installer must be allowed to use its graceful close, replace, rollback, and reopen workflow. Do not start a preview server or tunnel as a substitute. Skip local installation only when the user explicitly requests no rebuild/install, the host is not macOS, or a required check/build fails; report the reason clearly.
+- `pnpm tauri build` remains the release build. Because updater artifacts are enabled in the main Tauri configuration, it requires the project owner's updater signing credentials. Never weaken the release configuration or expose signing material merely to make a local build pass.
+- The first optimized Rust build can take several minutes because release LTO is enabled. A silent linker phase is normal; do not interrupt it while the process is still active.
+- Rust must normally be available through `cargo`. The macOS installer helper also reuses a workspace-local toolchain when it exists at `node_modules/.cache/flow-cargo`, keeping machine-specific bootstrap files outside Git.
+- The local Tauri helper routes package inspection and frontend commands through workspace-local shims under `node_modules/.cache`; keep these generated files out of Git so builds do not depend on host-specific package-manager wrappers.
+- Some managed environments force `NODE_ENV=production`, which removes React's test-only `act` export. Run Vitest with `NODE_ENV=test pnpm test` in that situation; this is an environment issue, not a reason to change application imports.
+- Local installation is not a release or deployment. Do not commit, push, publish, sign, or notarize unless the user explicitly authorizes the corresponding action.

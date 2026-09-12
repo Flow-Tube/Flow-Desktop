@@ -30,6 +30,7 @@ import {
   getHiddenContinueWatchingIds,
   hideContinueWatchingVideo,
 } from "../lib/continueWatching";
+import { reconcileHomeFeedResults } from "../lib/homeFeedResults";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -1264,10 +1265,11 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           finalCount: trendingList.length,
           sample: summarizeVideosForLog(trendingList),
         });
-        setVideos(trendingList);
-        videosRef.current = trendingList;
-        rememberSeenVideos(trendingList);
-        updateCache("trending", trendingList);
+        const reconciledTrending = reconcileHomeFeedResults(videosRef.current, trendingList);
+        setVideos(reconciledTrending);
+        videosRef.current = reconciledTrending;
+        rememberSeenVideos(reconciledTrending);
+        updateCache("trending", reconciledTrending);
       } else {
         const starterRotationPoolPromise = fetchSubscriptionRotationPool();
         const starterDiscoveryPoolPromise = fetchDiscoveryPool(queryCandidates, "discovery-starter-pool", 2);
@@ -1304,9 +1306,13 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
             starterFeedCount: starterResult.starterFeed.length,
             sample: summarizeVideosForLog(starterResult.starterFeed),
           });
-          setVideos(starterResult.starterFeed);
-          videosRef.current = starterResult.starterFeed;
-          rememberSeenVideos(starterResult.starterFeed);
+          const reconciledStarter = reconcileHomeFeedResults(
+            videosRef.current,
+            starterResult.starterFeed,
+          );
+          setVideos(reconciledStarter);
+          videosRef.current = reconciledStarter;
+          rememberSeenVideos(reconciledStarter);
           renderedInitialFeed = true;
           setLoading(false);
         } else if (requestSequenceRef.current === requestId) {
@@ -1350,9 +1356,13 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
               return;
             }
             if (lateStarterResult.starterFeed.length > 0) {
-              setVideos(lateStarterResult.starterFeed);
-              videosRef.current = lateStarterResult.starterFeed;
-              rememberSeenVideos(lateStarterResult.starterFeed);
+              const reconciledStarter = reconcileHomeFeedResults(
+                videosRef.current,
+                lateStarterResult.starterFeed,
+              );
+              setVideos(reconciledStarter);
+              videosRef.current = reconciledStarter;
+              rememberSeenVideos(reconciledStarter);
               renderedInitialFeed = true;
               setLoading(false);
             }
@@ -1427,7 +1437,8 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           return;
         }
         if (discoverFeed.mixedFeed.length > 0) {
-          const finalFeed = composeWithFreshSubs(freshSubs, discoverFeed.mixedFeed);
+          const rankedFeed = composeWithFreshSubs(freshSubs, discoverFeed.mixedFeed);
+          const finalFeed = reconcileHomeFeedResults(videosRef.current, rankedFeed);
           setVideos(finalFeed);
           videosRef.current = finalFeed;
           rememberSeenVideos(finalFeed);
@@ -1503,10 +1514,14 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
               return;
             }
             if (rescuedFeed.mixedFeed.length > 0) {
-              setVideos(rescuedFeed.mixedFeed);
-              videosRef.current = rescuedFeed.mixedFeed;
-              rememberSeenVideos(rescuedFeed.mixedFeed);
-              updateCache("discover", rescuedFeed.mixedFeed);
+              const reconciledFeed = reconcileHomeFeedResults(
+                videosRef.current,
+                rescuedFeed.mixedFeed,
+              );
+              setVideos(reconciledFeed);
+              videosRef.current = reconciledFeed;
+              rememberSeenVideos(reconciledFeed);
+              updateCache("discover", reconciledFeed);
               setHasMoreDiscover(true);
             }
           }
@@ -1514,7 +1529,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       }
     } catch (e: any) {
       console.error("Failed to load feed. Error:", e?.message || e);
-      if (requestSequenceRef.current === requestId) {
+      if (requestSequenceRef.current === requestId && !renderedInitialFeed) {
         setVideos([]);
         videosRef.current = [];
       }
@@ -1563,6 +1578,11 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     }
 
     void fetchFeed();
+
+    return () => {
+      requestSequenceRef.current += 1;
+      initialDiscoverHydratingRef.current = false;
+    };
   }, [activeTab, homeFeedEnabled, hideWatchedVideos]);
 
   useEffect(() => {

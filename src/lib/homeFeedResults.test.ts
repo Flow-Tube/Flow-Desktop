@@ -18,6 +18,17 @@ describe("reconcileHomeFeedResults", () => {
     ]);
   });
 
+  it("keeps the visible feed stable when a history refresh fully changes the ranking", () => {
+    const visibleBeforeHistoryRefresh = [video("initial-a"), video("initial-b")];
+    const rerankedFromImportedHistory = [video("history-a"), video("history-b")];
+
+    expect(
+      reconcileHomeFeedResults(visibleBeforeHistoryRefresh, rerankedFromImportedHistory).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["initial-a", "initial-b", "history-a", "history-b"]);
+  });
+
   it("does not create a new list when a late result contains nothing new", () => {
     const visible = [video("a"), video("b")];
 

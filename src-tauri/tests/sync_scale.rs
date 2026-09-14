@@ -93,6 +93,7 @@ async fn large_watch_history_streams_across_chunks_intact() {
             }],
             vec![Collection::WatchHistory],
             false,
+            || async {},
         )
         .await
         .unwrap()

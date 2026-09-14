@@ -68,6 +68,7 @@ async fn one_way_transfer_succeeds_for_all_selected_collections() {
             vec![oc(WatchHistory, WH_NDJSON), oc(Likes, LIKES_NDJSON)],
             vec![WatchHistory, Likes],
             false,
+            || async {},
         )
         .await
         .unwrap()
@@ -134,6 +135,84 @@ async fn one_way_transfer_succeeds_for_all_selected_collections() {
     }
 }
 
+/// Regression: the sender must stream in sorted key order whatever order the caller selects. We
+/// route chunks by SELECTION order, Android by the sorted-BTreeMap MANIFEST — any other stream
+/// order misroutes on one side (the "Field 'videoId' is required" desktop→mobile bug).
+#[tokio::test]
+async fn sender_streams_collections_in_sorted_key_order() {
+    let master = generate_master_secret();
+    let sid = generate_session_id();
+    let (listener, port) = transport::bind().await.unwrap();
+
+    let host_master = master.clone();
+    let host = tokio::spawn(async move {
+        let ch = transport::accept(&listener).await.unwrap();
+        let cipher = SessionCipher::new(&host_master, sid, Role::Host);
+        run_sender(
+            ch,
+            cipher,
+            hello("host-1", "Flow Desktop"),
+            caps(&[(WatchHistory, true, true), (Likes, true, true)]),
+            vec![oc(WatchHistory, WH_NDJSON), oc(Likes, LIKES_NDJSON)],
+            vec![WatchHistory, Likes], // unsorted on purpose
+            false,
+            || async {},
+        )
+        .await
+        .unwrap()
+    });
+
+    let ch = transport::connect("127.0.0.1", port).await.unwrap();
+    let cipher = SessionCipher::new(&master, sid, Role::Client);
+    let outcome = run_receiver(
+        ch,
+        cipher,
+        hello("client-1", "Pixel 8"),
+        caps(&[(WatchHistory, true, true), (Likes, true, true)]),
+        |_, manifest| async move {
+            // MANIFEST is a sorted BTreeMap — the order Android routes by.
+            let keys: Vec<&str> = manifest.collections.keys().map(String::as_str).collect();
+            assert_eq!(keys, ["likes", "watch_history"]);
+            true
+        },
+    )
+    .await
+    .unwrap();
+
+    let received = match outcome {
+        ClientOutcome::Completed(p) => p,
+        ClientOutcome::Declined => panic!("receiver declined"),
+    };
+
+    // run_receiver stages in wire order (= SELECTION = stream); it must equal the sorted MANIFEST.
+    let stream_order: Vec<&str> = received
+        .collections
+        .iter()
+        .map(|c| c.collection.key())
+        .collect();
+    assert_eq!(
+        stream_order,
+        ["likes", "watch_history"],
+        "stream order must match the sorted manifest so both receiver implementations agree"
+    );
+
+    // …and payloads landed under the right names.
+    let wh = received
+        .collections
+        .iter()
+        .find(|c| c.collection == WatchHistory)
+        .unwrap();
+    assert_eq!(wh.ndjson, WH_NDJSON);
+    let lk = received
+        .collections
+        .iter()
+        .find(|c| c.collection == Likes)
+        .unwrap();
+    assert_eq!(lk.ndjson, LIKES_NDJSON);
+
+    assert!(matches!(host.await.unwrap(), HostOutcome::Completed(_)));
+}
+
 #[tokio::test]
 async fn capability_negotiation_skips_collections_the_peer_cannot_consume() {
     let master = generate_master_secret();
@@ -152,6 +231,7 @@ async fn capability_negotiation_skips_collections_the_peer_cannot_consume() {
             vec![oc(WatchHistory, WH_NDJSON), oc(Likes, LIKES_NDJSON)],
             vec![WatchHistory, Likes],
             false,
+            || async {},
         )
         .await
         .unwrap()
@@ -225,6 +305,7 @@ async fn host_receives_while_client_sends() {
         caps(&[(WatchHistory, true, true), (Likes, true, true)]),
         vec![oc(WatchHistory, WH_NDJSON), oc(Likes, LIKES_NDJSON)],
         vec![WatchHistory, Likes],
+        || async {},
     )
     .await
     .unwrap();
@@ -269,6 +350,7 @@ async fn receiver_decline_aborts_both_sides_cleanly() {
             vec![oc(WatchHistory, WH_NDJSON)],
             vec![WatchHistory],
             false,
+            || async {},
         )
         .await
         .unwrap()

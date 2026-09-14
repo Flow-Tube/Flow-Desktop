@@ -20,6 +20,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:build:local": "tauri build --config src-tauri/tauri.local.conf.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:version": "node scripts/verify-release-version.mjs"

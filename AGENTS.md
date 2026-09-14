@@ -103,6 +103,7 @@ Rules:
 pnpm install          # once, or after dependency changes
 pnpm tauri dev         # run the app (frontend + Rust backend) for manual testing
 pnpm build             # tsc typecheck + vite build (frontend only)
+pnpm tauri:build:local # native bundle without updater artifacts (no signing key needed)
 cd src-tauri && cargo build   # backend compile check (run cargo from src-tauri/)
 ```
 

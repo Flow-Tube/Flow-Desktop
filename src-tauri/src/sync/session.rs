@@ -676,7 +676,22 @@ async fn host_run(
         )
         .await;
 
-    let outcome = run_sender(ch, cipher, hello, caps, outgoing, selection.to_vec(), true).await?;
+    // Accepted → plain transferring (no SAS); the UI swaps the verify screen for the syncing spinner.
+    let outcome = run_sender(
+        ch,
+        cipher,
+        hello,
+        caps,
+        outgoing,
+        selection.to_vec(),
+        true,
+        || async {
+            manager
+                .set_status(app, SyncStatus::simple("transferring", Some("host")))
+                .await;
+        },
+    )
+    .await?;
     finish_send(app, manager, "host", &pool, outcome).await
 }
 
@@ -818,7 +833,13 @@ async fn client_send_session(
         )
         .await;
 
-    let outcome = run_client_sender(ch, cipher, hello, caps, outgoing, selection).await?;
+    // Accepted → plain transferring (no SAS); the UI swaps the verify screen for the syncing spinner.
+    let outcome = run_client_sender(ch, cipher, hello, caps, outgoing, selection, || async {
+        manager
+            .set_status(app, SyncStatus::simple("transferring", Some("client")))
+            .await;
+    })
+    .await?;
     finish_send(app, manager, "client", &pool, outcome).await
 }
 

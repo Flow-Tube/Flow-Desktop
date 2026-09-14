@@ -477,6 +477,31 @@ function ProgressScreen({ label }: { label: string }) {
   );
 }
 
+// Sender-side: keep the code visible while the peer confirms it (only the sender's status has sas).
+function SendingVerifyScreen() {
+  const { status } = useSyncStore();
+  if (!status.sas) {
+    return <ProgressScreen label={getString("sync_syncing")} />;
+  }
+  return (
+    <div className="mx-auto mt-12 flex max-w-xl flex-col items-center justify-center text-center">
+      <h2 className="text-2xl font-bold tracking-tight text-chrome-neutral-100">
+        {getString("sync_verify_title")}
+      </h2>
+      <p className="mt-2 max-w-sm text-sm text-chrome-neutral-400">{getString("sync_verify_subtitle")}</p>
+
+      <div className="my-10">
+        <VerificationCode sas={status.sas} />
+      </div>
+
+      <div className="flex items-center gap-3 rounded-full bg-surface-container-low px-4 py-2 text-sm text-chrome-neutral-400">
+        <Spinner className="h-3.5 w-3.5" />
+        {getString("sync_waiting_accept")}
+      </div>
+    </div>
+  );
+}
+
 function CompletedScreen() {
   const { status, reset } = useSyncStore();
   const isClient = status.role === "client";
@@ -538,7 +563,12 @@ export default function Sync() {
       case "awaitingConsent":
         return { screenKey: "consent", body: <ConsentScreen /> };
       case "transferring":
-        return { screenKey: "transferring", body: <ProgressScreen label={getString("sync_syncing")} /> };
+        // One key for the whole phase: verify → syncing is a content swap, not a screen change.
+        // Separate keys double-play the enter animation under StrictMode and flicker.
+        return {
+          screenKey: "transferring",
+          body: status.sas ? <SendingVerifyScreen /> : <ProgressScreen label={getString("sync_syncing")} />,
+        };
       case "completed":
         return { screenKey: "completed", body: <CompletedScreen /> };
       case "declined":

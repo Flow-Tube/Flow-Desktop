@@ -44,8 +44,12 @@ import {
 import {
   hasMediaPlaybackProgressed,
   shouldEnterMediaBuffering,
-  type MediaBufferingSignal,
 } from "../../lib/mediaBuffering";
+import {
+  canAutoHidePlayerChrome,
+  PLAYER_CHROME_HIDE_DELAY_MS,
+  shouldPinPlayerChrome,
+} from "../../lib/playerChrome";
 
 type PlayerProps = {
   src?: string | null;
@@ -331,6 +335,7 @@ export const Player: React.FC<PlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
+  const keyboardFocusInsideRef = useRef(false);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skippedSegmentsRef = useRef<Set<string>>(new Set());
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
@@ -473,7 +478,6 @@ export const Player: React.FC<PlayerProps> = ({
 
   const [controlsVisible, setControlsVisible] = useState(true);
   const [cursorHidden, setCursorHidden] = useState(false);
-  const [hasFocusedControl, setHasFocusedControl] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ambientMode] = useState(true);
   const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
@@ -490,6 +494,14 @@ export const Player: React.FC<PlayerProps> = ({
   const [isPip, setIsPip] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
+
+  // Every exit from buffering has to drop both the flag and the clock reading
+  // it started from; leaving one behind is what strands the spinner.
+  const clearMediaBuffering = useCallback(() => {
+    mediaBufferingRef.current = false;
+    bufferingStartedAtRef.current = null;
+    setIsBuffering(false);
+  }, []);
   const [bufferedPct, setBufferedPct] = useState(0);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
@@ -1095,15 +1107,19 @@ export const Player: React.FC<PlayerProps> = ({
     return () => window.clearInterval(interval);
   }, [isPlaying, error, isScrubbing]);
 
-  const canAutoHidePointer =
-    isPlaying &&
-    !settingsOpen &&
-    !isScrubbing &&
-    !hasFocusedControl &&
-    !isPipMode &&
-    !isLoading &&
-    !error &&
-    !errorInfo;
+  const canAutoHideChrome = canAutoHidePlayerChrome({
+    isPlaying,
+    settingsOpen,
+    isScrubbing,
+    isPipMode,
+    isLoading,
+    hasError: Boolean(error || errorInfo),
+  });
+  // Read at call time instead of captured: revealControls is a dependency of
+  // the keyboard effect and is handed to the control bar, so rebuilding it on
+  // every playback-state flip would re-subscribe that listener and defeat
+  // memoisation on the children holding it.
+  const canAutoHideChromeRef = useRef(canAutoHideChrome);
 
   const clearHideTimer = useCallback(() => {
     if (!hideTimerRef.current) return;
@@ -1115,20 +1131,18 @@ export const Player: React.FC<PlayerProps> = ({
     setControlsVisible(true);
     setCursorHidden(false);
     clearHideTimer();
-    if (!canAutoHidePointer || !pointerInsideRef.current) return;
+    if (!canAutoHideChromeRef.current || keyboardFocusInsideRef.current) return;
     hideTimerRef.current = setTimeout(() => {
       hideTimerRef.current = null;
       setControlsVisible(false);
       if (pointerInsideRef.current) setCursorHidden(true);
-    }, 2400);
-  }, [canAutoHidePointer, clearHideTimer]);
+    }, PLAYER_CHROME_HIDE_DELAY_MS);
+  }, [clearHideTimer]);
 
   useEffect(() => {
-    setCursorHidden(false);
-    clearHideTimer();
-
-    if (pointerInsideRef.current) revealControls();
-  }, [canAutoHidePointer, clearHideTimer, isFullscreen, mediaIdentity, revealControls]);
+    canAutoHideChromeRef.current = canAutoHideChrome;
+    revealControls();
+  }, [canAutoHideChrome, isFullscreen, mediaIdentity, revealControls]);
 
   const handlePointerEnter = useCallback(() => {
     pointerInsideRef.current = true;
@@ -1137,26 +1151,24 @@ export const Player: React.FC<PlayerProps> = ({
 
   const handlePointerLeave = useCallback(() => {
     pointerInsideRef.current = false;
-    clearHideTimer();
     setCursorHidden(false);
+    if (keyboardFocusInsideRef.current) return;
+    clearHideTimer();
     setControlsVisible(false);
   }, [clearHideTimer]);
 
   const handleFocusCapture = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
-    setCursorHidden(false);
-    clearHideTimer();
-    setControlsVisible(true);
-    setHasFocusedControl(event.target !== event.currentTarget);
-  }, [clearHideTimer]);
+    keyboardFocusInsideRef.current = shouldPinPlayerChrome(event.currentTarget, event.target);
+    revealControls();
+  }, [revealControls]);
 
-  const handleBlurCapture = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
-    const nextTarget = event.relatedTarget;
-    setHasFocusedControl(
-      nextTarget instanceof Node &&
-      event.currentTarget.contains(nextTarget) &&
-      nextTarget !== event.currentTarget,
-    );
-  }, []);
+  const handleBlurCapture = useCallback(() => {
+    // Focus moving within the player fires this before the matching focus
+    // event, which re-evaluates; focus leaving the player fires nothing
+    // further, so clearing here is what lets the chrome hide again.
+    keyboardFocusInsideRef.current = false;
+    revealControls();
+  }, [revealControls]);
 
   const showSeekFeedback = useCallback((direction: PlayerSeekFeedback["direction"], seconds: number) => {
     setSeekFeedback({
@@ -1434,9 +1446,7 @@ export const Player: React.FC<PlayerProps> = ({
 
     const videoStarved = video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
     if (mediaBufferingRef.current && !video.paused && !videoStarved) {
-      mediaBufferingRef.current = false;
-      bufferingStartedAtRef.current = null;
-      setIsBuffering(false);
+      clearMediaBuffering();
     }
 
     const drift = audio.currentTime - video.currentTime;
@@ -1480,6 +1490,7 @@ export const Player: React.FC<PlayerProps> = ({
         return;
     }
   }, [
+    clearMediaBuffering,
     isVideoAdvancing,
     playbackRate,
     realignExternalAudioClock,
@@ -1816,12 +1827,10 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     if (!video) return;
 
-    const enterBuffering = (signal: MediaBufferingSignal) => {
+    const enterBuffering = () => {
       if (!shouldEnterMediaBuffering({
-        signal,
         paused: video.paused,
         ended: video.ended,
-        seeking: video.seeking,
         readyState: video.readyState,
       })) return;
 
@@ -1838,7 +1847,7 @@ export const Player: React.FC<PlayerProps> = ({
       }
     };
     const onVideoWaiting = () => {
-      enterBuffering("waiting");
+      enterBuffering();
       logPlayerEvent("html-video-waiting", {
         readyState: video.readyState,
         networkState: video.networkState,
@@ -1846,7 +1855,7 @@ export const Player: React.FC<PlayerProps> = ({
       });
     };
     const onVideoStalled = () => {
-      enterBuffering("stalled");
+      enterBuffering();
       logPlayerEvent("html-video-stalled", {
         readyState: video.readyState,
         networkState: video.networkState,
@@ -1854,9 +1863,7 @@ export const Player: React.FC<PlayerProps> = ({
       });
     };
     const resumeExternalAudio = (eventName: string) => {
-      mediaBufferingRef.current = false;
-      bufferingStartedAtRef.current = null;
-      setIsBuffering(false);
+      clearMediaBuffering();
       waitingSinceRef.current = null;
       if (playbackStartAtRef.current === null) playbackStartAtRef.current = Date.now();
       const audio = audioRef.current;
@@ -1888,9 +1895,7 @@ export const Player: React.FC<PlayerProps> = ({
     const onVideoPlaying = () => resumeExternalAudio("html-video-playing");
     const onVideoSeeking = () => {
       lastSeekAtRef.current = Date.now();
-      mediaBufferingRef.current = false;
-      bufferingStartedAtRef.current = null;
-      setIsBuffering(false);
+      clearMediaBuffering();
       waitingSinceRef.current = null;
       stallCountRef.current = 0;
       videoProgressSampleRef.current = null;
@@ -1914,9 +1919,7 @@ export const Player: React.FC<PlayerProps> = ({
       }
     };
     const onVideoError = () => {
-      mediaBufferingRef.current = false;
-      bufferingStartedAtRef.current = null;
-      setIsBuffering(false);
+      clearMediaBuffering();
       const code = video.error?.code;
       logPlayerEvent("html-video-error", {
         mediaError: video.error ? {
@@ -1945,6 +1948,7 @@ export const Player: React.FC<PlayerProps> = ({
       video.removeEventListener("error", onVideoError);
     };
   }, [
+    clearMediaBuffering,
     logPlayerEvent,
     playbackRate,
     realignExternalAudioClock,
@@ -1966,9 +1970,7 @@ export const Player: React.FC<PlayerProps> = ({
     notifiedSegmentsRef.current.clear();
     lastMediaIdentityRef.current = mediaIdentity;
 
-    mediaBufferingRef.current = false;
-    bufferingStartedAtRef.current = null;
-    setIsBuffering(false);
+    clearMediaBuffering();
     videoProgressSampleRef.current = null;
     postSwitchRealignPendingRef.current = true;
 
@@ -1994,7 +1996,7 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-  }, [mediaIdentity, resumeTime]);
+  }, [clearMediaBuffering, mediaIdentity, resumeTime]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2359,10 +2361,8 @@ export const Player: React.FC<PlayerProps> = ({
       && !video.paused
       && hasMediaPlaybackProgressed(bufferingStartedAtRef.current, nextTime)
     ) {
-      mediaBufferingRef.current = false;
-      bufferingStartedAtRef.current = null;
+      clearMediaBuffering();
       waitingSinceRef.current = null;
-      setIsBuffering(false);
     }
 
     let inMuteSegment = false;
@@ -2501,10 +2501,8 @@ export const Player: React.FC<PlayerProps> = ({
         }}
         onPause={() => {
           const video = videoRef.current;
-          mediaBufferingRef.current = false;
-          bufferingStartedAtRef.current = null;
+          clearMediaBuffering();
           waitingSinceRef.current = null;
-          setIsBuffering(false);
           if (isDashPlayback && qualitySwitchSnapshotRef.current) {
             logPlayerEvent("video-pause-during-quality-switch", {
               snapshot: qualitySwitchSnapshotRef.current,

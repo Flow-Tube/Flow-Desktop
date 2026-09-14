@@ -18,11 +18,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "desktop:dev": "node scripts/run-tauri-local.mjs dev",
-    "desktop:build": "node scripts/run-tauri-local.mjs build",
-    "desktop:install": "node scripts/build-and-install-macos.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:build:local": "tauri build --config src-tauri/tauri.local.conf.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:version": "node scripts/verify-release-version.mjs"

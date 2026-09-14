@@ -53,7 +53,7 @@ mp4 = "0.14"
 webm-iterable = "0.6.2"
 
 # Cover-art embedding for downloaded music/audio (MP4 covr, ID3 APIC, Vorbis pictures).
-lofty = "0.22"
+lofty = "0.24"
 
 # SABR streaming protocol (self-contained protobuf/UMP codec, no external toolchain)
 base64 = "0.23"

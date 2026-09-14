@@ -40,4 +40,23 @@ describe("reconcileHomeFeedResults", () => {
 
     expect(reconcileHomeFeedResults([], initial)).toBe(initial);
   });
+
+  it("keeps one copy of a video repeated inside the incoming feed", () => {
+    const visible = [video("a")];
+    const refreshed = [video("b"), video("b"), video("a")];
+
+    expect(reconcileHomeFeedResults(visible, refreshed).map(({ id }) => id)).toEqual(["a", "b"]);
+  });
+
+  it("leaves hoisting to the caller rather than honouring the incoming order", () => {
+    // The ranked feed puts fresh subscription uploads first. Reconciling cannot
+    // honour that without reordering the visible feed, so Home composes them
+    // back on top afterwards — see reconcileHomeFeedResults's module comment.
+    const visible = [video("visible-a")];
+    const rankedWithFreshSubFirst = [video("fresh-sub"), video("ranked-a")];
+
+    expect(
+      reconcileHomeFeedResults(visible, rankedWithFreshSubFirst).map(({ id }) => id),
+    ).toEqual(["visible-a", "fresh-sub", "ranked-a"]);
+  });
 });

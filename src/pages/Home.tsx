@@ -1265,11 +1265,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           finalCount: trendingList.length,
           sample: summarizeVideosForLog(trendingList),
         });
-        const reconciledTrending = reconcileHomeFeedResults(videosRef.current, trendingList);
-        setVideos(reconciledTrending);
-        videosRef.current = reconciledTrending;
-        rememberSeenVideos(reconciledTrending);
-        updateCache("trending", reconciledTrending);
+        setVideos(trendingList);
+        videosRef.current = trendingList;
+        rememberSeenVideos(trendingList);
+        updateCache("trending", trendingList);
       } else {
         const starterRotationPoolPromise = fetchSubscriptionRotationPool();
         const starterDiscoveryPoolPromise = fetchDiscoveryPool(queryCandidates, "discovery-starter-pool", 2);
@@ -1437,8 +1436,8 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           return;
         }
         if (discoverFeed.mixedFeed.length > 0) {
-          const rankedFeed = composeWithFreshSubs(freshSubs, discoverFeed.mixedFeed);
-          const finalFeed = reconcileHomeFeedResults(videosRef.current, rankedFeed);
+          const stableFeed = reconcileHomeFeedResults(videosRef.current, discoverFeed.mixedFeed);
+          const finalFeed = composeWithFreshSubs(freshSubs, stableFeed);
           setVideos(finalFeed);
           videosRef.current = finalFeed;
           rememberSeenVideos(finalFeed);

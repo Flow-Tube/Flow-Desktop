@@ -32,6 +32,7 @@ use commands::db::{
 use commands::diagnostics::{
     clear_logs, log_frontend_event, logs_dir_path, read_logs, reveal_logs_folder, startup_render_ok,
 };
+use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
     DownloadManager, cancel_download, clear_downloads, create_download_collection,
     delete_download_collections, delete_downloads, get_download_formats, get_downloaded_video_ids,
@@ -84,6 +85,7 @@ use commands::youtube::{
     get_video_details, parse_subscription_export, refresh_music_home, resolve_channel_id,
     search_music, search_videos, stream_subscription_rss_feed, submit_sponsorblock_segment,
 };
+use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
 use services::recommendation_service::RecommendationService;
 use services::shorts_service::ShortsService;
@@ -305,6 +307,7 @@ pub fn run() {
             app.manage(DownloadManager::default());
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
+            app.manage(DiscordPresence::new());
 
             // Initialize and manage streaming proxy
             let (streaming_manager, proxy_listener) = streaming::proxy::StreamingManager::new();
@@ -502,7 +505,10 @@ pub fn run() {
             mark_notifications_read,
             delete_notification,
             clear_notifications,
-            check_subscriptions_now
+            check_subscriptions_now,
+            // --- Discord Rich Presence ---
+            set_discord_presence,
+            clear_discord_presence
         ])
         .build(context)
         .expect("error while building Flow Desktop")

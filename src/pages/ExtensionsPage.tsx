@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, Copy, Info } from "lucide-react";
 import {
   DEFAULT_SB_COLORS,
@@ -8,6 +9,7 @@ import {
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
+import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
 import { TextInput } from "../components/ui/TextInput";
 import { SponsorBlockCategoryRow } from "../components/extensions/SponsorBlockCategoryRow";
@@ -36,6 +38,8 @@ export const ExtensionsPage: React.FC = () => {
     setDeArrowBadgeEnabled,
     rytdEnabled,
     setRytdEnabled,
+    discordMode,
+    setDiscordMode,
     sponsorBlockColors,
     setCategoryColor,
     sponsorBlockActions,
@@ -51,6 +55,7 @@ export const ExtensionsPage: React.FC = () => {
     setSbUserId,
   } = useSettingsStore();
 
+  const { t } = useTranslation("settings");
   const submissionsDisabled = isSettingDisabledUntilWired(SETTINGS.SB_SUBMIT_ENABLED);
   const { stats: categoryStats } = useSponsorBlockCategoryStats(segmentsSkipped);
 
@@ -144,6 +149,21 @@ export const ExtensionsPage: React.FC = () => {
               description="Fetch and display estimated public dislike counts."
             >
               <ToggleSwitch checked={rytdEnabled} onChange={setRytdEnabled} />
+            </SettingItem>
+            <SettingItem
+              title={t("discord.title")}
+              description={t("discord.description")}
+            >
+              <Select
+                value={discordMode}
+                onChange={(value) => void setDiscordMode(value as typeof discordMode)}
+                options={[
+                  { value: "off", label: t("discord.modeOff") },
+                  { value: "music", label: t("discord.modeMusic") },
+                  { value: "videos", label: t("discord.modeVideos") },
+                  { value: "musicAndVideos", label: t("discord.modeMusicAndVideos") },
+                ]}
+              />
             </SettingItem>
           </SettingsGroup>
         </section>

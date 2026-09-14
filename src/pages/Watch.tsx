@@ -127,6 +127,15 @@ export function Watch() {
     });
   }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
 
+  // Keep currentVideo.isLive authoritative from details (a list stub may lack it);
+  // Discord Rich Presence reads it to choose the live activity.
+  useEffect(() => {
+    if (!videoId || !videoDetails || videoDetails.id !== videoId) return;
+    if (!currentVideo || currentVideo.id !== videoId) return;
+    if ((currentVideo.isLive ?? false) === (videoDetails.isLive ?? false)) return;
+    enrichCurrentVideo(videoId, { isLive: videoDetails.isLive ?? false });
+  }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
+
   useEffect(() => {
     if (!videoId) return;
     const currentCache = usePlayerStore.getState().watchPageCache;

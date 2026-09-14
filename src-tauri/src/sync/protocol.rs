@@ -225,7 +225,8 @@ fn chunk_lines(lines: &[Vec<u8>], per: usize) -> Vec<Vec<u8>> {
 /// merge decision). The sender does not send one — the user verifies the SAS on this device's screen
 /// and the receiver is the control point (it can decline). `chosen` is the collection selection,
 /// intersected with what this device can *produce* and what the peer can *consume*.
-pub async fn run_sender<S>(
+#[allow(clippy::too_many_arguments)]
+pub async fn run_sender<S, G, GFut>(
     ch: WsChannel<S>,
     cipher: SessionCipher,
     our_hello: HelloFrame,
@@ -233,9 +234,12 @@ pub async fn run_sender<S>(
     outgoing: Vec<OutgoingCollection>,
     chosen: Vec<Collection>,
     sas_confirm_required: bool,
+    on_accepted: G,
 ) -> Result<HostOutcome, SyncError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
+    G: FnOnce() -> GFut,
+    GFut: Future<Output = ()>,
 {
     let mut peer = FramedPeer::new(ch, cipher);
     tracing::info!(target: "flow::sync::protocol", role = "sender", "session started, awaiting HELLO");
@@ -254,22 +258,26 @@ where
         &their_caps,
         outgoing,
         chosen,
+        on_accepted,
     )
     .await
 }
 
 /// Drive the **client that sends** (it scanned a QR whose host wants to *receive*). Same data path
 /// as [`run_sender`], but this side opened the connection and so speaks first (`HELLO`).
-pub async fn run_client_sender<S>(
+pub async fn run_client_sender<S, G, GFut>(
     ch: WsChannel<S>,
     cipher: SessionCipher,
     our_hello: HelloFrame,
     our_caps: CapabilitiesFrame,
     outgoing: Vec<OutgoingCollection>,
     chosen: Vec<Collection>,
+    on_accepted: G,
 ) -> Result<HostOutcome, SyncError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
+    G: FnOnce() -> GFut,
+    GFut: Future<Output = ()>,
 {
     let mut peer = FramedPeer::new(ch, cipher);
     tracing::info!(target: "flow::sync::protocol", role = "client-sender", "session started, sending HELLO");
@@ -282,6 +290,7 @@ where
         &their_caps,
         outgoing,
         chosen,
+        on_accepted,
     )
     .await
 }
@@ -360,22 +369,28 @@ where
 
 /// The send-data choreography: SELECTION exchange → MANIFEST → recv CONSENT → stream → recv
 /// APPLY_RESULT. Identical whether this side is the WebSocket host or client.
-async fn send_data<S>(
+async fn send_data<S, G, GFut>(
     peer: &mut FramedPeer<S>,
     peer_hello: HelloFrame,
     our_caps: &CapabilitiesFrame,
     their_caps: &CapabilitiesFrame,
     outgoing: Vec<OutgoingCollection>,
     chosen: Vec<Collection>,
+    on_accepted: G,
 ) -> Result<HostOutcome, SyncError>
 where
     S: AsyncRead + AsyncWrite + Unpin,
+    G: FnOnce() -> GFut,
+    GFut: Future<Output = ()>,
 {
     // Selection exchange (we declare `send`; read the peer's SELECTION to stay frame-aligned).
-    let selection: Vec<Collection> = chosen
+    // Sort by key so SELECTION, MANIFEST and the stream agree: we route chunks by SELECTION order,
+    // Android by the sorted-BTreeMap MANIFEST — any other order misroutes on one side.
+    let mut selection: Vec<Collection> = chosen
         .into_iter()
         .filter(|c| produces(our_caps, *c) && consumes(their_caps, *c))
         .collect();
+    selection.sort_by(|a, b| a.key().cmp(b.key()));
     tracing::info!(
         target: "flow::sync::protocol", role = "sender",
         selection = ?selection.iter().map(|c| c.key()).collect::<Vec<_>>(),
@@ -424,6 +439,8 @@ where
         peer.close().await;
         return Ok(HostOutcome::Declined);
     }
+    // Consent received — let the caller advance its UI (verify → syncing) in step with the peer.
+    on_accepted().await;
 
     // Stream each collection: CHUNK*↔CHUNK_ACK, then COMPLETE.
     for p in &prepared {

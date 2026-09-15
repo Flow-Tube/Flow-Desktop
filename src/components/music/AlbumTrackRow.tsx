@@ -30,6 +30,7 @@ interface AlbumTrackRowProps {
   streamsText?: string | null;
   showArtwork?: boolean;
   showStreamsColumn?: boolean;
+  showArtist?: boolean;
   compactActions?: boolean;
   onPlay: (track: SongItem) => void;
   onAddToQueue: (track: SongItem) => void;
@@ -145,6 +146,7 @@ export function AlbumTrackRow({
   streamsText,
   showArtwork = false,
   showStreamsColumn = true,
+  showArtist = true,
   compactActions = false,
   onPlay,
   onAddToQueue,
@@ -292,10 +294,10 @@ export function AlbumTrackRow({
         <span className={`line-clamp-1 font-medium ${isCurrent ? 'text-[var(--color-primary)]' : 'text-chrome-neutral-100'}`}>
           {track.title}
         </span>
-        {(artistLabel || track.explicit) && (
+        {((showArtist && artistLabel) || track.explicit) && (
           <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-chrome-neutral-400 transition-colors duration-200 ease-out group-hover:text-chrome-neutral-300">
             {track.explicit ? <ExplicitBadge /> : null}
-            {artistLabel ? <span className="line-clamp-1">{artistLabel}</span> : null}
+            {showArtist && artistLabel ? <span className="line-clamp-1">{artistLabel}</span> : null}
           </span>
         )}
       </div>

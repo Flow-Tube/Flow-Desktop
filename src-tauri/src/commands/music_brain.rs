@@ -97,6 +97,7 @@ pub async fn get_heavy_rotation(
                 video_id: Some(id),
                 playlist_id: None,
                 params: None,
+                views_text: None,
             })
         })
         .collect();

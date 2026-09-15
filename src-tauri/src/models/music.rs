@@ -28,6 +28,9 @@ pub struct SongItem {
     pub video_id: Option<String>,
     pub playlist_id: Option<String>,
     pub params: Option<String>,
+    /// Play-count text (`3.4B plays`) shown in the album view's Streams column.
+    #[serde(default)]
+    pub views_text: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

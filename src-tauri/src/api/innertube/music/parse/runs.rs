@@ -59,6 +59,15 @@ fn looks_like_duration(text: &str) -> bool {
     t.contains(':') && t.chars().all(|c| c.is_ascii_digit() || c == ':')
 }
 
+/// Whether a run is a play/view count (`3.4B plays`) — used for the Streams column.
+/// The digit prefix + `plays`/`views` suffix avoids catching artists like `50 Cent`.
+pub(super) fn looks_like_play_count(text: &str) -> bool {
+    let t = text.trim();
+    let lower = t.to_ascii_lowercase();
+    (lower.ends_with("plays") || lower.ends_with("views"))
+        && t.chars().next().is_some_and(|c| c.is_ascii_digit())
+}
+
 /// Extract (artists, album, duration) from a song's flex-column byline.
 ///
 /// Runs that link to an `ARTIST` page become artists; a run linking to an
@@ -165,4 +174,19 @@ pub fn parse_artists_and_year(v: &Value) -> (Vec<Artist>, Option<i32>) {
         }
     }
     (artists, year)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn play_counts_are_recognized_and_artists_are_not() {
+        assert!(looks_like_play_count("3.4B plays"));
+        assert!(looks_like_play_count("1,234 views"));
+        // A digit-leading band name must not be mistaken for a play count.
+        assert!(!looks_like_play_count("12 Stones"));
+        assert!(!looks_like_play_count("Coldplay"));
+        assert!(!looks_like_play_count("2:47"));
+    }
 }

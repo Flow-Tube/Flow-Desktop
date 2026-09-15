@@ -13,6 +13,7 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useUiStore } from '../../store/useUiStore';
 import { getString } from '../../lib/i18n/index';
+import { artistsText } from '../../lib/musicFormat';
 import type { AlbumItem, SongItem } from '../../types/music';
 
 const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
@@ -233,6 +234,11 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
           {songs.map((song, i) => {
             const songId = videoIdOf(song);
             const isCurrentSong = currentTrackId === songId;
+            // On albums the per-track artist just repeats the album artist, so show it
+            // only for featured artists that differ; the play count takes the Streams column.
+            const trackArtist = artistsText(song.artists);
+            const showArtist =
+              kind !== 'album' || (!!trackArtist && trackArtist !== meta.artistName);
 
             return (
               <AlbumTrackRow
@@ -241,6 +247,8 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
                 index={i}
                 isCurrent={isCurrentSong}
                 isPlaying={isPlaying}
+                streamsText={song.viewsText}
+                showArtist={showArtist}
                 onPlay={playFrom}
                 onAddToQueue={addToQueue}
                 onRemove={

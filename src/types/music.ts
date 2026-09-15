@@ -23,6 +23,7 @@ export interface SongItem {
   videoId: string | null;
   playlistId: string | null;
   params: string | null;
+  viewsText?: string | null;
 }
 
 export interface AlbumItem {

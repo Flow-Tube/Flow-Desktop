@@ -7,8 +7,12 @@
 
 use serde_json::Value;
 
-use super::endpoint::{browse_id, has_explicit, music_video_type, page_type, video_id};
-use super::runs::{flex_text, parse_artists_and_year, parse_song_meta, runs_text};
+use super::endpoint::{
+    album_from_menu, browse_id, has_explicit, music_video_type, page_type, video_id,
+};
+use super::runs::{
+    flex_text, looks_like_play_count, parse_artists_and_year, parse_song_meta, runs_text,
+};
 use super::thumbnail::thumbnail_url;
 use crate::api::innertube::music::endpoints;
 use crate::models::music::{
@@ -30,6 +34,7 @@ pub fn parse_yt_item(item: &Value) -> Option<YTItem> {
 fn song_from_responsive(r: &Value, title: String, thumbnail: Option<String>) -> Option<YTItem> {
     let vid = video_id(r)?;
     let (artists, album, duration) = parse_song_meta(r);
+    let album = album.or_else(|| album_from_menu(r));
     let mvt = music_video_type(&r["flexColumns"][0]["musicResponsiveListItemFlexColumnRenderer"]
         ["text"]["runs"][0]["navigationEndpoint"])
         .or_else(|| music_video_type(&r["navigationEndpoint"]));
@@ -47,6 +52,7 @@ fn song_from_responsive(r: &Value, title: String, thumbnail: Option<String>) -> 
             .as_str()
             .map(ToOwned::to_owned),
         params: None,
+        views_text: None,
     }))
 }
 
@@ -133,7 +139,7 @@ pub fn parse_two_row_item(r: &Value) -> Option<YTItem> {
             id: vid.to_string(),
             title,
             artists,
-            album: None,
+            album: album_from_menu(r),
             duration: None,
             music_video_type: music_video_type(nav),
             thumbnail: thumbnail.unwrap_or_default(),
@@ -143,6 +149,7 @@ pub fn parse_two_row_item(r: &Value) -> Option<YTItem> {
                 .as_str()
                 .map(ToOwned::to_owned),
             params: None,
+            views_text: None,
         }));
     }
 
@@ -209,7 +216,7 @@ pub fn parse_card_shelf(card: &Value) -> Option<YTItem> {
             id: vid.to_string(),
             title,
             artists,
-            album: None,
+            album: album_from_menu(card),
             duration: None,
             music_video_type: music_video_type(on_tap),
             thumbnail: thumbnail.unwrap_or_default(),
@@ -217,6 +224,7 @@ pub fn parse_card_shelf(card: &Value) -> Option<YTItem> {
             video_id: Some(vid.to_string()),
             playlist_id: None,
             params: None,
+            views_text: None,
         }));
     }
 
@@ -253,31 +261,49 @@ pub fn parse_card_shelf(card: &Value) -> Option<YTItem> {
     }
 }
 
+fn album_track_plays(r: &Value) -> Option<String> {
+    (1..4).find_map(|col| flex_text(r, col).filter(|t| looks_like_play_count(t)))
+}
+
+/// Album rows carry no per-track artist or cover art (both live only in the album
+/// header), so each track inherits them from this context.
+pub struct AlbumTrackCtx {
+    pub album: Album,
+    pub artists: Vec<Artist>,
+    pub thumbnail: String,
+}
+
 /// Album helper used by the album-songs continuation loop.
 #[must_use]
-pub fn album_track(r: &Value, album: Option<&Album>) -> Option<SongItem> {
+pub fn album_track(r: &Value, ctx: Option<&AlbumTrackCtx>) -> Option<SongItem> {
     let title = flex_text(r, 0)?;
     let vid = video_id(r)?;
     let (mut artists, parsed_album, duration) = parse_song_meta(r);
-    if artists.is_empty() {
-        if let Some(a) = album {
-            artists.push(Artist {
-                name: a.name.clone(),
-                id: Some(a.id.clone()),
-            });
+    // An album row's artist lives in the header (threaded via ctx), not the row.
+    // Keep only linked featured artists from the byline; otherwise take the
+    // header's, so an unlinked run like "3.4B plays" can't stand in as the artist.
+    if let Some(ctx) = ctx {
+        artists.retain(|a| a.id.is_some());
+        if artists.is_empty() {
+            artists = ctx.artists.clone();
         }
     }
+    let thumbnail = thumbnail_url(r)
+        .filter(|t| !t.is_empty())
+        .or_else(|| ctx.map(|c| c.thumbnail.clone()).filter(|t| !t.is_empty()))
+        .unwrap_or_default();
     Some(SongItem {
         id: vid.clone(),
         title,
         artists,
-        album: parsed_album.or_else(|| album.cloned()),
+        album: parsed_album.or_else(|| ctx.map(|c| c.album.clone())),
         duration,
         music_video_type: None,
-        thumbnail: thumbnail_url(r).unwrap_or_default(),
+        thumbnail,
         explicit: has_explicit(r),
         video_id: Some(vid),
         playlist_id: None,
         params: None,
+        views_text: album_track_plays(r),
     })
 }

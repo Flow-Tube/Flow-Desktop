@@ -17,6 +17,7 @@ import { PlayingWave } from './PlayingWave';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
+import { useTrackRadioAction } from './useTrackRadioAction';
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -164,12 +165,14 @@ export function AlbumTrackRow({
   const playNextInQueue = useMusicPlayerStore((s) => s.playNextInQueue);
   const menu = useMusicContextMenu(true);
   const navActions = useTrackNavActions(track);
+  const radioActions = useTrackRadioAction(track);
   const downloadActions = useTrackDownloadAction(track);
   const blockActions = useTrackBlockActions(track);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const isHighlighted = isHovered || showEq;
   const activeColor = dominantColor ?? preloadedColor;
   const menuActions: MusicMenuAction[] = [
+    ...radioActions,
     {
       id: 'add-to-queue',
       label: getString('music_add_to_queue'),

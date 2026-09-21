@@ -18,6 +18,7 @@ import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './Musi
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
+import { useTrackRadioAction } from './useTrackRadioAction';
 
 type BaseProps = {
   className?: string;
@@ -291,6 +292,7 @@ function SquareCard({
   const isAlbum = menuKind === 'album' && item && 'browseId' in item;
   const songLike = useSongLike(isTrack ? item : null);
   const navActions = useTrackNavActions(isTrack ? item : null);
+  const radioActions = useTrackRadioAction(isTrack ? item : null);
   const downloadActions = useTrackDownloadAction(isTrack ? item : null);
   const blockActions = useTrackBlockActions(isTrack ? item : null);
 
@@ -304,6 +306,7 @@ function SquareCard({
   const wash = useHoverWashColor(washSrc);
   const menuActions: MusicMenuAction[] = isTrack
     ? [
+        ...radioActions,
         {
           id: 'add-to-queue',
           label: getString('music_add_to_queue'),
@@ -599,6 +602,7 @@ function ListRow({
   const playerIsPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const navActions = useTrackNavActions(item);
+  const radioActions = useTrackRadioAction(item);
   const downloadActions = useTrackDownloadAction(item);
   const blockActions = useTrackBlockActions(item);
   const menu = useMusicContextMenu(true);
@@ -606,6 +610,7 @@ function ListRow({
   const isHighlighted = isHovered || isPlayingTrack;
   const activeColor = dominantColor ?? preloadedColor;
   const menuActions: MusicMenuAction[] = [
+    ...radioActions,
     {
       id: 'add-to-queue',
       label: getString('music_add_to_queue'),

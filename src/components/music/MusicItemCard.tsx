@@ -12,6 +12,7 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
@@ -216,11 +217,10 @@ function Artwork({
   onLoad?: (img: HTMLImageElement) => void;
   imageRef?: React.Ref<HTMLImageElement>;
 }) {
-  const [failed, setFailed] = useState(false);
   const upgradedSrc = rounded.includes('full') ? upgradeAvatarUrl(src) : upgradeMusicImageUrl(src);
   const imageSrc = useProxiedImageUrl(upgradedSrc);
-  useEffect(() => setFailed(false), [imageSrc]);
-  if (!imageSrc || failed) {
+  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
+  if (!displaySrc) {
     return (
       <div
         className={cx(
@@ -237,11 +237,11 @@ function Artwork({
   return (
     <img
       ref={imageRef}
-      src={imageSrc}
+      src={displaySrc}
       alt={alt}
       loading="lazy"
       onLoad={(event) => onLoad?.(event.currentTarget)}
-      onError={() => setFailed(true)}
+      onError={onError}
       className={cx('object-cover', rounded, className)}
     />
   );

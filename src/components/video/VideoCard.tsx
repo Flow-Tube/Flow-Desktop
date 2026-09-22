@@ -7,7 +7,8 @@ import { useLiveStore } from '../../store/useLiveStore';
 import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, Download, User } from 'lucide-react';
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
 import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
@@ -114,7 +115,6 @@ function VideoCardComponent({
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);
-  const [thumbnailCandidateIndex, setThumbnailCandidateIndex] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const thumbnailRef = useRef<HTMLImageElement>(null);
 
@@ -157,8 +157,11 @@ function VideoCardComponent({
   const overriddenThumbnail = dearrowOverride?.thumbnailUrl || null;
 
   const displayTitle = overriddenTitle || video.title;
-  const thumbnailCandidates = resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl);
-  const displayThumbnail = thumbnailCandidates[thumbnailCandidateIndex] || overriddenThumbnail || video.thumbnailUrl;
+  const thumbnailCandidates = useMemo(
+    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl),
+    [overriddenThumbnail, video.id, video.thumbnailUrl],
+  );
+  const { src: displayThumbnail, onError: handleThumbnailError } = useImageFallback(thumbnailCandidates);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -185,9 +188,9 @@ function VideoCardComponent({
     const img = event.currentTarget;
     if (
       isUnavailableYoutubeThumbnail(img) &&
-      thumbnailCandidateIndex < thumbnailCandidates.length - 1
+      displayThumbnail !== thumbnailCandidates[thumbnailCandidates.length - 1]
     ) {
-      setThumbnailCandidateIndex((idx) => idx + 1);
+      handleThumbnailError();
       return;
     }
 
@@ -197,7 +200,7 @@ function VideoCardComponent({
         setDominantColor(color);
       }
     }
-  }, [dominantColor, isHovered, thumbnailCandidateIndex, thumbnailCandidates.length]);
+  }, [displayThumbnail, dominantColor, handleThumbnailError, isHovered, thumbnailCandidates]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     if (isChannel) return;
@@ -224,13 +227,8 @@ function VideoCardComponent({
   const progressPercent = Math.min(100, Math.max(0, video.watchProgressPercent ?? 0));
 
   useEffect(() => {
-    setThumbnailCandidateIndex(0);
     setDominantColor(null);
   }, [overriddenThumbnail, video.id, video.thumbnailUrl]);
-
-  const handleThumbnailError = useCallback(() => {
-    setThumbnailCandidateIndex((idx) => Math.min(idx + 1, Math.max(0, thumbnailCandidates.length - 1)));
-  }, [thumbnailCandidates.length]);
 
   const handleSubscribeToggle = (e: React.MouseEvent) => {
     e.stopPropagation();

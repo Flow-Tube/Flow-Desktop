@@ -6,6 +6,7 @@ import { artistsText, formatTime } from '../../lib/musicFormat';
 import { upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { extractDominantColorFromImage, useDominantColor } from '../../lib/useDominantColor';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
@@ -109,13 +110,11 @@ function TrackArtwork({
   onLoad?: (img: HTMLImageElement) => void;
   imageRef?: React.Ref<HTMLImageElement>;
 }) {
-  const [failed, setFailed] = useState(false);
   const src = upgradeMusicImageUrl(track.thumbnail, 120);
   const imageSrc = useProxiedImageUrl(src);
+  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
 
-  useEffect(() => setFailed(false), [imageSrc]);
-
-  if (!imageSrc || failed) {
+  if (!displaySrc) {
     return (
       <div className="grid h-10 w-10 shrink-0 place-items-center rounded bg-surface-container-high text-chrome-neutral-500">
         <Music2 className="h-4 w-4" />
@@ -126,12 +125,12 @@ function TrackArtwork({
   return (
     <img
       ref={imageRef}
-      src={imageSrc}
+      src={displaySrc}
       alt=""
       aria-hidden="true"
       loading="lazy"
       onLoad={(event) => onLoad?.(event.currentTarget)}
-      onError={() => setFailed(true)}
+      onError={onError}
       className="h-10 w-10 shrink-0 rounded object-cover"
     />
   );

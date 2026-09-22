@@ -1,3 +1,4 @@
+use crate::models::channel::ShortVideoSummary;
 use crate::models::video::{RelatedContentItem, VideoSummary};
 use serde_json::Value;
 
@@ -605,6 +606,40 @@ pub fn map_related_content_to_video_summary(item: RelatedContentItem) -> VideoSu
         channel_avatar_url: None,
         is_live: item.is_live,
     }
+}
+
+/// A Short from the object wrapping a `shortsLockupViewModel` or older
+/// `reelItemRenderer`.
+pub fn short_video_summary_from_item(item: &Value) -> Option<ShortVideoSummary> {
+    let (id, title, thumbnails, view_count_text) =
+        if let Some(lockup) = item.get("shortsLockupViewModel") {
+            let overlay = &lockup["overlayMetadata"];
+            (
+                &lockup["onTap"]["innertubeCommand"]["reelWatchEndpoint"]["videoId"],
+                &overlay["primaryText"],
+                &lockup["thumbnailViewModel"]["thumbnailViewModel"]["image"]["sources"],
+                &overlay["secondaryText"],
+            )
+        } else {
+            let reel = item.get("reelItemRenderer")?;
+            (
+                &reel["videoId"],
+                &reel["headline"],
+                &reel["thumbnail"]["thumbnails"],
+                &reel["viewCountText"],
+            )
+        };
+
+    Some(ShortVideoSummary {
+        id: id.as_str().filter(|id| !id.is_empty())?.to_string(),
+        title: extract_text_from_value(title).unwrap_or_default(),
+        thumbnail_url: thumbnails
+            .as_array()
+            .and_then(|sources| sources.last())
+            .and_then(|source| source["url"].as_str())
+            .map(ToOwned::to_owned),
+        view_count_text: extract_text_from_value(view_count_text),
+    })
 }
 
 pub fn extract_channel_id_from_music_renderer(renderer: &Value) -> Option<String> {

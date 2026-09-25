@@ -127,6 +127,13 @@ pub struct MoodAndGenreItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MoodAndGenreGroup {
+    pub title: String,
+    pub items: Vec<MoodAndGenreItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExplorePage {
     pub new_release_albums: Vec<AlbumItem>,
     pub mood_and_genres: Vec<MoodAndGenreItem>,
@@ -137,12 +144,16 @@ pub struct ExplorePage {
 pub struct ChartSection {
     pub title: String,
     pub items: Vec<YTItem>,
-    pub chart_type: String, // "Trending" | "Top" | "Genre" | "NewReleases"
+    pub chart_type: String, // "Songs" | "Playlists" | "Artists" | "NewReleases" | "Mixed"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartsPage {
     pub sections: Vec<ChartSection>,
+    /// `None` means the service returned Global charts.
+    pub country_code: Option<String>,
+    /// The service's own (localized) name for the returned country or Global.
+    pub country_label: Option<String>,
     pub continuation: Option<String>,
 }

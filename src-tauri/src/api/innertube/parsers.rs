@@ -958,6 +958,8 @@ pub fn parse_music_charts_json(val: &Value) -> AppResult<ChartsPage> {
 
     Ok(ChartsPage {
         sections,
+        country_code: None,
+        country_label: None,
         continuation,
     })
 }

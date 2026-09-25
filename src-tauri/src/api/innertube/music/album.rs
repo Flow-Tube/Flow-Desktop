@@ -12,7 +12,7 @@ use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
 use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
-use crate::models::music::{Album, AlbumItem, SongItem};
+use crate::models::music::{Album, AlbumItem, SongItem, YTItem};
 use crate::models::music_pages::AlbumPage;
 
 impl InnertubeClient {
@@ -72,11 +72,14 @@ impl InnertubeClient {
             artists: (!artists.is_empty()).then_some(artists),
             year,
             thumbnail: thumbnail.unwrap_or_default(),
-            explicit: false,
+            explicit: has_explicit_badge(header),
         };
+
+        let other_versions = find_other_versions(&res, &album);
 
         Ok(AlbumPage {
             album,
+            other_versions,
             description,
             song_count,
             duration_text,
@@ -132,6 +135,57 @@ impl InnertubeClient {
         let next = parse_album_continuation(&res, None, &mut songs, &mut seen);
         Ok((songs, next))
     }
+}
+
+fn has_explicit_badge(header: &Value) -> bool {
+    ["subtitleBadge", "badges"].iter().any(|key| {
+        header[*key].as_array().is_some_and(|badges| {
+            badges.iter().any(|badge| {
+                badge["musicInlineBadgeRenderer"]["icon"]["iconType"].as_str()
+                    == Some("MUSIC_EXPLICIT_BADGE")
+            })
+        })
+    })
+}
+
+fn find_other_versions(res: &Value, current: &AlbumItem) -> Vec<AlbumItem> {
+    let title = current.title.trim().to_lowercase();
+    shelves::section_list_contents(res)
+        .into_iter()
+        .filter(|section| !section["musicCarouselShelfRenderer"].is_null())
+        .filter_map(|section| shelves::parse_section(&section))
+        .map(|shelf| {
+            shelf
+                .items
+                .into_iter()
+                .filter_map(|item| match item {
+                    YTItem::Album(album) => Some(album),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .find(|albums| {
+            !albums.is_empty()
+                && albums.iter().all(|album| {
+                    album.browse_id != current.browse_id
+                        && album.title.to_lowercase().starts_with(&title)
+                        && album
+                            .artists
+                            .as_ref()
+                            .zip(current.artists.as_ref())
+                            .is_none_or(|(artists, current_artists)| {
+                                artists.iter().any(|artist| {
+                                    current_artists.iter().any(|current_artist| {
+                                        artist.id.is_some() && artist.id == current_artist.id
+                                            || artist
+                                                .name
+                                                .eq_ignore_ascii_case(&current_artist.name)
+                                    })
+                                })
+                            })
+                })
+        })
+        .unwrap_or_default()
 }
 
 fn parse_album_continuation(
@@ -305,4 +359,49 @@ fn parse_count_and_duration(second: Option<&str>) -> (Option<u32>, Option<String
         }
     }
     (count, duration)
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn explicit_badge_and_other_versions_are_structural() {
+        let header = json!({ "subtitleBadge": [{ "musicInlineBadgeRenderer": {
+            "icon": { "iconType": "MUSIC_EXPLICIT_BADGE" }
+        } }] });
+        assert!(has_explicit_badge(&header));
+        let current = AlbumItem {
+            browse_id: "current".into(),
+            playlist_id: String::new(),
+            title: "Play".into(),
+            artists: None,
+            year: None,
+            thumbnail: String::new(),
+            explicit: true,
+        };
+        let response = json!({ "contents": { "twoColumnBrowseResultsRenderer": {
+            "secondaryContents": { "sectionListRenderer": { "contents": [{
+                "musicCarouselShelfRenderer": {
+                    "header": { "musicCarouselShelfBasicHeaderRenderer": {
+                        "title": { "runs": [{ "text": "Autres versions" }] }
+                    } },
+                    "contents": [{ "musicTwoRowItemRenderer": {
+                        "title": { "runs": [{ "text": "Play (Deluxe)" }] },
+                        "navigationEndpoint": { "browseEndpoint": {
+                            "browseId": "deluxe",
+                            "browseEndpointContextSupportedConfigs": {
+                                "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_ALBUM" }
+                            }
+                        } }
+                    } }]
+                }
+            }] } }
+        } } });
+        assert_eq!(
+            find_other_versions(&response, &current)[0].browse_id,
+            "deluxe"
+        );
+    }
 }

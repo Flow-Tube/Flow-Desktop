@@ -57,6 +57,7 @@ pub struct MusicSearchSuggestions {
 #[serde(rename_all = "camelCase")]
 pub struct AlbumPage {
     pub album: AlbumItem,
+    pub other_versions: Vec<AlbumItem>,
     pub description: Option<String>,
     pub song_count: Option<u32>,
     pub duration_text: Option<String>,
@@ -105,14 +106,45 @@ pub struct MusicHomePage {
     pub continuation: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedMusicHomePage {
+    pub page: MusicHomePage,
+    /// Unix timestamp in seconds, used by the UI to decide when to refresh.
+    pub fetched_at: i64,
+}
+
 // ---------------------------------------------------------------------------
-// Related (typed — buckets by concrete kind)
+// Related (typed shelves preserve the source of each candidate)
 // ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RelatedShelfType {
+    Similar,
+    Playlists,
+    OtherPerformances,
+    SimilarArtists,
+    MoreFromArtist,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedShelf {
+    pub shelf_type: RelatedShelfType,
+    pub title: String,
+    pub artist_browse_id: Option<String>,
+    pub items: Vec<YTItem>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelatedPage {
+    pub sections: Vec<RelatedShelf>,
+    /// Only audio from the similar-song lane; suitable for audio recommendations.
     pub songs: Vec<SongItem>,
+    pub other_performances: Vec<SongItem>,
     pub albums: Vec<AlbumItem>,
     pub artists: Vec<ArtistItem>,
     pub playlists: Vec<PlaylistItem>,

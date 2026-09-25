@@ -4,14 +4,14 @@
 use serde_json::{Value, json};
 
 use super::clients;
-use super::parse::endpoint::album_from_menu;
+use super::parse::endpoint::{album_from_menu, browse_id};
 use super::parse::runs::{parse_artists_and_year, parse_duration, runs_text};
 use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
 use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
 use crate::models::music::{SongItem, YTItem};
-use crate::models::music_pages::{QueuePage, RelatedPage};
+use crate::models::music_pages::{QueuePage, RelatedPage, RelatedShelf, RelatedShelfType};
 
 impl InnertubeClient {
     /// Watch queue / radio for a song (the `next` endpoint). Also surfaces the
@@ -115,16 +115,9 @@ impl InnertubeClient {
 
     /// Typed related content for a song, bucketed by kind.
     pub(crate) async fn music_related_page(&self, video_id: &str) -> AppResult<RelatedPage> {
-        let mut page = RelatedPage {
-            songs: Vec::new(),
-            albums: Vec::new(),
-            artists: Vec::new(),
-            playlists: Vec::new(),
-        };
-
         let queue = self.music_watch_queue(Some(video_id), None, None).await?;
         let Some(related_browse) = queue.related_browse_id else {
-            return Ok(page);
+            return Ok(related_from_sections(Vec::new()));
         };
 
         let visitor = self.music_visitor_data().await;
@@ -132,20 +125,18 @@ impl InnertubeClient {
             .music_browse(Some(&related_browse), None, None, visitor.as_deref())
             .await?;
 
-        for section in shelves::section_list_contents(&res) {
-            if let Some(shelf) = shelves::parse_section(&section) {
-                for item in shelf.items {
-                    match item {
-                        YTItem::Song(s) => page.songs.push(s),
-                        YTItem::Album(a) => page.albums.push(a),
-                        YTItem::Artist(a) => page.artists.push(a),
-                        YTItem::Playlist(p) => page.playlists.push(p),
-                        _ => {}
-                    }
-                }
-            }
-        }
-        Ok(page)
+        let sections = shelves::section_list_contents(&res)
+            .into_iter()
+            .filter_map(|section| {
+                let parsed = shelves::parse_section(&section)?;
+                let title_run = &section["musicCarouselShelfRenderer"]["header"]
+                    ["musicCarouselShelfBasicHeaderRenderer"]["title"]["runs"][0];
+                let artist_browse_id = browse_id(&title_run["navigationEndpoint"])
+                    .filter(|id| id.starts_with("UC"));
+                Some((parsed, artist_browse_id))
+            })
+            .collect();
+        Ok(related_from_sections(sections))
     }
 
     /// Plain lyrics text for a song (via the `next` lyrics tab pointer).
@@ -178,6 +169,76 @@ impl InnertubeClient {
         }
         Ok((!text.is_empty()).then_some(text))
     }
+}
+
+fn is_video_song(song: &SongItem) -> bool {
+    song.music_video_type
+        .as_deref()
+        .is_some_and(|kind| kind != "MUSIC_VIDEO_TYPE_ATV")
+}
+
+fn related_from_sections(
+    sections: Vec<(crate::models::music_pages::MusicShelf, Option<String>)>,
+) -> RelatedPage {
+    let mut page = RelatedPage {
+        sections: Vec::new(),
+        songs: Vec::new(),
+        other_performances: Vec::new(),
+        albums: Vec::new(),
+        artists: Vec::new(),
+        playlists: Vec::new(),
+    };
+    let mut song_shelves = 0;
+    for (shelf, artist_browse_id) in sections {
+        let items = &shelf.items;
+        let shelf_type = if artist_browse_id.is_some()
+            && items.iter().all(|item| matches!(item, YTItem::Album(_)))
+        {
+            RelatedShelfType::MoreFromArtist
+        } else if items.iter().all(|item| matches!(item, YTItem::Artist(_))) {
+            RelatedShelfType::SimilarArtists
+        } else if items.iter().all(|item| matches!(item, YTItem::Playlist(_))) {
+            RelatedShelfType::Playlists
+        } else if items.iter().all(|item| matches!(item, YTItem::Song(_))) {
+            // The first song carousel is the similar-audio lane and later ones are
+            // alternate performances; videos are filtered per item below.
+            song_shelves += 1;
+            if song_shelves == 1 {
+                RelatedShelfType::Similar
+            } else {
+                RelatedShelfType::OtherPerformances
+            }
+        } else {
+            RelatedShelfType::Unknown
+        };
+        for item in &shelf.items {
+            match (shelf_type, item) {
+                (RelatedShelfType::Similar, YTItem::Song(song)) if !is_video_song(song) => {
+                    page.songs.push(song.clone());
+                }
+                (RelatedShelfType::OtherPerformances, YTItem::Song(song)) => {
+                    page.other_performances.push(song.clone());
+                }
+                (RelatedShelfType::MoreFromArtist, YTItem::Album(album)) => {
+                    page.albums.push(album.clone());
+                }
+                (RelatedShelfType::SimilarArtists, YTItem::Artist(artist)) => {
+                    page.artists.push(artist.clone());
+                }
+                (RelatedShelfType::Playlists, YTItem::Playlist(playlist)) => {
+                    page.playlists.push(playlist.clone());
+                }
+                _ => {}
+            }
+        }
+        page.sections.push(RelatedShelf {
+            shelf_type,
+            title: shelf.title,
+            artist_browse_id,
+            items: shelf.items,
+        });
+    }
+    page
 }
 
 fn parse_next_queue(res: &Value) -> QueuePage {
@@ -273,5 +334,148 @@ mod tests {
             "longBylineText": { "runs": [{ "text": "Artist Only" }] }
         });
         assert!(parse_panel_video(&r).unwrap().album.is_none());
+    }
+}
+
+#[cfg(test)]
+mod related_tests {
+    use super::*;
+    use crate::models::music::PlaylistItem;
+    use crate::models::music_pages::MusicShelf;
+
+    fn song(id: &str, kind: &str) -> YTItem {
+        YTItem::Song(SongItem {
+            id: id.into(),
+            title: id.into(),
+            artists: Vec::new(),
+            album: None,
+            duration: Some(180),
+            music_video_type: Some(kind.into()),
+            thumbnail: String::new(),
+            explicit: false,
+            video_id: Some(id.into()),
+            playlist_id: None,
+            params: None,
+            views_text: None,
+        })
+    }
+
+    fn shelf(title: &str, items: Vec<YTItem>) -> MusicShelf {
+        MusicShelf {
+            title: title.into(),
+            subtitle: None,
+            browse_id: None,
+            params: None,
+            items,
+        }
+    }
+
+    #[test]
+    fn translated_related_shelves_keep_audio_and_performances_apart() {
+        let page = related_from_sections(vec![
+            (
+                shelf("مقترح لك", vec![song("similar", "MUSIC_VIDEO_TYPE_ATV")]),
+                None,
+            ),
+            (
+                shelf(
+                    "قوائم تشغيل",
+                    vec![YTItem::Playlist(PlaylistItem {
+                        id: "playlist".into(),
+                        title: "mix".into(),
+                        author: None,
+                        song_count_text: None,
+                        thumbnail: None,
+                    })],
+                ),
+                None,
+            ),
+            (
+                shelf(
+                    "عروض أخرى",
+                    vec![
+                        song("alternate-audio", "MUSIC_VIDEO_TYPE_ATV"),
+                        song("live-video", "MUSIC_VIDEO_TYPE_OMV"),
+                    ],
+                ),
+                None,
+            ),
+        ]);
+        assert_eq!(page.sections[0].shelf_type, RelatedShelfType::Similar);
+        assert_eq!(page.sections[1].shelf_type, RelatedShelfType::Playlists);
+        assert_eq!(
+            page.sections[2].shelf_type,
+            RelatedShelfType::OtherPerformances
+        );
+        assert_eq!(
+            page.songs
+                .iter()
+                .map(|song| song.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["similar"]
+        );
+        assert_eq!(page.other_performances.len(), 2);
+        assert_eq!(page.playlists.len(), 1);
+    }
+
+    #[test]
+    fn a_video_in_the_similar_lane_is_dropped_without_losing_the_lane() {
+        let page = related_from_sections(vec![
+            (
+                shelf(
+                    "First",
+                    vec![
+                        song("audio-1", "MUSIC_VIDEO_TYPE_ATV"),
+                        song("video", "MUSIC_VIDEO_TYPE_OMV"),
+                        song("audio-2", "MUSIC_VIDEO_TYPE_ATV"),
+                    ],
+                ),
+                None,
+            ),
+            (
+                shelf("Second", vec![song("performance", "MUSIC_VIDEO_TYPE_UGC")]),
+                None,
+            ),
+        ]);
+        assert_eq!(page.sections[0].shelf_type, RelatedShelfType::Similar);
+        assert_eq!(
+            page.songs
+                .iter()
+                .map(|song| song.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["audio-1", "audio-2"]
+        );
+        assert_eq!(page.other_performances.len(), 1);
+    }
+
+    #[test]
+    fn next_queue_keeps_order_and_related_pointer() {
+        let item = |id: &str| {
+            json!({ "playlistPanelVideoRenderer": {
+            "videoId": id,
+            "title": { "runs": [{ "text": id }] },
+            "longBylineText": { "runs": [{ "text": "Artist" }] },
+            "lengthText": { "runs": [{ "text": "3:00" }] },
+        } })
+        };
+        let response = json!({ "contents": { "singleColumnMusicWatchNextResultsRenderer": {
+            "tabbedRenderer": { "watchNextTabbedResultsRenderer": { "tabs": [
+                { "tabRenderer": { "content": { "musicQueueRenderer": { "content": {
+                    "playlistPanelRenderer": { "contents": [item("one"), item("two")] }
+                } } } } },
+                { "tabRenderer": {} },
+                { "tabRenderer": { "endpoint": { "browseEndpoint": { "browseId": "MPTRt_related" } } } },
+            ] } }
+        } } });
+        let queue = parse_next_queue(&response);
+        assert_eq!(
+            queue
+                .items
+                .iter()
+                .map(|song| song.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["one", "two"]
+        );
+        assert_eq!(queue.related_browse_id.as_deref(), Some("MPTRt_related"));
     }
 }

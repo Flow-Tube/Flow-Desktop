@@ -186,6 +186,17 @@ pub fn rediscover(brain: &MusicBrain, now_ms: u64, limit: usize) -> Vec<String> 
         .collect()
 }
 
+/// The part of the day `now_ms` falls in, matching the rotation's buckets, for naming the
+/// shelf ("Your evening rotation"). Weekday and weekend share a name.
+pub fn day_slot(now_ms: u64) -> Option<&'static str> {
+    Some(match bucket_for(now_ms)? {
+        TimeBucket::WeekdayMorning | TimeBucket::WeekendMorning => "morning",
+        TimeBucket::WeekdayAfternoon | TimeBucket::WeekendAfternoon => "afternoon",
+        TimeBucket::WeekdayEvening | TimeBucket::WeekendEvening => "evening",
+        TimeBucket::WeekdayNight | TimeBucket::WeekendNight => "night",
+    })
+}
+
 /// Tracks with at least two counted plays in the current local time bucket.
 pub fn time_of_day_rotation(brain: &MusicBrain, now_ms: u64, limit: usize) -> Vec<String> {
     let Some(current_bucket) = bucket_for(now_ms) else {
@@ -766,5 +777,21 @@ mod tests {
         );
         crate::music_brain::learn::block_music_artist(&mut brain, "a");
         assert!(time_of_day_rotation(&brain, now, 10).is_empty());
+    }
+
+    #[test]
+    fn day_slot_names_every_bucket() {
+        use chrono::{Local, TimeZone};
+        let at = |hour: u32| {
+            let local = Local
+                .with_ymd_and_hms(2026, 9, 23, hour, 30, 0)
+                .single()
+                .unwrap();
+            u64::try_from(local.timestamp_millis()).unwrap()
+        };
+        assert_eq!(day_slot(at(8)), Some("morning"));
+        assert_eq!(day_slot(at(13)), Some("afternoon"));
+        assert_eq!(day_slot(at(20)), Some("evening"));
+        assert_eq!(day_slot(at(2)), Some("night"));
     }
 }

@@ -8,7 +8,9 @@ use crate::models::music::{Artist, SongItem};
 use crate::music_brain::mixes::{DailyMixSeed, daily_mixes};
 use crate::music_brain::model::MusicBrain;
 use crate::music_brain::profile::{MusicTasteProfile, taste_profile};
-use crate::music_brain::rank::{RankInput, heavy_rotation, rank, rediscover, time_of_day_rotation};
+use crate::music_brain::rank::{
+    RankInput, day_slot, heavy_rotation, rank, rediscover, time_of_day_rotation,
+};
 use crate::music_brain::store::MusicBrainStore;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
@@ -143,16 +145,28 @@ pub async fn get_music_rediscover(
     ))
 }
 
+/// The rotation shelf plus the part of the day it was built for, so the UI can name it.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeRotation {
+    pub slot: Option<&'static str>,
+    pub songs: Vec<SongItem>,
+}
+
 #[tauri::command]
 pub async fn get_music_time_rotation(
     limit: usize,
     music_brain: State<'_, Arc<MusicBrainStore>>,
-) -> CmdResult<Vec<SongItem>> {
+) -> CmdResult<TimeRotation> {
     let brain = music_brain.read().await;
-    Ok(songs_from_ids(
-        &brain,
-        time_of_day_rotation(&brain, now_ms(), limit.clamp(1, 100)),
-    ))
+    let now = now_ms();
+    Ok(TimeRotation {
+        slot: day_slot(now),
+        songs: songs_from_ids(
+            &brain,
+            time_of_day_rotation(&brain, now, limit.clamp(1, 100)),
+        ),
+    })
 }
 
 #[tauri::command]

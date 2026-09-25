@@ -17,6 +17,7 @@ import type {
   MoodAndGenreGroup,
   MoodGenrePage,
   MusicHomePage,
+  MusicTimeRotation,
   MusicPlaylistPage,
   MusicSearchResponse,
   MusicSearchSuggestions,
@@ -182,8 +183,8 @@ export function getMusicRediscover(limit = 16): Promise<SongItem[]> {
   return invokeBackend<SongItem[]>("get_music_rediscover", { limit });
 }
 
-export function getMusicTimeRotation(limit = 16): Promise<SongItem[]> {
-  return invokeBackend<SongItem[]>("get_music_time_rotation", { limit });
+export function getMusicTimeRotation(limit = 20): Promise<MusicTimeRotation> {
+  return invokeBackend<MusicTimeRotation>("get_music_time_rotation", { limit });
 }
 
 export function getMusicLinkedArtists(limit = 20): Promise<ArtistItem[]> {

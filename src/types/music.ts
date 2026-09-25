@@ -218,6 +218,19 @@ export interface RelatedShelf {
   items: YTItem[];
 }
 
+/** Artwork shown beside a home section title: the seed artist (round) or track. */
+export interface MusicSeedArt {
+  url: string;
+  round?: boolean;
+}
+
+export type MusicDaySlot = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export interface MusicTimeRotation {
+  slot: MusicDaySlot | null;
+  songs: SongItem[];
+}
+
 /** A Daily Mix cluster from the music brain: a label + seed tracks to expand. */
 export interface DailyMixSeed {
   label: string;

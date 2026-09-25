@@ -20,6 +20,9 @@ import { TitleBar } from "./components/layout/TitleBar";
 
 import Home from "./pages/Home";
 import MusicHome from "./pages/music/MusicHome";
+import MusicBrowsePage from "./pages/music/MusicBrowsePage";
+import MusicMoodsPage from "./pages/music/MusicMoodsPage";
+import MusicMixPage from "./pages/music/MusicMixPage";
 import ArtistPage from "./pages/music/ArtistPage";
 import ArtistItemsPage from "./pages/music/ArtistItemsPage";
 import MusicCollectionPage from "./pages/music/MusicCollectionPage";
@@ -155,6 +158,9 @@ function App() {
           <Route path="music" element={
             <MusicHome />
           } />
+          <Route path="music/moods" element={<MusicMoodsPage />} />
+          <Route path="music/browse" element={<MusicBrowsePage />} />
+          <Route path="music/mix/:id" element={<MusicMixPage />} />
           <Route path="music/artist/:artistId" element={
             <ArtistPage />
           } />

@@ -5,6 +5,7 @@ import { ShelfScroller } from '../ui/ShelfScroller';
 
 interface MusicShelfProps<T> {
   title: string;
+  subtitle?: string | null;
   items: T[];
   renderItem: (item: T, index: number) => React.ReactNode;
   onSeeAll?: () => void;
@@ -40,6 +41,7 @@ function ShelfSkeleton({ shape }: { shape: 'square' | 'circle' }) {
 
 export function MusicShelf<T>({
   title,
+  subtitle,
   items,
   renderItem,
   onSeeAll,
@@ -54,7 +56,10 @@ export function MusicShelf<T>({
     <section className={cx('flex flex-col', className)}>
       {(title || onSeeAll) && (
       <div className="mb-3 flex items-center justify-between px-1">
-        <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
+        <div className="min-w-0">
+          {subtitle && <p className="text-sm text-chrome-neutral-400">{subtitle}</p>}
+          <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
+        </div>
         {onSeeAll && (
           <button
             type="button"

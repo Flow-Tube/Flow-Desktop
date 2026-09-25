@@ -14,6 +14,7 @@ import { getString } from '../../lib/i18n/index';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import type { SongItem } from '../../types/music';
+import { shuffled } from '../../lib/musicRecall';
 
 const videoIdOf = (track: SongItem) => track.videoId ?? track.id;
 
@@ -265,13 +266,13 @@ export default function ArtistPage() {
 
   const startPlayback = (shuffle: boolean) => {
     if (!topSongs.length) return;
-    const queue: SongItem[] = shuffle ? [...topSongs].sort(() => Math.random() - 0.5) : topSongs;
-    void playQueue(queue, 0);
+    const queue: SongItem[] = shuffle ? shuffled(topSongs) : topSongs;
+    void playQueue(queue, 0, header.title);
   };
 
   const playFrom = (list: SongItem[], track: SongItem) => {
     const start = Math.max(0, list.findIndex((item) => videoIdOf(item) === videoIdOf(track)));
-    void playQueue(list, start);
+    void playQueue(list, start, header.title);
   };
 
   const openAlbum = (browseId: string) => navigate(`/music/album/${browseId}`);

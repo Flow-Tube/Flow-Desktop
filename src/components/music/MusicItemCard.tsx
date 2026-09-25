@@ -13,6 +13,7 @@ import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { useTrackBlockActions } from './useTrackBlockActions';
@@ -246,19 +247,6 @@ function Artwork({
       onError={() => setFailed(true)}
       className={cx('object-cover', rounded, className)}
     />
-  );
-}
-
-function ExplicitBadge() {
-  const label = getString('music_explicit');
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      className="grid h-4 w-4 shrink-0 place-items-center rounded-[3px] bg-chrome-neutral-700 text-[10px] font-bold leading-none text-chrome-neutral-300"
-    >
-      E
-    </span>
   );
 }
 

@@ -13,6 +13,7 @@ import { useLikesStore } from '../../store/useLikesStore';
 import { useUiStore } from '../../store/useUiStore';
 import type { SongItem } from '../../types/music';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
+import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
@@ -38,19 +39,6 @@ interface AlbumTrackRowProps {
   onLike?: (track: SongItem) => void;
   onMenu?: (track: SongItem) => void;
   onRemove?: (track: SongItem) => void;
-}
-
-function ExplicitBadge() {
-  const label = getString('music_explicit');
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      className="grid h-4 w-4 shrink-0 place-items-center rounded-[3px] bg-chrome-neutral-700 text-[10px] font-bold leading-none text-chrome-neutral-300"
-    >
-      E
-    </span>
-  );
 }
 
 function videoIdOf(track: SongItem): string {

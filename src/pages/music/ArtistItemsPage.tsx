@@ -9,6 +9,7 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { getString } from '../../lib/i18n/index';
 import { useGridStyle } from '../../lib/useGridColumns';
 import type { SongItem, YTItem } from '../../types/music';
+import { shuffled } from '../../lib/musicRecall';
 
 const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
 
@@ -82,11 +83,11 @@ export default function ArtistItemsPage() {
 
   const playFrom = (track: SongItem) => {
     const start = Math.max(0, songs.findIndex((t) => videoIdOf(t) === videoIdOf(track)));
-    void playQueue(songs, start);
+    void playQueue(songs, start, title || null);
   };
   const playAll = (shuffle: boolean) => {
     if (!songs.length) return;
-    void playQueue(shuffle ? [...songs].sort(() => Math.random() - 0.5) : songs, 0);
+    void playQueue(shuffle ? shuffled(songs) : songs, 0, title || null);
   };
 
   const openAlbum = (browse: string) => navigate(`/music/album/${browse}`);

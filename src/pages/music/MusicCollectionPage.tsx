@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Loader2, Play } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
 import { AlbumTrackRow } from '../../components/music/AlbumTrackRow';
 import { MusicCollectionHeader } from '../../components/music/MusicCollectionHeader';
+import { MusicItemCard } from '../../components/music/MusicItemCard';
+import { MusicShelf } from '../../components/music/MusicShelf';
 import { useMusicCollection, type CollectionKind } from '../../lib/useMusicCollection';
 import { usePublishTitle } from '../../lib/usePublishTitle';
 import { useCollectionDownloadState } from '../../lib/useCollectionDownloads';
@@ -15,6 +18,7 @@ import { useUiStore } from '../../store/useUiStore';
 import { getString } from '../../lib/i18n/index';
 import { artistsText } from '../../lib/musicFormat';
 import type { AlbumItem, SongItem } from '../../types/music';
+import { shuffled } from '../../lib/musicRecall';
 
 const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
 
@@ -56,6 +60,7 @@ function CollectionSkeleton() {
 }
 
 export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) {
+  const { t } = useTranslation('common');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
@@ -69,7 +74,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
   const showToast = useUiStore((s) => s.showToast);
   const [showMiniHeader, setShowMiniHeader] = useState(false);
 
-  const { meta, songs, loading, loadingMore, error, hasMore, loadMore, reload, ownedAlbumId } =
+  const { meta, songs, otherVersions, loading, loadingMore, error, hasMore, loadMore, reload, ownedAlbumId } =
     useMusicCollection(kind, id);
   usePublishTitle(meta?.title);
 
@@ -127,11 +132,11 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
 
   const playFrom = (track: SongItem) => {
     const start = Math.max(0, songs.findIndex((t) => videoIdOf(t) === videoIdOf(track)));
-    void playQueue(songs, start);
+    void playQueue(songs, start, meta?.title ?? null);
   };
   const playAll = (shuffle: boolean) => {
     if (!songs.length) return;
-    void playQueue(shuffle ? [...songs].sort(() => Math.random() - 0.5) : songs, 0);
+    void playQueue(shuffle ? shuffled(songs) : songs, 0, meta?.title ?? null);
   };
 
   const isOnlineAlbum = kind === 'album' && !ownedAlbumId;
@@ -283,6 +288,12 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
           </div>
         )}
       </div>
+      {kind === 'album' && otherVersions.length > 0 && <div className="mx-auto max-w-[1600px] px-8 pt-8">
+        <MusicShelf title={t('musicOtherVersions')} items={otherVersions}
+          renderItem={(album) => <MusicItemCard variant="album" item={album}
+            onPlay={() => navigate(`/music/album/${album.browseId}`)}
+            onOpen={() => navigate(`/music/album/${album.browseId}`)} />} />
+      </div>}
     </div>
   );
 }

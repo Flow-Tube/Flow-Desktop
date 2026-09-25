@@ -5,6 +5,7 @@ import { getString } from '../../lib/i18n/index';
 import type { CollectionMeta } from '../../lib/useMusicCollection';
 import { upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { ExplicitBadge } from './ExplicitBadge';
 
 interface MusicCollectionHeaderProps {
   meta: CollectionMeta;
@@ -88,8 +89,9 @@ export function MusicCollectionHeader({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
-          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-chrome-neutral-300">
+          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-chrome-neutral-300">
             {meta.typeLabel}
+            {meta.explicit && <ExplicitBadge />}
           </span>
 
           <h1 className="line-clamp-2 text-5xl font-extrabold leading-tight tracking-tighter text-chrome-white lg:text-7xl">

@@ -97,6 +97,7 @@ export function MusicQueuePane() {
   const queue = useMusicPlayerStore((s) => s.queue);
   const currentIndex = useMusicPlayerStore((s) => s.currentIndex);
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
+  const queueSource = useMusicPlayerStore((s) => s.queueSource);
   const radioOn = useMusicPlayerStore(selectRadioOn);
   const radioLoading = useMusicPlayerStore((s) => s.radioLoading);
   const radioQueuedIds = useMusicPlayerStore((s) => s.radioQueuedIds);
@@ -146,6 +147,12 @@ export function MusicQueuePane() {
           </button>
         )}
       </div>
+
+      {queueSource && (
+        <p className="mb-3 truncate px-1 text-xs text-chrome-neutral-400">
+          {getString("playing_from")} <span className="font-medium text-chrome-neutral-200">{queueSource}</span>
+        </p>
+      )}
 
       {/* Scroll area */}
       <div className="hide-scrollbar -mx-1 flex-1 overflow-y-auto px-1">

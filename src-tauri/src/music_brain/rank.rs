@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 use crate::flow_neuro::scoring::TimeBucket;
 
 use super::model::{DEFAULT_DISCOVERY_APPETITE, MusicBrain, pair_key};
+use super::profile::bucket_for;
 
 /// ACT-R base-level decay exponent (Anderson's standard ~0.5).
 const ACT_DECAY: f64 = 0.5;
@@ -143,6 +144,84 @@ pub fn heavy_rotation(brain: &MusicBrain, now_ms: u64, limit: usize) -> Vec<Stri
         .collect();
     scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     scored.into_iter().take(limit).map(|(t, _)| t).collect()
+}
+
+/// Familiar tracks from artists the user liked but has not played in three weeks.
+pub fn rediscover(brain: &MusicBrain, now_ms: u64, limit: usize) -> Vec<String> {
+    const STALE_MS: u64 = 21 * 24 * 60 * 60 * 1000;
+    let stale_before = now_ms.saturating_sub(STALE_MS);
+    let mut candidates: Vec<(&String, f64, String)> = Vec::new();
+    for (artist_key, affinity) in &brain.artist_affinity {
+        if affinity.plays < 3
+            || affinity.score < 0.25
+            || affinity.last_played == 0
+            || affinity.last_played >= stale_before
+            || brain.is_artist_blocked(artist_key)
+            || is_in_dislike_cooldown(brain, artist_key, now_ms)
+        {
+            continue;
+        }
+        let best = brain
+            .track_meta
+            .iter()
+            .filter(|(_, meta)| meta.artist_key == *artist_key)
+            .filter_map(|(track_id, _)| {
+                let stamps = brain.track_plays.get(track_id)?;
+                Some((
+                    track_id,
+                    stamps.len(),
+                    stamps.iter().max().copied().unwrap_or(0),
+                ))
+            })
+            .max_by_key(|(_, plays, newest)| (*plays, *newest));
+        if let Some((track_id, _, _)) = best {
+            candidates.push((artist_key, affinity.score, track_id.clone()));
+        }
+    }
+    candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    candidates
+        .into_iter()
+        .take(limit)
+        .map(|(_, _, id)| id)
+        .collect()
+}
+
+/// Tracks with at least two counted plays in the current local time bucket.
+pub fn time_of_day_rotation(brain: &MusicBrain, now_ms: u64, limit: usize) -> Vec<String> {
+    let Some(current_bucket) = bucket_for(now_ms) else {
+        return Vec::new();
+    };
+    let mut scored: Vec<(String, usize, f64)> = brain
+        .track_plays
+        .iter()
+        .filter(|(id, _)| {
+            brain.track_meta.get(*id).is_none_or(|meta| {
+                !brain.is_artist_blocked(&meta.artist_key)
+                    && !is_in_dislike_cooldown(brain, &meta.artist_key, now_ms)
+            })
+        })
+        .map(|(id, stamps)| {
+            let bucket_plays = stamps
+                .iter()
+                .filter(|stamp| bucket_for(**stamp) == Some(current_bucket))
+                .count();
+            (
+                id.clone(),
+                bucket_plays,
+                base_level_activation(brain, id, now_ms),
+            )
+        })
+        .filter(|(_, plays, _)| *plays >= 2)
+        .collect();
+    scored.sort_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then_with(|| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    scored
+        .into_iter()
+        .take(limit)
+        .map(|(id, _, _)| id)
+        .collect()
 }
 
 /// Squash an unbounded non-negative value into `0.0..1.0`.
@@ -633,5 +712,59 @@ mod tests {
         // Even on quick_picks where "a" has affinity, the cooldown sinks it below the unknown "b".
         let order = rank(&brain, &inputs, "quick_picks", 3_000);
         assert_eq!(order.first(), Some(&1));
+    }
+
+    fn titled_listen(brain: &mut MusicBrain, track: &str, artist: &str, at: u64) {
+        let sig = MusicSignal {
+            track_id: track.to_string(),
+            artist_key: artist.to_string(),
+            genre: None,
+            percent_played: 1.0,
+            is_explicit_like: false,
+            title: Some(track.to_string()),
+            artist_display: Some(artist.to_string()),
+            thumbnail: None,
+        };
+        apply_music_signal(brain, &sig, &newly_crossed(0.0, 1.0), at, None);
+    }
+
+    const DAY: u64 = 86_400_000;
+
+    #[test]
+    fn rediscover_surfaces_stale_favourites_only() {
+        let mut brain = MusicBrain::default();
+        let now = 400 * DAY;
+        for offset in 0..3 {
+            titled_listen(&mut brain, "old-hit", "old", now - 40 * DAY - offset * DAY);
+            titled_listen(&mut brain, "fresh-hit", "fresh", now - DAY - offset * 1_000);
+            titled_listen(
+                &mut brain,
+                "gone-hit",
+                "gone",
+                now - 40 * DAY - offset * DAY,
+            );
+        }
+        titled_listen(&mut brain, "old-deep", "old", now - 45 * DAY);
+        crate::music_brain::learn::block_music_artist(&mut brain, "gone");
+
+        assert_eq!(rediscover(&brain, now, 10), vec!["old-hit".to_string()]);
+    }
+
+    #[test]
+    fn time_rotation_needs_repeat_plays_in_the_current_bucket() {
+        let mut brain = MusicBrain::default();
+        let now = 400 * DAY;
+        titled_listen(&mut brain, "same-slot", "a", now - 7 * DAY);
+        titled_listen(&mut brain, "same-slot", "a", now - 14 * DAY);
+        titled_listen(&mut brain, "other-slot", "b", now - 7 * DAY - DAY / 2);
+        titled_listen(&mut brain, "other-slot", "b", now - 14 * DAY - DAY / 2);
+        titled_listen(&mut brain, "once", "c", now - 7 * DAY);
+
+        assert_eq!(
+            time_of_day_rotation(&brain, now, 10),
+            vec!["same-slot".to_string()]
+        );
+        crate::music_brain::learn::block_music_artist(&mut brain, "a");
+        assert!(time_of_day_rotation(&brain, now, 10).is_empty());
     }
 }

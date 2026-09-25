@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::db::music_content::GraphTaste;
 use crate::errors::ErrorResponse;
 use crate::models::music::{Artist, SongItem};
 use crate::music_brain::mixes::{DailyMixSeed, daily_mixes};
 use crate::music_brain::model::MusicBrain;
 use crate::music_brain::profile::{MusicTasteProfile, taste_profile};
-use crate::music_brain::rank::{RankInput, heavy_rotation, rank};
+use crate::music_brain::rank::{RankInput, heavy_rotation, rank, rediscover, time_of_day_rotation};
 use crate::music_brain::store::MusicBrainStore;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
@@ -35,8 +36,54 @@ fn song_to_input(song: &SongItem) -> RankInput {
     }
 }
 
+/// Seeds graph reads with the profile's top artists and hides every artist the user
+/// already knows, has disliked, or has blocked.
+pub(crate) fn graph_taste(brain: &MusicBrain) -> GraphTaste {
+    let seed_artists = taste_profile(brain, now_ms())
+        .top_artists
+        .into_iter()
+        .map(|artist| artist.key)
+        .collect();
+    let known_artists = brain
+        .artist_affinity
+        .keys()
+        .chain(brain.disliked_artists.keys())
+        .chain(brain.blocked_artists.iter())
+        .cloned()
+        .collect();
+    GraphTaste {
+        seed_artists,
+        known_artists,
+    }
+}
+
 fn now_ms() -> u64 {
     chrono::Utc::now().timestamp_millis() as u64
+}
+
+fn songs_from_ids(brain: &MusicBrain, ids: Vec<String>) -> Vec<SongItem> {
+    ids.into_iter()
+        .filter_map(|id| {
+            let meta = brain.track_meta.get(&id)?;
+            Some(SongItem {
+                id: id.clone(),
+                title: meta.title.clone(),
+                artists: vec![Artist {
+                    name: meta.artist.clone(),
+                    id: None,
+                }],
+                album: None,
+                duration: None,
+                music_video_type: None,
+                thumbnail: meta.thumbnail.clone(),
+                explicit: false,
+                video_id: Some(id),
+                playlist_id: None,
+                params: None,
+                views_text: None,
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -78,30 +125,34 @@ pub async fn get_heavy_rotation(
 ) -> CmdResult<Vec<SongItem>> {
     let now = now_ms();
     let brain = music_brain.read().await;
-    let songs = heavy_rotation(&brain, now, limit.clamp(1, 100))
-        .into_iter()
-        .filter_map(|id| {
-            let meta = brain.track_meta.get(&id)?;
-            Some(SongItem {
-                id: id.clone(),
-                title: meta.title.clone(),
-                artists: vec![Artist {
-                    name: meta.artist.clone(),
-                    id: None,
-                }],
-                album: None,
-                duration: None,
-                music_video_type: None,
-                thumbnail: meta.thumbnail.clone(),
-                explicit: false,
-                video_id: Some(id),
-                playlist_id: None,
-                params: None,
-                views_text: None,
-            })
-        })
-        .collect();
-    Ok(songs)
+    Ok(songs_from_ids(
+        &brain,
+        heavy_rotation(&brain, now, limit.clamp(1, 100)),
+    ))
+}
+
+#[tauri::command]
+pub async fn get_music_rediscover(
+    limit: usize,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<Vec<SongItem>> {
+    let brain = music_brain.read().await;
+    Ok(songs_from_ids(
+        &brain,
+        rediscover(&brain, now_ms(), limit.clamp(1, 100)),
+    ))
+}
+
+#[tauri::command]
+pub async fn get_music_time_rotation(
+    limit: usize,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<Vec<SongItem>> {
+    let brain = music_brain.read().await;
+    Ok(songs_from_ids(
+        &brain,
+        time_of_day_rotation(&brain, now_ms(), limit.clamp(1, 100)),
+    ))
 }
 
 #[tauri::command]

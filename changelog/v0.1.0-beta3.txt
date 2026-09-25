@@ -1,0 +1,18 @@
+FLOW DESKTOP CHANGE LOG
+VERSION: 0.1.0-beta3
+DATE: 2026-09-25
+STATUS: PRE-RELEASE
+
+ABOUT
+Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, no ads, no analytics, no telemetry. It is the desktop companion to Flow for Android.
+
+MUSIC
+- The music home opens instantly from a saved copy and refreshes in the background, and keeps showing your last feed when you are offline.
+- New shelves built on your listening: Listen Again, a morning, evening or late-night rotation, Speed Dial with one-click shuffle, Rediscover, Deep Cuts, Artists for You and releases from your favorite artists.
+- Charts follow the country set in Settings, Daily Mixes open as their own playable page, and a new Moods and genres browser lets you explore by feel.
+- Similar to now mixes in artists and playlists and links to the artist, community playlists can be sampled right from the home, Quick Picks no longer fill up with chart hits or one artist, and "See all" opens the right page.
+
+SUPPORTED DEVICES
+- Windows 10/11 (x64 and ARM64)
+- macOS 13+ (Intel and Apple Silicon)
+- Linux (x64 and ARM64 - AppImage, .deb, .rpm)

@@ -78,6 +78,7 @@ interface AlbumLibraryState {
   isSaved: (id: string) => boolean;
   toggle: (album: AlbumItem) => Promise<boolean>;
   createAlbum: (name: string, description?: string) => Promise<StoredAlbum>;
+  saveMix: (id: string, title: string, tracks: SongItem[]) => Promise<void>;
   removeAlbum: (id: string) => Promise<void>;
   addTrack: (albumId: string, track: SongItem) => Promise<void>;
   removeTrack: (albumId: string, trackVideoId: string) => Promise<void>;
@@ -155,6 +156,23 @@ export const useAlbumLibraryStore = create<AlbumLibraryState>((set, get) => ({
     set({ albums: updated });
     await persist(updated);
     return album;
+  },
+
+  saveMix: async (id, title, tracks) => {
+    const previous = get().albums;
+    const album: StoredAlbum = {
+      id, title, source: "Owned", tracks,
+      thumbnail: tracks[0]?.thumbnail ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    const next = [...previous.filter((item) => item.id !== id), album];
+    set({ albums: next });
+    try {
+      await setSetting(ALBUMS_SETTING_KEY, JSON.stringify(next));
+    } catch (error) {
+      set({ albums: previous });
+      throw error;
+    }
   },
 
   removeAlbum: async (id) => {

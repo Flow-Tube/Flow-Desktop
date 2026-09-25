@@ -293,7 +293,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.NOTIFICATIONS_ENABLED, "content", true, "wired"),
   str(SETTINGS.NOTIFICATION_CHECK_INTERVAL, "content", "360", "wired", ["15", "30", "60", "180", "360", "720", "1440"]),
   bool(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, "content", true, "wired"),
-  str(SETTINGS.TRENDING_REGION, "content", "US", "persisted-only"),
+  str(SETTINGS.TRENDING_REGION, "content", "US", "wired"),
   // Session state, not a preference: exporting it can permanently mute history recording
   // on the restoring device (its paired activated_at timestamp is internal too).
   bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired", "internal"),

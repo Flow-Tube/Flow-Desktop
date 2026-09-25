@@ -102,6 +102,11 @@ export interface MoodAndGenreItem {
   params: string | null;
 }
 
+export interface MoodAndGenreGroup {
+  title: string;
+  items: MoodAndGenreItem[];
+}
+
 export interface ExplorePage {
   newReleaseAlbums: AlbumItem[];
   moodAndGenres: MoodAndGenreItem[];
@@ -110,11 +115,15 @@ export interface ExplorePage {
 export interface ChartSection {
   title: string;
   items: YTItem[];
-  chartType: string; // "Trending" | "Top" | "Genre" | "NewReleases"
+  chartType: 'Songs' | 'Playlists' | 'Artists' | 'NewReleases' | 'Mixed';
 }
 
 export interface ChartsPage {
   sections: ChartSection[];
+  /** Null when charts fall back to Global. */
+  countryCode: string | null;
+  /** The service's own name for the returned country (or Global). */
+  countryLabel: string | null;
   continuation: string | null;
 }
 
@@ -131,12 +140,18 @@ export interface MusicShelf {
   browseId: string | null;
   params: string | null;
   items: YTItem[];
+  source?: string;
 }
 
 export interface MusicHomePage {
   chips: MusicHomeChip[];
   sections: MusicShelf[];
   continuation: string | null;
+}
+
+export interface CachedMusicHomePage {
+  page: MusicHomePage;
+  fetchedAt: number;
 }
 
 export interface MusicSearchSection {
@@ -160,6 +175,7 @@ export interface MusicSearchSuggestions {
 
 export interface AlbumPage {
   album: AlbumItem;
+  otherVersions: AlbumItem[];
   description: string | null;
   songCount: number | null;
   durationText: string | null;
@@ -179,10 +195,27 @@ export interface MusicPlaylistPage {
 }
 
 export interface RelatedPage {
+  sections: RelatedShelf[];
   songs: SongItem[];
+  otherPerformances: SongItem[];
   albums: AlbumItem[];
   artists: ArtistItem[];
   playlists: PlaylistItem[];
+}
+
+export type RelatedShelfType =
+  | 'similar'
+  | 'playlists'
+  | 'otherPerformances'
+  | 'similarArtists'
+  | 'moreFromArtist'
+  | 'unknown';
+
+export interface RelatedShelf {
+  shelfType: RelatedShelfType;
+  title: string;
+  artistBrowseId: string | null;
+  items: YTItem[];
 }
 
 /** A Daily Mix cluster from the music brain: a label + seed tracks to expand. */

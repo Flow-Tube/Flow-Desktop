@@ -1,143 +1,145 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  getMusicChartsPage,
+  getCachedMusicHomePage,
   getMusicHomePage,
   getMusicMoodGenre,
   getMusicNewReleases,
 } from './api/music';
 import { getBackendErrorMessage } from './api/errors';
+import { recordDiagnostic } from './diagnostics';
 import { getString } from './i18n/index';
-import type { AlbumItem, MusicHomeChip, MusicShelf, SongItem, YTItem } from '../types/music';
+import type { AlbumItem, MusicHomeChip, MusicHomePage, MusicShelf, YTItem } from '../types/music';
 
 export interface MusicHomeData {
   chips: MusicHomeChip[];
-  quickPicks: SongItem[];
   sections: MusicShelf[];
 }
 
-const EAGER_PAGES = 3;
-const QUICK_PICKS_MAX = 24;
+export const MUSIC_HOME_CACHE_FRESH_MS = 4 * 60 * 60 * 1000;
 
-const songsOf = (items: YTItem[]): SongItem[] =>
-  items.filter((i): i is Extract<YTItem, { type: 'song' }> => i.type === 'song');
-
-const isQuickPicks = (items: YTItem[]) => {
-  const songs = songsOf(items).length;
-  return songs >= 4 && songs >= items.length / 2;
-};
-
-function pickQuickPicks(sections: MusicShelf[]): { quickPicks: SongItem[]; rest: MusicShelf[] } {
-  const rest: MusicShelf[] = [];
-  let quickPicks: SongItem[] = [];
-  for (const section of sections) {
-    if (quickPicks.length === 0 && isQuickPicks(section.items)) {
-      quickPicks = songsOf(section.items).slice(0, QUICK_PICKS_MAX);
-      continue;
-    }
-    rest.push(section);
-  }
-  if (quickPicks.length === 0) {
-    quickPicks = rest.flatMap((s) => songsOf(s.items)).slice(0, QUICK_PICKS_MAX);
-  }
-  return { quickPicks, rest };
+function sectionKey(section: MusicShelf): string {
+  if (section.browseId) return `browse:${section.browseId}:${section.params ?? ''}`;
+  const itemKeys = section.items.slice(0, 3).map((item) => {
+    if ('id' in item) return item.id;
+    if ('browseId' in item) return item.browseId;
+    return '';
+  });
+  return `${section.title}:${itemKeys.join(',')}`;
 }
 
+/**
+ * The Innertube music home: paints the typed SQLite cache first, refreshes it when
+ * older than four hours, and keeps the last good page if the network fails. New
+ * releases load independently; charts live in `useMusicCharts`.
+ */
 export function useMusicHome() {
   const [data, setData] = useState<MusicHomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 
   const reqRef = useRef(0);
   const contRef = useRef<string | null>(null);
+  const fromCacheRef = useRef(false);
   const sectionsRef = useRef<MusicShelf[]>([]);
-  const seenTitlesRef = useRef<Set<string>>(new Set());
+  const releasesRef = useRef<MusicShelf | null>(null);
+  const seenSectionsRef = useRef<Set<string>>(new Set());
   const chipsRef = useRef<MusicHomeChip[]>([]);
-  const quickPicksRef = useRef<SongItem[]>([]);
   const loadingMoreRef = useRef(false);
   const busyRef = useRef(false);
 
-  const publish = () =>
+  const publish = useCallback(() => {
     setData({
       chips: chipsRef.current,
-      quickPicks: quickPicksRef.current,
-      sections: [...sectionsRef.current],
+      sections: releasesRef.current ? [...sectionsRef.current, releasesRef.current] : [...sectionsRef.current],
     });
+  }, []);
 
-  const addSections = (incoming: MusicShelf[]) => {
+  const addSections = useCallback((incoming: MusicShelf[]) => {
     for (const section of incoming) {
-      const key = (section.title || '').trim().toLowerCase();
-      if (key && seenTitlesRef.current.has(key)) continue;
-      if (key) seenTitlesRef.current.add(key);
+      const key = sectionKey(section);
+      if (seenSectionsRef.current.has(key)) continue;
+      seenSectionsRef.current.add(key);
       sectionsRef.current.push(section);
     }
-  };
+  }, []);
+
+  const applyHome = useCallback((home: MusicHomePage, fromCache: boolean) => {
+    chipsRef.current = home.chips ?? [];
+    sectionsRef.current = [];
+    seenSectionsRef.current = new Set();
+    addSections(home.sections ?? []);
+    contRef.current = home.continuation ?? null;
+    fromCacheRef.current = fromCache;
+    publish();
+  }, [addSections, publish]);
 
   const load = useCallback(async () => {
     const req = ++reqRef.current;
+    const started = performance.now();
     busyRef.current = true;
     setLoading(true);
     setError(null);
+    setLoadMoreError(null);
     setLoadingMore(false);
     contRef.current = null;
     sectionsRef.current = [];
-    seenTitlesRef.current = new Set();
+    releasesRef.current = null;
+    seenSectionsRef.current = new Set();
     chipsRef.current = [];
-    quickPicksRef.current = [];
+    let painted = false;
+    const markFirstContent = (source: 'cache' | 'network') => {
+      if (painted) return;
+      painted = true;
+      setLoading(false);
+      recordDiagnostic('music-home', `first content from ${source} in ${Math.round(performance.now() - started)}ms`);
+    };
+
+    void getMusicNewReleases().then((releases: AlbumItem[]) => {
+      if (reqRef.current !== req || !releases.length) return;
+      releasesRef.current = {
+        title: getString('music_new_releases'),
+        subtitle: null,
+        browseId: null,
+        params: null,
+        source: 'newReleases',
+        items: releases.map((album) => ({ type: 'album' as const, ...album })),
+      };
+      publish();
+    }).catch(() => undefined);
 
     try {
-      const home = await getMusicHomePage();
+      const cached = await getCachedMusicHomePage().catch(() => null);
       if (reqRef.current !== req) return;
-
-      chipsRef.current = home.chips ?? [];
-      const { quickPicks, rest } = pickQuickPicks(home.sections ?? []);
-      quickPicksRef.current = quickPicks;
-      addSections(rest);
-      contRef.current = home.continuation ?? null;
-      publish();
-      setLoading(false);
-
-      for (let i = 0; i < EAGER_PAGES && contRef.current; i += 1) {
-        const more = await getMusicHomePage(contRef.current);
-        if (reqRef.current !== req) return;
-        contRef.current = more.continuation ?? null;
-        addSections(more.sections ?? []);
-        publish();
+      if (cached) {
+        applyHome(cached.page, true);
+        markFirstContent('cache');
       }
-
-      const [charts, newReleases] = await Promise.all([
-        getMusicChartsPage().catch(() => null),
-        getMusicNewReleases().catch(() => [] as AlbumItem[]),
-      ]);
-      if (reqRef.current !== req) return;
-
-      const extra: MusicShelf[] = [];
-      if (newReleases.length) {
-        extra.push({
-          title: getString('music_new_releases'),
-          subtitle: null,
-          browseId: null,
-          params: null,
-          items: newReleases.map((a) => ({ type: 'album' as const, ...a })),
-        });
+      const fresh = cached && Date.now() - cached.fetchedAt * 1000 < MUSIC_HOME_CACHE_FRESH_MS;
+      if (!fresh) {
+        try {
+          const home = await getMusicHomePage();
+          if (reqRef.current !== req) return;
+          applyHome(home, false);
+          markFirstContent('network');
+        } catch (e) {
+          if (reqRef.current === req) setError(getBackendErrorMessage(e));
+        }
       }
-      for (const cs of charts?.sections ?? []) {
-        extra.push({ title: cs.title, subtitle: null, browseId: null, params: null, items: cs.items });
-      }
-      addSections(extra);
-      publish();
-    } catch (e) {
-      if (reqRef.current === req) setError(getBackendErrorMessage(e));
     } finally {
-      busyRef.current = false;
-      if (reqRef.current === req) setLoading(false);
+      if (reqRef.current === req) {
+        busyRef.current = false;
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [applyHome, publish]);
 
   const loadMore = useCallback(async () => {
     if (busyRef.current || loadingMoreRef.current || !contRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
+    setLoadMoreError(null);
     const req = reqRef.current;
     try {
       const more = await getMusicHomePage(contRef.current);
@@ -145,19 +147,32 @@ export function useMusicHome() {
       contRef.current = more.continuation ?? null;
       addSections(more.sections ?? []);
       publish();
-    } catch {
-      contRef.current = null;
+    } catch (e) {
+      if (reqRef.current !== req) return;
+      if (fromCacheRef.current) {
+        // A cached page can carry an expired continuation; refetch the first page
+        // for a live token instead of stranding the feed.
+        try {
+          const home = await getMusicHomePage();
+          if (reqRef.current === req) applyHome(home, false);
+        } catch (refreshError) {
+          if (reqRef.current === req) setLoadMoreError(getBackendErrorMessage(refreshError));
+        }
+      } else {
+        setLoadMoreError(getBackendErrorMessage(e));
+      }
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, []);
+  }, [addSections, applyHome, publish]);
 
   useEffect(() => {
     void load();
+    return () => { reqRef.current += 1; };
   }, [load]);
 
-  return { data, loading, error, reload: load, loadMore, hasMore: !!contRef.current, loadingMore };
+  return { data, loading, error, reload: load, loadMore, hasMore: !!contRef.current, loadingMore, loadMoreError };
 }
 
 export function useMusicChipFilter(chip: MusicHomeChip | null) {
@@ -165,6 +180,7 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const reqRef = useRef(0);
   const contRef = useRef<string | null>(null);
@@ -197,7 +213,7 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
       .finally(() => {
         if (reqRef.current === req) setLoading(false);
       });
-  }, [browseId, params]);
+  }, [browseId, params, retryKey]);
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !contRef.current || !browseId) return;
@@ -209,13 +225,13 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
       if (reqRef.current !== req) return;
       contRef.current = res.continuation ?? null;
       setItems((prev) => [...prev, ...res.items]);
-    } catch {
-      contRef.current = null;
+    } catch (e) {
+      if (reqRef.current === req) setError(getBackendErrorMessage(e));
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }, [browseId, params]);
 
-  return { items, loading, error, loadMore, hasMore: !!contRef.current, loadingMore };
+  return { items, loading, error, reload: () => setRetryKey((key) => key + 1), loadMore, hasMore: !!contRef.current, loadingMore };
 }

@@ -172,6 +172,9 @@ interface MusicPlayerState {
   // Session only: the saved setting governs queues that run out on their own.
   radioStationActive: boolean;
 
+  /** Where the current queue was started from ("Playing from …"); null for ad-hoc plays. */
+  queueSource: string | null;
+
   // --- radio / autoplay ---
   radioLoading: boolean;
   radioQueuedIds: string[];
@@ -186,7 +189,7 @@ interface MusicPlayerState {
 
   // --- intents (called by UI) ---
   playTrack: (track: SongItem) => Promise<void>;
-  playQueue: (tracks: SongItem[], startIndex?: number) => Promise<void>;
+  playQueue: (tracks: SongItem[], startIndex?: number, source?: string | null) => Promise<void>;
   togglePlay: () => void;
   play: () => void;
   pause: () => void;
@@ -259,6 +262,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   isShuffle: initialConfig.isShuffle,
   radioEnabled: initialConfig.radioEnabled,
   radioStationActive: false,
+  queueSource: null,
   radioLoading: false,
   radioQueuedIds: [],
 
@@ -272,14 +276,14 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   playTrack: async (track) => {
     resetRadioSession([videoIdOf(track)]);
-    set({ queue: [track], radioQueuedIds: [], radioStationActive: false });
+    set({ queue: [track], radioQueuedIds: [], radioStationActive: false, queueSource: null });
     await get()._loadIndex(0);
   },
 
-  playQueue: async (tracks, startIndex = 0) => {
+  playQueue: async (tracks, startIndex = 0, source = null) => {
     if (tracks.length === 0) return;
     resetRadioSession(tracks.map(videoIdOf));
-    set({ queue: tracks, radioQueuedIds: [], radioStationActive: false });
+    set({ queue: tracks, radioQueuedIds: [], radioStationActive: false, queueSource: source });
     await get()._loadIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
   },
 
@@ -448,6 +452,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     set({
       currentTrack: null,
       queue: [],
+      queueSource: null,
       radioQueuedIds: [],
       radioStationActive: false,
       currentIndex: -1,
@@ -644,8 +649,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   clearQueue: () => {
     const { currentTrack, currentIndex } = get();
-    if (currentTrack) set({ queue: [currentTrack], currentIndex: 0 });
-    else set({ queue: [], currentIndex: -1 });
+    if (currentTrack) set({ queue: [currentTrack], currentIndex: 0, queueSource: null });
+    else set({ queue: [], currentIndex: -1, queueSource: null });
     void currentIndex;
   },
 

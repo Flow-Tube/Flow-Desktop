@@ -41,18 +41,21 @@ use commands::downloads::{
 };
 use commands::files::write_backup_file;
 use commands::music::{
-    get_music_album_continuation, get_music_album_page, get_music_artist_items,
-    get_music_artist_page, get_music_charts_page, get_music_explore_page, get_music_home_page,
-    get_music_lyrics_typed, get_music_mood_genre, get_music_moods, get_music_new_releases,
+    get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
+    get_music_artist_items, get_music_artist_page, get_music_charts_page, get_music_deep_cuts,
+    get_music_explore_page, get_music_home_page, get_music_linked_artists, get_music_lyrics_typed,
+    get_music_mood_genre, get_music_mood_groups, get_music_moods, get_music_new_releases,
     get_music_playlist_continuation, get_music_playlist_page, get_music_queue,
-    get_music_queue_continuation, get_music_related_typed, get_music_search_suggestions,
-    get_music_search_summary, get_music_stream, get_music_watch_queue, lyrics_http_get,
-    proxy_image_url, search_music_continuation, search_music_typed,
+    get_music_queue_continuation, get_music_related_typed, get_music_request_diagnostics,
+    get_music_search_suggestions, get_music_search_summary, get_music_stream,
+    get_music_watch_queue, lyrics_http_get, proxy_image_url, search_music_continuation,
+    search_music_typed,
 };
 use commands::music_brain::{
     block_music_artist, dislike_music_artist, get_blocked_music_artists, get_daily_mixes,
-    get_heavy_rotation, get_music_brain_snapshot, get_music_taste_profile, rank_music_candidates,
-    record_music_interaction, reset_music_brain, unblock_music_artist,
+    get_heavy_rotation, get_music_brain_snapshot, get_music_rediscover, get_music_taste_profile,
+    get_music_time_rotation, rank_music_candidates, record_music_interaction, reset_music_brain,
+    unblock_music_artist,
 };
 use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
@@ -247,10 +250,8 @@ pub fn run() {
             // Initialize native Innertube extractor (shared by the video path and
             // the additive YouTube Music subsystem).
             let extractor = Arc::new(InnertubeClient::new(app.handle()));
-            let music_service = MusicService::new(extractor.clone());
-            let youtube_service = YoutubeService::new(extractor);
+            let youtube_service = YoutubeService::new(extractor.clone());
             app.manage(youtube_service);
-            app.manage(music_service);
 
             // Initialize SQLite database
             let pool = tauri::async_runtime::block_on(async {
@@ -265,6 +266,14 @@ pub fn run() {
 
             // Manage database pool
             app.manage(pool.clone());
+            app.manage(MusicService::new(extractor, pool.clone()));
+
+            let music_pool = pool.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = db::music_content::prune(&music_pool).await {
+                    tracing::warn!(%error, "Could not prune public music content graph");
+                }
+            });
 
             // Run DeArrow cache cleanup asynchronously
             let pool_clone = pool.clone();
@@ -457,9 +466,12 @@ pub fn run() {
             reset_shorts_feed,
             // --- YouTube Music subsystem (additive) ---
             get_music_home_page,
+            get_cached_music_home_page,
+            get_music_request_diagnostics,
             get_music_explore_page,
             get_music_charts_page,
             get_music_moods,
+            get_music_mood_groups,
             get_music_new_releases,
             get_music_mood_genre,
             get_music_artist_items,
@@ -476,6 +488,8 @@ pub fn run() {
             get_music_queue_continuation,
             get_music_queue,
             get_music_related_typed,
+            get_music_deep_cuts,
+            get_music_linked_artists,
             get_music_lyrics_typed,
             lyrics_http_get,
             get_music_stream,
@@ -488,6 +502,8 @@ pub fn run() {
             get_blocked_music_artists,
             rank_music_candidates,
             get_heavy_rotation,
+            get_music_rediscover,
+            get_music_time_rotation,
             get_daily_mixes,
             get_music_brain_snapshot,
             get_music_taste_profile,

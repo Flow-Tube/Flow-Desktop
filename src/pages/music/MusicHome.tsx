@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
@@ -8,9 +8,9 @@ import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { CommunityPlaylistCard } from '../../components/music/CommunityPlaylistCard';
 import { MusicMoodShelf } from '../../components/music/MusicMoodShelf';
 import { MusicQuickPicksShelf } from '../../components/music/MusicQuickPicksShelf';
+import { MusicSpeedDial } from '../../components/music/MusicSpeedDial';
 import { MusicShelf } from '../../components/music/MusicShelf';
 import { Button } from '../../components/ui/Button';
-import { Select } from '../../components/ui/Select';
 import { useMusicChipFilter, useMusicHome } from '../../lib/useMusicHome';
 import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
 import { useMusicDiscoverySections } from '../../lib/useMusicDiscoverySections';
@@ -18,9 +18,9 @@ import { useMusicCharts } from '../../lib/useMusicCharts';
 import { useMusicMoods } from '../../lib/useMusicMoods';
 import { composeMusicFeed, type MusicFeedSection } from '../../lib/musicFeedComposer';
 import { musicSeeAllRoute } from '../../lib/musicRoutes';
+import { shuffled } from '../../lib/musicRecall';
 import { usePreference } from '../../lib/usePreference';
 import { SETTINGS } from '../../lib/settings/schema';
-import { REGION_OPTIONS } from '../../lib/regionOptions';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { getString } from '../../lib/i18n/index';
@@ -31,6 +31,9 @@ const songsOf = (items: YTItem[]): SongItem[] =>
   items.filter((i): i is Extract<YTItem, { type: 'song' }> => i.type === 'song');
 
 const renderable = (item: YTItem) => item.type !== 'episode' && item.type !== 'podcast';
+
+// Three full rows of tiles on the widest layout.
+const MOOD_TILES = 18;
 
 function SquareSkeleton({ fill }: { fill?: boolean }) {
   return (
@@ -51,7 +54,7 @@ export default function MusicHome() {
   const { data, loading, error, reload, loadMore, hasMore, loadingMore, loadMoreError } = useMusicHome();
   const personalization = useMusicPersonalization();
   const discoverySections = useMusicDiscoverySections();
-  const [chartCountry, setChartCountry] = usePreference(SETTINGS.TRENDING_REGION, 'US');
+  const [chartCountry] = usePreference(SETTINGS.TRENDING_REGION, 'US');
   const charts = useMusicCharts(chartCountry);
   const moods = useMusicMoods();
   const isHidden = useMusicHiddenFilter();
@@ -106,7 +109,7 @@ export default function MusicHome() {
   const openAlbum = (a: AlbumItem) => navigate(`/music/album/${a.browseId}`);
   const openArtist = (a: ArtistItem) => navigate(`/music/artist/${a.id}`);
   const openPlaylist = (p: PlaylistItem) => navigate(`/music/playlist/${p.id}`);
-  const moodItems = moods.groups.flatMap((group) => group.items).slice(0, 16);
+  const moodItems = moods.groups.flatMap((group) => group.items).slice(0, MOOD_TILES);
   const openMood = (mood: MoodAndGenreItem) =>
     navigate(musicSeeAllRoute(mood.browseId, mood.params, mood.title));
 
@@ -186,44 +189,56 @@ export default function MusicHome() {
     }
 
     const quickPicks = personalization.quickPicks.filter((track) => !isHidden(track));
-    const personalSections = [
-      ...personalization.sections.filter((section) => section.id === 'on-repeat'),
-      ...discoverySections,
-      ...personalization.sections.filter((section) => section.id !== 'on-repeat'),
-    ];
-    const feedSections = composeMusicFeed(
-      personalSections.map((section) => ({ ...section, items: visible(section.items) })),
+    const feed = composeMusicFeed(
+      [...personalization.sections, ...discoverySections]
+        .map((section) => ({ ...section, items: visible(section.items) })),
       [...(data?.sections ?? []), ...charts].map((section) => ({ ...section, items: visible(section.items) })),
-      personalization.maturity, quickPicks,
+      personalization.maturity, quickPicks, { hasMoods: moodItems.length > 0 },
     );
 
-    const seeAll = (section: MusicFeedSection, items: YTItem[]) => {
-      if (section.route) return () => navigate(section.route as string);
+    const headerActions = (section: MusicFeedSection, items: YTItem[]) => {
+      if (section.route) return { onNavigate: () => navigate(section.route as string) };
+      if (section.playAll) {
+        const songs = songsOf(items);
+        return { onPlayAll: () => void playQueue(songs, 0, section.title) };
+      }
       if (section.browseId) {
         const route = musicSeeAllRoute(section.browseId, section.params, section.title, items);
-        return () => navigate(route);
+        return { onSeeAll: () => navigate(route) };
       }
-      return undefined;
+      return {};
     };
 
     const renderShelf = (section: MusicFeedSection) => {
       const items = visible(section.items.filter(renderable)).slice(0, 20);
       if (items.length === 0) return null;
       const songContext = songsOf(items);
-      const shape = items[0]?.type === 'artist' ? 'circle' : 'square';
+      if (section.id === 'speed-dial') {
+        return (
+          <MusicSpeedDial
+            title={section.title}
+            tracks={songContext}
+            onPlay={(track) => playTrack(track, songContext, section.title)}
+            onShuffle={() => void playQueue(shuffled(songContext), 0, section.title)}
+            onQueue={addToQueue}
+          />
+        );
+      }
       return (
         <MusicShelf
           title={section.title}
           subtitle={section.subtitle}
+          seedArt={section.seedArt}
           items={items}
-          onSeeAll={seeAll(section, items)}
-          skeletonShape={shape}
+          {...headerActions(section, items)}
+          skeletonShape={items[0]?.type === 'artist' ? 'circle' : 'square'}
           renderItem={(item) => {
             const preview = item.type === 'playlist'
               ? (section.previews?.[item.id] ?? []).filter((track) => !isHidden(track)) : [];
             return item.type === 'playlist' && preview.length > 0
               ? <CommunityPlaylistCard playlist={item} preview={preview}
                   onOpen={() => openPlaylist(item)}
+                  onPlay={() => void playQueue(preview, 0, item.title)}
                   onPlayPreview={(track) => playTrack(track, preview, item.title)} />
               : renderCard(item, songContext, section.title);
           }}
@@ -231,53 +246,43 @@ export default function MusicHome() {
       );
     };
 
-    if (!quickPicks.length && !feedSections.length && !loading && !moodItems.length) {
+    if (!feed.length && !loading) {
       return <p className="py-20 text-center text-sm text-chrome-neutral-400">{t('musicEmpty')}</p>;
     }
     const quickTitle = getString('music_quick_picks');
-    const quickShelf = (
-      <MusicQuickPicksShelf
-        key="quick-picks"
-        title={quickTitle}
-        tracks={quickPicks}
-        onPlay={(track) => playTrack(track, quickPicks, quickTitle)}
-        onQueue={addToQueue}
-      />
+    return (
+      <div className="flex flex-col gap-10">
+        {feed.map((entry) => {
+          if (entry.kind === 'quickPicks') {
+            return (
+              <MusicQuickPicksShelf
+                key="quick-picks"
+                title={quickTitle}
+                tracks={quickPicks}
+                onPlay={(track) => playTrack(track, quickPicks, quickTitle)}
+                onQueue={addToQueue}
+              />
+            );
+          }
+          if (entry.kind === 'moods') {
+            return (
+              <MusicMoodShelf
+                key="moods"
+                title={t('musicMoodsAndGenres')}
+                moods={moodItems}
+                onOpen={openMood}
+                onBrowse={() => navigate('/music/moods')}
+              />
+            );
+          }
+          return <div key={entry.section.id}>{renderShelf(entry.section)}</div>;
+        })}
+      </div>
     );
-    const moodShelf = (
-      <MusicMoodShelf
-        key="moods"
-        title={t('musicMoodsAndGenres')}
-        moods={moodItems}
-        onOpen={openMood}
-        onSeeAll={() => navigate('/music/moods')}
-      />
-    );
-    // A first-run home leads with charts/releases, then Quick Picks and moods; a warm one
-    // leads with Quick Picks and personal shelves, with moods before the generic feed.
-    const cold = personalization.maturity === 'cold_start';
-    const leadCount = cold
-      ? feedSections.filter((section) => section.origin === 'anchor').length
-      : 0;
-    const firstGeneric = feedSections.findIndex((section) => section.origin !== 'personal');
-    const moodIndex = cold ? leadCount : firstGeneric === -1 ? feedSections.length : firstGeneric;
-    const rows: React.ReactNode[] = feedSections.map((section) => (
-      <div key={section.id}>{renderShelf(section)}</div>
-    ));
-    rows.splice(moodIndex, 0, moodShelf);
-    rows.splice(leadCount, 0, quickShelf);
-    return <div className="flex flex-col gap-10">{rows}</div>;
   };
 
   return (
     <div className="px-6 py-6 lg:px-8">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <Button variant="secondary" onClick={() => navigate('/music/moods')}>{t('musicBrowse')}</Button>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-chrome-neutral-400">{t('musicChartCountry')}</span>
-          <Select value={chartCountry} onChange={setChartCountry} options={REGION_OPTIONS} />
-        </div>
-      </div>
       <CategoryChips
         categories={categories}
         activeCategory={activeMood}

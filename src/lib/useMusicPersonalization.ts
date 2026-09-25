@@ -16,6 +16,7 @@ import {
   MIN_SHELF_ITEMS,
   audioMusicOnly,
   chartsSongs,
+  interleaveSimilar,
   ranked,
   recallArtist,
   relatedSongs,
@@ -26,7 +27,7 @@ import {
   ytItemId,
 } from './musicRecall';
 import { useMusicPlayerStore } from '../store/useMusicPlayerStore';
-import type { MusicTasteProfile, PlaylistItem, SongItem, YTItem } from '../types/music';
+import type { MusicSeedArt, MusicTasteProfile, PlaylistItem, SongItem, YTItem } from '../types/music';
 import type { WatchHistoryRecord } from '../types/db';
 
 export interface PersonalSection {
@@ -34,7 +35,11 @@ export interface PersonalSection {
   title: string;
   subtitle?: string;
   items: YTItem[];
+  /** The whole header opens this route. */
   route?: string;
+  seedArt?: MusicSeedArt;
+  /** The header offers Play all over the section's songs. */
+  playAll?: boolean;
   previews?: Record<string, SongItem[]>;
 }
 
@@ -59,6 +64,9 @@ const ARTIST_GRAPH_SHELF_SIZE = 14;
 const ARTIST_GRAPH_MAX_FETCHES = 8; // hard cap on artist-page fetches per home build
 
 const COMMUNITY_PREVIEWS = 6;
+const COMMUNITY_PREVIEW_MIN = 3;
+// Two tracks already make a repeat pattern, so On Repeat appears sooner than other shelves.
+const ON_REPEAT_MIN = 2;
 
 // Cross-reload repetition guard: a session-scoped FIFO ring of recently-surfaced track ids.
 // Discovery/recall shelves avoid these so reloading the home yields fresh content; On Repeat
@@ -99,6 +107,8 @@ interface SimilarAnchor {
   key: string;
   name: string;
   seed: string;
+  /** The key is a browse id, so the anchor has an artist page and photo. */
+  idKeyed: boolean;
 }
 
 // "Similar to {Artist}" — song-radio around the user's favorite artists. Anchors are taken
@@ -119,7 +129,7 @@ async function buildSimilarTo(
     if (usedAnchors.has(a.key)) continue;
     const seed = seeds.get(a.key);
     if (!seed) continue;
-    anchors.push({ key: a.key, name: a.name, seed });
+    anchors.push({ key: a.key, name: a.name, seed, idKeyed: a.idKeyed });
     if (anchors.length >= SIMILAR_MAX_ANCHORS) break;
   }
   if (anchors.length === 0) {
@@ -140,7 +150,7 @@ async function buildSimilarTo(
       if (!seed) continue;
       const key = (recs[0]?.channelId ?? '').trim() || artist.toLowerCase();
       if (usedAnchors.has(key)) continue;
-      anchors.push({ key, name: artist, seed });
+      anchors.push({ key, name: artist, seed, idKeyed: false });
     }
   }
 
@@ -148,35 +158,46 @@ async function buildSimilarTo(
   const seenSeeds = new Set<string>();
   for (const anchor of anchors) {
     usedAnchors.add(anchor.key);
-    const page = await getMusicRelatedTyped(anchor.seed).catch(() => null);
+    const [page, artist] = await Promise.all([
+      getMusicRelatedTyped(anchor.seed).catch(() => null),
+      anchor.idKeyed ? recallArtist(anchor.key) : Promise.resolve(null),
+    ]);
     if (!page) continue;
+    const artistRoute = anchor.idKeyed ? `/music/artist/${anchor.key}` : undefined;
     const songs = takeUnused(await ranked(audioMusicOnly(page.songs), 'similar'), 10, used, avoid);
-    const mixed: YTItem[] = [
-      ...songs.map(toYTSong),
-      ...page.artists.slice(0, 2).map((item) => ({ type: 'artist' as const, ...item })),
-      ...page.playlists.slice(0, 2).map((item) => ({ type: 'playlist' as const, ...item })),
-    ];
-    if (mixed.length >= MIN_SHELF_ITEMS) {
+    const row = interleaveSimilar(songs.map(toYTSong), [
+      page.artists.slice(0, 2).map((item) => ({ type: 'artist' as const, ...item })),
+      page.playlists.slice(0, 2).map((item) => ({ type: 'playlist' as const, ...item })),
+    ]);
+    if (row.length >= MIN_SHELF_ITEMS) {
       seenSeeds.add(anchor.seed);
       sections.push({
         id: `similar-${anchor.key}`,
         title: anchor.name,
         subtitle: getString('music_similar_to'),
-        items: mixed,
+        seedArt: artist?.header.thumbnail ? { url: artist.header.thumbnail, round: true } : undefined,
+        route: artistRoute,
+        items: row,
       });
     }
+    // Alternate recordings of the seed song itself, so the header names that song.
     const performances = page.otherPerformances.slice(0, 12).map(toYTSong);
     if (performances.length >= 3) sections.push({
-      id: `performances-${anchor.key}`, title: i18n.t('musicOtherPerformances'),
-      subtitle: anchor.name, items: performances,
+      id: `performances-${anchor.key}`,
+      title: history.find((record) => record.videoId === anchor.seed)?.title ?? anchor.name,
+      subtitle: i18n.t('musicOtherPerformances'),
+      playAll: true,
+      items: performances,
     });
     const albums = page.albums.slice(0, 12).map((item) => ({ type: 'album' as const, ...item }));
     // The related page titles this shelf with the artist's name and links it to the artist.
     const moreFrom = page.sections.find((section) => section.shelfType === 'moreFromArtist');
+    const moreFromId = moreFrom?.artistBrowseId;
     if (albums.length >= 3) sections.push({
       id: `artist-albums-${anchor.key}`,
-      title: i18n.t('musicMoreFromArtist', { artist: moreFrom?.title || anchor.name }),
-      route: moreFrom?.artistBrowseId ? `/music/artist/${moreFrom.artistBrowseId}` : undefined,
+      title: moreFrom?.title || anchor.name,
+      subtitle: i18n.t('musicMoreFrom'),
+      route: moreFromId ? `/music/artist/${moreFromId}` : artistRoute,
       items: albums,
     });
   }
@@ -313,10 +334,12 @@ async function buildFromCommunity(
     const playlist = playlists[index];
     if (playlist && page) previews[playlist.id] = audioMusicOnly(page.songs).slice(0, 10);
   });
+  // Sampler cards need tracks to sample; plain covers are the fallback when too few load.
+  const sampled = playlists.filter((playlist) => (previews[playlist.id]?.length ?? 0) >= COMMUNITY_PREVIEW_MIN);
   return {
     id: 'from-community',
     title: getString('music_from_community'),
-    items: playlists.map((playlist) => ({ type: 'playlist' as const, ...playlist })),
+    items: (sampled.length >= 2 ? sampled : playlists).map((playlist) => ({ type: 'playlist' as const, ...playlist })),
     previews,
   };
 }
@@ -327,7 +350,7 @@ async function buildHeavyRotation(used: Set<string>): Promise<PersonalSection | 
   try {
     const songs = audioMusicOnly(await getHeavyRotation(16));
     const items = takeUnused(songs, 16, used).map(toYTSong);
-    if (items.length < MIN_SHELF_ITEMS) return null;
+    if (items.length < ON_REPEAT_MIN) return null;
     return { id: 'on-repeat', title: getString('music_on_repeat'), items };
   } catch {
     return null;
@@ -348,9 +371,12 @@ async function buildDailyMixes(used: Set<string>): Promise<PersonalSection[]> {
     const pool = await expandDailyMix(mix);
     const items = takeUnused(pool, 14, used).map(toYTSong);
     if (items.length >= MIN_SHELF_ITEMS) {
+      const cover = items[0]?.type === 'song' ? items[0].thumbnail : '';
       sections.push({
         id: dailyMixId(mix),
         title: `${mix.label} ${getString('music_mix')}`,
+        subtitle: i18n.t('musicDailyMix'),
+        seedArt: cover ? { url: cover } : undefined,
         items,
         route: dailyMixRoute(mix),
       });

@@ -23,14 +23,27 @@ import {
 } from './musicRecall';
 import { useLikesStore } from '../store/useLikesStore';
 import type { PersonalSection } from './useMusicPersonalization';
-import type { SongItem, YTItem } from '../types/music';
+import type { MusicDaySlot, SongItem, YTItem } from '../types/music';
 
 const SECTION_ORDER = [
   'listen-again', 'rotation', 'speed-dial', 'rediscover',
   'deep-cuts', 'artists-for-you', 'favorite-artist-albums',
 ];
 const LISTEN_AGAIN_SIZE = 12;
-const SPEED_DIAL_SIZE = 26;
+const SPEED_DIAL_SIZE = 18;
+/** [minimum to show, maximum shown] per shelf, matching Flow for Android. */
+const LIMITS: Record<string, [number, number]> = {
+  rotation: [3, 20],
+  rediscover: [3, 12],
+  'deep-cuts': [3, 12],
+  'artists-for-you': [3, 10],
+};
+const ROTATION_TITLES: Record<MusicDaySlot, string> = {
+  morning: 'musicRotationMorning',
+  afternoon: 'musicRotationAfternoon',
+  evening: 'musicRotationEvening',
+  night: 'musicRotationNight',
+};
 const RELEASE_ANCHORS = 3;
 const RELEASES_PER_KIND = 2;
 const RELEASE_SHELF_SIZE = 12;
@@ -61,16 +74,21 @@ export function useMusicDiscoverySections(): PersonalSection[] {
     const live = () => requestRef.current === request;
     setSections([]);
     const publish = (section: PersonalSection | null) => {
-      if (!section || !live() || section.items.length < MIN_SHELF_ITEMS) return;
-      setSections((previous) => [...previous.filter((item) => item.id !== section.id), section]
+      if (!section || !live()) return;
+      const [min, max] = LIMITS[section.id] ?? [MIN_SHELF_ITEMS, Infinity];
+      if (section.items.length < min) return;
+      const bounded = { ...section, items: section.items.slice(0, max) };
+      setSections((previous) => [...previous.filter((item) => item.id !== section.id), bounded]
         .sort((a, b) => SECTION_ORDER.indexOf(a.id) - SECTION_ORDER.indexOf(b.id)));
     };
     const songSection = (id: string, key: string, songs: SongItem[]): PersonalSection => ({
       id, title: t(key), items: songs.map((song): YTItem => ({ type: 'song', ...song })),
     });
 
-    void getMusicTimeRotation(16)
-      .then((songs) => publish(songSection('rotation', 'musicRotation', uniqueAudio(songs))))
+    void getMusicTimeRotation(20)
+      .then(({ slot, songs }) => publish(songSection(
+        'rotation', slot ? ROTATION_TITLES[slot] : 'musicRotation', uniqueAudio(songs),
+      )))
       .catch(() => undefined);
     void getMusicRediscover(16)
       .then((songs) => publish(songSection('rediscover', 'musicRediscover', uniqueAudio(songs))))

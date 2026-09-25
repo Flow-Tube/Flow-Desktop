@@ -126,3 +126,24 @@ export function roundRobinReleases(perArtist: AlbumItem[][], limit: number): Alb
   }
   return out;
 }
+
+/**
+ * A Similar to row that covers songs, artists and playlists: after the first two songs,
+ * an artist or playlist card follows every second song (artists first), and any cards
+ * left over when songs run out close the row.
+ */
+export function interleaveSimilar(songs: YTItem[], extras: YTItem[][]): YTItem[] {
+  const queue: YTItem[] = [];
+  for (let index = 0; index < Math.max(0, ...extras.map((list) => list.length)); index += 1) {
+    for (const list of extras) {
+      const extra = list[index];
+      if (extra) queue.push(extra);
+    }
+  }
+  const out: YTItem[] = [];
+  songs.forEach((song, index) => {
+    out.push(song);
+    if (index >= 1 && index % 2 === 1 && queue.length) out.push(queue.shift() as YTItem);
+  });
+  return [...out, ...queue];
+}

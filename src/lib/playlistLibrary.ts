@@ -1,5 +1,6 @@
 import { getSetting, setSetting } from "./api/db";
 import { getPlaylistDetails } from "./api/youtube";
+import { withPublishedAt } from "./publishedDate";
 import type { PlaylistSummary, VideoSummary } from "../types/video";
 
 export type PlaylistSource = "Owned" | "Saved";
@@ -212,7 +213,12 @@ export const updateStoredPlaylistTracks = async (
 };
 
 export const persistStoredPlaylists = async (playlists: StoredPlaylist[]) => {
-  await setSetting(PLAYLISTS_SETTING_KEY, JSON.stringify(withRequiredPlaylists(playlists)));
+  const now = Date.now();
+  const stamped = playlists.map((playlist) => ({
+    ...playlist,
+    tracks: (playlist.tracks ?? []).map((track) => withPublishedAt(track, now)),
+  }));
+  await setSetting(PLAYLISTS_SETTING_KEY, JSON.stringify(withRequiredPlaylists(stamped)));
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
   }

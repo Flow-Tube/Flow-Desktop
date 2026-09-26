@@ -6,6 +6,8 @@ export interface VideoSummary {
   thumbnailUrl?: string | null;
   durationSeconds?: number | null;
   publishedText?: string | null;
+  /** Epoch ms a stored track's relative `publishedText` is pinned to. */
+  publishedAt?: number | null;
   viewCountText?: string | null;
   channelAvatarUrl?: string | null;
   watchProgressPercent?: number | null;

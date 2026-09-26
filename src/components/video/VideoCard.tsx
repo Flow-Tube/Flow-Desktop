@@ -27,6 +27,7 @@ import { useDownloadStore } from '../../store/useDownloadStore';
 import { useDownloadsLibraryStore } from '../../store/useDownloadsLibraryStore';
 import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
 import { extractDominantColorFromImage, type Rgb } from '../../lib/useDominantColor';
+import { formatPublishedText } from '../../lib/publishedDate';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 
 export interface VideoCardProps {
@@ -125,6 +126,7 @@ function VideoCardComponent({
   const markLive = useLiveStore((s) => s.markLive);
   const liveFromStore = useLiveStore((s) => s.liveIds.has(video.id));
   const isLiveVideo = !!video.isLive || liveFromStore;
+  const publishedText = formatPublishedText(video);
 
   useEffect(() => {
     if (video.isLive) markLive(video.id);
@@ -551,8 +553,8 @@ function VideoCardComponent({
           </button>
           <div className="text-[13px] text-chrome-neutral-500">
             {video.viewCountText && <span>{video.viewCountText}</span>}
-            {video.viewCountText && video.publishedText && <span className="mx-1">•</span>}
-            {video.publishedText && <span>{video.publishedText}</span>}
+            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+            {publishedText && <span>{publishedText}</span>}
           </div>
         </div>
 
@@ -652,8 +654,8 @@ function VideoCardComponent({
           </button>
           <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
             {video.viewCountText && <span>{video.viewCountText}</span>}
-            {video.viewCountText && video.publishedText && <span className="mx-1">•</span>}
-            {video.publishedText && <span>{video.publishedText}</span>}
+            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+            {publishedText && <span>{publishedText}</span>}
           </div>
         </div>
 
@@ -774,8 +776,8 @@ function VideoCardComponent({
           {/* View Count + Published */}
           <div className="text-chrome-zinc-500 text-[13px] flex items-center gap-0 mt-0">
             {video.viewCountText && <span>{video.viewCountText}</span>}
-            {video.viewCountText && video.publishedText && <span className="mx-1">•</span>}
-            {video.publishedText && <span>{video.publishedText}</span>}
+            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+            {publishedText && <span>{publishedText}</span>}
           </div>
         </div>
 

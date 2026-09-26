@@ -47,6 +47,57 @@ export function formatYouTubeRelativeTime(timestamp: number, now = Date.now()): 
   return new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(0, "second");
 }
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+function parseAbsoluteDate(text: string): number | null {
+  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) return new Date(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3])).getTime();
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) {
+    const timestamp = Date.parse(text);
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  const monthFirst = text.match(/^([a-z]{3,})\.?\s+(\d{1,2}),\s*(\d{4})$/i);
+  const dayFirst = text.match(/^(\d{1,2})\s+([a-z]{3,})\.?\s+(\d{4})$/i);
+  const [month, day, year] = monthFirst
+    ? [monthFirst[1], monthFirst[2], monthFirst[3]]
+    : dayFirst
+      ? [dayFirst[2], dayFirst[1], dayFirst[3]]
+      : [];
+  const monthIndex = month ? MONTHS.indexOf(month.slice(0, 3).toLowerCase()) : -1;
+  if (monthIndex < 0) return null;
+  return new Date(Number(year), monthIndex, Number(day)).getTime();
+}
+
+export function parseToTimestamp(text: string | null | undefined, now = Date.now()): number | null {
+  const raw = text?.trim() ?? "";
+  if (!raw) return null;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric) && numeric > 100_000_000_000) return numeric;
+
+  const cleanRaw = raw.replace(/^(streamed|premiered)\s+(live\s+)?(on\s+)?/i, "").trim();
+  return parseAbsoluteDate(cleanRaw) ?? parseRelativeToTimestamp(cleanRaw, now);
+}
+
+export function resolveDisplayUploadTimestamp(
+  text: string,
+  storedTimestamp: number | null | undefined,
+  now = Date.now(),
+): number | null {
+  const stored = storedTimestamp && storedTimestamp > 0 ? storedTimestamp : null;
+  const relative = parseRelativeToTimestamp(text, now);
+  if (stored !== null && relative !== null) return Math.min(stored, relative);
+  if (relative !== null) return relative;
+  return preferStoredWithinDay(parseToTimestamp(text, now), stored);
+}
+
+// A date alone parses to midnight, so on the same day the stored time is more precise.
+function preferStoredWithinDay(parsed: number | null, stored: number | null): number | null {
+  if (parsed === null) return stored;
+  if (stored === null) return parsed;
+  return new Date(parsed).toDateString() === new Date(stored).toDateString() ? stored : parsed;
+}
+
 function relativePrefix(text: string): string | null {
   const lower = text.toLowerCase();
   if (lower.startsWith("streamed ")) return "Streamed";
@@ -55,21 +106,20 @@ function relativePrefix(text: string): string | null {
 }
 
 export function withPublishedAt(video: VideoSummary, now = Date.now()): VideoSummary {
-  const parsed = video.publishedText ? parseRelativeToTimestamp(video.publishedText, now) : null;
-  if (parsed === null) return video;
-  const publishedAt = video.publishedAt && video.publishedAt > 0
-    ? Math.min(video.publishedAt, parsed)
-    : parsed;
-  return publishedAt === video.publishedAt ? video : { ...video, publishedAt };
+  if (!video.publishedText) return video;
+  const publishedAt = resolveDisplayUploadTimestamp(video.publishedText, video.publishedAt, now);
+  if (publishedAt === null || publishedAt === video.publishedAt) return video;
+  return { ...video, publishedAt };
 }
 
 export function formatPublishedText(video: VideoSummary, now = Date.now()): string | null {
   const text = video.publishedText?.trim();
   if (!text) return null;
-  const parsed = parseRelativeToTimestamp(text, now);
-  if (parsed === null || !video.publishedAt) return text;
+  if (!video.publishedAt || text.toLowerCase() === "live") return text;
+  const timestamp = resolveDisplayUploadTimestamp(text, video.publishedAt, now);
+  if (timestamp === null) return text;
 
-  const relative = formatYouTubeRelativeTime(Math.min(video.publishedAt, parsed), now);
+  const relative = formatYouTubeRelativeTime(timestamp, now);
   const prefix = relativePrefix(text);
   return prefix ? `${prefix} ${relative}` : relative;
 }

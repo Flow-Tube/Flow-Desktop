@@ -4,6 +4,7 @@ import {
   formatPublishedText,
   formatYouTubeRelativeTime,
   parseRelativeToTimestamp,
+  parseToTimestamp,
   withPublishedAt,
 } from "./publishedDate";
 import type { VideoSummary } from "../types/video";
@@ -36,6 +37,20 @@ describe("parseRelativeToTimestamp", () => {
   });
 });
 
+describe("parseToTimestamp", () => {
+  it("reads absolute dates as local midnight", () => {
+    const expected = new Date(2020, 5, 19).getTime();
+    expect(parseToTimestamp("Jun 19, 2020")).toBe(expected);
+    expect(parseToTimestamp("19 Jun 2020")).toBe(expected);
+    expect(parseToTimestamp("2020-06-19")).toBe(expected);
+    expect(parseToTimestamp("Streamed live on Jun 19, 2020")).toBe(expected);
+  });
+
+  it("falls back to relative text", () => {
+    expect(parseToTimestamp("3 days ago", NOW)).toBe(NOW - 3 * DAY);
+  });
+});
+
 describe("formatYouTubeRelativeTime", () => {
   it("uses the largest whole unit", () => {
     expect(formatYouTubeRelativeTime(NOW - 90 * 60_000, NOW)).toBe("1 hour ago");
@@ -54,10 +69,16 @@ describe("withPublishedAt", () => {
     expect(withPublishedAt(pinned, NOW + DAY)).toBe(pinned);
   });
 
-  it("leaves absolute or missing text alone", () => {
-    const absolute = video("Jun 19, 2020");
-    expect(withPublishedAt(absolute, NOW)).toBe(absolute);
+  it("pins an absolute date, keeping a stored time from the same day", () => {
+    expect(withPublishedAt(video("Jun 19, 2020"), NOW).publishedAt).toBe(new Date(2020, 5, 19).getTime());
+    const sameDay = new Date(2020, 5, 19, 15).getTime();
+    const pinned = video("Jun 19, 2020", sameDay);
+    expect(withPublishedAt(pinned, NOW)).toBe(pinned);
+  });
+
+  it("leaves missing and live text alone", () => {
     expect(withPublishedAt(video(null), NOW).publishedAt).toBeUndefined();
+    expect(withPublishedAt(video("LIVE"), NOW).publishedAt).toBeUndefined();
   });
 });
 
@@ -68,8 +89,14 @@ describe("formatPublishedText", () => {
       .toBe("Streamed 2 days ago");
   });
 
-  it("shows text as given without a pinned timestamp or with an absolute date", () => {
+  it("shows an absolute date as its age", () => {
+    const published = new Date(2026, 8, 13).getTime();
+    expect(formatPublishedText(video("Sep 13, 2026", published), published + 13 * DAY)).toBe("1 week ago");
+  });
+
+  it("shows text as given without a pinned timestamp, and live text", () => {
     expect(formatPublishedText(video("1 hour ago"), NOW + 2 * DAY)).toBe("1 hour ago");
-    expect(formatPublishedText(video("Jun 19, 2020", NOW - HOUR), NOW)).toBe("Jun 19, 2020");
+    expect(formatPublishedText(video("Sep 13, 2026"), NOW)).toBe("Sep 13, 2026");
+    expect(formatPublishedText(video("LIVE", NOW - HOUR), NOW)).toBe("LIVE");
   });
 });

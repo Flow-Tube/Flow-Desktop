@@ -157,7 +157,7 @@ export function GlobalVideoPlayer() {
       return;
     }
 
-    if (prevWatchId === currentVideo.id && videoPlayerMode === "watch") {
+    if (nextWatchId === null && prevWatchId === currentVideo.id && videoPlayerMode === "watch") {
       if (isPlaying && autoPipEnabled) {
         enterVideoPip("auto");
       } else {

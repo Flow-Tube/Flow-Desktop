@@ -36,6 +36,24 @@ pub struct DeArrowOverride {
     pub thumbnail_url: Option<String>,
 }
 
+/// DeArrow submitters prefix a word with `>` to keep its casing when titles are
+/// auto-formatted; the marker is formatting metadata, never part of the title.
+pub fn strip_case_markers(title: &str) -> String {
+    let mut out = String::with_capacity(title.len());
+    let mut chars = title.chars().peekable();
+    let mut at_word_start = true;
+    while let Some(c) = chars.next() {
+        let is_marker = c == '>'
+            && at_word_start
+            && chars.peek().is_some_and(|next| !next.is_whitespace());
+        if !is_marker {
+            out.push(c);
+        }
+        at_word_start = c.is_whitespace();
+    }
+    out
+}
+
 pub async fn fetch_dearrow_override_api(video_id: &str) -> AppResult<Option<DeArrowOverride>> {
     let client = crate::api::http::shared_client();
 
@@ -75,7 +93,7 @@ pub async fn fetch_dearrow_override_api(video_id: &str) -> AppResult<Option<DeAr
         .iter()
         .filter(|t| !t.original && (t.votes >= 0 || t.locked))
         .max_by_key(|t| if t.locked { i32::MAX } else { t.votes })
-        .map(|t| t.title.clone());
+        .map(|t| strip_case_markers(&t.title));
 
     // Filter and pick the best thumbnail
     let best_thumb = content
@@ -106,5 +124,26 @@ pub async fn fetch_dearrow_override_api(video_id: &str) -> AppResult<Option<DeAr
             title: best_title,
             thumbnail_url,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strips_case_markers_at_word_starts() {
+        assert_eq!(
+            strip_case_markers("National >Flying >Laboratory >Centre | Tom >Scott: >England >E24"),
+            "National Flying Laboratory Centre | Tom Scott: England E24"
+        );
+        assert_eq!(strip_case_markers(">US Supreme Court"), "US Supreme Court");
+    }
+
+    #[test]
+    fn keeps_literal_greater_than_signs() {
+        assert_eq!(strip_case_markers("5 > 3"), "5 > 3");
+        assert_eq!(strip_case_markers("a->b >"), "a->b >");
+        assert_eq!(strip_case_markers(">>Mixed"), ">Mixed");
     }
 }

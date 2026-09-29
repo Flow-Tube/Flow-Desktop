@@ -43,9 +43,8 @@ pub fn strip_case_markers(title: &str) -> String {
     let mut chars = title.chars().peekable();
     let mut at_word_start = true;
     while let Some(c) = chars.next() {
-        let is_marker = c == '>'
-            && at_word_start
-            && chars.peek().is_some_and(|next| !next.is_whitespace());
+        let is_marker =
+            c == '>' && at_word_start && chars.peek().is_some_and(|next| !next.is_whitespace());
         if !is_marker {
             out.push(c);
         }

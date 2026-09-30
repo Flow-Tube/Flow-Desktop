@@ -2,7 +2,7 @@ import { getMusicQueueContinuation, getMusicWatchQueue } from './api/music';
 import {
   MIN_SHELF_ITEMS,
   audioMusicOnly,
-  chartsSongs,
+  trendingSongs,
   isAudioSong,
   ranked,
   recallArtist,
@@ -77,7 +77,7 @@ export async function buildQuickPicks(
   const [radio, related, charts, artists] = await Promise.all([
     Promise.all(seeds.slice(0, RADIO_SEEDS).map((seed) => gatherRadio(seed.videoId))),
     Promise.all(seeds.map((seed) => relatedSongs(seed.videoId))),
-    chartsSongs(),
+    trendingSongs(),
     artistLanes(profile),
   ]);
   const personal = (await Promise.all(

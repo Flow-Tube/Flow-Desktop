@@ -15,7 +15,6 @@
   "musicEmpty": "No music to show yet. Play a few songs or explore charts and moods.",
   "musicChipEmpty": "No results in this category.",
   "musicChartsGlobal": "Global charts",
-  "musicPopularSongs": "Popular songs",
   "musicBrowse": "Browse music",
   "musicRetry": "Retry",
   "musicLoadMore": "Load more",
@@ -37,5 +36,6 @@
   "musicDailyMix": "Daily Mix",
   "musicMoreFrom": "More from",
   "musicShufflePlay": "Shuffle play",
-  "musicOpen": "Open"
+  "musicOpen": "Open",
+  "musicTrending": "Trending"
 }

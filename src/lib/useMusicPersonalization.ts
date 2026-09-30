@@ -15,7 +15,7 @@ import { dailyMixId, dailyMixRoute, expandDailyMix } from './musicMixes';
 import {
   MIN_SHELF_ITEMS,
   audioMusicOnly,
-  chartsSongs,
+  trendingSongs,
   interleaveSimilar,
   ranked,
   recallArtist,
@@ -385,16 +385,16 @@ async function buildDailyMixes(used: Set<string>): Promise<PersonalSection[]> {
   return sections;
 }
 
-// Cold-start surface: real charts (what's genuinely popular now), discovery-ranked —
+// Trending: the song chart, or YouTube Music's home songs when there is none, discovery-ranked —
 // replaces the old hardcoded artist list.
-async function buildPopularArtists(
+async function buildTrending(
   used: Set<string>,
   avoid: Set<string>,
 ): Promise<PersonalSection | null> {
-  const pool = await ranked(await chartsSongs(), 'discover');
+  const pool = await ranked(await trendingSongs(), 'discover');
   const items = takeUnused(pool, 16, used, avoid).map(toYTSong);
   if (items.length < MIN_SHELF_ITEMS) return null;
-  return { id: 'popular-songs', title: i18n.t('musicPopularSongs'), items };
+  return { id: 'popular-songs', title: i18n.t('musicTrending'), items };
 }
 
 interface BuiltSections {
@@ -519,7 +519,7 @@ export function useMusicPersonalization(): MusicPersonalization {
       built.similar = await buildSimilarTo(profile, history, used, usedAnchors, avoid);
       if (!publish()) return;
       built.daily = await buildDailyDiscover(history, used, avoid);
-      built.popular = await buildPopularArtists(used, avoid);
+      built.popular = await buildTrending(used, avoid);
       built.community = await communityP;
       if (!publish()) return;
       rememberShown(sectionIdsRef.current); // refresh the cross-reload repetition guard

@@ -79,6 +79,10 @@ export function getMusicChartsPage(continuation?: string, country?: string): Pro
   return request;
 }
 
+export function getMusicTrendingSongs(country?: string): Promise<SongItem[]> {
+  return invokeBackend<SongItem[]>("get_music_trending_songs", { country });
+}
+
 export function getMusicMoods(): Promise<MoodAndGenreItem[]> {
   return invokeBackend<MoodAndGenreItem[]>("get_music_moods");
 }

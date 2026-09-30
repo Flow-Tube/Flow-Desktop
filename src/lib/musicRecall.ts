@@ -3,7 +3,7 @@
 // unranked result instead of throwing, so one failed source never breaks a shelf.
 import {
   getMusicArtistPage,
-  getMusicChartsPage,
+  getMusicTrendingSongs,
   getMusicRelatedTyped,
   rankMusicCandidates,
   type MusicRankSurface,
@@ -89,13 +89,10 @@ export function chartCountry(): string {
   return useAppSettingsStore.getState().values[SETTINGS.TRENDING_REGION] ?? 'US';
 }
 
-export async function chartsSongs(): Promise<SongItem[]> {
+/** Popular songs right now (the song chart, or YouTube Music's home songs without one). */
+export async function trendingSongs(): Promise<SongItem[]> {
   try {
-    const charts = await getMusicChartsPage(undefined, chartCountry());
-    return audioMusicOnly(charts.sections
-      .filter((section) => section.chartType === 'Songs')
-      .flatMap((section) => section.items)
-      .filter((item): item is Extract<YTItem, { type: 'song' }> => item.type === 'song'));
+    return audioMusicOnly(await getMusicTrendingSongs(chartCountry()));
   } catch {
     return [];
   }

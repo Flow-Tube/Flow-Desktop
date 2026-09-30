@@ -81,6 +81,7 @@ export function feedGroupOf(entry: MusicFeedEntry): string {
   if (similar) return `similar:${similar[1]}`;
   if (section.id.startsWith('mix-')) return 'daily-mixes';
   if (section.id.startsWith('fans-')) return 'fans';
+  if (section.id.startsWith('genre-')) return 'genre-mixes';
   return section.id;
 }
 
@@ -91,6 +92,14 @@ function sessionRank(seed: number, key: string): number {
     hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
   }
   return hash >>> 0;
+}
+
+/** A stable per-session choice of `count` items, e.g. which genres or vibe to show. */
+export function pickForSession<T>(items: T[], count: number, keyOf: (item: T) => string, salt: string,
+  seed: number = SESSION_SEED): T[] {
+  return [...items]
+    .sort((a, b) => sessionRank(seed, `${salt}:${keyOf(a)}`) - sessionRank(seed, `${salt}:${keyOf(b)}`))
+    .slice(0, count);
 }
 
 function orderEntries(entries: MusicFeedEntry[], maturity: string, seed: number): MusicFeedEntry[] {
@@ -122,9 +131,9 @@ function orderEntries(entries: MusicFeedEntry[], maturity: string, seed: number)
 
 /**
  * Orders the whole home: the fixed personal block, three lead groups chosen by listening
- * maturity, the remaining groups in a per-session shuffle, then YouTube's own feed. Each
- * item appears once (Quick Picks claim theirs first), and a shelf that deduplication
- * shrank below a useful size is dropped rather than shown as a stub.
+ * maturity, the remaining groups in a per-session shuffle, then YouTube's own feed. Below
+ * the personal block each item appears once (Quick Picks claim theirs first), and a shelf
+ * that deduplication shrank below a useful size is dropped rather than shown as a stub.
  */
 export function composeMusicFeed(
   personal: PersonalSection[],
@@ -148,6 +157,12 @@ export function composeMusicFeed(
       continue;
     }
     const { section } = entry;
+    // The personal block is the user's own music: those shelves may repeat each other
+    // (as on Android) and never take songs away from the discovery shelves below.
+    if (HEAD_GROUPS.includes(feedGroupOf(entry))) {
+      output.push(entry);
+      continue;
+    }
     const items = section.items.filter((item) => {
       const key = itemKey(item);
       if (seen.has(key)) return false;

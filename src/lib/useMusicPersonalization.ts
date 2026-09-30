@@ -72,7 +72,6 @@ const ON_REPEAT_MIN = 2;
 // Discovery/recall shelves avoid these so reloading the home yields fresh content; On Repeat
 // and Daily Mixes deliberately ignore it (they are meant to be stable).
 const RECENTLY_SHOWN_MAX = 200;
-const MAX_PERSONAL_SHELVES = 16;
 
 let recentlyShown: string[] = [];
 
@@ -411,7 +410,6 @@ interface BuiltSections {
 //  • cold_start → comfort/charts-led (no artist-graph yet); never an empty home.
 //  • high discovery appetite → graph-driven discovery surfaced early (after On Repeat).
 //  • otherwise → comfort-first, discovery after.
-// Capped at MAX_PERSONAL_SHELVES so the home never becomes an endless wall.
 function planSections(profile: MusicTasteProfile | null, b: BuiltSections): PersonalSection[] {
   const maturity = profile?.maturity ?? 'cold_start';
   const highAppetite = (profile?.discoveryAppetite ?? 0) >= ARTIST_GRAPH_HIGH_APPETITE;
@@ -444,7 +442,7 @@ function planSections(profile: MusicTasteProfile | null, b: BuiltSections): Pers
     push(b.community);
     push(b.popular);
   }
-  return out.slice(0, MAX_PERSONAL_SHELVES);
+  return out;
 }
 
 const EMPTY_BUILD: BuiltSections = {

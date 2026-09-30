@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composeMusicFeed, feedGroupOf, type MusicFeedEntry } from './musicFeedComposer';
+import { composeMusicFeed, feedGroupOf, pickForSession, type MusicFeedEntry } from './musicFeedComposer';
 import type { MusicShelf, SongItem, YTItem } from '../types/music';
 import type { PersonalSection } from './useMusicPersonalization';
 
@@ -71,17 +71,36 @@ describe('music feed order', () => {
 });
 
 describe('music feed deduplication', () => {
-  it('lets Quick Picks claim their songs and drops shelves shrunk below four items', () => {
+  it('lets Quick Picks claim their songs and drops discovery shelves shrunk below four items', () => {
+    const feed = composeMusicFeed(
+      [{ id: 'daily-discover', title: 'Daily', items: [item('a'), item('b'), item('c'), item('d')] },
+        { id: 'popular-songs', title: 'Trending', items: [item('a'), item('b'), item('c'), item('e'), item('f')] }],
+      [], 'warming', [song('seed', 'Same')], { sessionSeed: 1 },
+    );
+    expect(names(feed)).toEqual(['quickPicks', 'daily-discover:Daily']);
+  });
+
+  it('lets the personal block repeat songs without taking them from other shelves', () => {
     const feed = composeMusicFeed(
       [{ id: 'listen-again', title: 'Listen again', items: [item('a'), item('b'), item('c'), item('d')] },
-        { id: 'daily-discover', title: 'Daily', items: [item('a'), item('b'), item('c'), item('e'), item('f')] }],
-      [], 'mature', [song('seed', 'Same')], { sessionSeed: 1 },
+        { id: 'speed-dial', title: 'Speed dial', items: [item('a'), item('b'), item('c'), item('d')] },
+        { id: 'daily-discover', title: 'Daily', items: [item('a'), item('b'), item('c'), item('d')] }],
+      [], 'mature', [], { sessionSeed: 1 },
     );
-    expect(names(feed)).toEqual(['listen-again:Listen again', 'quickPicks']);
+    expect(names(feed)).toEqual(['listen-again:Listen again', 'speed-dial:Speed dial', 'daily-discover:Daily']);
   });
 
   it('keeps naturally small shelves', () => {
     const feed = composeMusicFeed([personal('rotation', 3)], [], 'mature', [], { sessionSeed: 1 });
     expect(feed[0]?.kind === 'section' && feed[0].section.items).toHaveLength(3);
+  });
+});
+
+describe('pickForSession', () => {
+  it('picks the same items for the same session and salt', () => {
+    const genres = ['Pop', 'Rock', 'Jazz', 'Blues', 'Soul'];
+    const first = pickForSession(genres, 2, (genre) => genre, 'genres', 9);
+    expect(pickForSession([...genres].reverse(), 2, (genre) => genre, 'genres', 9)).toEqual(first);
+    expect(first).toHaveLength(2);
   });
 });

@@ -16,6 +16,14 @@ export type SponsorBlockCategory =
 
 export type SponsorBlockAction = "skip" | "mute" | "notify" | "ignore";
 
+export type DiscordRpcMode = "off" | "music" | "videos" | "musicAndVideos";
+
+const DISCORD_RPC_MODES = ["off", "music", "videos", "musicAndVideos"] as const satisfies readonly DiscordRpcMode[];
+
+function normalizeDiscordMode(raw: string | null | undefined): DiscordRpcMode {
+  return (DISCORD_RPC_MODES as readonly string[]).includes(raw ?? "") ? (raw as DiscordRpcMode) : "off";
+}
+
 export const SPONSORBLOCK_CATEGORIES = [
   "sponsor",
   "intro",
@@ -121,6 +129,7 @@ interface SettingsState {
   dearrowEnabled: boolean;
   dearrowBadgeEnabled: boolean;
   rytdEnabled: boolean;
+  discordMode: DiscordRpcMode;
   sbSubmitEnabled: boolean;
   sbUserId: string;
   serverUrl: string;
@@ -136,6 +145,7 @@ interface SettingsState {
   setDeArrowEnabled: (enabled: boolean) => Promise<void>;
   setDeArrowBadgeEnabled: (enabled: boolean) => Promise<void>;
   setRytdEnabled: (enabled: boolean) => Promise<void>;
+  setDiscordMode: (mode: DiscordRpcMode) => Promise<void>;
   setSbSubmitEnabled: (enabled: boolean) => Promise<void>;
   setSbUserId: (id: string) => Promise<void>;
   setServerUrl: (url: string) => Promise<void>;
@@ -151,6 +161,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   dearrowEnabled: true,
   dearrowBadgeEnabled: true,
   rytdEnabled: true,
+  discordMode: "off",
   sbSubmitEnabled: false,
   sbUserId: "",
   serverUrl: "https://sponsor.ajay.app",
@@ -173,6 +184,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         dearrowEnabled: getSettingValue(SETTINGS.DEARROW_ENABLED) !== "false",
         dearrowBadgeEnabled: getSettingValue(SETTINGS.DEARROW_BADGE_ENABLED) !== "false",
         rytdEnabled: getSettingValue(SETTINGS.RYTD_ENABLED) !== "false",
+        discordMode: normalizeDiscordMode(getSettingValue(SETTINGS.DISCORD_RPC_MODE)),
         sbSubmitEnabled: getSettingValue(SETTINGS.SB_SUBMIT_ENABLED) === "true",
         sbUserId: getSettingValue(SETTINGS.SPONSORBLOCK_USER_ID),
         serverUrl,
@@ -204,6 +216,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setRytdEnabled: async (enabled) => {
     set({ rytdEnabled: enabled });
     await setSettingValue(SETTINGS.RYTD_ENABLED, String(enabled));
+  },
+
+  setDiscordMode: async (mode) => {
+    set({ discordMode: mode });
+    await setSettingValue(SETTINGS.DISCORD_RPC_MODE, mode);
   },
 
   setSbSubmitEnabled: async (enabled) => {

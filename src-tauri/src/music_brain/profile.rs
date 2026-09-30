@@ -123,7 +123,7 @@ fn top_genres(map: &HashMap<String, f64>, n: usize) -> Vec<GenreWeight> {
 
 /// Buckets a millisecond timestamp into a `TimeBucket` using local time, reusing the
 /// canonical hour→bucket mapping (`TimeBucket::from_parts`) so the logic isn't duplicated.
-fn bucket_for(ms: u64) -> Option<TimeBucket> {
+pub(super) fn bucket_for(ms: u64) -> Option<TimeBucket> {
     let dt = Local.timestamp_millis_opt(ms as i64).single()?;
     let is_weekend = matches!(dt.weekday(), Weekday::Sat | Weekday::Sun);
     Some(TimeBucket::from_parts(dt.hour(), is_weekend))

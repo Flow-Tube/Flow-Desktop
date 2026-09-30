@@ -7,13 +7,17 @@ import { invokeBackend } from "./errors";
 import type {
   AlbumItem,
   AlbumPage,
+  ArtistItem,
   ArtistPage,
+  CachedMusicHomePage,
   ChartsPage,
   DailyMixSeed,
   ExplorePage,
   MoodAndGenreItem,
+  MoodAndGenreGroup,
   MoodGenrePage,
   MusicHomePage,
+  MusicTimeRotation,
   MusicPlaylistPage,
   MusicSearchResponse,
   MusicSearchSuggestions,
@@ -34,16 +38,57 @@ export function getMusicHomePage(continuation?: string): Promise<MusicHomePage> 
   return invokeBackend<MusicHomePage>("get_music_home_page", { continuation });
 }
 
+export function getCachedMusicHomePage(): Promise<CachedMusicHomePage | null> {
+  return invokeBackend<CachedMusicHomePage | null>("get_cached_music_home_page");
+}
+
+export interface MusicRequestDiagnostics {
+  requests: number;
+  requestMillis: number;
+  publicCacheHits: number;
+}
+
+export function getMusicRequestDiagnostics(): Promise<MusicRequestDiagnostics> {
+  return invokeBackend<MusicRequestDiagnostics>("get_music_request_diagnostics");
+}
+
+/**
+ * Page fetch mode. Pages people open are always fetched fresh; recommendation
+ * recall passes `preferCached` so the content graph can answer without a request.
+ */
+export interface MusicPageOptions {
+  preferCached?: boolean;
+}
+
 export function getMusicExplorePage(): Promise<ExplorePage> {
   return invokeBackend<ExplorePage>("get_music_explore_page");
 }
 
-export function getMusicChartsPage(continuation?: string): Promise<ChartsPage> {
-  return invokeBackend<ChartsPage>("get_music_charts_page", { continuation });
+const chartRequests = new Map<string, Promise<ChartsPage>>();
+
+export function getMusicChartsPage(continuation?: string, country?: string): Promise<ChartsPage> {
+  const key = `${country ?? ''}:${continuation ?? ''}`;
+  const existing = chartRequests.get(key);
+  if (existing) return existing;
+  const request = invokeBackend<ChartsPage>("get_music_charts_page", { continuation, country });
+  chartRequests.set(key, request);
+  void request.then(
+    () => { if (chartRequests.get(key) === request) chartRequests.delete(key); },
+    () => { if (chartRequests.get(key) === request) chartRequests.delete(key); },
+  );
+  return request;
+}
+
+export function getMusicTrendingSongs(country?: string): Promise<SongItem[]> {
+  return invokeBackend<SongItem[]>("get_music_trending_songs", { country });
 }
 
 export function getMusicMoods(): Promise<MoodAndGenreItem[]> {
   return invokeBackend<MoodAndGenreItem[]>("get_music_moods");
+}
+
+export function getMusicMoodGroups(): Promise<MoodAndGenreGroup[]> {
+  return invokeBackend<MoodAndGenreGroup[]>("get_music_mood_groups");
 }
 
 export function getMusicNewReleases(): Promise<AlbumItem[]> {
@@ -86,20 +131,26 @@ export function getMusicSearchSuggestions(query: string): Promise<MusicSearchSug
 
 // --- Album / Artist / Playlist -------------------------------------------
 
-export function getMusicAlbumPage(browseId: string): Promise<AlbumPage> {
-  return invokeBackend<AlbumPage>("get_music_album_page", { browseId });
+export function getMusicAlbumPage(browseId: string, options: MusicPageOptions = {}): Promise<AlbumPage> {
+  return invokeBackend<AlbumPage>("get_music_album_page", { browseId, preferCached: options.preferCached });
 }
 
 export function getMusicAlbumContinuation(continuation: string): Promise<SongContinuation> {
   return invokeBackend<SongContinuation>("get_music_album_continuation", { continuation });
 }
 
-export function getMusicArtistPage(browseId: string): Promise<ArtistPage> {
-  return invokeBackend<ArtistPage>("get_music_artist_page", { browseId });
+export function getMusicArtistPage(browseId: string, options: MusicPageOptions = {}): Promise<ArtistPage> {
+  return invokeBackend<ArtistPage>("get_music_artist_page", { browseId, preferCached: options.preferCached });
 }
 
-export function getMusicPlaylistPage(playlistId: string): Promise<MusicPlaylistPage> {
-  return invokeBackend<MusicPlaylistPage>("get_music_playlist_page", { playlistId });
+export function getMusicPlaylistPage(
+  playlistId: string,
+  options: MusicPageOptions = {},
+): Promise<MusicPlaylistPage> {
+  return invokeBackend<MusicPlaylistPage>("get_music_playlist_page", {
+    playlistId,
+    preferCached: options.preferCached,
+  });
 }
 
 export function getMusicPlaylistContinuation(continuation: string): Promise<SongContinuation> {
@@ -126,6 +177,22 @@ export function getMusicQueue(videoIds: string[], playlistId?: string): Promise<
 
 export function getMusicRelatedTyped(videoId: string): Promise<RelatedPage> {
   return invokeBackend<RelatedPage>("get_music_related_typed", { videoId });
+}
+
+export function getMusicDeepCuts(limit = 20): Promise<SongItem[]> {
+  return invokeBackend<SongItem[]>("get_music_deep_cuts", { limit });
+}
+
+export function getMusicRediscover(limit = 16): Promise<SongItem[]> {
+  return invokeBackend<SongItem[]>("get_music_rediscover", { limit });
+}
+
+export function getMusicTimeRotation(limit = 20): Promise<MusicTimeRotation> {
+  return invokeBackend<MusicTimeRotation>("get_music_time_rotation", { limit });
+}
+
+export function getMusicLinkedArtists(limit = 20): Promise<ArtistItem[]> {
+  return invokeBackend<ArtistItem[]>("get_music_linked_artists", { limit });
 }
 
 export function getMusicLyricsTyped(videoId: string): Promise<string | null> {

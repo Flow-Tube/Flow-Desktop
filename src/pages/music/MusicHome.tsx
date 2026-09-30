@@ -1,24 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
 import { CategoryChips } from '../../components/layout/CategoryChips';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
+import { CommunityPlaylistCard } from '../../components/music/CommunityPlaylistCard';
+import { MusicMoodShelf } from '../../components/music/MusicMoodShelf';
+import { MusicQuickPicksShelf } from '../../components/music/MusicQuickPicksShelf';
+import { MusicSpeedDial } from '../../components/music/MusicSpeedDial';
 import { MusicShelf } from '../../components/music/MusicShelf';
-import { ShelfScroller } from '../../components/ui/ShelfScroller';
 import { Button } from '../../components/ui/Button';
 import { useMusicChipFilter, useMusicHome } from '../../lib/useMusicHome';
 import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
+import { useMusicDiscoverySections } from '../../lib/useMusicDiscoverySections';
+import { useMusicMoreSections } from '../../lib/useMusicMoreSections';
+import { useMusicCharts } from '../../lib/useMusicCharts';
+import { useMusicMoods } from '../../lib/useMusicMoods';
+import { composeMusicFeed, type MusicFeedSection } from '../../lib/musicFeedComposer';
+import { musicSeeAllRoute } from '../../lib/musicRoutes';
+import { shuffled } from '../../lib/musicRecall';
+import { usePreference } from '../../lib/usePreference';
+import { SETTINGS } from '../../lib/settings/schema';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { getString } from '../../lib/i18n/index';
 import { useGridStyle } from '../../lib/useGridColumns';
-import type { AlbumItem, ArtistItem, PlaylistItem, SongItem, YTItem } from '../../types/music';
+import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistItem, SongItem, YTItem } from '../../types/music';
 
 const songsOf = (items: YTItem[]): SongItem[] =>
   items.filter((i): i is Extract<YTItem, { type: 'song' }> => i.type === 'song');
 
 const renderable = (item: YTItem) => item.type !== 'episode' && item.type !== 'podcast';
+
+const NO_CHIPS: MusicHomeChip[] = [];
+
+// Three full rows of tiles on the widest layout.
+const MOOD_TILES = 18;
 
 function SquareSkeleton({ fill }: { fill?: boolean }) {
   return (
@@ -31,12 +49,18 @@ function SquareSkeleton({ fill }: { fill?: boolean }) {
 }
 
 export default function MusicHome() {
+  const { t } = useTranslation('common');
   const gridStyle = useGridStyle({ density: 'dense' });
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
-  const { data, loading, error, reload, loadMore, hasMore, loadingMore } = useMusicHome();
+  const { data, loading, error, reload, loadMore, hasMore, loadingMore, loadMoreError } = useMusicHome();
   const personalization = useMusicPersonalization();
+  const discoverySections = useMusicDiscoverySections();
+  const [chartCountry] = usePreference(SETTINGS.TRENDING_REGION, 'US');
+  const charts = useMusicCharts(chartCountry);
+  const moods = useMusicMoods();
+  const moreSections = useMusicMoreSections(data?.chips ?? NO_CHIPS, moods.groups);
   const isHidden = useMusicHiddenFilter();
   const isArtistHidden = useMusicArtistHidden();
   // Drop blocked/dismissed songs and blocked-artist cards from every shelf.
@@ -45,26 +69,18 @@ export default function MusicHome() {
       it.type === 'song' ? !isHidden(it) : it.type === 'artist' ? !isArtistHidden(it) : true,
     );
 
-  const fallbackMoods = useMemo(
-    () => [
-      getString('music_mood_all'),
-      getString('music_mood_workout'),
-      getString('music_mood_focus'),
-      getString('music_mood_relax'),
-      getString('music_mood_podcasts'),
-    ],
-    [],
-  );
-
-  const chips = data?.chips ?? [];
-  const categories = chips.length
-    ? [getString('music_mood_all'), ...chips.map((c) => c.title).filter(Boolean)]
-    : fallbackMoods;
+  const chips = (data?.chips ?? []).filter((chip) => !!chip.browseId);
+  const categories = [getString('music_mood_all'), ...chips.map((chip) => chip.title).filter(Boolean)];
   const [activeMood, setActiveMood] = useState<string>(getString('music_mood_all'));
   const activeChip = useMemo(
     () => chips.find((c) => c.title === activeMood) ?? null,
     [chips, activeMood],
   );
+  useEffect(() => {
+    if (activeMood !== getString('music_mood_all') && !chips.some((chip) => chip.title === activeMood)) {
+      setActiveMood(getString('music_mood_all'));
+    }
+  }, [activeMood, chips]);
   const chipFilter = useMusicChipFilter(activeChip);
 
   const isFiltering = !!activeChip;
@@ -87,21 +103,28 @@ export default function MusicHome() {
     return () => observer.disconnect();
   }, [pageHasMore, pageLoadingMore, pageLoadMore]);
 
-  const playTrack = (track: SongItem, context: SongItem[]) => {
+  const playTrack = (track: SongItem, context: SongItem[], source: string | null) => {
     const queue = context.length ? context : [track];
     const id = track.videoId ?? track.id;
     const startIndex = Math.max(0, queue.findIndex((t) => (t.videoId ?? t.id) === id));
-    void playQueue(queue, startIndex);
+    void playQueue(queue, startIndex, source);
   };
 
   const openAlbum = (a: AlbumItem) => navigate(`/music/album/${a.browseId}`);
   const openArtist = (a: ArtistItem) => navigate(`/music/artist/${a.id}`);
   const openPlaylist = (p: PlaylistItem) => navigate(`/music/playlist/${p.id}`);
+  const moodItems = moods.groups.flatMap((group) => group.items).slice(0, MOOD_TILES);
+  const openMood = (mood: MoodAndGenreItem) =>
+    navigate(musicSeeAllRoute(mood.browseId, mood.params, mood.title));
 
-  const renderCard = (item: YTItem, songContext: SongItem[], fill = false) => {
+  const renderCard = (item: YTItem, songContext: SongItem[], source: string | null, fill = false) => {
     switch (item.type) {
       case 'song':
-        return <MusicItemCard variant="song" item={item} fill={fill} onPlay={() => playTrack(item, songContext)} />;
+        return item.musicVideoType && item.musicVideoType !== 'MUSIC_VIDEO_TYPE_ATV'
+          ? <MusicItemCard variant="video" item={item} fill={fill}
+              onPlay={() => navigate(`/watch/${item.videoId ?? item.id}`)}
+              onOpen={() => navigate(`/watch/${item.videoId ?? item.id}`)} />
+          : <MusicItemCard variant="song" item={item} fill={fill} onPlay={() => playTrack(item, songContext, source)} />;
       case 'album':
         return (
           <MusicItemCard variant="album" item={item} fill={fill} onPlay={() => openAlbum(item)} onOpen={() => openAlbum(item)} />
@@ -124,7 +147,9 @@ export default function MusicHome() {
   };
 
   const renderBody = () => {
-    if (error && !data) {
+    const hasLocal = personalization.quickPicks.length > 0 || personalization.sections.length > 0
+      || discoverySections.length > 0;
+    if (error && !data && !hasLocal) {
       return (
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
           <AlertTriangle className="h-8 w-8 text-chrome-neutral-500" />
@@ -139,16 +164,25 @@ export default function MusicHome() {
     if (activeChip) {
       const items = visible(chipFilter.items.filter(renderable));
       const songContext = songsOf(items);
+      if (chipFilter.error && items.length === 0) {
+        return <div className="flex flex-col items-center gap-3 py-20 text-center">
+          <p className="text-sm text-chrome-neutral-400">{getString('music_error_generic')}</p>
+          <Button variant="secondary" onClick={chipFilter.reload}>{getString('music_retry')}</Button>
+        </div>;
+      }
+      if (!chipFilter.loading && items.length === 0) {
+        return <p className="py-20 text-center text-sm text-chrome-neutral-400">{t('musicChipEmpty')}</p>;
+      }
       return (
         <div className="flow-grid gap-y-6" style={gridStyle}>
           {chipFilter.loading && items.length === 0
             ? Array.from({ length: 18 }).map((_, i) => <SquareSkeleton key={i} fill />)
-            : items.map((item, i) => <div key={i}>{renderCard(item, songContext, true)}</div>)}
+            : items.map((item, i) => <div key={i}>{renderCard(item, songContext, activeChip.title, true)}</div>)}
         </div>
       );
     }
 
-    if (loading && !data) {
+    if (loading && !data && !hasLocal) {
       return (
         <div className="flex flex-col gap-10">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -158,66 +192,96 @@ export default function MusicHome() {
       );
     }
 
-    const quickPicks = (
-      personalization.quickPicks.length ? personalization.quickPicks : data?.quickPicks ?? []
-    ).filter((track) => !isHidden(track));
-    const personalSections = personalization.sections;
-    const seenTitles = new Set(personalSections.map((s) => s.title.trim().toLowerCase()));
-    const homeSections = (data?.sections ?? []).filter(
-      (s) => !seenTitles.has(s.title.trim().toLowerCase()),
+    const quickPicks = personalization.quickPicks.filter((track) => !isHidden(track));
+    const feed = composeMusicFeed(
+      [...personalization.sections, ...discoverySections, ...moreSections]
+        .map((section) => ({ ...section, items: visible(section.items) })),
+      [...(data?.sections ?? []), ...charts].map((section) => ({ ...section, items: visible(section.items) })),
+      personalization.maturity, quickPicks, { hasMoods: moodItems.length > 0 },
     );
 
-    const renderShelf = (key: string, title: string, rawItems: YTItem[]) => {
-      const items = visible(rawItems.filter(renderable)).slice(0, 20);
+    const headerActions = (section: MusicFeedSection, items: YTItem[]) => {
+      if (section.route) return { onNavigate: () => navigate(section.route as string) };
+      if (section.playAll) {
+        const songs = songsOf(items);
+        return { onPlayAll: () => void playQueue(songs, 0, section.title) };
+      }
+      if (section.browseId) {
+        const route = musicSeeAllRoute(section.browseId, section.params, section.title, items);
+        return { onSeeAll: () => navigate(route) };
+      }
+      return {};
+    };
+
+    const renderShelf = (section: MusicFeedSection) => {
+      const items = visible(section.items.filter(renderable)).slice(0, 20);
       if (items.length === 0) return null;
       const songContext = songsOf(items);
-      const shape = items[0]?.type === 'artist' ? 'circle' : 'square';
+      if (section.id === 'speed-dial') {
+        return (
+          <MusicSpeedDial
+            title={section.title}
+            tracks={songContext}
+            onPlay={(track) => playTrack(track, songContext, section.title)}
+            onShuffle={() => void playQueue(shuffled(songContext), 0, section.title)}
+            onQueue={addToQueue}
+          />
+        );
+      }
       return (
         <MusicShelf
-          key={key}
-          title={title}
+          title={section.title}
+          subtitle={section.subtitle}
+          seedArt={section.seedArt}
           items={items}
-          skeletonShape={shape}
-          renderItem={(item) => renderCard(item, songContext)}
+          {...headerActions(section, items)}
+          skeletonShape={items[0]?.type === 'artist' ? 'circle' : 'square'}
+          renderItem={(item) => {
+            const preview = item.type === 'playlist'
+              ? (section.previews?.[item.id] ?? []).filter((track) => !isHidden(track)) : [];
+            return item.type === 'playlist' && preview.length > 0
+              ? <CommunityPlaylistCard playlist={item} preview={preview}
+                  onOpen={() => openPlaylist(item)}
+                  onPlay={() => void playQueue(preview, 0, item.title)}
+                  onPlayPreview={(track) => playTrack(track, preview, item.title)} />
+              : renderCard(item, songContext, section.title);
+          }}
         />
       );
     };
 
+    if (!feed.length && !loading) {
+      return <p className="py-20 text-center text-sm text-chrome-neutral-400">{t('musicEmpty')}</p>;
+    }
+    const quickTitle = getString('music_quick_picks');
     return (
-      <>
-        {quickPicks.length > 0 && (
-          <section className="mb-10">
-            <h2 className="mb-3 px-1 text-xl font-bold tracking-tight text-chrome-neutral-100">
-              {getString('music_quick_picks')}
-            </h2>
-            <ShelfScroller className="grid auto-cols-[88%] grid-flow-col grid-rows-3 gap-x-4 gap-y-1 snap-x px-3 -mx-3 pt-3 -mt-2 pb-4 sm:auto-cols-[46%] lg:auto-cols-[31%] xl:auto-cols-[23.5%]">
-              {quickPicks.map((track) => (
-                <MusicItemCard
-                  key={track.videoId ?? track.id}
-                  variant="track-list"
-                  item={track}
-                  className="snap-start bg-surface-container-low pr-3"
-                  onPlay={() => playTrack(track, quickPicks)}
-                  onMenu={() => addToQueue(track)}
-                />
-              ))}
-            </ShelfScroller>
-          </section>
-        )}
-
-        <div className="flex flex-col gap-10">
-          {personalSections.map((section) =>
-            renderShelf(
-              section.id,
-              section.subtitle ? `${section.subtitle} ${section.title}` : section.title,
-              section.items,
-            ),
-          )}
-          {homeSections.map((section, idx) =>
-            renderShelf(`${section.title}-${idx}`, section.title, section.items),
-          )}
-        </div>
-      </>
+      <div className="flex flex-col gap-10">
+        {feed.map((entry) => {
+          if (entry.kind === 'quickPicks') {
+            return (
+              <MusicQuickPicksShelf
+                key="quick-picks"
+                title={quickTitle}
+                tracks={quickPicks}
+                onPlay={(track) => playTrack(track, quickPicks, quickTitle)}
+                onQueue={addToQueue}
+              />
+            );
+          }
+          if (entry.kind === 'moods') {
+            return (
+              <MusicMoodShelf
+                key="moods"
+                title={t('musicMoodsAndGenres')}
+                moods={moodItems}
+                onOpen={openMood}
+                onBrowse={() => navigate('/music/moods')}
+              />
+            );
+          }
+          return <div key={entry.section.id}>{renderShelf(entry.section)}</div>;
+        })}
+      </div>
     );
   };
 
@@ -231,6 +295,15 @@ export default function MusicHome() {
         className="mt-1 mb-8"
       />
       {renderBody()}
+
+      {error && (data || personalization.quickPicks.length || personalization.sections.length
+        || discoverySections.length) && (
+        <div className="mt-5 flex items-center gap-3 text-sm text-chrome-neutral-400">
+          <span>{getString('music_error_generic')}</span>
+          <Button variant="secondary" onClick={() => void reload()}>{getString('music_retry')}</Button>
+        </div>
+      )}
+      {loadMoreError && <p className="text-center text-sm text-chrome-neutral-400">{loadMoreError}</p>}
 
       {!error && pageHasMore && (
         <div className="flex flex-col items-center gap-3 py-10">

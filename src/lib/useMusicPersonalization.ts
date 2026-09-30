@@ -3,21 +3,32 @@ import { getMusicHistory } from './api/db';
 import {
   getDailyMixes,
   getHeavyRotation,
-  getMusicArtistPage,
-  getMusicChartsPage,
-  getMusicQueueContinuation,
+  getMusicPlaylistPage,
   getMusicRelatedTyped,
   getMusicTasteProfile,
-  getMusicWatchQueue,
-  rankMusicCandidates,
   searchMusicTyped,
-  type MusicRankSurface,
 } from './api/music';
-import { segmentArtistPage } from './useArtistPage';
+import i18n from './i18n';
 import { getString } from './i18n/index';
-import { interleaveQuickPickLanes, selectQuickPickSeeds } from './musicQuickPicks';
+import { buildQuickPicks } from './musicQuickPicksBuilder';
+import { dailyMixId, dailyMixRoute, expandDailyMix } from './musicMixes';
+import { pickForSession } from './musicFeedComposer';
+import {
+  MIN_SHELF_ITEMS,
+  audioMusicOnly,
+  trendingSongs,
+  interleaveSimilar,
+  ranked,
+  recallArtist,
+  relatedSongs,
+  shuffled,
+  songIdOf,
+  takeUnused,
+  toYTSong,
+  ytItemId,
+} from './musicRecall';
 import { useMusicPlayerStore } from '../store/useMusicPlayerStore';
-import type { MusicTasteProfile, SongItem, YTItem } from '../types/music';
+import type { MusicSeedArt, MusicTasteProfile, PlaylistItem, SongItem, YTItem } from '../types/music';
 import type { WatchHistoryRecord } from '../types/db';
 
 export interface PersonalSection {
@@ -25,21 +36,22 @@ export interface PersonalSection {
   title: string;
   subtitle?: string;
   items: YTItem[];
+  /** The whole header opens this route. */
+  route?: string;
+  seedArt?: MusicSeedArt;
+  /** The header offers Play all over the section's songs. */
+  playAll?: boolean;
+  previews?: Record<string, SongItem[]>;
 }
 
 export interface MusicPersonalization {
   quickPicks: SongItem[];
   sections: PersonalSection[];
   loading: boolean;
+  maturity: MusicTasteProfile['maturity'];
 }
 
 const HISTORY_SEED_LIMIT = 50;
-const MIN_SHELF_ITEMS = 4;
-const QUICK_PICKS_TARGET = 24;
-const QUICK_PICKS_SEED_LIMIT = 5;
-const QUICK_PICKS_RADIO_SEEDS = 2;
-const QUICK_PICKS_LANE_SIZE = 20;
-const RADIO_MAX_PAGES = 2;
 
 // --- Artist-graph discovery ("Fans of {Artist} also like") ----------------
 const SIMILAR_MAX_ANCHORS = 2;
@@ -52,11 +64,17 @@ const ARTIST_GRAPH_TRACKS_PER_RELATED = 3;
 const ARTIST_GRAPH_SHELF_SIZE = 14;
 const ARTIST_GRAPH_MAX_FETCHES = 8; // hard cap on artist-page fetches per home build
 
+const COMMUNITY_PREVIEWS = 6;
+const COMMUNITY_PREVIEW_TRACKS = 10;
+const COMMUNITY_TRACK_SEEDS = 2;
+const COMMUNITY_ARTIST_SEEDS = 3;
+// Two tracks already make a repeat pattern, so On Repeat appears sooner than other shelves.
+const ON_REPEAT_MIN = 2;
+
 // Cross-reload repetition guard: a session-scoped FIFO ring of recently-surfaced track ids.
 // Discovery/recall shelves avoid these so reloading the home yields fresh content; On Repeat
 // and Daily Mixes deliberately ignore it (they are meant to be stable).
 const RECENTLY_SHOWN_MAX = 200;
-const MAX_PERSONAL_SHELVES = 8;
 
 let recentlyShown: string[] = [];
 
@@ -72,142 +90,6 @@ function rememberShown(ids: Iterable<string>): void {
   if (recentlyShown.length > RECENTLY_SHOWN_MAX) {
     recentlyShown = recentlyShown.slice(recentlyShown.length - RECENTLY_SHOWN_MAX);
   }
-}
-
-const toYTSong = (s: SongItem): YTItem => ({ type: 'song', ...s });
-const songIdOf = (s: SongItem): string => s.videoId ?? s.id;
-
-function ytItemId(it: YTItem): string {
-  if ('videoId' in it && it.videoId) return it.videoId;
-  if ('id' in it && it.id) return it.id;
-  if ('browseId' in it && it.browseId) return it.browseId;
-  return '';
-}
-
-function isAudioSong(s: SongItem): boolean {
-  const vt = s.musicVideoType;
-  const isVideoSong = !!vt && vt !== 'MUSIC_VIDEO_TYPE_ATV';
-  const dur = s.duration ?? 0;
-  const okDuration = dur === 0 || (dur >= 30 && dur <= 1200);
-  return !isVideoSong && !!songIdOf(s) && okDuration;
-}
-
-function audioMusicOnly(songs: SongItem[]): SongItem[] {
-  const seen = new Set<string>();
-  const out: SongItem[] = [];
-  for (const s of songs) {
-    if (!isAudioSong(s)) continue;
-    const id = songIdOf(s);
-    if (seen.has(id)) continue;
-    seen.add(id);
-    out.push(s);
-  }
-  return out;
-}
-
-// Picks up to `n` songs not already claimed (`used`) or recently surfaced (`avoid`). Only
-// `used` is mutated — `avoid` is a read-only suppression set (the recently-shown ring).
-function takeUnused(
-  songs: SongItem[],
-  n: number,
-  used: Set<string>,
-  avoid?: Set<string>,
-): SongItem[] {
-  const out: SongItem[] = [];
-  for (const s of songs) {
-    const id = songIdOf(s);
-    if (!id || used.has(id) || (avoid && avoid.has(id))) continue;
-    used.add(id);
-    out.push(s);
-    if (out.length >= n) break;
-  }
-  return out;
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
-}
-
-// Local taste ranking over YT Music recall. A cold/empty brain is a stable pass-through,
-// and any failure falls back to the original order — so this never breaks a shelf.
-async function ranked(songs: SongItem[], surface: MusicRankSurface): Promise<SongItem[]> {
-  if (songs.length <= 1) return songs;
-  try {
-    return await rankMusicCandidates(songs, surface);
-  } catch {
-    return songs;
-  }
-}
-
-async function relatedSongs(videoId: string): Promise<SongItem[]> {
-  try {
-    const page = await getMusicRelatedTyped(videoId);
-    return audioMusicOnly(page.songs);
-  } catch {
-    return [];
-  }
-}
-
-async function chartsSongs(): Promise<SongItem[]> {
-  try {
-    const charts = await getMusicChartsPage();
-    const songs = charts.sections
-      .flatMap((s) => s.items)
-      .filter((i): i is Extract<YTItem, { type: 'song' }> => i.type === 'song');
-    return audioMusicOnly(songs);
-  } catch {
-    return [];
-  }
-}
-
-async function gatherRadio(seedId: string, cap: number): Promise<SongItem[]> {
-  const pool: SongItem[] = [];
-  try {
-    const first = await getMusicWatchQueue(seedId, `RDAMVM${seedId}`);
-    pool.push(...first.items);
-    let continuation = first.continuation;
-    let page = 0;
-    while (pool.length < cap && continuation && page < RADIO_MAX_PAGES) {
-      page += 1;
-      const next = await getMusicQueueContinuation(continuation);
-      pool.push(...next.items);
-      continuation = next.continuation;
-    }
-  } catch {
-  }
-  return pool;
-}
-
-async function buildQuickPicks(
-  history: WatchHistoryRecord[],
-  currentTrack: SongItem | null,
-  used: Set<string>,
-): Promise<SongItem[]> {
-  const seeds = selectQuickPickSeeds(history, currentTrack, QUICK_PICKS_SEED_LIMIT);
-  const seedIds = new Set(seeds.map((seed) => seed.videoId));
-  for (const id of seedIds) used.add(id);
-
-  // Recall independent radio/related lanes plus charts on every build. Ranking within each
-  // lane preserves taste relevance; round-robin mixing keeps one station from owning the shelf.
-  const [radioResults, relatedResults, charts] = await Promise.all([
-    Promise.all(
-      seeds
-        .slice(0, QUICK_PICKS_RADIO_SEEDS)
-        .map((seed) => gatherRadio(seed.videoId, QUICK_PICKS_LANE_SIZE)),
-    ),
-    Promise.all(seeds.map((seed) => relatedSongs(seed.videoId))),
-    chartsSongs(),
-  ]);
-
-  const personalizedLanes = await Promise.all(
-    [...radioResults, ...relatedResults].map((lane) => ranked(audioMusicOnly(lane), 'quick_picks')),
-  );
-  const discoveryLane = await ranked(charts, 'discover');
-  return interleaveQuickPickLanes(
-    [...personalizedLanes, discoveryLane],
-    QUICK_PICKS_TARGET,
-    used,
-  );
 }
 
 /** artist_key → a representative seed videoId, mirroring the backend's `artist_key()`
@@ -227,6 +109,8 @@ interface SimilarAnchor {
   key: string;
   name: string;
   seed: string;
+  /** The key is a browse id, so the anchor has an artist page and photo. */
+  idKeyed: boolean;
 }
 
 // "Similar to {Artist}" — song-radio around the user's favorite artists. Anchors are taken
@@ -247,7 +131,7 @@ async function buildSimilarTo(
     if (usedAnchors.has(a.key)) continue;
     const seed = seeds.get(a.key);
     if (!seed) continue;
-    anchors.push({ key: a.key, name: a.name, seed });
+    anchors.push({ key: a.key, name: a.name, seed, idKeyed: a.idKeyed });
     if (anchors.length >= SIMILAR_MAX_ANCHORS) break;
   }
   if (anchors.length === 0) {
@@ -260,7 +144,7 @@ async function buildSimilarTo(
       list.push(h);
       byArtist.set(artist, list);
     }
-    const top = shuffle(
+    const top = shuffled(
       [...byArtist.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 6),
     ).slice(0, SIMILAR_MAX_ANCHORS);
     for (const [artist, recs] of top) {
@@ -268,7 +152,7 @@ async function buildSimilarTo(
       if (!seed) continue;
       const key = (recs[0]?.channelId ?? '').trim() || artist.toLowerCase();
       if (usedAnchors.has(key)) continue;
-      anchors.push({ key, name: artist, seed });
+      anchors.push({ key, name: artist, seed, idKeyed: false });
     }
   }
 
@@ -276,21 +160,54 @@ async function buildSimilarTo(
   const seenSeeds = new Set<string>();
   for (const anchor of anchors) {
     usedAnchors.add(anchor.key);
-    const items = takeUnused(await ranked(await relatedSongs(anchor.seed), 'similar'), 12, used, avoid);
-    if (items.length >= MIN_SHELF_ITEMS) {
+    const [page, artist] = await Promise.all([
+      getMusicRelatedTyped(anchor.seed).catch(() => null),
+      anchor.idKeyed ? recallArtist(anchor.key) : Promise.resolve(null),
+    ]);
+    if (!page) continue;
+    const artistRoute = anchor.idKeyed ? `/music/artist/${anchor.key}` : undefined;
+    const songs = takeUnused(await ranked(audioMusicOnly(page.songs), 'similar'), 10, used, avoid);
+    const row = interleaveSimilar(songs.map(toYTSong), [
+      page.artists.slice(0, 2).map((item) => ({ type: 'artist' as const, ...item })),
+      page.playlists.slice(0, 2).map((item) => ({ type: 'playlist' as const, ...item })),
+    ]);
+    if (row.length >= MIN_SHELF_ITEMS) {
       seenSeeds.add(anchor.seed);
       sections.push({
         id: `similar-${anchor.key}`,
         title: anchor.name,
         subtitle: getString('music_similar_to'),
-        items: items.map(toYTSong),
+        seedArt: artist?.header.thumbnail ? { url: artist.header.thumbnail, round: true } : undefined,
+        route: artistRoute,
+        items: row,
       });
     }
+    // Alternate recordings of the seed song itself, so the header names that song.
+    const performances = page.otherPerformances.slice(0, 12).map(toYTSong);
+    if (performances.length >= 3) sections.push({
+      id: `performances-${anchor.key}`,
+      title: history.find((record) => record.videoId === anchor.seed)?.title ?? anchor.name,
+      subtitle: i18n.t('musicOtherPerformances'),
+      playAll: true,
+      items: performances,
+    });
+    const albums = page.albums.slice(0, 12).map((item) => ({ type: 'album' as const, ...item }));
+    // The related page titles this shelf with the artist's name and links it to the artist.
+    const moreFrom = page.sections.find((section) => section.shelfType === 'moreFromArtist');
+    const moreFromId = moreFrom?.artistBrowseId;
+    if (albums.length >= 3) sections.push({
+      id: `artist-albums-${anchor.key}`,
+      title: moreFrom?.title || anchor.name,
+      subtitle: i18n.t('musicMoreFrom'),
+      route: moreFromId ? `/music/artist/${moreFromId}` : artistRoute,
+      items: albums,
+    });
   }
 
   const recent = history[0];
   if (recent?.videoId && !seenSeeds.has(recent.videoId)) {
-    const items = takeUnused(await ranked(await relatedSongs(recent.videoId), 'similar'), 12, used, avoid);
+    const page = await getMusicRelatedTyped(recent.videoId).catch(() => null);
+    const items = takeUnused(await ranked(audioMusicOnly(page?.songs ?? []), 'similar'), 12, used, avoid);
     if (items.length >= MIN_SHELF_ITEMS) {
       sections.push({
         id: `similar-${recent.videoId}`,
@@ -331,13 +248,9 @@ async function buildArtistGraph(
     if (fetches >= ARTIST_GRAPH_MAX_FETCHES) break;
     usedAnchors.add(anchor.key);
 
-    let related;
-    try {
-      fetches += 1;
-      related = segmentArtistPage(await getMusicArtistPage(anchor.key)).related;
-    } catch {
-      continue;
-    }
+    fetches += 1;
+    const related = (await recallArtist(anchor.key))?.related;
+    if (!related) continue;
 
     const budget = Math.max(0, ARTIST_GRAPH_MAX_FETCHES - fetches);
     const fetchable = related
@@ -348,13 +261,9 @@ async function buildArtistGraph(
     fetchable.forEach((r) => seenRelated.add(r.id));
     fetches += fetchable.length;
 
-    const pages = await Promise.allSettled(fetchable.map((r) => getMusicArtistPage(r.id)));
-    const pool: SongItem[] = [];
-    for (const res of pages) {
-      if (res.status !== 'fulfilled') continue;
-      const songs = audioMusicOnly(segmentArtistPage(res.value).topSongs);
-      pool.push(...songs.slice(0, ARTIST_GRAPH_TRACKS_PER_RELATED));
-    }
+    const pages = await Promise.all(fetchable.map((r) => recallArtist(r.id)));
+    const pool = pages.flatMap((page) =>
+      audioMusicOnly(page?.topSongs ?? []).slice(0, ARTIST_GRAPH_TRACKS_PER_RELATED));
 
     const rankedPool = await ranked(audioMusicOnly(pool), 'similar');
     const items = takeUnused(rankedPool, ARTIST_GRAPH_SHELF_SIZE, used, avoid).map(toYTSong);
@@ -375,7 +284,7 @@ async function buildDailyDiscover(
   avoid: Set<string>,
 ): Promise<PersonalSection | null> {
   if (history.length === 0) return null;
-  const seeds = shuffle(history).slice(0, 8);
+  const seeds = shuffled(history).slice(0, 8);
   const results = await Promise.all(seeds.map((seed) => relatedSongs(seed.videoId)));
   const pool = await ranked(audioMusicOnly(results.flat()), 'discover');
   const items = takeUnused(pool, 12, used, avoid).map(toYTSong);
@@ -383,37 +292,68 @@ async function buildDailyDiscover(
   return { id: 'daily-discover', title: getString('music_daily_discover'), items };
 }
 
-async function buildFromCommunity(history: WatchHistoryRecord[]): Promise<PersonalSection | null> {
-  if (history.length === 0) return null;
-  const artists = [...new Set(history.map((h) => (h.channelName ?? '').trim()).filter(Boolean))].slice(0, 3);
-  if (artists.length === 0) return null;
+const isCommunityPlaylist = (playlist: PlaylistItem): boolean => {
+  const author = (playlist.author?.name ?? '').trim().toLowerCase();
+  return !playlist.id.startsWith('RD') && !playlist.id.startsWith('OLAK')
+    && author !== '' && author !== 'youtube' && author !== 'youtube music';
+};
 
-  const results = await Promise.all(
-    artists.map(async (artist) => {
-      try {
-        const res = await searchMusicTyped(`${artist} playlist`, 'community_playlists');
-        return res.sections.flatMap((s) => s.items);
-      } catch {
-        return [] as YTItem[];
-      }
-    }),
-  );
-
+/** The most recent listen of each of the first `count` distinct artists. */
+function distinctArtistSeeds(history: WatchHistoryRecord[], count: number): WatchHistoryRecord[] {
   const seen = new Set<string>();
-  const playlists = results
-    .flat()
-    .filter((it): it is Extract<YTItem, { type: 'playlist' }> => it.type === 'playlist')
-    .filter((p) => !p.id.startsWith('RD') && !p.id.startsWith('OLAK'))
-    .filter((p) => (p.author?.name ?? '').trim().toLowerCase() !== 'youtube')
-    .filter((p) => {
-      if (seen.has(p.id)) return false;
-      seen.add(p.id);
-      return true;
-    })
-    .slice(0, 12);
+  return history.filter((record) => {
+    const key = (record.channelId ?? '').trim() || (record.channelName ?? '').trim().toLowerCase();
+    if (!record.videoId || !key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, count);
+}
 
-  if (playlists.length === 0) return null;
-  return { id: 'from-community', title: getString('music_from_community'), items: playlists };
+// Community playlists, as on Android: the related playlists of recent listens plus the
+// "Featured on" playlists of the top artists (not the artists' own), a session pick of
+// up to six, each hydrated for its preview. A text search only stands in when there is
+// no listening to seed from.
+async function buildFromCommunity(
+  history: WatchHistoryRecord[],
+  profile: MusicTasteProfile | null,
+): Promise<PersonalSection | null> {
+  const trackSeeds = distinctArtistSeeds(history, COMMUNITY_TRACK_SEEDS);
+  const anchors = (profile?.topArtists ?? []).filter((artist) => artist.idKeyed).slice(0, COMMUNITY_ARTIST_SEEDS);
+  const [related, artistPages] = await Promise.all([
+    Promise.all(trackSeeds.map((seed) => getMusicRelatedTyped(seed.videoId).catch(() => null))),
+    Promise.all(anchors.map((artist) => recallArtist(artist.key))),
+  ]);
+  const featured = artistPages.flatMap((page) => (page?.featuredOn ?? [])
+    .filter((playlist) => (playlist.author?.name ?? '').trim().toLowerCase()
+      !== page?.header.title.trim().toLowerCase()));
+  let candidates = [...related.flatMap((page) => page?.playlists ?? []), ...featured].filter(isCommunityPlaylist);
+  if (candidates.length === 0 && history.length === 0) {
+    candidates = await searchMusicTyped('community playlist', 'community_playlists')
+      .then((res) => res.sections.flatMap((section) => section.items)
+        .filter((it): it is Extract<YTItem, { type: 'playlist' }> => it.type === 'playlist')
+        .filter(isCommunityPlaylist))
+      .catch(() => []);
+  }
+  const unique = [...new Map(candidates.map((playlist) => [playlist.id, playlist])).values()];
+  const picked = pickForSession(unique, COMMUNITY_PREVIEWS, (playlist) => playlist.id, 'community');
+  if (picked.length === 0) return null;
+
+  const pages = await Promise.all(picked
+    .map((playlist) => getMusicPlaylistPage(playlist.id, { preferCached: true }).catch(() => null)));
+  const previews: Record<string, SongItem[]> = {};
+  const playable = picked.filter((playlist, index) => {
+    const tracks = audioMusicOnly(pages[index]?.songs ?? []).slice(0, COMMUNITY_PREVIEW_TRACKS);
+    if (tracks.length === 0) return false;
+    previews[playlist.id] = tracks;
+    return true;
+  });
+  if (playable.length === 0) return null;
+  return {
+    id: 'from-community',
+    title: getString('music_from_community'),
+    items: playable.map((playlist) => ({ type: 'playlist' as const, ...playlist })),
+    previews,
+  };
 }
 
 // "On Repeat": the user's heavy-rotation tracks (ACT-R activation), resolved locally
@@ -422,7 +362,7 @@ async function buildHeavyRotation(used: Set<string>): Promise<PersonalSection | 
   try {
     const songs = audioMusicOnly(await getHeavyRotation(16));
     const items = takeUnused(songs, 16, used).map(toYTSong);
-    if (items.length < MIN_SHELF_ITEMS) return null;
+    if (items.length < ON_REPEAT_MIN) return null;
     return { id: 'on-repeat', title: getString('music_on_repeat'), items };
   } catch {
     return null;
@@ -440,31 +380,33 @@ async function buildDailyMixes(used: Set<string>): Promise<PersonalSection[]> {
   }
   const sections: PersonalSection[] = [];
   for (const mix of mixes) {
-    const seeds = mix.seedTrackIds.slice(0, 3);
-    const related = (await Promise.all(seeds.map(relatedSongs))).flat();
-    const pool = await ranked(audioMusicOnly(related), 'discover');
+    const pool = await expandDailyMix(mix);
     const items = takeUnused(pool, 14, used).map(toYTSong);
     if (items.length >= MIN_SHELF_ITEMS) {
+      const cover = items[0]?.type === 'song' ? items[0].thumbnail : '';
       sections.push({
-        id: `mix-${mix.label}`,
+        id: dailyMixId(mix),
         title: `${mix.label} ${getString('music_mix')}`,
+        subtitle: i18n.t('musicDailyMix'),
+        seedArt: cover ? { url: cover } : undefined,
         items,
+        route: dailyMixRoute(mix),
       });
     }
   }
   return sections;
 }
 
-// Cold-start surface: real charts (what's genuinely popular now), discovery-ranked —
+// Trending: the song chart, or YouTube Music's home songs when there is none, discovery-ranked —
 // replaces the old hardcoded artist list.
-async function buildPopularArtists(
+async function buildTrending(
   used: Set<string>,
   avoid: Set<string>,
 ): Promise<PersonalSection | null> {
-  const pool = await ranked(await chartsSongs(), 'discover');
+  const pool = await ranked(await trendingSongs(), 'discover');
   const items = takeUnused(pool, 16, used, avoid).map(toYTSong);
   if (items.length < MIN_SHELF_ITEMS) return null;
-  return { id: 'popular-artists', title: getString('music_popular_artists'), items };
+  return { id: 'popular-songs', title: i18n.t('musicTrending'), items };
 }
 
 interface BuiltSections {
@@ -481,7 +423,6 @@ interface BuiltSections {
 //  • cold_start → comfort/charts-led (no artist-graph yet); never an empty home.
 //  • high discovery appetite → graph-driven discovery surfaced early (after On Repeat).
 //  • otherwise → comfort-first, discovery after.
-// Capped at MAX_PERSONAL_SHELVES so the home never becomes an endless wall.
 function planSections(profile: MusicTasteProfile | null, b: BuiltSections): PersonalSection[] {
   const maturity = profile?.maturity ?? 'cold_start';
   const highAppetite = (profile?.discoveryAppetite ?? 0) >= ARTIST_GRAPH_HIGH_APPETITE;
@@ -514,7 +455,20 @@ function planSections(profile: MusicTasteProfile | null, b: BuiltSections): Pers
     push(b.community);
     push(b.popular);
   }
-  return out.slice(0, MAX_PERSONAL_SHELVES);
+  return out;
+}
+
+const EMPTY_BUILD: BuiltSections = {
+  heavy: null, mixes: [], fans: [], similar: [], daily: null, community: null, popular: null,
+};
+
+function sectionItemIds(sections: PersonalSection[]): Set<string> {
+  const ids = new Set<string>();
+  for (const section of sections) for (const item of section.items) {
+    const id = ytItemId(item);
+    if (id) ids.add(id);
+  }
+  return ids;
 }
 
 export function useMusicPersonalization(): MusicPersonalization {
@@ -524,9 +478,11 @@ export function useMusicPersonalization(): MusicPersonalization {
   const [quickPicks, setQuickPicks] = useState<SongItem[]>([]);
   const [sections, setSections] = useState<PersonalSection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [maturity, setMaturity] = useState<MusicTasteProfile['maturity']>('cold_start');
   const [dataVersion, setDataVersion] = useState(0);
 
   const historyRef = useRef<WatchHistoryRecord[]>([]);
+  const profileRef = useRef<MusicTasteProfile | null>(null);
   const sectionIdsRef = useRef<Set<string>>(new Set());
   const sectionsReqRef = useRef(0);
   const quickReqRef = useRef(0);
@@ -541,57 +497,57 @@ export function useMusicPersonalization(): MusicPersonalization {
       ]);
       if (sectionsReqRef.current !== req) return;
       historyRef.current = history;
+      profileRef.current = profile;
+      setMaturity(profile?.maturity ?? 'cold_start');
 
-      const communityP = buildFromCommunity(history);
+      const communityP = buildFromCommunity(history, profile);
       const used = new Set<string>();
       const usedAnchors = new Set<string>();
       // Avoid re-surfacing tracks shown on a recent reload — discovery/recall shelves only.
       const avoid = snapshotRecentlyShown();
+      const built: BuiltSections = { ...EMPTY_BUILD };
+      // Each stage publishes as soon as it lands, in planned order, so fast local
+      // shelves never wait behind slower network-backed ones.
+      const publish = (): boolean => {
+        if (sectionsReqRef.current !== req) return false;
+        const next = planSections(profile, built);
+        sectionIdsRef.current = sectionItemIds(next);
+        setSections(next);
+        return true;
+      };
 
       // On Repeat + Daily Mixes run first (claim the strongest tracks) and intentionally
       // ignore the recently-shown ring — they are meant to be stable. The artist-graph then
       // claims the best id-keyed anchors before Similar-To takes the remainder.
-      const heavy = await buildHeavyRotation(used);
-      const mixes = await buildDailyMixes(used);
-      const fans = await buildArtistGraph(profile, used, usedAnchors, avoid);
-      const similar = await buildSimilarTo(profile, history, used, usedAnchors, avoid);
-      const daily = await buildDailyDiscover(history, used, avoid);
-      const popular = await buildPopularArtists(used, avoid);
-      const community = await communityP;
-      if (sectionsReqRef.current !== req) return;
-
-      const next = planSections(profile, {
-        heavy,
-        mixes,
-        fans,
-        similar,
-        daily,
-        community,
-        popular,
-      });
-
-      const ids = new Set<string>();
-      for (const s of next) for (const it of s.items) {
-        const id = ytItemId(it);
-        if (id) ids.add(id);
-      }
-      sectionIdsRef.current = ids;
-      rememberShown(ids); // refresh the cross-reload repetition guard
-      setSections(next);
+      built.heavy = await buildHeavyRotation(used);
+      if (!publish()) return;
       setLoading(false);
-      setDataVersion((v) => v + 1);
-    })();
+      setDataVersion((version) => version + 1);
+      built.mixes = await buildDailyMixes(used);
+      if (!publish()) return;
+      built.fans = await buildArtistGraph(profile, used, usedAnchors, avoid);
+      if (!publish()) return;
+      built.similar = await buildSimilarTo(profile, history, used, usedAnchors, avoid);
+      if (!publish()) return;
+      built.daily = await buildDailyDiscover(history, used, avoid);
+      built.popular = await buildTrending(used, avoid);
+      built.community = await communityP;
+      if (!publish()) return;
+      rememberShown(sectionIdsRef.current); // refresh the cross-reload repetition guard
+    })().catch(() => {
+      if (sectionsReqRef.current === req) setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
+    if (dataVersion === 0) return;
     const req = ++quickReqRef.current;
-    (async () => {
-      const used = new Set(sectionIdsRef.current);
-      const picks = await buildQuickPicks(historyRef.current, currentTrack, used);
-      if (quickReqRef.current !== req) return;
-      setQuickPicks(picks);
-    })();
+    void buildQuickPicks(historyRef.current, currentTrack, new Set(sectionIdsRef.current), profileRef.current)
+      .then((picks) => {
+        if (quickReqRef.current === req) setQuickPicks(picks);
+      })
+      .catch(() => undefined);
   }, [currentTrackId, dataVersion]);
 
-  return { quickPicks, sections, loading };
+  return { quickPicks, sections, loading, maturity };
 }

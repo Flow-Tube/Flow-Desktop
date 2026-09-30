@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { clearLogs, getLogsDir, readLogs } from "./api/diagnostics";
 import { getBackendErrorMessage } from "./api/errors";
+import { getMusicRequestDiagnostics, type MusicRequestDiagnostics } from "./api/music";
 import { clearDiagnosticEvents, formatDiagnosticEvent, getDiagnosticEvents } from "./diagnostics";
 
 function formatInAppEvents(): string {
@@ -8,6 +9,17 @@ function formatInAppEvents(): string {
   if (events.length === 0) return "";
   const lines = events.map(formatDiagnosticEvent);
   return `===== In-app events (${events.length}) =====\n${lines.join("\n")}`;
+}
+
+/** Anonymous music request totals since launch; counts and timings only, never tokens. */
+function formatMusicRequests(stats: MusicRequestDiagnostics | null): string {
+  if (!stats) return "";
+  const average = stats.requests > 0 ? Math.round(stats.requestMillis / stats.requests) : 0;
+  return [
+    "===== Music requests since launch =====",
+    `Innertube requests: ${stats.requests} (avg ${average}ms)`,
+    `Served from local cache: ${stats.publicCacheHits}`,
+  ].join("\n");
 }
 
 export interface DiagnosticsState {
@@ -28,6 +40,7 @@ export interface DiagnosticsState {
  */
 export function useDiagnostics(): DiagnosticsState {
   const [fileLogs, setFileLogs] = useState("");
+  const [musicRequests, setMusicRequests] = useState<MusicRequestDiagnostics | null>(null);
   const [logsDir, setLogsDir] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +50,14 @@ export function useDiagnostics(): DiagnosticsState {
     setError(null);
     try {
       // The dir lookup is a best-effort convenience; never let it fail the load.
-      const [logs, dir] = await Promise.all([readLogs(), getLogsDir().catch(() => "")]);
+      const [logs, dir, music] = await Promise.all([
+        readLogs(),
+        getLogsDir().catch(() => ""),
+        getMusicRequestDiagnostics().catch(() => null),
+      ]);
       setFileLogs(logs);
       setLogsDir(dir);
+      setMusicRequests(music);
     } catch (caught) {
       setError(getBackendErrorMessage(caught));
     } finally {
@@ -62,7 +80,9 @@ export function useDiagnostics(): DiagnosticsState {
     void refresh();
   }, [refresh]);
 
-  const text = [fileLogs.trim(), formatInAppEvents()].filter(Boolean).join("\n\n");
+  const text = [fileLogs.trim(), formatInAppEvents(), formatMusicRequests(musicRequests)]
+    .filter(Boolean)
+    .join("\n\n");
 
   return { text, logsDir, loading, error, refresh, clear };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { WatchHistoryRecord } from '../types/db';
 import type { SongItem } from '../types/music';
-import { interleaveQuickPickLanes, selectQuickPickSeeds } from './musicQuickPicks';
+import { interleaveQuickPickLanes, pickFanArtists, selectQuickPickSeeds } from './musicQuickPicks';
 
 const song = (id: string, artist = id): SongItem => ({
   id,
@@ -52,6 +52,16 @@ describe('selectQuickPickSeeds', () => {
 
     expect(seeds.map((seed) => seed.videoId)).toEqual(['one', 'two', 'three']);
   });
+
+  it('interleaves liked songs with history while keeping artists distinct', () => {
+    const seeds = selectQuickPickSeeds(
+      [history('history-a', 'artist-a'), history('history-b', 'artist-b')],
+      null,
+      3,
+      [song('liked-c', 'artist-c')],
+    );
+    expect(seeds.map((seed) => seed.videoId)).toEqual(['history-a', 'liked-c', 'history-b']);
+  });
 });
 
 describe('interleaveQuickPickLanes', () => {
@@ -74,5 +84,31 @@ describe('interleaveQuickPickLanes', () => {
       'related-2',
       'chart-2',
     ]);
+  });
+
+  it('caps charts and artists and excludes alternate recordings and videos', () => {
+    const alternate = { ...song('alternate', 'artist-a'), title: 'same title' };
+    const first = { ...song('first', 'artist-a'), title: 'same title' };
+    const video = { ...song('video', 'artist-v'), musicVideoType: 'MUSIC_VIDEO_TYPE_OMV' };
+    const mixed = interleaveQuickPickLanes(
+      [
+        [first, alternate, song('a-2', 'artist-a'), song('a-3', 'artist-a'), song('a-4', 'artist-a'), video],
+        [song('b-1', 'artist-b'), song('b-2', 'artist-b')],
+        [song('chart-1', 'artist-c'), song('chart-2', 'artist-d'), song('chart-3', 'artist-e')],
+      ],
+      12,
+      [],
+      { chartLaneIndex: 2, chartLimit: 2, artistLimit: 3 },
+    );
+    expect(mixed.map((item) => item.id)).toEqual([
+      'first', 'b-1', 'chart-1', 'a-2', 'b-2', 'chart-2', 'a-3',
+    ]);
+  });
+});
+
+describe('pickFanArtists', () => {
+  it('takes one neighbour from each top artist in turn and skips known artists', () => {
+    const picked = pickFanArtists([['a1', 'a2', 'a3'], ['top', 'b1'], ['c1']], new Set(['top']), 4);
+    expect(picked).toEqual(['a1', 'c1', 'a2', 'b1']);
   });
 });

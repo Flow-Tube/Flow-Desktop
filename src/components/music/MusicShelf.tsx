@@ -1,13 +1,18 @@
 import React from 'react';
-import { ChevronRight } from 'lucide-react';
-import { getString } from '../../lib/i18n/index';
 import { ShelfScroller } from '../ui/ShelfScroller';
+import { MusicSectionHeader } from './MusicSectionHeader';
+import type { MusicSeedArt } from '../../types/music';
 
 interface MusicShelfProps<T> {
   title: string;
+  /** Drawn as a strapline above the title. */
+  subtitle?: string | null;
+  seedArt?: MusicSeedArt | null;
   items: T[];
   renderItem: (item: T, index: number) => React.ReactNode;
   onSeeAll?: () => void;
+  onNavigate?: () => void;
+  onPlayAll?: () => void;
   loading?: boolean;
   skeletonShape?: 'square' | 'circle';
   skeletonCount?: number;
@@ -40,9 +45,13 @@ function ShelfSkeleton({ shape }: { shape: 'square' | 'circle' }) {
 
 export function MusicShelf<T>({
   title,
+  subtitle,
+  seedArt,
   items,
   renderItem,
   onSeeAll,
+  onNavigate,
+  onPlayAll,
   loading = false,
   skeletonShape = 'square',
   skeletonCount = 6,
@@ -52,20 +61,15 @@ export function MusicShelf<T>({
 
   return (
     <section className={cx('flex flex-col', className)}>
-      {(title || onSeeAll) && (
-      <div className="mb-3 flex items-center justify-between px-1">
-        <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
-        {onSeeAll && (
-          <button
-            type="button"
-            onClick={onSeeAll}
-            className="group flex items-center gap-0.5 text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
-          >
-            {getString('music_show_all')}
-            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </button>
-        )}
-      </div>
+      {title && (
+        <MusicSectionHeader
+          title={title}
+          strapline={subtitle}
+          seedArt={seedArt}
+          onNavigate={onNavigate}
+          onPlayAll={onPlayAll}
+          onSeeAll={onSeeAll}
+        />
       )}
 
       <ShelfScroller className="flex snap-x gap-6 px-3 -mx-3 pt-3 -mt-2 pb-6">

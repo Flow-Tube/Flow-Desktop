@@ -13,11 +13,13 @@ import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
+import { useTrackRadioAction } from './useTrackRadioAction';
 
 type BaseProps = {
   className?: string;
@@ -39,6 +41,7 @@ export type MusicItemCardProps = BaseProps &
         variant: 'track-list';
         item: SongItem;
         onMenu?: () => void;
+        onNavigate?: () => void;
         appendActions?: MusicMenuAction[];
       }
   );
@@ -247,19 +250,6 @@ function Artwork({
   );
 }
 
-function ExplicitBadge() {
-  const label = getString('music_explicit');
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      className="grid h-4 w-4 shrink-0 place-items-center rounded-[3px] bg-chrome-neutral-700 text-[10px] font-bold leading-none text-chrome-neutral-300"
-    >
-      E
-    </span>
-  );
-}
-
 // --- variant renderers ----------------------------------------------------
 
 /** Variant A — square card for albums & playlists. */
@@ -291,6 +281,7 @@ function SquareCard({
   const isAlbum = menuKind === 'album' && item && 'browseId' in item;
   const songLike = useSongLike(isTrack ? item : null);
   const navActions = useTrackNavActions(isTrack ? item : null);
+  const radioActions = useTrackRadioAction(isTrack ? item : null);
   const downloadActions = useTrackDownloadAction(isTrack ? item : null);
   const blockActions = useTrackBlockActions(isTrack ? item : null);
 
@@ -304,6 +295,7 @@ function SquareCard({
   const wash = useHoverWashColor(washSrc);
   const menuActions: MusicMenuAction[] = isTrack
     ? [
+        ...radioActions,
         {
           id: 'add-to-queue',
           label: getString('music_add_to_queue'),
@@ -573,12 +565,14 @@ function ListRow({
   item,
   onPlay,
   onMenu,
+  onNavigate,
   appendActions,
   className,
 }: {
   item: SongItem;
   onPlay?: () => void;
   onMenu?: () => void;
+  onNavigate?: () => void;
   appendActions?: MusicMenuAction[];
   className?: string;
 }) {
@@ -598,7 +592,8 @@ function ListRow({
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const playerIsPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
-  const navActions = useTrackNavActions(item);
+  const navActions = useTrackNavActions(item, { onNavigate });
+  const radioActions = useTrackRadioAction(item);
   const downloadActions = useTrackDownloadAction(item);
   const blockActions = useTrackBlockActions(item);
   const menu = useMusicContextMenu(true);
@@ -606,6 +601,7 @@ function ListRow({
   const isHighlighted = isHovered || isPlayingTrack;
   const activeColor = dominantColor ?? preloadedColor;
   const menuActions: MusicMenuAction[] = [
+    ...radioActions,
     {
       id: 'add-to-queue',
       label: getString('music_add_to_queue'),
@@ -854,6 +850,7 @@ export function MusicItemCard(props: MusicItemCardProps) {
           item={props.item}
           onPlay={onPlay}
           onMenu={props.onMenu}
+          onNavigate={props.onNavigate}
           appendActions={props.appendActions}
           className={className}
         />

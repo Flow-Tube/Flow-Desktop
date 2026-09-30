@@ -6,13 +6,13 @@ use std::collections::HashSet;
 use serde_json::Value;
 
 use super::endpoints;
-use super::parse::items::album_track;
+use super::parse::items::{AlbumTrackCtx, album_track};
 use super::parse::runs::{parse_artists_and_year, runs_text};
 use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
 use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
-use crate::models::music::{Album, AlbumItem, SongItem};
+use crate::models::music::{Album, AlbumItem, SongItem, YTItem};
 use crate::models::music_pages::AlbumPage;
 
 impl InnertubeClient {
@@ -45,11 +45,17 @@ impl InnertubeClient {
         };
         let playlist_id = extract_album_playlist_id(&res, header);
 
-        let (mut songs, mut continuation_token) = collect_album_tracks(&res, &album_ref);
+        let ctx = AlbumTrackCtx {
+            album: album_ref,
+            artists: artists.clone(),
+            thumbnail: thumbnail.clone().unwrap_or_default(),
+        };
+
+        let (mut songs, mut continuation_token) = collect_album_tracks(&res, &ctx);
         let looks_capped = continuation_token.is_some() || songs.len() >= 100;
         if looks_capped && !playlist_id.is_empty() {
             if let Ok(full) = self
-                .music_album_songs(&playlist_id, &album_ref, visitor.as_deref())
+                .music_album_songs(&playlist_id, &ctx, visitor.as_deref())
                 .await
             {
                 if full.len() >= songs.len() {
@@ -66,11 +72,14 @@ impl InnertubeClient {
             artists: (!artists.is_empty()).then_some(artists),
             year,
             thumbnail: thumbnail.unwrap_or_default(),
-            explicit: false,
+            explicit: has_explicit_badge(header),
         };
+
+        let other_versions = find_other_versions(&res, &album);
 
         Ok(AlbumPage {
             album,
+            other_versions,
             description,
             song_count,
             duration_text,
@@ -82,14 +91,14 @@ impl InnertubeClient {
     async fn music_album_songs(
         &self,
         playlist_id: &str,
-        album: &Album,
+        ctx: &AlbumTrackCtx,
         visitor: Option<&str>,
     ) -> AppResult<Vec<SongItem>> {
         let pl = endpoints::vl(playlist_id);
         let res = self.music_browse(Some(&pl), None, None, visitor).await?;
 
         let mut seen = HashSet::new();
-        let (page, mut next) = collect_album_tracks(&res, album);
+        let (page, mut next) = collect_album_tracks(&res, ctx);
         let mut songs = Vec::new();
         for s in page {
             let key = s.video_id.clone().unwrap_or_else(|| s.id.clone());
@@ -107,7 +116,7 @@ impl InnertubeClient {
             }
             requests += 1;
             let res = self.music_browse(None, None, Some(&token), visitor).await?;
-            next = parse_album_continuation(&res, Some(album), &mut songs, &mut seen);
+            next = parse_album_continuation(&res, Some(ctx), &mut songs, &mut seen);
         }
 
         Ok(songs)
@@ -128,9 +137,60 @@ impl InnertubeClient {
     }
 }
 
+fn has_explicit_badge(header: &Value) -> bool {
+    ["subtitleBadge", "badges"].iter().any(|key| {
+        header[*key].as_array().is_some_and(|badges| {
+            badges.iter().any(|badge| {
+                badge["musicInlineBadgeRenderer"]["icon"]["iconType"].as_str()
+                    == Some("MUSIC_EXPLICIT_BADGE")
+            })
+        })
+    })
+}
+
+fn find_other_versions(res: &Value, current: &AlbumItem) -> Vec<AlbumItem> {
+    let title = current.title.trim().to_lowercase();
+    shelves::section_list_contents(res)
+        .into_iter()
+        .filter(|section| !section["musicCarouselShelfRenderer"].is_null())
+        .filter_map(|section| shelves::parse_section(&section))
+        .map(|shelf| {
+            shelf
+                .items
+                .into_iter()
+                .filter_map(|item| match item {
+                    YTItem::Album(album) => Some(album),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .find(|albums| {
+            !albums.is_empty()
+                && albums.iter().all(|album| {
+                    album.browse_id != current.browse_id
+                        && album.title.to_lowercase().starts_with(&title)
+                        && album
+                            .artists
+                            .as_ref()
+                            .zip(current.artists.as_ref())
+                            .is_none_or(|(artists, current_artists)| {
+                                artists.iter().any(|artist| {
+                                    current_artists.iter().any(|current_artist| {
+                                        artist.id.is_some() && artist.id == current_artist.id
+                                            || artist
+                                                .name
+                                                .eq_ignore_ascii_case(&current_artist.name)
+                                    })
+                                })
+                            })
+                })
+        })
+        .unwrap_or_default()
+}
+
 fn parse_album_continuation(
     res: &Value,
-    album: Option<&Album>,
+    ctx: Option<&AlbumTrackCtx>,
     songs: &mut Vec<SongItem>,
     seen: &mut HashSet<String>,
 ) -> Option<String> {
@@ -143,7 +203,7 @@ fn parse_album_continuation(
     if let Some(arr) = cont["sectionListContinuation"]["contents"].as_array() {
         for section in arr {
             for key in ["musicPlaylistShelfRenderer", "musicShelfRenderer"] {
-                collect_album_rows(&section[key]["contents"], album, songs, seen);
+                collect_album_rows(&section[key]["contents"], ctx, songs, seen);
             }
         }
         if next.is_none() {
@@ -155,7 +215,7 @@ fn parse_album_continuation(
         &cont["musicPlaylistShelfContinuation"],
         &cont["musicShelfContinuation"],
     ] {
-        collect_album_rows(&shelf["contents"], album, songs, seen);
+        collect_album_rows(&shelf["contents"], ctx, songs, seen);
         if next.is_none() {
             next = continuation::any(shelf, &shelf["contents"]);
         }
@@ -164,7 +224,7 @@ fn parse_album_continuation(
     if let Some(actions) = res["onResponseReceivedActions"].as_array() {
         for action in actions {
             let items = &action["appendContinuationItemsAction"]["continuationItems"];
-            collect_album_rows(items, album, songs, seen);
+            collect_album_rows(items, ctx, songs, seen);
             if next.is_none() {
                 next = continuation::from_items(items);
             }
@@ -194,7 +254,7 @@ fn find_album_header(res: &Value) -> &Value {
 
 /// Collect album tracks from either the two-column secondary contents or the
 /// single-column section list.
-fn collect_album_tracks(res: &Value, album: &Album) -> (Vec<SongItem>, Option<String>) {
+fn collect_album_tracks(res: &Value, ctx: &AlbumTrackCtx) -> (Vec<SongItem>, Option<String>) {
     let mut songs = Vec::new();
     let mut cont = None;
     let mut seen = HashSet::new();
@@ -208,7 +268,7 @@ fn collect_album_tracks(res: &Value, album: &Album) -> (Vec<SongItem>, Option<St
         } else {
             continue;
         };
-        collect_album_rows(&shelf["contents"], Some(album), &mut songs, &mut seen);
+        collect_album_rows(&shelf["contents"], Some(ctx), &mut songs, &mut seen);
         if cont.is_none() {
             cont = continuation::any(shelf, &shelf["contents"])
                 .or_else(|| continuation::from_continuations(section));
@@ -236,13 +296,13 @@ fn collect_album_tracks(res: &Value, album: &Album) -> (Vec<SongItem>, Option<St
 
 fn collect_album_rows(
     items: &Value,
-    album: Option<&Album>,
+    ctx: Option<&AlbumTrackCtx>,
     songs: &mut Vec<SongItem>,
     seen: &mut HashSet<String>,
 ) {
     if let Some(arr) = items.as_array() {
         for item in arr {
-            if let Some(s) = album_track(&item["musicResponsiveListItemRenderer"], album) {
+            if let Some(s) = album_track(&item["musicResponsiveListItemRenderer"], ctx) {
                 let key = s.video_id.clone().unwrap_or_else(|| s.id.clone());
                 if seen.insert(key) {
                     songs.push(s);
@@ -299,4 +359,49 @@ fn parse_count_and_duration(second: Option<&str>) -> (Option<u32>, Option<String
         }
     }
     (count, duration)
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn explicit_badge_and_other_versions_are_structural() {
+        let header = json!({ "subtitleBadge": [{ "musicInlineBadgeRenderer": {
+            "icon": { "iconType": "MUSIC_EXPLICIT_BADGE" }
+        } }] });
+        assert!(has_explicit_badge(&header));
+        let current = AlbumItem {
+            browse_id: "current".into(),
+            playlist_id: String::new(),
+            title: "Play".into(),
+            artists: None,
+            year: None,
+            thumbnail: String::new(),
+            explicit: true,
+        };
+        let response = json!({ "contents": { "twoColumnBrowseResultsRenderer": {
+            "secondaryContents": { "sectionListRenderer": { "contents": [{
+                "musicCarouselShelfRenderer": {
+                    "header": { "musicCarouselShelfBasicHeaderRenderer": {
+                        "title": { "runs": [{ "text": "Autres versions" }] }
+                    } },
+                    "contents": [{ "musicTwoRowItemRenderer": {
+                        "title": { "runs": [{ "text": "Play (Deluxe)" }] },
+                        "navigationEndpoint": { "browseEndpoint": {
+                            "browseId": "deluxe",
+                            "browseEndpointContextSupportedConfigs": {
+                                "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_ALBUM" }
+                            }
+                        } }
+                    } }]
+                }
+            }] } }
+        } } });
+        assert_eq!(
+            find_other_versions(&response, &current)[0].browse_id,
+            "deluxe"
+        );
+    }
 }

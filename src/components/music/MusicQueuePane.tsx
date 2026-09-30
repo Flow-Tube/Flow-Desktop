@@ -16,7 +16,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, ListX, Loader2, Radio, X } from "lucide-react";
 
-import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
+import { selectRadioOn, useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicHiddenFilter } from "../../store/useMusicActionsStore";
 import { getString } from "../../lib/i18n/index";
 import type { SongItem } from "../../types/music";
@@ -97,7 +97,7 @@ export function MusicQueuePane() {
   const queue = useMusicPlayerStore((s) => s.queue);
   const currentIndex = useMusicPlayerStore((s) => s.currentIndex);
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
-  const radioEnabled = useMusicPlayerStore((s) => s.radioEnabled);
+  const radioOn = useMusicPlayerStore(selectRadioOn);
   const radioLoading = useMusicPlayerStore((s) => s.radioLoading);
   const radioQueuedIds = useMusicPlayerStore((s) => s.radioQueuedIds);
   const loadIndex = useMusicPlayerStore((s) => s._loadIndex);
@@ -167,7 +167,7 @@ export function MusicQueuePane() {
           <p className="text-[10px] font-semibold uppercase tracking-widest text-chrome-neutral-600">
             {getString("music_up_next")}
           </p>
-          {radioEnabled && radioLoading && (
+          {radioOn && radioLoading && (
             <Loader2 className="h-3.5 w-3.5 animate-spin text-chrome-neutral-500" />
           )}
         </div>
@@ -192,7 +192,7 @@ export function MusicQueuePane() {
         ) : (
           <div className="px-2 py-6 text-center">
             <p className="text-sm text-chrome-neutral-500">{getString("music_queue_empty")}</p>
-            {!radioEnabled && (
+            {!radioOn && (
               <p className="mt-1 text-xs text-chrome-neutral-600">{getString("music_queue_autoplay_hint")}</p>
             )}
           </div>
@@ -202,13 +202,13 @@ export function MusicQueuePane() {
       {/* Autoplay footer */}
       <div className="mt-2 flex items-center gap-3 rounded-xl border border-chrome-neutral-800 bg-surface-container-low px-3 py-2.5">
         <Radio
-          className={cx("h-5 w-5 shrink-0", radioEnabled ? "text-[var(--color-primary)]" : "text-chrome-neutral-500")}
+          className={cx("h-5 w-5 shrink-0", radioOn ? "text-[var(--color-primary)]" : "text-chrome-neutral-500")}
         />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-chrome-neutral-100">{getString("music_autoplay")}</p>
           <p className="line-clamp-1 text-xs text-chrome-neutral-500">{getString("music_autoplay_desc")}</p>
         </div>
-        <ToggleSwitch checked={radioEnabled} onChange={() => toggleRadio()} />
+        <ToggleSwitch checked={radioOn} onChange={() => toggleRadio()} />
       </div>
     </div>
   );

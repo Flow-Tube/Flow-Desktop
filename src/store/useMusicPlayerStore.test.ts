@@ -24,7 +24,7 @@ vi.mock("../lib/api/music", () => ({
   rankMusicCandidates: (items: SongItem[]) => Promise.resolve(items),
 }));
 
-import { useMusicPlayerStore } from "./useMusicPlayerStore";
+import { selectRadioOn, useMusicPlayerStore } from "./useMusicPlayerStore";
 
 beforeEach(() => {
   getMusicWatchQueue.mockResolvedValue({
@@ -32,7 +32,12 @@ beforeEach(() => {
     continuation: null,
     radioPlaylistId: null,
   });
-  useMusicPlayerStore.setState({ radioEnabled: false, isShuffle: false, _loadIndex: vi.fn() });
+  useMusicPlayerStore.setState({
+    radioEnabled: false,
+    radioStationActive: false,
+    isShuffle: false,
+    _loadIndex: vi.fn(),
+  });
 });
 
 afterEach(() => {
@@ -59,12 +64,26 @@ describe("start radio", () => {
     expect(useMusicPlayerStore.getState().queue.map((t) => t.id)).toEqual(["seed"]);
   });
 
+  it("shows as on while the station plays, and one click stops it", async () => {
+    await useMusicPlayerStore.getState().startRadio(song("seed"));
+    expect(selectRadioOn(useMusicPlayerStore.getState())).toBe(true);
+
+    useMusicPlayerStore.getState().toggleRadio();
+    await useMusicPlayerStore.getState()._ensureRadio();
+
+    const state = useMusicPlayerStore.getState();
+    expect(selectRadioOn(state)).toBe(false);
+    expect(state.radioEnabled).toBe(false);
+    expect(getMusicWatchQueue).not.toHaveBeenCalled();
+  });
+
   it("ends with the next queue the user plays", async () => {
     await useMusicPlayerStore.getState().startRadio(song("seed"));
     await useMusicPlayerStore.getState().playQueue([song("a"), song("b")]);
     await useMusicPlayerStore.getState()._ensureRadio();
 
     expect(getMusicWatchQueue).not.toHaveBeenCalled();
+    expect(selectRadioOn(useMusicPlayerStore.getState())).toBe(false);
     expect(useMusicPlayerStore.getState().queue.map((t) => t.id)).toEqual(["a", "b"]);
   });
 });

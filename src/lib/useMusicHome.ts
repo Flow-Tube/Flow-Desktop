@@ -16,6 +16,11 @@ export interface MusicHomeData {
 }
 
 export const MUSIC_HOME_CACHE_FRESH_MS = 4 * 60 * 60 * 1000;
+/**
+ * YouTube spreads its home over a few pages and the first holds only two or three
+ * shelves, so the next pages load in the background once the first is on screen.
+ */
+const HOME_PREFETCH_PAGES = 2;
 
 function sectionKey(section: MusicShelf): string {
   if (section.browseId) return `browse:${section.browseId}:${section.params ?? ''}`;
@@ -48,6 +53,7 @@ export function useMusicHome() {
   const chipsRef = useRef<MusicHomeChip[]>([]);
   const loadingMoreRef = useRef(false);
   const busyRef = useRef(false);
+  const prefetchedRef = useRef(0);
 
   const publish = useCallback(() => {
     setData({
@@ -84,6 +90,7 @@ export function useMusicHome() {
     setLoadMoreError(null);
     setLoadingMore(false);
     contRef.current = null;
+    prefetchedRef.current = 0;
     sectionsRef.current = [];
     releasesRef.current = null;
     seenSectionsRef.current = new Set();
@@ -171,6 +178,13 @@ export function useMusicHome() {
     void load();
     return () => { reqRef.current += 1; };
   }, [load]);
+
+  useEffect(() => {
+    if (loading || loadingMore || !data || !contRef.current) return;
+    if (prefetchedRef.current >= HOME_PREFETCH_PAGES) return;
+    prefetchedRef.current += 1;
+    void loadMore();
+  }, [data, loading, loadingMore, loadMore]);
 
   return { data, loading, error, reload: load, loadMore, hasMore: !!contRef.current, loadingMore, loadMoreError };
 }

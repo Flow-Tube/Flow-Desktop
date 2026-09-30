@@ -14,6 +14,7 @@ import { Button } from '../../components/ui/Button';
 import { useMusicChipFilter, useMusicHome } from '../../lib/useMusicHome';
 import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
 import { useMusicDiscoverySections } from '../../lib/useMusicDiscoverySections';
+import { useMusicMoreSections } from '../../lib/useMusicMoreSections';
 import { useMusicCharts } from '../../lib/useMusicCharts';
 import { useMusicMoods } from '../../lib/useMusicMoods';
 import { composeMusicFeed, type MusicFeedSection } from '../../lib/musicFeedComposer';
@@ -25,12 +26,14 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { getString } from '../../lib/i18n/index';
 import { useGridStyle } from '../../lib/useGridColumns';
-import type { AlbumItem, ArtistItem, MoodAndGenreItem, PlaylistItem, SongItem, YTItem } from '../../types/music';
+import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistItem, SongItem, YTItem } from '../../types/music';
 
 const songsOf = (items: YTItem[]): SongItem[] =>
   items.filter((i): i is Extract<YTItem, { type: 'song' }> => i.type === 'song');
 
 const renderable = (item: YTItem) => item.type !== 'episode' && item.type !== 'podcast';
+
+const NO_CHIPS: MusicHomeChip[] = [];
 
 // Three full rows of tiles on the widest layout.
 const MOOD_TILES = 18;
@@ -57,6 +60,7 @@ export default function MusicHome() {
   const [chartCountry] = usePreference(SETTINGS.TRENDING_REGION, 'US');
   const charts = useMusicCharts(chartCountry);
   const moods = useMusicMoods();
+  const moreSections = useMusicMoreSections(data?.chips ?? NO_CHIPS, moods.groups);
   const isHidden = useMusicHiddenFilter();
   const isArtistHidden = useMusicArtistHidden();
   // Drop blocked/dismissed songs and blocked-artist cards from every shelf.
@@ -190,7 +194,7 @@ export default function MusicHome() {
 
     const quickPicks = personalization.quickPicks.filter((track) => !isHidden(track));
     const feed = composeMusicFeed(
-      [...personalization.sections, ...discoverySections]
+      [...personalization.sections, ...discoverySections, ...moreSections]
         .map((section) => ({ ...section, items: visible(section.items) })),
       [...(data?.sections ?? []), ...charts].map((section) => ({ ...section, items: visible(section.items) })),
       personalization.maturity, quickPicks, { hasMoods: moodItems.length > 0 },

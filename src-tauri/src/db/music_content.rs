@@ -4,7 +4,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use sqlx::{Row, SqlitePool};
 
 use crate::errors::{AppError, AppResult};
-use crate::models::music::{Artist, ArtistItem, SongItem, YTItem};
+use crate::models::music::{Album, AlbumItem, Artist, ArtistItem, SongItem, YTItem};
 
 pub const RETENTION_SECONDS: i64 = 60 * 24 * 60 * 60;
 const MAX_EDGES_PER_RELATION: usize = 64;
@@ -166,6 +166,48 @@ fn recording_key(title: &str, artist: &str) -> String {
     format!("{}|{}", words(&bare.to_lowercase()), words(artist))
 }
 
+/// Album track rows often omit the artist and cover (the album header carries them),
+/// and can even put the play count where the artist goes. A track with no identified
+/// artist takes the album's, so graph reads can match it to the user's taste.
+pub fn fill_from_album(song: &mut SongItem, album: &AlbumItem) {
+    let identified = song.artists.iter().any(|artist| artist.id.is_some());
+    if !identified
+        && let Some(album_artists) = album.artists.as_ref().filter(|artists| !artists.is_empty())
+    {
+        song.artists.clone_from(album_artists);
+    }
+    if song.thumbnail.is_empty() {
+        song.thumbnail.clone_from(&album.thumbnail);
+    }
+    if song.album.is_none() {
+        song.album = Some(Album {
+            name: album.title.clone(),
+            id: album.browse_id.clone(),
+        });
+    }
+}
+
+/// Album headers from cached album pages, for repairing rows recorded before
+/// [`fill_from_album`] ran at write time.
+async fn cached_album_headers(pool: &SqlitePool) -> AppResult<HashMap<String, AlbumItem>> {
+    let rows = sqlx::query(
+        "SELECT source_id, payload_json FROM music_content_cache WHERE source_kind = 'album'",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let id: String = row.try_get("source_id").ok()?;
+            let json: String = row.try_get("payload_json").ok()?;
+            let page: serde_json::Value = serde_json::from_str(&json).ok()?;
+            let album: AlbumItem = serde_json::from_value(page.get("album")?.clone()).ok()?;
+            Some((id, album))
+        })
+        .collect())
+}
+
 /// Unheard tracks from albums by the user's strongest artists, a few per album.
 pub async fn deep_cuts(
     pool: &SqlitePool,
@@ -198,6 +240,7 @@ pub async fn deep_cuts(
     .fetch_all(pool)
     .await
     .map_err(AppError::from)?;
+    let albums = cached_album_headers(pool).await?;
     let limit = usize::try_from(limit.clamp(1, 100)).unwrap_or(1);
     let mut per_album: HashMap<String, usize> = HashMap::new();
     let mut seen = HashSet::new();
@@ -209,9 +252,12 @@ pub async fn deep_cuts(
         let Ok(json) = row.try_get::<String, _>("payload_json") else {
             continue;
         };
-        let Ok(YTItem::Song(song)) = serde_json::from_str::<YTItem>(&json) else {
+        let Ok(YTItem::Song(mut song)) = serde_json::from_str::<YTItem>(&json) else {
             continue;
         };
+        if let Some(album) = albums.get(&album_id) {
+            fill_from_album(&mut song, album);
+        }
         if !artist_keys(&song.artists).any(|key| taste.seed_artists.contains(&key)) {
             continue;
         }
@@ -476,5 +522,42 @@ mod tests {
             .unwrap();
         let ids: Vec<_> = artists.iter().map(|artist| artist.id.as_str()).collect();
         assert_eq!(ids, vec!["fan-pick", "from-related"]);
+    }
+
+    #[tokio::test]
+    async fn deep_cuts_repair_album_rows_that_lack_the_artist() {
+        let pool = pool().await;
+        let mut track = song("hidden-gem", "fav");
+        // What album pages used to record: the play count parsed as the artist.
+        track.artists = vec![Artist {
+            name: "329K plays".into(),
+            id: None,
+        }];
+        track.thumbnail = String::new();
+        let page = serde_json::json!({ "album": {
+            "browseId": "MPREb_fav", "playlistId": "", "title": "Fav album",
+            "artists": [{ "name": "Fav", "id": "fav-id" }], "year": null,
+            "thumbnail": "cover.jpg", "explicit": false
+        } });
+        save(
+            &pool,
+            "album",
+            "MPREb_fav",
+            &page,
+            &[("tracks".into(), YTItem::Song(track))],
+        )
+        .await
+        .unwrap();
+
+        let cuts = deep_cuts(&pool, &taste(&["fav-id"], &[]), 10)
+            .await
+            .unwrap();
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].artists[0].id.as_deref(), Some("fav-id"));
+        assert_eq!(cuts[0].thumbnail, "cover.jpg");
+        assert_eq!(
+            cuts[0].album.as_ref().map(|album| album.id.as_str()),
+            Some("MPREb_fav")
+        );
     }
 }

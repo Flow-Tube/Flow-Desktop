@@ -48,8 +48,8 @@ use commands::music::{
     get_music_playlist_continuation, get_music_playlist_page, get_music_queue,
     get_music_queue_continuation, get_music_related_typed, get_music_request_diagnostics,
     get_music_search_suggestions, get_music_search_summary, get_music_stream,
-    get_music_watch_queue, lyrics_http_get, proxy_image_url, search_music_continuation,
-    search_music_typed,
+    get_music_trending_songs, get_music_watch_queue, lyrics_http_get, proxy_image_url,
+    search_music_continuation, search_music_typed,
 };
 use commands::music_brain::{
     block_music_artist, dislike_music_artist, get_blocked_music_artists, get_daily_mixes,
@@ -468,6 +468,7 @@ pub fn run() {
             get_music_home_page,
             get_cached_music_home_page,
             get_music_request_diagnostics,
+            get_music_trending_songs,
             get_music_explore_page,
             get_music_charts_page,
             get_music_moods,

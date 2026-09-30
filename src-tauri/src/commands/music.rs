@@ -107,6 +107,17 @@ pub async fn get_music_moods(music: State<'_, MusicService>) -> CmdResult<Vec<Mo
 }
 
 #[tauri::command]
+pub async fn get_music_trending_songs(
+    country: Option<String>,
+    music: State<'_, MusicService>,
+) -> CmdResult<Vec<SongItem>> {
+    music
+        .trending_songs(country.as_deref())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
 pub async fn get_music_mood_groups(
     music: State<'_, MusicService>,
 ) -> CmdResult<Vec<MoodAndGenreGroup>> {

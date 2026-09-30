@@ -3,7 +3,7 @@
 //! (which is a `dyn YoutubeExtractor` and drives the video path) so the music
 //! feature is independently wired and the video path is untouched.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 
@@ -26,6 +26,9 @@ use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 
 const PAGE_MAX_AGE_SECONDS: i64 = 7 * 24 * 60 * 60;
 const ALBUM_MAX_AGE_SECONDS: i64 = 30 * 24 * 60 * 60;
+const TRENDING_MAX_AGE_SECONDS: i64 = 6 * 60 * 60;
+/// The anonymous home spreads its song shelves over the first few pages.
+const TRENDING_HOME_PAGES: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Freshness {
@@ -42,6 +45,46 @@ impl Freshness {
             Self::Network
         }
     }
+}
+
+fn is_audio(song: &SongItem) -> bool {
+    song.music_video_type
+        .as_deref()
+        .is_none_or(|kind| kind == "MUSIC_VIDEO_TYPE_ATV")
+}
+
+/// Audio songs from any mix of items, first occurrence wins.
+fn audio_songs<'a>(items: impl Iterator<Item = &'a YTItem>) -> Vec<SongItem> {
+    let mut seen = HashSet::new();
+    items
+        .filter_map(|item| match item {
+            YTItem::Song(song) if is_audio(song) => Some(song),
+            _ => None,
+        })
+        .filter(|song| seen.insert(song.video_id.clone().unwrap_or_else(|| song.id.clone())))
+        .cloned()
+        .collect()
+}
+
+fn chart_songs(charts: &ChartsPage) -> Vec<SongItem> {
+    audio_songs(
+        charts
+            .sections
+            .iter()
+            .filter(|section| section.chart_type == "Songs")
+            .flat_map(|section| section.items.iter()),
+    )
+}
+
+fn album_track_edges(page: &AlbumPage) -> Vec<(String, YTItem)> {
+    page.songs
+        .iter()
+        .cloned()
+        .map(|mut song| {
+            music_content::fill_from_album(&mut song, &page.album);
+            ("tracks".into(), YTItem::Song(song))
+        })
+        .collect()
 }
 
 fn track_edges(songs: &[SongItem]) -> Vec<(String, YTItem)> {
@@ -197,6 +240,48 @@ impl MusicService {
     ) -> AppResult<ChartsPage> {
         self.client.music_charts_page(continuation, country).await
     }
+    /// Popular songs right now. Anonymous charts usually carry only video, genre and
+    /// artist charts, so, as on Android, the songs `YouTube Music` puts on its own home
+    /// stand in when there is no song chart. Cached for a few hours.
+    pub async fn trending_songs(&self, country: Option<&str>) -> AppResult<Vec<SongItem>> {
+        self.graph_page(
+            "trending",
+            country.unwrap_or("global"),
+            Freshness::Cached,
+            TRENDING_MAX_AGE_SECONDS,
+            || self.fetch_trending(country),
+            |_| Vec::new(),
+        )
+        .await
+    }
+
+    async fn fetch_trending(&self, country: Option<&str>) -> AppResult<Vec<SongItem>> {
+        if let Ok(charts) = self.client.music_charts_page(None, country).await {
+            let songs = chart_songs(&charts);
+            if !songs.is_empty() {
+                return Ok(songs);
+            }
+        }
+        let mut shelves = Vec::new();
+        let mut continuation: Option<String> = None;
+        for _ in 0..TRENDING_HOME_PAGES {
+            match self.client.music_home_page(continuation.as_deref()).await {
+                Ok(page) => {
+                    shelves.extend(page.sections);
+                    continuation = page.continuation;
+                }
+                Err(error) if shelves.is_empty() => return Err(error),
+                Err(_) => break,
+            }
+            if continuation.is_none() {
+                break;
+            }
+        }
+        Ok(audio_songs(
+            shelves.iter().flat_map(|shelf| shelf.items.iter()),
+        ))
+    }
+
     pub async fn moods(&self) -> AppResult<Vec<MoodAndGenreItem>> {
         self.client.music_moods().await
     }
@@ -239,7 +324,7 @@ impl MusicService {
             freshness,
             ALBUM_MAX_AGE_SECONDS,
             || self.client.music_album_page(browse_id),
-            |page| track_edges(&page.songs),
+            album_track_edges,
         )
         .await
     }
@@ -328,5 +413,79 @@ impl MusicService {
         self.client
             .resolve_music_stream(video_id, audio_quality)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::music::{ArtistItem, ChartSection};
+
+    fn song(id: &str, kind: Option<&str>) -> YTItem {
+        YTItem::Song(SongItem {
+            id: id.into(),
+            title: id.into(),
+            artists: Vec::new(),
+            album: None,
+            duration: Some(200),
+            music_video_type: kind.map(Into::into),
+            thumbnail: String::new(),
+            explicit: false,
+            video_id: Some(id.into()),
+            playlist_id: None,
+            params: None,
+            views_text: None,
+        })
+    }
+
+    fn ids(songs: &[SongItem]) -> Vec<&str> {
+        songs.iter().map(|song| song.id.as_str()).collect()
+    }
+
+    #[test]
+    fn chart_songs_keep_audio_from_song_charts_only() {
+        let charts = ChartsPage {
+            sections: vec![
+                ChartSection {
+                    title: "Top artists".into(),
+                    chart_type: "Artists".into(),
+                    items: vec![YTItem::Artist(ArtistItem {
+                        id: "UC".into(),
+                        title: "A".into(),
+                        thumbnail: None,
+                        channel_id: None,
+                    })],
+                },
+                ChartSection {
+                    title: "Top songs".into(),
+                    chart_type: "Songs".into(),
+                    items: vec![
+                        song("audio", Some("MUSIC_VIDEO_TYPE_ATV")),
+                        song("video", Some("MUSIC_VIDEO_TYPE_OMV")),
+                        song("audio", Some("MUSIC_VIDEO_TYPE_ATV")),
+                        song("untyped", None),
+                    ],
+                },
+            ],
+            country_code: None,
+            country_label: None,
+            continuation: None,
+        };
+        assert_eq!(ids(&chart_songs(&charts)), vec!["audio", "untyped"]);
+    }
+
+    #[test]
+    fn charts_without_a_song_chart_yield_nothing() {
+        let charts = ChartsPage {
+            sections: vec![ChartSection {
+                title: "Video charts".into(),
+                chart_type: "Playlists".into(),
+                items: Vec::new(),
+            }],
+            country_code: Some("US".into()),
+            country_label: Some("United States".into()),
+            continuation: None,
+        };
+        assert!(chart_songs(&charts).is_empty());
     }
 }

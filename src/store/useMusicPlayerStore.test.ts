@@ -49,6 +49,16 @@ describe("start radio", () => {
     expect(state.queue.map((t) => t.id)).toEqual(["seed", "r1", "r2", "r3"]);
   });
 
+  it("stops extending when the radio switch is turned off", async () => {
+    useMusicPlayerStore.setState({ radioEnabled: true });
+    await useMusicPlayerStore.getState().startRadio(song("seed"));
+    useMusicPlayerStore.getState().toggleRadio();
+    await useMusicPlayerStore.getState()._ensureRadio();
+
+    expect(getMusicWatchQueue).not.toHaveBeenCalled();
+    expect(useMusicPlayerStore.getState().queue.map((t) => t.id)).toEqual(["seed"]);
+  });
+
   it("ends with the next queue the user plays", async () => {
     await useMusicPlayerStore.getState().startRadio(song("seed"));
     await useMusicPlayerStore.getState().playQueue([song("a"), song("b")]);

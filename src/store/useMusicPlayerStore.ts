@@ -575,6 +575,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   toggleRadio: () => {
     const radioEnabled = !get().radioEnabled;
+    if (!radioEnabled) explicitRadioRequest = false;
     set({ radioEnabled });
     saveConfig(get);
     if (radioEnabled) void get()._ensureRadio();

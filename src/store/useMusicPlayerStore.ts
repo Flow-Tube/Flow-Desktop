@@ -118,6 +118,9 @@ let radioContinuation: string | null = null;
 let radioPlaylistId: string | null = null;
 const radioSessionSeen = new Set<string>();
 let radioInFlight: Promise<void> | null = null;
+// A radio the user started by name outruns the passive radio toggle: that switch governs
+// queues that run out on their own, not a station the user asked for.
+let explicitRadioRequest = false;
 
 // Hide predicate pushed in by `useMusicActionsStore` (block list). Kept as a module-level
 // ref so radio autoplay can consult it without the store importing the actions store.
@@ -129,6 +132,7 @@ const resetRadioSession = (seedIds: string[] = []) => {
   radioInFlight = null;
   radioSessionSeen.clear();
   for (const id of seedIds) radioSessionSeen.add(id);
+  explicitRadioRequest = false;
 };
 
 const stationIdFor = (videoId: string): string => `RDAMVM${videoId}`;
@@ -278,7 +282,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   _ensureRadio: async () => {
     if (radioInFlight) return radioInFlight;
     const { queue, currentIndex, radioEnabled, isShuffle } = get();
-    if (!radioEnabled || isShuffle) return;
+    if ((!radioEnabled && !explicitRadioRequest) || isShuffle) return;
     if (queue.length - 1 - currentIndex > RADIO_LOW_WATER) return;
 
     const seed = queue[queue.length - 1] ?? get().currentTrack;
@@ -504,7 +508,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       if (nextIndex >= queue.length) {
         if (repeatMode === "all") {
           nextIndex = 0;
-        } else if (get().radioEnabled) {
+        } else if (get().radioEnabled || explicitRadioRequest) {
           void (async () => {
             await get()._ensureRadio();
             const s = get();
@@ -580,8 +584,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const base = seed ?? get().currentTrack;
     if (!base) return;
     resetRadioSession([videoIdOf(base)]);
-    set({ queue: [base], radioQueuedIds: [], currentIndex: 0, radioEnabled: true });
-    saveConfig(get);
+    explicitRadioRequest = true;
+    set({ queue: [base], radioQueuedIds: [], currentIndex: 0 });
     await get()._loadIndex(0);
   },
 

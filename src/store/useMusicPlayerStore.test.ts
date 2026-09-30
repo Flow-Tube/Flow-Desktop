@@ -35,6 +35,7 @@ beforeEach(() => {
   useMusicPlayerStore.setState({
     radioEnabled: false,
     radioStationActive: false,
+    queueSource: null,
     isShuffle: false,
     _loadIndex: vi.fn(),
   });
@@ -85,5 +86,22 @@ describe("start radio", () => {
     expect(getMusicWatchQueue).not.toHaveBeenCalled();
     expect(selectRadioOn(useMusicPlayerStore.getState())).toBe(false);
     expect(useMusicPlayerStore.getState().queue.map((t) => t.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe('queue source ("Playing from")', () => {
+  it("remembers where a queue was started from", async () => {
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 0, "Quick picks");
+    expect(useMusicPlayerStore.getState().queueSource).toBe("Quick picks");
+  });
+
+  it("forgets the source when a radio or a single track replaces the queue", async () => {
+    await useMusicPlayerStore.getState().playQueue([song("a")], 0, "Quick picks");
+    await useMusicPlayerStore.getState().startRadio(song("b"));
+    expect(useMusicPlayerStore.getState().queueSource).toBeNull();
+
+    await useMusicPlayerStore.getState().playQueue([song("a")], 0, "Speed dial");
+    await useMusicPlayerStore.getState().playTrack(song("c"));
+    expect(useMusicPlayerStore.getState().queueSource).toBeNull();
   });
 });

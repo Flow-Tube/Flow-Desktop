@@ -594,7 +594,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const base = seed ?? get().currentTrack;
     if (!base) return;
     resetRadioSession([videoIdOf(base)]);
-    set({ queue: [base], radioQueuedIds: [], currentIndex: 0, radioStationActive: true });
+    set({ queue: [base], radioQueuedIds: [], currentIndex: 0, radioStationActive: true, queueSource: null });
     await get()._loadIndex(0);
   },
 

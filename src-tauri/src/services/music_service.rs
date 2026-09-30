@@ -134,6 +134,19 @@ fn related_edges(page: &RelatedPage) -> Vec<(String, YTItem)> {
         .collect()
 }
 
+/// Where a public page lives in the content graph and when a copy of it is worth using.
+struct GraphSource<'a, T> {
+    kind: &'a str,
+    id: &'a str,
+    max_age_seconds: i64,
+    /// Rejects answers that must not be cached or served (e.g. an empty related page).
+    usable: fn(&T) -> bool,
+}
+
+const fn always<T>(_: &T) -> bool {
+    true
+}
+
 #[derive(Clone)]
 pub struct MusicService {
     client: Arc<InnertubeClient>,
@@ -169,12 +182,27 @@ impl MusicService {
     /// than `max_age_seconds` (recommendation recall, where a week-old related list is
     /// fine). `Network` always refetches because people are looking at the page; it
     /// still records the graph, and serves the last retained copy only when offline.
-    async fn graph_page<T, F, Fut, E>(
+    /// A cached copy younger than `max_age_seconds` that `usable` accepts.
+    async fn cached_copy<T: DeserializeOwned>(
         &self,
         kind: &str,
         id: &str,
-        freshness: Freshness,
         max_age_seconds: i64,
+        usable: fn(&T) -> bool,
+    ) -> Option<T> {
+        match music_content::get_cached::<T>(&self.pool, kind, id, max_age_seconds).await {
+            Ok(Some(page)) if usable(&page) => {
+                record_public_cache_hit();
+                Some(page)
+            }
+            _ => None,
+        }
+    }
+
+    async fn graph_page<T, F, Fut, E>(
+        &self,
+        source: GraphSource<'_, T>,
+        freshness: Freshness,
         fetch: F,
         edges: E,
     ) -> AppResult<T>
@@ -184,43 +212,45 @@ impl MusicService {
         Fut: Future<Output = AppResult<T>>,
         E: FnOnce(&T) -> Vec<(String, YTItem)>,
     {
+        let GraphSource {
+            kind,
+            id,
+            max_age_seconds,
+            usable,
+        } = source;
         if freshness == Freshness::Cached
-            && let Ok(Some(page)) =
-                music_content::get_cached(&self.pool, kind, id, max_age_seconds).await
+            && let Some(page) = self.cached_copy(kind, id, max_age_seconds, usable).await
         {
-            record_public_cache_hit();
             return Ok(page);
         }
         let lock = self.lock_for(kind, id);
         let _guard = lock.lock().await;
         if freshness == Freshness::Cached
-            && let Ok(Some(page)) =
-                music_content::get_cached(&self.pool, kind, id, max_age_seconds).await
+            && let Some(page) = self.cached_copy(kind, id, max_age_seconds, usable).await
         {
-            record_public_cache_hit();
             return Ok(page);
         }
         let page = match fetch().await {
             Ok(page) => page,
             Err(error) => {
-                return match music_content::get_cached(
-                    &self.pool,
-                    kind,
-                    id,
-                    music_content::RETENTION_SECONDS,
-                )
-                .await
+                return match self
+                    .cached_copy(kind, id, music_content::RETENTION_SECONDS, usable)
+                    .await
                 {
-                    Ok(Some(page)) => {
+                    Some(page) => {
                         tracing::info!(kind, id, %error, "Serving retained music page after fetch failure");
-                        record_public_cache_hit();
                         Ok(page)
                     }
-                    _ => Err(error),
+                    None => Err(error),
                 };
             }
         };
-        if let Err(error) = music_content::save(&self.pool, kind, id, &page, &edges(&page)).await {
+        // An empty answer (a parsing miss or a transient gap) is returned but never kept,
+        // so it cannot shadow real data for the whole cache lifetime.
+        if usable(&page)
+            && let Err(error) =
+                music_content::save(&self.pool, kind, id, &page, &edges(&page)).await
+        {
             tracing::warn!(%error, kind, id, "Could not save public music content graph");
         }
         Ok(page)
@@ -245,10 +275,13 @@ impl MusicService {
     /// stand in when there is no song chart. Cached for a few hours.
     pub async fn trending_songs(&self, country: Option<&str>) -> AppResult<Vec<SongItem>> {
         self.graph_page(
-            "trending",
-            country.unwrap_or("global"),
+            GraphSource {
+                kind: "trending",
+                id: country.unwrap_or("global"),
+                max_age_seconds: TRENDING_MAX_AGE_SECONDS,
+                usable: |songs: &Vec<SongItem>| !songs.is_empty(),
+            },
             Freshness::Cached,
-            TRENDING_MAX_AGE_SECONDS,
             || self.fetch_trending(country),
             |_| Vec::new(),
         )
@@ -319,10 +352,13 @@ impl MusicService {
     // --- Album / Artist / Playlist ---------------------------------------
     pub async fn album(&self, browse_id: &str, freshness: Freshness) -> AppResult<AlbumPage> {
         self.graph_page(
-            "album",
-            browse_id,
+            GraphSource {
+                kind: "album",
+                id: browse_id,
+                max_age_seconds: ALBUM_MAX_AGE_SECONDS,
+                usable: always,
+            },
             freshness,
-            ALBUM_MAX_AGE_SECONDS,
             || self.client.music_album_page(browse_id),
             album_track_edges,
         )
@@ -336,10 +372,13 @@ impl MusicService {
     }
     pub async fn artist(&self, browse_id: &str, freshness: Freshness) -> AppResult<ArtistPage> {
         self.graph_page(
-            "artist",
-            browse_id,
+            GraphSource {
+                kind: "artist",
+                id: browse_id,
+                max_age_seconds: PAGE_MAX_AGE_SECONDS,
+                usable: always,
+            },
             freshness,
-            PAGE_MAX_AGE_SECONDS,
             || self.client.music_artist_page(browse_id),
             artist_edges,
         )
@@ -351,10 +390,13 @@ impl MusicService {
         freshness: Freshness,
     ) -> AppResult<MusicPlaylistPage> {
         self.graph_page(
-            "playlist",
-            playlist_id,
+            GraphSource {
+                kind: "playlist",
+                id: playlist_id,
+                max_age_seconds: PAGE_MAX_AGE_SECONDS,
+                usable: always,
+            },
             freshness,
-            PAGE_MAX_AGE_SECONDS,
             || self.client.music_playlist_page(playlist_id),
             |page| track_edges(&page.songs),
         )
@@ -391,10 +433,13 @@ impl MusicService {
     /// Related shelves only feed recommendations, so they are always graph-first.
     pub async fn related(&self, video_id: &str) -> AppResult<RelatedPage> {
         self.graph_page(
-            "related",
-            video_id,
+            GraphSource {
+                kind: "related",
+                id: video_id,
+                max_age_seconds: PAGE_MAX_AGE_SECONDS,
+                usable: |page: &RelatedPage| !page.sections.is_empty(),
+            },
             Freshness::Cached,
-            PAGE_MAX_AGE_SECONDS,
             || self.client.music_related_page(video_id),
             related_edges,
         )

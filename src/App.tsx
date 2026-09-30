@@ -20,6 +20,9 @@ import { TitleBar } from "./components/layout/TitleBar";
 
 import Home from "./pages/Home";
 import MusicHome from "./pages/music/MusicHome";
+import MusicBrowsePage from "./pages/music/MusicBrowsePage";
+import MusicMoodsPage from "./pages/music/MusicMoodsPage";
+import MusicMixPage from "./pages/music/MusicMixPage";
 import ArtistPage from "./pages/music/ArtistPage";
 import ArtistItemsPage from "./pages/music/ArtistItemsPage";
 import MusicCollectionPage from "./pages/music/MusicCollectionPage";
@@ -57,6 +60,7 @@ import { AddTracksToAlbumModal } from "./components/music/AddTracksToAlbumModal"
 import { AddToPlaylistModal } from "./components/playlist/AddToPlaylistModal";
 import { DeepFlowController } from "./components/deep-flow/DeepFlowController";
 import { DeepLinkController } from "./components/handoff/DeepLinkController";
+import { DiscordPresenceController } from "./components/discord/DiscordPresenceController";
 import { DownloadDialog } from "./components/downloads/DownloadDialog";
 import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
@@ -154,6 +158,9 @@ function App() {
           <Route path="music" element={
             <MusicHome />
           } />
+          <Route path="music/moods" element={<MusicMoodsPage />} />
+          <Route path="music/browse" element={<MusicBrowsePage />} />
+          <Route path="music/mix/:id" element={<MusicMixPage />} />
           <Route path="music/artist/:artistId" element={
             <ArtistPage />
           } />
@@ -253,6 +260,7 @@ function App() {
       <AddToPlaylistModal />
       <DeepFlowController />
       <DeepLinkController />
+      <DiscordPresenceController />
       <LayoutGroup id="downloads">
         <DownloadDialog />
         <DownloadActivity />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   ChevronDown,
@@ -14,6 +14,7 @@ import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
 import { getString } from '../../lib/i18n/index';
 import { SETTINGS } from '../../lib/settings/schema';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { useSubscriptionAvatarHydration } from '../../lib/useSubscriptionAvatarHydration';
 
@@ -25,19 +26,15 @@ type SidebarProps = {
 
 function SidebarAvatar({ src }: { src?: string | null }) {
   const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
-  const [failed, setFailed] = useState(false);
+  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
 
-  useEffect(() => {
-    setFailed(false);
-  }, [imageSrc]);
-
-  if (!imageSrc || failed) return <div className="w-6 h-6 rounded-full bg-surface-container-high" />;
+  if (!displaySrc) return <div className="w-6 h-6 rounded-full bg-surface-container-high" />;
   return (
     <img
-      src={imageSrc}
+      src={displaySrc}
       alt=""
       className="w-6 h-6 rounded-full object-cover"
-      onError={() => setFailed(true)}
+      onError={onError}
     />
   );
 }

@@ -3,6 +3,7 @@ use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     detect_lockup_is_live, detect_video_is_live, extract_channel_id_from_video_renderer,
     normalize_youtube_image_url, parse_duration_seconds, parse_mixed_number_word_to_long,
+    short_video_summary_from_item,
 };
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::{
@@ -282,78 +283,8 @@ fn extract_videos_from_browse(
                         is_live: detect_video_is_live(video),
                     }));
                 }
-            } else if let Some(shorts_lockup) = target.get("shortsLockupViewModel") {
-                let video_id = shorts_lockup
-                    .get("onTap")
-                    .and_then(|ot| ot.get("innertubeCommand"))
-                    .and_then(|ic| ic.get("reelWatchEndpoint"))
-                    .and_then(|rw| rw.get("videoId"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                if !video_id.is_empty() {
-                    let title = shorts_lockup
-                        .get("overlayMetadata")
-                        .and_then(|om| om.get("primaryText"))
-                        .and_then(|pt| pt.get("content"))
-                        .and_then(|c| c.as_str())
-                        .unwrap_or_default()
-                        .to_string();
-                    let thumbnail_url = shorts_lockup
-                        .get("thumbnailViewModel")
-                        .and_then(|tv| tv.get("thumbnailViewModel"))
-                        .and_then(|tvm| tvm.get("image"))
-                        .and_then(|img| img.get("sources"))
-                        .and_then(|s| s.as_array())
-                        .and_then(|arr| arr.last())
-                        .and_then(|src| src.get("url"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    let view_count_text = shorts_lockup
-                        .get("overlayMetadata")
-                        .and_then(|om| om.get("secondaryText"))
-                        .and_then(|st| st.get("content"))
-                        .and_then(|c| c.as_str())
-                        .map(|s| s.to_string());
-                    items.push(ChannelItem::Short(ShortVideoSummary {
-                        id: video_id.to_string(),
-                        title,
-                        thumbnail_url,
-                        view_count_text,
-                    }));
-                }
-            } else if let Some(reel) = target.get("reelItemRenderer") {
-                let video_id = reel
-                    .get("videoId")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-                if !video_id.is_empty() {
-                    let title = reel
-                        .get("headline")
-                        .and_then(|h| h.get("simpleText").and_then(|s| s.as_str()))
-                        .unwrap_or_default()
-                        .to_string();
-                    let thumbnail_url = reel
-                        .get("thumbnail")
-                        .and_then(|th| {
-                            th.get("thumbnails")
-                                .and_then(|t| t.as_array())
-                                .and_then(|arr| arr.last())
-                                .and_then(|f| f.get("url"))
-                                .and_then(|s| s.as_str())
-                        })
-                        .map(|s| s.to_string());
-                    let view_count_text = reel
-                        .get("viewCountText")
-                        .and_then(|v| v.get("simpleText").and_then(|s| s.as_str()))
-                        .map(|s| s.to_string());
-
-                    items.push(ChannelItem::Short(ShortVideoSummary {
-                        id: video_id.to_string(),
-                        title,
-                        thumbnail_url,
-                        view_count_text,
-                    }));
-                }
+            } else if let Some(short) = short_video_summary_from_item(target) {
+                items.push(ChannelItem::Short(short));
             } else if let Some(playlist) = target
                 .get("playlistRenderer")
                 .or_else(|| target.get("gridPlaylistRenderer"))

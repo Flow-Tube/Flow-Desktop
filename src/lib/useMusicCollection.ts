@@ -9,7 +9,7 @@ import { getBackendErrorMessage } from './api/errors';
 import { getString } from './i18n/index';
 import { artistsText } from './musicFormat';
 import { useAlbumLibraryStore, type StoredAlbum } from '../store/useAlbumLibraryStore';
-import type { AlbumPage, MusicPlaylistPage, SongItem } from '../types/music';
+import type { AlbumItem, AlbumPage, MusicPlaylistPage, SongItem } from '../types/music';
 
 export type CollectionKind = 'album' | 'playlist';
 
@@ -19,6 +19,7 @@ export interface CollectionMeta {
   title: string;
   thumbnail: string | null;
   typeLabel: string;
+  explicit: boolean;
   artistName: string | null;
   artistId: string | null;
   yearText: string | null;
@@ -31,6 +32,7 @@ export interface CollectionMeta {
 interface InitialLoad {
   meta: CollectionMeta;
   songs: SongItem[];
+  otherVersions: AlbumItem[];
   continuation: string | null;
 }
 
@@ -75,6 +77,7 @@ function albumMeta(page: AlbumPage): CollectionMeta {
     title: page.album.title,
     thumbnail: page.album.thumbnail || null,
     typeLabel: getString('music_album_label'),
+    explicit: page.album.explicit,
     artistName: artistsText(page.album.artists) || null,
     artistId: page.album.artists?.[0]?.id ?? null,
     yearText,
@@ -92,6 +95,7 @@ function playlistMeta(page: MusicPlaylistPage): CollectionMeta {
     title: page.title,
     thumbnail: page.thumbnail || null,
     typeLabel: getString('music_playlist_label'),
+    explicit: false,
     artistName: page.author?.name ?? null,
     artistId: page.author?.id ?? null,
     yearText: null,
@@ -110,6 +114,7 @@ function ownedAlbumMeta(album: StoredAlbum): CollectionMeta {
     title: album.title,
     thumbnail: album.thumbnail ?? tracks.find((t) => t.thumbnail)?.thumbnail ?? null,
     typeLabel: getString('music_album_label'),
+    explicit: false,
     artistName: null,
     artistId: null,
     yearText: null,
@@ -124,12 +129,14 @@ const noop = async () => {};
 
 async function loadAlbum(id: string): Promise<InitialLoad> {
   const page = await getMusicAlbumPage(id);
-  return { meta: albumMeta(page), songs: uniqueSongs(page.songs), continuation: page.continuation };
+  return { meta: albumMeta(page), songs: uniqueSongs(page.songs),
+    otherVersions: page.otherVersions ?? [], continuation: page.continuation };
 }
 
 async function loadPlaylist(id: string): Promise<InitialLoad> {
   const page = await getMusicPlaylistPage(id);
-  return { meta: playlistMeta(page), songs: uniqueSongs(page.songs), continuation: page.continuation };
+  return { meta: playlistMeta(page), songs: uniqueSongs(page.songs),
+    otherVersions: [], continuation: page.continuation };
 }
 
 /**
@@ -149,6 +156,7 @@ export function useMusicCollection(kind: CollectionKind, id: string | undefined)
 
   const [meta, setMeta] = useState<CollectionMeta | null>(null);
   const [songs, setSongs] = useState<SongItem[]>([]);
+  const [otherVersions, setOtherVersions] = useState<AlbumItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -177,12 +185,14 @@ export function useMusicCollection(kind: CollectionKind, id: string | undefined)
     setHasMore(false);
     seenContinuationsRef.current = new Set();
     setSongs([]);
+    setOtherVersions([]);
     setMeta(null);
     try {
       const res = await fetchInitial(id);
       if (reqRef.current !== req) return;
       setMeta(res.meta);
       setSongs(res.songs);
+      setOtherVersions(res.otherVersions);
       contRef.current = res.continuation;
       setHasMore(Boolean(res.continuation));
       if (res.continuation) seenContinuationsRef.current.add(res.continuation);
@@ -224,6 +234,7 @@ export function useMusicCollection(kind: CollectionKind, id: string | undefined)
     return {
       meta: ownedAlbumMeta(ownedAlbum),
       songs: ownedAlbum.tracks ?? [],
+      otherVersions: [],
       loading: false,
       loadingMore: false,
       error: null,
@@ -237,6 +248,7 @@ export function useMusicCollection(kind: CollectionKind, id: string | undefined)
   return {
     meta,
     songs,
+    otherVersions,
     loading,
     loadingMore,
     error,

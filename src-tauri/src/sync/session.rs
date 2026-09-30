@@ -26,7 +26,7 @@ use tokio::sync::{Mutex, oneshot};
 use tokio::time::timeout;
 
 use crate::music_brain::store::MusicBrainStore;
-use crate::services::music_service::MusicService;
+use crate::services::music_service::{Freshness, MusicService};
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::PROTOCOL_VERSION;
 use crate::sync::apply;
@@ -379,7 +379,7 @@ async fn enrich_outgoing_albums(app: &AppHandle, outgoing: &mut [OutgoingCollect
     };
     let mut tracks: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for id in browse_ids {
-        match music.album(&id).await {
+        match music.album(&id, Freshness::Cached).await {
             Ok(page) => {
                 let cover = page.album.thumbnail.clone();
                 let songs: Vec<Value> = page

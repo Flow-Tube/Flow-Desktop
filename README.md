@@ -29,7 +29,7 @@
 - A dedicated Shorts feed with comments, descriptions, saved Shorts, looping, auto-next, and timed scrolling modes.
 - Local subscriptions, playlists, Watch Later, likes, albums, video and music history, Continue Watching, and regional Explore feeds.
 - Channel pages with videos, Shorts, playlists, community posts, comments, and live chat support.
-- SponsorBlock, DeArrow, and Return YouTube Dislike integrations.
+- SponsorBlock, DeArrow, Return YouTube Dislike, and Discord Rich Presence integrations.
 - Imports from Flow backups, Google Takeout, NewPipe, LibreTube, FreeTube, and OPML.
 
 ### FlowNeuro

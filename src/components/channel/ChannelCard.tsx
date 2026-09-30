@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Plus } from 'lucide-react';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { Button } from '../ui/Button';
 import { getString } from '../../lib/i18n/index';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
@@ -23,10 +24,9 @@ function cx(...parts: Array<string | false | null | undefined>): string {
 }
 
 function CircleAvatar({ src, name }: { src?: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
   const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
-  useEffect(() => setFailed(false), [imageSrc]);
-  if (!imageSrc || failed) {
+  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
+  if (!displaySrc) {
     return (
       <div className="grid h-full w-full place-items-center rounded-full bg-surface-container-high text-2xl font-semibold text-chrome-neutral-500">
         {name.charAt(0).toUpperCase() || '?'}
@@ -35,10 +35,10 @@ function CircleAvatar({ src, name }: { src?: string | null; name: string }) {
   }
   return (
     <img
-      src={imageSrc}
+      src={displaySrc}
       alt={name}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={onError}
       className="h-full w-full rounded-full object-cover"
     />
   );

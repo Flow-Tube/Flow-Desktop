@@ -10,6 +10,7 @@ import {
   savePlaylistToLibrary,
 } from '../../lib/playlistLibrary';
 import { downloadPlaylist } from '../../lib/useCollectionDownloads';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useUiStore } from '../../store/useUiStore';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
@@ -37,7 +38,9 @@ function StackedPlaylistThumbnail({
   title: string;
   videoCountText: string;
 }) {
-  if (!thumbnailUrl) {
+  const { src, onError } = useImageFallback([thumbnailUrl]);
+
+  if (!src) {
     return (
       <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-800">
         <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
@@ -58,7 +61,7 @@ function StackedPlaylistThumbnail({
         className="pointer-events-none absolute left-4 right-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
       >
         <img
-          src={thumbnailUrl}
+          src={src}
           alt=""
           className="h-full w-full scale-110 object-cover blur-md brightness-[0.45] saturate-75"
           loading="lazy"
@@ -70,7 +73,7 @@ function StackedPlaylistThumbnail({
         className="pointer-events-none absolute left-2 right-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
       >
         <img
-          src={thumbnailUrl}
+          src={src}
           alt=""
           className="h-full w-full scale-105 object-cover blur-sm brightness-[0.65] saturate-90"
           loading="lazy"
@@ -79,8 +82,9 @@ function StackedPlaylistThumbnail({
 
       <div className="relative z-10 aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-900">
         <img
-          src={thumbnailUrl}
+          src={src}
           alt={title}
+          onError={onError}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
         />

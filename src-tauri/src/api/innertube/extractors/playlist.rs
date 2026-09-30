@@ -1,13 +1,39 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
-    best_video_thumbnail_url, extract_channel_id_from_video_renderer,
-    parse_mixed_number_word_to_long,
+    best_video_thumbnail_url, build_related_content_from_lockup,
+    extract_channel_id_from_video_renderer, map_related_content_to_video_summary,
+    parse_mixed_number_word_to_long, short_video_summary_from_item,
 };
 use crate::errors::{AppError, AppResult};
+use crate::models::channel::ShortVideoSummary;
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::video::VideoSummary;
 use serde_json::Value;
+
+/// Pull the view-count and relative published texts out of a
+/// `playlistVideoRenderer`'s `videoInfo` runs (e.g. "1.2M views · 3 years ago").
+fn extract_playlist_video_info(video: &Value) -> (Option<String>, Option<String>) {
+    let Some(runs) = video["videoInfo"]["runs"].as_array() else {
+        return (None, None);
+    };
+
+    let mut view_count_text = None;
+    let mut published_text = None;
+    for run in runs {
+        let Some(text) = run["text"].as_str().map(str::trim) else {
+            continue;
+        };
+        let lower = text.to_lowercase();
+        if view_count_text.is_none() && lower.contains("view") {
+            view_count_text = Some(text.to_string());
+        } else if published_text.is_none() && lower.contains("ago") {
+            published_text = Some(text.to_string());
+        }
+    }
+
+    (view_count_text, published_text)
+}
 
 fn extract_videos_from_playlist_browse(val: &Value) -> (Vec<VideoSummary>, Option<String>) {
     let mut items = Vec::new();
@@ -39,6 +65,8 @@ fn extract_videos_from_playlist_browse(val: &Value) -> (Vec<VideoSummary>, Optio
                         .and_then(|s| s.parse::<u64>().ok())
                         .or_else(|| video["lengthSeconds"].as_u64());
 
+                    let (view_count_text, published_text) = extract_playlist_video_info(video);
+
                     items.push(VideoSummary {
                         id: video_id.to_string(),
                         title,
@@ -46,8 +74,8 @@ fn extract_videos_from_playlist_browse(val: &Value) -> (Vec<VideoSummary>, Optio
                         channel_id: extract_channel_id_from_video_renderer(video),
                         thumbnail_url,
                         duration_seconds,
-                        published_text: None,
-                        view_count_text: None,
+                        published_text,
+                        view_count_text,
                         channel_avatar_url: None,
                         is_live: false,
                     });
@@ -97,7 +125,62 @@ fn extract_videos_from_playlist_browse(val: &Value) -> (Vec<VideoSummary>, Optio
         }
     }
 
+    // Case 3: Newer layouts (`lockupViewModel` videos, Shorts view-models).
+    if items.is_empty() {
+        collect_lockup_playlist_videos(&val["contents"], &mut items);
+    }
+
     (items, next_page_token)
+}
+
+/// Neither Shorts layout carries a channel, duration, or publish date.
+fn video_summary_from_short(short: ShortVideoSummary) -> VideoSummary {
+    VideoSummary {
+        thumbnail_url: short
+            .thumbnail_url
+            .or_else(|| best_video_thumbnail_url(&short.id, None)),
+        id: short.id,
+        title: short.title,
+        channel_name: String::new(),
+        channel_id: None,
+        duration_seconds: None,
+        published_text: None,
+        view_count_text: short.view_count_text,
+        channel_avatar_url: None,
+        is_live: false,
+    }
+}
+
+/// Collect videos and Shorts from the newer view-model layouts, reusing the
+/// shared parsers, wherever they're nested in the browse contents. Non-video
+/// lockups (channels, mixes) are skipped. Each lockup is a single-key wrapper
+/// object, so a handled one is not descended into.
+fn collect_lockup_playlist_videos(value: &Value, out: &mut Vec<VideoSummary>) {
+    match value {
+        Value::Object(map) => {
+            if let Some(lockup) = map.get("lockupViewModel") {
+                if let Some(item) = build_related_content_from_lockup(lockup) {
+                    if item.item_type == "video" {
+                        out.push(map_related_content_to_video_summary(item));
+                    }
+                }
+                return;
+            }
+            if map.contains_key("shortsLockupViewModel") || map.contains_key("reelItemRenderer") {
+                out.extend(short_video_summary_from_item(value).map(video_summary_from_short));
+                return;
+            }
+            for val in map.values() {
+                collect_lockup_playlist_videos(val, out);
+            }
+        }
+        Value::Array(arr) => {
+            for val in arr {
+                collect_lockup_playlist_videos(val, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn extract_text_from_runs_or_simple(value: &Value) -> Option<String> {
@@ -330,5 +413,83 @@ impl InnertubeClient {
             videos,
             next_page_token,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_videos_from_playlist_browse;
+    use serde_json::{Value, json};
+
+    fn browse_page(section_contents: Vec<Value>) -> Value {
+        json!({
+            "contents": { "twoColumnBrowseResultsRenderer": { "tabs": [{ "tabRenderer": {
+                "content": { "sectionListRenderer": { "contents": section_contents } }
+            }}]}}
+        })
+    }
+
+    #[test]
+    fn view_model_playlist_collects_videos_and_shorts_in_order() {
+        let val = browse_page(vec![json!({ "itemSectionRenderer": { "contents": [{
+            "richGridRenderer": { "contents": [
+                { "richItemRenderer": { "content": { "lockupViewModel": {
+                    "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                    "contentId": "vid00000001",
+                    "metadata": { "lockupMetadataViewModel": { "title": { "content": "A video" } } }
+                }}}},
+                { "richItemRenderer": { "content": { "lockupViewModel": {
+                    "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+                    "rendererContext": { "commandContext": { "onTap": { "innertubeCommand": {
+                        "watchPlaylistEndpoint": { "playlistId": "PLskipped" } } } } }
+                }}}},
+                { "richItemRenderer": { "content": { "shortsLockupViewModel": {
+                    "onTap": { "innertubeCommand": { "reelWatchEndpoint": { "videoId": "short0000001" } } },
+                    "overlayMetadata": {
+                        "primaryText": { "content": "A short" },
+                        "secondaryText": { "content": "1.2M views" }
+                    }
+                }}}},
+                { "richItemRenderer": { "content": { "reelItemRenderer": {
+                    "videoId": "reel00000001",
+                    "headline": { "simpleText": "A reel" },
+                    "viewCountText": { "simpleText": "3K views" }
+                }}}}
+            ]}
+        }]}})]);
+
+        let (videos, token) = extract_videos_from_playlist_browse(&val);
+        let ids: Vec<&str> = videos.iter().map(|video| video.id.as_str()).collect();
+        assert_eq!(ids, ["vid00000001", "short0000001", "reel00000001"]);
+        assert_eq!(videos[0].title, "A video");
+        assert_eq!(videos[1].title, "A short");
+        assert_eq!(videos[1].view_count_text.as_deref(), Some("1.2M views"));
+        assert_eq!(videos[2].view_count_text.as_deref(), Some("3K views"));
+        assert_eq!(token, None);
+    }
+
+    #[test]
+    fn classic_playlist_reads_video_info_and_ignores_tokens_outside_its_list() {
+        let val = browse_page(vec![
+            json!({ "itemSectionRenderer": { "contents": [{ "playlistVideoListRenderer": { "contents": [
+                { "playlistVideoRenderer": {
+                    "videoId": "vid00000001",
+                    "title": { "runs": [{ "text": "Title" }] },
+                    "videoInfo": { "runs": [
+                        { "text": "1.2M views" }, { "text": " · " }, { "text": "3 years ago" }
+                    ]}
+                }}
+            ]}}]}}),
+            json!({ "itemSectionRenderer": { "contents": [
+                { "continuationItemRenderer": { "continuationEndpoint": {
+                    "continuationCommand": { "token": "ANOTHER_SECTION" } } } }
+            ]}}),
+        ]);
+
+        let (videos, token) = extract_videos_from_playlist_browse(&val);
+        assert_eq!(videos.len(), 1);
+        assert_eq!(videos[0].view_count_text.as_deref(), Some("1.2M views"));
+        assert_eq!(videos[0].published_text.as_deref(), Some("3 years ago"));
+        assert_eq!(token, None);
     }
 }

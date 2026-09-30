@@ -1,4 +1,14 @@
 {
   "settings": "Settings",
-  "theme": "Theme"
+  "theme": "Theme",
+  "discord": {
+    "title": "Discord Rich Presence",
+    "description": "Show your friends what you're playing, requires Discord to be running.",
+    "modeOff": "Off",
+    "modeMusic": "Music only",
+    "modeVideos": "Videos only",
+    "modeMusicAndVideos": "Music and videos",
+    "buttonWatch": "Watch on YouTube",
+    "buttonListen": "Listen on YouTube Music"
+  }
 }

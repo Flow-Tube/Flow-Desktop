@@ -7,13 +7,41 @@
 //! on [`InnertubeClient`] so connection pooling (and any future outbound proxy)
 //! is shared — but it never modifies the video request path.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+
 use reqwest::header::USER_AGENT;
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::clients::MusicClient;
 use super::endpoints;
 use crate::api::innertube::InnertubeClient;
 use crate::errors::{AppError, AppResult};
+
+static MUSIC_REQUESTS: AtomicU64 = AtomicU64::new(0);
+static MUSIC_REQUEST_MILLIS: AtomicU64 = AtomicU64::new(0);
+static MUSIC_PUBLIC_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicRequestDiagnostics {
+    pub requests: u64,
+    pub request_millis: u64,
+    pub public_cache_hits: u64,
+}
+
+pub fn music_request_diagnostics() -> MusicRequestDiagnostics {
+    MusicRequestDiagnostics {
+        requests: MUSIC_REQUESTS.load(Ordering::Relaxed),
+        request_millis: MUSIC_REQUEST_MILLIS.load(Ordering::Relaxed),
+        public_cache_hits: MUSIC_PUBLIC_CACHE_HITS.load(Ordering::Relaxed),
+    }
+}
+
+pub fn record_public_cache_hit() {
+    MUSIC_PUBLIC_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+}
 
 impl InnertubeClient {
     /// Visitor data, fetched once and cached on the shared client.
@@ -72,6 +100,8 @@ impl InnertubeClient {
             req = req.header("X-Goog-Visitor-Id", vd);
         }
 
+        MUSIC_REQUESTS.fetch_add(1, Ordering::Relaxed);
+        let started = Instant::now();
         let res = req
             .send()
             .await
@@ -81,6 +111,9 @@ impl InnertubeClient {
             .json::<Value>()
             .await
             .map_err(|e| AppError::Extractor(format!("Music JSON error ({endpoint}): {e}")))?;
+        let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        MUSIC_REQUEST_MILLIS.fetch_add(elapsed, Ordering::Relaxed);
+        tracing::debug!(endpoint, elapsed_ms = elapsed, "Music request completed");
 
         if !status.is_success() {
             return Err(AppError::Extractor(format!(

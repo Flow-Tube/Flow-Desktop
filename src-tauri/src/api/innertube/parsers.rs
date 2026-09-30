@@ -413,6 +413,7 @@ pub fn parse_music_responsive_list_item_renderer(renderer: &Value) -> Option<YTI
         video_id: Some(video_id),
         playlist_id,
         params,
+        views_text: None,
     }))
 }
 
@@ -477,6 +478,7 @@ pub fn parse_music_two_row_item_renderer(renderer: &Value) -> Option<YTItem> {
             video_id: Some(video_id),
             playlist_id: watch_endpoint["playlistId"].as_str().map(|s| s.to_string()),
             params: watch_endpoint["params"].as_str().map(|s| s.to_string()),
+            views_text: None,
         }))
     } else if page_type == "MUSIC_PAGE_TYPE_ARTIST" || page_type == "MUSIC_PAGE_TYPE_LIBRARY_ARTIST"
     {
@@ -956,6 +958,8 @@ pub fn parse_music_charts_json(val: &Value) -> AppResult<ChartsPage> {
 
     Ok(ChartsPage {
         sections,
+        country_code: None,
+        country_label: None,
         continuation,
     })
 }

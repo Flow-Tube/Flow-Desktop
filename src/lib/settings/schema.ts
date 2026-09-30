@@ -132,6 +132,7 @@ export const SETTINGS = {
   DEARROW_ENABLED: "dearrow_enabled",
   DEARROW_BADGE_ENABLED: "dearrow_badge_enabled",
   RYTD_ENABLED: "rytd_enabled",
+  DISCORD_RPC_MODE: "discord_rpc_mode",
   SB_SUBMIT_ENABLED: "sb_submit_enabled",
   SPONSORBLOCK_USER_ID: "sponsorblock_user_id",
   SPONSORBLOCK_SERVER: "sponsorblock_server",
@@ -292,7 +293,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.NOTIFICATIONS_ENABLED, "content", true, "wired"),
   str(SETTINGS.NOTIFICATION_CHECK_INTERVAL, "content", "360", "wired", ["15", "30", "60", "180", "360", "720", "1440"]),
   bool(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, "content", true, "wired"),
-  str(SETTINGS.TRENDING_REGION, "content", "US", "persisted-only"),
+  str(SETTINGS.TRENDING_REGION, "content", "US", "wired"),
   // Session state, not a preference: exporting it can permanently mute history recording
   // on the restoring device (its paired activated_at timestamp is internal too).
   bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired", "internal"),
@@ -334,6 +335,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.DEARROW_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.DEARROW_BADGE_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.RYTD_ENABLED, "extensions", true, "wired"),
+  str(SETTINGS.DISCORD_RPC_MODE, "extensions", "off", "wired", ["off", "music", "videos", "musicAndVideos"]),
   bool(SETTINGS.SB_SUBMIT_ENABLED, "extensions", false, "wired"),
   str(SETTINGS.SPONSORBLOCK_USER_ID, "extensions", "", "persisted-only", undefined, "visible", "private"),
   str(SETTINGS.SPONSORBLOCK_SERVER, "extensions", "https://sponsor.ajay.app", "wired"),

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   buildThumbnailSources,
   type ThumbnailQuality,
 } from "./thumbnails";
+import { useImageFallback } from "./useImageFallback";
 
 export function useVideoThumbnail(
   videoId?: string | null,
@@ -14,19 +15,5 @@ export function useVideoThumbnail(
     [videoId, fallbackUrl, quality],
   );
 
-  const [src, setSrc] = useState(sources.primary);
-
-  useEffect(() => {
-    setSrc(sources.primary);
-  }, [sources.primary]);
-
-  const onError = useCallback(() => {
-    setSrc((current) => (
-      sources.fallback && current !== sources.fallback
-        ? sources.fallback
-        : current
-    ));
-  }, [sources.fallback]);
-
-  return { src, onError };
+  return useImageFallback([sources.primary, sources.fallback]);
 }

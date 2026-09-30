@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
 import { Bookmark, Check, Download, Loader2, Music2, Play, Search, Shuffle } from 'lucide-react';
 
 import { getString } from '../../lib/i18n/index';
 import type { CollectionMeta } from '../../lib/useMusicCollection';
 import { upgradeMusicImageUrl } from '../../lib/thumbnails';
+import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { ExplicitBadge } from './ExplicitBadge';
 
 interface MusicCollectionHeaderProps {
   meta: CollectionMeta;
@@ -21,10 +22,9 @@ interface MusicCollectionHeaderProps {
 }
 
 function Cover({ src, alt }: { src: string | null | undefined; alt: string }) {
-  const [failed, setFailed] = useState(false);
   const imageSrc = useProxiedImageUrl(upgradeMusicImageUrl(src));
-  useEffect(() => setFailed(false), [imageSrc]);
-  if (!imageSrc || failed) {
+  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
+  if (!displaySrc) {
     return (
       <div className="grid h-full w-full place-items-center bg-surface-container-high text-chrome-neutral-500">
         <Music2 className="h-12 w-12" />
@@ -34,10 +34,10 @@ function Cover({ src, alt }: { src: string | null | undefined; alt: string }) {
 
   return (
     <img
-      src={imageSrc}
+      src={displaySrc}
       alt={alt}
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={onError}
       className="h-full w-full object-cover"
     />
   );
@@ -88,8 +88,9 @@ export function MusicCollectionHeader({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
-          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-chrome-neutral-300">
+          <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-chrome-neutral-300">
             {meta.typeLabel}
+            {meta.explicit && <ExplicitBadge />}
           </span>
 
           <h1 className="line-clamp-2 text-5xl font-extrabold leading-tight tracking-tighter text-chrome-white lg:text-7xl">

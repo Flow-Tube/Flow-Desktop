@@ -4,36 +4,84 @@
 //! command reuses the shared streaming proxy exactly like `get_stream_info`.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use sqlx::SqlitePool;
 use tauri::State;
 use uuid::Uuid;
 
+use crate::api::innertube::music::client::{
+    MusicRequestDiagnostics, music_request_diagnostics, record_public_cache_hit,
+};
+use crate::api::innertube::music::clients::WEB_REMIX;
+use crate::commands::music_brain::graph_taste;
+use crate::db::{music_content, music_home};
 use crate::errors::{AppError, ErrorResponse};
 use crate::models::music::{
-    AlbumItem, ArtistPage, ChartsPage, ExplorePage, MoodAndGenreItem, SongItem,
+    AlbumItem, ArtistItem, ArtistPage, ChartsPage, ExplorePage, MoodAndGenreGroup,
+    MoodAndGenreItem, SongItem,
 };
 use crate::models::music_pages::{
-    AlbumPage, MoodGenrePage, MusicHomePage, MusicPlaylistPage, MusicSearchResponse,
-    MusicSearchSuggestions, QueuePage, RelatedPage, SearchSummaryPage,
+    AlbumPage, CachedMusicHomePage, MoodGenrePage, MusicHomePage, MusicPlaylistPage,
+    MusicSearchResponse, MusicSearchSuggestions, QueuePage, RelatedPage, SearchSummaryPage,
 };
 use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
+use crate::music_brain::store::MusicBrainStore;
 use crate::security::validation::{validate_search_query, validate_video_id};
-use crate::services::music_service::MusicService;
+use crate::services::music_service::{Freshness, MusicService};
 use crate::streaming::proxy::StreamingManager;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
 
 // --- Browse ---------------------------------------------------------------
 
+/// Home responses vary only with the request's `hl`/`gl`, so the cache is keyed on
+/// the values the music client actually sends rather than the UI language.
+fn music_home_cache_stamp() -> String {
+    let context = WEB_REMIX.context(None, None);
+    let client = &context["client"];
+    format!(
+        "{}-{}",
+        client["hl"].as_str().unwrap_or_default(),
+        client["gl"].as_str().unwrap_or_default()
+    )
+}
+
 #[tauri::command]
 pub async fn get_music_home_page(
     continuation: Option<String>,
     music: State<'_, MusicService>,
+    pool: State<'_, SqlitePool>,
 ) -> CmdResult<MusicHomePage> {
-    music
+    let page = music
         .home(continuation.as_deref())
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    if continuation.is_none()
+        && let Err(error) = music_home::save(&pool, &music_home_cache_stamp(), &page).await
+    {
+        tracing::warn!(%error, "Could not cache typed music home");
+    }
+    Ok(page)
+}
+
+#[tauri::command]
+pub async fn get_cached_music_home_page(
+    pool: State<'_, SqlitePool>,
+) -> CmdResult<Option<CachedMusicHomePage>> {
+    let cached = music_home::get_cached(&pool, &music_home_cache_stamp())
+        .await
+        .map_err(ErrorResponse::from)?;
+    if cached.is_some() {
+        record_public_cache_hit();
+    }
+    Ok(cached)
+}
+
+#[tauri::command]
+#[must_use]
+pub fn get_music_request_diagnostics() -> MusicRequestDiagnostics {
+    music_request_diagnostics()
 }
 
 #[tauri::command]
@@ -44,10 +92,11 @@ pub async fn get_music_explore_page(music: State<'_, MusicService>) -> CmdResult
 #[tauri::command]
 pub async fn get_music_charts_page(
     continuation: Option<String>,
+    country: Option<String>,
     music: State<'_, MusicService>,
 ) -> CmdResult<ChartsPage> {
     music
-        .charts(continuation.as_deref())
+        .charts(continuation.as_deref(), country.as_deref())
         .await
         .map_err(ErrorResponse::from)
 }
@@ -55,6 +104,24 @@ pub async fn get_music_charts_page(
 #[tauri::command]
 pub async fn get_music_moods(music: State<'_, MusicService>) -> CmdResult<Vec<MoodAndGenreItem>> {
     music.moods().await.map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_music_trending_songs(
+    country: Option<String>,
+    music: State<'_, MusicService>,
+) -> CmdResult<Vec<SongItem>> {
+    music
+        .trending_songs(country.as_deref())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_music_mood_groups(
+    music: State<'_, MusicService>,
+) -> CmdResult<Vec<MoodAndGenreGroup>> {
+    music.mood_groups().await.map_err(ErrorResponse::from)
 }
 
 #[tauri::command]
@@ -143,9 +210,13 @@ pub async fn get_music_search_suggestions(
 #[tauri::command]
 pub async fn get_music_album_page(
     browse_id: String,
+    prefer_cached: Option<bool>,
     music: State<'_, MusicService>,
 ) -> CmdResult<AlbumPage> {
-    music.album(&browse_id).await.map_err(ErrorResponse::from)
+    music
+        .album(&browse_id, Freshness::prefer_cached(prefer_cached))
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]
@@ -162,18 +233,23 @@ pub async fn get_music_album_continuation(
 #[tauri::command]
 pub async fn get_music_artist_page(
     browse_id: String,
+    prefer_cached: Option<bool>,
     music: State<'_, MusicService>,
 ) -> CmdResult<ArtistPage> {
-    music.artist(&browse_id).await.map_err(ErrorResponse::from)
+    music
+        .artist(&browse_id, Freshness::prefer_cached(prefer_cached))
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]
 pub async fn get_music_playlist_page(
     playlist_id: String,
+    prefer_cached: Option<bool>,
     music: State<'_, MusicService>,
 ) -> CmdResult<MusicPlaylistPage> {
     music
-        .playlist(&playlist_id)
+        .playlist(&playlist_id, Freshness::prefer_cached(prefer_cached))
         .await
         .map_err(ErrorResponse::from)
 }
@@ -238,6 +314,30 @@ pub async fn get_music_related_typed(
 ) -> CmdResult<RelatedPage> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
     music.related(&video_id).await.map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_music_deep_cuts(
+    limit: Option<i64>,
+    pool: State<'_, SqlitePool>,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<Vec<SongItem>> {
+    let taste = graph_taste(&*music_brain.read().await);
+    music_content::deep_cuts(&pool, &taste, limit.unwrap_or(20))
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_music_linked_artists(
+    limit: Option<i64>,
+    pool: State<'_, SqlitePool>,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<Vec<ArtistItem>> {
+    let taste = graph_taste(&*music_brain.read().await);
+    music_content::linked_artists(&pool, &taste, limit.unwrap_or(20))
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]

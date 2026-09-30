@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Music2, Loader2 } from "lucide-react";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
+import { useImageFallback } from "../../lib/useImageFallback";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 
 interface MusicArtworkProps {
@@ -22,10 +22,9 @@ export function MusicArtwork({
   loading = false,
   iconClassName = "h-5 w-5",
 }: MusicArtworkProps) {
-  const [failed, setFailed] = useState(false);
   const imageSrc = useProxiedImageUrl(upgradeMusicImageUrl(src));
-  const showImage = !!imageSrc && !failed;
-  useEffect(() => setFailed(false), [imageSrc]);
+  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
+  const showImage = !!displaySrc;
 
   return (
     <motion.div
@@ -34,11 +33,11 @@ export function MusicArtwork({
     >
       {showImage ? (
         <img
-          src={imageSrc}
+          src={displaySrc}
           alt={alt}
           loading="lazy"
           draggable={false}
-          onError={() => setFailed(true)}
+          onError={onError}
           className="h-full w-full object-cover"
         />
       ) : (

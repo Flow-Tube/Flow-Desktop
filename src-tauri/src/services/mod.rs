@@ -1,3 +1,4 @@
+pub mod discord_presence;
 pub mod music_service;
 pub mod notification_service;
 pub mod recommendation_service;

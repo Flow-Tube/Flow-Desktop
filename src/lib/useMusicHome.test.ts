@@ -76,16 +76,32 @@ describe('useMusicHome', () => {
     expect(state.current?.error).toBeTruthy();
   });
 
+  it('loads the next two pages in the background after the first one shows', async () => {
+    api.getCachedMusicHomePage.mockResolvedValue(null);
+    api.getMusicHomePage
+      .mockResolvedValueOnce(page(['First'], 'p1'))
+      .mockResolvedValueOnce(page(['Second'], 'p2'))
+      .mockResolvedValueOnce(page(['Third'], 'p3'));
+    await renderHome();
+    await act(async () => { await Promise.resolve(); });
+    expect(api.getMusicHomePage).toHaveBeenNthCalledWith(2, 'p1');
+    expect(api.getMusicHomePage).toHaveBeenNthCalledWith(3, 'p2');
+    expect(api.getMusicHomePage).toHaveBeenCalledTimes(3);
+    expect(titles()).toEqual(['First', 'Second', 'Third']);
+  });
+
   it('refetches the first page when a cached continuation has expired', async () => {
     api.getCachedMusicHomePage.mockResolvedValue(cached(['Cached'], 60_000, 'expired'));
     api.getMusicHomePage
       .mockRejectedValueOnce(new Error('bad continuation'))
-      .mockResolvedValueOnce(page(['Live'], 'live-token'));
+      .mockResolvedValueOnce(page(['Live'], 'live-token'))
+      .mockResolvedValue(page(['More']));
     await renderHome();
-    await act(async () => { await state.current?.loadMore(); });
+    await act(async () => { await Promise.resolve(); });
     expect(api.getMusicHomePage).toHaveBeenNthCalledWith(1, 'expired');
     expect(api.getMusicHomePage).toHaveBeenNthCalledWith(2);
-    expect(titles()).toEqual(['Live']);
+    expect(api.getMusicHomePage).toHaveBeenNthCalledWith(3, 'live-token');
+    expect(titles()).toEqual(['Live', 'More']);
     expect(state.current?.loadMoreError).toBeNull();
   });
 });

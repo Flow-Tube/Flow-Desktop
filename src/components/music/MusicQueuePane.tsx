@@ -34,9 +34,10 @@ interface QueueRowProps {
   isRadio: boolean;
   onPlay: () => void;
   onRemove: () => void;
+  onNavigate: () => void;
 }
 
-function QueueRow({ track, isRadio, onPlay, onRemove }: QueueRowProps) {
+function QueueRow({ track, isRadio, onPlay, onRemove, onNavigate }: QueueRowProps) {
   const {
     attributes,
     listeners,
@@ -77,6 +78,7 @@ function QueueRow({ track, isRadio, onPlay, onRemove }: QueueRowProps) {
           variant="track-list"
           item={track}
           onPlay={onPlay}
+          onNavigate={onNavigate}
           appendActions={[
             {
               id: "remove-from-queue",
@@ -103,6 +105,7 @@ export function MusicQueuePane() {
   const reorderQueue = useMusicPlayerStore((s) => s.reorderQueue);
   const clearQueue = useMusicPlayerStore((s) => s.clearQueue);
   const toggleRadio = useMusicPlayerStore((s) => s.toggleRadio);
+  const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
   const isHidden = useMusicHiddenFilter();
 
   const sensors = useSensors(
@@ -151,7 +154,12 @@ export function MusicQueuePane() {
             <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-widest text-chrome-neutral-600">
               {getString("music_now_playing")}
             </p>
-            <MusicItemCard variant="track-list" item={currentTrack} onPlay={() => void loadIndex(currentIndex)} />
+            <MusicItemCard
+              variant="track-list"
+              item={currentTrack}
+              onPlay={() => void loadIndex(currentIndex)}
+              onNavigate={closeOverlay}
+            />
           </>
         )}
 
@@ -175,6 +183,7 @@ export function MusicQueuePane() {
                     isRadio={radioSet.has(videoIdOf(track))}
                     onPlay={() => void loadIndex(i)}
                     onRemove={() => removeFromQueue(i)}
+                    onNavigate={closeOverlay}
                   />
                 ))}
               </div>

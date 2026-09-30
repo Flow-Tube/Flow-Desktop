@@ -4,6 +4,7 @@
 use serde_json::{Value, json};
 
 use super::clients;
+use super::parse::endpoint::album_from_menu;
 use super::parse::runs::{parse_artists_and_year, parse_duration, runs_text};
 use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
@@ -220,12 +221,13 @@ fn parse_panel_video(r: &Value) -> Option<SongItem> {
     let video_id = r["videoId"].as_str()?.to_string();
     let title = runs_text(&r["title"])?;
     let artists = parse_artists_and_year(&r["longBylineText"]).0;
+    let album = album_from_menu(r);
     let duration = runs_text(&r["lengthText"]).and_then(|t| parse_duration(&t));
     Some(SongItem {
         id: video_id.clone(),
         title,
         artists,
-        album: None,
+        album,
         duration,
         music_video_type: None,
         thumbnail: thumbnail_url(r).unwrap_or_default(),
@@ -235,5 +237,41 @@ fn parse_panel_video(r: &Value) -> Option<SongItem> {
             .as_str()
             .map(ToOwned::to_owned),
         params: None,
+        views_text: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn panel_video_album_from_menu() {
+        let r = json!({
+            "videoId": "vid2",
+            "title": { "runs": [{ "text": "Some Song" }] },
+            "longBylineText": { "runs": [{ "text": "Some Artist" }] },
+            "menu": { "menuRenderer": { "items": [
+                { "menuNavigationItemRenderer": { "navigationEndpoint": { "browseEndpoint": {
+                    "browseId": "MPREmenualbum",
+                    "browseEndpointContextSupportedConfigs": {
+                        "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_ALBUM" }
+                    }
+                }}}}
+            ]}}
+        });
+        let album = parse_panel_video(&r).unwrap().album.unwrap();
+        assert_eq!(album.id, "MPREmenualbum");
+        assert!(album.name.is_empty());
+    }
+
+    #[test]
+    fn panel_video_no_album() {
+        let r = json!({
+            "videoId": "vid3",
+            "title": { "runs": [{ "text": "Single" }] },
+            "longBylineText": { "runs": [{ "text": "Artist Only" }] }
+        });
+        assert!(parse_panel_video(&r).unwrap().album.is_none());
+    }
 }

@@ -57,6 +57,7 @@ import { AddTracksToAlbumModal } from "./components/music/AddTracksToAlbumModal"
 import { AddToPlaylistModal } from "./components/playlist/AddToPlaylistModal";
 import { DeepFlowController } from "./components/deep-flow/DeepFlowController";
 import { DeepLinkController } from "./components/handoff/DeepLinkController";
+import { DiscordPresenceController } from "./components/discord/DiscordPresenceController";
 import { DownloadDialog } from "./components/downloads/DownloadDialog";
 import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
@@ -253,6 +254,7 @@ function App() {
       <AddToPlaylistModal />
       <DeepFlowController />
       <DeepLinkController />
+      <DiscordPresenceController />
       <LayoutGroup id="downloads">
         <DownloadDialog />
         <DownloadActivity />

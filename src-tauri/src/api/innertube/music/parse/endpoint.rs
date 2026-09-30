@@ -2,6 +2,8 @@
 
 use serde_json::Value;
 
+use crate::models::music::Album;
+
 /// Music `pageType` of a navigation endpoint's browse config, if present.
 #[must_use]
 pub fn page_type(nav: &Value) -> Option<&str> {
@@ -52,6 +54,25 @@ pub fn music_video_type(nav: &Value) -> Option<String> {
         ["musicVideoType"]
         .as_str()
         .map(ToOwned::to_owned)
+}
+
+/// Album from a row's "Go to album" menu, when the byline has no album link. Name
+/// is left empty — the menu label is the localized action text, not the title.
+#[must_use]
+pub fn album_from_menu(r: &Value) -> Option<Album> {
+    let items = r["menu"]["menuRenderer"]["items"].as_array()?;
+    items.iter().find_map(|item| {
+        let nav = &item["menuNavigationItemRenderer"]["navigationEndpoint"];
+        let pt = page_type(nav)?;
+        if !(pt.contains("ALBUM") || pt.contains("AUDIOBOOK")) {
+            return None;
+        }
+        let id = browse_id(nav)?;
+        (!id.is_empty()).then(|| Album {
+            name: String::new(),
+            id,
+        })
+    })
 }
 
 /// `MUSIC_EXPLICIT_BADGE` presence on a renderer's `badges`.

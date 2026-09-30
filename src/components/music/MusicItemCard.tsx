@@ -40,6 +40,7 @@ export type MusicItemCardProps = BaseProps &
         variant: 'track-list';
         item: SongItem;
         onMenu?: () => void;
+        onNavigate?: () => void;
         appendActions?: MusicMenuAction[];
       }
   );
@@ -576,12 +577,14 @@ function ListRow({
   item,
   onPlay,
   onMenu,
+  onNavigate,
   appendActions,
   className,
 }: {
   item: SongItem;
   onPlay?: () => void;
   onMenu?: () => void;
+  onNavigate?: () => void;
   appendActions?: MusicMenuAction[];
   className?: string;
 }) {
@@ -601,7 +604,7 @@ function ListRow({
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const playerIsPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
-  const navActions = useTrackNavActions(item);
+  const navActions = useTrackNavActions(item, { onNavigate });
   const radioActions = useTrackRadioAction(item);
   const downloadActions = useTrackDownloadAction(item);
   const blockActions = useTrackBlockActions(item);
@@ -859,6 +862,7 @@ export function MusicItemCard(props: MusicItemCardProps) {
           item={props.item}
           onPlay={onPlay}
           onMenu={props.onMenu}
+          onNavigate={props.onNavigate}
           appendActions={props.appendActions}
           className={className}
         />

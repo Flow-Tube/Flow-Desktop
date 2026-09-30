@@ -12,6 +12,7 @@ import i18n from './i18n';
 import { getString } from './i18n/index';
 import { buildQuickPicks } from './musicQuickPicksBuilder';
 import { dailyMixId, dailyMixRoute, expandDailyMix } from './musicMixes';
+import { pickForSession } from './musicFeedComposer';
 import {
   MIN_SHELF_ITEMS,
   audioMusicOnly,
@@ -64,7 +65,9 @@ const ARTIST_GRAPH_SHELF_SIZE = 14;
 const ARTIST_GRAPH_MAX_FETCHES = 8; // hard cap on artist-page fetches per home build
 
 const COMMUNITY_PREVIEWS = 6;
-const COMMUNITY_PREVIEW_MIN = 3;
+const COMMUNITY_PREVIEW_TRACKS = 10;
+const COMMUNITY_TRACK_SEEDS = 2;
+const COMMUNITY_ARTIST_SEEDS = 3;
 // Two tracks already make a repeat pattern, so On Repeat appears sooner than other shelves.
 const ON_REPEAT_MIN = 2;
 
@@ -289,56 +292,66 @@ async function buildDailyDiscover(
   return { id: 'daily-discover', title: getString('music_daily_discover'), items };
 }
 
-const isCommunityPlaylist = (playlist: PlaylistItem): boolean =>
-  !playlist.id.startsWith('RD') && !playlist.id.startsWith('OLAK')
-  && (playlist.author?.name ?? '').trim().toLowerCase() !== 'youtube';
+const isCommunityPlaylist = (playlist: PlaylistItem): boolean => {
+  const author = (playlist.author?.name ?? '').trim().toLowerCase();
+  return !playlist.id.startsWith('RD') && !playlist.id.startsWith('OLAK')
+    && author !== '' && author !== 'youtube' && author !== 'youtube music';
+};
 
-// Community playlists: typed sources first (related "Recommended playlists" for the last
-// listen, then "Featured on" from the top artists' pages), with a text search only when
-// those are thin. The first few are hydrated for a track preview.
+/** The most recent listen of each of the first `count` distinct artists. */
+function distinctArtistSeeds(history: WatchHistoryRecord[], count: number): WatchHistoryRecord[] {
+  const seen = new Set<string>();
+  return history.filter((record) => {
+    const key = (record.channelId ?? '').trim() || (record.channelName ?? '').trim().toLowerCase();
+    if (!record.videoId || !key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, count);
+}
+
+// Community playlists, as on Android: the related playlists of recent listens plus the
+// "Featured on" playlists of the top artists (not the artists' own), a session pick of
+// up to six, each hydrated for its preview. A text search only stands in when there is
+// no listening to seed from.
 async function buildFromCommunity(
   history: WatchHistoryRecord[],
   profile: MusicTasteProfile | null,
 ): Promise<PersonalSection | null> {
-  const recent = history[0];
-  const anchors = (profile?.topArtists ?? []).filter((artist) => artist.idKeyed).slice(0, 2);
+  const trackSeeds = distinctArtistSeeds(history, COMMUNITY_TRACK_SEEDS);
+  const anchors = (profile?.topArtists ?? []).filter((artist) => artist.idKeyed).slice(0, COMMUNITY_ARTIST_SEEDS);
   const [related, artistPages] = await Promise.all([
-    recent ? getMusicRelatedTyped(recent.videoId).catch(() => null) : Promise.resolve(null),
+    Promise.all(trackSeeds.map((seed) => getMusicRelatedTyped(seed.videoId).catch(() => null))),
     Promise.all(anchors.map((artist) => recallArtist(artist.key))),
   ]);
-  const typed = [...(related?.playlists ?? []), ...artistPages.flatMap((page) => page?.featuredOn ?? [])]
-    .filter(isCommunityPlaylist);
-  const searchArtists = typed.length >= MIN_SHELF_ITEMS ? []
-    : [...new Set(history.map((h) => (h.channelName ?? '').trim()).filter(Boolean))].slice(0, 3);
-  const searched = await Promise.all(searchArtists.map(async (artist) => {
-    try {
-      const res = await searchMusicTyped(`${artist} playlist`, 'community_playlists');
-      return res.sections.flatMap((s) => s.items)
-        .filter((it): it is Extract<YTItem, { type: 'playlist' }> => it.type === 'playlist');
-    } catch {
-      return [];
-    }
-  }));
+  const featured = artistPages.flatMap((page) => (page?.featuredOn ?? [])
+    .filter((playlist) => (playlist.author?.name ?? '').trim().toLowerCase()
+      !== page?.header.title.trim().toLowerCase()));
+  let candidates = [...related.flatMap((page) => page?.playlists ?? []), ...featured].filter(isCommunityPlaylist);
+  if (candidates.length === 0 && history.length === 0) {
+    candidates = await searchMusicTyped('community playlist', 'community_playlists')
+      .then((res) => res.sections.flatMap((section) => section.items)
+        .filter((it): it is Extract<YTItem, { type: 'playlist' }> => it.type === 'playlist')
+        .filter(isCommunityPlaylist))
+      .catch(() => []);
+  }
+  const unique = [...new Map(candidates.map((playlist) => [playlist.id, playlist])).values()];
+  const picked = pickForSession(unique, COMMUNITY_PREVIEWS, (playlist) => playlist.id, 'community');
+  if (picked.length === 0) return null;
 
-  const seen = new Set<string>();
-  const playlists = [...typed, ...searched.flat().filter(isCommunityPlaylist)]
-    .filter((playlist) => !seen.has(playlist.id) && !!seen.add(playlist.id))
-    .slice(0, 12);
-  if (playlists.length === 0) return null;
-
-  const previews: Record<string, SongItem[]> = {};
-  const pages = await Promise.all(playlists.slice(0, COMMUNITY_PREVIEWS)
+  const pages = await Promise.all(picked
     .map((playlist) => getMusicPlaylistPage(playlist.id, { preferCached: true }).catch(() => null)));
-  pages.forEach((page, index) => {
-    const playlist = playlists[index];
-    if (playlist && page) previews[playlist.id] = audioMusicOnly(page.songs).slice(0, 10);
+  const previews: Record<string, SongItem[]> = {};
+  const playable = picked.filter((playlist, index) => {
+    const tracks = audioMusicOnly(pages[index]?.songs ?? []).slice(0, COMMUNITY_PREVIEW_TRACKS);
+    if (tracks.length === 0) return false;
+    previews[playlist.id] = tracks;
+    return true;
   });
-  // Sampler cards need tracks to sample; plain covers are the fallback when too few load.
-  const sampled = playlists.filter((playlist) => (previews[playlist.id]?.length ?? 0) >= COMMUNITY_PREVIEW_MIN);
+  if (playable.length === 0) return null;
   return {
     id: 'from-community',
     title: getString('music_from_community'),
-    items: (sampled.length >= 2 ? sampled : playlists).map((playlist) => ({ type: 'playlist' as const, ...playlist })),
+    items: playable.map((playlist) => ({ type: 'playlist' as const, ...playlist })),
     previews,
   };
 }

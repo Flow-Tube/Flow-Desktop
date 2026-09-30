@@ -4,7 +4,7 @@
 use serde_json::{Value, json};
 
 use super::clients;
-use super::parse::endpoint::{album_from_menu, browse_id};
+use super::parse::endpoint::{WatchNextTab, album_from_menu, browse_id, watch_next_tab};
 use super::parse::runs::{parse_artists_and_year, parse_duration, runs_text};
 use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
@@ -253,8 +253,8 @@ fn parse_next_queue(res: &Value) -> QueuePage {
         .and_then(|v| i32::try_from(v).ok());
     let radio_playlist_id = panel["playlistId"].as_str().map(ToOwned::to_owned);
 
-    let lyrics_endpoint = &tabs[1]["tabRenderer"]["endpoint"]["browseEndpoint"];
-    let related_endpoint = &tabs[2]["tabRenderer"]["endpoint"]["browseEndpoint"];
+    let lyrics_endpoint = &watch_next_tab(tabs, WatchNextTab::Lyrics)["browseEndpoint"];
+    let related_endpoint = &watch_next_tab(tabs, WatchNextTab::Related)["browseEndpoint"];
 
     QueuePage {
         items,
@@ -463,8 +463,20 @@ mod related_tests {
                 { "tabRenderer": { "content": { "musicQueueRenderer": { "content": {
                     "playlistPanelRenderer": { "contents": [item("one"), item("two")] }
                 } } } } },
-                { "tabRenderer": {} },
-                { "tabRenderer": { "endpoint": { "browseEndpoint": { "browseId": "MPTRt_related" } } } },
+                { "tabRenderer": { "endpoint": { "browseEndpoint": {
+                    "browseId": "MPLYt_lyrics",
+                    "browseEndpointContextSupportedConfigs": { "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_TRACK_LYRICS"
+                    } }
+                } } } },
+                // YouTube added Comments here, pushing Related to the fourth tab.
+                { "tabRenderer": { "title": "Comments" } },
+                { "tabRenderer": { "endpoint": { "browseEndpoint": {
+                    "browseId": "MPTRt_related",
+                    "browseEndpointContextSupportedConfigs": { "browseEndpointContextMusicConfig": {
+                        "pageType": "MUSIC_PAGE_TYPE_TRACK_RELATED"
+                    } }
+                } } } },
             ] } }
         } } });
         let queue = parse_next_queue(&response);
@@ -477,5 +489,6 @@ mod related_tests {
             vec!["one", "two"]
         );
         assert_eq!(queue.related_browse_id.as_deref(), Some("MPTRt_related"));
+        assert_eq!(queue.lyrics_browse_id.as_deref(), Some("MPLYt_lyrics"));
     }
 }

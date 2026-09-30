@@ -85,3 +85,32 @@ pub fn has_explicit(r: &Value) -> bool {
         })
     })
 }
+
+/// A tab of the watch-next ("next") response.
+#[derive(Debug, Clone, Copy)]
+pub enum WatchNextTab {
+    Lyrics,
+    Related,
+}
+
+/// The endpoint of a watch-next tab. The tabs change order (a Comments tab now sits
+/// before Related), so each is found by its page type, or its browse-id prefix when the
+/// type is missing, never by position.
+#[must_use]
+pub fn watch_next_tab(tabs: &Value, tab: WatchNextTab) -> &Value {
+    let (page, prefix) = match tab {
+        WatchNextTab::Lyrics => ("MUSIC_PAGE_TYPE_TRACK_LYRICS", "MPLYt"),
+        WatchNextTab::Related => ("MUSIC_PAGE_TYPE_TRACK_RELATED", "MPTRt"),
+    };
+    tabs.as_array()
+        .into_iter()
+        .flatten()
+        .map(|tab| &tab["tabRenderer"]["endpoint"])
+        .find(|endpoint| {
+            page_type(endpoint) == Some(page)
+                || endpoint["browseEndpoint"]["browseId"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with(prefix))
+        })
+        .unwrap_or(&Value::Null)
+}

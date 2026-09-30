@@ -1,5 +1,6 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients::{self, YouTubeClient};
+use crate::api::innertube::music::parse::endpoint::{WatchNextTab, watch_next_tab};
 use crate::errors::{AppError, AppResult};
 use serde_json::Value;
 
@@ -107,33 +108,15 @@ impl InnertubeClient {
             .post_innertube("next", &clients::WEB_REMIX, &mut payload)
             .await?;
 
-        let lyrics_tab = res["contents"]["singleColumnMusicWatchNextResultsRenderer"]
-            ["tabbedRenderer"]["watchNextTabbedResultsRenderer"]["tabs"]
-            .as_array()
-            .and_then(|tabs| tabs.get(1))
-            .and_then(|tab| tab.get("tabRenderer"));
-
-        let lyrics_browse_id = lyrics_tab
-            .and_then(|renderer| renderer["endpoint"]["browseEndpoint"]["browseId"].as_str())
-            .map(|s| s.to_string());
-
-        let lyrics_params = lyrics_tab
-            .and_then(|renderer| renderer["endpoint"]["browseEndpoint"]["params"].as_str())
-            .map(|s| s.to_string());
-
-        let related_tab = res["contents"]["singleColumnMusicWatchNextResultsRenderer"]
-            ["tabbedRenderer"]["watchNextTabbedResultsRenderer"]["tabs"]
-            .as_array()
-            .and_then(|tabs| tabs.get(2))
-            .and_then(|tab| tab.get("tabRenderer"));
-
-        let related_browse_id = related_tab
-            .and_then(|renderer| renderer["endpoint"]["browseEndpoint"]["browseId"].as_str())
-            .map(|s| s.to_string());
-
-        let related_params = related_tab
-            .and_then(|renderer| renderer["endpoint"]["browseEndpoint"]["params"].as_str())
-            .map(|s| s.to_string());
+        let tabs = &res["contents"]["singleColumnMusicWatchNextResultsRenderer"]["tabbedRenderer"]
+            ["watchNextTabbedResultsRenderer"]["tabs"];
+        let lyrics = &watch_next_tab(tabs, WatchNextTab::Lyrics)["browseEndpoint"];
+        let related = &watch_next_tab(tabs, WatchNextTab::Related)["browseEndpoint"];
+        let text = |value: &Value| value.as_str().map(ToOwned::to_owned);
+        let lyrics_browse_id = text(&lyrics["browseId"]);
+        let lyrics_params = text(&lyrics["params"]);
+        let related_browse_id = text(&related["browseId"]);
+        let related_params = text(&related["params"]);
 
         Ok((
             lyrics_browse_id,

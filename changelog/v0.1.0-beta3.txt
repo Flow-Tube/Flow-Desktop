@@ -12,6 +12,7 @@ MUSIC
 - Charts follow the country set in Settings, Daily Mixes open as their own playable page, and a new Moods and genres browser lets you explore by feel.
 - Similar to now mixes in artists and playlists and links to the artist, community playlists can be sampled right from the home, Quick Picks no longer fill up with chart hits or one artist, and "See all" opens the right page.
 - Fixed related songs, Daily Mixes and the Similar to shelves coming up empty after YouTube Music added a Comments tab next to Related.
+- Start a radio station from any song menu. It keeps playing for that session without changing your Autoplay setting, and switching Autoplay off stops it.
 
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)

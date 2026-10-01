@@ -668,6 +668,9 @@ fn build_video(obj: &serde_json::Map<String, Value>, fallback_id: &str) -> Value
 // Playlists  (frontend `user_playlists` JSON blob  ⇄  canonical)
 // ===========================================================================================
 
+/// `VideoSummary.addedAtInPlaylist`: epoch ms a stored track was added to its playlist.
+const ADDED_AT_KEY: &str = "addedAtInPlaylist";
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct VideoSummaryMirror {
@@ -756,7 +759,12 @@ fn playlist_from_mirror(m: StoredPlaylistMirror, device_id: &str) -> Playlist {
         .map(|(i, t)| PlaylistItem {
             video_id: t.id.clone(),
             position: i as i64,
-            added_at_ms: created_ms,
+            added_at_ms: t
+                .extra
+                .get(ADDED_AT_KEY)
+                .and_then(Value::as_u64)
+                .filter(|ms| *ms > 0)
+                .unwrap_or(created_ms),
             deleted: false,
             title: Some(t.title.clone()),
             channel_name: Some(t.channel_name.clone()),
@@ -873,6 +881,11 @@ fn item_to_mirror(i: &PlaylistItem) -> VideoSummaryMirror {
             return m;
         }
     }
+    // 0 means the sender does not know when the item was added.
+    let mut extra = BTreeMap::new();
+    if i.added_at_ms > 0 {
+        extra.insert(ADDED_AT_KEY.to_string(), Value::from(i.added_at_ms));
+    }
     VideoSummaryMirror {
         id: i.video_id.clone(),
         title: i.title.clone().unwrap_or_default(),
@@ -881,7 +894,7 @@ fn item_to_mirror(i: &PlaylistItem) -> VideoSummaryMirror {
         thumbnail_url: i.thumbnail_url.clone(),
         duration_seconds: i.duration_seconds.map(|d| d as i64),
         is_live: None,
-        extra: BTreeMap::new(),
+        extra,
     }
 }
 

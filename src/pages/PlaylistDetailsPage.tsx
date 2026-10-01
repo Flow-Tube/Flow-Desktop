@@ -4,8 +4,12 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PlaylistAmbientHeader } from "../components/playlist/PlaylistAmbientHeader";
 import { PlaylistSortableList } from "../components/playlist/PlaylistSortableList";
 import {
+  availablePlaylistSortOrders,
+  loadPlaylistSortOrder,
+  resolvePlaylistSortOrder,
+  savePlaylistSortOrder,
   sortPlaylistVideos,
-  type PlaylistSortType,
+  type PlaylistSortOrder,
 } from "../lib/playlistSort";
 import {
   isProtectedPlaylistId,
@@ -46,27 +50,39 @@ export function PlaylistDetailsPage({
   } = usePlaylistDetails(playlistId);
   usePublishTitle(meta?.title);
 
-  const [sortType, setSortType] = useState<PlaylistSortType>("Manual");
+  const [storedSortOrder, setStoredSortOrder] = useState<string | null>(() =>
+    playlistId ? loadPlaylistSortOrder(playlistId) : null,
+  );
   const [manualVideos, setManualVideos] = useState<VideoSummary[]>([]);
   const [savedInLibrary, setSavedInLibrary] = useState(false);
 
   useEffect(() => {
     setManualVideos(videos);
-    setSortType("Manual");
   }, [videos]);
+
+  useEffect(() => {
+    setStoredSortOrder(playlistId ? loadPlaylistSortOrder(playlistId) : null);
+  }, [playlistId]);
 
   useEffect(() => {
     setSavedInLibrary(Boolean(storedPlaylist));
   }, [storedPlaylist]);
 
+  const handleSortChange = (next: PlaylistSortOrder) => {
+    setStoredSortOrder(next);
+    if (playlistId) savePlaylistSortOrder(playlistId, next);
+  };
+
   const isProtected =
     Boolean(storedPlaylist?.isProtected) ||
     (playlistId ? isProtectedPlaylistId(playlistId) : false);
   const isOwned = storedPlaylist?.source === "Owned" && !isProtected;
+  const isLocalPlaylist = savedInLibrary || isProtected;
+  const sortOrder = resolvePlaylistSortOrder(storedSortOrder, isLocalPlaylist);
 
   const displayVideos = useMemo(
-    () => sortPlaylistVideos(manualVideos, sortType),
-    [manualVideos, sortType],
+    () => sortPlaylistVideos(manualVideos, sortOrder, isProtected),
+    [manualVideos, sortOrder, isProtected],
   );
 
   const leadVideo = manualVideos[0];
@@ -133,7 +149,9 @@ export function PlaylistDetailsPage({
       videoCountText: meta.videoCountText,
     };
     try {
-      await savePlaylistToLibrary(summary);
+      const playlists = await savePlaylistToLibrary(summary);
+      const saved = playlists.find((playlist) => playlist.id === meta.id);
+      if (saved) setManualVideos(saved.tracks);
       setSavedInLibrary(true);
       showToast({
         variant: "success",
@@ -235,8 +253,9 @@ export function PlaylistDetailsPage({
         <PlaylistSortableList
           videos={manualVideos}
           displayVideos={displayVideos}
-          sortType={sortType}
-          onSortChange={setSortType}
+          sortOrder={sortOrder}
+          sortOptions={availablePlaylistSortOrders(isLocalPlaylist)}
+          onSortChange={handleSortChange}
           onReorder={handleReorder}
           onPlay={playFromPlaylist}
           onAddToQueue={onAddToQueue}

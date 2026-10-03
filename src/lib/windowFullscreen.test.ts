@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createWindowFullscreenController,
-  watchNativeFullscreenExit,
+  watchNativeFullscreen,
 } from "./windowFullscreen";
 
 const nativeWindowMock = vi.hoisted(() => ({
   fullscreen: true,
   listeners: [] as Array<() => void>,
+  queries: [] as Array<Promise<boolean>>,
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -18,7 +19,7 @@ vi.mock("@tauri-apps/api/window", () => ({
         if (index >= 0) nativeWindowMock.listeners.splice(index, 1);
       };
     },
-    isFullscreen: async () => nativeWindowMock.fullscreen,
+    isFullscreen: () => nativeWindowMock.queries.shift() ?? Promise.resolve(nativeWindowMock.fullscreen),
   }),
 }));
 
@@ -31,9 +32,38 @@ const emitNativeResize = async () => {
 beforeEach(() => {
   nativeWindowMock.fullscreen = true;
   nativeWindowMock.listeners.length = 0;
+  nativeWindowMock.queries.length = 0;
 });
 
 describe("createWindowFullscreenController", () => {
+  it("reports a failed native transition and allows the next request to recover", async () => {
+    const setNativeFullscreen = vi.fn()
+      .mockRejectedValueOnce(new Error("Window transition refused"))
+      .mockResolvedValue(undefined);
+    const controller = createWindowFullscreenController(setNativeFullscreen);
+
+    expect(await controller.sync(true)).toBe(false);
+    expect(controller.isTransitioning()).toBe(false);
+    expect(await controller.sync(true)).toBe(true);
+    expect(setNativeFullscreen).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not confirm an obsolete request while a newer exit is pending", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const setNativeFullscreen = vi.fn().mockImplementationOnce(() => gate)
+      .mockResolvedValue(undefined);
+    const controller = createWindowFullscreenController(setNativeFullscreen);
+
+    const enter = controller.sync(true);
+    await Promise.resolve();
+    const exit = controller.sync(false);
+    release();
+    expect(await enter).toBe(false);
+    expect(await exit).toBe(true);
+    expect(setNativeFullscreen.mock.calls).toEqual([[true], [false]]);
+  });
+
   it("sends native enter and exit transitions in order", async () => {
     const setNativeFullscreen = vi.fn(async () => {});
     const controller = createWindowFullscreenController(setNativeFullscreen);
@@ -101,7 +131,87 @@ describe("createWindowFullscreenController", () => {
   });
 });
 
-describe("watchNativeFullscreenExit", () => {
+describe("watchNativeFullscreen", () => {
+  it("ignores a stale exit query that resolves after a newer native entry", async () => {
+    const setNativeFullscreen = vi.fn(async () => {});
+    const controller = createWindowFullscreenController(setNativeFullscreen);
+    const dispose = await watchNativeFullscreen(controller, () => false, vi.fn());
+
+    let release!: (value: boolean) => void;
+    nativeWindowMock.queries.push(new Promise((resolve) => { release = resolve; }));
+    nativeWindowMock.listeners[0]!();
+    await emitNativeResize();
+    release(false);
+    await Promise.resolve();
+
+    await controller.sync(false);
+    expect(setNativeFullscreen).toHaveBeenCalledWith(false);
+    dispose();
+  });
+
+  it("stops observing even when the initial native query is still pending", async () => {
+    let release!: (value: boolean) => void;
+    nativeWindowMock.queries.push(new Promise((resolve) => { release = resolve; }));
+    const onExternalExit = vi.fn();
+    const dispose = await watchNativeFullscreen(
+      createWindowFullscreenController(async () => {}), () => true, onExternalExit,
+    );
+
+    dispose();
+    release(false);
+    await Promise.resolve();
+    expect(nativeWindowMock.listeners).toHaveLength(0);
+    expect(onExternalExit).not.toHaveBeenCalled();
+  });
+
+  it("adopts existing native fullscreen without enabling video presentation", async () => {
+    const setNativeFullscreen = vi.fn(async () => {});
+    const controller = createWindowFullscreenController(setNativeFullscreen);
+    const onExternalExit = vi.fn();
+    const dispose = await watchNativeFullscreen(controller, () => false, onExternalExit);
+
+    expect(onExternalExit).not.toHaveBeenCalled();
+    expect(await controller.sync(false)).toBe(true);
+    expect(setNativeFullscreen).toHaveBeenCalledWith(false);
+    dispose();
+  });
+
+  it("tracks green-button entry while the player is not fullscreen", async () => {
+    nativeWindowMock.fullscreen = false;
+    const setNativeFullscreen = vi.fn(async () => {});
+    const controller = createWindowFullscreenController(setNativeFullscreen);
+    const onExternalExit = vi.fn();
+    const dispose = await watchNativeFullscreen(controller, () => false, onExternalExit);
+
+    nativeWindowMock.fullscreen = true;
+    await emitNativeResize();
+    expect(onExternalExit).not.toHaveBeenCalled();
+    expect(await controller.sync(false)).toBe(true);
+    expect(setNativeFullscreen).toHaveBeenCalledWith(false);
+    dispose();
+  });
+
+  it("reconciles a native exit even when the player has already left fullscreen", async () => {
+    const setNativeFullscreen = vi.fn(async () => {});
+    const controller = createWindowFullscreenController(setNativeFullscreen);
+    const dispose = await watchNativeFullscreen(controller, () => false, vi.fn());
+
+    nativeWindowMock.fullscreen = false;
+    await emitNativeResize();
+    expect(await controller.sync(true)).toBe(true);
+    expect(setNativeFullscreen).toHaveBeenCalledWith(true);
+    dispose();
+  });
+
+  it("removes its listener when disposed", async () => {
+    const dispose = await watchNativeFullscreen(
+      createWindowFullscreenController(async () => {}), () => false, vi.fn(),
+    );
+    expect(nativeWindowMock.listeners).toHaveLength(1);
+    dispose();
+    expect(nativeWindowMock.listeners).toHaveLength(0);
+  });
+
   it("reports an OS-initiated exit once and reconciles the controller", async () => {
     const setNativeFullscreen = vi.fn(async () => {});
     const controller = createWindowFullscreenController(setNativeFullscreen);
@@ -111,7 +221,7 @@ describe("watchNativeFullscreenExit", () => {
     const onExternalExit = vi.fn(() => {
       storeFullscreen = false;
     });
-    await watchNativeFullscreenExit(controller, () => storeFullscreen, onExternalExit);
+    await watchNativeFullscreen(controller, () => storeFullscreen, onExternalExit);
 
     nativeWindowMock.fullscreen = false;
     await emitNativeResize();
@@ -130,7 +240,7 @@ describe("watchNativeFullscreenExit", () => {
     await controller.sync(true);
 
     const onExternalExit = vi.fn();
-    const dispose = await watchNativeFullscreenExit(controller, () => true, onExternalExit);
+    const dispose = await watchNativeFullscreen(controller, () => true, onExternalExit);
 
     await emitNativeResize();
     expect(onExternalExit).not.toHaveBeenCalled();
@@ -142,7 +252,7 @@ describe("watchNativeFullscreenExit", () => {
     await controller.sync(true);
 
     const onExternalExit = vi.fn();
-    const dispose = await watchNativeFullscreenExit(controller, () => false, onExternalExit);
+    const dispose = await watchNativeFullscreen(controller, () => false, onExternalExit);
 
     nativeWindowMock.fullscreen = false;
     await emitNativeResize();

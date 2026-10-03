@@ -67,7 +67,11 @@ import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
 import { ThemeController } from "./lib/useTheme";
 
+import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
+import type { CSSProperties } from "react";
 import "./App.css";
+
+const windowLayoutStyle = { "--app-titlebar-height": `${APP_TITLEBAR_HEIGHT}px` } as CSSProperties;
 
 function App() {
   /*
@@ -131,7 +135,8 @@ function App() {
 
   if (loadingOnboarding) {
     return (
-      <div className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
+      <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
+        <ThemeController />
         <TitleBar />
         <div className="flex flex-1 items-center justify-center">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -141,7 +146,7 @@ function App() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
+    <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
       <ThemeController />
       <TitleBar />
       <div className="relative min-h-0 flex-1">

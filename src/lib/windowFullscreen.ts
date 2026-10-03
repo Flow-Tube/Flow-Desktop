@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { logToBackend } from "./diagnostics";
 
 export interface WindowFullscreenController {
-  sync(fullscreen: boolean): Promise<void>;
+  sync(fullscreen: boolean): Promise<boolean>;
   /** True while a programmatic native transition is queued or in flight. */
   isTransitioning(): boolean;
   /**
@@ -34,31 +34,32 @@ export function createWindowFullscreenController(
   let pendingTransitions = 0;
   let pendingTransition = Promise.resolve();
 
-  const sync = (fullscreen: boolean): Promise<void> => {
+  const sync = (fullscreen: boolean): Promise<boolean> => {
     desiredFullscreen = fullscreen;
     pendingTransitions += 1;
 
     const transition = pendingTransition
       .then(async () => {
-        if (desiredFullscreen !== fullscreen || appliedFullscreen === fullscreen) {
-          return;
-        }
+        if (desiredFullscreen !== fullscreen) return false;
+        if (appliedFullscreen === fullscreen) return true;
 
         await applyNativeFullscreen(fullscreen);
         appliedFullscreen = fullscreen;
         void logToBackend("info", "window fullscreen sync", { fullscreen });
+        return desiredFullscreen === fullscreen;
       })
       .catch((cause) => {
         void logToBackend("warn", "window fullscreen sync failed", {
           fullscreen,
           cause: String(cause),
         });
+        return false;
       })
       .finally(() => {
         pendingTransitions -= 1;
       });
 
-    pendingTransition = transition;
+    pendingTransition = transition.then(() => {});
     return transition;
   };
 
@@ -77,13 +78,10 @@ export function createWindowFullscreenController(
 }
 
 /**
- * Watches the native window for an OS-initiated fullscreen exit (F11, window
- * manager shortcut, session restore) that the app did not request, so the UI
- * fullscreen state can follow instead of desyncing. Only the exit direction is
- * reported: entering fullscreen is always app-initiated through
- * {@link WindowFullscreenController.sync}.
+ * Reconciles native entry and exit, including the macOS green button. Native
+ * entry changes the window state without enabling the video-only presentation.
  */
-export async function watchNativeFullscreenExit(
+export async function watchNativeFullscreen(
   controller: WindowFullscreenController,
   isFullscreenExpected: () => boolean,
   onExternalExit: () => void,
@@ -91,18 +89,30 @@ export async function watchNativeFullscreenExit(
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const appWindow = getCurrentWindow();
 
-  return appWindow.onResized(() => {
-    if (controller.isTransitioning() || !isFullscreenExpected()) return;
-    void appWindow
+  let disposed = false;
+  let observation = 0;
+  const refresh = () => {
+    if (disposed || controller.isTransitioning()) return;
+    const currentObservation = ++observation;
+    return appWindow
       .isFullscreen()
       .then((fullscreen) => {
-        if (fullscreen || controller.isTransitioning() || !isFullscreenExpected()) return;
-        controller.noteNativeFullscreen(false);
-        void logToBackend("info", "window fullscreen exited natively");
-        onExternalExit();
+        if (disposed || currentObservation !== observation || controller.isTransitioning()) return;
+        controller.noteNativeFullscreen(fullscreen);
+        if (!fullscreen && isFullscreenExpected()) {
+          void logToBackend("info", "window fullscreen exited natively");
+          onExternalExit();
+        }
       })
       .catch(() => {
         // Best effort: a failed native query must not surface as a player error.
       });
-  });
+  };
+
+  const unlisten = await appWindow.onResized(() => { void refresh(); });
+  void refresh();
+  return () => {
+    disposed = true;
+    unlisten();
+  };
 }

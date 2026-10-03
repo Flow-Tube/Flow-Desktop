@@ -1,4 +1,7 @@
 import { useEffect, useMemo } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { IS_MACOS_RUNTIME } from "./platform";
+import { logToBackend } from "./diagnostics";
 import { SETTINGS } from "./settings/schema";
 import {
   DEFAULT_THEME,
@@ -43,11 +46,24 @@ export function ThemeController() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const variables = themeCssVariables(theme.variants[variant] ?? DEFAULT_THEME.variants.dark, variant);
+    const colors = theme.variants[variant] ?? DEFAULT_THEME.variants.dark;
+    const variables = themeCssVariables(colors, variant);
     Object.entries(variables).forEach(([name, value]) => root.style.setProperty(name, value));
     root.dataset.theme = theme.id;
     root.dataset.themeVariant = variant;
     root.style.colorScheme = variant === "light" ? "light" : "dark";
+
+    if (!IS_MACOS_RUNTIME) return;
+    let disposed = false;
+    const appWindow = getCurrentWindow();
+    void appWindow.setTheme(variant === "light" ? "light" : "dark")
+      .then(async () => {
+        if (!disposed) await appWindow.setBackgroundColor(colors.background);
+      })
+      .catch((cause) => {
+        void logToBackend("warn", "native window appearance failed", { cause: String(cause) });
+      });
+    return () => { disposed = true; };
   }, [theme, variant]);
 
   return null;

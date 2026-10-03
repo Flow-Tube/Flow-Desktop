@@ -1,5 +1,7 @@
 import { Maximize2, Pin, PinOff, X } from "lucide-react";
 
+import { IS_MACOS_RUNTIME } from "../../lib/platform";
+import { useNativeWindowTitle } from "../../lib/useNativeWindowTitle";
 import { getString } from "../../lib/i18n/index";
 import { usePipSession } from "../../lib/usePipSession";
 import { usePipWindowAspectLock } from "../../lib/usePipWindowAspectLock";
@@ -23,6 +25,7 @@ export function PipWindowApp() {
   usePipWindowAspectLock();
 
   const currentVideo = usePlayerStore((s) => s.currentVideo);
+  useNativeWindowTitle(currentVideo?.title ?? getString("pip_window_title"));
   const isPlaying = status === "playing" && !!currentVideo;
   // This window holds the media element while it is open, so it also owns the
   // OS transport controls.
@@ -61,16 +64,17 @@ export function PipWindowApp() {
         </div>
       )}
 
-      {/* Title strip doubles as the drag handle; the OS gives an undecorated
-          window no titlebar of its own to move it by. */}
+      {/* macOS uses its native title bar; other platforms need a drag handle. */}
       <div className="absolute inset-x-0 top-0 z-[250] flex h-9 items-center gap-1 px-2 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
         <div
-          data-tauri-drag-region
+          data-tauri-drag-region={IS_MACOS_RUNTIME ? undefined : true}
           className="flex h-full min-w-0 flex-1 items-center rounded-lg px-2"
         >
-          <span className="pointer-events-none truncate text-xs font-medium text-chrome-white">
-            {currentVideo?.title ?? getString("pip_window_title")}
-          </span>
+          {!IS_MACOS_RUNTIME && (
+            <span className="pointer-events-none truncate text-xs font-medium text-chrome-white">
+              {currentVideo?.title ?? getString("pip_window_title")}
+            </span>
+          )}
         </div>
         <button
           type="button"
@@ -94,18 +98,20 @@ export function PipWindowApp() {
         >
           <Maximize2 size={15} />
         </button>
-        <button
-          type="button"
-          aria-label={getString("pip_window_close")}
-          title={getString("pip_window_close")}
-          onClick={() => void closeWindow()}
-          className={chromeButton}
-        >
-          <X size={16} />
-        </button>
+        {!IS_MACOS_RUNTIME && (
+          <button
+            type="button"
+            aria-label={getString("pip_window_close")}
+            title={getString("pip_window_close")}
+            onClick={() => void closeWindow()}
+            className={chromeButton}
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
-      <WindowResizeEdges zIndexClass="z-[300]" />
+      {!IS_MACOS_RUNTIME && <WindowResizeEdges zIndexClass="z-[300]" />}
     </div>
   );
 }

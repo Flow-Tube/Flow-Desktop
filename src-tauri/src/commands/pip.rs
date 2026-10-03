@@ -143,6 +143,11 @@ pub async fn open_pip_window<R: Runtime>(
             // never flashes white over whatever the user is working in.
             .background_color(Color(0, 0, 0, 255));
 
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.decorations(true);
+    }
+
     if let Some((x, y)) = pip_origin(&app) {
         builder = builder.position(x, y);
     }

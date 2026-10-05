@@ -60,7 +60,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "sidecar/integrity.cjs"
+      "sidecar/integrity.cjs",
+      "sidecar/nsig.cjs"
     ],
     "macOS": {
       "minimumSystemVersion": "13.0",

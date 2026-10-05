@@ -691,16 +691,13 @@ impl SabrEngine {
         &self.audio_tracks
     }
 
-    // Re-mint the PO token (bound to the session visitor data) and install it for
-    // subsequent requests. Returns whether a token was obtained.
+    // Mint a new PO token, bound to the video id like the one the session opened
+    // with (Flow for Android's binding), and install it for subsequent requests.
+    // Returns whether a token was obtained.
     async fn refresh_po_token(&self) -> bool {
-        let binding = self
-            .descriptor
-            .visitor_data
-            .clone()
-            .filter(|v| !v.is_empty())
-            .unwrap_or_else(|| self.descriptor.video_id.clone());
-        match crate::api::innertube::core::botguard::generate_po_token(&binding).await {
+        match crate::api::innertube::core::botguard::remint_po_token(&self.descriptor.video_id)
+            .await
+        {
             Some(token) => match decode_b64_loose(&token) {
                 Some(bytes) => {
                     self.state.lock().await.po_token = Some(bytes);

@@ -614,12 +614,17 @@ pub async fn get_stream_info(
         stream_info.hls_manifest_url = Some(local_manifest_url.to_string());
     }
 
-    streaming_manager.register_session(
-        token.clone(),
-        stream_info.local_url.clone(),
-        "video/mp4".to_string(),
-        dynamic_user_agent.clone(),
-    );
+    // A SABR-only or manifest-only response has no progressive URL; registering
+    // an empty one only hands the player a route that fails on first request.
+    let has_progressive_url = !stream_info.local_url.is_empty();
+    if has_progressive_url {
+        streaming_manager.register_session(
+            token.clone(),
+            stream_info.local_url.clone(),
+            "video/mp4".to_string(),
+            dynamic_user_agent.clone(),
+        );
+    }
 
     for variant in &mut stream_info.variants {
         if !variant.is_playable || variant.local_url.is_empty() {
@@ -721,7 +726,9 @@ pub async fn get_stream_info(
     stream_info.expires_at = clean_expires_at;
 
     // Rewrite to local loopback URL
-    stream_info.local_url = format!("http://127.0.0.1:{}/stream/{}", proxy_port, token);
+    if has_progressive_url {
+        stream_info.local_url = format!("http://127.0.0.1:{proxy_port}/stream/{token}");
+    }
 
     Ok(stream_info)
 }

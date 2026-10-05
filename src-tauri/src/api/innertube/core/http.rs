@@ -32,6 +32,29 @@ impl InnertubeClient {
         client: &YouTubeClient,
         payload: &mut Value,
     ) -> AppResult<Value> {
+        self.post_innertube_via(&self.client, endpoint, client, payload)
+            .await
+    }
+
+    /// [`Self::post_innertube`] on the dedicated playback connection pool, for
+    /// the requests first frame waits on.
+    pub async fn post_innertube_for_playback(
+        &self,
+        endpoint: &str,
+        client: &YouTubeClient,
+        payload: &mut Value,
+    ) -> AppResult<Value> {
+        self.post_innertube_via(&self.playback_client, endpoint, client, payload)
+            .await
+    }
+
+    async fn post_innertube_via(
+        &self,
+        http: &reqwest::Client,
+        endpoint: &str,
+        client: &YouTubeClient,
+        payload: &mut Value,
+    ) -> AppResult<Value> {
         if let Some(obj) = payload.as_object_mut() {
             obj.entry("context")
                 .or_insert_with(|| client.context(None, None));
@@ -50,8 +73,7 @@ impl InnertubeClient {
             "https://www.youtube.com/youtubei/v1/{}?prettyPrint=false",
             endpoint
         );
-        let mut req = self
-            .client
+        let mut req = http
             .post(&url)
             .header(reqwest::header::USER_AGENT, client.user_agent)
             .header("X-YouTube-Client-Name", client.client_id)

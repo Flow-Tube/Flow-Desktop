@@ -21,6 +21,12 @@ MACOS
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
 
+PLAYER
+- Fewer "Sign in to confirm you're not a bot" errors: when YouTube asks, the player gets a fresh visitor session and tries again before moving on.
+- Playback now tries the same chain of YouTube clients as Flow for Android: visionOS first, then mobile web and web through SABR streaming, then the Android VR builds, then the Android app.
+- Videos opened right after launch no longer time out on slow connections: playback requests get their own connection instead of queuing behind the home and subscription feeds.
+- Live streams no longer fail to refresh on slow connections, and a video that no longer exists now shows its own message instead of a generic error.
+
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)
 - macOS 13+ (Intel and Apple Silicon)

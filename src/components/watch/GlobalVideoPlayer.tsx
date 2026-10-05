@@ -102,7 +102,7 @@ export function GlobalVideoPlayer() {
       if (!next) return;
       const prev = lastSlotBoundsRef.current;
       lastSlotBoundsRef.current = next;
-      writeFrameBounds(next);
+      if (!boundsEqual(prev, next)) writeFrameBounds(next);
       if (!prev || prev.width !== next.width || prev.height !== next.height) {
         setSlotBounds((old) => (boundsEqual(old, next) ? old : next));
       }
@@ -110,9 +110,17 @@ export function GlobalVideoPlayer() {
 
     sync();
     const slot = document.querySelector<HTMLElement>("[data-flow-watch-player-slot='true']");
-    const observer = new ResizeObserver(sync);
+    let resizeRaf: number | null = null;
+    const onResize = () => {
+      if (resizeRaf !== null) return;
+      resizeRaf = window.requestAnimationFrame(() => {
+        resizeRaf = null;
+        sync();
+      });
+    };
+    const observer = new ResizeObserver(onResize);
     if (slot) observer.observe(slot);
-    window.addEventListener("resize", sync);
+    window.addEventListener("resize", onResize);
 
     let scrollRaf: number | null = null;
     const onScroll = () => {
@@ -135,12 +143,13 @@ export function GlobalVideoPlayer() {
 
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", sync);
+      if (resizeRaf !== null) window.cancelAnimationFrame(resizeRaf);
+      window.removeEventListener("resize", onResize);
       document.removeEventListener("scroll", onScroll, { capture: true });
       if (scrollRaf !== null) window.cancelAnimationFrame(scrollRaf);
       window.cancelAnimationFrame(settleRaf);
     };
-  }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo, location.pathname]);
+  }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo?.id, location.pathname]);
 
   useEffect(() => {
     const previousPath = previousPathRef.current;

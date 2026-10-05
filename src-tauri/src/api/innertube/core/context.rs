@@ -11,7 +11,7 @@ impl InnertubeClient {
 
         let mut payload = serde_json::json!({});
         if let Ok(res) = self
-            .post_innertube("visitor_id", &clients::WEB, &mut payload)
+            .post_innertube_for_playback("visitor_id", &clients::WEB, &mut payload)
             .await
         {
             if let Some(vd) = res["responseContext"]["visitorData"].as_str() {
@@ -22,5 +22,16 @@ impl InnertubeClient {
             }
         }
         None
+    }
+
+    /// Drop the cached visitor identity and issue a new one.
+    ///
+    /// A bot wall on a request that carried `visitorData` means that identity is
+    /// no longer trusted; every later request under it would be walled too.
+    pub async fn refresh_visitor_data(&self) -> Option<String> {
+        if let Ok(mut guard) = self.visitor_data.write() {
+            *guard = None;
+        }
+        self.fetch_visitor_data().await
     }
 }

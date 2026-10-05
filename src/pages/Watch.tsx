@@ -6,17 +6,16 @@ import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import {
-  getVideoDetails,
   getChannelDetails,
   getPlaylistDetails,
   getRelatedVideos,
 } from "../lib/api/youtube";
 import { getSponsorBlockSegments, getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
 import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
+import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
 import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { setSetting } from "../lib/api/db";
 import { seekToTime } from "../lib/linkify";
-import { getString } from "../lib/i18n/index";
 import { Chapters } from "../components/player/chapters";
 import { QueuePanel } from "../components/player/QueuePanel";
 import {
@@ -77,13 +76,14 @@ export function Watch() {
   const liveChatEnabled = useAppSettingsStore((state) => state.values[SETTINGS.LIVE_CHAT_ENABLED] !== "false");
 
   const [channelDetails, setChannelDetails] = useState<any>(null);
-  const [videoDetails, setVideoDetails] = useState<any>(null);
   const [relatedVideos, setRelatedVideos] = useState<RelatedContentItem[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
 
   const offlineRecord = useDownloadedVideoRecord(videoId);
+  const playbackSettled = usePlaybackSettled(videoId);
+  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord, retryNonce);
   useEffect(() => {
     loadSubscriptions();
   }, [loadSubscriptions]);
@@ -142,7 +142,6 @@ export function Watch() {
     const cachedWatchPage = currentCache?.videoId === videoId ? currentCache : null;
 
     setChannelDetails(cachedWatchPage?.channelDetails ?? null);
-    setVideoDetails(cachedWatchPage?.videoDetails ?? null);
     setRelatedVideos(cachedWatchPage?.relatedVideos ?? []);
     // Related content is fetched only after playback starts, so hold its
     // skeleton up meanwhile rather than showing an empty rail.
@@ -155,28 +154,6 @@ export function Watch() {
       setRelatedLoading(false);
       return;
     }
-
-    // Details share the player response playback just resolved, so this is a
-    // cache hit rather than a second client ladder — and chapters, description
-    // and the live flag are all read from it. SponsorBlock stays on this pass
-    // too: a segment starting at 0:00 has to be known before playback reaches it.
-    const loadVideoMeta = async () => {
-      try {
-        const detailsRes = cachedWatchPage?.videoDetails ?? (await getVideoDetails(videoId));
-        setVideoDetails(detailsRes);
-        setWatchPageCache(videoId, { videoDetails: detailsRes });
-      } catch (err) {
-        console.warn("Failed to load extra details", err);
-        // A cold open is still holding a stub with nothing but an id. Drop it so
-        // the page shows its error state rather than a player bound to a video
-        // nothing is known about.
-        const stub = usePlayerStore.getState().currentVideo;
-        if (stub?.id === videoId && !stub.title) {
-          setPageError(getString("watch_error_body"));
-          usePlayerStore.getState().clearQueue();
-        }
-      }
-    };
 
     const loadSponsorBlock = async () => {
       try {
@@ -194,7 +171,6 @@ export function Watch() {
       }
     };
 
-    void loadVideoMeta();
     void loadSponsorBlock();
   }, [
     videoId,
@@ -210,9 +186,7 @@ export function Watch() {
   // Everything below is page furniture, not playback. Each item costs its own
   // request, and opening them all while the player is still resolving puts them
   // in direct competition with the first media buffer — so they wait until
-  // playback has actually started (or the grace period in the hook expires).
-  const playbackSettled = usePlaybackSettled(videoId);
-
+  // playback has actually started.
   useEffect(() => {
     if (!videoId || !playbackSettled) return;
     const currentCache = usePlayerStore.getState().watchPageCache;
@@ -417,7 +391,7 @@ export function Watch() {
                 captions={captions}
                 videoId={videoId}
                 onClose={() => setIsChaptersPanelOpen(false)}
-                videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl}
+                videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl || undefined}
                 seekTo={seekToTime}
               />
             </div>

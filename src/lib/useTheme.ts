@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { setNativeWindowBackground } from "./nativeWindowAppearance";
 import { IS_MACOS_RUNTIME } from "./platform";
 import { logToBackend } from "./diagnostics";
 import { SETTINGS } from "./settings/schema";
@@ -58,7 +59,7 @@ export function ThemeController() {
     const appWindow = getCurrentWindow();
     void appWindow.setTheme(variant === "light" ? "light" : "dark")
       .then(async () => {
-        if (!disposed) await appWindow.setBackgroundColor(colors.background);
+        if (!disposed) await setNativeWindowBackground(colors.background);
       })
       .catch((cause) => {
         void logToBackend("warn", "native window appearance failed", { cause: String(cause) });

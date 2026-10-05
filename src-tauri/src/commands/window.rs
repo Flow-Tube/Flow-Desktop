@@ -113,6 +113,18 @@ pub fn set_player_fullscreen(
     Ok(())
 }
 
+#[tauri::command]
+pub fn set_window_background(
+    window: WebviewWindow,
+    color: tauri::window::Color,
+) -> Result<(), ErrorResponse> {
+    window.set_background_color(Some(color)).map_err(|error| {
+        ErrorResponse::from(AppError::Internal(format!(
+            "Native window background failed: {error}"
+        )))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};

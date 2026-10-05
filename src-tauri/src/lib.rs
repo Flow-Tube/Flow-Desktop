@@ -462,6 +462,7 @@ pub fn run() {
             reveal_logs_folder,
             startup_render_ok,
             set_player_fullscreen,
+            commands::window::set_window_background,
             // --- Pop-out (picture-in-picture) player window ---
             open_pip_window,
             pip_session,

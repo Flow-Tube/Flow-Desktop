@@ -53,22 +53,21 @@ fn token_cache() -> &'static Mutex<HashMap<String, MintedToken>> {
 }
 
 /// Resolve the Node executable. Honors `FLOW_NODE`, else relies on PATH.
-fn node_command() -> String {
+pub(crate) fn node_command() -> String {
     std::env::var("FLOW_NODE").unwrap_or_else(|_| "node".to_string())
 }
 
-/// Locate `integrity.cjs`. Checks `FLOW_INTEGRITY_SCRIPT`, then paths relative to
-/// the working directory and the executable (covering `cargo test`, `tauri dev`,
-/// and bundled-resource layouts).
-fn integrity_script_path() -> Option<PathBuf> {
-    if let Ok(explicit) = std::env::var("FLOW_INTEGRITY_SCRIPT") {
+/// Locate a bundled `sidecar/<name>` script, in dev (repo or `src-tauri`) and
+/// packaged (next to the executable or under its `resources`) layouts.
+pub(crate) fn sidecar_script_path(name: &str, override_var: &str) -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var(override_var) {
         let path = PathBuf::from(explicit);
         if path.is_file() {
             return Some(path);
         }
     }
 
-    let rel = std::path::Path::new("sidecar").join("integrity.cjs");
+    let rel = std::path::Path::new("sidecar").join(name);
     let mut candidates: Vec<PathBuf> =
         vec![rel.clone(), std::path::Path::new("src-tauri").join(&rel)];
 
@@ -78,8 +77,6 @@ fn integrity_script_path() -> Option<PathBuf> {
     }
 
     if let Ok(exe) = std::env::current_exe() {
-        // Walk up from the executable: target/debug -> src-tauri, plus bundled
-        // `resources/` layouts next to the binary.
         let mut dir = exe.parent().map(|p| p.to_path_buf());
         for _ in 0..5 {
             let Some(current) = dir else { break };
@@ -92,14 +89,10 @@ fn integrity_script_path() -> Option<PathBuf> {
     candidates.into_iter().find(|path| path.is_file())
 }
 
-/// Run the headless BotGuard sidecar once for `content_binding` (visitor data).
 async fn run_sidecar(content_binding: &str) -> Option<MintedToken> {
-    let script = match integrity_script_path() {
-        Some(path) => path,
-        None => {
-            warn!("integrity.cjs sidecar not found; cannot mint PO token");
-            return None;
-        }
+    let Some(script) = sidecar_script_path("integrity.cjs", "FLOW_INTEGRITY_SCRIPT") else {
+        warn!("integrity.cjs sidecar not found; cannot mint PO token");
+        return None;
     };
 
     let output = match tokio::process::Command::new(node_command())
@@ -201,4 +194,12 @@ pub async fn generate_po_token(content_binding: &str) -> Option<String> {
     mint_po_token(content_binding)
         .await
         .map(|token| token.po_token)
+}
+
+/// Mint a new token for `content_binding`, replacing any cached one. For a SABR
+/// session the server has escalated to `ATTESTATION_REQUIRED`: handing back the
+/// cached token it just refused would only be refused again.
+pub async fn remint_po_token(content_binding: &str) -> Option<String> {
+    token_cache().lock().await.remove(content_binding);
+    generate_po_token(content_binding).await
 }

@@ -38,7 +38,7 @@ import {
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
   createWindowFullscreenController,
-  watchNativeFullscreenExit,
+  watchNativeFullscreen,
   type WindowFullscreenController,
 } from "../../lib/windowFullscreen";
 import {
@@ -1303,7 +1303,7 @@ export const Player: React.FC<PlayerProps> = ({
   }
 
   const syncNativeFullscreen = useCallback((active: boolean) => {
-    return windowFullscreenControllerRef.current?.sync(active) ?? Promise.resolve();
+    return windowFullscreenControllerRef.current?.sync(active) ?? Promise.resolve(false);
   }, []);
 
   useEffect(() => {
@@ -1312,7 +1312,7 @@ export const Player: React.FC<PlayerProps> = ({
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    watchNativeFullscreenExit(
+    watchNativeFullscreen(
       controller,
       () => usePlayerStore.getState().isVideoFullscreen,
       () => usePlayerStore.getState().setIsVideoFullscreen(false),
@@ -1339,8 +1339,9 @@ export const Player: React.FC<PlayerProps> = ({
     // and on Windows the unmaximize step of the transition flashed a restored
     // window through it. The cover hides the resize either way.
     setIsVideoFullscreenTransitioning(true);
-    void syncNativeFullscreen(active).finally(() => {
-      setIsFullscreen(active);
+    void syncNativeFullscreen(active).then((applied) => {
+      if (applied) setIsFullscreen(active);
+    }).finally(() => {
       setTimeout(() => setIsVideoFullscreenTransitioning(false), FULLSCREEN_SETTLE_MS);
     });
   }, [isFullscreen, setIsFullscreen, setIsVideoFullscreenTransitioning, syncNativeFullscreen]);
@@ -2085,8 +2086,10 @@ export const Player: React.FC<PlayerProps> = ({
   }, [playbackRate]);
 
   useEffect(() => () => {
+    const controller = windowFullscreenControllerRef.current;
+    const ownsFullscreen = usePlayerStore.getState().isVideoFullscreen || controller?.isTransitioning();
     setIsFullscreen(false);
-    void syncNativeFullscreen(false);
+    if (ownsFullscreen) void syncNativeFullscreen(false);
   }, [setIsFullscreen, syncNativeFullscreen]);
 
   useEffect(() => {

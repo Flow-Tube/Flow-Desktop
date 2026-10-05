@@ -13,6 +13,8 @@ mod errors;
 mod flow_neuro;
 #[cfg(target_os = "linux")]
 mod linux_startup;
+#[cfg(target_os = "macos")]
+mod macos_window;
 pub mod models;
 mod music_brain;
 mod security;
@@ -61,9 +63,11 @@ use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
     get_unread_notification_count, mark_notifications_read,
 };
+#[cfg(not(target_os = "macos"))]
+use commands::pip::PIP_WINDOW_LABEL;
 use commands::pip::{
-    PIP_WINDOW_LABEL, PipState, close_pip_window, focus_main_window, open_pip_window, pip_session,
-    pip_window_ready, set_pip_always_on_top,
+    PipState, close_pip_window, focus_main_window, open_pip_window, pip_session, pip_window_ready,
+    set_pip_always_on_top,
 };
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, complete_onboarding,
@@ -352,8 +356,13 @@ pub fn run() {
                 });
             }
 
-            // The pop-out player is a second top-level window, so closing the
-            // main window would otherwise leave Flow running headless behind it.
+            #[cfg(target_os = "macos")]
+            if let Some(main_window) = app.get_webview_window("main") {
+                macos_window::install_close_handler(&main_window);
+            }
+
+            // Other platforms quit with the main window, including the pop-out.
+            #[cfg(not(target_os = "macos"))]
             if let Some(main_window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
                 main_window.on_window_event(move |event| {
@@ -453,6 +462,7 @@ pub fn run() {
             reveal_logs_folder,
             startup_render_ok,
             set_player_fullscreen,
+            commands::window::set_window_background,
             // --- Pop-out (picture-in-picture) player window ---
             open_pip_window,
             pip_session,
@@ -530,6 +540,11 @@ pub fn run() {
         .build(context)
         .expect("error while building Flow Desktop")
         .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                macos_window::reopen(app_handle);
+            }
+
             // Flush the resident brain to disk on shutdown so the debounce window is never lost.
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 if let Some(service) = app_handle.try_state::<RecommendationService>() {

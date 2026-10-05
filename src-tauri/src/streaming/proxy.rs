@@ -50,6 +50,14 @@ const MAX_UPSTREAM_RECOVERIES: u32 = 6;
 const MAX_HEADER_BYTES: usize = 32 * 1024;
 const LOCAL_FILE_CHUNK_BYTES: usize = 256 * 1024;
 const IMAGE_UPSTREAM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+// How long a video or audio body may go without a byte before the relay treats
+// the connection as dead and resumes from the next byte. Scoped to media: a live
+// HLS playlist can legitimately take longer than this on a congested link, and
+// failing it stops the live stream.
+#[cfg(not(test))]
+const MEDIA_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+#[cfg(test)]
+const MEDIA_STALL_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(200);
 
 static IMAGE_FETCH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(6);
 
@@ -393,6 +401,7 @@ pub async fn start_proxy_server(manager: StreamingManager, std_listener: std::ne
         manager.get_port()
     );
     let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
         .no_gzip()
         .no_brotli()
         .no_deflate()
@@ -582,6 +591,33 @@ async fn handle_connection(
     .await
 }
 
+fn valid_resume_range(
+    status: u16,
+    content_range: Option<&str>,
+    start: u64,
+    end: Option<u64>,
+) -> bool {
+    if status != 206 {
+        return false;
+    }
+    let Some(spec) = content_range.and_then(|value| value.strip_prefix("bytes ")) else {
+        return false;
+    };
+    let Some((range, total)) = spec.split_once('/') else {
+        return false;
+    };
+    let Some((first, last)) = range.split_once('-') else {
+        return false;
+    };
+    let (Ok(first), Ok(last)) = (first.parse::<u64>(), last.parse::<u64>()) else {
+        return false;
+    };
+    first == start
+        && last >= first
+        && end.is_none_or(|end| last == end)
+        && (total == "*" || total.parse::<u64>().is_ok_and(|total| last < total))
+}
+
 // Parse a `bytes=START-END` style range spec into (start, end_inclusive).
 fn parse_range_spec(range: Option<&str>) -> (u64, Option<u64>) {
     let Some(range) = range else {
@@ -734,6 +770,8 @@ async fn relay_remote(
         };
 
         let is_image = session.content_type.starts_with("image/");
+        let stall_guarded = session.content_type.starts_with("video/")
+            || session.content_type.starts_with("audio/");
         let mut req = client
             .get(target_url)
             .header("User-Agent", &upstream_user_agent)
@@ -764,10 +802,16 @@ async fn relay_remote(
             Ok(res) => res,
             Err(e) => {
                 if headers_written {
-                    warn!("Upstream re-request failed after partial relay: {e}");
-                    return Ok(());
+                    warn!(error = ?e.without_url(), attempt, "Upstream re-request failed after partial relay");
+                    attempt += 1;
+                    if attempt > MAX_UPSTREAM_RECOVERIES {
+                        return Ok(());
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(150 * u64::from(attempt)))
+                        .await;
+                    continue;
                 }
-                error!("Failed to fetch upstream stream: {:?}", e);
+                error!(error = ?e.without_url(), content_type = %session.content_type, "Failed to fetch upstream resource");
                 return write_status_only(
                     socket,
                     502,
@@ -778,8 +822,28 @@ async fn relay_remote(
             }
         };
 
+        let status = response.status();
+        if headers_written {
+            let end = (content_length_value > 0)
+                .then(|| range_start + content_length_value as u64 - 1)
+                .or(range_end);
+            let content_range = response
+                .headers()
+                .get("Content-Range")
+                .and_then(|value| value.to_str().ok());
+            if !valid_resume_range(status.as_u16(), content_range, effective_start, end) {
+                // Appending a full 200 response or the wrong offset corrupts the media.
+                warn!(
+                    status = status.as_u16(),
+                    effective_start, "Invalid upstream range during recovery"
+                );
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid upstream resume range",
+                ));
+            }
+        }
         if !headers_written {
-            let status = response.status();
             status_code_value = status.as_u16();
             reason_value = status.canonical_reason().unwrap_or("OK").to_string();
             if !status.is_success() && !status.is_redirection() {
@@ -787,7 +851,6 @@ async fn relay_remote(
                     status = status.as_u16(),
                     range = ?range_header,
                     ua = %upstream_user_agent,
-                    url = %target_url,
                     "Upstream rejected stream relay"
                 );
             }
@@ -868,7 +931,20 @@ async fn relay_remote(
         // Stream the body; on a clean finish we break, recover on a reset.
         let mut stream = response.bytes_stream();
         let mut clean_finish = true;
-        while let Some(chunk_result) = stream.next().await {
+        loop {
+            let next = if stall_guarded {
+                if let Ok(next) = tokio::time::timeout(MEDIA_STALL_TIMEOUT, stream.next()).await {
+                    next
+                } else {
+                    clean_finish = false;
+                    warn!("Upstream media stalled after {bytes_relayed} bytes (attempt {attempt})");
+                    cached_body = None;
+                    break;
+                }
+            } else {
+                stream.next().await
+            };
+            let Some(chunk_result) = next else { break };
             match chunk_result {
                 Ok(chunk) => {
                     if let Some(body) = cached_body.as_mut() {
@@ -886,7 +962,8 @@ async fn relay_remote(
                 Err(e) => {
                     clean_finish = false;
                     warn!(
-                        "Upstream stream chunk error after {bytes_relayed} bytes (attempt {attempt}): {e}"
+                        "Upstream stream chunk error after {bytes_relayed} bytes (attempt {attempt}): {}",
+                        e.without_url()
                     );
                     cached_body = None;
                     break;
@@ -894,7 +971,9 @@ async fn relay_remote(
             }
         }
 
-        if clean_finish {
+        if clean_finish
+            && (content_length_value == 0 || bytes_relayed >= content_length_value as u64)
+        {
             break;
         }
 
@@ -1100,5 +1179,225 @@ async fn handle_sabr_route(
             .await
         }
         _ => write_status_only(socket, 404, "Not Found", "Unknown SABR route").await,
+    }
+}
+
+#[cfg(test)]
+mod range_recovery_tests {
+    use super::valid_resume_range;
+    use super::{StreamSession, StreamSessionKind, StreamingManager, relay_remote};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::{TcpListener, TcpStream};
+
+    async fn interrupted_relay(resume_response: &'static [u8]) -> (std::io::Result<()>, Vec<u8>) {
+        let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/media", upstream.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for (index, response) in [
+                b"HTTP/1.1 206 Partial Content\r\nContent-Length: 6\r\nContent-Range: bytes 0-5/6\r\nConnection: close\r\n\r\nabc".as_slice(),
+                resume_response,
+            ].into_iter().enumerate() {
+                let (mut socket, _) = upstream.accept().await.unwrap();
+                let mut request = Vec::new();
+                loop {
+                    let mut bytes = [0; 1024];
+                    let count = socket.read(&mut bytes).await.unwrap();
+                    assert!(count > 0);
+                    request.extend_from_slice(&bytes[..count]);
+                    if request.windows(4).any(|part| part == b"\r\n\r\n") { break; }
+                }
+                if index == 1 {
+                    assert!(String::from_utf8_lossy(&request).to_lowercase().contains("range: bytes=3-5"));
+                }
+                socket.write_all(response).await.unwrap();
+            }
+        });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut downstream = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let relay = tokio::spawn(async move {
+            let (manager, _) = StreamingManager::new();
+            let session = StreamSession {
+                kind: StreamSessionKind::Remote {
+                    remote_url: url.clone(),
+                },
+                content_type: "audio/mp4".into(),
+                expires_at: u64::MAX,
+                user_agent: "test".into(),
+            };
+            relay_remote(
+                &mut socket,
+                &reqwest::Client::new(),
+                &manager,
+                &session,
+                &url,
+                Some("bytes=0-5"),
+                "/stream/test",
+                false,
+            )
+            .await
+        });
+        let mut received = Vec::new();
+        downstream.read_to_end(&mut received).await.unwrap();
+        server.await.unwrap();
+        let result = relay.await.unwrap();
+        let body_start = received
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        (result, received[body_start..].to_vec())
+    }
+
+    /// Relay one upstream exchange per entry, pausing `pause` before writing
+    /// the bytes that follow each entry's split point.
+    async fn slow_relay(
+        content_type: &'static str,
+        responses: Vec<(&'static [u8], std::time::Duration, &'static [u8])>,
+    ) -> (std::io::Result<()>, Vec<u8>) {
+        let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/media", upstream.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for (head, pause, tail) in responses {
+                let (mut socket, _) = upstream.accept().await.unwrap();
+                let mut request = [0; 2048];
+                let _ = socket.read(&mut request).await.unwrap();
+                socket.write_all(head).await.unwrap();
+                tokio::time::sleep(pause).await;
+                let _ = socket.write_all(tail).await;
+            }
+        });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut downstream = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let relay = tokio::spawn(async move {
+            let (manager, _) = StreamingManager::new();
+            let session = StreamSession {
+                kind: StreamSessionKind::Remote {
+                    remote_url: url.clone(),
+                },
+                content_type: content_type.into(),
+                expires_at: u64::MAX,
+                user_agent: "test".into(),
+            };
+            relay_remote(
+                &mut socket,
+                &reqwest::Client::new(),
+                &manager,
+                &session,
+                &url,
+                Some("bytes=0-5"),
+                "/stream/test",
+                false,
+            )
+            .await
+        });
+        let mut received = Vec::new();
+        downstream.read_to_end(&mut received).await.unwrap();
+        let result = relay.await.unwrap();
+        server.abort();
+        let body_start = received
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        (result, received[body_start..].to_vec())
+    }
+
+    #[tokio::test]
+    async fn resumes_a_stalled_media_body_at_the_next_byte() {
+        let stall = super::MEDIA_STALL_TIMEOUT * 3;
+        let (result, body) = slow_relay(
+            "audio/mp4",
+            vec![
+                (
+                    b"HTTP/1.1 206 Partial Content\r\nContent-Length: 6\r\nContent-Range: bytes 0-5/6\r\n\r\nabc",
+                    stall,
+                    b"",
+                ),
+                (
+                    b"HTTP/1.1 206 Partial Content\r\nContent-Length: 3\r\nContent-Range: bytes 3-5/6\r\nConnection: close\r\n\r\ndef",
+                    std::time::Duration::ZERO,
+                    b"",
+                ),
+            ],
+        )
+        .await;
+        assert!(result.is_ok());
+        assert_eq!(body, b"abcdef");
+    }
+
+    #[tokio::test]
+    async fn waits_out_a_slow_playlist_instead_of_failing_it() {
+        // Longer than the media stall window: a live playlist on a congested
+        // link must still arrive whole.
+        let pause = super::MEDIA_STALL_TIMEOUT * 3;
+        let (result, body) = slow_relay(
+            "application/vnd.apple.mpegurl",
+            vec![(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Length: 6\r\nConnection: close\r\n\r\n#EX",
+                pause,
+                b"TM3",
+            )],
+        )
+        .await;
+        assert!(result.is_ok());
+        assert_eq!(body, b"#EXTM3");
+    }
+
+    #[tokio::test]
+    async fn reconnects_at_the_next_byte_without_duplicate_audio() {
+        let (result, body) = interrupted_relay(b"HTTP/1.1 206 Partial Content\r\nContent-Length: 3\r\nContent-Range: bytes 3-5/6\r\nConnection: close\r\n\r\ndef").await;
+        assert!(result.is_ok());
+        assert_eq!(body, b"abcdef");
+    }
+
+    #[tokio::test]
+    async fn refuses_to_append_an_ignored_resume_range() {
+        let (result, body) = interrupted_relay(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabcdef",
+        )
+        .await;
+        assert!(result.is_err());
+        assert_eq!(body, b"abc");
+    }
+
+    #[test]
+    fn accepts_only_the_exact_remaining_partial_response() {
+        assert!(valid_resume_range(
+            206,
+            Some("bytes 100-199/200"),
+            100,
+            Some(199)
+        ));
+        assert!(!valid_resume_range(200, None, 100, Some(199)));
+        assert!(!valid_resume_range(
+            206,
+            Some("bytes 0-199/200"),
+            100,
+            Some(199)
+        ));
+        assert!(!valid_resume_range(
+            206,
+            Some("bytes 100-198/200"),
+            100,
+            Some(199)
+        ));
+        assert!(!valid_resume_range(
+            403,
+            Some("bytes 100-199/200"),
+            100,
+            Some(199)
+        ));
+        assert!(!valid_resume_range(
+            206,
+            Some("bytes 100-200/200"),
+            100,
+            None
+        ));
     }
 }

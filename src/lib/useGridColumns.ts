@@ -89,6 +89,7 @@ export function useResolvedGridColumns(
 
     measure();
 
+    let frame: number | null = null;
     const observer = new ResizeObserver((entries) => {
       /*
         Width is the only thing that can change the track count or their size.
@@ -101,10 +102,17 @@ export function useResolvedGridColumns(
       if (inlineSize === undefined) return;
       if (inlineSize === lastInlineSize) return;
       lastInlineSize = inlineSize;
-      measure();
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        measure();
+      });
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
     // `style` carries the column preference, which changes the track count
     // without changing the element's size — the observer alone would miss it.
   }, [ref, style]);

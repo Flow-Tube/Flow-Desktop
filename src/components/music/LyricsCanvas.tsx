@@ -242,12 +242,25 @@ export function LyricsCanvas({
 
   useEffect(() => {
     relayout();
-    const ro = new ResizeObserver(() => relayout());
+    let frame: number | null = null;
+    let disposed = false;
+    const scheduleLayout = () => {
+      if (disposed || frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        relayout();
+      });
+    };
+    const ro = new ResizeObserver(scheduleLayout);
     if (wrapRef.current) ro.observe(wrapRef.current);
     if (typeof document !== "undefined" && document.fonts?.ready) {
-      void document.fonts.ready.then(() => relayout());
+      void document.fonts.ready.then(scheduleLayout);
     }
-    return () => ro.disconnect();
+    return () => {
+      disposed = true;
+      ro.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
   }, [lines]);
 
   useEffect(() => {

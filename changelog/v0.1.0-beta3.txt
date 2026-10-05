@@ -14,6 +14,13 @@ MUSIC
 - Fixed related songs, Daily Mixes and the Similar to shelves coming up empty after YouTube Music added a Comments tab next to Related.
 - Start a radio station from any song menu. It keeps playing for that session without changing your Autoplay setting, and switching Autoplay off stops it.
 
+MACOS
+- Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
+- The window background now follows your theme. A Tauri bug was clearing it, which showed a mismatched color around the app while resizing.
+
+INTERFACE
+- Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
+
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)
 - macOS 13+ (Intel and Apple Silicon)

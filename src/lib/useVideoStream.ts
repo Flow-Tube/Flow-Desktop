@@ -110,17 +110,18 @@ const selectVariantByBandwidth = (
   );
 };
 
-const browserSupportsVP9 = () =>
+const browserSupportsDash = (info: StreamInfo) =>
   typeof MediaSource !== "undefined" &&
   typeof MediaSource.isTypeSupported === "function" &&
-  MediaSource.isTypeSupported('video/webm; codecs="vp9"');
+  info.variants.some((variant) => !!variant.mimeType && MediaSource.isTypeSupported(variant.mimeType)) &&
+  info.audioTracks.some((track) => !!track.mimeType && MediaSource.isTypeSupported(track.mimeType));
 
 const computeAvailableSourceModes = (info: StreamInfo): SourceMode[] => {
   const modes: SourceMode[] = [];
   const isLive = !!info.isLive;
 
   if (isLive && info.hlsManifestUrl) modes.push("hls");
-  if (info.dashManifestUrl && browserSupportsVP9()) modes.push("dash-native");
+  if (info.dashManifestUrl && browserSupportsDash(info)) modes.push("dash-native");
   if (!isLive) {
     const canUseAdaptive = (info.audioTracks || []).some((track) => !!track.localUrl);
     const hasDirect =
@@ -212,6 +213,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   );
 
   useEffect(() => {
+    const currentVideo = usePlayerStore.getState().currentVideo;
     if (!currentVideo || currentVideo.id !== videoId) return;
 
     const loadToken = ++loadTokenRef.current;
@@ -374,7 +376,8 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     };
 
     void loadStream();
-  }, [currentVideo, videoId, setIsPlaying, publishCaptions, preferredCodec, preferredQuality]);
+    return () => { ++loadTokenRef.current; };
+  }, [currentVideo?.id, videoId, setIsPlaying, publishCaptions, preferredCodec, preferredQuality]);
 
   const onSelectQuality = useCallback(
     (variant: StreamVariant | "auto") => {

@@ -192,6 +192,15 @@ pub const ANDROID_VR: YouTubeClient = YouTubeClient {
     attestation: AttestationPlatform::DroidGuard,
 };
 
+/// Newest VR build, leading the gated fallbacks the way it does on Android:
+/// it still answers some videos the 1.61.48 build is bot-walled on.
+pub const ANDROID_VR_1_65_10: YouTubeClient = YouTubeClient {
+    version: "1.65.10",
+    user_agent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+    os_version: Some("12L"),
+    ..ANDROID_VR
+};
+
 /// Non-ABR VR build — the smoothest for music, which is why it leads the audio
 /// chain ahead of the newer ones.
 pub const ANDROID_VR_1_43_32: YouTubeClient = YouTubeClient {
@@ -280,6 +289,19 @@ pub const WEB: YouTubeClient = YouTubeClient {
     attestation: AttestationPlatform::Web,
 };
 
+/// Mobile web. With a `BotGuard` token on the request it is served the same SABR
+/// session the web player gets, which is what lets the ladder keep playing a
+/// video every direct-URL client is bot-walled on.
+pub const MWEB: YouTubeClient = YouTubeClient {
+    name: "MWEB",
+    version: "2.20250122.04.00",
+    client_id: "2",
+    user_agent: "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)",
+    os_name: None,
+    os_version: None,
+    ..WEB
+};
+
 pub const WEB_REMIX: YouTubeClient = YouTubeClient {
     name: "WEB_REMIX",
     version: "1.20260213.01.00",
@@ -321,6 +343,7 @@ const ALL: &[YouTubeClient] = &[
     IOS,
     IPADOS,
     WEB,
+    MWEB,
     WEB_REMIX,
     WEB_MUSIC_ANALYTICS,
     TVHTML5_SIMPLY_EMBEDDED_PLAYER,

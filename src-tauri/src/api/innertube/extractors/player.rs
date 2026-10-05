@@ -1,6 +1,8 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
 use crate::api::innertube::core::clients;
+use crate::api::innertube::core::player_js;
+use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
 use crate::api::innertube::core::utils::{
     collect_related_content_items, dedupe_related_content_items,
     extract_channel_id_from_video_renderer, extract_text_from_value, thumbnail_url_from_array,
@@ -36,47 +38,62 @@ const PLAYER_RESPONSE_TTL: Duration = Duration::from_secs(120);
 /// nothing beyond the few videos currently in flight is ever asked for again.
 const PLAYER_RESPONSE_CACHE_CAPACITY: usize = 12;
 
-/// Client ladder for playback, best first.
+/// How long video details wait for the `next` response (likes, views, publish
+/// date) before returning without them.
+const WATCH_NEXT_TIMEOUT: Duration = Duration::from_secs(6);
+
+/// Web clients mint a PO token and solve `n` before their SABR session can
+/// start, so they get the longer budget Flow for Android gives them.
+const WEB_PLAYER_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Client ladder for playback, in Flow for Android's order.
 ///
-/// VISIONOS leads because googlevideo serves its formats without a PO token and
-/// without an `n` parameter — it needs neither an attestation Flow cannot mint nor
-/// an nsig solver Flow does not have. The rest are unattested: they still answer,
-/// but googlevideo now stops serving them partway in, so they rank below it and
-/// exist to keep degraded playback working rather than none.
-///
-/// Deliberately excludes the web-family clients (WEB, TVHTML5_*): their formats
-/// arrive ciphered and `n`-throttled, and with no JS solver every URL they return
-/// would be rejected by `validate_stream_url` after the round trip was already
-/// paid. The in-page WebView recovery is how a WEB response is obtained instead.
+/// 1. `VISIONOS`: direct URLs with neither a PO token nor an `n` parameter, so it
+///    reaches first frame fastest. It needs `visitorData` on the request; without
+///    it the answer is a bot wall.
+/// 2. `MWEB`, then `WEB`: a `BotGuard` token on the request buys a SABR session, which
+///    is playable once its endpoint's `n` is solved from the player script.
+/// 3. The `ANDROID_VR` builds, newest first: unattested direct URLs that still
+///    answer some videos the others are walled on, though googlevideo can stop
+///    serving them partway in.
+/// 4. `ANDROID`: last resort. It usually answers with ciphered formats only, which
+///    the playability check below skips without paying for them.
 const PLAYER_CLIENT_LADDER: &[&clients::YouTubeClient] = &[
     &clients::VISIONOS,
+    &clients::MWEB,
+    &clients::WEB,
+    &clients::ANDROID_VR_1_65_10,
     &clients::ANDROID_VR,
     &clients::ANDROID_VR_NO_AUTH,
+    &clients::ANDROID_VR_1_43_32,
     &clients::ANDROID,
-    &clients::IOS,
 ];
 
 /// Clients asked for a live broadcast's HLS/DASH manifest when the winning
 /// client returned none. A live stream plays from its manifest, so this only
-/// needs a client that exposes one — not one with a usable direct ladder.
-const LIVE_MANIFEST_CLIENTS: &[&clients::YouTubeClient] = &[
-    &clients::IOS,
-    &clients::VISIONOS,
-    &clients::TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-];
+/// needs a client that exposes one, not one with a usable direct ladder.
+const LIVE_MANIFEST_CLIENTS: &[&clients::YouTubeClient] =
+    &[&clients::ANDROID_VR_1_65_10, &clients::VISIONOS];
 
 /// The winning client of a ladder walk, plus what it was attested with.
+#[derive(Clone)]
 struct PlayerAttempt {
     response: Value,
     client: &'static clients::YouTubeClient,
     po_token: Option<String>,
+    /// The visitor identity the response was issued to; a SABR session must
+    /// present the same one.
+    visitor_data: Option<String>,
 }
 
 struct CachedPlayerAttempt {
-    response: Value,
-    client: &'static clients::YouTubeClient,
-    po_token: Option<String>,
+    attempt: PlayerAttempt,
     resolved_at: Instant,
+}
+
+fn playback_priority() -> &'static PlaybackPriority {
+    static PRIORITY: OnceLock<PlaybackPriority> = OnceLock::new();
+    PRIORITY.get_or_init(PlaybackPriority::default)
 }
 
 /// Successful ladder walks, keyed by video id. Only an `OK` response is stored,
@@ -94,11 +111,7 @@ fn cached_player_attempt(video_id: &str) -> Option<PlayerAttempt> {
         cache.remove(video_id);
         return None;
     }
-    Some(PlayerAttempt {
-        response: entry.response.clone(),
-        client: entry.client,
-        po_token: entry.po_token.clone(),
-    })
+    Some(entry.attempt.clone())
 }
 
 fn store_player_attempt(video_id: &str, attempt: &PlayerAttempt) {
@@ -118,9 +131,7 @@ fn store_player_attempt(video_id: &str, attempt: &PlayerAttempt) {
     cache.insert(
         video_id.to_string(),
         CachedPlayerAttempt {
-            response: attempt.response.clone(),
-            client: attempt.client,
-            po_token: attempt.po_token.clone(),
+            attempt: attempt.clone(),
             resolved_at: Instant::now(),
         },
     );
@@ -1309,6 +1320,55 @@ fn build_sabr_metadata(
     (Some(info), descriptor)
 }
 
+/// What one client's `player` request came back with.
+enum ClientOutcome {
+    /// Playable, with streams Flow can actually fetch.
+    Won(PlayerAttempt),
+    /// A non-OK playability status, kept so the most specific restriction can be
+    /// reported once the ladder is exhausted.
+    Refused(Value),
+    /// No answer, or an `OK` with nothing fetchable (ciphered-only formats, an
+    /// unsolvable `n`, a missing PO token).
+    Unusable,
+}
+
+/// Whether a refusal should be what the user is told once every client has
+/// failed. A definitive restriction always is, and so is `ERROR`, the status
+/// the server gives a video that does not exist: every client agrees on it, and
+/// without it the user would only see a generic extraction failure.
+fn is_reportable_refusal(playability: &Value) -> bool {
+    is_definitive_restriction(&map_playability_error(playability))
+        || playability["status"]
+            .as_str()
+            .is_some_and(|status| status.eq_ignore_ascii_case("ERROR"))
+}
+
+fn is_bot_wall(playability: &Value) -> bool {
+    matches!(
+        map_playability_error(playability),
+        AppError::BotCheckRequired(_)
+    )
+}
+
+/// Whether a direct-URL response carries a stream the proxy can fetch as is:
+/// a muxed format, or a video-only one with a separate audio track beside it.
+fn has_playable_direct_streams(streaming_data: &Value, video_id: &str) -> bool {
+    let (variants, _) = collect_stream_variants(streaming_data, video_id);
+    let has_separate_audio = !collect_audio_tracks(streaming_data, "").is_empty();
+    variants
+        .iter()
+        .any(|variant| variant.is_playable && (variant.has_audio || has_separate_audio))
+}
+
+fn has_live_manifest(response: &Value) -> bool {
+    let streaming_data = &response["streamingData"];
+    response["videoDetails"]["isLive"]
+        .as_bool()
+        .unwrap_or(false)
+        && (streaming_data["hlsManifestUrl"].is_string()
+            || streaming_data["dashManifestUrl"].is_string())
+}
+
 impl InnertubeClient {
     /// The playback ladder walk every caller for a given video shares.
     ///
@@ -1319,109 +1379,240 @@ impl InnertubeClient {
     async fn resolve_player_attempt(
         &self,
         video_id: &str,
-        visitor_data: Option<&str>,
         deferred_restriction: &mut Option<AppError>,
         refresh: bool,
     ) -> Option<PlayerAttempt> {
-        if refresh {
-            invalidate_player_response(video_id);
-        } else if let Some(cached) = cached_player_attempt(video_id) {
-            debug!(video_id = %video_id, client = cached.client.name, "Reusing in-flight player response");
-            return Some(cached);
-        }
-
-        let attempt = self
-            .try_player_ladder(
-                video_id,
-                PLAYER_CLIENT_LADDER,
-                visitor_data,
-                deferred_restriction,
-            )
+        static FLIGHTS: OnceLock<PlayerFlights<(Option<PlayerAttempt>, Option<Value>)>> =
+            OnceLock::new();
+        // A refresh replaces URLs that already failed, so it must never be
+        // answered by a normal walk that started before them.
+        let flight_key = if refresh {
+            format!("refresh:{video_id}")
+        } else {
+            video_id.to_string()
+        };
+        let flight = FLIGHTS
+            .get_or_init(PlayerFlights::default)
+            .for_video(&flight_key);
+        let outcome = flight
+            .get_or_init(|| async {
+                if refresh {
+                    invalidate_player_response(video_id);
+                } else if let Some(cached) = cached_player_attempt(video_id) {
+                    debug!(
+                        video_id,
+                        client = cached.client.name,
+                        "Reusing cached player response"
+                    );
+                    return (Some(cached), None);
+                }
+                let visitor_data = self.fetch_visitor_data().await;
+                let mut restriction = None;
+                let attempt = self
+                    .try_player_ladder(
+                        video_id,
+                        PLAYER_CLIENT_LADDER,
+                        visitor_data,
+                        &mut restriction,
+                    )
+                    .await;
+                if let Some(attempt) = attempt.as_ref() {
+                    store_player_attempt(video_id, attempt);
+                }
+                (attempt, restriction)
+            })
             .await;
-        if let Some(attempt) = attempt.as_ref() {
-            store_player_attempt(video_id, attempt);
+        if let Some(playability) = outcome.1.as_ref() {
+            *deferred_restriction = Some(map_playability_error(playability));
         }
-        attempt
+        outcome.0.clone()
     }
 
-    /// Walk `ladder` in order, returning the first client whose player response is
-    /// playable.
+    /// Walk `ladder` in order, returning the first client that answers with
+    /// streams Flow can fetch.
     ///
-    /// A definitive restriction (age-gated, private, paid, geo-blocked) seen on any
-    /// client is recorded in `deferred_restriction` so the caller can surface that
-    /// specific reason instead of a generic failure once the ladder is exhausted.
+    /// The first bot wall gets one retry of that client under a freshly issued
+    /// visitor identity, which every later client then inherits: a stale or
+    /// flagged visitorData walls every client alike, so walking on with it only
+    /// spends the ladder. A content-level refusal (region, privacy, membership,
+    /// age, removal) ends the walk at once and is recorded in
+    /// `deferred_restriction`, so the caller surfaces that specific reason
+    /// instead of a generic failure.
     async fn try_player_ladder(
         &self,
         video_id: &str,
         ladder: &[&'static clients::YouTubeClient],
-        visitor_data: Option<&str>,
-        deferred_restriction: &mut Option<AppError>,
+        visitor_data: Option<String>,
+        deferred_restriction: &mut Option<Value>,
     ) -> Option<PlayerAttempt> {
+        let mut visitor_data = visitor_data;
+        let mut identity_refreshed = false;
         for client in ladder {
-            // Only a client whose attestation platform Flow can actually run gets a
-            // token. Injecting a BotGuard token into an IOS/ANDROID_VR/VISIONOS
-            // request is a claim googlevideo validates and refuses, which makes it
-            // strictly worse than sending nothing.
-            let po_token = if client.accepts_web_po_token() {
-                let binding = visitor_data
-                    .filter(|value| !value.is_empty())
-                    .unwrap_or(video_id);
-                generate_po_token(binding).await
-            } else {
-                None
-            };
-
-            let mut response = match self
-                .request_player(video_id, client, visitor_data, po_token.as_deref(), None)
-                .await
+            let mut outcome = self
+                .attempt_client(video_id, client, visitor_data.as_deref())
+                .await;
+            if !identity_refreshed
+                && matches!(&outcome, ClientOutcome::Refused(playability) if is_bot_wall(playability))
             {
-                Some(value) => value,
-                None => continue,
-            };
-
-            // A `needs reload` response clears if the request looks like it came
-            // from the short link rather than the watch page.
-            if check_needs_reload(&response) {
-                let referer = format!("https://youtu.be/{video_id}");
-                match self
-                    .request_player(
-                        video_id,
-                        client,
-                        visitor_data,
-                        po_token.as_deref(),
-                        Some(&referer),
-                    )
-                    .await
-                {
-                    Some(retry) => response = retry,
-                    None => continue,
+                identity_refreshed = true;
+                if let Some(fresh) = self.refresh_visitor_data().await {
+                    info!(video_id = %video_id, client = client.name, "Bot wall; retrying under a fresh visitor identity");
+                    visitor_data = Some(fresh);
+                    outcome = self
+                        .attempt_client(video_id, client, visitor_data.as_deref())
+                        .await;
                 }
             }
 
-            let status = response["playabilityStatus"]["status"]
-                .as_str()
-                .unwrap_or_default();
-            if status.eq_ignore_ascii_case("OK") {
-                debug!(video_id = %video_id, client = client.name, "Player ladder resolved");
-                return Some(PlayerAttempt {
-                    response,
-                    client,
-                    po_token,
-                });
+            match outcome {
+                ClientOutcome::Won(attempt) => {
+                    info!(video_id = %video_id, client = client.name, version = client.version, "Player ladder resolved");
+                    return Some(attempt);
+                }
+                ClientOutcome::Refused(playability) => {
+                    let mapped = map_playability_error(&playability);
+                    warn!(
+                        video_id = %video_id,
+                        client = client.name,
+                        version = client.version,
+                        reason = %mapped,
+                        "Player client refused, trying the next one"
+                    );
+                    if is_reportable_refusal(&playability) {
+                        // Region, privacy, membership, age and removal are
+                        // properties of the video, so every later client would
+                        // refuse it the same way. A bot wall is per client.
+                        let content_level = !is_bot_wall(&playability);
+                        deferred_restriction.get_or_insert(playability);
+                        if content_level {
+                            return None;
+                        }
+                    }
+                }
+                ClientOutcome::Unusable => {}
             }
-
-            let mapped = map_playability_error(&response["playabilityStatus"]);
-            if is_definitive_restriction(&mapped) {
-                deferred_restriction.get_or_insert(mapped);
-            }
-            warn!(
-                video_id = %video_id,
-                client = client.name,
-                status = %status,
-                "Player client returned a non-OK status, trying the next one"
-            );
         }
         None
+    }
+
+    /// One client's turn on the ladder: request, then judge the answer by what
+    /// Flow can actually play rather than by its status alone.
+    async fn attempt_client(
+        &self,
+        video_id: &str,
+        client: &'static clients::YouTubeClient,
+        visitor_data: Option<&str>,
+    ) -> ClientOutcome {
+        let web_client = client.accepts_web_po_token();
+        // Web clients are only served with a BotGuard token on the request, bound
+        // to the video id as Flow for Android binds it. Every other family is
+        // attested by a runtime Flow cannot run, and a BotGuard token on those is
+        // a claim googlevideo validates and refuses.
+        let po_token = if web_client {
+            let Some(token) = generate_po_token(video_id).await else {
+                warn!(video_id = %video_id, client = client.name, "No PO token; skipping web client");
+                return ClientOutcome::Unusable;
+            };
+            Some(token)
+        } else {
+            None
+        };
+
+        let mut response = match self
+            .request_player(video_id, client, visitor_data, po_token.as_deref(), None)
+            .await
+        {
+            Some(value) => value,
+            // The lead client gets one more try: a cold DNS/TLS handshake can eat
+            // the whole first budget.
+            None if std::ptr::eq(client, PLAYER_CLIENT_LADDER[0]) => {
+                match self
+                    .request_player(video_id, client, visitor_data, po_token.as_deref(), None)
+                    .await
+                {
+                    Some(value) => value,
+                    None => return ClientOutcome::Unusable,
+                }
+            }
+            None => return ClientOutcome::Unusable,
+        };
+
+        // A `needs reload` response clears if the request looks like it came
+        // from the short link rather than the watch page.
+        if check_needs_reload(&response) {
+            let referer = format!("https://youtu.be/{video_id}");
+            match self
+                .request_player(
+                    video_id,
+                    client,
+                    visitor_data,
+                    po_token.as_deref(),
+                    Some(&referer),
+                )
+                .await
+            {
+                Some(retry) => response = retry,
+                None => return ClientOutcome::Unusable,
+            }
+        }
+
+        let status = response["playabilityStatus"]["status"]
+            .as_str()
+            .unwrap_or_default();
+        if !status.eq_ignore_ascii_case("OK") {
+            return ClientOutcome::Refused(response["playabilityStatus"].clone());
+        }
+
+        let playable = if has_live_manifest(&response) {
+            true
+        } else if web_client {
+            self.prepare_sabr_endpoint(video_id, client, &mut response)
+                .await
+        } else {
+            has_playable_direct_streams(&response["streamingData"], video_id)
+        };
+        if !playable {
+            warn!(video_id = %video_id, client = client.name, "Player client answered OK with nothing Flow can fetch");
+            return ClientOutcome::Unusable;
+        }
+
+        ClientOutcome::Won(PlayerAttempt {
+            response,
+            client,
+            po_token,
+            visitor_data: visitor_data.map(ToOwned::to_owned),
+        })
+    }
+
+    /// A web client's response is SABR-only: playable once its SABR endpoint
+    /// carries a solved `n`, which googlevideo otherwise refuses outright. The
+    /// solved URL is written back so every later reader of the response uses it.
+    async fn prepare_sabr_endpoint(
+        &self,
+        video_id: &str,
+        client: &clients::YouTubeClient,
+        response: &mut Value,
+    ) -> bool {
+        let streaming_data = &response["streamingData"];
+        let Some(server_url) = extract_server_abr_url(streaming_data) else {
+            return false;
+        };
+        if extract_ustreamer_config(response).is_empty()
+            || select_formats(
+                &parse_sabr_formats(streaming_data),
+                None,
+                CodecSupport::default(),
+            )
+            .is_none()
+        {
+            return false;
+        }
+        let Some(solved) = player_js::solve_n_in_url(&server_url).await else {
+            warn!(video_id = %video_id, client = client.name, "Could not solve n for the SABR endpoint");
+            return false;
+        };
+        response["streamingData"]["serverAbrStreamingUrl"] = Value::String(solved);
+        true
     }
 
     /// One `player` request as `client`, carrying whatever that client's profile
@@ -1447,11 +1638,15 @@ impl InnertubeClient {
             "contentCheckOk": true,
             "racyCheckOk": true,
         });
-        if let Some(timestamp) = client.signature_timestamp() {
+        if client.use_signature_timestamp {
+            let timestamp = player_js::signature_timestamp()
+                .await
+                .unwrap_or(clients::DEFAULT_SIGNATURE_TIMESTAMP);
             payload["playbackContext"] = serde_json::json!({
                 "contentPlaybackContext": {
                     "referer": referer.unwrap_or("https://www.youtube.com"),
-                    "signatureTimestamp": timestamp
+                    "signatureTimestamp": timestamp,
+                    "html5Preference": "HTML5_PREF_WANTS"
                 }
             });
         }
@@ -1459,9 +1654,14 @@ impl InnertubeClient {
             payload["custom_referer"] = serde_json::json!(referer);
         }
 
+        let budget = if client.accepts_web_po_token() {
+            WEB_PLAYER_TIMEOUT
+        } else {
+            PER_CLIENT_TIMEOUT
+        };
         match tokio::time::timeout(
-            PER_CLIENT_TIMEOUT,
-            self.post_innertube("player", client, &mut payload),
+            budget,
+            self.post_innertube_for_playback("player", client, &mut payload),
         )
         .await
         {
@@ -1485,17 +1685,11 @@ impl InnertubeClient {
             return Err(AppError::Validation("Video ID cannot be empty".into()));
         }
 
-        // Initialize visitor session token
-        let visitor_data = self.fetch_visitor_data().await;
+        let _priority = playback_priority().start_metadata().await;
 
         let mut deferred_restriction: Option<AppError> = None;
         let attempt = self
-            .resolve_player_attempt(
-                video_id_trimmed,
-                visitor_data.as_deref(),
-                &mut deferred_restriction,
-                false,
-            )
+            .resolve_player_attempt(video_id_trimmed, &mut deferred_restriction, false)
             .await;
 
         let res = match attempt {
@@ -1538,9 +1732,14 @@ impl InnertubeClient {
         let mut next_payload = serde_json::json!({
             "videoId": &id
         });
-        if let Ok(next_res) = self
-            .post_innertube("next", &clients::WEB, &mut next_payload)
-            .await
+        // Likes, views and the publish date are optional; a deep link waits on
+        // this whole call before it can start playback, so it is bounded and
+        // kept off the connection the feed fan-out saturates.
+        if let Ok(Ok(next_res)) = tokio::time::timeout(
+            WATCH_NEXT_TIMEOUT,
+            self.post_innertube_for_playback("next", &clients::WEB, &mut next_payload),
+        )
+        .await
         {
             let mut primary_info = &serde_json::Value::Null;
             let mut secondary_info = &serde_json::Value::Null;
@@ -1720,20 +1919,16 @@ impl InnertubeClient {
             return Err(AppError::Validation("Video ID cannot be empty".into()));
         }
 
-        // 1. Fetch visitor session data
-        let visitor_data = self.fetch_visitor_data().await;
-        let mut visitor_data_for_sabr = visitor_data.clone();
+        let _priority = playback_priority().start_stream();
 
-        // 2. Walk the client ladder; the first playable response wins.
+        // Walk the client ladder; the first playable response wins.
         let mut deferred_restriction: Option<AppError> = None;
         let attempt = self
-            .resolve_player_attempt(
-                video_id_trimmed,
-                visitor_data.as_deref(),
-                &mut deferred_restriction,
-                refresh,
-            )
+            .resolve_player_attempt(video_id_trimmed, &mut deferred_restriction, refresh)
             .await;
+        let mut visitor_data_for_sabr = attempt
+            .as_ref()
+            .and_then(|attempt| attempt.visitor_data.clone());
 
         let mut winning_client = attempt
             .as_ref()
@@ -1756,30 +1951,29 @@ impl InnertubeClient {
                 .map(|status| status.eq_ignore_ascii_case("OK"))
                 .unwrap_or(false));
         if !res_is_ok && std::env::var("FLOW_INPAGE_RECOVERY").is_ok() {
-            if let Some(web_res) =
+            if let Some(mut web_res) =
                 crate::api::innertube::core::webview_player::fetch_player_response_in_page(
                     video_id_trimmed,
                 )
                 .await
             {
-                if web_res["playabilityStatus"]["status"]
+                let web_ok = web_res["playabilityStatus"]["status"]
                     .as_str()
-                    .map(|status| status.eq_ignore_ascii_case("OK"))
-                    .unwrap_or(false)
+                    .is_some_and(|status| status.eq_ignore_ascii_case("OK"));
+                if web_ok
+                    && self
+                        .prepare_sabr_endpoint(video_id_trimmed, &clients::WEB, &mut web_res)
+                        .await
                 {
                     info!(video_id = %video_id_trimmed, "Recovered bot-walled video via in-page WebView (WEB/SABR)");
-                    // Bind the SABR pot to the WEB response's own visitor data.
+                    // The SABR session presents the WEB response's own visitor data.
                     if let Some(web_visitor) = web_res["responseContext"]["visitorData"]
                         .as_str()
                         .filter(|value| !value.is_empty())
                     {
                         visitor_data_for_sabr = Some(web_visitor.to_string());
                     }
-                    let pot_binding = visitor_data_for_sabr
-                        .as_deref()
-                        .filter(|value| !value.is_empty())
-                        .unwrap_or(video_id_trimmed);
-                    po_token_used = generate_po_token(pot_binding).await;
+                    po_token_used = generate_po_token(video_id_trimmed).await;
                     winning_client = &clients::WEB;
                     res = Ok(web_res);
                 }
@@ -1818,12 +2012,12 @@ impl InnertubeClient {
         // A restriction seen here is discarded: the video already resolved, so a
         // missing manifest is not the reason to fail it.
         if is_live && hls_manifest_url.is_none() {
-            let mut discarded: Option<AppError> = None;
+            let mut discarded: Option<Value> = None;
             if let Some(live) = self
                 .try_player_ladder(
                     video_id_trimmed,
                     LIVE_MANIFEST_CLIENTS,
-                    visitor_data_for_sabr.as_deref(),
+                    visitor_data_for_sabr.clone(),
                     &mut discarded,
                 )
                 .await
@@ -1964,6 +2158,7 @@ mod sabr_live_smoke {
             std::env::var("FLOW_SABR_VIDEO").unwrap_or_else(|_| "3RmOvxilbPM".to_string());
         let client = InnertubeClient {
             client: reqwest::Client::new(),
+            playback_client: reqwest::Client::new(),
             visitor_data: std::sync::RwLock::new(None),
         };
 
@@ -2199,6 +2394,7 @@ mod sabr_client_probe {
             std::env::var("FLOW_SABR_VIDEO").unwrap_or_else(|_| "3RmOvxilbPM".to_string());
         let client = InnertubeClient {
             client: reqwest::Client::new(),
+            playback_client: reqwest::Client::new(),
             visitor_data: std::sync::RwLock::new(None),
         };
         // Allow injecting an externally-minted pot+visitor (e.g. from bgutils-js)
@@ -2489,5 +2685,215 @@ mod playability_classification {
             "x".into()
         )));
         assert!(!is_definitive_restriction(&AppError::Extractor("x".into())));
+    }
+}
+
+#[cfg(test)]
+mod ladder_decisions {
+    use super::*;
+    use serde_json::json;
+
+    fn adaptive(mime: &str, url: Option<&str>) -> Value {
+        let mut format = json!({ "itag": 137, "mimeType": mime, "bitrate": 1000 });
+        if mime.starts_with("video/") {
+            format["qualityLabel"] = json!("1080p");
+            format["height"] = json!(1080);
+        }
+        if let Some(url) = url {
+            format["url"] = json!(url);
+        }
+        format
+    }
+
+    #[test]
+    fn only_a_bot_check_counts_as_a_bot_wall() {
+        assert!(is_bot_wall(&json!({
+            "status": "LOGIN_REQUIRED",
+            "reason": "Sign in to confirm you’re not a bot",
+        })));
+        assert!(!is_bot_wall(&json!({
+            "status": "LOGIN_REQUIRED",
+            "reason": "This video is private.",
+        })));
+        assert!(!is_bot_wall(&json!({
+            "status": "UNPLAYABLE",
+            "reason": "The page needs to be reloaded.",
+        })));
+    }
+
+    #[test]
+    fn a_missing_video_is_reported_but_a_generic_refusal_is_not() {
+        assert!(is_reportable_refusal(&json!({
+            "status": "ERROR",
+            "reason": "This video is unavailable",
+        })));
+        assert!(is_reportable_refusal(&json!({
+            "status": "LOGIN_REQUIRED",
+            "reason": "This video is private.",
+        })));
+        assert!(!is_reportable_refusal(&json!({
+            "status": "UNPLAYABLE",
+            "reason": "The page needs to be reloaded.",
+        })));
+    }
+
+    #[test]
+    fn ciphered_only_formats_are_not_a_win() {
+        // ANDROID's usual answer: OK, but nothing carries a fetchable URL.
+        let streaming_data = json!({
+            "adaptiveFormats": [adaptive("video/mp4; codecs=\"avc1\"", None), adaptive("audio/mp4; codecs=\"mp4a\"", None)],
+        });
+        assert!(!has_playable_direct_streams(&streaming_data, "video"));
+    }
+
+    #[test]
+    fn unsolved_n_urls_are_not_a_win() {
+        let throttled = "https://rr1.googlevideo.com/videoplayback?expire=1&n=abc";
+        let streaming_data = json!({
+            "adaptiveFormats": [
+                adaptive("video/mp4; codecs=\"avc1\"", Some(throttled)),
+                adaptive("audio/mp4; codecs=\"mp4a\"", Some(throttled)),
+            ],
+        });
+        assert!(!has_playable_direct_streams(&streaming_data, "video"));
+    }
+
+    #[test]
+    fn direct_video_with_separate_audio_is_a_win() {
+        let clean = "https://rr1.googlevideo.com/videoplayback?expire=1&c=VISIONOS";
+        let streaming_data = json!({
+            "adaptiveFormats": [
+                adaptive("video/mp4; codecs=\"avc1\"", Some(clean)),
+                adaptive("audio/mp4; codecs=\"mp4a\"", Some(clean)),
+            ],
+        });
+        assert!(has_playable_direct_streams(&streaming_data, "video"));
+    }
+
+    #[test]
+    fn video_without_any_audio_is_not_a_win() {
+        let clean = "https://rr1.googlevideo.com/videoplayback?expire=1&c=VISIONOS";
+        let streaming_data = json!({
+            "adaptiveFormats": [adaptive("video/mp4; codecs=\"avc1\"", Some(clean))],
+        });
+        assert!(!has_playable_direct_streams(&streaming_data, "video"));
+    }
+
+    #[test]
+    fn a_live_manifest_needs_the_live_flag() {
+        let manifest = json!({ "streamingData": { "hlsManifestUrl": "https://manifest" } });
+        assert!(!has_live_manifest(&manifest));
+        let mut live = manifest.clone();
+        live["videoDetails"] = json!({ "isLive": true });
+        assert!(has_live_manifest(&live));
+    }
+}
+
+// Live checks of the client ladder against YouTube. Ignored by default; run with:
+//   FLOW_LADDER_VIDEO=eWKY0OnPByg cargo test --lib ladder_live -- --ignored --nocapture
+#[cfg(test)]
+mod ladder_live {
+    use super::*;
+    use crate::streaming::sabr::SabrTrack;
+    use crate::streaming::sabr::engine::{SabrEngine, SabrEngineConfig};
+    use std::sync::Arc;
+
+    fn video_id() -> String {
+        std::env::var("FLOW_LADDER_VIDEO").unwrap_or_else(|_| "eWKY0OnPByg".to_string())
+    }
+
+    fn fresh_client() -> InnertubeClient {
+        InnertubeClient {
+            client: reqwest::Client::new(),
+            playback_client: reqwest::Client::new(),
+            visitor_data: std::sync::RwLock::new(None),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "hits the network"]
+    async fn ladder_live_cold_start_resolves() {
+        let client = fresh_client();
+        let info = client
+            .get_stream_info(&video_id(), false)
+            .await
+            .expect("a cold start must resolve");
+        println!(
+            "variants={} audio={} sabr_available={:?}",
+            info.variants.len(),
+            info.audio_tracks.len(),
+            info.sabr.as_ref().map(|sabr| sabr.available)
+        );
+        assert!(
+            info.variants.iter().any(|variant| variant.is_playable)
+                || info.sabr.as_ref().is_some_and(|sabr| sabr.available)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[ignore = "hits the network + botguard + nsig sidecars"]
+    async fn ladder_live_each_client() {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .with_test_writer()
+            .try_init();
+        let client = fresh_client();
+        let video_id = video_id();
+        let visitor_data = client.fetch_visitor_data().await;
+        for candidate in PLAYER_CLIENT_LADDER {
+            let outcome = client
+                .attempt_client(&video_id, candidate, visitor_data.as_deref())
+                .await;
+            let verdict = match &outcome {
+                ClientOutcome::Won(_) => "playable".to_string(),
+                ClientOutcome::Refused(playability) => {
+                    format!("refused: {}", map_playability_error(playability))
+                }
+                ClientOutcome::Unusable => "unusable".to_string(),
+            };
+            println!("{:<16} {:<9} {verdict}", candidate.name, candidate.version);
+
+            // A web client's win is a SABR session; prove media flows from it.
+            let ClientOutcome::Won(attempt) = outcome else {
+                continue;
+            };
+            if !candidate.accepts_web_po_token() {
+                continue;
+            }
+            let streaming_data = &attempt.response["streamingData"];
+            let (_, descriptor) = build_sabr_metadata(
+                &attempt.response,
+                streaming_data,
+                &video_id,
+                attempt.visitor_data.clone(),
+                attempt.po_token.clone(),
+                candidate,
+                extract_duration_seconds_from_player_response(&attempt.response),
+            );
+            let descriptor = descriptor.expect("a web win carries a SABR session");
+            let selected = select_formats(&descriptor.formats, None, CodecSupport::default())
+                .expect("selectable formats");
+            let engine = Arc::new(SabrEngine::new(
+                video_id.clone(),
+                descriptor,
+                selected,
+                SabrEngineConfig {
+                    segment_wait: std::time::Duration::from_secs(30),
+                    ..Default::default()
+                },
+            ));
+            engine.clone().spawn();
+            engine
+                .wait_timing(std::time::Duration::from_secs(30))
+                .await
+                .expect("SABR session opens");
+            let first = engine.get_segment(SabrTrack::Video, 1).await;
+            println!(
+                "    SABR first video segment: {:?}",
+                first.as_ref().map(Vec::len).map_err(ToString::to_string)
+            );
+            engine.cancel();
+            assert!(first.is_ok(), "{} SABR must deliver media", candidate.name);
+        }
     }
 }

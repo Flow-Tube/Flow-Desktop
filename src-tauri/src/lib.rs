@@ -257,6 +257,14 @@ pub fn run() {
             let youtube_service = YoutubeService::new(extractor.clone());
             app.manage(youtube_service);
 
+            // The first video otherwise waits on both: the visitor identity every
+            // player request carries, and the player script web clients need.
+            let warm_extractor = extractor.clone();
+            tauri::async_runtime::spawn(async move {
+                warm_extractor.fetch_visitor_data().await;
+                api::innertube::core::player_js::prewarm().await;
+            });
+
             // Initialize SQLite database
             let pool = tauri::async_runtime::block_on(async {
                 db::initialize_database(app_data_dir).await

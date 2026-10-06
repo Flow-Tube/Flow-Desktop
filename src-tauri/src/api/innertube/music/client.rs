@@ -194,8 +194,10 @@ impl InnertubeClient {
         }
 
         let url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
+        // The playback pool: a track waiting behind the music home's browse
+        // traffic on the shared connection was most of a slow start.
         let mut req = self
-            .client
+            .playback_client
             .post(url)
             .header(USER_AGENT, client.user_agent)
             .header("X-YouTube-Client-Name", client.client_id)

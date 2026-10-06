@@ -35,11 +35,19 @@ struct CachedResponse {
     cached_at: u64,
 }
 
+/// The proxy's two listeners: one for media and manifests, one for artwork.
+/// Both serve the same sessions; they exist only to be separate origins.
+pub struct ProxyListeners {
+    pub media: std::net::TcpListener,
+    pub images: std::net::TcpListener,
+}
+
 #[derive(Clone)]
 pub struct StreamingManager {
     sessions: Arc<Mutex<HashMap<String, StreamSession>>>,
     response_cache: Arc<Mutex<HashMap<String, Arc<CachedResponse>>>>,
     port: u16,
+    image_port: u16,
     sabr: SabrSessionManager,
 }
 
@@ -96,23 +104,34 @@ fn user_agent_for_media_url(url: &str, session_user_agent: &str) -> String {
 }
 
 impl StreamingManager {
-    pub fn new() -> (Self, std::net::TcpListener) {
-        let listener =
-            std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind streaming proxy");
-        let port = listener.local_addr().unwrap().port();
+    pub fn new() -> (Self, ProxyListeners) {
+        let bind =
+            || std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind streaming proxy");
+        let listeners = ProxyListeners {
+            media: bind(),
+            images: bind(),
+        };
 
         let manager = Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             response_cache: Arc::new(Mutex::new(HashMap::new())),
-            port,
+            port: listeners.media.local_addr().unwrap().port(),
+            image_port: listeners.images.local_addr().unwrap().port(),
             sabr: SabrSessionManager::new(),
         };
 
-        (manager, listener)
+        (manager, listeners)
     }
 
     pub fn get_port(&self) -> u16 {
         self.port
+    }
+
+    /// The port artwork is served from. The web view allows only a handful of open
+    /// connections per host and port, so images on the media port could fill
+    /// them all and leave a song's request queued behind slow thumbnails.
+    pub fn get_image_port(&self) -> u16 {
+        self.image_port
     }
 
     pub fn sabr(&self) -> &SabrSessionManager {
@@ -397,8 +416,10 @@ pub async fn start_proxy_server(manager: StreamingManager, std_listener: std::ne
     let listener = TcpListener::from_std(std_listener).expect("Failed to convert TcpListener");
 
     info!(
-        "Starting local media proxy on 127.0.0.1:{}",
-        manager.get_port()
+        "Starting local media proxy on {}",
+        listener
+            .local_addr()
+            .map_or_else(|_| "an unknown port".to_string(), |addr| addr.to_string())
     );
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -745,6 +766,13 @@ async fn relay_remote(
         return write_cached_response(socket, &cached, head_only).await;
     }
 
+    // Artwork that fails is better shown as a fallback than retried for a
+    // minute while it holds one of the few connections the page has.
+    let max_recoveries = if session.content_type.starts_with("image/") {
+        1
+    } else {
+        MAX_UPSTREAM_RECOVERIES
+    };
     let mut headers_written = false;
     let mut bytes_relayed: u64 = 0;
     let mut attempt: u32 = 0;
@@ -804,7 +832,7 @@ async fn relay_remote(
                 if headers_written {
                     warn!(error = ?e.without_url(), attempt, "Upstream re-request failed after partial relay");
                     attempt += 1;
-                    if attempt > MAX_UPSTREAM_RECOVERIES {
+                    if attempt > max_recoveries {
                         return Ok(());
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(150 * u64::from(attempt)))
@@ -831,7 +859,13 @@ async fn relay_remote(
                 .headers()
                 .get("Content-Range")
                 .and_then(|value| value.to_str().ok());
-            if !valid_resume_range(status.as_u16(), content_range, effective_start, end) {
+            // Nothing reached the client yet and it was promised the whole
+            // resource, so a whole resource from the start is the right reply.
+            let fresh_restart =
+                bytes_relayed == 0 && status_code_value == 200 && status.as_u16() == 200;
+            if !fresh_restart
+                && !valid_resume_range(status.as_u16(), content_range, effective_start, end)
+            {
                 // Appending a full 200 response or the wrong offset corrupts the media.
                 warn!(
                     status = status.as_u16(),
@@ -978,7 +1012,7 @@ async fn relay_remote(
         }
 
         attempt += 1;
-        if attempt > MAX_UPSTREAM_RECOVERIES {
+        if attempt > max_recoveries {
             warn!("Giving up upstream recovery after {attempt} attempts");
             break;
         }
@@ -1321,6 +1355,38 @@ mod range_recovery_tests {
                 ),
                 (
                     b"HTTP/1.1 206 Partial Content\r\nContent-Length: 3\r\nContent-Range: bytes 3-5/6\r\nConnection: close\r\n\r\ndef",
+                    std::time::Duration::ZERO,
+                    b"",
+                ),
+            ],
+        )
+        .await;
+        assert!(result.is_ok());
+        assert_eq!(body, b"abcdef");
+    }
+
+    #[test]
+    fn artwork_is_served_from_its_own_origin() {
+        let (manager, listeners) = StreamingManager::new();
+        assert_ne!(manager.get_port(), manager.get_image_port());
+        assert_eq!(
+            listeners.images.local_addr().unwrap().port(),
+            manager.get_image_port()
+        );
+    }
+
+    #[tokio::test]
+    async fn restarts_a_full_response_that_dropped_before_any_bytes() {
+        let (result, body) = slow_relay(
+            "image/jpeg",
+            vec![
+                (
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\n",
+                    std::time::Duration::ZERO,
+                    b"",
+                ),
+                (
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabcdef",
                     std::time::Duration::ZERO,
                     b"",
                 ),

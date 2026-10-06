@@ -1852,7 +1852,10 @@ pub async fn get_offline_stream(
         Some((path, image_type)) => {
             let artwork_token = Uuid::new_v4().to_string();
             streaming_manager.register_local_session(artwork_token.clone(), path, image_type);
-            Some(format!("http://127.0.0.1:{port}/stream/{artwork_token}"))
+            let image_port = streaming_manager.get_image_port();
+            Some(format!(
+                "http://127.0.0.1:{image_port}/stream/{artwork_token}"
+            ))
         }
         None => None,
     };

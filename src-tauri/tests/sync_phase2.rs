@@ -2,8 +2,11 @@
 //! WebSocket (host ⇄ client in-process), covering the happy path, capability filtering, and both
 //! consent-denial paths.
 
+mod common;
+
 use std::collections::BTreeMap;
 
+use common::bind_loopback;
 use flow_desktop_lib::sync::canonical::Collection::{self, Likes, WatchHistory};
 use flow_desktop_lib::sync::crypto::{
     Role, SessionCipher, generate_master_secret, generate_session_id,
@@ -54,7 +57,7 @@ const LIKES_NDJSON: &[u8] = b"{\"id\":\"a\",\"state\":\"liked\"}";
 async fn one_way_transfer_succeeds_for_all_selected_collections() {
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let (listener, port) = transport::bind().await.unwrap();
+    let (listener, port) = bind_loopback().await;
 
     let host_master = master.clone();
     let host = tokio::spawn(async move {
@@ -142,7 +145,7 @@ async fn one_way_transfer_succeeds_for_all_selected_collections() {
 async fn sender_streams_collections_in_sorted_key_order() {
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let (listener, port) = transport::bind().await.unwrap();
+    let (listener, port) = bind_loopback().await;
 
     let host_master = master.clone();
     let host = tokio::spawn(async move {
@@ -217,7 +220,7 @@ async fn sender_streams_collections_in_sorted_key_order() {
 async fn capability_negotiation_skips_collections_the_peer_cannot_consume() {
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let (listener, port) = transport::bind().await.unwrap();
+    let (listener, port) = bind_loopback().await;
 
     let host_master = master.clone();
     let host = tokio::spawn(async move {
@@ -272,7 +275,7 @@ async fn capability_negotiation_skips_collections_the_peer_cannot_consume() {
 async fn host_receives_while_client_sends() {
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let (listener, port) = transport::bind().await.unwrap();
+    let (listener, port) = bind_loopback().await;
 
     // Host = receiver.
     let host_master = master.clone();
@@ -336,7 +339,7 @@ async fn host_receives_while_client_sends() {
 async fn receiver_decline_aborts_both_sides_cleanly() {
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let (listener, port) = transport::bind().await.unwrap();
+    let (listener, port) = bind_loopback().await;
 
     let host_master = master.clone();
     let host = tokio::spawn(async move {

@@ -1,4 +1,5 @@
 pub mod apply;
+pub mod brain_attrib;
 pub mod brainmap;
 pub mod canonical;
 pub mod codec;

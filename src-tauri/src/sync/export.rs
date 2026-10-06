@@ -19,6 +19,9 @@ use sqlx::SqlitePool;
 use crate::flow_neuro::scoring::UserBrain;
 use crate::music_brain::model::MusicBrain;
 use crate::sync::apply::{MUSIC_BRAIN_KEY, MUSIC_MERGED_KEY, NEURO_BRAIN_KEY, NEURO_MERGED_KEY};
+use crate::sync::brain_attrib::{
+    self, MUSIC_BASELINE_KEY, MusicBaseline, NEURO_BASELINE_KEY, NeuroBaseline, attribution,
+};
 use crate::sync::brainmap;
 use crate::sync::canonical::{Collection, Hlc, Playlist, SettingEntry, WatchHistoryRecord};
 use crate::sync::error::SyncError;
@@ -220,13 +223,23 @@ async fn current_merged_flow(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedFlowNeuroBrain::default(),
     };
-    if let Some(s) = get_setting(pool, NEURO_BRAIN_KEY).await? {
-        if let Ok(ub) = serde_json::from_str::<UserBrain>(&s) {
-            let snap =
-                brainmap::userbrain_to_snapshot(&ub, device_id, Hlc::new(now_ms(), 0, device_id));
-            merged.merge_snapshot(&snap);
-        }
-    }
+    let Some(ub) = get_setting(pool, NEURO_BRAIN_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str::<UserBrain>(&s).ok())
+    else {
+        return Ok(merged);
+    };
+    let baseline: Option<NeuroBaseline> = get_setting(pool, NEURO_BASELINE_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str(&s).ok());
+    let prior_applies = prior_applies(pool, Collection::FlowNeuroBrain).await?;
+    brain_attrib::fold_local_flow(
+        &mut merged,
+        &ub,
+        device_id,
+        Hlc::new(now_ms(), 0, device_id),
+        attribution(baseline.as_ref(), prior_applies),
+    );
     Ok(merged)
 }
 
@@ -238,13 +251,23 @@ async fn current_merged_music(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedMusicBrain::default(),
     };
-    if let Some(s) = get_setting(pool, MUSIC_BRAIN_KEY).await? {
-        if let Ok(mb) = serde_json::from_str::<MusicBrain>(&s) {
-            let snap =
-                brainmap::musicbrain_to_snapshot(&mb, device_id, Hlc::new(now_ms(), 0, device_id));
-            merged.merge_snapshot(&snap);
-        }
-    }
+    let Some(mb) = get_setting(pool, MUSIC_BRAIN_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str::<MusicBrain>(&s).ok())
+    else {
+        return Ok(merged);
+    };
+    let baseline: Option<MusicBaseline> = get_setting(pool, MUSIC_BASELINE_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str(&s).ok());
+    let prior_applies = prior_applies(pool, Collection::MusicBrain).await?;
+    brain_attrib::fold_local_music(
+        &mut merged,
+        &mb,
+        device_id,
+        Hlc::new(now_ms(), 0, device_id),
+        attribution(baseline.as_ref(), prior_applies),
+    );
     Ok(merged)
 }
 
@@ -273,6 +296,14 @@ async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, Syn
             .fetch_optional(pool)
             .await?,
     )
+}
+
+async fn prior_applies(pool: &SqlitePool, collection: Collection) -> Result<u64, SyncError> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_log WHERE collection = ?")
+        .bind(collection.key())
+        .fetch_one(pool)
+        .await?;
+    Ok(u64::try_from(n).unwrap_or(0))
 }
 
 async fn get_setting_with_time(

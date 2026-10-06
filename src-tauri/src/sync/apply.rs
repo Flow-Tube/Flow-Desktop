@@ -18,6 +18,9 @@ use sqlx::{Sqlite, SqlitePool, Transaction};
 
 use crate::flow_neuro::scoring::UserBrain;
 use crate::music_brain::model::MusicBrain;
+use crate::sync::brain_attrib::{
+    self, MUSIC_BASELINE_KEY, MusicBaseline, NEURO_BASELINE_KEY, NeuroBaseline, attribution,
+};
 use crate::sync::brainmap;
 use crate::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, Hlc, Like, MusicBrainSnapshot, Playlist, SettingEntry,
@@ -348,27 +351,35 @@ async fn apply_flow_neuro(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedFlowNeuroBrain::default(),
     };
+    let base = get_setting(tx, NEURO_BRAIN_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str::<UserBrain>(&s).ok());
+    let baseline: Option<NeuroBaseline> = get_setting(tx, NEURO_BASELINE_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str(&s).ok());
 
-    // Fold in this device's current brain so local learning isn't lost (idempotent re-fold).
-    if let Some(s) = get_setting(tx, NEURO_BRAIN_KEY).await? {
-        if let Ok(ub) = serde_json::from_str::<UserBrain>(&s) {
-            let snap =
-                brainmap::userbrain_to_snapshot(&ub, device_id, Hlc::new(now_ms(), 0, device_id));
-            merged.merge_snapshot(&snap);
-        }
+    if let Some(ub) = &base {
+        let prior_applies = prior_applies(tx, Collection::FlowNeuroBrain).await?;
+        brain_attrib::fold_local_flow(
+            &mut merged,
+            ub,
+            device_id,
+            Hlc::new(now_ms(), 0, device_id),
+            attribution(baseline.as_ref(), prior_applies),
+        );
     }
-    for snap in &incoming {
-        merged.merge_snapshot(snap);
-    }
+    brain_attrib::merge_incoming_flow(&mut merged, &incoming, device_id);
     set_setting(tx, NEURO_MERGED_KEY, &serde_json::to_string(&merged)?).await?;
 
     // Derive the effective brain for the engine, preserving device-local fields.
-    let base = get_setting(tx, NEURO_BRAIN_KEY)
-        .await?
-        .and_then(|s| serde_json::from_str::<UserBrain>(&s).ok())
-        .unwrap_or_default();
-    let effective = brainmap::merged_flow_to_userbrain(&merged, &base);
+    let effective = brainmap::merged_flow_to_userbrain(&merged, &base.unwrap_or_default());
     set_setting(tx, NEURO_BRAIN_KEY, &serde_json::to_string(&effective)?).await?;
+    set_setting(
+        tx,
+        NEURO_BASELINE_KEY,
+        &serde_json::to_string(&NeuroBaseline::of(&effective))?,
+    )
+    .await?;
 
     Ok(ApplyStats {
         collection_key: Collection::FlowNeuroBrain.key().to_string(),
@@ -388,24 +399,34 @@ async fn apply_music(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedMusicBrain::default(),
     };
-    if let Some(s) = get_setting(tx, MUSIC_BRAIN_KEY).await? {
-        if let Ok(mb) = serde_json::from_str::<MusicBrain>(&s) {
-            let snap =
-                brainmap::musicbrain_to_snapshot(&mb, device_id, Hlc::new(now_ms(), 0, device_id));
-            merged.merge_snapshot(&snap);
-        }
-    }
-    for snap in &incoming {
-        merged.merge_snapshot(snap);
-    }
-    set_setting(tx, MUSIC_MERGED_KEY, &serde_json::to_string(&merged)?).await?;
-
     let base = get_setting(tx, MUSIC_BRAIN_KEY)
         .await?
-        .and_then(|s| serde_json::from_str::<MusicBrain>(&s).ok())
-        .unwrap_or_default();
-    let effective = brainmap::merged_music_to_musicbrain(&merged, &base);
+        .and_then(|s| serde_json::from_str::<MusicBrain>(&s).ok());
+    let baseline: Option<MusicBaseline> = get_setting(tx, MUSIC_BASELINE_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str(&s).ok());
+
+    if let Some(mb) = &base {
+        let prior_applies = prior_applies(tx, Collection::MusicBrain).await?;
+        brain_attrib::fold_local_music(
+            &mut merged,
+            mb,
+            device_id,
+            Hlc::new(now_ms(), 0, device_id),
+            attribution(baseline.as_ref(), prior_applies),
+        );
+    }
+    brain_attrib::merge_incoming_music(&mut merged, &incoming, device_id);
+    set_setting(tx, MUSIC_MERGED_KEY, &serde_json::to_string(&merged)?).await?;
+
+    let effective = brainmap::merged_music_to_musicbrain(&merged, &base.unwrap_or_default());
     set_setting(tx, MUSIC_BRAIN_KEY, &serde_json::to_string(&effective)?).await?;
+    set_setting(
+        tx,
+        MUSIC_BASELINE_KEY,
+        &serde_json::to_string(&MusicBaseline::of(&effective))?,
+    )
+    .await?;
 
     Ok(ApplyStats {
         collection_key: Collection::MusicBrain.key().to_string(),
@@ -507,6 +528,18 @@ async fn apply_subscribed_channels(
     )
     .await?;
     Ok(stat)
+}
+
+/// How many payloads of `collection` this device has applied before, from any peer.
+async fn prior_applies(
+    tx: &mut Transaction<'_, Sqlite>,
+    collection: Collection,
+) -> Result<u64, SyncError> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_log WHERE collection = ?")
+        .bind(collection.key())
+        .fetch_one(&mut **tx)
+        .await?;
+    Ok(u64::try_from(n).unwrap_or(0))
 }
 
 async fn get_setting_with_time(

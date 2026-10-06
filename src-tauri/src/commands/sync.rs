@@ -20,7 +20,7 @@ use crate::sync::session::{HostStartInfo, SyncManager, SyncStatus};
 fn err(e: SyncError) -> ErrorResponse {
     ErrorResponse {
         message: e.to_string(),
-        kind: "sync".to_string(),
+        kind: e.kind().to_string(),
     }
 }
 

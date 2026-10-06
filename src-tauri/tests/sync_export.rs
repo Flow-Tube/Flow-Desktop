@@ -107,7 +107,10 @@ async fn export_then_apply_round_trips_watch_likes_playlists_settings() {
     // The excluded download path must never appear in the exported settings payload.
     let settings_out = outgoing.iter().find(|o| o.collection == Settings).unwrap();
     let settings_str = String::from_utf8(settings_out.ndjson.clone()).unwrap();
-    assert!(settings_str.contains("autoplay_enabled"));
+    assert!(
+        settings_str.contains(r#""key":"autoplay","#) && settings_str.contains(r#""value":true"#),
+        "shared settings go out under Android's canonical key with a typed value: {settings_str}"
+    );
     assert!(
         !settings_str.contains("download_location"),
         "export must not leak the excluded download path"

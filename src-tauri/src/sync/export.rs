@@ -10,7 +10,7 @@
 //! relay everything it has converged from other devices, so a 3rd device converges transitively.
 //! Callers MUST flush the resident brain stores to the DB before calling this (see the Phase  so the freshest learning is included.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -19,12 +19,18 @@ use sqlx::SqlitePool;
 use crate::flow_neuro::scoring::UserBrain;
 use crate::music_brain::model::MusicBrain;
 use crate::sync::apply::{MUSIC_BRAIN_KEY, MUSIC_MERGED_KEY, NEURO_BRAIN_KEY, NEURO_MERGED_KEY};
+use crate::sync::brain_attrib::{
+    self, MUSIC_BASELINE_KEY, MusicBaseline, NEURO_BASELINE_KEY, NeuroBaseline, attribution,
+};
 use crate::sync::brainmap;
 use crate::sync::canonical::{Collection, Hlc, Playlist, SettingEntry, WatchHistoryRecord};
+use crate::sync::changes::{self, Stamp};
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchRow};
 use crate::sync::merge::{MergedFlowNeuroBrain, MergedMusicBrain};
 use crate::sync::protocol::OutgoingCollection;
+use crate::sync::settings_map;
+use crate::sync::tombstones;
 
 const WATCH_SELECT: &str = "SELECT video_id, title, channel_name, channel_id, watch_date, \
      watch_duration_seconds, total_duration_seconds, is_music, is_short, updated_hlc \
@@ -61,6 +67,9 @@ async fn export_watch_history(pool: &SqlitePool, device_id: &str) -> Result<Vec<
         .await?;
     let mut records: Vec<WatchHistoryRecord> =
         rows.iter().map(|r| r.to_canonical(device_id)).collect();
+    let live: BTreeSet<String> = records.iter().map(|r| r.video_id.clone()).collect();
+    let stamps = load_changes(pool, changes::WATCH_HISTORY).await?;
+    records.extend(tombstones::watch_history(&stamps, &live, device_id));
     records.sort_by(|a, b| a.video_id.cmp(&b.video_id));
     Ok(to_ndjson(&records))
 }
@@ -70,6 +79,9 @@ async fn export_likes(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, Syn
         Some(raw) => mapping::parse_likes_blob(&raw, device_id),
         None => Vec::new(),
     };
+    let live: BTreeSet<String> = likes.iter().map(mapping::like_key).collect();
+    let stamps = load_changes(pool, changes::LIKES).await?;
+    likes.extend(tombstones::likes(&stamps, &live, device_id));
     likes.sort_by(|a, b| mapping::like_key(a).cmp(&mapping::like_key(b)));
     Ok(to_ndjson(&likes))
 }
@@ -82,6 +94,12 @@ async fn export_playlists(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>,
     if let Some(raw) = get_setting(pool, mapping::ALBUMS_SETTING_KEY).await? {
         playlists.extend(mapping::parse_albums_blob(&raw, device_id));
     }
+    tombstones::playlists(
+        &mut playlists,
+        &load_changes(pool, changes::PLAYLISTS).await?,
+        &load_changes(pool, changes::PLAYLIST_ITEMS).await?,
+        device_id,
+    );
     for p in &mut playlists {
         p.items.sort_by(|a, b| a.video_id.cmp(&b.video_id));
     }
@@ -98,7 +116,7 @@ fn parse_all_playlists(ndjson: &[u8]) -> Option<Vec<Playlist>> {
 }
 
 fn album_needs_tracks(p: &Playlist) -> Option<String> {
-    if mapping::is_album_playlist(p) && p.items.iter().all(|i| i.deleted) {
+    if !p.deleted && mapping::is_album_playlist(p) && p.items.iter().all(|i| i.deleted) {
         p.youtube_id.clone().filter(|y| !y.is_empty())
     } else {
         None
@@ -155,11 +173,14 @@ pub fn fill_album_tracks(ndjson: &[u8], tracks: &BTreeMap<String, Vec<Value>>) -
 }
 
 async fn export_subscriptions(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {
-    let hlc = Hlc::new(now_ms(), 0, device_id);
     let mut groups = match get_setting(pool, mapping::SUBSCRIPTION_GROUPS_SETTING_KEY).await? {
-        Some(raw) => mapping::parse_subscription_groups_blob(&raw, &hlc),
+        Some(raw) => mapping::parse_subscription_groups_blob(&raw, &Hlc::default()),
         None => Vec::new(),
     };
+    let stamps = load_changes(pool, changes::GROUPS).await?;
+    tombstones::stamp_groups(&mut groups, &stamps, device_id);
+    let live: BTreeSet<String> = groups.iter().map(|g| g.name.clone()).collect();
+    groups.extend(tombstones::groups(&stamps, &live, device_id));
     groups.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(to_ndjson(&groups))
 }
@@ -185,13 +206,9 @@ async fn export_subscribed_channels(
 
 async fn export_settings(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {
     let mut entries: Vec<SettingEntry> = Vec::new();
-    for key in mapping::SYNCABLE_SETTINGS {
+    for key in settings_map::desktop_keys() {
         if let Some((value, updated)) = get_setting_with_time(pool, key).await? {
-            entries.push(SettingEntry {
-                key: (*key).to_string(),
-                value: serde_json::Value::String(value),
-                hlc: Hlc::new(mapping::iso_to_ms(&updated), 0, device_id),
-            });
+            entries.extend(settings_map::local_entry(key, &value, &updated, device_id));
         }
     }
     entries.sort_by(|a, b| a.key.cmp(&b.key));
@@ -223,13 +240,23 @@ async fn current_merged_flow(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedFlowNeuroBrain::default(),
     };
-    if let Some(s) = get_setting(pool, NEURO_BRAIN_KEY).await? {
-        if let Ok(ub) = serde_json::from_str::<UserBrain>(&s) {
-            let snap =
-                brainmap::userbrain_to_snapshot(&ub, device_id, Hlc::new(now_ms(), 0, device_id));
-            merged.merge_snapshot(&snap);
-        }
-    }
+    let Some(ub) = get_setting(pool, NEURO_BRAIN_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str::<UserBrain>(&s).ok())
+    else {
+        return Ok(merged);
+    };
+    let baseline: Option<NeuroBaseline> = get_setting(pool, NEURO_BASELINE_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str(&s).ok());
+    let prior_applies = prior_applies(pool, Collection::FlowNeuroBrain).await?;
+    brain_attrib::fold_local_flow(
+        &mut merged,
+        &ub,
+        device_id,
+        &Hlc::new(now_ms(), 0, device_id),
+        &attribution(baseline.as_ref(), prior_applies),
+    );
     Ok(merged)
 }
 
@@ -241,13 +268,23 @@ async fn current_merged_music(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedMusicBrain::default(),
     };
-    if let Some(s) = get_setting(pool, MUSIC_BRAIN_KEY).await? {
-        if let Ok(mb) = serde_json::from_str::<MusicBrain>(&s) {
-            let snap =
-                brainmap::musicbrain_to_snapshot(&mb, device_id, Hlc::new(now_ms(), 0, device_id));
-            merged.merge_snapshot(&snap);
-        }
-    }
+    let Some(mb) = get_setting(pool, MUSIC_BRAIN_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str::<MusicBrain>(&s).ok())
+    else {
+        return Ok(merged);
+    };
+    let baseline: Option<MusicBaseline> = get_setting(pool, MUSIC_BASELINE_KEY)
+        .await?
+        .and_then(|s| serde_json::from_str(&s).ok());
+    let prior_applies = prior_applies(pool, Collection::MusicBrain).await?;
+    brain_attrib::fold_local_music(
+        &mut merged,
+        &mb,
+        device_id,
+        &Hlc::new(now_ms(), 0, device_id),
+        &attribution(baseline.as_ref(), prior_applies),
+    );
     Ok(merged)
 }
 
@@ -276,6 +313,22 @@ async fn get_setting(pool: &SqlitePool, key: &str) -> Result<Option<String>, Syn
             .fetch_optional(pool)
             .await?,
     )
+}
+
+async fn load_changes(
+    pool: &SqlitePool,
+    collection: &'static str,
+) -> Result<BTreeMap<String, Stamp>, SyncError> {
+    let mut conn = pool.acquire().await?;
+    changes::load(&mut conn, collection, now_ms()).await
+}
+
+async fn prior_applies(pool: &SqlitePool, collection: Collection) -> Result<u64, SyncError> {
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_log WHERE collection = ?")
+        .bind(collection.key())
+        .fetch_one(pool)
+        .await?;
+    Ok(u64::try_from(n).unwrap_or(0))
 }
 
 async fn get_setting_with_time(

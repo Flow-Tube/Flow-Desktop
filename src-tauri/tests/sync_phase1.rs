@@ -7,7 +7,7 @@ use flow_desktop_lib::sync::crypto::{
     CryptoError, Role, SessionCipher, compute_sas, generate_master_secret, generate_session_id,
 };
 use flow_desktop_lib::sync::frames::FrameType;
-use flow_desktop_lib::sync::identity::{HlcClock, default_device_name, new_device_id};
+use flow_desktop_lib::sync::identity::{default_device_name, new_device_id};
 use flow_desktop_lib::sync::qr::{QrError, QrPayload};
 
 // --------------------------------------------------------------------------------------------
@@ -18,24 +18,6 @@ use flow_desktop_lib::sync::qr::{QrError, QrPayload};
 fn device_ids_are_unique_and_name_is_friendly() {
     assert_ne!(new_device_id(), new_device_id());
     assert!(default_device_name().starts_with("Flow Desktop ("));
-}
-
-#[test]
-fn hlc_tick_is_monotonic_and_breaks_ties_with_counter() {
-    let mut clock = HlcClock::new("device-aaa");
-
-    let a = clock.tick(1000);
-    let b = clock.tick(1000); // same wall ms -> counter increments
-    let c = clock.tick(1001); // wall advances -> counter resets, physical advances
-
-    assert!(a < b, "ties at equal physical time advance the counter");
-    assert_eq!(b.physical_ms, 1000);
-    assert_eq!(b.counter, a.counter + 1);
-    assert!(b < c);
-    assert_eq!(c.physical_ms, 1001);
-    assert_eq!(c.counter, 0, "counter resets when physical time advances");
-    // the HLC carries the short device-id (hyphen-stripped, lowercased, 8 chars).
-    assert_eq!(c.device_id, short_device_id("device-aaa"));
 }
 
 #[test]
@@ -52,26 +34,6 @@ fn hlc_uses_the_short_device_id_form() {
         "ab",
         "ids shorter than 8 are kept as-is"
     );
-}
-
-#[test]
-fn hlc_never_goes_backwards_when_wall_clock_regresses() {
-    let mut clock = HlcClock::new("d1");
-    let a = clock.tick(5000);
-    let b = clock.tick(4000); // wall clock jumped backwards
-    assert!(b > a, "HLC must not regress even if the wall clock does");
-    assert_eq!(b.physical_ms, 5000);
-}
-
-#[test]
-fn hlc_observe_merges_a_remote_ahead_stamp() {
-    let mut clock = HlcClock::new("local");
-    clock.tick(1000);
-    let remote = Hlc::new(2000, 4, "remote");
-    let merged = clock.observe(&remote, 1500);
-    assert_eq!(merged.physical_ms, 2000, "adopts the highest physical time");
-    assert_eq!(merged.counter, 5, "remote.counter + 1");
-    assert_eq!(merged.device_id, "local");
 }
 
 // --------------------------------------------------------------------------------------------

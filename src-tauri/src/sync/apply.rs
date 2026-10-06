@@ -27,6 +27,7 @@ use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchInsert, WatchRow};
 use crate::sync::merge::{self, MergedFlowNeuroBrain, MergedMusicBrain};
 use crate::sync::protocol::StagedCollection;
+use crate::sync::settings_map;
 
 pub(crate) const NEURO_BRAIN_KEY: &str = "user_neuro_brain";
 pub(crate) const NEURO_MERGED_KEY: &str = "sync_neuro_merged";
@@ -296,20 +297,19 @@ async fn apply_settings(
     device_id: &str,
     ndjson: &[u8],
 ) -> Result<ApplyStats, SyncError> {
-    // Only whitelisted keys are accepted, even if a peer sends others.
+    // Only keys this desktop syncs are accepted, even if a peer sends others.
     let incoming: Vec<SettingEntry> = parse_ndjson::<SettingEntry>(ndjson)?
         .into_iter()
-        .filter(|s| mapping::is_syncable_setting(&s.key))
+        .filter_map(|mut s| {
+            s.key = settings_map::normalize_wire_key(&s.key)?;
+            Some(s)
+        })
         .collect();
 
     let mut local: Vec<SettingEntry> = Vec::new();
-    for key in mapping::SYNCABLE_SETTINGS {
+    for key in settings_map::desktop_keys() {
         if let Some((value, updated)) = get_setting_with_time(tx, key).await? {
-            local.push(SettingEntry {
-                key: (*key).to_string(),
-                value: serde_json::Value::String(value),
-                hlc: Hlc::new(mapping::iso_to_ms(&updated), 0, device_id),
-            });
+            local.extend(settings_map::local_entry(key, &value, &updated, device_id));
         }
     }
     let local_map: BTreeMap<String, SettingEntry> =
@@ -525,16 +525,15 @@ async fn write_setting_value(
     tx: &mut Transaction<'_, Sqlite>,
     entry: &SettingEntry,
 ) -> Result<(), SyncError> {
-    let value = match &entry.value {
-        serde_json::Value::String(s) => s.clone(),
-        other => other.to_string(),
+    let Some((desktop_key, value)) = settings_map::from_wire(&entry.key, &entry.value) else {
+        return Ok(());
     };
     let updated = mapping::ms_to_iso(entry.hlc.physical_ms);
     sqlx::query(
         "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
     )
-    .bind(&entry.key)
+    .bind(desktop_key)
     .bind(value)
     .bind(updated)
     .execute(&mut **tx)
@@ -633,9 +632,9 @@ async fn backup_snapshot(
             }
             Collection::Settings => {
                 let mut map = serde_json::Map::new();
-                for key in mapping::SYNCABLE_SETTINGS {
+                for key in settings_map::desktop_keys() {
                     if let Some(v) = setting_value(pool, key).await? {
-                        map.insert((*key).to_string(), serde_json::json!(v));
+                        map.insert(key.to_string(), serde_json::json!(v));
                     }
                 }
                 obj.insert("settings".to_string(), serde_json::Value::Object(map));

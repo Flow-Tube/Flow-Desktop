@@ -224,84 +224,6 @@ pub fn subscription_groups_to_blob(groups: &[SubscriptionGroup]) -> String {
     serde_json::to_string(&live).unwrap_or_else(|_| "[]".to_string())
 }
 
-/// The curated set of settings that sync across devices: **player, content/UI, and quality**
-/// preferences plus the SponsorBlock/DeArrow feature toggles — i.e. behavior that should feel the
-/// same on every device. Deliberately EXCLUDED: download paths, proxy host/credentials, network
-/// buffer tuning, media-cache size, auto-backup config, private ids, internal counters, and
-/// transient Deep-Flow runtime state. (Cross-platform: Android maps its DataStore keys to these.)
-pub const SYNCABLE_SETTINGS: &[&str] = &[
-    // --- player ---
-    "autoplay_enabled",
-    "video_loop_enabled",
-    "skip_silence_enabled",
-    "stable_volume_enabled",
-    "allow_volume_boost",
-    "remember_playback_speed",
-    "playback_speed",
-    "custom_speeds_enabled",
-    "custom_speed_presets",
-    "long_press_playback_speed",
-    "speed_slider_enabled",
-    "double_tap_seek_seconds",
-    "subtitles_enabled",
-    "preferred_subtitle_language",
-    "subtitle_font_size",
-    "subtitle_bold",
-    "mini_player_show_skip_controls",
-    "mini_player_show_next_prev_controls",
-    "show_fullscreen_title",
-    "adaptive_player_size_enabled",
-    "auto_pip_enabled",
-    "manual_pip_button_enabled",
-    "lyrics_provider_order",
-    "lyrics_provider_enabled_states",
-    // --- content / UI ---
-    "video_title_max_lines",
-    "download_dialog_style",
-    "home_feed_enabled",
-    "show_app_logo_icon",
-    "shorts_shelf_enabled",
-    "home_shorts_shelf_enabled",
-    "continue_watching_enabled",
-    "comments_enabled",
-    "show_related_videos",
-    "hide_watched_videos",
-    "disable_shorts_player",
-    "shorts_navigation_enabled",
-    "shorts_playback_mode",
-    "shorts_auto_scroll_seconds",
-    "music_navigation_enabled",
-    "categories_nav_tab_enabled",
-    "subscription_refresh_on_startup",
-    "subscription_show_videos",
-    "subscription_show_shorts",
-    "subscription_show_live",
-    "show_region_picker_in_explore",
-    "trending_region",
-    "deep_flow_expire_hours",
-    "deep_flow_save_history",
-    // --- quality ---
-    "default_quality_wifi",
-    "default_video_codec",
-    "shorts_quality_wifi",
-    "music_audio_quality",
-    "preferred_audio_language",
-    // --- extensions (feature toggles, not ids/counters) ---
-    "sponsorblock_enabled",
-    "dearrow_enabled",
-    "dearrow_badge_enabled",
-    "rytd_enabled",
-    "sb_submit_enabled",
-    "sponsorblock_server",
-    "sponsorblock_colors",
-    "sponsorblock_categories",
-];
-
-/// Whether a setting key is allowed to sync (defends against a peer pushing excluded keys).
-pub fn is_syncable_setting(key: &str) -> bool {
-    SYNCABLE_SETTINGS.contains(&key)
-}
-
 /// Convert epoch milliseconds to the RFC-3339 string the `watch_history.watch_date` column uses.
 pub fn ms_to_iso(ms: u64) -> String {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms as i64)
@@ -309,10 +231,17 @@ pub fn ms_to_iso(ms: u64) -> String {
         .unwrap_or_default()
 }
 
-/// Parse an RFC-3339 (or similar) timestamp into epoch milliseconds; `0` if unparseable.
+/// Parse a timestamp into epoch milliseconds; `0` if unparseable. Accepts RFC 3339 and SQLite's
+/// offset-less `CURRENT_TIMESTAMP` form (`YYYY-MM-DD HH:MM:SS`, always UTC), which the settings
+/// table writes for every local change.
 pub fn iso_to_ms(s: &str) -> u64 {
     chrono::DateTime::parse_from_rfc3339(s)
-        .map(|d| d.timestamp_millis().max(0) as u64)
+        .map(|d| d.timestamp_millis())
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+                .map(|d| d.and_utc().timestamp_millis())
+        })
+        .map(|ms| ms.max(0) as u64)
         .unwrap_or(0)
 }
 

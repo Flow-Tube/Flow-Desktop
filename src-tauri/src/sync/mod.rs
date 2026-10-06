@@ -14,6 +14,7 @@ pub mod merge;
 pub mod protocol;
 pub mod qr;
 pub mod session;
+pub mod settings_map;
 pub mod transport;
 
 /// `FLOW-SYNC` protocol version implemented by this build.

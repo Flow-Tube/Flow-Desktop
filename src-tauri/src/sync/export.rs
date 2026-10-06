@@ -25,6 +25,7 @@ use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchRow};
 use crate::sync::merge::{MergedFlowNeuroBrain, MergedMusicBrain};
 use crate::sync::protocol::OutgoingCollection;
+use crate::sync::settings_map;
 
 const WATCH_SELECT: &str = "SELECT video_id, title, channel_name, channel_id, watch_date, \
      watch_duration_seconds, total_duration_seconds, is_music, is_short, updated_hlc \
@@ -185,13 +186,9 @@ async fn export_subscribed_channels(
 
 async fn export_settings(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {
     let mut entries: Vec<SettingEntry> = Vec::new();
-    for key in mapping::SYNCABLE_SETTINGS {
+    for key in settings_map::desktop_keys() {
         if let Some((value, updated)) = get_setting_with_time(pool, key).await? {
-            entries.push(SettingEntry {
-                key: (*key).to_string(),
-                value: serde_json::Value::String(value),
-                hlc: Hlc::new(mapping::iso_to_ms(&updated), 0, device_id),
-            });
+            entries.extend(settings_map::local_entry(key, &value, &updated, device_id));
         }
     }
     entries.sort_by(|a, b| a.key.cmp(&b.key));

@@ -8,10 +8,12 @@ use flow_desktop_lib::sync::canonical::Collection::{self, Likes, WatchHistory};
 use flow_desktop_lib::sync::crypto::{
     Role, SessionCipher, generate_master_secret, generate_session_id,
 };
-use flow_desktop_lib::sync::frames::{CapabilitiesFrame, Capability, HelloFrame, Platform};
+use flow_desktop_lib::sync::frames::{
+    ApplyResultEntry, ApplyResultFrame, CapabilitiesFrame, Capability, HelloFrame, Platform,
+};
 use flow_desktop_lib::sync::protocol::{
-    ClientOutcome, HostOutcome, OutgoingCollection, run_client_sender, run_host_receiver,
-    run_receiver, run_sender,
+    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection,
+    run_client_sender, run_host_receiver, run_receiver, run_sender,
 };
 use flow_desktop_lib::sync::transport;
 
@@ -45,6 +47,24 @@ fn oc(c: Collection, data: &[u8]) -> OutgoingCollection {
         collection: c,
         ndjson: data.to_vec(),
     }
+}
+
+/// Apply step for tests: report every record as added and hand the staged data back.
+async fn stage_only(
+    _peer: HelloFrame,
+    staged: Vec<StagedCollection>,
+) -> ApplyOutput<Vec<StagedCollection>> {
+    let mut frame = ApplyResultFrame::default();
+    for c in &staged {
+        frame.collections.insert(
+            c.collection.key().to_string(),
+            ApplyResultEntry {
+                added: c.record_count,
+                ..ApplyResultEntry::default()
+            },
+        );
+    }
+    Ok((frame, staged))
 }
 
 const WH_NDJSON: &[u8] = b"{\"videoId\":\"a\",\"p\":0.5}\n{\"videoId\":\"b\",\"p\":1.0}";
@@ -86,6 +106,7 @@ async fn one_way_transfer_succeeds_for_all_selected_collections() {
             assert_eq!(manifest.collections.len(), 2);
             true
         },
+        stage_only,
     )
     .await
     .unwrap();
@@ -97,10 +118,10 @@ async fn one_way_transfer_succeeds_for_all_selected_collections() {
         ClientOutcome::Declined => panic!("receiver unexpectedly declined"),
     };
     assert_eq!(payload.peer.device_id, "host-1");
-    assert_eq!(payload.collections.len(), 2);
+    assert_eq!(payload.applied.len(), 2);
 
     let wh = payload
-        .collections
+        .applied
         .iter()
         .find(|c| c.collection == WatchHistory)
         .unwrap();
@@ -111,7 +132,7 @@ async fn one_way_transfer_succeeds_for_all_selected_collections() {
     assert_eq!(wh.record_count, 2);
 
     let lk = payload
-        .collections
+        .applied
         .iter()
         .find(|c| c.collection == Likes)
         .unwrap();
@@ -175,6 +196,7 @@ async fn sender_streams_collections_in_sorted_key_order() {
             assert_eq!(keys, ["likes", "watch_history"]);
             true
         },
+        stage_only,
     )
     .await
     .unwrap();
@@ -184,9 +206,10 @@ async fn sender_streams_collections_in_sorted_key_order() {
         ClientOutcome::Declined => panic!("receiver declined"),
     };
 
-    // run_receiver stages in wire order (= SELECTION = stream); it must equal the sorted MANIFEST.
+    // Collections are staged in arrival order, which must equal the sorted MANIFEST: released
+    // desktops route by SELECTION order and Android by MANIFEST order.
     let stream_order: Vec<&str> = received
-        .collections
+        .applied
         .iter()
         .map(|c| c.collection.key())
         .collect();
@@ -198,13 +221,13 @@ async fn sender_streams_collections_in_sorted_key_order() {
 
     // …and payloads landed under the right names.
     let wh = received
-        .collections
+        .applied
         .iter()
         .find(|c| c.collection == WatchHistory)
         .unwrap();
     assert_eq!(wh.ndjson, WH_NDJSON);
     let lk = received
-        .collections
+        .applied
         .iter()
         .find(|c| c.collection == Likes)
         .unwrap();
@@ -253,6 +276,7 @@ async fn capability_negotiation_skips_collections_the_peer_cannot_consume() {
             );
             true
         },
+        stage_only,
     )
     .await
     .unwrap();
@@ -262,8 +286,8 @@ async fn capability_negotiation_skips_collections_the_peer_cannot_consume() {
         ClientOutcome::Completed(p) => p,
         ClientOutcome::Declined => panic!("declined"),
     };
-    assert_eq!(payload.collections.len(), 1);
-    assert_eq!(payload.collections[0].collection, WatchHistory);
+    assert_eq!(payload.applied.len(), 1);
+    assert_eq!(payload.applied[0].collection, WatchHistory);
 }
 
 /// The camera-less-desktop direction: the **host receives** (it showed a `role:"receiver"` QR) and the
@@ -290,6 +314,7 @@ async fn host_receives_while_client_sends() {
                 assert_eq!(manifest.collections.len(), 2);
                 true
             },
+            stage_only,
         )
         .await
         .unwrap()
@@ -315,9 +340,9 @@ async fn host_receives_while_client_sends() {
         ClientOutcome::Declined => panic!("host receiver declined"),
     };
     assert_eq!(received.peer.device_id, "client-1");
-    assert_eq!(received.collections.len(), 2);
+    assert_eq!(received.applied.len(), 2);
     let wh = received
-        .collections
+        .applied
         .iter()
         .find(|c| c.collection == WatchHistory)
         .unwrap();
@@ -364,6 +389,7 @@ async fn receiver_decline_aborts_both_sides_cleanly() {
         hello("client-1", "Phone"),
         caps(&[(WatchHistory, true, true)]),
         |_, _| async { false }, // user taps "Cancel" on the merge prompt
+        stage_only,
     )
     .await
     .unwrap();

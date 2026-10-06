@@ -36,11 +36,14 @@ use crate::sync::crypto::{
 };
 use crate::sync::error::SyncError;
 use crate::sync::export;
-use crate::sync::frames::{CapabilitiesFrame, Capability, HelloFrame, ManifestFrame, Platform};
+use crate::sync::frames::{
+    ApplyResultEntry, ApplyResultFrame, CapabilitiesFrame, Capability, HelloFrame, ManifestFrame,
+    Platform,
+};
 use crate::sync::ledger;
 use crate::sync::protocol::{
-    ClientOutcome, HostOutcome, OutgoingCollection, run_client_sender, run_host_receiver,
-    run_receiver, run_sender,
+    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection,
+    run_client_sender, run_host_receiver, run_receiver, run_sender,
 };
 use crate::sync::qr::QrPayload;
 use crate::sync::transport;
@@ -50,8 +53,12 @@ use serde_json::Value;
 const CAP_SCHEMA: i32 = 1;
 /// How long the QR / host listener stays open waiting for a peer.
 const HOST_TTL: Duration = Duration::from_secs(180);
-/// How long to wait for the TCP/WebSocket connect when joining.
+/// How long to wait for the TCP/WebSocket connect when joining, across every address in the code.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// The floor for one address when the code offers several.
+const MIN_CONNECT_PER_ADDRESS: Duration = Duration::from_secs(5);
+/// Extra host addresses offered in the QR after the best one.
+const QR_FALLBACK_ADDRESSES: usize = 2;
 /// How long a consent prompt waits for the user before auto-declining.
 const CONSENT_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -101,6 +108,8 @@ pub struct SyncStatus {
     pub phase: String,
     pub role: Option<String>, // "host" | "client"
     pub message: Option<String>,
+    /// For `error`: the [`SyncError::kind`] the UI turns into a translated, actionable message.
+    pub error_kind: Option<String>,
     pub sas: Option<String>,
     pub peer: Option<PeerInfo>,
     /// For `awaitingConsent`: `hostAllow` (sender approves the peer) or `clientMerge` (receiver
@@ -118,6 +127,7 @@ impl SyncStatus {
             phase: "idle".into(),
             role: None,
             message: None,
+            error_kind: None,
             sas: None,
             peer: None,
             consent_kind: None,
@@ -136,11 +146,12 @@ impl SyncStatus {
         }
     }
 
-    fn error(msg: impl Into<String>, role: Option<&str>) -> Self {
+    fn failed(error: &SyncError, role: Option<&str>) -> Self {
         Self {
             phase: "error".into(),
             role: role.map(String::from),
-            message: Some(msg.into()),
+            message: Some(error.to_string()),
+            error_kind: Some(error.kind().to_string()),
             ..Self::idle()
         }
     }
@@ -435,9 +446,7 @@ pub async fn start_host(
     receive: bool,
 ) -> Result<HostStartInfo, SyncError> {
     if manager.is_busy().await {
-        return Err(SyncError::Protocol(
-            "a sync session is already active".into(),
-        ));
+        return Err(SyncError::Busy);
     }
 
     let pool = pool_of(&app);
@@ -457,9 +466,11 @@ pub async fn start_host(
         candidates = ?candidates.iter().map(|c| format!("{}={}{}", c.interface, c.ip, if c.virtual_iface { " (virtual)" } else { "" })).collect::<Vec<_>>(),
         "LAN address candidates, best first"
     );
-    let ip = candidates.into_iter().next().map(|c| c.ip).ok_or_else(|| {
+    let mut addresses = candidates.into_iter().map(|c| c.ip);
+    let ip = addresses.next().ok_or_else(|| {
         SyncError::Transport("no usable LAN IPv4 address found (are you on Wi-Fi/LAN?)".into())
     })?;
+    let fallbacks: Vec<String> = addresses.take(QR_FALLBACK_ADDRESSES).collect();
     let expires_at = now_s() + HOST_TTL.as_secs();
     let qr = if receive {
         QrPayload::new_receiving(
@@ -480,6 +491,7 @@ pub async fn start_host(
             expires_at,
         )
     }
+    .with_fallback_ips(fallbacks)
     .to_json();
 
     let (h2c_fp, c2h_fp) = key_fingerprints(&master, &session_id);
@@ -521,7 +533,7 @@ pub async fn start_host(
                 {
                     tracing::error!(target: "flow::sync::session", role = "host-receiver", "session failed: {e}");
                     manager
-                        .set_status(&app, SyncStatus::error(e.to_string(), Some("host")))
+                        .set_status(&app, SyncStatus::failed(&e, Some("host")))
                         .await;
                 }
             } else {
@@ -563,22 +575,14 @@ async fn host_receive_session(
     session_id: crate::sync::crypto::SessionId,
     device_id: &str,
 ) -> Result<(), SyncError> {
-    let ch = match timeout(HOST_TTL, transport::accept(&listener)).await {
-        Ok(ch) => ch?,
-        Err(_) => {
-            manager
-                .set_status(
-                    app,
-                    SyncStatus::error("timed out waiting for a device to connect", Some("host")),
-                )
-                .await;
-            return Ok(());
-        }
-    };
+    let ch = timeout(HOST_TTL, transport::accept(&listener))
+        .await
+        .map_err(|_| SyncError::NoPeer)??;
 
     let sas = compute_sas(&master, &session_id);
     let cipher = SessionCipher::new(&master, session_id, Role::Host);
-    let device_name = ledger::device_name(&pool_of(app)).await?;
+    let pool = pool_of(app);
+    let device_name = ledger::device_name(&pool).await?;
     let hello = our_hello(device_id, &device_name);
     let caps = desktop_capabilities();
 
@@ -589,10 +593,11 @@ async fn host_receive_session(
         caps,
         true,
         merge_consent(app, manager, sas, "host"),
+        apply_step(app, manager, "host", pool.clone(), device_id.to_string()),
     )
     .await?;
 
-    finish_receive(app, manager, "host", &pool_of(app), device_id, outcome).await
+    finish_receive(app, manager, "host", &pool, outcome).await
 }
 
 async fn host_session(
@@ -625,7 +630,7 @@ async fn host_session(
     if let Err(e) = result {
         tracing::error!(target: "flow::sync::session", role = "host", "session failed: {e}");
         manager
-            .set_status(&app, SyncStatus::error(e.to_string(), Some("host")))
+            .set_status(&app, SyncStatus::failed(&e, Some("host")))
             .await;
     }
 }
@@ -641,23 +646,21 @@ async fn host_run(
     device_name: &str,
     sas: String,
 ) -> Result<(), SyncError> {
-    let ch = match timeout(HOST_TTL, transport::accept(&listener)).await {
-        Ok(ch) => ch?,
-        Err(_) => {
-            manager
-                .set_status(
-                    app,
-                    SyncStatus::error("timed out waiting for a device to connect", Some("host")),
-                )
-                .await;
-            return Ok(());
-        }
-    };
+    let mut ch = timeout(HOST_TTL, transport::accept(&listener))
+        .await
+        .map_err(|_| SyncError::NoPeer)??;
 
     let cipher = SessionCipher::new(&master, session_id, Role::Host);
     let pool = pool_of(app);
-    let mut outgoing = export::export_collections(&pool, device_id, selection).await?;
-    enrich_outgoing_albums(app, &mut outgoing).await;
+    // The phone is connected and waiting for HELLO_ACK while this runs; album enrichment fetches
+    // over the network, so keep answering its pings or it drops the link.
+    let outgoing = ch
+        .keepalive_while(async {
+            let mut outgoing = export::export_collections(&pool, device_id, selection).await?;
+            enrich_outgoing_albums(app, &mut outgoing).await;
+            Ok::<_, SyncError>(outgoing)
+        })
+        .await??;
     let hello = our_hello(device_id, device_name);
     let caps = desktop_capabilities();
 
@@ -708,15 +711,11 @@ pub async fn scan_join(
     qr_text: String,
 ) -> Result<(), SyncError> {
     if manager.is_busy().await {
-        return Err(SyncError::Protocol(
-            "a sync session is already active".into(),
-        ));
+        return Err(SyncError::Busy);
     }
     let payload = QrPayload::from_json(&qr_text)?;
     if payload.is_expired(now_s()) {
-        return Err(SyncError::Protocol(
-            "this sync code has expired — generate a new one".into(),
-        ));
+        return Err(SyncError::Expired);
     }
 
     manager
@@ -735,7 +734,7 @@ pub async fn scan_join(
             if let Err(e) = res {
                 tracing::error!(target: "flow::sync::session", role = "client", "session failed: {e}");
                 manager
-                    .set_status(&app, SyncStatus::error(e.to_string(), Some("client")))
+                    .set_status(&app, SyncStatus::failed(&e, Some("client")))
                     .await;
             }
         })
@@ -765,10 +764,7 @@ async fn client_recv_session(
     let device_id = ledger::get_or_create_device_id(&pool).await?;
     let device_name = ledger::device_name(&pool).await?;
 
-    let ch = match timeout(CONNECT_TIMEOUT, transport::connect(&payload.ip, payload.p)).await {
-        Ok(ch) => ch?,
-        Err(_) => return Err(SyncError::Transport("connection timed out".into())),
-    };
+    let ch = connect_any(&payload).await?;
     let cipher = SessionCipher::new(&master, session_id, Role::Client);
     let hello = our_hello(&device_id, &device_name);
     let caps = desktop_capabilities();
@@ -779,10 +775,11 @@ async fn client_recv_session(
         hello,
         caps,
         merge_consent(app, manager, sas, "client"),
+        apply_step(app, manager, "client", pool.clone(), device_id.clone()),
     )
     .await?;
 
-    finish_receive(app, manager, "client", &pool, &device_id, outcome).await
+    finish_receive(app, manager, "client", &pool, outcome).await
 }
 
 /// Connect as the WebSocket client and **send** (we scanned a `role:"receiver"` QR — the host wants our
@@ -812,10 +809,7 @@ async fn client_send_session(
     let mut outgoing = export::export_collections(&pool, &device_id, &selection).await?;
     enrich_outgoing_albums(app, &mut outgoing).await;
 
-    let ch = match timeout(CONNECT_TIMEOUT, transport::connect(&payload.ip, payload.p)).await {
-        Ok(ch) => ch?,
-        Err(_) => return Err(SyncError::Transport("connection timed out".into())),
-    };
+    let ch = connect_any(&payload).await?;
     let cipher = SessionCipher::new(&master, session_id, Role::Client);
     let hello = our_hello(&device_id, &device_name);
     let caps = desktop_capabilities();
@@ -884,15 +878,86 @@ fn merge_consent(
     }
 }
 
-/// Shared apply pipeline for any receive (scan-receive or host-receive): consent already handled by
-/// the protocol; here we flush brains → atomic merge → reload brains → backup → peer → refresh UI.
+/// Dial each address the code offers, in order, until one answers.
+async fn connect_any(
+    payload: &QrPayload,
+) -> Result<transport::WsChannel<transport::ClientStream>, SyncError> {
+    let addresses = payload.dial_addresses();
+    let per_address = (CONNECT_TIMEOUT / u32::try_from(addresses.len()).unwrap_or(1).max(1))
+        .max(MIN_CONNECT_PER_ADDRESS);
+    let mut last_error = SyncError::Transport("connection timed out".into());
+    for ip in addresses {
+        match timeout(per_address, transport::connect(ip, payload.p)).await {
+            Ok(Ok(ch)) => return Ok(ch),
+            Ok(Err(e)) => last_error = e,
+            Err(_) => last_error = SyncError::Transport(format!("{ip} did not answer")),
+        }
+        tracing::info!(target: "flow::sync::session", %ip, "address unreachable: {last_error}");
+    }
+    Err(last_error)
+}
+
+/// The receiver's apply step, run inside the protocol so `APPLY_RESULT` reports what was really
+/// saved: flush brains → atomic merge → reload brains → keep the pre-merge backup.
+fn apply_step(
+    app: &AppHandle,
+    manager: &Arc<SyncManager>,
+    role: &'static str,
+    pool: SqlitePool,
+    device_id: String,
+) -> impl FnOnce(
+    HelloFrame,
+    Vec<StagedCollection>,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = ApplyOutput<apply::ApplyReport>> + Send>,
+> {
+    let app = app.clone();
+    let manager = manager.clone();
+    move |peer: HelloFrame, staged: Vec<StagedCollection>| {
+        Box::pin(async move {
+            manager
+                .set_status(&app, SyncStatus::simple("transferring", Some(role)))
+                .await;
+            flush_brains(&app).await;
+            let report = apply::apply_payload(&pool, &device_id, &peer.device_id, &staged)
+                .await
+                .map_err(|e| match e {
+                    SyncError::Apply(_) => e,
+                    other => SyncError::Apply(other.to_string()),
+                })?;
+            reload_brains(&app).await;
+            let _ =
+                crate::db::settings::set_setting(&pool, "sync_last_backup", &report.backup).await;
+            let mut frame = ApplyResultFrame::default();
+            for s in &report.stats {
+                tracing::info!(
+                    target: "flow::sync::session", role, collection = %s.collection_key,
+                    added = s.added, updated = s.updated, skipped = s.skipped, tombstoned = s.tombstoned,
+                    "merged collection"
+                );
+                frame.collections.insert(
+                    s.collection_key.clone(),
+                    ApplyResultEntry {
+                        added: s.added,
+                        updated: s.updated,
+                        skipped: s.skipped,
+                        tombstoned: s.tombstoned,
+                    },
+                );
+            }
+            Ok((frame, report))
+        })
+    }
+}
+
+/// Shared completion for any receive (scan-receive or host-receive): the protocol already applied
+/// the merge; record the peer, refresh the UI stores and report the stats.
 async fn finish_receive(
     app: &AppHandle,
     manager: &Arc<SyncManager>,
     role: &'static str,
     pool: &SqlitePool,
-    device_id: &str,
-    outcome: ClientOutcome,
+    outcome: ClientOutcome<apply::ApplyReport>,
 ) -> Result<(), SyncError> {
     let received = match outcome {
         ClientOutcome::Completed(p) => p,
@@ -903,29 +968,8 @@ async fn finish_receive(
             return Ok(());
         }
     };
+    let report = received.applied;
 
-    manager
-        .set_status(app, SyncStatus::simple("transferring", Some(role)))
-        .await;
-
-    flush_brains(app).await;
-    let report = apply::apply_payload(
-        pool,
-        device_id,
-        &received.peer.device_id,
-        &received.collections,
-    )
-    .await?;
-    reload_brains(app).await;
-    for s in &report.stats {
-        tracing::info!(
-            target: "flow::sync::session", role, collection = %s.collection_key,
-            added = s.added, updated = s.updated, skipped = s.skipped, tombstoned = s.tombstoned,
-            "merged collection"
-        );
-    }
-
-    let _ = crate::db::settings::set_setting(pool, "sync_last_backup", &report.backup).await;
     ledger::upsert_peer(
         pool,
         &received.peer.device_id,
@@ -934,10 +978,10 @@ async fn finish_receive(
     )
     .await?;
 
-    let collections: Vec<String> = received
-        .collections
+    let collections: Vec<String> = report
+        .stats
         .iter()
-        .map(|c| c.collection.key().to_string())
+        .map(|s| s.collection_key.clone())
         .collect();
     let _ = app.emit(EVENT_REFRESH, collections);
 

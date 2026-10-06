@@ -145,3 +145,14 @@ fn collection_serializes_snake_case() {
     assert_eq!(v["send"][1], "flow_neuro_brain");
     assert_eq!(v["accept"][0], "likes");
 }
+
+#[test]
+fn selection_drops_collections_this_build_does_not_know() {
+    // Android 2.3 adds `notes`; one unknown name used to fail the whole frame and end the session.
+    let s: SelectionFrame = serde_json::from_str(
+        r#"{"send":["watch_history","notes","likes"],"accept":["notes","future_thing"]}"#,
+    )
+    .unwrap();
+    assert_eq!(s.send, vec![Collection::WatchHistory, Collection::Likes]);
+    assert!(s.accept.is_empty());
+}

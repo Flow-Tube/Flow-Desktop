@@ -11,10 +11,15 @@ import type { MusicStreamInfo } from "../types/music";
  * cache read, and a track played again inside the window costs nothing.
  */
 
-/** Music URLs stay valid for hours and the proxy session behind them for one;
- * a few minutes covers a queue advance and a replay without ever handing the
- * element a session the proxy has dropped. */
-const MUSIC_STREAM_TTL_MS = 4 * 60_000;
+/** Music URLs stay valid for hours and the proxy session behind them for one
+ * hour. Staying well inside that keeps a link prefetched at the start of a long
+ * track usable when the track ends, without ever handing the element a session
+ * the proxy has dropped. */
+const MUSIC_STREAM_TTL_MS = 50 * 60_000;
+
+/** Long enough for the backend to walk every client on a slow link; past this
+ * the request is treated as failed rather than left spinning. */
+const MUSIC_STREAM_TIMEOUT_MS = 15_000;
 
 /** A queue only ever needs the track playing and the one or two after it. */
 const MAX_CACHED_TRACKS = 8;
@@ -42,7 +47,17 @@ function request(videoId: string, quality: MusicAudioQuality): Promise<MusicStre
   const existing = inFlight.get(key);
   if (existing) return existing;
 
-  const pending = getMusicStream(videoId, quality).then((info) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject({ kind: "streaming", message: `Timed out resolving the stream for ${videoId}` }),
+      MUSIC_STREAM_TIMEOUT_MS,
+    );
+  });
+  const pending = Promise.race([getMusicStream(videoId, quality), timeout]).then((info) => {
+    // An invalidate while this was in flight means the caller no longer trusts
+    // the answer; caching it would hand the dead link straight back.
+    if (inFlight.get(key) !== tracked) return info;
     cache.set(key, { info, resolvedAt: Date.now() });
     while (cache.size > MAX_CACHED_TRACKS) {
       const oldest = cache.keys().next().value;
@@ -51,7 +66,8 @@ function request(videoId: string, quality: MusicAudioQuality): Promise<MusicStre
     }
     return info;
   });
-  const tracked = pending.finally(() => {
+  const tracked: Promise<MusicStreamInfo> = pending.finally(() => {
+    clearTimeout(timer);
     if (inFlight.get(key) === tracked) inFlight.delete(key);
   });
   inFlight.set(key, tracked);

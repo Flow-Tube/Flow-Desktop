@@ -14,7 +14,8 @@ import {
   type HostStartInfo,
   type SyncStatus,
 } from "../lib/api/sync";
-import { getBackendErrorMessage } from "../lib/api/errors";
+import { getBackendErrorMessage, normalizeBackendError } from "../lib/api/errors";
+import { syncErrorMessage } from "../lib/syncErrors";
 import { isTauriEnv } from "../lib/api/env";
 import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "./useLikesStore";
 import { useAppSettingsStore } from "./useAppSettingsStore";
@@ -23,6 +24,11 @@ import { useSubscriptionStore } from "./useSubscriptionStore";
 import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "../lib/playlistLibrary";
 
 const IDLE_STATUS: SyncStatus = { phase: "idle" };
+
+function describeSyncError(error: unknown): string {
+  const { kind, message } = normalizeBackendError(error);
+  return syncErrorMessage(kind, message);
+}
 
 /// Reload the Zustand-cached frontend stores after a merge wrote the DB directly.
 async function applyRefresh(collections: string[]) {
@@ -92,7 +98,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         patch.hostInfo = null;
       }
       if (status.phase === "error") {
-        patch.error = status.message ?? "Sync failed";
+        patch.error = syncErrorMessage(status.errorKind, status.message);
       }
       set(patch);
     });
@@ -114,7 +120,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       const hostInfo = await startSyncHost(collections);
       set({ hostInfo, busy: false });
     } catch (error) {
-      set({ busy: false, error: getBackendErrorMessage(error) });
+      set({ busy: false, error: describeSyncError(error) });
     }
   },
 
@@ -124,7 +130,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       const hostInfo = await startSyncHostReceive();
       set({ hostInfo, busy: false });
     } catch (error) {
-      set({ busy: false, error: getBackendErrorMessage(error) });
+      set({ busy: false, error: describeSyncError(error) });
     }
   },
 
@@ -134,7 +140,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       await scanSyncJoin(qr.trim());
       set({ busy: false });
     } catch (error) {
-      set({ busy: false, error: getBackendErrorMessage(error) });
+      set({ busy: false, error: describeSyncError(error) });
     }
   },
 

@@ -28,7 +28,7 @@ import { useDownloadStore } from '../../store/useDownloadStore';
 import { useDownloadsLibraryStore } from '../../store/useDownloadsLibraryStore';
 import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
 import { extractDominantColorFromImage, type Rgb } from '../../lib/useDominantColor';
-import { formatPublishedText } from '../../lib/publishedDate';
+import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publishedDate';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 
 export interface VideoCardProps {
@@ -44,6 +44,8 @@ export interface VideoCardProps {
     ref?: React.Ref<HTMLButtonElement>;
   };
   isDragActive?: boolean;
+  /** List rows in a playlist sorted by date added say when each video was added. */
+  showAddedDate?: boolean;
 }
 
 /*
@@ -99,6 +101,7 @@ function VideoCardComponent({
   showDragHandle = true,
   dragHandleProps,
   isDragActive = false,
+  showAddedDate = false,
 }: VideoCardProps) {
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
@@ -651,9 +654,17 @@ function VideoCardComponent({
             {video.channelName}
           </button>
           <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
-            {video.viewCountText && <span>{video.viewCountText}</span>}
-            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-            {publishedText && <span>{publishedText}</span>}
+            {showAddedDate && video.addedAtInPlaylist ? (
+              <span>
+                {getString("playlist_video_added_template", formatYouTubeRelativeTime(video.addedAtInPlaylist))}
+              </span>
+            ) : (
+              <>
+                {video.viewCountText && <span>{video.viewCountText}</span>}
+                {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+                {publishedText && <span>{publishedText}</span>}
+              </>
+            )}
           </div>
         </div>
 

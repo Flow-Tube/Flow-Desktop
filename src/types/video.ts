@@ -8,6 +8,8 @@ export interface VideoSummary {
   publishedText?: string | null;
   /** Epoch ms a stored track's relative `publishedText` is pinned to. */
   publishedAt?: number | null;
+  /** Epoch ms a stored track was added to its playlist; missing for tracks saved before it was kept. */
+  addedAtInPlaylist?: number | null;
   viewCountText?: string | null;
   channelAvatarUrl?: string | null;
   watchProgressPercent?: number | null;

@@ -18,7 +18,10 @@ import { findDownloadedRecord } from "../lib/useDownloads";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
 import { normalizeBackendError } from "../lib/api/errors";
 import { recordPlayerEvent } from "../lib/playerDiagnostics";
+import { logToBackend } from "../lib/diagnostics";
 import { musicAudioEngine } from "../lib/audio/musicAudioEngine";
+import { preloadTrack } from "../lib/musicPreload";
+import { resetQueueOrder, upcomingIndex, type QueueRepeatMode } from "../lib/musicQueueOrder";
 import { SETTINGS } from "../lib/settings/schema";
 import {
   EQ_FLAT,
@@ -29,7 +32,7 @@ import {
 import { getSettingValue } from "./useAppSettingsStore";
 
 export type MusicViewState = "dock" | "full" | "queue" | "lyrics";
-export type MusicRepeatMode = "none" | "one" | "all";
+export type MusicRepeatMode = QueueRepeatMode;
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
@@ -99,14 +102,25 @@ const saveConfig = (get: () => MusicPlayerState) => {
   }
 };
 
-const pickRandomIndex = (length: number, exclude: number): number => {
-  if (length <= 1) return 0;
-  let next = exclude;
-  while (next === exclude) next = Math.floor(Math.random() * length);
-  return next;
-};
-
 const PLAYBACK_ERROR_FALLBACK = "Playback failed";
+
+// The track a media-element failure was already recovered for; a second failure
+// on it is shown to the user instead of looping.
+let recoveredVideoId: string | null = null;
+
+// When the current load began, for the start-up timing in the diagnostics log.
+let loadStartedAt: { videoId: string; at: number } | null = null;
+
+// A stall with no bytes arriving for this long is treated as a dead connection
+// and recovered; a slow one that is still receiving is left to finish.
+const STALL_CHECK_MS = 5_000;
+const STALL_LIMIT_MS = 15_000;
+let stallWatch: ReturnType<typeof setInterval> | null = null;
+
+const stopStallWatch = () => {
+  if (stallWatch !== null) clearInterval(stallWatch);
+  stallWatch = null;
+};
 const MUSIC_AUDIO_QUALITY_VALUES = new Set(["Auto", "High", "Medium", "Low"]);
 
 // --- radio / autoplay -------------------------------------------------
@@ -229,8 +243,10 @@ interface MusicPlayerState {
 
   // --- internal: driven by the root <audio> controller (element → store) ---
   _ensureRadio: () => Promise<void>;
-  _loadIndex: (index: number) => Promise<void>;
+  _loadIndex: (index: number, options?: { resumeAt?: number }) => Promise<void>;
   _prefetchUpcoming: () => void;
+  _preloadUpcoming: () => void;
+  _onPreloadError: () => void;
   _syncTime: (progress: number, duration: number) => void;
   _reflectPlaying: (isPlaying: boolean) => void;
   _setBuffering: (isBuffering: boolean) => void;
@@ -346,15 +362,16 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     return radioInFlight;
   },
 
-  _loadIndex: async (index) => {
+  _loadIndex: async (index, options) => {
     const track = get().queue[index];
     if (!track) return;
     const videoId = videoIdOf(track);
+    const resumeAt = options?.resumeAt ?? 0;
 
     set({
       currentTrack: track,
       currentIndex: index,
-      progress: 0,
+      progress: resumeAt,
       duration: track.duration ?? 0,
       isPlaying: true,
       isBuffering: true,
@@ -362,10 +379,29 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       streamErrorKind: null,
       loadingStreamId: videoId,
     });
+    if (recoveredVideoId !== videoId) recoveredVideoId = null;
+    loadStartedAt = { videoId, at: performance.now() };
     recordPlayerEvent(`music resolve start: ${videoId}`);
 
-    // Prefetch the radio station ahead of time so the queue never dead-ends.
-    void get()._ensureRadio();
+    // Radio top-up and next-track warming wait until this track is audible, so
+    // they never compete with it for a slow connection.
+    const afterStart = () => {
+      void get()._ensureRadio();
+      get()._prefetchUpcoming();
+    };
+
+    // Gapless: the standby element already holds this track, buffered.
+    if (resumeAt === 0 && musicAudioEngine.activatePreloaded(videoId)) {
+      const loudnessDb = musicAudioEngine.getActiveLoudness();
+      set({ loudnessDb, loadingStreamId: null });
+      musicAudioEngine.setLoudness(loudnessDb, get().normalizationEnabled);
+      await musicAudioEngine.play();
+      recordPlayerEvent(`music started from preload: ${videoId}`);
+      afterStart();
+      return;
+    }
+    // Whatever the standby element holds is not what plays next any more.
+    musicAudioEngine.clearPreload();
 
     const audioQuality = getMusicAudioQualitySetting();
 
@@ -398,22 +434,34 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
           });
           musicAudioEngine.setLoudness(null, get().normalizationEnabled);
           await musicAudioEngine.load(offline.url);
+          musicAudioEngine.seekWhenReady(resumeAt);
           await musicAudioEngine.play();
-          get()._prefetchUpcoming();
+          afterStart();
           return;
         } catch (offlineError) {
           console.warn("Offline track unavailable, falling back to stream", offlineError);
         }
       }
 
-      const info = await (streamRequest ?? resolveMusicStream(videoId, audioQuality));
+      let info: MusicStreamInfo;
+      try {
+        info = await (streamRequest ?? resolveMusicStream(videoId, audioQuality));
+      } catch (firstError) {
+        // One automatic retry on a fresh lookup: a timeout or a dropped
+        // connection on a slow link usually clears on the second attempt.
+        if (get().loadingStreamId !== videoId) return;
+        recordPlayerEvent(`music resolve retry: ${normalizeBackendError(firstError).kind}`);
+        invalidateMusicStream(videoId);
+        info = await resolveMusicStream(videoId, audioQuality);
+      }
       if (get().loadingStreamId !== videoId) return;
 
       set({ loudnessDb: info.loudnessDb, loadingStreamId: null });
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
       await musicAudioEngine.load(info.audioUrl);
+      musicAudioEngine.seekWhenReady(resumeAt);
       await musicAudioEngine.play();
-      get()._prefetchUpcoming();
+      afterStart();
     } catch (e) {
       if (get().loadingStreamId !== videoId) return;
       const normalized = normalizeBackendError(e);
@@ -447,8 +495,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // Tear down the player entirely — stops audio, clears the queue, hides the
   // dock/overlay. (The controller flushes a final history record on track clear.)
   dismiss: () => {
+    stopStallWatch();
     musicAudioEngine.stop();
     resetRadioSession();
+    resetQueueOrder();
     set({
       currentTrack: null,
       queue: [],
@@ -471,25 +521,36 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // Which track plays next depends on shuffle and repeat, so ask the same
   // question the transport does rather than assuming the following index.
   _prefetchUpcoming: () => {
-    const { queue, currentIndex, isShuffle, repeatMode } = get();
-    if (queue.length === 0 || currentIndex < 0) return;
-    // Shuffle picks its next track at random on advance, so there is nothing to
-    // warm; repeat-one replays what is already loaded.
-    if (isShuffle || repeatMode === "one") return;
-
-    const nextIndex = currentIndex + 1;
-    const upcoming =
-      nextIndex < queue.length
-        ? queue[nextIndex]
-        : repeatMode === "all"
-          ? queue[0]
-          : null;
+    const state = get();
+    const index = upcomingIndex(state);
+    const upcoming = index >= 0 ? state.queue[index] : null;
     if (!upcoming) return;
 
     const upcomingId = videoIdOf(upcoming);
     // A downloaded track plays from disk; resolving it would be a wasted request.
     if (findDownloadedRecord(upcomingId, "audio")) return;
     prefetchMusicStream(upcomingId, getMusicAudioQualitySetting());
+  },
+
+  // Buffers the next track's audio on the standby element near the end of the
+  // current one, so the change is a swap with no load in between.
+  _preloadUpcoming: () => {
+    const state = get();
+    const index = upcomingIndex(state);
+    const upcoming = index >= 0 ? state.queue[index] : null;
+    if (!upcoming) return;
+    void preloadTrack(upcoming, getMusicAudioQualitySetting(), (videoId) => {
+      const now = get();
+      const nowTrack = now.queue[upcomingIndex(now)];
+      return !!nowTrack && videoIdOf(nowTrack) === videoId;
+    });
+  },
+
+  _onPreloadError: () => {
+    // The standby element refused its link; forget both so the track resolves
+    // afresh when it is reached.
+    const videoId = musicAudioEngine.clearPreload();
+    if (videoId) invalidateMusicStream(videoId);
   },
 
   retryCurrentTrack: () => {
@@ -501,7 +562,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     if (track) invalidateMusicStream(videoIdOf(track));
     set({ streamError: null, streamErrorKind: null });
     recordPlayerEvent(`music retry: index ${currentIndex}`);
-    void get()._loadIndex(currentIndex);
+    // Pick up where it stopped rather than from the start of the track.
+    void get()._loadIndex(currentIndex, { resumeAt: get().progress });
   },
 
   clearStreamError: () => set({ streamError: null, streamErrorKind: null }),
@@ -512,7 +574,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
     let nextIndex: number;
     if (isShuffle && queue.length > 1) {
-      nextIndex = pickRandomIndex(queue.length, currentIndex);
+      nextIndex = upcomingIndex(get());
     } else {
       nextIndex = currentIndex + 1;
       if (nextIndex >= queue.length) {
@@ -717,7 +779,35 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   _reflectPlaying: (isPlaying) => set({ isPlaying }),
 
-  _setBuffering: (isBuffering) => set({ isBuffering }),
+  _setBuffering: (isBuffering) => {
+    stopStallWatch();
+    if (isBuffering && get().loadingStreamId === null) {
+      let lastBuffered = musicAudioEngine.getBufferedEnd();
+      let quietSince = Date.now();
+      stallWatch = setInterval(() => {
+        const buffered = musicAudioEngine.getBufferedEnd();
+        if (buffered > lastBuffered) {
+          lastBuffered = buffered;
+          quietSince = Date.now();
+          return;
+        }
+        if (Date.now() - quietSince < STALL_LIMIT_MS) return;
+        stopStallWatch();
+        recordPlayerEvent("music stalled with no data arriving");
+        get()._onPlaybackError();
+      }, STALL_CHECK_MS);
+    }
+    if (!isBuffering && loadStartedAt) {
+      const started = loadStartedAt;
+      loadStartedAt = null;
+      const elapsedMs = Math.round(performance.now() - started.at);
+      const audioContext = musicAudioEngine.getContextState();
+      recordPlayerEvent(`music first audio: ${started.videoId} after ${elapsedMs} ms (audio context ${audioContext})`);
+      // One line per track in the log file, so slow starts can be measured.
+      void logToBackend("info", "music first audio", { videoId: started.videoId, elapsedMs, audioContext });
+    }
+    set({ isBuffering });
+  },
 
   handleEnded: () => {
     if (get().repeatMode === "one") {
@@ -734,8 +824,26 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     recordPlayerEvent("music playback error (media element)");
     // The element rejected the URL it was given, so drop it rather than let any
     // later attempt be served the same dead one from cache.
-    const track = get().currentTrack;
-    if (track) invalidateMusicStream(videoIdOf(track));
+    const { currentTrack, currentIndex, progress } = get();
+    if (!currentTrack) return;
+    const videoId = videoIdOf(currentTrack);
+    invalidateMusicStream(videoId);
+    // An expired or refused link usually plays again on a fresh lookup, so try
+    // that once, from the same position, before telling the user.
+    if (recoveredVideoId !== videoId) {
+      recoveredVideoId = videoId;
+      recordPlayerEvent(`music playback recovery: ${videoId} at ${Math.round(progress)}s`);
+      void get()._loadIndex(currentIndex, { resumeAt: progress });
+      return;
+    }
     set({ isPlaying: false, streamError: PLAYBACK_ERROR_FALLBACK, streamErrorKind: "streaming" });
   },
 }));
+
+// Radio additions, queue edits and reorders all change what plays next, so warm
+// its link whenever the queue does.
+useMusicPlayerStore.subscribe((state, previous) => {
+  if (state.queue !== previous.queue && state.currentTrack && state.loadingStreamId === null) {
+    state._prefetchUpcoming();
+  }
+});

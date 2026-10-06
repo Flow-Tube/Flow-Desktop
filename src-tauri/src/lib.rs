@@ -331,10 +331,14 @@ pub fn run() {
             app.manage(DiscordPresence::new());
 
             // Initialize and manage streaming proxy
-            let (streaming_manager, proxy_listener) = streaming::proxy::StreamingManager::new();
+            let (streaming_manager, proxy_listeners) = streaming::proxy::StreamingManager::new();
             tauri::async_runtime::spawn(streaming::proxy::start_proxy_server(
                 streaming_manager.clone(),
-                proxy_listener,
+                proxy_listeners.media,
+            ));
+            tauri::async_runtime::spawn(streaming::proxy::start_proxy_server(
+                streaming_manager.clone(),
+                proxy_listeners.images,
             ));
             app.manage(streaming_manager);
 

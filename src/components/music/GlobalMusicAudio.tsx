@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type SyntheticEvent } from "react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
+import { PRELOAD_LEAD_SECONDS } from "../../lib/musicPreload";
 import { recordSongHistory } from "../../lib/musicHistory";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import type { SongItem } from "../../types/music";
@@ -13,8 +14,20 @@ const HISTORY_PERSIST_MS = 5000;
  */
 const PROGRESS_SYNC_STEP_S = 0.25;
 
+/**
+ * Wraps a media-element handler so only the element that is playing drives the
+ * player. The standby element buffers the next track in silence; its events
+ * (and the pause/emptied burst when it hands over) must not move the UI.
+ */
+const fromActive =
+  (handler: (el: HTMLAudioElement) => void) =>
+  (event: SyntheticEvent<HTMLAudioElement>) => {
+    if (event.currentTarget === musicAudioEngine.getActiveElement()) handler(event.currentTarget);
+  };
+
 export function GlobalMusicAudio() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const firstRef = useRef<HTMLAudioElement | null>(null);
+  const secondRef = useRef<HTMLAudioElement | null>(null);
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
 
@@ -24,9 +37,10 @@ export function GlobalMusicAudio() {
   const lastPersistAtRef = useRef(0);
 
   useEffect(() => {
-    const el = audioRef.current;
-    if (!el) return;
-    musicAudioEngine.attach(el);
+    const first = firstRef.current;
+    const second = secondRef.current;
+    if (!first || !second) return;
+    musicAudioEngine.attach([first, second]);
     const s = useMusicPlayerStore.getState();
     musicAudioEngine.setVolume(s.volume);
     musicAudioEngine.setMuted(s.isMuted);
@@ -67,7 +81,7 @@ export function GlobalMusicAudio() {
     let lastSyncedTime = -1;
     let lastSyncedDuration = -1;
     const tick = () => {
-      const el = audioRef.current;
+      const el = musicAudioEngine.getActiveElement();
       if (el) {
         const duration = Number.isFinite(el.duration)
           ? el.duration
@@ -89,17 +103,6 @@ export function GlobalMusicAudio() {
           lastSyncedTime = el.currentTime;
           lastSyncedDuration = duration;
           useMusicPlayerStore.getState()._syncTime(el.currentTime, el.duration);
-        }
-
-        // Tracked every frame regardless: history persistence and the
-        // beforeunload flush want the true position, not the last synced one.
-        lastProgressRef.current = { time: el.currentTime, duration };
-
-        const now = Date.now();
-        if (now - lastPersistAtRef.current > HISTORY_PERSIST_MS) {
-          lastPersistAtRef.current = now;
-          const t = historyTrackRef.current;
-          if (t) void recordSongHistory(t, el.currentTime, duration);
         }
       }
       raf = requestAnimationFrame(tick);
@@ -142,22 +145,44 @@ export function GlobalMusicAudio() {
     }
   }, [isPlaying]);
 
-  return (
-    <audio
-      ref={audioRef}
-      hidden
-      preload="auto"
-      onPlay={() => useMusicPlayerStore.getState()._reflectPlaying(true)}
-      onPause={() => useMusicPlayerStore.getState()._reflectPlaying(false)}
-      onWaiting={() => useMusicPlayerStore.getState()._setBuffering(true)}
-      onPlaying={() => useMusicPlayerStore.getState()._setBuffering(false)}
-      onDurationChange={(e) =>
-        useMusicPlayerStore
-          .getState()
-          ._syncTime(e.currentTarget.currentTime, e.currentTarget.duration)
+  const store = () => useMusicPlayerStore.getState();
+  const audioProps = {
+    hidden: true,
+    preload: "auto",
+    onPlay: fromActive(() => store()._reflectPlaying(true)),
+    onPause: fromActive(() => store()._reflectPlaying(false)),
+    onWaiting: fromActive(() => store()._setBuffering(true)),
+    onPlaying: fromActive(() => store()._setBuffering(false)),
+    onDurationChange: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
+    // Near the end, buffer the next track on the standby element so the change
+    // is a swap. Driven by the element rather than the frame loop, which WebKit
+    // pauses while the window is hidden, as it usually is while music plays.
+    // The listed length stands in when WebKit reports a stream as endless.
+    onTimeUpdate: fromActive((el) => {
+      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : store().duration;
+      if (duration > 0 && duration - el.currentTime <= PRELOAD_LEAD_SECONDS) store()._preloadUpcoming();
+
+      // History is persisted from here for the same reason: the frame loop
+      // stops in the background, and listening there is the common case.
+      lastProgressRef.current = { time: el.currentTime, duration };
+      const now = Date.now();
+      if (now - lastPersistAtRef.current > HISTORY_PERSIST_MS) {
+        lastPersistAtRef.current = now;
+        const t = historyTrackRef.current;
+        if (t) void recordSongHistory(t, el.currentTime, duration);
       }
-      onEnded={() => useMusicPlayerStore.getState().handleEnded()}
-      onError={() => useMusicPlayerStore.getState()._onPlaybackError()}
-    />
+    }),
+    onEnded: fromActive(() => store().handleEnded()),
+    onError: (event: SyntheticEvent<HTMLAudioElement>) => {
+      if (event.currentTarget === musicAudioEngine.getActiveElement()) store()._onPlaybackError();
+      else store()._onPreloadError();
+    },
+  } as const;
+
+  return (
+    <>
+      <audio ref={firstRef} {...audioProps} />
+      <audio ref={secondRef} {...audioProps} />
+    </>
   );
 }

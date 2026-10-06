@@ -516,7 +516,7 @@ pub async fn proxy_image_url(
 
     Ok(format!(
         "http://127.0.0.1:{}/stream/{}",
-        streaming_manager.get_port(),
+        streaming_manager.get_image_port(),
         token
     ))
 }

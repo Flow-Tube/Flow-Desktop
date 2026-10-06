@@ -44,6 +44,14 @@ pub struct VideoChapter {
     pub end_seconds: u64,
 }
 
+/// The two facts a feed needs to fill in for a listed video, without the full
+/// details lookup and its `next` request.
+#[derive(Debug, Clone, Default)]
+pub struct VideoBasics {
+    pub channel_id: Option<String>,
+    pub duration_seconds: Option<u64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoDetails {

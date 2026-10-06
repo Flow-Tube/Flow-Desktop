@@ -1214,6 +1214,10 @@ pub async fn get_subscription_rotation_feed(
         .map_err(ErrorResponse::from)
 }
 
+/// Feed duration fills run beside whatever the user is playing, so they stay
+/// few at a time on a slow link.
+const DURATION_FILL_CONCURRENCY: usize = 3;
+
 async fn populate_video_durations(
     videos: &mut [VideoSummary],
     youtube_service: &YoutubeService,
@@ -1233,7 +1237,7 @@ async fn populate_video_durations(
 
     let results = crate::api::http::bounded_join(
         items,
-        crate::api::http::DEFAULT_FETCH_CONCURRENCY,
+        DURATION_FILL_CONCURRENCY,
         move |(video_id, title, channel_name, thumbnail_url)| {
             let youtube_service = youtube_service.clone();
             let pool = pool.clone();
@@ -1248,7 +1252,7 @@ async fn populate_video_durations(
                 }
 
                 // 2. Fetch from API
-                if let Ok(details) = youtube_service.get_video_details(&video_id).await {
+                if let Ok(details) = youtube_service.get_video_basics(&video_id).await {
                     let summary = VideoSummary {
                         id: video_id.clone(),
                         title,

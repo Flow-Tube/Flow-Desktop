@@ -10,7 +10,7 @@ use crate::api::innertube::core::utils::{
 use crate::errors::{AppError, AppResult};
 use crate::models::video::{
     AudioTrack, CaptionTrack, RelatedContentItem, SabrStreamInfo, StreamInfo, StreamVariant,
-    VideoChapter, VideoDetails,
+    VideoBasics, VideoChapter, VideoDetails,
 };
 use crate::streaming::sabr::engine::decode_b64_loose;
 use crate::streaming::sabr::selector::{CodecSupport, SabrFormat, select_formats};
@@ -91,7 +91,7 @@ struct CachedPlayerAttempt {
     resolved_at: Instant,
 }
 
-fn playback_priority() -> &'static PlaybackPriority {
+pub(crate) fn playback_priority() -> &'static PlaybackPriority {
     static PRIORITY: OnceLock<PlaybackPriority> = OnceLock::new();
     PRIORITY.get_or_init(PlaybackPriority::default)
 }
@@ -397,7 +397,7 @@ fn combined_playability_reason(playability: &Value) -> String {
     }
 }
 
-fn map_playability_error(playability: &Value) -> AppError {
+pub(crate) fn map_playability_error(playability: &Value) -> AppError {
     let status = playability["status"].as_str().unwrap_or("UNKNOWN");
     let reason_text = combined_playability_reason(playability);
     let normalized_reason = reason_text.to_ascii_lowercase();
@@ -1336,14 +1336,14 @@ enum ClientOutcome {
 /// failed. A definitive restriction always is, and so is `ERROR`, the status
 /// the server gives a video that does not exist: every client agrees on it, and
 /// without it the user would only see a generic extraction failure.
-fn is_reportable_refusal(playability: &Value) -> bool {
+pub(crate) fn is_reportable_refusal(playability: &Value) -> bool {
     is_definitive_restriction(&map_playability_error(playability))
         || playability["status"]
             .as_str()
             .is_some_and(|status| status.eq_ignore_ascii_case("ERROR"))
 }
 
-fn is_bot_wall(playability: &Value) -> bool {
+pub(crate) fn is_bot_wall(playability: &Value) -> bool {
     matches!(
         map_playability_error(playability),
         AppError::BotCheckRequired(_)
@@ -1679,6 +1679,45 @@ impl InnertubeClient {
 }
 
 impl InnertubeClient {
+    /// Channel and duration for a listed video, from one VISIONOS `player`
+    /// request on the shared connection.
+    ///
+    /// Feeds fill these in for dozens of videos at a time. Doing it with the
+    /// full details lookup cost a ladder walk plus a `next` request each, on the
+    /// connection reserved for playback, and on a slow link that bulk traffic
+    /// delayed whatever the user was trying to play. This waits while a stream
+    /// is resolving and gives up quickly instead of walking the ladder.
+    pub async fn get_video_basics(&self, video_id: &str) -> AppResult<VideoBasics> {
+        let video_id = video_id.trim();
+        if video_id.is_empty() {
+            return Err(AppError::Validation("Video ID cannot be empty".into()));
+        }
+
+        let _priority = playback_priority().start_metadata().await;
+        let visitor_data = self.fetch_visitor_data().await;
+        let mut payload = serde_json::json!({
+            "context": clients::VISIONOS.context(visitor_data.as_deref(), None),
+            "videoId": video_id,
+            "contentCheckOk": true,
+            "racyCheckOk": true,
+        });
+        let response = tokio::time::timeout(
+            PER_CLIENT_TIMEOUT,
+            self.post_innertube("player", &clients::VISIONOS, &mut payload),
+        )
+        .await
+        .map_err(|_| AppError::Extractor(format!("Basics lookup timed out for {video_id}")))??;
+
+        check_playability_status(&response["playabilityStatus"])?;
+        let details = &response["videoDetails"];
+        Ok(VideoBasics {
+            channel_id: details["channelId"].as_str().map(ToOwned::to_owned),
+            duration_seconds: details["lengthSeconds"]
+                .as_str()
+                .and_then(|seconds| seconds.parse().ok()),
+        })
+    }
+
     pub async fn get_video_details(&self, video_id: &str) -> AppResult<VideoDetails> {
         let video_id_trimmed = video_id.trim();
         if video_id_trimmed.is_empty() {

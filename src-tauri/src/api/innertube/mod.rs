@@ -8,7 +8,8 @@ use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::shorts::ShortsFeed;
 use crate::models::video::{
-    MusicHomeChip, MusicHomeSection, RelatedContentItem, StreamInfo, VideoDetails, VideoSummary,
+    MusicHomeChip, MusicHomeSection, RelatedContentItem, StreamInfo, VideoBasics, VideoDetails,
+    VideoSummary,
 };
 use async_trait::async_trait;
 
@@ -66,6 +67,10 @@ impl YoutubeExtractor for InnertubeClient {
 
     async fn get_video_details(&self, video_id: &str) -> AppResult<VideoDetails> {
         self.get_video_details(video_id).await
+    }
+
+    async fn get_video_basics(&self, video_id: &str) -> AppResult<VideoBasics> {
+        self.get_video_basics(video_id).await
     }
 
     async fn get_related_videos(&self, video_id: &str) -> AppResult<Vec<RelatedContentItem>> {

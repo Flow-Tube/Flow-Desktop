@@ -22,7 +22,6 @@ import {
   recallArtist,
   relatedSongs,
   shuffled,
-  songIdOf,
   takeUnused,
   toYTSong,
   ytItemId,
@@ -472,9 +471,6 @@ function sectionItemIds(sections: PersonalSection[]): Set<string> {
 }
 
 export function useMusicPersonalization(): MusicPersonalization {
-  const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
-  const currentTrackId = currentTrack ? songIdOf(currentTrack) : null;
-
   const [quickPicks, setQuickPicks] = useState<SongItem[]>([]);
   const [sections, setSections] = useState<PersonalSection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -539,15 +535,19 @@ export function useMusicPersonalization(): MusicPersonalization {
     });
   }, []);
 
+  // Quick picks are built when Home opens, seeded by whatever is playing then.
+  // Rebuilding on every track change fired a dozen YouTube Music requests at the
+  // exact moment the new track needed the connection to start.
   useEffect(() => {
     if (dataVersion === 0) return;
     const req = ++quickReqRef.current;
+    const currentTrack = useMusicPlayerStore.getState().currentTrack;
     void buildQuickPicks(historyRef.current, currentTrack, new Set(sectionIdsRef.current), profileRef.current)
       .then((picks) => {
         if (quickReqRef.current === req) setQuickPicks(picks);
       })
       .catch(() => undefined);
-  }, [currentTrackId, dataVersion]);
+  }, [dataVersion]);
 
   return { quickPicks, sections, loading, maturity };
 }

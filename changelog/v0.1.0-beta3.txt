@@ -31,6 +31,12 @@ PLAYER
 - Videos opened right after launch no longer time out on slow connections: playback requests get their own connection instead of queuing behind the home and subscription feeds.
 - Live streams no longer fail to refresh on slow connections, and a video that no longer exists now shows its own message instead of a generic error.
 
+SYNC
+- Removing a video from history or unliking it on the desktop now reaches Flow for Android instead of coming back on the next sync. Deleted playlists, removed playlist tracks and deleted subscription groups reach your other desktops.
+- Renaming a playlist no longer leaves a copy behind on the other device, and playlists with the same name on two devices are matched once and stay matched.
+- Settings sync with Flow for Android under the names it understands, and a newer change made on the desktop is no longer overwritten. The video codec preference now stays on each device.
+- Recommendation counts no longer grow on every sync, and a channel, topic or artist you unblock on the desktop stays unblocked. Counts that had already grown are corrected once.
+
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)
 - macOS 13+ (Intel and Apple Silicon)

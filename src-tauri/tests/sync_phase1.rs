@@ -252,26 +252,92 @@ fn scanning_the_qr_reconstructs_keys_and_sas() {
 }
 
 #[test]
-fn qr_expiry_is_respected() {
+fn desktop_qr_carries_a_host_lease_and_never_expires_on_the_scanners_clock() {
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let qr = QrPayload::new(&sid, &master, "1.2.3.4", 1, "x", 1000);
-    assert!(!qr.is_expired(999));
-    assert!(qr.is_expired(1000));
-    assert!(qr.is_expired(1001));
+    let qr = QrPayload::new(&sid, &master, "192.168.1.4", 1, "x", 1000);
+    assert!(qr.to_json().contains(r#""lease":"host""#));
+    // A scanner whose clock runs far ahead must still accept it: the host's listener decides.
+    assert!(!qr.is_expired(1_000_000));
+}
+
+#[test]
+fn leaseless_qr_expires_after_a_clock_skew_grace() {
+    // An Android phone host: no lease, expiry is the phone's clock.
+    let json = r#"{"v":1,"sid":"AAAAAAAAAAAAAAAAAAAAAA","k":"AAAA","ip":"192.168.1.20","p":4000,"d":"Pixel","exp":1000,"role":"sender"}"#;
+    let qr = QrPayload::from_json(json).unwrap();
+    assert!(
+        !qr.is_expired(1000),
+        "a PC clock a little ahead must not reject a live code"
+    );
+    assert!(!qr.is_expired(1599));
+    assert!(qr.is_expired(1600));
+}
+
+#[test]
+fn qr_only_accepts_local_network_addresses() {
+    let base = |ip: &str| {
+        format!(r#"{{"v":1,"sid":"AAAA","k":"AAAA","ip":"{ip}","p":4000,"d":"x","exp":1}}"#)
+    };
+    for ok in [
+        "192.168.1.4",
+        "10.0.0.2",
+        "172.20.1.1",
+        "169.254.3.4",
+        "100.101.1.1",
+        "127.0.0.1",
+        "fd12::1",
+    ] {
+        assert!(
+            QrPayload::from_json(&base(ok)).is_ok(),
+            "{ok} should be accepted"
+        );
+    }
+    for bad in [
+        "8.8.8.8",
+        "example.com",
+        "192.168.1.4/evil",
+        "attacker@192.168.1.4",
+        "2001:db8::1",
+        "",
+    ] {
+        assert!(
+            matches!(QrPayload::from_json(&base(bad)), Err(QrError::Address(_))),
+            "{bad} should be refused"
+        );
+    }
+    // A public fallback address poisons the whole code.
+    let with_bad_fallback = r#"{"v":1,"sid":"AAAA","k":"AAAA","ip":"192.168.1.4","p":4000,"d":"x","exp":1,"ips":["8.8.8.8"]}"#;
+    assert!(matches!(
+        QrPayload::from_json(with_bad_fallback),
+        Err(QrError::Address(_))
+    ));
+}
+
+#[test]
+fn qr_fallback_addresses_are_dialled_after_the_primary() {
+    let master = generate_master_secret();
+    let sid = generate_session_id();
+    let qr = QrPayload::new(&sid, &master, "192.168.1.4", 1, "x", 1000).with_fallback_ips([
+        "192.168.1.4".to_string(),
+        "10.0.0.7".to_string(),
+        "10.0.0.7".to_string(),
+    ]);
+    let parsed = QrPayload::from_json(&qr.to_json()).unwrap();
+    assert_eq!(parsed.dial_addresses(), vec!["192.168.1.4", "10.0.0.7"]);
 }
 
 #[test]
 fn qr_rejects_wrong_version_and_bad_base64() {
     // Unsupported version.
-    let bad_version = r#"{"v":2,"sid":"AAAA","k":"AAAA","ip":"1.2.3.4","p":1,"d":"x","exp":1}"#;
+    let bad_version = r#"{"v":2,"sid":"AAAA","k":"AAAA","ip":"192.168.1.4","p":1,"d":"x","exp":1}"#;
     assert!(matches!(
         QrPayload::from_json(bad_version),
         Err(QrError::UnsupportedVersion(2))
     ));
 
     // Valid JSON & version, but `sid` is not valid base64url for 16 bytes.
-    let bad_sid = r#"{"v":1,"sid":"!!!!","k":"AAAA","ip":"1.2.3.4","p":1,"d":"x","exp":1}"#;
+    let bad_sid = r#"{"v":1,"sid":"!!!!","k":"AAAA","ip":"192.168.1.4","p":1,"d":"x","exp":1}"#;
     let parsed = QrPayload::from_json(bad_sid).unwrap();
     assert!(parsed.session_id().is_err());
 }

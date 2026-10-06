@@ -348,7 +348,7 @@ pub fn parse_likes_blob(json: &str, device_id: &str) -> Vec<Like> {
         .collect()
 }
 
-fn like_from_value(v: Value, device_id: &str) -> Option<Like> {
+fn like_from_value(mut v: Value, device_id: &str) -> Option<Like> {
     let kind = match v.get("kind").and_then(Value::as_str) {
         Some("music") => LikeKind::Music,
         Some("video") => LikeKind::Video,
@@ -360,6 +360,9 @@ fn like_from_value(v: Value, device_id: &str) -> Option<Like> {
         .and_then(Value::as_str)
         .map(iso_to_ms)
         .unwrap_or(0);
+    if let Some(obj) = v.as_object_mut() {
+        add_flat_like_meta(obj);
+    }
     Some(Like {
         kind,
         id,
@@ -368,6 +371,40 @@ fn like_from_value(v: Value, device_id: &str) -> Option<Like> {
         hlc: Hlc::new(ms, 0, device_id),
         meta: Some(v),
     })
+}
+
+/// Flow for Android reads a like's title, artist and thumbnail from flat `meta` fields, while the
+/// desktop item nests them under `video` or `song`. Copy them up so a desktop like doesn't arrive
+/// on the phone as a blank row; the nested object stays for desktop peers.
+fn add_flat_like_meta(item: &mut serde_json::Map<String, Value>) {
+    let (title, artist, thumbnail) =
+        if let Some(video) = item.get("video").and_then(Value::as_object) {
+            (
+                first_str(video, &["title"]),
+                first_str(video, &["channelName"]),
+                first_str(video, &["thumbnailUrl"]),
+            )
+        } else if let Some(song) = item.get("song") {
+            let obj = song.as_object().cloned().unwrap_or_default();
+            (
+                first_str(&obj, &["title"]),
+                song_artists_text(song),
+                first_str(&obj, &["thumbnail", "thumbnailUrl"]),
+            )
+        } else {
+            return;
+        };
+    for (key, value) in [
+        ("title", title),
+        ("artist", artist),
+        ("thumbnailUrl", thumbnail),
+    ] {
+        if let Some(value) = value {
+            if first_str(item, &[key]).is_none() {
+                item.insert(key.to_string(), Value::String(value));
+            }
+        }
+    }
 }
 
 /// Serialize canonical likes back to the `liked_items` blob (newest first, tombstones dropped).

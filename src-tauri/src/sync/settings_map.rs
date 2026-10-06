@@ -139,6 +139,7 @@ pub fn desktop_keys() -> impl Iterator<Item = &'static str> {
 }
 
 /// The wire entry for a stored desktop setting, stamped with the time the row last changed.
+#[must_use]
 pub fn local_entry(
     desktop_key: &str,
     stored: &str,
@@ -154,6 +155,7 @@ pub fn local_entry(
 }
 
 /// The wire key and typed value for a stored desktop setting. `None` for a key that doesn't sync.
+#[must_use]
 pub fn to_wire(desktop_key: &str, stored: &str) -> Option<(String, Value)> {
     if let Some(s) = SHARED.iter().find(|s| s.desktop == desktop_key) {
         return Some((s.canonical.to_string(), typed(s.kind, stored)));
@@ -168,6 +170,7 @@ pub fn to_wire(desktop_key: &str, stored: &str) -> Option<(String, Value)> {
 
 /// Normalize an incoming wire key to the form [`to_wire`] produces, accepting the raw desktop key
 /// names older desktop builds sent. `None` for anything this desktop doesn't sync.
+#[must_use]
 pub fn normalize_wire_key(key: &str) -> Option<String> {
     if let Some(s) = SHARED
         .iter()
@@ -182,13 +185,13 @@ pub fn normalize_wire_key(key: &str) -> Option<String> {
 }
 
 /// The desktop key and stored string for a normalized wire setting.
+#[must_use]
 pub fn from_wire(wire_key: &str, value: &Value) -> Option<(&'static str, String)> {
-    let desktop = match SHARED.iter().find(|s| s.canonical == wire_key) {
-        Some(s) => s.desktop,
-        None => {
-            let bare = wire_key.strip_prefix(DESKTOP_PREFIX)?;
-            DESKTOP_ONLY.iter().copied().find(|k| *k == bare)?
-        }
+    let desktop = if let Some(s) = SHARED.iter().find(|s| s.canonical == wire_key) {
+        s.desktop
+    } else {
+        let bare = wire_key.strip_prefix(DESKTOP_PREFIX)?;
+        DESKTOP_ONLY.iter().copied().find(|k| *k == bare)?
     };
     let stored = match value {
         Value::String(s) => s.clone(),

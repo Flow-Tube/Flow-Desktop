@@ -234,6 +234,7 @@ pub fn ms_to_iso(ms: u64) -> String {
 /// Parse a timestamp into epoch milliseconds; `0` if unparseable. Accepts RFC 3339 and SQLite's
 /// offset-less `CURRENT_TIMESTAMP` form (`YYYY-MM-DD HH:MM:SS`, always UTC), which the settings
 /// table writes for every local change.
+#[must_use]
 pub fn iso_to_ms(s: &str) -> u64 {
     chrono::DateTime::parse_from_rfc3339(s)
         .map(|d| d.timestamp_millis())
@@ -241,8 +242,7 @@ pub fn iso_to_ms(s: &str) -> u64 {
             chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
                 .map(|d| d.and_utc().timestamp_millis())
         })
-        .map(|ms| ms.max(0) as u64)
-        .unwrap_or(0)
+        .map_or(0, |ms| u64::try_from(ms).unwrap_or(0))
 }
 
 /// A row read from `watch_history` (with the sync columns added by migration `0010`).

@@ -10,8 +10,8 @@
 //! * watch_history — key `video_id`; `watched_at`/`progress` = max, `is_music`/`is_short` = OR,
 //!   metadata + `deleted` = LWW(hlc).
 //! * likes — key `(kind,id)`; whole record LWW(hlc) (`state:none` is the unlike tombstone).
-//! * playlists — key `playlist_merge_key` (reserved id / `yt:<id>` / `owned:<title>`) so the
-//!   "same" entry on two devices coalesces; metadata LWW; items OR-Map keyed by `video_id`, each LWW.
+//! * playlists — key `playlist_merge_key` (`yt:<id>` for saved YouTube playlists, else the sync
+//!   id); metadata LWW; items OR-Map keyed by `video_id`, each LWW.
 //! * settings — key `key`; LWW(hlc).
 //! * subscriptions — key `name`; `channel_ids` OR-Set union, `sort_order` LWW, `deleted` LWW.
 //! * flow_neuro_brain — additive counters as G-Counters, sets as OR-Sets, per-video maps as
@@ -223,29 +223,60 @@ pub fn normalize_title(title: &str) -> String {
         .to_lowercase()
 }
 
+/// The identity two playlists must share to merge: the YouTube id for a saved YouTube playlist,
+/// otherwise the sync id. Titles are deliberately not part of it, so a rename stays the same
+/// playlist; same-titled playlists made independently on two devices are matched once, on first
+/// contact, by [`adopt_peer_playlist_ids`].
 #[must_use]
 pub fn playlist_merge_key(p: &Playlist) -> String {
-    if p.is_protected {
-        return p.sync_id.clone();
-    }
-    if p.origin == PlaylistOrigin::Youtube {
-        if let Some(y) = p.youtube_id.as_deref() {
-            if !y.is_empty() {
-                return format!("yt:{y}");
-            }
-        }
-    }
-    if p.is_user_created {
-        let t = normalize_title(&p.title);
-        if !t.is_empty() {
-            return if p.is_music {
-                format!("owned-music:{t}")
-            } else {
-                format!("owned:{t}")
-            };
-        }
+    if !p.is_protected
+        && p.origin == PlaylistOrigin::Youtube
+        && let Some(y) = p.youtube_id.as_deref().filter(|y| !y.is_empty())
+    {
+        return format!("yt:{y}");
     }
     p.sync_id.clone()
+}
+
+fn is_reconcilable(p: &Playlist) -> bool {
+    !p.deleted
+        && !p.is_protected
+        && p.is_user_created
+        && p.origin == PlaylistOrigin::Local
+        && !normalize_title(&p.title).is_empty()
+}
+
+fn title_key(p: &Playlist) -> String {
+    let kind = if p.is_music { "m" } else { "v" };
+    format!("{kind}:{}", normalize_title(&p.title))
+}
+
+/// First-contact matching, as Flow for Android does it: an incoming owned playlist this device
+/// doesn't know by id, with the same title as a local one the sender doesn't know either, is the
+/// same playlist. The local copy takes the sender's sync id, so the two devices share one id from
+/// then on and later renames on either side keep matching. Returns `(old, new)` sync id pairs.
+pub fn adopt_peer_playlist_ids(
+    local: &mut [Playlist],
+    incoming: &[Playlist],
+) -> Vec<(String, String)> {
+    let local_keys: BTreeSet<String> = local.iter().map(playlist_merge_key).collect();
+    let incoming_keys: BTreeSet<String> = incoming.iter().map(playlist_merge_key).collect();
+    let mut renames = Vec::new();
+    for peer in incoming.iter().filter(|p| is_reconcilable(p)) {
+        if local_keys.contains(&playlist_merge_key(peer)) {
+            continue;
+        }
+        let wanted = title_key(peer);
+        if let Some(mine) = local.iter_mut().find(|p| {
+            is_reconcilable(p)
+                && !incoming_keys.contains(&playlist_merge_key(p))
+                && title_key(p) == wanted
+        }) {
+            renames.push((mine.sync_id.clone(), peer.sync_id.clone()));
+            mine.sync_id.clone_from(&peer.sync_id);
+        }
+    }
+    renames
 }
 
 pub fn merge_playlists(a: Vec<Playlist>, b: Vec<Playlist>) -> Vec<Playlist> {

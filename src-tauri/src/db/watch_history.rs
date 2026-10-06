@@ -26,6 +26,8 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
 
     if let Some(row) = existing {
         let id: i64 = sqlx::Row::get(&row, 0);
+        // Clearing the sync stamp makes it follow the new watch time, so a re-watch beats a
+        // deletion synced from another device before it.
         sqlx::query(
             "UPDATE watch_history SET
                 title = ?,
@@ -33,7 +35,8 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
                 watch_date = ?,
                 watch_duration_seconds = ?,
                 total_duration_seconds = ?,
-                is_music = ?
+                is_music = ?,
+                updated_hlc = NULL
              WHERE id = ?",
         )
         .bind(&record.title)
@@ -92,7 +95,8 @@ pub async fn upsert_watch_records_bulk(
                     watch_date = ?,
                     watch_duration_seconds = ?,
                     total_duration_seconds = ?,
-                    is_music = ?
+                    is_music = ?,
+                    updated_hlc = NULL
                  WHERE id = ?",
             )
             .bind(&record.title)

@@ -23,7 +23,7 @@ use crate::sync::canonical::{
 };
 use crate::sync::merge::{MergedFlowNeuroBrain, MergedMusicBrain};
 
-/// Settings key holding the FlowNeuro counters as they stood right after the last merge.
+/// Settings key holding the `FlowNeuro` counters as they stood right after the last merge.
 pub const NEURO_BASELINE_KEY: &str = "sync_neuro_baseline";
 /// Settings key holding the music counters as they stood right after the last merge.
 pub const MUSIC_BASELINE_KEY: &str = "sync_music_baseline";
@@ -37,6 +37,7 @@ pub struct NeuroBaseline {
 }
 
 impl NeuroBaseline {
+    #[must_use]
     pub fn of(ub: &UserBrain) -> Self {
         Self {
             idf_total_documents: non_negative(ub.idf_total_documents),
@@ -58,6 +59,7 @@ pub struct MusicBaseline {
 }
 
 impl MusicBaseline {
+    #[must_use]
     pub fn of(mb: &MusicBrain) -> Self {
         Self {
             total_plays: u64::from(mb.total_plays),
@@ -71,7 +73,7 @@ impl MusicBaseline {
 }
 
 /// How this device's counter entries are derived on this fold.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub enum Attribution<'a, B> {
     /// Credit growth since `baseline` on top of the merged own entry.
     Since(&'a B),
@@ -81,6 +83,7 @@ pub enum Attribution<'a, B> {
 }
 
 /// The attribution for a fold: since the stored baseline, else the one-time legacy correction.
+#[must_use]
 pub fn attribution<B>(baseline: Option<&B>, prior_applies: u64) -> Attribution<'_, B> {
     match baseline {
         Some(b) => Attribution::Since(b),
@@ -92,6 +95,7 @@ pub fn attribution<B>(baseline: Option<&B>, prior_applies: u64) -> Attribution<'
 /// total back as the local value, adding the peers' counts to it again, so one copy of the peers'
 /// counts is removed per apply. Exact when the peers' counts didn't change between syncs; errs low
 /// (never below zero) when they grew.
+#[must_use]
 pub fn legacy_own_count(local: u64, others: u64, prior_applies: u64) -> u64 {
     local.saturating_sub(others.saturating_mul(prior_applies))
 }
@@ -121,11 +125,11 @@ pub fn fold_local_flow(
     merged: &mut MergedFlowNeuroBrain,
     ub: &UserBrain,
     device_id: &str,
-    hlc: Hlc,
-    attribution: Attribution<'_, NeuroBaseline>,
+    hlc: &Hlc,
+    attribution: &Attribution<'_, NeuroBaseline>,
 ) {
     let mut snap = brainmap::userbrain_to_snapshot(ub, device_id, hlc.clone());
-    let (baseline, applies) = split(attribution);
+    let (baseline, applies) = attribution.parts();
 
     let docs = own_count(
         &merged.counters.idf_total_documents,
@@ -163,11 +167,9 @@ pub fn fold_local_flow(
             .insert(word.clone(), GCounter::single(device_id, own));
     }
 
-    snap.sets.blocked_topics = diff_set(&ub.blocked_topics, &merged.sets.blocked_topics, &hlc);
-    snap.sets.blocked_channels =
-        diff_set(&ub.blocked_channels, &merged.sets.blocked_channels, &hlc);
-    snap.sets.preferred_topics =
-        diff_set(&ub.preferred_topics, &merged.sets.preferred_topics, &hlc);
+    snap.sets.blocked_topics = diff_set(&ub.blocked_topics, &merged.sets.blocked_topics, hlc);
+    snap.sets.blocked_channels = diff_set(&ub.blocked_channels, &merged.sets.blocked_channels, hlc);
+    snap.sets.preferred_topics = diff_set(&ub.preferred_topics, &merged.sets.preferred_topics, hlc);
 
     let m = &merged.lww_maps;
     retain_changed(
@@ -220,15 +222,17 @@ pub fn merge_incoming_flow(
 
 /// Fold this device's current music brain into `merged`, crediting only local growth to its
 /// counters and stamping only the LWW values that changed.
+// Values round-trip verbatim through the merged state, so exact equality is what "unchanged" means.
+#[allow(clippy::float_cmp)]
 pub fn fold_local_music(
     merged: &mut MergedMusicBrain,
     mb: &MusicBrain,
     device_id: &str,
-    hlc: Hlc,
-    attribution: Attribution<'_, MusicBaseline>,
+    hlc: &Hlc,
+    attribution: &Attribution<'_, MusicBaseline>,
 ) {
     let mut snap = brainmap::musicbrain_to_snapshot(mb, device_id, hlc.clone());
-    let (baseline, applies) = split(attribution);
+    let (baseline, applies) = attribution.parts();
 
     let total = own_count(
         &merged.total_plays,
@@ -265,8 +269,8 @@ pub fn fold_local_music(
         }
     }
 
-    snap.seen_artists = diff_set(&mb.seen_artists, &merged.seen_artists, &hlc);
-    snap.blocked_artists = diff_set(&mb.blocked_artists, &merged.blocked_artists, &hlc);
+    snap.seen_artists = diff_set(&mb.seen_artists, &merged.seen_artists, hlc);
+    snap.blocked_artists = diff_set(&mb.blocked_artists, &merged.blocked_artists, hlc);
     retain_changed(&mut snap.disliked_artists, &merged.disliked_artists);
     if merged
         .discovery_appetite
@@ -306,10 +310,12 @@ pub fn merge_incoming_music(
 // Helpers
 // ===========================================================================================
 
-fn split<B>(attribution: Attribution<'_, B>) -> (Option<&B>, Option<u64>) {
-    match attribution {
-        Attribution::Since(b) => (Some(b), None),
-        Attribution::Legacy { prior_applies } => (None, Some(prior_applies)),
+impl<'a, B> Attribution<'a, B> {
+    fn parts(&self) -> (Option<&'a B>, Option<u64>) {
+        match *self {
+            Attribution::Since(b) => (Some(b), None),
+            Attribution::Legacy { prior_applies } => (None, Some(prior_applies)),
+        }
     }
 }
 

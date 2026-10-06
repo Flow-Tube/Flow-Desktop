@@ -2,6 +2,7 @@ pub mod apply;
 pub mod brain_attrib;
 pub mod brainmap;
 pub mod canonical;
+pub mod changes;
 pub mod codec;
 pub mod compat;
 pub mod crypto;
@@ -10,12 +11,14 @@ pub mod export;
 pub mod frames;
 pub mod identity;
 pub mod ledger;
+pub mod local_edits;
 pub mod mapping;
 pub mod merge;
 pub mod protocol;
 pub mod qr;
 pub mod session;
 pub mod settings_map;
+pub mod tombstones;
 pub mod transport;
 
 /// `FLOW-SYNC` protocol version implemented by this build.

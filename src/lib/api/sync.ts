@@ -41,6 +41,8 @@ export interface SyncStatus {
   phase: SyncPhase;
   role?: SyncRole | null;
   message?: string | null;
+  /** For `error`: the backend `SyncError::kind`, turned into a message by `syncErrorMessage`. */
+  errorKind?: string | null;
   sas?: string | null;
   peer?: PeerInfo | null;
   consentKind?: ConsentKind | null;

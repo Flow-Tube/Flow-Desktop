@@ -322,3 +322,17 @@ fn a_host_with_only_a_tunnel_still_gets_an_address() {
     assert_eq!(candidates[0].ip, "10.64.0.2");
     assert!(candidates[0].virtual_iface);
 }
+
+#[test]
+fn windows_friendly_names_of_virtual_adapters_are_recognised() {
+    // Windows reports friendly names, not `vboxnet0` / `zt...`, so these used to rank as physical
+    // and could win the QR over the real Wi-Fi address.
+    let candidates = rank_lan_candidates(vec![
+        iface("VirtualBox Host-Only Network", "192.168.56.1"),
+        iface("ZeroTier One [8056c2e21c000001]", "192.168.191.4"),
+        iface("VMware Network Adapter VMnet8", "192.168.79.1"),
+        iface("Wi-Fi", "10.0.0.23"),
+    ]);
+    assert_eq!(candidates[0].interface, "Wi-Fi");
+    assert!(candidates[1..].iter().all(|c| c.virtual_iface));
+}

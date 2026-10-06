@@ -11,20 +11,36 @@
 
 #![allow(clippy::must_use_candidate)]
 
+use std::future::Future;
 use std::net::IpAddr;
+use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
-use tokio_tungstenite::tungstenite::Message;
+use tokio::time::{Instant, Interval, MissedTickBehavior, interval_at};
+use tokio_tungstenite::tungstenite::{Bytes, Error as WsError, Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, accept_async, connect_async};
 
 use crate::sync::error::SyncError;
+
+/// How often we ping while waiting. Android's `OkHttp` client drops the link when its own 20 s ping
+/// goes unanswered, and a peer that vanished without a close is only noticed through traffic.
+const PING_EVERY: Duration = Duration::from_secs(15);
+
+fn ping_timer() -> Interval {
+    let mut timer = interval_at(Instant::now() + PING_EVERY, PING_EVERY);
+    timer.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    timer
+}
 
 /// A binary-message channel over a WebSocket. Text frames are ignored; pings are answered;
 /// a close (or stream end) surfaces as [`SyncError::ConnectionClosed`].
 pub struct WsChannel<S> {
     ws: WebSocketStream<S>,
+    /// A data frame that arrived during [`keepalive_while`](Self::keepalive_while), handed out by
+    /// the next [`recv_binary`](Self::recv_binary).
+    pending: Option<Vec<u8>>,
 }
 
 impl<S> WsChannel<S>
@@ -32,7 +48,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(ws: WebSocketStream<S>) -> Self {
-        Self { ws }
+        Self { ws, pending: None }
     }
 
     /// Send one binary message.
@@ -41,18 +57,57 @@ where
         Ok(())
     }
 
-    /// Receive the next binary message, transparently answering pings and skipping text/pong.
+    /// Receive the next binary message, answering pings, skipping text/pong, and pinging the peer
+    /// while it is quiet.
     pub async fn recv_binary(&mut self) -> Result<Vec<u8>, SyncError> {
+        if let Some(data) = self.pending.take() {
+            return Ok(data);
+        }
+        let mut ping = ping_timer();
         loop {
-            match self.ws.next().await {
-                Some(Ok(Message::Binary(payload))) => return Ok(payload.to_vec()),
-                Some(Ok(Message::Ping(p))) => {
-                    self.ws.send(Message::Pong(p)).await?;
+            tokio::select! {
+                msg = self.ws.next() => {
+                    if let Some(data) = self.handle(msg).await? {
+                        return Ok(data);
+                    }
                 }
-                Some(Ok(Message::Close(_))) | None => return Err(SyncError::ConnectionClosed),
-                Some(Ok(_)) => {} // ignore text / pong / raw frame
-                Some(Err(e)) => return Err(e.into()),
+                _ = ping.tick() => self.ws.send(Message::Ping(Bytes::new())).await?,
             }
+        }
+    }
+
+    /// Run `fut` (a consent prompt, a database apply) while keeping the socket alive: pings are
+    /// answered and sent, and a data frame that arrives meanwhile is kept for the next read. Without
+    /// this the peer sees a dead link whenever the user takes longer than its ping timeout.
+    pub async fn keepalive_while<F: Future>(&mut self, fut: F) -> Result<F::Output, SyncError> {
+        tokio::pin!(fut);
+        let mut ping = ping_timer();
+        loop {
+            tokio::select! {
+                out = &mut fut => return Ok(out),
+                msg = self.ws.next(), if self.pending.is_none() => {
+                    if let Some(data) = self.handle(msg).await? {
+                        self.pending = Some(data);
+                    }
+                }
+                _ = ping.tick() => self.ws.send(Message::Ping(Bytes::new())).await?,
+            }
+        }
+    }
+
+    async fn handle(
+        &mut self,
+        msg: Option<Result<Message, WsError>>,
+    ) -> Result<Option<Vec<u8>>, SyncError> {
+        match msg {
+            Some(Ok(Message::Binary(payload))) => Ok(Some(payload.to_vec())),
+            Some(Ok(Message::Ping(p))) => {
+                self.ws.send(Message::Pong(p)).await?;
+                Ok(None)
+            }
+            Some(Ok(Message::Close(_))) | None => Err(SyncError::ConnectionClosed),
+            Some(Ok(_)) => Ok(None), // text / pong / raw frame
+            Some(Err(e)) => Err(e.into()),
         }
     }
 
@@ -68,6 +123,9 @@ pub async fn bind() -> Result<(TcpListener, u16), SyncError> {
     let port = listener.local_addr()?.port();
     Ok((listener, port))
 }
+
+/// The stream under a client-side [`WsChannel`].
+pub type ClientStream = MaybeTlsStream<TcpStream>;
 
 /// The fixed WebSocket path both platforms dial/serve.
 pub const WS_PATH: &str = "/flow-sync";
@@ -86,11 +144,13 @@ pub async fn accept(listener: &TcpListener) -> Result<WsChannel<TcpStream>, Sync
 
 /// Connect to a host and complete the WebSocket handshake (client role). Dials the fixed
 /// `/flow-sync` path so a host that enforces the path accepts us.
-pub async fn connect(
-    ip: &str,
-    port: u16,
-) -> Result<WsChannel<MaybeTlsStream<TcpStream>>, SyncError> {
-    let url = format!("ws://{ip}:{port}{WS_PATH}");
+pub async fn connect(ip: &str, port: u16) -> Result<WsChannel<ClientStream>, SyncError> {
+    let host = if ip.contains(':') {
+        format!("[{ip}]")
+    } else {
+        ip.to_string()
+    };
+    let url = format!("ws://{host}:{port}{WS_PATH}");
     tracing::info!(target: "flow::sync::transport", %url, "dialing host");
     let (ws, _resp) = connect_async(&url).await.map_err(|e| {
         tracing::warn!(target: "flow::sync::transport", %url, "WebSocket connect failed: {e}");
@@ -105,16 +165,27 @@ pub async fn connect(
 const VIRTUAL_IFACE_PREFIXES: [&str; 8] = ["tun", "tap", "utun", "wg", "ppp", "veth", "br-", "zt"];
 
 /// Distinctive fragments that mean the same thing but can appear anywhere in the (often verbose)
-/// Windows/macOS adapter name, e.g. `vEthernet (WSL)`.
-const VIRTUAL_IFACE_SUBSTRINGS: [&str; 8] = [
+/// Windows/macOS adapter name, e.g. `vEthernet (WSL)`. Windows reports friendly names, so
+/// VirtualBox's host-only adapter is "VirtualBox Host-Only Network" rather than `vboxnet0`, and
+/// ZeroTier's is "ZeroTier One [...]" rather than `zt...`.
+const VIRTUAL_IFACE_SUBSTRINGS: [&str; 17] = [
     "docker",
     "virbr",
     "vboxnet",
+    "virtualbox",
+    "host-only",
     "vmnet",
+    "vmware",
+    "hyper-v",
     "tailscale",
     "vethernet",
     "mullvad",
     "wsl",
+    "zerotier",
+    "hamachi",
+    "radmin",
+    "nordlynx",
+    "wireguard",
 ];
 
 /// One candidate address for the QR, with the interface it came from.

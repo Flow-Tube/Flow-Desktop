@@ -31,6 +31,12 @@ PLAYER
 - Videos opened right after launch no longer time out on slow connections: playback requests get their own connection instead of queuing behind the home and subscription feeds.
 - Live streams no longer fail to refresh on slow connections, and a video that no longer exists now shows its own message instead of a generic error.
 
+SYNC
+- Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.
+- Pairing codes no longer show as expired on the phone when the two devices' clocks disagree, and codes that point outside your local network are refused.
+- The connection stays up while you read the merge prompt, the other device only reports success once the data is saved, and stalled sessions time out instead of hanging.
+- Sync errors say what went wrong and what to try, the pairing screen can copy the connection data for a device without a camera, and it suggests firewall checks when nothing connects.
+
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)
 - macOS 13+ (Intel and Apple Silicon)

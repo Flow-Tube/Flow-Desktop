@@ -13,6 +13,10 @@ MUSIC
 - Similar to now mixes in artists and playlists and links to the artist, community playlists can be sampled right from the home, Quick Picks no longer fill up with chart hits or one artist, and "See all" opens the right page.
 - Fixed related songs, Daily Mixes and the Similar to shelves coming up empty after YouTube Music added a Comments tab next to Related.
 - Start a radio station from any song menu. It keeps playing for that session without changing your Autoplay setting, and switching Autoplay off stops it.
+- Songs start in a few seconds instead of up to 15: cover art loads separately so it can no longer hold up the song, Quick Picks refresh when you open Home instead of on every song change, and radio lookups wait until the song is playing.
+- Songs change with no gap: the next song is buffered before the current one ends, even while Flow is in the background.
+- A song that stops loading recovers on its own and carries on from where it stopped, and Retry no longer restarts the song.
+- Listening time is saved while Flow is in the background, so history and recommendations count those plays.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

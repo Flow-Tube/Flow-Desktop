@@ -1,19 +1,23 @@
 <div align="center">
-  <img src="Assets/logo.png" alt="Flow logo" width="132">
-
-  # Flow Desktop
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/banners/flow-desktop-dark.svg">
+    <img alt="Flow Desktop. Privacy-first YouTube and YouTube Music for Windows, macOS and Linux." src="https://assets.flow-tube.org/v1/banners/flow-desktop-light.svg" width="100%">
+  </picture>
 
   **A privacy-respecting YouTube and YouTube Music client with a native, fully local recommendation engine.**
 
   Flow Desktop is the desktop companion to [Flow for Android](https://github.com/A-EDev/Flow), built with Rust, Tauri, React, and TypeScript.
 
-  [![Status](https://img.shields.io/badge/Status-Active_Development-success?style=for-the-badge&logo=github-actions&logoColor=white)](https://github.com/FlowNeuro/Flow-Desktop/commits/main)
-
-  [![Downloads](https://img.shields.io/github/downloads/FlowNeuro/Flow-Desktop/total?style=for-the-badge&color=orange&logo=github&label=Downloads)](https://github.com/FlowNeuro/Flow-Desktop/releases) [![Latest Version](https://img.shields.io/github/v/release/FlowNeuro/Flow-Desktop?style=for-the-badge&color=crimson&label=Latest%20Version&include_prereleases)](https://github.com/FlowNeuro/Flow-Desktop/releases)
-
-  [![Platform](https://img.shields.io/badge/Windows_·_macOS_·_Linux-3DDC84?style=for-the-badge&logo=linux&logoColor=white)](#downloads-and-supported-systems) [![Rust](https://img.shields.io/badge/Rust-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/) [![Tauri](https://img.shields.io/badge/Tauri_2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white)](https://v2.tauri.app/)
-
-  [![Reddit](https://img.shields.io/badge/Reddit-r%2FFlow__Official-FF4500?style=for-the-badge&logo=reddit&logoColor=white)](https://www.reddit.com/r/Flow_Official/) [![Stars](https://img.shields.io/github/stars/FlowNeuro/Flow-Desktop?style=for-the-badge&logo=star&color=gold)](https://github.com/FlowNeuro/Flow-Desktop/stargazers) [![License](https://img.shields.io/badge/License-GPL_v3.0-blue?style=for-the-badge&logo=gnu-bash&logoColor=white)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/FlowNeuro/Flow-Desktop?style=for-the-badge&color=red)](https://github.com/FlowNeuro/Flow-Desktop/commits/main)
+  <p>
+  <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-windows-dark.svg"><img alt="Download for Windows" src="https://assets.flow-tube.org/v1/badges/pill/get-windows-light.svg" height="60"></picture></a>
+  <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-macos-dark.svg"><img alt="Download for macOS" src="https://assets.flow-tube.org/v1/badges/pill/get-macos-light.svg" height="60"></picture></a>
+  <a href="https://github.com/Flow-Tube/Flow-Desktop/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/get-linux-dark.svg"><img alt="Download for Linux" src="https://assets.flow-tube.org/v1/badges/pill/get-linux-light.svg" height="60"></picture></a>
+  </p>
+  <p>
+  <a href="#downloads-and-supported-systems"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/split/desktop-dark.svg"><img alt="Desktop: Windows · macOS · Linux" src="https://assets.flow-tube.org/v1/badges/split/desktop-light.svg" height="32"></picture></a>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/split/tauri-dark.svg"><img alt="Built with Rust · Tauri 2" src="https://assets.flow-tube.org/v1/badges/split/tauri-light.svg" height="32"></picture>
+  <a href="LICENSE"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/split/license-dark.svg"><img alt="License: GPL-3.0" src="https://assets.flow-tube.org/v1/badges/split/license-light.svg" height="32"></picture></a>
+  </p>
 
   [**Downloads**](https://github.com/FlowNeuro/Flow-Desktop/releases) · [**Android app**](https://github.com/A-EDev/Flow) · [**Community**](https://www.reddit.com/r/Flow_Official/) · [**Support development**](#support--donations)
 </div>
@@ -120,7 +124,7 @@ Windows, Linux, and macOS packages are built natively by the GitHub Actions rele
 
 Flow is free and open-source software maintained by an independent developer. Patreon supports card, PayPal, Apple Pay, recurring support, and one-time tips.
 
-[![Support Flow on Patreon](https://img.shields.io/badge/Patreon-Support_Flow-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/A_EDev)
+<a href="https://patreon.com/A_EDev"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/support-patreon-dark.svg"><img alt="Support Flow on Patreon" src="https://assets.flow-tube.org/v1/badges/pill/support-patreon-light.svg" height="60"></picture></a>
 
 You can also donate directly with crypto. Scan a QR code using a compatible wallet, or click it where custom wallet links are supported. The address and network are printed below every code — always verify both before sending.
 
@@ -167,3 +171,9 @@ Flow Desktop is free software licensed under the [GNU General Public License v3.
 This license requires that any project using Flow's source code, including the FlowNeuro engine, must also be released as open source under GPLv3. It may not be used in a proprietary or closed-source application.
 
 Copyright © 2025–2026 A-EDev
+
+---
+
+<div align="center">
+  <a href="https://github.com/Flow-Tube"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/part-of-flow-dark.svg"><img alt="Part of the Flow ecosystem" src="https://assets.flow-tube.org/v1/badges/pill/part-of-flow-light.svg" height="60"></picture></a>
+</div>

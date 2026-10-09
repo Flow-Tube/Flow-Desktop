@@ -174,6 +174,17 @@ Copyright © 2025–2026 A-EDev
 
 ---
 
+## Star History
+
+<a href="https://github.com/Flow-Tube/Flow-Desktop/stargazers">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/stars/stars-flow-desktop-dark.svg">
+    <img alt="Star history of Flow Desktop" src="https://assets.flow-tube.org/v1/stars/stars-flow-desktop-light.svg" width="100%">
+  </picture>
+</a>
+
+---
+
 <div align="center">
   <a href="https://github.com/Flow-Tube"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/pill/part-of-flow-dark.svg"><img alt="Part of the Flow ecosystem" src="https://assets.flow-tube.org/v1/badges/pill/part-of-flow-light.svg" height="60"></picture></a>
 </div>

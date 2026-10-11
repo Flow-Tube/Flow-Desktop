@@ -32,6 +32,10 @@ PLAYER
 - Live streams no longer fail to refresh on slow connections, and a video that no longer exists now shows its own message instead of a generic error.
 
 SYNC
+- Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.
+- Pairing codes no longer show as expired on the phone when the two devices' clocks disagree, and codes that point outside your local network are refused.
+- The connection stays up while you read the merge prompt, the other device only reports success once the data is saved, and stalled sessions time out instead of hanging.
+- Sync errors say what went wrong and what to try, the pairing screen can copy the connection data for a device without a camera, and it suggests firewall checks when nothing connects.
 - Removing a video from history or unliking it on the desktop now reaches Flow for Android instead of coming back on the next sync. Deleted playlists, removed playlist tracks and deleted subscription groups reach your other desktops.
 - Renaming a playlist no longer leaves a copy behind on the other device, and playlists with the same name on two devices are matched once and stay matched.
 - Settings sync with Flow for Android under the names it understands, and a newer change made on the desktop is no longer overwritten. The video codec preference now stays on each device.

@@ -10,9 +10,24 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::sync::canonical::Collection;
+
+/// The collection with this wire name, if this build knows it.
+pub fn collection_from_key(name: &str) -> Option<Collection> {
+    Collection::ALL.into_iter().find(|c| c.key() == name)
+}
+
+/// Decode a list of collection names, dropping any this build doesn't know. A newer peer adds
+/// collections (Android's `notes`); failing the whole frame on one unknown name ended the session.
+fn known_collections<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Collection>, D::Error> {
+    let names = Vec::<String>::deserialize(d)?;
+    Ok(names
+        .iter()
+        .filter_map(|n| collection_from_key(n))
+        .collect())
+}
 
 /// Protocol version negotiated end-to-end.
 pub const PROTOCOL_VERSION: u8 = 1;
@@ -110,7 +125,9 @@ pub struct CapabilitiesFrame {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SelectionFrame {
+    #[serde(deserialize_with = "known_collections")]
     pub send: Vec<Collection>,
+    #[serde(deserialize_with = "known_collections")]
     pub accept: Vec<Collection>,
 }
 
@@ -139,10 +156,12 @@ pub struct ManifestFrame {
 }
 
 /// Header for a streamed NDJSON chunk (the records follow in the same decrypted frame body).
+/// Collection names on the stream stay raw strings so a collection this build doesn't know can
+/// still be routed and drained rather than failing the decode.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ChunkHeader {
-    pub collection: Option<Collection>,
+    pub collection: Option<String>,
     pub seq: u64,
     pub last: bool,
 }
@@ -150,14 +169,14 @@ pub struct ChunkHeader {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ChunkAckFrame {
-    pub collection: Option<Collection>,
+    pub collection: Option<String>,
     pub seq: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CompleteFrame {
-    pub collection: Option<Collection>,
+    pub collection: Option<String>,
     pub records_sent: u64,
     pub hash: String,
 }

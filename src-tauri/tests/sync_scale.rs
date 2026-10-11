@@ -3,23 +3,47 @@
 //! pipeline must merge that volume in a single transaction. Catches off-by-one chunk-boundary bugs
 //! and any accidental O(n²) in the staging/merge path.
 
+mod common;
+
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
+use common::bind_loopback;
 use flow_desktop_lib::sync::apply::apply_payload;
 use flow_desktop_lib::sync::canonical::{Collection, Hlc, WatchHistoryRecord, to_canonical_json};
 use flow_desktop_lib::sync::codec::sha256_hex;
 use flow_desktop_lib::sync::crypto::{
     Role, SessionCipher, generate_master_secret, generate_session_id,
 };
-use flow_desktop_lib::sync::frames::{CapabilitiesFrame, Capability, HelloFrame, Platform};
+use flow_desktop_lib::sync::frames::{
+    ApplyResultEntry, ApplyResultFrame, CapabilitiesFrame, Capability, HelloFrame, Platform,
+};
 use flow_desktop_lib::sync::protocol::{
-    ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection, run_receiver, run_sender,
+    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection, run_receiver,
+    run_sender,
 };
 use flow_desktop_lib::sync::transport;
 use std::collections::BTreeMap;
 
 const N: usize = 25_000;
+
+/// Apply step for tests: report every record as added and hand the staged data back.
+async fn stage_only(
+    _peer: HelloFrame,
+    staged: Vec<StagedCollection>,
+) -> ApplyOutput<Vec<StagedCollection>> {
+    let mut frame = ApplyResultFrame::default();
+    for c in &staged {
+        frame.collections.insert(
+            c.collection.key().to_string(),
+            ApplyResultEntry {
+                added: c.record_count,
+                ..ApplyResultEntry::default()
+            },
+        );
+    }
+    Ok((frame, staged))
+}
 
 fn record(i: usize) -> WatchHistoryRecord {
     WatchHistoryRecord {
@@ -75,7 +99,7 @@ async fn large_watch_history_streams_across_chunks_intact() {
 
     let master = generate_master_secret();
     let sid = generate_session_id();
-    let (listener, port) = transport::bind().await.unwrap();
+    let (listener, port) = bind_loopback().await;
 
     let host_master = master.clone();
     let send_nd = ndjson.clone();
@@ -114,6 +138,7 @@ async fn large_watch_history_streams_across_chunks_intact() {
             );
             true
         },
+        stage_only,
     )
     .await
     .unwrap();
@@ -122,7 +147,7 @@ async fn large_watch_history_streams_across_chunks_intact() {
         ClientOutcome::Completed(p) => p,
         ClientOutcome::Declined => panic!("receiver declined"),
     };
-    let col = &received.collections[0];
+    let col = &received.applied[0];
     assert_eq!(
         col.record_count, N as u64,
         "all records re-assembled across chunks"

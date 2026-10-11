@@ -10,6 +10,8 @@
 
 #![allow(clippy::must_use_candidate)]
 
+use std::net::IpAddr;
+
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
@@ -25,6 +27,8 @@ pub enum QrError {
     UnsupportedVersion(u8),
     #[error("bad base64 in field `{0}`")]
     Base64(&'static str),
+    #[error("`{0}` is not an address on a local network")]
+    Address(String),
     #[error(transparent)]
     Crypto(#[from] CryptoError),
 }
@@ -53,7 +57,23 @@ pub struct QrPayload {
     /// when sending so older peers stay compatible. (Matches the Android `role` field.)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
+    /// `"host"` when the host's own single-use, time-bounded listener decides freshness, so the
+    /// scanner must not compare `exp` with its own clock: device clocks routinely disagree by
+    /// minutes, which made valid codes look expired on arrival. (Matches the Android `lease`.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease: Option<String>,
+    /// More host addresses to try, in order, when `ip` is unreachable (a second adapter, or a
+    /// virtual adapter that won the ranking). Older scanners ignore it and dial `ip` only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ips: Vec<String>,
 }
+
+/// The `lease` value meaning "the host session decides freshness".
+const LEASE_HOST_SESSION: &str = "host";
+
+/// Slack for codes without a lease (Android phones), whose expiry is the phone's clock: a PC clock
+/// running a few minutes ahead must not reject a code the phone is still serving.
+const CLOCK_SKEW_GRACE_S: u64 = 600;
 
 impl QrPayload {
     /// Build a QR payload for a host that will **send** (the default; `role` omitted ⇒ "sender").
@@ -74,7 +94,20 @@ impl QrPayload {
             d: device_name.into(),
             exp: expires_at_epoch_s,
             role: None,
+            lease: Some(LEASE_HOST_SESSION.to_string()),
+            ips: Vec::new(),
         }
+    }
+
+    /// Offer extra addresses for the scanner to fall back to (deduplicated against `ip`).
+    #[must_use]
+    pub fn with_fallback_ips(mut self, ips: impl IntoIterator<Item = String>) -> Self {
+        for ip in ips {
+            if ip != self.ip && !self.ips.contains(&ip) {
+                self.ips.push(ip);
+            }
+        }
+        self
     }
 
     /// Build a QR payload for a host that will **receive** (`role:"receiver"`); the scanner must SEND.
@@ -116,6 +149,11 @@ impl QrPayload {
         if payload.v != PROTOCOL_VERSION {
             return Err(QrError::UnsupportedVersion(payload.v));
         }
+        for ip in std::iter::once(&payload.ip).chain(&payload.ips) {
+            if !is_local_address(ip) {
+                return Err(QrError::Address(ip.clone()));
+            }
+        }
         Ok(payload)
     }
 
@@ -135,9 +173,39 @@ impl QrPayload {
         MasterSecret::try_from_slice(&bytes).map_err(QrError::from)
     }
 
-    /// True if the QR has expired relative to the given wall-clock time (epoch seconds).
+    /// Every address to dial, in order: `ip` first, then the fallbacks.
+    pub fn dial_addresses(&self) -> Vec<&str> {
+        std::iter::once(self.ip.as_str())
+            .chain(self.ips.iter().map(String::as_str))
+            .collect()
+    }
+
+    /// True if the QR has expired relative to the given wall-clock time (epoch seconds). A
+    /// host-session lease never expires here: the host refuses late connections itself.
     pub fn is_expired(&self, now_epoch_s: u64) -> bool {
-        now_epoch_s >= self.exp
+        self.lease.as_deref() != Some(LEASE_HOST_SESSION)
+            && now_epoch_s >= self.exp.saturating_add(CLOCK_SKEW_GRACE_S)
+    }
+}
+
+/// True for an IP literal on a local network: private, link-local, CGNAT (Tailscale and other
+/// overlays) or loopback. Hostnames and public addresses are refused because the code carries the
+/// session key: a pasted code pointing at an internet host would stream the library to it, and the
+/// matching verification code proves nothing when the attacker made the key.
+pub fn is_local_address(ip: &str) -> bool {
+    match ip.parse::<IpAddr>() {
+        Ok(IpAddr::V4(v4)) => {
+            let [a, b, ..] = v4.octets();
+            v4.is_private()
+                || v4.is_link_local()
+                || v4.is_loopback()
+                || (a == 100 && (64..=127).contains(&b))
+        }
+        Ok(IpAddr::V6(v6)) => {
+            // Unique-local only: a link-local fe80:: address needs a zone id a QR can't carry.
+            v6.is_loopback() || (v6.segments()[0] & 0xfe00) == 0xfc00
+        }
+        Err(_) => false,
     }
 }
 

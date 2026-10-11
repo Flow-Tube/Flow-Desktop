@@ -15,11 +15,13 @@ import {
   X,
 } from "lucide-react";
 
+import { CopyConnectionData, NotConnectingHint } from "../components/sync/PairingHelp";
 import { Button } from "../components/ui/Button";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { useSyncStore } from "../store/useSyncStore";
 import { SYNC_COLLECTIONS, type ManifestInfo, type StatInfo } from "../lib/api/sync";
 import { getString, type StringKey } from "../lib/i18n/index";
+import { looksLikeAddress, syncErrorMessage } from "../lib/syncErrors";
 
 // --------------------------------------------------------------------------------------------
 // Collection display strings (resolved from i18n — no hardcoded copy in the view)
@@ -186,6 +188,10 @@ function SetupState() {
     const text = paste.trim();
     if (/^\d{4,8}$/.test(text)) {
       setPasteError(getString("sync_paste_is_sas"));
+      return;
+    }
+    if (looksLikeAddress(text)) {
+      setPasteError(getString("sync_paste_is_address"));
       return;
     }
     if (!text.startsWith("{")) {
@@ -381,6 +387,9 @@ function PairingState() {
         {expired ? getString("sync_expired") : getString("sync_waiting_connect")}
       </div>
       {!expired && <p className="mt-2 font-mono text-xs text-chrome-neutral-500">{getString("sync_expires_in", remaining)}</p>}
+      {!expired && <NotConnectingHint since={hostInfo.qr} />}
+
+      <CopyConnectionData data={hostInfo.qr} />
 
       <p className="mt-6 font-mono text-xs text-chrome-neutral-500">
         {getString("sync_host_address", `${hostInfo.ip}:${hostInfo.port}`)}
@@ -597,7 +606,7 @@ export default function Sync() {
                 </div>
               }
               title={getString("sync_failed_title")}
-              message={status.message ?? error ?? getString("sync_failed_body")}
+              message={status.errorKind || status.message ? syncErrorMessage(status.errorKind, status.message) : (error ?? getString("sync_failed_body"))}
             />
           ),
         };

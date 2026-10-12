@@ -5,7 +5,7 @@ import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
-import { usePlayerStore } from "../../store/usePlayerStore";
+import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory, type SponsorBlockAction } from "../../store/useSettingsStore";
 import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../../types/video";
 import { FlowPlayerControls } from "./FlowPlayerControls";
@@ -1264,9 +1264,10 @@ export const Player: React.FC<PlayerProps> = ({
 
   const nudgeSubtitleFontSize = useCallback((delta: number) => {
     const { subtitleStyle: current, setSubtitleStyle } = usePlayerStore.getState();
-    const fontSize = Math.min(32, Math.max(12, current.fontSize + delta));
-    if (fontSize === current.fontSize) return;
-    setSubtitleStyle({ ...current, fontSize });
+    const index = SUBTITLE_FONT_SCALES.indexOf(current.fontScale) + delta;
+    const fontScale = SUBTITLE_FONT_SCALES[Math.min(SUBTITLE_FONT_SCALES.length - 1, Math.max(0, index))];
+    if (fontScale === undefined || fontScale === current.fontScale) return;
+    setSubtitleStyle({ ...current, fontScale });
   }, []);
 
   const stepFrame = useCallback((direction: 1 | -1) => {

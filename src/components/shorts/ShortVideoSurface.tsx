@@ -825,6 +825,7 @@ export function ShortVideoSurface({
         selectedCaptionId={selectedCaptionId}
         currentTime={progress}
         shouldShowControls={settingsOpen}
+        uprightVideo={fit === "cover"}
       />
       {isBoosting && (
         <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/80 px-5 py-2 text-sm font-bold text-chrome-white">

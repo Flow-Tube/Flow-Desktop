@@ -1240,6 +1240,7 @@
   "stats_ready_state": "Ready state",
   "stats_captions": "Captions",
   "subtitles_track_unavailable": "This subtitle track could not be loaded",
+  "subtitles_drag_hint": "Drag subtitles on the video to move them for just that video.",
   "blocked_card_title": "Blocked",
   "blocked_card_reason": "Matched “%s”",
   "blocked_card_show": "Show anyway",

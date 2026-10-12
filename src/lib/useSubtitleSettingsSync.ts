@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 import { SETTINGS } from "./settings/schema";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
+import { getSettingValue, setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
 import { usePlayerStore } from "../store/usePlayerStore";
 
 /**
- * Applies the Settings-page subtitle font size / bold values onto the
- * in-player subtitle style — but only when those settings actually change.
+ * Keeps the Settings-page subtitle font scale / bold values and the in-player
+ * subtitle style in step, in both directions — but only on actual changes.
  *
  * The in-player customizer (SubtitleCustomizer -> setSubtitleStyle, persisted
  * to localStorage) is the live source of truth. Keying this sync on the
@@ -19,8 +19,8 @@ let lastAppliedSettingsKey: string | null = null;
 
 export function useSubtitleSettingsSync() {
   const settingsLoaded = useAppSettingsStore((state) => state.loaded);
-  const fontSizeSetting = useAppSettingsStore(
-    (state) => state.values[SETTINGS.SUBTITLE_FONT_SIZE] ?? "14",
+  const fontScaleSetting = useAppSettingsStore(
+    (state) => state.values[SETTINGS.SUBTITLE_FONT_SCALE] ?? "100",
   );
   const bold = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLE_BOLD] !== "false");
 
@@ -29,9 +29,9 @@ export function useSubtitleSettingsSync() {
     // defaults->stored transition would clobber the persisted style on launch.
     if (!settingsLoaded) return;
 
-    const parsed = Number(fontSizeSetting);
-    const fontSize = Number.isFinite(parsed) ? parsed : 14;
-    const key = `${fontSize}|${bold}`;
+    const parsed = Number(fontScaleSetting);
+    const fontScale = Number.isFinite(parsed) ? parsed : 100;
+    const key = `${fontScale}|${bold}`;
     if (lastAppliedSettingsKey === key) return;
 
     const isFirstObservation = lastAppliedSettingsKey === null;
@@ -40,7 +40,25 @@ export function useSubtitleSettingsSync() {
     if (isFirstObservation) return;
 
     const { subtitleStyle, setSubtitleStyle } = usePlayerStore.getState();
-    if (subtitleStyle.fontSize === fontSize && subtitleStyle.isBold === bold) return;
-    setSubtitleStyle({ ...subtitleStyle, fontSize, isBold: bold });
-  }, [bold, fontSizeSetting, settingsLoaded]);
+    if (subtitleStyle.fontScale === fontScale && subtitleStyle.isBold === bold) return;
+    setSubtitleStyle({ ...subtitleStyle, fontScale, isBold: bold });
+  }, [bold, fontScaleSetting, settingsLoaded]);
+
+  // Changes made in the player (customizer, +/- keys) are saved to the settings too, so the Settings
+  // page shows them. Only on a change, so launching never writes over the stored settings.
+  useEffect(
+    () =>
+      usePlayerStore.subscribe((state, previous) => {
+        const style = state.subtitleStyle;
+        if (style === previous.subtitleStyle || !useAppSettingsStore.getState().loaded) return;
+        const values = [
+          [SETTINGS.SUBTITLE_FONT_SCALE, String(style.fontScale)],
+          [SETTINGS.SUBTITLE_BOLD, String(style.isBold)],
+        ] as const;
+        for (const [key, value] of values) {
+          if (getSettingValue(key) !== value) void setSettingValue(key, value);
+        }
+      }),
+    [],
+  );
 }

@@ -95,7 +95,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "long_press_playback_speed",
     "speed_slider_enabled",
     "double_tap_seek_seconds",
-    "subtitle_font_size",
+    "subtitle_font_scale",
     "subtitle_bold",
     "mini_player_show_skip_controls",
     "mini_player_show_next_prev_controls",

@@ -77,7 +77,7 @@ async fn android_settings_land_on_the_desktop_keys() {
         entry("subscriptions_show_shorts", json!(false), 1_000),
         entry("default_video_codec", json!("av1"), 1_000),
         entry("equalizer", json!("{\"bands\":[]}"), 1_000),
-        entry("desktop.subtitle_font_size", json!("18"), 1_000),
+        entry("desktop.subtitle_font_scale", json!("150"), 1_000),
     ];
     apply_payload(&pool, OUR, PEER, &[staged(&incoming, "s1")])
         .await
@@ -97,8 +97,8 @@ async fn android_settings_land_on_the_desktop_keys() {
         Some("false")
     );
     assert_eq!(
-        stored(&pool, "subtitle_font_size").await.as_deref(),
-        Some("18")
+        stored(&pool, "subtitle_font_scale").await.as_deref(),
+        Some("150")
     );
     assert_eq!(
         stored(&pool, "default_video_codec").await,
@@ -134,7 +134,7 @@ async fn export_renames_and_types_settings_and_leaves_the_codec_out() {
     let pool = memory_pool().await;
     set_like_the_app(&pool, "autoplay_enabled", "true").await;
     set_like_the_app(&pool, "playback_speed", "1.25").await;
-    set_like_the_app(&pool, "subtitle_font_size", "18").await;
+    set_like_the_app(&pool, "subtitle_font_scale", "150").await;
     set_like_the_app(&pool, "default_video_codec", "av1").await;
     set_like_the_app(&pool, "download_location", "/secret").await;
 
@@ -151,8 +151,8 @@ async fn export_renames_and_types_settings_and_leaves_the_codec_out() {
     assert_eq!(find("autoplay").unwrap().value, json!(true));
     assert_eq!(find("playback_speed").unwrap().value, json!(1.25));
     assert_eq!(
-        find("desktop.subtitle_font_size").unwrap().value,
-        json!("18")
+        find("desktop.subtitle_font_scale").unwrap().value,
+        json!("150")
     );
     assert!(find("default_video_codec").is_none());
     assert!(find("download_location").is_none());

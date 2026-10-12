@@ -1,6 +1,12 @@
 import React from "react";
-import { usePlayerStore, DEFAULT_SUBTITLE_STYLE, type SubtitleStyle } from "../../store/usePlayerStore";
+import {
+  usePlayerStore,
+  DEFAULT_SUBTITLE_STYLE,
+  SUBTITLE_FONT_SCALES,
+  type SubtitleStyle,
+} from "../../store/usePlayerStore";
 import { Undo2 } from "lucide-react";
+import { getString } from "../../lib/i18n/index";
 
 const textColors = [
   "#FFFFFF", // White
@@ -40,6 +46,7 @@ export const SubtitleCustomizer: React.FC = () => {
   const g = parseInt(hex.substring(2, 4), 16) || 0;
   const b = parseInt(hex.substring(4, 6), 16) || 0;
   const bgRgba = `rgba(${r}, ${g}, ${b}, ${subtitleStyle.backgroundOpacity})`;
+  const scaleIndex = Math.max(0, SUBTITLE_FONT_SCALES.indexOf(subtitleStyle.fontScale));
 
   return (
     <div className="flex flex-col gap-4 p-1 select-none">
@@ -53,7 +60,8 @@ export const SubtitleCustomizer: React.FC = () => {
           style={{
             backgroundColor: bgRgba,
             color: subtitleStyle.textColor,
-            fontSize: `${subtitleStyle.fontSize}px`,
+            // The real size follows the player; the preview only shows the relative size, kept inside its box.
+            fontSize: `${Math.min(32, (16 * subtitleStyle.fontScale) / 100)}px`,
             fontWeight: subtitleStyle.isBold ? "700" : "500",
             lineHeight: "1.35",
             boxShadow: "0 10px 25px -5px color-mix(in srgb, var(--color-chrome-black) 50%, transparent)",
@@ -67,15 +75,15 @@ export const SubtitleCustomizer: React.FC = () => {
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
           <span>Font Size</span>
-          <span className="text-chrome-red-400 font-mono">{subtitleStyle.fontSize}px</span>
+          <span className="text-chrome-red-400 font-mono">{subtitleStyle.fontScale}%</span>
         </div>
         <input
           type="range"
-          min={12}
-          max={32}
+          min={0}
+          max={SUBTITLE_FONT_SCALES.length - 1}
           step={1}
-          value={subtitleStyle.fontSize}
-          onChange={(e) => handleUpdate({ fontSize: Number(e.target.value) })}
+          value={scaleIndex}
+          onChange={(e) => handleUpdate({ fontScale: SUBTITLE_FONT_SCALES[Number(e.target.value)] ?? DEFAULT_SUBTITLE_STYLE.fontScale })}
           className="w-full h-1 bg-chrome-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary"
         />
       </div>
@@ -84,17 +92,18 @@ export const SubtitleCustomizer: React.FC = () => {
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
           <span>Bottom Position</span>
-          <span className="text-chrome-red-400 font-mono">{subtitleStyle.bottomPadding}px</span>
+          <span className="text-chrome-red-400 font-mono">{subtitleStyle.bottomOffset}%</span>
         </div>
         <input
           type="range"
-          min={24}
-          max={180}
-          step={2}
-          value={subtitleStyle.bottomPadding}
-          onChange={(e) => handleUpdate({ bottomPadding: Number(e.target.value) })}
+          min={2}
+          max={30}
+          step={0.5}
+          value={subtitleStyle.bottomOffset}
+          onChange={(e) => handleUpdate({ bottomOffset: Number(e.target.value) })}
           className="w-full h-1 bg-chrome-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary"
         />
+        <p className="text-xs text-chrome-zinc-400">{getString("subtitles_drag_hint")}</p>
       </div>
 
       {/* Text Colors Grid */}

@@ -7,6 +7,7 @@ import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePrefe
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
+import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import {
   getOrderedProviders,
   parseProviderEnabledStates,
@@ -32,7 +33,7 @@ export function PlayerTab() {
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
-  const [subtitleSize, setSubtitleSize] = usePreference(SETTINGS.SUBTITLE_FONT_SIZE, '14');
+  const [subtitleScale, setSubtitleScale] = usePreference(SETTINGS.SUBTITLE_FONT_SCALE, '100');
   const [subtitleBold, setSubtitleBold] = useBoolPref(SETTINGS.SUBTITLE_BOLD, true);
   const [lyricsProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
   const [lyricsEnabledRaw, setLyricsEnabledRaw] = usePreference(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, '{}');
@@ -130,10 +131,9 @@ export function PlayerTab() {
           ]} />
         </SettingItem>
         <SettingItem title={getString('settings_font_size')}>
-          <Select value={subtitleSize} onChange={setSubtitleSize} options={[
-            { value: '10', label: '10' }, { value: '12', label: '12' }, { value: '14', label: '14' },
-            { value: '16', label: '16' }, { value: '18', label: '18' }, { value: '20', label: '20' }, { value: '24', label: '24' },
-          ]} />
+          <Select value={subtitleScale} onChange={setSubtitleScale} options={SUBTITLE_FONT_SCALES.map((scale) => (
+            { value: String(scale), label: `${scale}%` }
+          ))} />
         </SettingItem>
         <SettingItem title={getString('settings_bold_subtitles')}>
           <ToggleSwitch checked={subtitleBold} onChange={setSubtitleBold} />

@@ -26,28 +26,35 @@ export interface WatchPageCache {
 }
 
 export interface SubtitleStyle {
-  fontSize: number;
+  /** Percent of YouTube's default caption size, which scales with the player. */
+  fontScale: number;
   textColor: string;
   backgroundColor: string;
   backgroundOpacity: number;
   isBold: boolean;
-  bottomPadding: number;
+  /** Percent of the player's height between its bottom and the captions'. */
+  bottomOffset: number;
 }
 
+/** YouTube's caption font size options. */
+export const SUBTITLE_FONT_SCALES = [50, 75, 100, 150, 200, 300, 400];
+
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
-  fontSize: 18,
+  fontScale: 100,
   textColor: "#FFFFFF",
   backgroundColor: "#000000",
   backgroundOpacity: 0.75,
   isBold: true,
-  bottomPadding: 32,
+  // YouTube's: its caption box sits 2% of the player's height above the bottom.
+  bottomOffset: 2,
 };
 
 const getSavedSubtitleStyle = (): SubtitleStyle => {
   try {
     const saved = localStorage.getItem("flow_subtitle_style");
     if (saved) {
-      return JSON.parse(saved);
+      // A style saved by an older build lacks the newer fields; they take the defaults.
+      return { ...DEFAULT_SUBTITLE_STYLE, ...JSON.parse(saved) };
     }
   } catch (e) {
     console.error("Failed to parse saved subtitle style", e);

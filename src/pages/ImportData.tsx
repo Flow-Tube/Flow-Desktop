@@ -276,7 +276,7 @@ export const ImportData: React.FC = () => {
           const crossRefs = backupData.playlistVideos || []; const vids = backupData.videos || [];
           const parsed: LocalPlaylist[] = backupData.playlists.map((pl: any) => {
             const refs = crossRefs.filter((r: any) => r.playlistId === pl.id).sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
-            const tracks: VideoSummary[] = refs.map((ref: any) => vids.find((v: any) => v.id === ref.videoId)).filter(Boolean).map((vid: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || "Unknown", thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track" }));
+            const tracks: VideoSummary[] = refs.map((ref: any) => ({ ref, vid: vids.find((v: any) => v.id === ref.videoId) })).filter(({ vid }: any) => vid).map(({ ref, vid }: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || "Unknown", thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track", addedAtInPlaylist: ref.addedAt > 0 ? ref.addedAt : null }));
             return { id: pl.id || `imported-${Date.now()}-${Math.random()}`, name: pl.name || "Imported Playlist", description: pl.description || "Imported from backup", tracks };
           });
           const merged = [...existing];

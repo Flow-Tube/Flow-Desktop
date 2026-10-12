@@ -243,7 +243,14 @@ export const savePlaylistToLibrary = async (playlist: PlaylistSummary) => {
     console.warn("Failed to fetch playlist details while saving", error);
   }
 
-  const fetchedTracks = details?.videos ?? [];
+  const addedAt = Date.now();
+  const existingAddedAt = new Map(
+    (existingPlaylist?.tracks ?? []).map((track) => [track.id, track.addedAtInPlaylist]),
+  );
+  const fetchedTracks = (details?.videos ?? []).map((track) => ({
+    ...track,
+    addedAtInPlaylist: existingAddedAt.get(track.id) ?? addedAt,
+  }));
   const parsedCount = parseVideoCountFromText(playlist.videoCountText);
   const videoCount = details?.videoCount
     ?? (fetchedTracks.length > 0 ? fetchedTracks.length : null)
@@ -331,7 +338,7 @@ export const addVideoToStoredPlaylist = async (
       return playlist;
     }
 
-    const tracks = [...playlist.tracks, video];
+    const tracks = [...playlist.tracks, { ...video, addedAtInPlaylist: Date.now() }];
     updatedPlaylist = normalizePlaylist({
       ...playlist,
       tracks,
@@ -354,7 +361,7 @@ export const addVideoToWatchLater = async (video: VideoSummary) => {
     if (playlist.id !== WATCH_LATER_PLAYLIST_ID) return playlist;
     if (playlist.tracks.some((track) => track.id === video.id)) return playlist;
 
-    const tracks = [video, ...playlist.tracks];
+    const tracks = [{ ...video, addedAtInPlaylist: Date.now() }, ...playlist.tracks];
     return normalizePlaylist({
       ...playlist,
       tracks,

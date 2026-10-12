@@ -17,17 +17,15 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { VideoCard } from "../video/VideoCard";
 import { Select } from "../ui/Select";
-import {
-  PLAYLIST_SORT_OPTIONS,
-  type PlaylistSortType,
-} from "../../lib/playlistSort";
+import { playlistSortLabel, showsDateAdded, type PlaylistSortOrder } from "../../lib/playlistSort";
 import type { VideoSummary } from "../../types/video";
 
 interface PlaylistSortableListProps {
   videos: VideoSummary[];
   displayVideos: VideoSummary[];
-  sortType: PlaylistSortType;
-  onSortChange: (sort: PlaylistSortType) => void;
+  sortOrder: PlaylistSortOrder;
+  sortOptions: PlaylistSortOrder[];
+  onSortChange: (order: PlaylistSortOrder) => void;
   onReorder: (videos: VideoSummary[]) => void;
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
@@ -86,11 +84,13 @@ function SortablePlaylistRow({
 function PlaylistVideoRows({
   displayVideos,
   sortEnabled,
+  showAddedDate,
   onPlay,
   onAddToQueue,
 }: {
   displayVideos: VideoSummary[];
   sortEnabled: boolean;
+  showAddedDate: boolean;
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
 }) {
@@ -128,6 +128,7 @@ function PlaylistVideoRows({
           onPlay={onPlay}
           onAddToQueue={onAddToQueue}
           showDragHandle={false}
+          showAddedDate={showAddedDate}
         />
       ))}
     </div>
@@ -137,13 +138,14 @@ function PlaylistVideoRows({
 export function PlaylistSortableList({
   videos,
   displayVideos,
-  sortType,
+  sortOrder,
+  sortOptions,
   onSortChange,
   onReorder,
   onPlay,
   onAddToQueue,
 }: PlaylistSortableListProps) {
-  const sortEnabled = sortType === "Manual";
+  const sortEnabled = sortOrder === "manual";
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -176,6 +178,7 @@ export function PlaylistSortableList({
     <PlaylistVideoRows
       displayVideos={displayVideos}
       sortEnabled={sortEnabled}
+      showAddedDate={showsDateAdded(sortOrder)}
       onPlay={onPlay}
       onAddToQueue={onAddToQueue}
     />
@@ -185,9 +188,9 @@ export function PlaylistSortableList({
     <section className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="shrink-0 border-b border-chrome-neutral-800/50 bg-background pb-4">
           <Select
-            value={sortType}
-            onChange={(val) => onSortChange(val as PlaylistSortType)}
-            options={PLAYLIST_SORT_OPTIONS.map((option) => ({ value: option, label: option }))}
+            value={sortOrder}
+            onChange={(val) => onSortChange(val as PlaylistSortOrder)}
+            options={sortOptions.map((order) => ({ value: order, label: playlistSortLabel(order) }))}
             className="w-full max-w-xs"
           />
       </div>

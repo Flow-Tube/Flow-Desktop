@@ -24,6 +24,8 @@ import {
 } from "../../lib/savedShortsLibrary";
 import { getString } from "../../lib/i18n/index";
 import { formatCount } from "../../lib/utils";
+import { youtubeShortsUrl } from "../../lib/youtubeUrl";
+import { copyText, shareLink } from "../../lib/clipboard";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 import type { ShortVideoSummary, VideoDetails, VideoSummary } from "../../types/video";
 import type { RydData } from "../../lib/api/foss";
@@ -121,10 +123,22 @@ export function ShortActionBar({
     };
   }, [short.id]);
 
-  const copyLink = () => {
+  const copyLink = async () => {
     setMenuOpen(false);
-    void navigator.clipboard?.writeText(`https://www.youtube.com/shorts/${short.id}`);
-    showToast({ variant: "success", message: getString("shorts_link_copied") });
+    const copied = await copyText(youtubeShortsUrl(short.id));
+    showToast({
+      variant: copied ? "success" : "error",
+      message: getString(copied ? "shorts_link_copied" : "share_link_copy_failed"),
+    });
+  };
+
+  const shareShort = async () => {
+    const result = await shareLink(resolvedTitle, youtubeShortsUrl(short.id));
+    if (result === "shared") return;
+    showToast({
+      variant: result === "copied" ? "success" : "error",
+      message: getString(result === "copied" ? "shorts_link_copied" : "share_link_copy_failed"),
+    });
   };
 
   const notInterested = () => {
@@ -191,7 +205,7 @@ export function ShortActionBar({
       <ActionButton
         ariaLabel="Share"
         countText="Share"
-        onClick={copyLink}
+        onClick={shareShort}
         icon={<Share2 className="h-6 w-6" />}
       />
 

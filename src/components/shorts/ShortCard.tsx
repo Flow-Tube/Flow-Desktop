@@ -24,6 +24,8 @@ import {
   saveShortToLibrary,
 } from "../../lib/savedShortsLibrary";
 import { getString } from "../../lib/i18n/index";
+import { youtubeShortsUrl } from "../../lib/youtubeUrl";
+import { copyText } from "../../lib/clipboard";
 import type { ShortVideoSummary, VideoSummary } from "../../types/video";
 
 interface ShortCardProps {
@@ -103,10 +105,13 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
     setMenuAnchor({ top: rect.bottom + 4, right: rect.right });
   };
 
-  const copyLink = () => {
+  const copyLink = async () => {
     setMenuAnchor(null);
-    void navigator.clipboard?.writeText(`https://www.youtube.com/shorts/${short.id}`);
-    showToast({ variant: "success", message: getString("shorts_link_copied") });
+    const copied = await copyText(youtubeShortsUrl(short.id));
+    showToast({
+      variant: copied ? "success" : "error",
+      message: getString(copied ? "shorts_link_copied" : "share_link_copy_failed"),
+    });
   };
 
   const toggleSavedShort = async () => {

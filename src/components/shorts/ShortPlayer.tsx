@@ -137,6 +137,7 @@ export function ShortPlayer({
         >
           <div className="relative z-20 aspect-[9/16] h-full bg-chrome-black">
             <ShortVideoSurface
+              videoId={short.id}
               dashUrl={active ? dashUrl : null}
               videoUrl={active ? videoUrl : null}
               audioUrl={active ? audioUrl : null}

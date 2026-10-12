@@ -101,3 +101,28 @@ const RESERVED = new Set([
 function isReservedPath(path: string): boolean {
   return RESERVED.has(path.slice(1).toLowerCase());
 }
+
+export function youtubeWatchUrl(videoId: string, positionSeconds?: number): string {
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  return positionSeconds === undefined ? watchUrl : `${watchUrl}&t=${Math.max(0, Math.floor(positionSeconds))}s`;
+}
+
+export function youtubeShortsUrl(videoId: string): string {
+  return `https://www.youtube.com/shorts/${videoId}`;
+}
+
+export function youtubeMusicWatchUrl(videoId: string): string {
+  return `https://music.youtube.com/watch?v=${videoId}`;
+}
+
+export function youtubeMusicAlbumUrl(browseId: string): string {
+  return `https://music.youtube.com/browse/${browseId}`;
+}
+
+export function youtubePlaylistUrl(playlistId: string): string {
+  return `https://www.youtube.com/playlist?list=${playlistId}`;
+}
+
+export function youtubePostUrl(postId: string): string {
+  return `https://www.youtube.com/post/${postId}`;
+}

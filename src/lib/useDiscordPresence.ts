@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { useSettingsStore, type DiscordRpcMode } from "../store/useSettingsStore";
+import { youtubeMusicWatchUrl, youtubeWatchUrl } from "./youtubeUrl";
 import {
   clearDiscordPresence,
   setDiscordPresence,
@@ -97,7 +98,7 @@ export function useDiscordPresence(): void {
         elapsedSeconds: elapsed,
         durationSeconds: m.duration || track.duration || undefined,
         isPaused: !m.isPlaying,
-        url: trackVideoId ? `https://music.youtube.com/watch?v=${trackVideoId}` : undefined,
+        url: trackVideoId ? youtubeMusicWatchUrl(trackVideoId) : undefined,
         buttonLabel: t("discord.buttonListen"),
       };
     } else if (chosen === "video" && v.currentVideo) {
@@ -121,7 +122,7 @@ export function useDiscordPresence(): void {
         elapsedSeconds: elapsed,
         durationSeconds: isLive ? undefined : video.durationSeconds ?? v.duration ?? undefined,
         isPaused: !v.isPlaying,
-        url: `https://www.youtube.com/watch?v=${video.id}`,
+        url: youtubeWatchUrl(video.id),
         buttonLabel: t("discord.buttonWatch"),
       };
     } else {

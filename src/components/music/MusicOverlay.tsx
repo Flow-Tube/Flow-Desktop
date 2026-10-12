@@ -45,6 +45,8 @@ import { useDominantColor } from "../../lib/useDominantColor";
 import { accentForeground, accentSurface } from "../../lib/accentColor";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { youtubeMusicWatchUrl } from "../../lib/youtubeUrl";
+import { shareLink } from "../../lib/clipboard";
 import { usePreference } from "../../lib/usePreference";
 import { SETTINGS } from "../../lib/settings/schema";
 
@@ -63,21 +65,6 @@ const LAYOUT_SPRING = { type: "spring" as const, stiffness: 320, damping: 36, ma
 
 function videoIdOf(track: SongItem): string {
   return track.videoId ?? track.id;
-}
-
-function trackShareUrl(track: SongItem): string {
-  return `https://music.youtube.com/watch?v=${encodeURIComponent(videoIdOf(track))}`;
-}
-
-async function shareTrack(track: SongItem) {
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: track.title, url: trackShareUrl(track) });
-      return;
-    }
-    await navigator.clipboard?.writeText(trackShareUrl(track));
-  } catch {
-  }
 }
 
 export function MusicOverlay() {
@@ -155,7 +142,7 @@ export function MusicOverlay() {
           id: "share",
           label: getString("music_share"),
           icon: <Share2 size={16} />,
-          onSelect: () => shareTrack(currentTrack),
+          onSelect: () => void shareLink(currentTrack.title, youtubeMusicWatchUrl(videoIdOf(currentTrack))),
         },
       ]
     : [];

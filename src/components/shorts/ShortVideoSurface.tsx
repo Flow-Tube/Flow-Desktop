@@ -17,6 +17,8 @@ import {
 import type { PlaybackRate } from "../../store/usePlayerStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { SETTINGS } from "../../lib/settings/schema";
+import { youtubeShortsUrl, youtubeWatchUrl } from "../../lib/youtubeUrl";
+import { copyText } from "../../lib/clipboard";
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
   formatPlaybackRate,
@@ -35,6 +37,7 @@ import { StatsForNerds } from "../player/StatsForNerds";
 import { MediaScrubber } from "../ui/MediaScrubber";
 
 interface ShortVideoSurfaceProps {
+  videoId: string;
   dashUrl: string | null;
   videoUrl: string | null;
   audioUrl: string | null;
@@ -73,21 +76,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-async function copyText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  textarea.remove();
-}
-
 function proxyPrefix(dashUrl: string): string | null {
   const marker = "?url=";
   const index = dashUrl.indexOf(marker);
@@ -95,6 +83,7 @@ function proxyPrefix(dashUrl: string): string | null {
 }
 
 export function ShortVideoSurface({
+  videoId,
   dashUrl,
   videoUrl,
   audioUrl,
@@ -558,22 +547,15 @@ export function ShortVideoSurface({
     [restorePlaybackRate],
   );
 
+  // A Shorts link can't carry a time, so the timed link opens the short as a regular video.
   const getCurrentUrl = useCallback(
-    (includeTime: boolean) => {
-      const url = new URL(window.location.href);
-      if (includeTime) {
-        url.searchParams.set("t", `${Math.max(0, Math.floor(progress))}`);
-      } else {
-        url.searchParams.delete("t");
-      }
-      return url.toString();
-    },
-    [progress],
+    (includeTime: boolean) => (includeTime ? youtubeWatchUrl(videoId, progress) : youtubeShortsUrl(videoId)),
+    [progress, videoId],
   );
 
   const copyDebugInfo = useCallback(async () => {
     const video = videoRef.current;
-    await copyText(JSON.stringify({
+    const copied = await copyText(JSON.stringify({
       currentTime: formatTime(progress),
       duration: formatTime(duration),
       playbackRate,
@@ -583,7 +565,7 @@ export function ShortVideoSurface({
       resolution: video ? `${video.videoWidth}x${video.videoHeight}` : null,
       captions: captions.length,
     }, null, 2));
-    showCopied("Debug info copied");
+    showCopied(copied ? "Debug info copied" : "Couldn't copy debug info");
   }, [captions.length, duration, playbackRate, progress, selectedQualityId, showCopied]);
 
   const togglePictureInPicture = useCallback(() => {
@@ -881,7 +863,7 @@ export function ShortVideoSurface({
             icon={<Link size={20} />}
             label="Copy video URL"
             onClick={() => {
-              void copyText(getCurrentUrl(false)).then(() => showCopied("Video URL copied"));
+              void copyText(getCurrentUrl(false)).then((copied) => showCopied(copied ? "Video URL copied" : "Couldn't copy URL"));
               setContextMenu(null);
             }}
           />
@@ -889,7 +871,7 @@ export function ShortVideoSurface({
             icon={<Link size={20} />}
             label="Copy video URL at current time"
             onClick={() => {
-              void copyText(getCurrentUrl(true)).then(() => showCopied("Timed URL copied"));
+              void copyText(getCurrentUrl(true)).then((copied) => showCopied(copied ? "Timed URL copied" : "Couldn't copy URL"));
               setContextMenu(null);
             }}
           />

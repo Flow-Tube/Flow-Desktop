@@ -6,6 +6,8 @@ import { getString } from "../../lib/i18n/index";
 import { formatCount } from "../../lib/utils";
 import { upgradeAvatarUrl, upgradeCommunityPostImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { youtubePostUrl } from "../../lib/youtubeUrl";
+import { shareLink } from "../../lib/clipboard";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { useUiStore } from "../../store/useUiStore";
 import { CommentsSection } from "../watch/CommentsSection";
@@ -24,7 +26,7 @@ export function PostCard({ post }: PostCardProps) {
   const showToast = useUiStore((state) => state.showToast);
   const avatarUrl = useProxiedImageUrl(upgradeAvatarUrl(post.authorAvatar));
   const imageUrl = useProxiedImageUrl(upgradeCommunityPostImageUrl(post.imageAttachment));
-  const postUrl = `https://www.youtube.com/post/${post.id}`;
+  const postUrl = youtubePostUrl(post.id);
   const likeLabel = rydData ? formatCount(rydData.likes) : formatCount(post.likesCountText) || "Like";
   const dislikeLabel = rydData ? formatCount(rydData.dislikes) : getString("watch_dislike");
   const commentLabel = formatCount(post.commentCountText) || "Comments";
@@ -45,19 +47,10 @@ export function PostCard({ post }: PostCardProps) {
   }, [post.id, rytdEnabled]);
 
   const sharePost = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: post.textContent?.slice(0, 80) || post.authorName || "YouTube post",
-          url: postUrl,
-        });
-        return;
-      }
-      await navigator.clipboard?.writeText(postUrl);
-      showToast({ variant: "success", message: getString("shorts_link_copied") });
-    } catch {
-      // Share can be cancelled by the user.
-    }
+    const title = post.textContent?.slice(0, 80) || post.authorName || "YouTube post";
+    const result = await shareLink(title, postUrl);
+    if (result === "copied") showToast({ variant: "success", message: getString("shorts_link_copied") });
+    if (result === "failed") showToast({ variant: "error", message: getString("share_link_copy_failed") });
   };
 
   return (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
+import { copyText } from "../../lib/clipboard";
 
 /// How long the QR waits before suggesting network and firewall checks.
 const NOT_CONNECTING_AFTER_MS = 45_000;
@@ -11,13 +12,8 @@ export function CopyConnectionData({ data }: { data: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(data);
-      setState("copied");
-    } catch {
-      // WebKitGTK and some WebView2 setups refuse clipboard writes; show the text to copy by hand.
-      setState("failed");
-    }
+    // WebKitGTK and some WebView2 setups refuse clipboard writes; show the text to copy by hand.
+    setState((await copyText(data)) ? "copied" : "failed");
   };
 
   return (

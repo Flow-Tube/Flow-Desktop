@@ -9,11 +9,12 @@ import { useDownloadStore } from "../../store/useDownloadStore";
 import { useIsDownloaded } from "../../lib/useDownloads";
 import { useVideoReactions } from "../../lib/useVideoReactions";
 import { formatCount } from "../../lib/utils";
-import { copyText } from "../../lib/clipboard";
+import { shareLink } from "../../lib/clipboard";
 import { useUiStore } from "../../store/useUiStore";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import type { WatchMetadataProps } from "./types";
 
 export function WatchMetadata({
@@ -54,10 +55,11 @@ export function WatchMetadata({
   };
 
   const shareVideo = async () => {
-    const copied = await copyText(`https://www.youtube.com/watch?v=${currentVideo.id}`);
+    const result = await shareLink(currentVideo.title, youtubeWatchUrl(currentVideo.id));
+    if (result === "shared") return;
     useUiStore.getState().showToast({
-      message: getString(copied ? "share_link_copied" : "share_link_copy_failed"),
-      variant: copied ? "success" : "error",
+      message: getString(result === "copied" ? "share_link_copied" : "share_link_copy_failed"),
+      variant: result === "copied" ? "success" : "error",
     });
   };
 

@@ -1,6 +1,7 @@
 import { Copy, Heart } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { getString } from "../lib/i18n/index";
+import { copyText } from "../lib/clipboard";
 import { openExternal } from "../lib/openExternal";
 import { useUiStore } from "../store/useUiStore";
 
@@ -102,14 +103,12 @@ export default function Donations() {
   const showToast = useUiStore((state) => state.showToast);
 
   const handleCopy = async (method: CryptoMethod) => {
-    try {
-      await navigator.clipboard.writeText(method.address);
+    if (await copyText(method.address)) {
       showToast({
         variant: "success",
         message: getString("donations_address_copied"),
       });
-    } catch (error) {
-      console.warn("Failed to copy donation address", error);
+    } else {
       showToast({
         variant: "error",
         message: getString("donations_copy_failed"),

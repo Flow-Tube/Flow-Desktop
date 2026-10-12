@@ -17,6 +17,7 @@ import { SponsorBlockStatsDashboard } from "../components/extensions/SponsorBloc
 import { SB_CATEGORY_META } from "../lib/sponsorBlockCategories";
 import { useSponsorBlockCategoryStats } from "../lib/useSponsorBlockCategoryStats";
 import { SETTINGS } from "../lib/settings/schema";
+import { copyText } from "../lib/clipboard";
 import { isSettingDisabledUntilWired } from "../lib/settings/values";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -83,9 +84,9 @@ export const ExtensionsPage: React.FC = () => {
     }
   };
 
-  const handleCopyUserId = () => {
+  const handleCopyUserId = async () => {
     if (!localUserId) return;
-    void navigator.clipboard.writeText(localUserId);
+    if (!(await copyText(localUserId))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

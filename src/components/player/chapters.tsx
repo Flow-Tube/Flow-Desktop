@@ -6,6 +6,8 @@ import type { VideoChapter, CaptionTrack } from "../../types/video";
 import { invokeBackend } from "../../lib/api/errors";
 import { parseCaptionCues, type CaptionCue } from "./SubtitleOverlay";
 import { Select } from "../ui/Select";
+import { youtubeWatchUrl } from "../../lib/youtubeUrl";
+import { copyText } from "../../lib/clipboard";
 
 interface ChaptersProps {
   chapters: VideoChapter[];
@@ -128,18 +130,15 @@ export const Chapters: React.FC<ChaptersProps> = ({
     return () => clearTimeout(timer);
   }, [activeChapter?.startSeconds, activeTab]);
 
-  const handleShare = (event: React.MouseEvent, chapter: VideoChapter) => {
+  const handleShare = async (event: React.MouseEvent, chapter: VideoChapter) => {
     event.stopPropagation();
-    try {
-      const shareUrl = new URL(window.location.href);
-      shareUrl.searchParams.set("t", Math.floor(chapter.startSeconds).toString());
-      void navigator.clipboard.writeText(shareUrl.toString());
+    if (!videoId) return;
+    if (await copyText(youtubeWatchUrl(videoId, chapter.startSeconds))) {
       showToast({
         variant: "success",
         message: `Copied link at ${formatTime(chapter.startSeconds)}.`,
       });
-    } catch (err) {
-      console.error("Failed to copy link", err);
+    } else {
       showToast({
         variant: "error",
         message: "Could not copy chapter link.",

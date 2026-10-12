@@ -18,6 +18,7 @@ import { seekToTime } from "../../lib/linkify";
 import { classifyPlayerError } from "../../lib/playerError";
 import { copyPlayerReport } from "../../lib/playerDiagnostics";
 import { openExternal } from "../../lib/openExternal";
+import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
 
@@ -219,7 +220,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     [stream.streamError, stream.streamErrorKind],
   );
 
-  const watchUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
+  const watchUrl = videoId ? youtubeWatchUrl(videoId) : null;
 
   const handleCopyLogs = useCallback(async () => {
     if (!errorInfo) return false;

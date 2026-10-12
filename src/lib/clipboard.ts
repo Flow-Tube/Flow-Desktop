@@ -22,3 +22,16 @@ export async function copyText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+// Opens the system share sheet where there is one, else copies the link.
+export async function shareLink(title: string, url: string): Promise<"shared" | "copied" | "failed"> {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url });
+    } catch {
+      // Closing the share sheet rejects; that isn't a failure.
+    }
+    return "shared";
+  }
+  return (await copyText(url)) ? "copied" : "failed";
+}

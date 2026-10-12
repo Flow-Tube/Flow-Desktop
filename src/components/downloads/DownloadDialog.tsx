@@ -21,6 +21,7 @@ import {
   type DownloadProgress,
 } from "../../lib/api/downloads";
 import { getString } from "../../lib/i18n/index";
+import { copyText } from "../../lib/clipboard";
 import { SETTINGS } from "../../lib/settings/schema";
 import {
   describeMusicStream,
@@ -415,21 +416,9 @@ function DownloadActivityDialog({
       "",
       ...logs,
     ].filter(Boolean).join("\n");
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        textarea.remove();
-      }
+    if (await copyText(text)) {
       showToast({ variant: "success", message: getString("download_logs_copied") });
-    } catch {
+    } else {
       showToast({ variant: "error", message: getString("download_logs_copy_failed") });
     }
   };

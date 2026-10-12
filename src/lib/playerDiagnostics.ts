@@ -2,6 +2,7 @@ import { getAppMetadata } from "./appMetadata";
 import { getSystemMetadata } from "./systemMetadata";
 import { formatDiagnosticEvent, getDiagnosticEvents, recordDiagnostic } from "./diagnostics";
 import type { PlayerErrorInfo } from "./playerError";
+import { copyText } from "./clipboard";
 
 export function recordPlayerEvent(message: string): void {
   recordDiagnostic("player", message);
@@ -71,9 +72,7 @@ export async function buildPlayerReport(ctx: PlayerReportContext): Promise<strin
 export async function copyPlayerReport(ctx: PlayerReportContext): Promise<boolean> {
   try {
     const report = await buildPlayerReport(ctx);
-    if (!navigator.clipboard?.writeText) return false;
-    await navigator.clipboard.writeText(report);
-    return true;
+    return await copyText(report);
   } catch (error) {
     console.warn("Failed to copy player diagnostics", error);
     return false;

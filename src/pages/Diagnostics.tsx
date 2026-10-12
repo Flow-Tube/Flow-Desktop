@@ -7,6 +7,7 @@ import { writeBackupFile } from "../lib/api/files";
 import { openExternal } from "../lib/openExternal";
 import { confirmAction, pickSaveFile } from "../lib/dialogs";
 import { getString } from "../lib/i18n/index";
+import { copyText } from "../lib/clipboard";
 import { useUiStore } from "../store/useUiStore";
 
 const GITHUB_ISSUES_URL = "https://github.com/FlowNeuro/Flow-Desktop/issues/new?template=bug_report.yml";
@@ -19,13 +20,8 @@ export const Diagnostics: React.FC = () => {
   const hasLogs = text.trim().length > 0;
 
   const copyLogs = async (): Promise<boolean> => {
-    if (!hasLogs || !navigator.clipboard?.writeText) return false;
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      return false;
-    }
+    if (!hasLogs) return false;
+    return copyText(text);
   };
 
   const handleCopy = async () => {

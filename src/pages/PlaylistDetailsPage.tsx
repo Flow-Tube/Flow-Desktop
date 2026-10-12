@@ -16,6 +16,8 @@ import {
 import { usePlaylistDetails } from "../lib/usePlaylistDetails";
 import { usePublishTitle } from "../lib/usePublishTitle";
 import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
+import { youtubePlaylistUrl } from "../lib/youtubeUrl";
+import { copyText } from "../lib/clipboard";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useUiStore } from "../store/useUiStore";
@@ -112,13 +114,9 @@ export function PlaylistDetailsPage({
 
   const handleCopyLink = async () => {
     if (!meta) return;
-    try {
-      await navigator.clipboard.writeText(
-        `https://www.youtube.com/playlist?list=${meta.id}`,
-      );
+    if (await copyText(youtubePlaylistUrl(meta.id))) {
       showToast({ variant: "success", message: "Playlist link copied" });
-    } catch (copyError) {
-      console.error("Failed to copy playlist link", copyError);
+    } else {
       showToast({ variant: "error", message: "Could not copy link" });
     }
   };

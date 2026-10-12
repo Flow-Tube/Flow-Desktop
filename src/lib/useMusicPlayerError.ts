@@ -5,6 +5,7 @@ import { useUiStore } from "../store/useUiStore";
 import { classifyPlayerError, type PlayerErrorInfo } from "./playerError";
 import { copyPlayerReport } from "./playerDiagnostics";
 import { openExternal } from "./openExternal";
+import { youtubeMusicWatchUrl } from "./youtubeUrl";
 import { getString } from "./i18n/index";
 
 export interface MusicPlayerErrorActions {
@@ -36,7 +37,7 @@ export function useMusicPlayerError(): MusicPlayerErrorActions {
   );
 
   const videoId = currentTrack ? currentTrack.videoId ?? currentTrack.id : null;
-  const watchUrl = videoId ? `https://music.youtube.com/watch?v=${videoId}` : null;
+  const watchUrl = videoId ? youtubeMusicWatchUrl(videoId) : null;
 
   const onRetry = useCallback(() => {
     retryCurrentTrack();

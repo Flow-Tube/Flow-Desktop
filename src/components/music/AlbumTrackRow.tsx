@@ -8,6 +8,8 @@ import { extractDominantColorFromImage, useDominantColor } from '../../lib/useDo
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { youtubeMusicWatchUrl } from '../../lib/youtubeUrl';
+import { shareLink } from '../../lib/clipboard';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
@@ -44,21 +46,6 @@ interface AlbumTrackRowProps {
 
 function videoIdOf(track: SongItem): string {
   return track.videoId ?? track.id;
-}
-
-function trackShareUrl(track: SongItem): string {
-  return `https://music.youtube.com/watch?v=${encodeURIComponent(videoIdOf(track))}`;
-}
-
-async function shareTrack(track: SongItem) {
-  try {
-    if (navigator.share) {
-      await navigator.share({ title: track.title, url: trackShareUrl(track) });
-      return;
-    }
-    await navigator.clipboard?.writeText(trackShareUrl(track));
-  } catch {
-  }
 }
 
 function useSongLike(track: SongItem) {
@@ -189,7 +176,7 @@ export function AlbumTrackRow({
       id: 'share',
       label: getString('music_share'),
       icon: <Share2 size={16} />,
-      onSelect: () => shareTrack(track),
+      onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
     ...(onRemove
       ? ([

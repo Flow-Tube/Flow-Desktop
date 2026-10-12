@@ -11,14 +11,13 @@ interface MusicSpeedDialProps {
   tracks: SongItem[];
   onPlay: (track: SongItem) => void;
   onShuffle: () => void;
-  onQueue: (track: SongItem) => void;
 }
 
 /**
  * A three-row grid of the regular track rows, led by a Shuffle tile, so the user's most
  * reached-for songs are one click away without a long single row.
  */
-export function MusicSpeedDial({ title, tracks, onPlay, onShuffle, onQueue }: MusicSpeedDialProps) {
+export function MusicSpeedDial({ title, tracks, onPlay, onShuffle }: MusicSpeedDialProps) {
   const { t } = useTranslation('common');
   if (tracks.length === 0) return null;
   return (
@@ -40,7 +39,6 @@ export function MusicSpeedDial({ title, tracks, onPlay, onShuffle, onQueue }: Mu
             item={track}
             className="snap-start bg-surface-container-low pr-3"
             onPlay={() => onPlay(track)}
-            onMenu={() => onQueue(track)}
           />
         ))}
       </ShelfScroller>

@@ -7,10 +7,9 @@ interface MusicQuickPicksShelfProps {
   title: string;
   tracks: SongItem[];
   onPlay: (track: SongItem) => void;
-  onQueue: (track: SongItem) => void;
 }
 
-export function MusicQuickPicksShelf({ title, tracks, onPlay, onQueue }: MusicQuickPicksShelfProps) {
+export function MusicQuickPicksShelf({ title, tracks, onPlay }: MusicQuickPicksShelfProps) {
   if (tracks.length === 0) return null;
   return (
     <section>
@@ -23,7 +22,6 @@ export function MusicQuickPicksShelf({ title, tracks, onPlay, onQueue }: MusicQu
             item={track}
             className="snap-start bg-surface-container-low pr-3"
             onPlay={() => onPlay(track)}
-            onMenu={() => onQueue(track)}
           />
         ))}
       </ShelfScroller>

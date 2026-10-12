@@ -53,7 +53,6 @@ export default function MusicHome() {
   const gridStyle = useGridStyle({ density: 'dense' });
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
-  const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
   const { data, loading, error, reload, loadMore, hasMore, loadingMore, loadMoreError } = useMusicHome();
   const personalization = useMusicPersonalization();
   const discoverySections = useMusicDiscoverySections();
@@ -224,7 +223,6 @@ export default function MusicHome() {
             tracks={songContext}
             onPlay={(track) => playTrack(track, songContext, section.title)}
             onShuffle={() => void playQueue(shuffled(songContext), 0, section.title)}
-            onQueue={addToQueue}
           />
         );
       }
@@ -264,7 +262,6 @@ export default function MusicHome() {
                 title={quickTitle}
                 tracks={quickPicks}
                 onPlay={(track) => playTrack(track, quickPicks, quickTitle)}
-                onQueue={addToQueue}
               />
             );
           }

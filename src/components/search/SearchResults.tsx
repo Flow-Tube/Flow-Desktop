@@ -57,7 +57,6 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   const squareGridStyle = useGridStyle({ density: 'dense' });
   const wideGridStyle = useGridStyle();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
-  const addSongToQueue = useMusicPlayerStore((s) => s.addToQueue);
 
   const {
     results: r,
@@ -181,7 +180,6 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
                   variant="track-list"
                   item={song}
                   onPlay={() => playSong(song, visibleSongs)}
-                  onMenu={() => addSongToQueue(song)}
                 />
               ))}
             </div>
@@ -303,7 +301,6 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
                 variant="track-list"
                 item={song}
                 onPlay={() => playSong(song, visibleSongs)}
-                onMenu={() => addSongToQueue(song)}
               />
             ))}
           </div>

@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { X } from "lucide-react";
 import { MusicItemCard } from "../music/MusicItemCard";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { historyVideoToSong, type HistoryVideo } from "../../lib/useHistory";
+import { getString } from "../../lib/i18n/index";
 
 interface MusicHistoryGridProps {
   videos: HistoryVideo[];
@@ -21,7 +23,14 @@ export function MusicHistoryGrid({ videos, onRemoveFromHistory }: MusicHistoryGr
           item={historyVideoToSong(video)}
           className="bg-surface-container-low pr-3"
           onPlay={() => void playQueue(songs, index)}
-          onMenu={() => onRemoveFromHistory(video.id)}
+          appendActions={[
+            {
+              id: "remove-from-history",
+              label: getString("music_remove_from_history"),
+              icon: <X size={16} />,
+              onSelect: () => onRemoveFromHistory(video.id),
+            },
+          ]}
         />
       ))}
     </div>

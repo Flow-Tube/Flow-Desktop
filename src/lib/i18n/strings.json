@@ -896,6 +896,7 @@
   "music_queue_empty": "Nothing up next",
   "music_queue_autoplay_hint": "Turn on Autoplay for nonstop music",
   "music_remove_from_queue": "Remove from queue",
+  "music_remove_from_history": "Remove from history",
   "music_drag_to_reorder": "Drag to reorder",
   "music_daily_discover": "Your Daily Discover",
   "music_from_community": "From the community",

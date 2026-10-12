@@ -51,7 +51,6 @@ export default function ArtistItemsPage() {
   const [sp] = useSearchParams();
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
-  const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
 
   const browseId = sp.get('browseId') ?? undefined;
   const params = sp.get('params') ?? undefined;
@@ -128,7 +127,6 @@ export default function ArtistItemsPage() {
                 variant="track-list"
                 item={song}
                 onPlay={() => playFrom(song)}
-                onMenu={() => addToQueue(song)}
               />
             ))}
           </div>

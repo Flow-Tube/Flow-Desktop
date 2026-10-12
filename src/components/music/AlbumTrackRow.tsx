@@ -38,7 +38,6 @@ interface AlbumTrackRowProps {
   onPlay: (track: SongItem) => void;
   onAddToQueue: (track: SongItem) => void;
   onLike?: (track: SongItem) => void;
-  onMenu?: (track: SongItem) => void;
   onRemove?: (track: SongItem) => void;
 }
 
@@ -139,7 +138,6 @@ export function AlbumTrackRow({
   onPlay,
   onAddToQueue,
   onLike,
-  onMenu,
   onRemove,
 }: AlbumTrackRowProps) {
   const artistLabel = artistsText(track.artists);
@@ -166,10 +164,7 @@ export function AlbumTrackRow({
       id: 'add-to-queue',
       label: getString('music_add_to_queue'),
       icon: <ListPlus size={16} />,
-      onSelect: () => {
-        if (onMenu) onMenu(track);
-        else onAddToQueue(track);
-      },
+      onSelect: () => onAddToQueue(track),
     },
     {
       id: 'play-next',

@@ -24,6 +24,8 @@ import { getString } from "../../lib/i18n/index";
 import { artistsText } from "../../lib/musicFormat";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { HapticButton } from "./HapticButton";
+import { MusicCardMenu, useMusicContextMenu } from "./MusicCardMenu";
+import { useNowPlayingMenuActions } from "./useNowPlayingMenuActions";
 import { MusicArtwork } from "./MusicArtwork";
 import { MusicScrubber } from "./MusicScrubber";
 import { EqPanel } from "./EqPanel";
@@ -59,6 +61,8 @@ export function GlobalMusicDock() {
   const { errorInfo, onRetry, onCopyLogs, onOpenInBrowser } = useMusicPlayerError();
 
   const [popover, setPopover] = useState<null | "eq" | "vol">(null);
+  const menu = useMusicContextMenu(Boolean(currentTrack));
+  const menuActions = useNowPlayingMenuActions(currentTrack);
 
   // Same artwork URL the overlay samples, so this reads a warm cache entry.
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
@@ -111,6 +115,7 @@ export function GlobalMusicDock() {
               <button
                 type="button"
                 onClick={() => openOverlay("full")}
+                onContextMenu={menu.openMenuFromContext}
                 aria-label={getString("music_expand")}
                 className="group/art flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
               >
@@ -130,6 +135,12 @@ export function GlobalMusicDock() {
                   </div>
                 </div>
               </button>
+              <MusicCardMenu
+                actions={menuActions}
+                anchor={menu.anchor}
+                onClose={menu.closeMenu}
+                show={menu.showMenu}
+              />
             </div>
 
             {/* CENTER — transport */}

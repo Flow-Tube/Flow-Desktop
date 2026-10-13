@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
-  Disc3,
   Play,
   Pause,
   SkipBack,
@@ -18,7 +17,6 @@ import {
   MoreHorizontal,
   Loader2,
   RefreshCw,
-  Share2,
 } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
@@ -26,14 +24,11 @@ import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { useLikesStore } from "../../store/useLikesStore";
 import { useUiStore } from "../../store/useUiStore";
-import { useAlbumLibraryStore } from "../../store/useAlbumLibraryStore";
 import { getString } from "../../lib/i18n/index";
 import { artistsText } from "../../lib/musicFormat";
-import type { SongItem } from "../../types/music";
 import { HapticButton } from "./HapticButton";
-import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from "./MusicCardMenu";
-import { useTrackNavActions } from "./useTrackNavActions";
-import { useTrackDownloadAction } from "./useTrackDownloadAction";
+import { MusicCardMenu, useMusicContextMenu } from "./MusicCardMenu";
+import { useNowPlayingMenuActions } from "./useNowPlayingMenuActions";
 import { MusicArtwork } from "./MusicArtwork";
 import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
@@ -45,8 +40,6 @@ import { useDominantColor } from "../../lib/useDominantColor";
 import { accentForeground, accentSurface } from "../../lib/accentColor";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
-import { youtubeMusicWatchUrl } from "../../lib/youtubeUrl";
-import { shareLink } from "../../lib/clipboard";
 import { usePreference } from "../../lib/usePreference";
 import { SETTINGS } from "../../lib/settings/schema";
 
@@ -62,10 +55,6 @@ const SIDE = "grid h-11 w-11 place-items-center rounded-full transition-colors d
 const SIDE_IDLE = `${SIDE} text-chrome-neutral-300 hover:bg-surface-container-high hover:text-chrome-neutral-100`;
 
 const LAYOUT_SPRING = { type: "spring" as const, stiffness: 320, damping: 36, mass: 0.9 };
-
-function videoIdOf(track: SongItem): string {
-  return track.videoId ?? track.id;
-}
 
 export function MusicOverlay() {
   const navigate = useNavigate();
@@ -91,7 +80,6 @@ export function MusicOverlay() {
   const loadLikes = useLikesStore((s) => s.load);
   const toggleSongLike = useLikesStore((s) => s.toggleSong);
   const showToast = useUiStore((s) => s.showToast);
-  const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const menu = useMusicContextMenu(Boolean(currentTrack));
 
   const musicError = useMusicPlayerError();
@@ -126,26 +114,7 @@ export function MusicOverlay() {
   const loading = isBuffering || loadingStreamId !== null;
   const primaryArtist = currentTrack?.artists?.find((artist) => artist.id) ?? currentTrack?.artists?.[0] ?? null;
   const canOpenArtist = Boolean(primaryArtist?.id);
-  const navActions = useTrackNavActions(currentTrack, { onNavigate: closeOverlay });
-  const downloadActions = useTrackDownloadAction(currentTrack);
-  const menuActions: MusicMenuAction[] = currentTrack
-    ? [
-        ...navActions,
-        {
-          id: "add-to-album",
-          label: getString("music_add_to_album"),
-          icon: <Disc3 size={16} />,
-          onSelect: () => openAddToAlbum(currentTrack),
-        },
-        ...downloadActions,
-        {
-          id: "share",
-          label: getString("music_share"),
-          icon: <Share2 size={16} />,
-          onSelect: () => void shareLink(currentTrack.title, youtubeMusicWatchUrl(videoIdOf(currentTrack))),
-        },
-      ]
-    : [];
+  const menuActions = useNowPlayingMenuActions(currentTrack, { onNavigate: closeOverlay });
 
   useEffect(() => {
     if (!likesLoaded) void loadLikes();

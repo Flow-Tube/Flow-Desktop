@@ -1,8 +1,8 @@
 # These are supported funding model platforms
 
-github:
 open_collective: flow-tube
 patreon: A_EDev
+github:
 ko_fi:
 tidelift:
 community_bridge:
@@ -14,4 +14,4 @@ buy_me_a_coffee:
 thanks_dev:
 
 # Link directly to the "Support & Donations" section of the README.
-custom: ["https://github.com/A-EDev/Flow#support--donations"]
+custom: ["https://github.com/Flow-Tube/Flow#support--donations"]

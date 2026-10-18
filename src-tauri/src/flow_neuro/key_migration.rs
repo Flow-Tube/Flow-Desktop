@@ -184,10 +184,7 @@ fn rekey_brain(
         *profile = rekey.merged(profile, f64::max);
     }
     brain.topic_evidence = rekey.merged(&brain.topic_evidence, &merge_evidence);
-    brain.rejection_patterns = rekey.merged(&brain.rejection_patterns, |a, b| RejectionSignal {
-        count: a.count.max(b.count),
-        last_rejected_at: a.last_rejected_at.max(b.last_rejected_at),
-    });
+    brain.rejection_patterns = rekey.rejections(&brain.rejection_patterns);
 
     let picks: HashSet<String> = brain
         .preferred_topics
@@ -368,22 +365,41 @@ impl<'a> Rekey<'a> {
             .collect();
     }
 
+    /// A pair read end by end; it goes when an end splits, vanishes or meets the other.
+    fn pair(&mut self, left: &str, right: &str) -> Option<String> {
+        let left = single(self.keys_for(left))?;
+        let right = single(self.keys_for(right))?;
+        (left != right).then(|| make_affinity_key(&left, &right))
+    }
+
     fn edges(&mut self, edges: &HashMap<String, f64>) -> HashMap<String, f64> {
         let mut out = HashMap::with_capacity(edges.len());
         for (key, &weight) in edges {
-            let Some((left, right)) = link_ends(key) else {
+            let Some(edge) = link_ends(key).and_then(|(left, right)| self.pair(left, right)) else {
                 continue;
             };
-            let (Some(left), Some(right)) =
-                (single(self.keys_for(left)), single(self.keys_for(right)))
-            else {
-                continue;
+            let entry = out.entry(edge).or_insert(weight);
+            *entry = f64::max(*entry, weight);
+        }
+        out
+    }
+
+    /// Rejection patterns, a rejected pair ("a|b") kept a pair. Android reads a pair as two words
+    /// here, which would turn one rejected pairing into two rejected topics.
+    fn rejections(
+        &mut self,
+        patterns: &HashMap<String, RejectionSignal>,
+    ) -> HashMap<String, RejectionSignal> {
+        let mut out: HashMap<String, RejectionSignal> = HashMap::with_capacity(patterns.len());
+        for (key, signal) in patterns {
+            let reads = match key.split_once('|') {
+                Some((left, right)) => self.pair(left, right).into_iter().collect(),
+                None => self.keys_for(key),
             };
-            if left != right {
-                let entry = out
-                    .entry(make_affinity_key(&left, &right))
-                    .or_insert(weight);
-                *entry = f64::max(*entry, weight);
+            for read in reads {
+                let entry = out.entry(read).or_insert_with(|| signal.clone());
+                entry.count = entry.count.max(signal.count);
+                entry.last_rejected_at = entry.last_rejected_at.max(signal.last_rejected_at);
             }
         }
         out
@@ -460,6 +476,10 @@ mod tests {
                 "guitar": { "positive_signals": 2, "positive_score": 2.0 }
             },
             "channel_topic_profiles": { "c1": { "guitars": 0.2, "guitar": 0.6 } },
+            "rejection_patterns": {
+                "guitars|riffs": { "count": 2, "last_rejected_at": 5 },
+                "guitars": { "count": 1, "last_rejected_at": 9 }
+            },
             "preferred_topics": ["Machine Learning"]
         }))
         .unwrap();
@@ -503,6 +523,14 @@ mod tests {
         assert_eq!(brain.topic_affinities.len(), 1);
         assert_eq!(brain.topic_evidence["guitar"].positive_signals, 3);
         assert_eq!(brain.channel_topic_profiles["c1"].get("guitar"), Some(&0.6));
+        let riff = spec.key_of("riffs");
+        let pair = make_affinity_key("guitar", &riff);
+        assert_eq!(
+            brain.rejection_patterns[&pair].count, 2,
+            "a rejected pair stays a pair"
+        );
+        assert_eq!(brain.rejection_patterns["guitar"].count, 1);
+        assert_eq!(brain.rejection_patterns.len(), 2);
         assert_eq!(brain.display_forms[&restor].form, "Restoring");
         assert!(!brain.display_forms.contains_key("guitar"));
         assert_eq!(brain.key_spec, keyspec::VERSION);

@@ -118,21 +118,44 @@ impl KeyReader {
         }
     }
 
+    /// A pair read end by end; it goes when an end splits, vanishes or meets the other.
+    fn pair(&mut self, left: &str, right: &str) -> Option<String> {
+        let left = only(self.keys_for(left))?;
+        let right = only(self.keys_for(right))?;
+        (left != right).then(|| make_affinity_key(&left, &right))
+    }
+
     fn edges(&mut self, edges: &BTreeMap<String, f64>) -> BTreeMap<String, f64> {
         let mut out: BTreeMap<String, f64> = BTreeMap::new();
         for (key, &weight) in edges {
-            let Some((left, right)) = link_ends(key) else {
+            let Some(edge) = link_ends(key).and_then(|(left, right)| self.pair(left, right)) else {
                 continue;
             };
-            let (Some(left), Some(right)) = (only(self.keys_for(left)), only(self.keys_for(right)))
-            else {
-                continue;
+            let entry = out.entry(edge).or_insert(weight);
+            *entry = entry.max(weight);
+        }
+        out
+    }
+
+    /// Rejection patterns, a rejected pair ("a|b") kept a pair. Android's `BrainKeyRekey` reads a
+    /// pair as two words, which would turn one rejected pairing into two rejected topics.
+    fn rejections<T: Clone>(
+        &mut self,
+        registers: &BTreeMap<String, Lww<T>>,
+    ) -> BTreeMap<String, Lww<T>> {
+        let mut out: BTreeMap<String, Lww<T>> = BTreeMap::new();
+        for (key, register) in registers {
+            let reads = match key.split_once('|') {
+                Some((left, right)) => self.pair(left, right).into_iter().collect(),
+                None => self.keys_for(key),
             };
-            if left != right {
-                let entry = out
-                    .entry(make_affinity_key(&left, &right))
-                    .or_insert(weight);
-                *entry = entry.max(weight);
+            for read in reads {
+                match out.get(&read) {
+                    Some(existing) if existing.hlc >= register.hlc => {}
+                    _ => {
+                        out.insert(read, register.clone());
+                    }
+                }
             }
         }
         out
@@ -166,7 +189,7 @@ impl KeyReader {
         let mut read = snap.clone();
         read.vectors = self.vectors(&snap.vectors);
         read.idf_word_frequency = self.counters(&snap.idf_word_frequency);
-        read.lww_maps.rejection_patterns = self.registers(&snap.lww_maps.rejection_patterns);
+        read.lww_maps.rejection_patterns = self.rejections(&snap.lww_maps.rejection_patterns);
         read.lww_maps.topic_evidence = self.registers(&snap.lww_maps.topic_evidence);
         read
     }
@@ -181,7 +204,7 @@ impl KeyReader {
         for device in merged.device_vectors.values_mut() {
             device.vectors = self.vectors(&device.vectors);
         }
-        merged.lww_maps.rejection_patterns = self.registers(&merged.lww_maps.rejection_patterns);
+        merged.lww_maps.rejection_patterns = self.rejections(&merged.lww_maps.rejection_patterns);
         merged.lww_maps.topic_evidence = self.registers(&merged.lww_maps.topic_evidence);
         merged.key_spec = keyspec::VERSION;
         merged.key_language.clone_from(&self.spec.key_language);

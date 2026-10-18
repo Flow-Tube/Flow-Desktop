@@ -13,7 +13,9 @@ use sqlx::sqlite::SqlitePoolOptions;
 use common::bind_loopback;
 use flow_desktop_lib::flow_neuro::keyspec::KeySpec;
 use flow_desktop_lib::sync::apply::apply_payload;
-use flow_desktop_lib::sync::canonical::{Collection, FlowNeuroBrainSnapshot, GCounter, Hlc};
+use flow_desktop_lib::sync::canonical::{
+    Collection, FlowNeuroBrainSnapshot, GCounter, Hlc, Lww, RejectionSignalWire,
+};
 use flow_desktop_lib::sync::crypto::{
     Role, SessionCipher, generate_master_secret, generate_session_id,
 };
@@ -249,16 +251,22 @@ async fn a_legacy_peer_snapshot_is_read_into_this_brains_keys() {
     .await;
 
     // A peer from before key spec 2 spells the same word two ways.
-    apply(
-        &pool,
-        &peer_snapshot(
-            &[("guitars", 0.6), ("guitar", 0.2)],
-            &[("guitars", 3), ("guitar", 2)],
-            5,
+    let mut snap = peer_snapshot(
+        &[("guitars", 0.6), ("guitar", 0.2)],
+        &[("guitars", 3), ("guitar", 2)],
+        5,
+    );
+    snap.lww_maps.rejection_patterns.insert(
+        "guitars|riffs".to_string(),
+        Lww::new(
+            RejectionSignalWire {
+                count: 2,
+                last_rejected_at: 7,
+            },
+            Hlc::new(1_000, 0, PEER),
         ),
-        "r1",
-    )
-    .await;
+    );
+    apply(&pool, &snap, "r1").await;
 
     let brain = get(&pool, "user_neuro_brain").await;
     assert_eq!(
@@ -271,6 +279,12 @@ async fn a_legacy_peer_snapshot_is_read_into_this_brains_keys() {
         "the peer's two spellings sum, then add to ours: 4 + 3 + 2"
     );
     assert_eq!(brain["display_forms"].get("guitar"), None);
+    let riff = KeySpec::default().key_of("riffs");
+    assert_eq!(
+        brain["rejection_patterns"][format!("guitar|{riff}")]["count"],
+        2,
+        "a rejected pair stays a pair"
+    );
 }
 
 #[tokio::test]

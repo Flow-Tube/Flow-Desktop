@@ -470,13 +470,7 @@ async fn apply_flow_neuro(
     let mut spelled = HashMap::new();
     for snap in &received {
         spelled.extend(spelled_before(
-            &snap
-                .vectors
-                .global_vector
-                .topics
-                .clone()
-                .into_iter()
-                .collect(),
+            &snap.vectors.global_vector.topics,
             reader.spec(),
         ));
     }

@@ -126,26 +126,29 @@ fn spell(brain: &mut UserBrain, titles: &[String], keys: &[String]) {
 /// that read as one other key. Of two spellings the heavier wins; a key already spelled that way
 /// in `keys` needs none.
 #[must_use]
-pub fn spelled_before(keys: &HashMap<String, f64>, spec: &KeySpec) -> HashMap<String, String> {
+pub fn spelled_before<'a>(
+    keys: impl IntoIterator<Item = (&'a String, &'a f64)>,
+    spec: &KeySpec,
+) -> HashMap<String, String> {
+    let bases: Vec<(String, f64)> = keys
+        .into_iter()
+        .map(|(key, &weight)| (respelled(&strip_domain_tag(key)), weight))
+        .collect();
     let mut before: HashMap<String, (String, f64)> = HashMap::new();
-    for (key, &weight) in keys {
-        let base = respelled(&strip_domain_tag(key));
-        let read = spec.rekey(&base);
+    for (base, weight) in &bases {
+        let read = spec.rekey(base);
         let [stemmed] = read.as_slice() else {
             continue;
         };
-        if *stemmed != base
+        if stemmed != base
             && before
                 .get(stemmed)
-                .is_none_or(|(_, heaviest)| weight > *heaviest)
+                .is_none_or(|(_, heaviest)| weight > heaviest)
         {
-            before.insert(stemmed.clone(), (base, weight));
+            before.insert(stemmed.clone(), (base.clone(), *weight));
         }
     }
-    let unchanged: HashSet<String> = keys
-        .keys()
-        .map(|key| respelled(&strip_domain_tag(key)))
-        .collect();
+    let unchanged: HashSet<&String> = bases.iter().map(|(base, _)| base).collect();
     before
         .into_iter()
         .filter(|(stemmed, _)| !unchanged.contains(stemmed))

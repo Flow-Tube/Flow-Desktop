@@ -12,6 +12,7 @@
 //! 8. Each word's lemma is stemmed by its script and the key language.
 
 mod chars;
+pub mod languages;
 pub mod tables;
 pub mod text;
 

@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 use serde::Deserialize;
 
 use super::chars::trim;
+use super::text::fold;
 
 const TABLES_JSON: &str = include_str!("../../../resources/neuro/key_spec_tables.json");
 
@@ -99,4 +100,32 @@ pub fn format_of(word: &str) -> Option<&'static str> {
 fn content_lines(text: &str) -> impl Iterator<Item = &str> {
     text.lines()
         .filter(|line| !trim(line).is_empty() && !line.starts_with('#'))
+}
+
+macro_rules! stop_files {
+    ($($language:literal),* $(,)?) => {
+        [$(($language, include_str!(concat!("../../../resources/neuro/stop/", $language, ".txt")))),*]
+    };
+}
+
+const STOP_FILES: [(&str, &str); 20] = stop_files!(
+    "en", "es", "pt", "fr", "de", "it", "ru", "id", "ar", "cs", "et", "fa", "hi", "ja", "ko", "pl",
+    "tr", "uk", "vi", "zh",
+);
+
+static STOP_LISTS: LazyLock<HashMap<&'static str, HashSet<String>>> = LazyLock::new(|| {
+    STOP_FILES
+        .iter()
+        .filter(|(language, _)| tables().stop_list_languages.contains(*language))
+        .map(|(language, text)| {
+            let words = content_lines(text).map(|line| fold(trim(line))).collect();
+            (*language, words)
+        })
+        .collect()
+});
+
+/// `language`'s stop words, folded, as listed; none when it has no list.
+#[must_use]
+pub fn raw_stop_list(language: &str) -> Option<&'static HashSet<String>> {
+    STOP_LISTS.get(language)
 }

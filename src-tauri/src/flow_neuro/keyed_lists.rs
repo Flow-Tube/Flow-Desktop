@@ -213,10 +213,10 @@ pub fn keyed_lists(spec: &KeySpec) -> Arc<KeyedLists> {
     let mut cache = CACHE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some((cached, lists)) = cache.as_ref() {
-        if cached == spec {
-            return Arc::clone(lists);
-        }
+    if let Some((cached, lists)) = cache.as_ref()
+        && cached == spec
+    {
+        return Arc::clone(lists);
     }
     let lists = Arc::new(KeyedLists::build(spec));
     *cache = Some((spec.clone(), Arc::clone(&lists)));

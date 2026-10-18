@@ -232,22 +232,20 @@ fn consumes(caps: &CapabilitiesFrame, c: Collection) -> bool {
     caps.collections.get(c.key()).is_some_and(|x| x.consume)
 }
 
-/// A collection whose topic keys follow a key spec goes only to a peer that writes them the same
-/// way: a reader of another spec or language would file them as new topics beside its own.
-fn peer_reads_our_keys(
-    ours: &CapabilitiesFrame,
-    theirs: &CapabilitiesFrame,
-    c: Collection,
-) -> bool {
+/// Whether this side sends `c` to the peer: it produces it, the peer consumes it, and a collection
+/// whose topic keys follow a key spec goes only to a peer that writes them the same way, since a
+/// reader of another spec or language would file them as new topics beside its own.
+fn sends(ours: &CapabilitiesFrame, theirs: &CapabilitiesFrame, c: Collection) -> bool {
     let Some(peer) = theirs.collections.get(c.key()) else {
         return false;
     };
-    match ours.collections.get(c.key()) {
+    let reads_our_keys = match ours.collections.get(c.key()) {
         Some(local) if local.key_spec > 0 => {
             peer.key_spec == local.key_spec && peer.key_language == local.key_language
         }
         _ => true,
-    }
+    };
+    produces(ours, c) && peer.consume && reads_our_keys
 }
 
 struct Prepared {
@@ -488,11 +486,7 @@ where
     // SELECTION order and Android by MANIFEST order, so any other order misroutes on one of them.
     let mut selection: Vec<Collection> = chosen
         .into_iter()
-        .filter(|c| {
-            produces(our_caps, *c)
-                && consumes(their_caps, *c)
-                && peer_reads_our_keys(our_caps, their_caps, *c)
-        })
+        .filter(|c| sends(our_caps, their_caps, *c))
         .collect();
     selection.sort_by(|a, b| a.key().cmp(b.key()));
     tracing::info!(

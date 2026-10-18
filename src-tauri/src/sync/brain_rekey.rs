@@ -4,7 +4,7 @@
 //! max, document-frequency sub-counts by sum within one device (two spellings were two counts of
 //! one word; across devices G-Counters still take the max), registers by the newer stamp. Keys
 //! already read stay as they are, so this can run on every snapshot. Pairs and links an older
-//! desktop wrote ("leg_day", "a:b") read as the pairs and links they were.
+//! desktop wrote (`leg_day`, `a:b`) read as the pairs and links they were.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -28,16 +28,13 @@ pub fn align_flow(
     merged: &mut MergedFlowNeuroBrain,
     baseline: Option<&mut NeuroBaseline>,
 ) -> KeyReader {
-    let spec = match base {
-        Some(brain) => {
-            brain.settle_languages(&system_language());
-            to_key_spec_2(brain);
-            brain.key_spec()
-        }
-        None => {
-            let language = system_language();
-            KeySpec::new(&language, &language)
-        }
+    let spec = if let Some(brain) = base {
+        brain.settle_languages(&system_language());
+        to_key_spec_2(brain);
+        brain.key_spec()
+    } else {
+        let language = system_language();
+        KeySpec::new(&language, &language)
     };
     let mut reader = KeyReader::new(spec);
     reader.align_merged(merged);

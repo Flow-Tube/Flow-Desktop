@@ -214,10 +214,11 @@ fn rekey_brain(
     brain.topic_evidence.retain(|key, _| !chance.contains(key));
     brain.topic_affinities.retain(|key, weight| {
         let ends: Vec<&str> = key.split('|').collect();
-        !ends.iter().any(|end| chance.contains(*end))
-            && !(pass == Pass::AfterSync
-                && ends.iter().all(|end| picks.contains(*end))
-                && (*weight - ONBOARDING_EDGE).abs() < 1e-9)
+        let by_chance = ends.iter().any(|end| chance.contains(*end));
+        let from_onboarding = pass == Pass::AfterSync
+            && ends.iter().all(|end| picks.contains(*end))
+            && (*weight - ONBOARDING_EDGE).abs() < 1e-9;
+        !(by_chance || from_onboarding)
     });
 }
 
@@ -262,10 +263,11 @@ fn chance_pairs(brain: &UserBrain, spec: &KeySpec, picks: &HashSet<String>) -> H
             .topic_evidence
             .get(&base)
             .or_else(|| brain.topic_evidence.get(key));
+        let learned = base.matches(' ').count() == 1 && phrases::is_phrase(&base, &per_video);
         base.contains(' ')
             && !picks.contains(&base)
             && !lists.is_known_phrase(&base)
-            && !(base.matches(' ').count() == 1 && phrases::is_phrase(&base, &per_video))
+            && !learned
             && evidence.is_none_or(|e| e.explicit_signals == 0)
             && evidence.is_none_or(|e| e.video_ids.len() < usize::try_from(MIN_COUNT).unwrap_or(3))
             && weights.get(key).copied().unwrap_or(0.0) < KEPT_PAIR_WEIGHT
@@ -292,7 +294,7 @@ fn merged_forms(forms: &DisplayForms, rekey: &mut Rekey) -> DisplayForms {
 }
 
 /// A stored key as the key spec should read it: desktops before key spec 2 joined a word pair
-/// with "_" ("leg_day"), which the key spec would read as two words.
+/// with an underscore (`leg_day`), which the key spec would read as two words.
 #[must_use]
 pub fn respelled(key: &str) -> String {
     key.replace('_', " ")

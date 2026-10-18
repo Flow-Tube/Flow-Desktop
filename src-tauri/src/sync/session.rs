@@ -52,7 +52,7 @@ use serde_json::Value;
 /// Per-collection schema version this build advertises in its capabilities.
 const CAP_SCHEMA: i32 = 1;
 /// The key spec the brain's topic keys are written in (Android `NeuroKeySpec.VERSION`).
-const NEURO_KEY_SPEC: i32 = crate::flow_neuro::keyspec::VERSION as i32;
+const NEURO_KEY_SPEC: i32 = crate::flow_neuro::keyspec::VERSION.cast_signed();
 /// How long the QR / host listener stays open waiting for a peer.
 const HOST_TTL: Duration = Duration::from_secs(180);
 /// How long to wait for the TCP/WebSocket connect when joining, across every address in the code.

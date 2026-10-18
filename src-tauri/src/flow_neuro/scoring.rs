@@ -1262,8 +1262,8 @@ pub fn calculate_title_similarity(w1: &HashSet<String>, w2: &HashSet<String>) ->
         return 0.0;
     }
 
-    let intersection = w1.intersection(&w2).count() as f64;
-    let union = w1.union(&w2).count() as f64;
+    let intersection = w1.intersection(w2).count() as f64;
+    let union = w1.union(w2).count() as f64;
 
     intersection / union
 }

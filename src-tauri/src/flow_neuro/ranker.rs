@@ -11,9 +11,10 @@ use crate::flow_neuro::scoring::{
     calculate_channel_profile_boost, calculate_channel_score_multiplier,
     calculate_cosine_similarity, calculate_feed_history_penalty,
     calculate_implicit_disinterest_penalty, calculate_rejection_pattern_penalty,
-    calculate_relevance_floor, is_music_track, normalize_lemma, strip_domain_tag,
+    calculate_relevance_floor, is_music_track, strip_domain_tag,
 };
 use crate::flow_neuro::signals::make_affinity_key;
+use std::collections::HashSet;
 
 /// Summed additive bonuses are capped so boosts (subscription, affinity, serendipity, …) can lift
 /// a candidate but never dominate the topical similarity that forms the base score.
@@ -43,6 +44,8 @@ pub struct RankInputs<'a> {
     pub candidate_pool_size: usize,
     /// Persona-scaled exploration appetite (Explorer high, Specialist low). 0 disables UCB.
     pub exploration_scale: f64,
+    /// The keys the viewer's onboarding picks read as.
+    pub pick_keys: &'a HashSet<String>,
 }
 
 /// Per-candidate inputs. Borrows the candidate's extracted vector and metadata.
@@ -126,10 +129,10 @@ fn additive_bonuses(
     let topic = primary_topic(vector);
 
     if inputs.is_onboarding {
-        let has_preferred = brain
-            .preferred_topics
+        let has_preferred = inputs
+            .pick_keys
             .iter()
-            .any(|pref| vector.topics.contains_key(&normalize_lemma(pref)));
+            .any(|key| vector.topics.contains_key(key));
         if has_preferred {
             bonus += inputs.onboarding_warmup * ONBOARDING_MAX_BOOST;
         }
@@ -318,8 +321,11 @@ mod tests {
             session_video_count: 0,
             candidate_pool_size: 50,
             exploration_scale: 0.6,
+            pick_keys: &NO_PICKS,
         }
     }
+
+    static NO_PICKS: std::sync::LazyLock<HashSet<String>> = std::sync::LazyLock::new(HashSet::new);
 
     fn candidate_for<'a>(
         vector: &'a ContentVector,

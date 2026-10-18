@@ -384,6 +384,7 @@ pub fn merged_flow_to_userbrain(m: &MergedFlowNeuroBrain, base: &UserBrain) -> U
         key_language: base.key_language.clone(),
         key_spec: base.key_spec,
         language_votes: base.language_votes.clone(),
+        counted_documents: base.counted_documents.clone(),
     }
 }
 

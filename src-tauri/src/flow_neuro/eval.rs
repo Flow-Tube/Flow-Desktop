@@ -99,6 +99,7 @@ pub fn evaluate(brain: &UserBrain, candidates: &[EvalCandidate], k: usize) -> Ev
         session_video_count: 0,
         candidate_pool_size: candidates.len(),
         exploration_scale: 0.6,
+        pick_keys: &HashSet::new(),
     };
 
     let scores: Vec<f64> = candidates

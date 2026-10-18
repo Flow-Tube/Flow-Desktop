@@ -5,6 +5,7 @@ use tracing::warn;
 
 use crate::db::settings;
 use crate::errors::AppResult;
+use crate::flow_neuro::features::{TopicReader, VideoText, document_terms, extract_features};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::{
     AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES,
@@ -17,8 +18,7 @@ use crate::flow_neuro::scoring::{
     PERSONA_MAX_STABILITY, REJECTION_EXPIRY_DAYS, REJECTION_MEMORY_MAX, RejectionSignal,
     TOPIC_EVIDENCE_MAX_ENTRIES, TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain,
     VIDEO_SUPPRESSION_DAYS, WATCH_HISTORY_MAX, WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED,
-    adjust_vector, apply_anchor_decay, classify_persona, extract_features, extract_rejection_keys,
-    strip_domain_tag,
+    adjust_vector, apply_anchor_decay, classify_persona, extract_rejection_keys, strip_domain_tag,
 };
 
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.40;
@@ -44,11 +44,12 @@ impl InteractionType {
     }
 }
 
+/// The key of a link between two topics, the way Flow for Android writes it ("a|b", in order).
 pub fn make_affinity_key(t1: &str, t2: &str) -> String {
     if t1 < t2 {
-        format!("{}:{}", t1, t2)
+        format!("{t1}|{t2}")
     } else {
-        format!("{}:{}", t2, t1)
+        format!("{t2}|{t1}")
     }
 }
 
@@ -320,14 +321,20 @@ pub fn apply_interaction(
         total_documents: brain.idf_total_documents,
     };
 
+    let spec = brain.key_spec();
     let video_vector = extract_features(
-        title,
-        channel_name,
-        description,
-        duration_sec,
-        is_live,
-        is_short,
-        &idf_snapshot,
+        &VideoText {
+            title,
+            channel_name,
+            description,
+            duration_seconds: duration_sec,
+            is_live,
+            is_short,
+        },
+        &TopicReader {
+            spec: spec.clone(),
+            idf: &idf_snapshot,
+        },
     );
 
     let primary_topic = video_vector
@@ -442,10 +449,10 @@ pub fn apply_interaction(
         }
     }
 
-    // 6. Update IDF counters on positive interaction
-    if learning_rate > 0.0 {
-        for word in video_vector.topics.keys() {
-            *brain.idf_word_frequency.entry(word.clone()).or_insert(0) += 1;
+    // 6. Document frequency counts each video once, so pair counts can say what is a phrase.
+    if learning_rate > 0.0 && brain.counted_documents.insert(video_id.to_string()) {
+        for term in document_terms(title, &video_vector, &spec) {
+            *brain.idf_word_frequency.entry(term).or_insert(0) += 1;
         }
         brain.idf_total_documents += 1;
 

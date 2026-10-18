@@ -1,8 +1,5 @@
-use crate::flow_neuro::keyspec;
-pub use crate::flow_neuro::tokenizer::{
-    get_polysemous_words, get_priority_bigrams, is_generic_word, normalize_lemma, strip_domain_tag,
-    tokenize, tokenize_unigrams, unigram_weight_multiplier,
-};
+use crate::flow_neuro::features::title_words;
+use crate::flow_neuro::keyspec::{self, KeySpec};
 use chrono::{Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -312,6 +309,9 @@ pub struct UserBrain {
     #[serde(default)]
     pub key_spec: u32,
     pub language_votes: HashMap<String, u32>,
+    /// Videos already counted toward document frequency in this run of the app.
+    #[serde(skip)]
+    pub counted_documents: HashSet<String>,
 }
 
 impl Default for UserBrain {
@@ -350,6 +350,7 @@ impl Default for UserBrain {
             key_language: None,
             key_spec: keyspec::VERSION,
             language_votes: HashMap::new(),
+            counted_documents: HashSet::new(),
         }
     }
 }
@@ -492,118 +493,6 @@ impl FlowPersona {
             _ => Self::Initiate,
         }
     }
-}
-
-// --- Tokenizer-adjacent scoring dictionaries ---
-
-pub fn get_sponsor_line_patterns() -> &'static [&'static str] {
-    &[
-        "use code ",
-        "% off",
-        "free trial",
-        "link in",
-        "sponsored by",
-        "brought to you",
-        "check out",
-        "sign up",
-        "discount",
-        "promo code",
-        "coupon",
-        "affiliate",
-        "partner",
-        "merch",
-        "merchandise",
-        "patreon",
-        "ko-fi",
-        "buymeacoffee",
-        "buy me a coffee",
-        "subscribe",
-        "follow me",
-        "social media",
-        "instagram",
-        "twitter",
-        "tiktok",
-        "discord",
-        "join the",
-        "become a member",
-        "membership",
-        "business inquiries",
-        "business email",
-        "contact:",
-        "►",
-        "→",
-        "⬇",
-        "⇩",
-        "👇",
-        "timestamps:",
-        "chapters:",
-    ]
-}
-
-pub fn get_high_pacing_words() -> &'static HashSet<&'static str> {
-    static INSTANCE: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    INSTANCE.get_or_init(|| {
-        [
-            "compilation",
-            "tiktok",
-            "tiktoks",
-            "highlights",
-            "speedrun",
-            "trailer",
-            "shorts",
-            "montage",
-            "moments",
-            "best of",
-            "try not to",
-            "memes",
-            "funny",
-            "fails",
-            "rapid",
-            "fast",
-            "quick",
-            "minute",
-            "seconds",
-            "top 10",
-            "top 5",
-            "ranked",
-            "tier list",
-            "versus",
-        ]
-        .iter()
-        .cloned()
-        .collect()
-    })
-}
-
-pub fn get_low_pacing_words() -> &'static HashSet<&'static str> {
-    static INSTANCE: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    INSTANCE.get_or_init(|| {
-        [
-            "podcast",
-            "essay",
-            "ambient",
-            "explained",
-            "study",
-            "meditation",
-            "sleep",
-            "asmr",
-            "relaxing",
-            "calm",
-            "deep dive",
-            "analysis",
-            "lecture",
-            "course",
-            "documentary",
-            "interview",
-            "conversation",
-            "discussion",
-            "breakdown",
-            "walkthrough",
-        ]
-        .iter()
-        .cloned()
-        .collect()
-    })
 }
 
 #[allow(dead_code)]
@@ -812,60 +701,6 @@ pub fn get_topic_categories() -> &'static Vec<TopicCategory> {
             },
         ]
     })
-}
-
-fn is_description_content_line(line: &str) -> bool {
-    let trimmed = line.trim();
-    if trimmed.len() <= DESCRIPTION_LINE_MIN_LENGTH {
-        return false;
-    }
-
-    let lower = trimmed.to_lowercase();
-    if get_sponsor_line_patterns()
-        .iter()
-        .any(|pattern| lower.contains(pattern))
-    {
-        return false;
-    }
-    if lower.contains("http") || trimmed.starts_with('#') {
-        return false;
-    }
-    if trimmed.len() > 5 && trimmed == trimmed.to_uppercase() {
-        return false;
-    }
-
-    true
-}
-
-fn extract_description_keywords(description: &str, idf: &IdfSnapshot) -> HashMap<String, f64> {
-    if description.len() < DESCRIPTION_MIN_LENGTH {
-        return HashMap::new();
-    }
-
-    let content_lines = description
-        .lines()
-        .filter(|line| is_description_content_line(line))
-        .take(DESCRIPTION_TAKE_LINES)
-        .collect::<Vec<&str>>()
-        .join(" ");
-
-    if content_lines.trim().is_empty() {
-        return HashMap::new();
-    }
-
-    let mut result = HashMap::new();
-    for word in tokenize(&content_lines)
-        .into_iter()
-        .take(DESCRIPTION_TAKE_WORDS)
-    {
-        let current_weight = *result.get(&word).unwrap_or(&0.0);
-        let adjusted_weight = DESCRIPTION_WORD_WEIGHT * unigram_weight_multiplier(&word);
-        result.insert(
-            word.clone(),
-            current_weight + calculate_idf_weight(&word, adjusted_weight, idf),
-        );
-    }
-    result
 }
 
 pub fn extract_rejection_keys(video_vector: &ContentVector) -> Vec<String> {
@@ -1093,6 +928,14 @@ impl TimeDecay {
     }
 }
 
+/// A key without its ":domain" tag ("metal:music" reads "metal").
+pub fn strip_domain_tag(topic: &str) -> String {
+    match topic.find(':') {
+        Some(index) if index > 0 => topic[..index].to_string(),
+        _ => topic.to_string(),
+    }
+}
+
 // --- IDF Helpers ---
 
 pub struct IdfSnapshot {
@@ -1110,177 +953,6 @@ pub fn calculate_idf_weight(word: &str, base_weight: f64, idf: &IdfSnapshot) -> 
     }
     let idf_val = (1.0 + (idf.total_documents as f64 / freq).ln()).max(0.0);
     base_weight * idf_val.min(10.0)
-}
-
-// --- Feature Extraction ---
-
-pub fn extract_features(
-    title: &str,
-    channel_name: &str,
-    description: Option<&str>,
-    duration: Option<u64>,
-    is_live: bool,
-    is_short: bool,
-    idf: &IdfSnapshot,
-) -> ContentVector {
-    let mut topics = HashMap::new();
-
-    let title_words = tokenize_unigrams(title);
-    let ch_words = tokenize_unigrams(channel_name);
-
-    for word in ch_words {
-        let adjusted_weight = CHANNEL_KEYWORD_WEIGHT * unigram_weight_multiplier(&word);
-        topics.insert(
-            word.clone(),
-            calculate_idf_weight(&word, adjusted_weight, idf),
-        );
-    }
-
-    if title_words.len() >= 2 {
-        for i in 0..title_words.len() - 1 {
-            let bigram_phrase = format!("{} {}", title_words[i], title_words[i + 1]);
-            let bigram = format!("{}_{}", title_words[i], title_words[i + 1]);
-            let is_meaningful_bigram = get_priority_bigrams().contains(bigram_phrase.as_str())
-                || get_polysemous_words().contains(title_words[i].as_str())
-                || get_polysemous_words().contains(title_words[i + 1].as_str())
-                || is_generic_word(title_words[i].as_str())
-                || is_generic_word(title_words[i + 1].as_str());
-            let bigram_weight = if is_meaningful_bigram {
-                BIGRAM_WEIGHT * BIGRAM_PRIORITY_WEIGHT
-            } else {
-                BIGRAM_WEIGHT
-            };
-            topics.insert(
-                bigram.clone(),
-                calculate_idf_weight(&bigram, bigram_weight, idf),
-            );
-        }
-    }
-
-    for word in &title_words {
-        let current_weight = *topics.get(word).unwrap_or(&0.0);
-        let adjusted_weight = TITLE_KEYWORD_WEIGHT * unigram_weight_multiplier(word);
-        topics.insert(
-            word.clone(),
-            current_weight + calculate_idf_weight(word, adjusted_weight, idf),
-        );
-    }
-
-    if let Some(desc) = description {
-        let limit_chars: String = desc.chars().take(DESCRIPTION_TAKE_CHARS).collect();
-        for (word, weight) in extract_description_keywords(&limit_chars, idf) {
-            let current_weight = *topics.get(&word).unwrap_or(&0.0);
-            topics.insert(word.clone(), current_weight + weight);
-        }
-    }
-
-    let normalized = if !topics.is_empty() {
-        let mut magnitude = 0.0;
-        for &v in topics.values() {
-            magnitude += v * v;
-        }
-        let magnitude = magnitude.sqrt();
-        if magnitude > 0.0 {
-            topics
-                .iter()
-                .map(|(k, &v)| (k.clone(), v / magnitude))
-                .collect()
-        } else {
-            topics
-        }
-    } else {
-        topics
-    };
-
-    let duration_sec = match duration {
-        Some(d) if d > 0 => d as f64,
-        _ if is_live => 3600.0,
-        _ => 300.0,
-    };
-    let duration_score = (1.0 + duration_sec).ln() / (7201.0_f64).ln();
-    let duration_score = duration_score.clamp(0.0, 1.0);
-
-    let title_lower = title.to_lowercase();
-    let high_count = get_high_pacing_words()
-        .iter()
-        .filter(|&&w| title_lower.contains(w))
-        .count() as f64;
-    let low_count = get_low_pacing_words()
-        .iter()
-        .filter(|&&w| title_lower.contains(w))
-        .count() as f64;
-
-    let pacing_score = if high_count > low_count {
-        (0.6 + high_count * 0.1).min(0.95)
-    } else if low_count > high_count {
-        (0.4 - low_count * 0.1).max(0.05)
-    } else if is_short {
-        0.85
-    } else {
-        0.5
-    };
-
-    // Chapter markers detection: count timestamps in description (e.g. 12:34 or 1:23)
-    let mut has_chapters = false;
-    if let Some(desc) = description {
-        let mut timestamp_count = 0;
-        let chars: Vec<char> = desc.chars().collect();
-        let mut i = 0;
-        while i < chars.len() {
-            if chars[i].is_ascii_digit() {
-                let mut digits_before = 0;
-                while i < chars.len() && chars[i].is_ascii_digit() {
-                    digits_before += 1;
-                    i += 1;
-                }
-                if digits_before >= 1 && digits_before <= 2 && i < chars.len() && chars[i] == ':' {
-                    i += 1; // skip ':'
-                    let mut digits_after = 0;
-                    while i < chars.len() && chars[i].is_ascii_digit() {
-                        digits_after += 1;
-                        i += 1;
-                    }
-                    if digits_after == 2 {
-                        timestamp_count += 1;
-                    }
-                }
-            } else {
-                i += 1;
-            }
-        }
-        if timestamp_count >= 3 {
-            has_chapters = true;
-        }
-    }
-
-    let title_words_count = title_words.len();
-    let avg_word_len = if title_words_count > 0 {
-        title_words.iter().map(|w| w.len()).sum::<usize>() as f64 / title_words_count as f64
-    } else {
-        4.0
-    };
-
-    let title_len_factor =
-        (title.len() as f64 / COMPLEXITY_TITLE_LEN_MAX).clamp(0.0, COMPLEXITY_TITLE_LEN_WEIGHT);
-    let word_len_factor =
-        (avg_word_len / COMPLEXITY_WORD_LEN_DIVISOR).clamp(0.0, COMPLEXITY_WORD_LEN_WEIGHT);
-    let chapter_bonus = if has_chapters {
-        COMPLEXITY_CHAPTER_BONUS
-    } else {
-        0.0
-    };
-
-    let complexity_score = (title_len_factor + word_len_factor + chapter_bonus).clamp(0.0, 1.0);
-
-    ContentVector {
-        topics: normalized,
-        topic_confidence: HashMap::new(),
-        anchor_topics: HashSet::new(),
-        duration: duration_score,
-        pacing: pacing_score,
-        complexity: complexity_score,
-        is_live: if is_live { 1.0 } else { 0.0 },
-    }
 }
 
 // --- Cosine Similarity ---
@@ -1581,10 +1253,7 @@ pub fn is_music_track(title: &str, channel: &str, duration_sec: Option<u64>) -> 
 
 // --- Smart Title Similarity ---
 
-pub fn calculate_title_similarity(t1: &str, t2: &str) -> f64 {
-    let w1: HashSet<String> = tokenize(t1).into_iter().collect();
-    let w2: HashSet<String> = tokenize(t2).into_iter().collect();
-
+pub fn calculate_title_similarity(w1: &HashSet<String>, w2: &HashSet<String>) -> f64 {
     if w1.is_empty() || w2.is_empty() {
         return 0.0;
     }
@@ -1605,10 +1274,15 @@ pub struct ScoredVideo {
     pub vector: ContentVector,
 }
 
-pub fn apply_smart_diversity(mut candidates: Vec<ScoredVideo>) -> Vec<String> {
+pub fn apply_smart_diversity(mut candidates: Vec<ScoredVideo>, spec: &KeySpec) -> Vec<String> {
     if candidates.is_empty() {
         return Vec::new();
     }
+    let words: HashMap<String, HashSet<String>> = candidates
+        .iter()
+        .map(|sv| (sv.id.clone(), title_words(&sv.title, spec)))
+        .collect();
+    let similarity = |a: &str, b: &str| calculate_title_similarity(&words[a], &words[b]);
 
     let mut final_playlist: Vec<(String, String, String)> = Vec::new();
     let mut channel_window = Vec::new();
@@ -1691,8 +1365,7 @@ pub fn apply_smart_diversity(mut candidates: Vec<ScoredVideo>) -> Vec<String> {
                 .rev()
                 .take(5)
                 .any(|existing: &(String, String, String)| {
-                    calculate_title_similarity(&current.title, &existing.1)
-                        > TITLE_SIMILARITY_STRICT
+                    similarity(&current.id, &existing.0) > TITLE_SIMILARITY_STRICT
                 });
 
         let is_novel_topic = !primary_topic.is_empty() && !user_top_topics.contains(&primary_topic);
@@ -1746,7 +1419,7 @@ pub fn apply_smart_diversity(mut candidates: Vec<ScoredVideo>) -> Vec<String> {
             .rev()
             .take(5)
             .any(|t: &(String, String, String)| {
-                calculate_title_similarity(&scored.title, &t.1) > TITLE_SIMILARITY_RELAXED
+                similarity(&scored.id, &t.0) > TITLE_SIMILARITY_RELAXED
             });
 
         if channel_ok && title_ok {
@@ -1782,7 +1455,7 @@ pub fn apply_smart_diversity(mut candidates: Vec<ScoredVideo>) -> Vec<String> {
                 .rev()
                 .take(5)
                 .any(|t: &(String, String, String)| {
-                    calculate_title_similarity(&scored.title, &t.1) > TITLE_SIMILARITY_RELAXED
+                    similarity(&scored.id, &t.0) > TITLE_SIMILARITY_RELAXED
                 });
 
         if !channel_spam && !title_similar {
@@ -1945,7 +1618,7 @@ mod tests {
                 vector,
             });
         }
-        let ordered = apply_smart_diversity(candidates);
+        let ordered = apply_smart_diversity(candidates, &KeySpec::default());
         assert_eq!(ordered.first(), Some(&"v0".to_string()));
         assert!(
             ordered.len() < 6,
@@ -1970,7 +1643,7 @@ mod tests {
     fn anchor_decay_reduces_anchor_weights_and_prunes_metadata() {
         let mut vector = ContentVector::default();
         vector.topics.insert("game".to_string(), 0.75);
-        vector.topics.insert("roblox_thief".to_string(), 0.20);
+        vector.topics.insert("roblox thief".to_string(), 0.20);
         vector.topic_confidence.insert("game".to_string(), 1.0);
         vector.anchor_topics.insert("game".to_string());
 
@@ -1980,7 +1653,7 @@ mod tests {
             vector.topics.get("game").copied(),
             Some(0.75 * ANCHOR_TOPIC_WATCH_DECAY)
         );
-        assert_eq!(vector.topics.get("roblox_thief").copied(), Some(0.20));
+        assert_eq!(vector.topics.get("roblox thief").copied(), Some(0.20));
 
         for _ in 0..80 {
             apply_anchor_decay(&mut vector, ANCHOR_DECAY_START_INTERACTIONS + 2);
@@ -1989,7 +1662,7 @@ mod tests {
         assert!(!vector.topics.contains_key("game"));
         assert!(!vector.topic_confidence.contains_key("game"));
         assert!(!vector.anchor_topics.contains("game"));
-        assert_eq!(vector.topics.get("roblox_thief").copied(), Some(0.20));
+        assert_eq!(vector.topics.get("roblox thief").copied(), Some(0.20));
     }
 
     #[test]

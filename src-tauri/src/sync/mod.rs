@@ -1,5 +1,6 @@
 pub mod apply;
 pub mod brain_attrib;
+pub mod brain_rekey;
 pub mod brainmap;
 pub mod canonical;
 pub mod changes;

@@ -34,6 +34,9 @@ pub struct NeuroBaseline {
     pub idf_total_documents: u64,
     pub total_interactions: u64,
     pub idf_word_frequency: BTreeMap<String, u64>,
+    /// The key spec and key language `idf_word_frequency` is keyed in.
+    pub key_spec: u32,
+    pub key_language: String,
 }
 
 impl NeuroBaseline {
@@ -47,6 +50,8 @@ impl NeuroBaseline {
                 .iter()
                 .map(|(w, &f)| (w.clone(), non_negative(f)))
                 .collect(),
+            key_spec: ub.key_spec,
+            key_language: ub.key_spec().key_language,
         }
     }
 }

@@ -29,8 +29,6 @@ pub fn to_key_spec_2(brain: &mut UserBrain) -> bool {
         return false;
     }
     let spec = brain.key_spec();
-    respell_desktop_keys(brain);
-
     let mut rekey = Rekey::new(&spec, HashMap::new());
     let mut forms = merged_forms(&brain.display_forms, &mut rekey);
     for (stemmed, before) in spelled_before(&weighted_keys(brain), &spec) {
@@ -93,12 +91,31 @@ pub fn after_sync(brain: &mut UserBrain, spelled: &HashMap<String, String>) {
 /// Spells a converted brain's keys from `titles`, oldest first, the way learning from them would
 /// have: the stems an older build kept ("vintag") never reached a label.
 pub fn spell_from_titles(brain: &mut UserBrain, titles: &[String]) {
-    let spec = brain.key_spec();
     let keys: Vec<String> = weighted_keys(brain).into_keys().collect();
+    spell(brain, titles, &keys);
+}
+
+/// Spells the keys no title has spelled yet from `titles`, such as the keys a peer's brain
+/// brought along with the titles of its watch history. A spelled key keeps its votes.
+/// Returns whether any key gained a spelling.
+pub fn fill_gaps_from_titles(brain: &mut UserBrain, titles: &[String]) -> bool {
+    let gaps: Vec<String> = weighted_keys(brain)
+        .into_keys()
+        .filter(|key| !brain.display_forms.contains_key(&strip_domain_tag(key)))
+        .collect();
+    let before = brain.display_forms.len();
+    if !gaps.is_empty() {
+        spell(brain, titles, &gaps);
+    }
+    brain.display_forms.len() > before
+}
+
+fn spell(brain: &mut UserBrain, titles: &[String], keys: &[String]) {
+    let spec = brain.key_spec();
     let global = &brain.global_vector.topics;
     let mut forms = std::mem::take(&mut brain.display_forms);
     for title in titles.iter().rev() {
-        forms = record(&forms, &spellings_in(title, &keys, &spec), |key| {
+        forms = record(&forms, &spellings_in(title, keys, &spec), |key| {
             global.contains_key(key)
         });
     }
@@ -112,7 +129,7 @@ pub fn spell_from_titles(brain: &mut UserBrain, titles: &[String]) {
 pub fn spelled_before(keys: &HashMap<String, f64>, spec: &KeySpec) -> HashMap<String, String> {
     let mut before: HashMap<String, (String, f64)> = HashMap::new();
     for (key, &weight) in keys {
-        let base = strip_domain_tag(key);
+        let base = respelled(&strip_domain_tag(key));
         let read = spec.rekey(&base);
         let [stemmed] = read.as_slice() else {
             continue;
@@ -125,7 +142,10 @@ pub fn spelled_before(keys: &HashMap<String, f64>, spec: &KeySpec) -> HashMap<St
             before.insert(stemmed.clone(), (base, weight));
         }
     }
-    let unchanged: HashSet<String> = keys.keys().map(|key| strip_domain_tag(key)).collect();
+    let unchanged: HashSet<String> = keys
+        .keys()
+        .map(|key| respelled(&strip_domain_tag(key)))
+        .collect();
     before
         .into_iter()
         .filter(|(stemmed, _)| !unchanged.contains(stemmed))
@@ -259,7 +279,8 @@ fn weighted_keys(brain: &UserBrain) -> HashMap<String, f64> {
     let linked = brain
         .topic_affinities
         .keys()
-        .flat_map(|key| key.split('|').map(str::to_string));
+        .filter_map(|key| link_ends(key))
+        .flat_map(|(left, right)| [left.to_string(), right.to_string()]);
     for key in linked.chain(brain.topic_evidence.keys().cloned()) {
         keys.entry(key).or_insert(0.0);
     }
@@ -270,58 +291,22 @@ fn merged_forms(forms: &DisplayForms, rekey: &mut Rekey) -> DisplayForms {
     rekey.merged(forms, |a, b| if a.votes >= b.votes { a } else { b })
 }
 
-/// The desktop's own spellings before key spec 2: word pairs joined by "_" ("leg_day") and links
-/// written "a:b". Read the way Android writes them ("leg day", "a|b"), so the key spec reads them as
-/// pairs and links rather than as punctuation.
-fn respell_desktop_keys(brain: &mut UserBrain) {
-    let pair = |key: &String| key.replace('_', " ");
-    let respell = |map: &HashMap<String, f64>| -> HashMap<String, f64> {
-        let mut out = HashMap::with_capacity(map.len());
-        for (key, &value) in map {
-            let entry = out.entry(pair(key)).or_insert(value);
-            *entry = f64::max(*entry, value);
-        }
-        out
-    };
-    let respell_vector = |vector: &mut ContentVector| {
-        vector.topics = respell(&vector.topics);
-        vector.topic_confidence = respell(&vector.topic_confidence);
-        vector.anchor_topics = vector.anchor_topics.iter().map(pair).collect();
-    };
-    respell_vector(&mut brain.global_vector);
-    brain.time_vectors.values_mut().for_each(respell_vector);
-    for profile in brain.channel_topic_profiles.values_mut() {
-        *profile = respell(profile);
+/// A stored key as the key spec should read it: desktops before key spec 2 joined a word pair
+/// with "_" ("leg_day"), which the key spec would read as two words.
+#[must_use]
+pub fn respelled(key: &str) -> String {
+    key.replace('_', " ")
+}
+
+/// A stored link's two ends: "a|b" as Android writes links, or "a:b" as desktops wrote them
+/// before key spec 2.
+#[must_use]
+pub fn link_ends(key: &str) -> Option<(&str, &str)> {
+    if let Some((left, right)) = key.split_once('|') {
+        return (!right.contains('|')).then_some((left, right));
     }
-    brain.topic_evidence = brain
-        .topic_evidence
-        .drain()
-        .map(|(key, evidence)| (pair(&key), evidence))
-        .collect();
-    brain.rejection_patterns = brain
-        .rejection_patterns
-        .drain()
-        .map(|(key, signal)| (pair(&key), signal))
-        .collect();
-    let mut frequencies = HashMap::new();
-    for (key, count) in brain.idf_word_frequency.drain() {
-        *frequencies.entry(pair(&key)).or_insert(0) += count;
-    }
-    brain.idf_word_frequency = frequencies;
-    let mut edges = HashMap::new();
-    for (key, weight) in &brain.topic_affinities {
-        let ends: Vec<&str> = if key.contains('|') {
-            key.split('|').collect()
-        } else {
-            key.split(':').collect()
-        };
-        if let [left, right] = ends.as_slice() {
-            let edge = make_affinity_key(&pair(&(*left).to_string()), &pair(&(*right).to_string()));
-            let entry = edges.entry(edge).or_insert(*weight);
-            *entry = f64::max(*entry, *weight);
-        }
-    }
-    brain.topic_affinities = edges;
+    let (left, right) = key.split_once(':')?;
+    (!right.contains(':') && !left.is_empty() && !right.is_empty()).then_some((left, right))
 }
 
 /// Reads keys again by a key spec (Android `NeuroKeyMigration.Rekey`), caching each key's reading.
@@ -348,7 +333,7 @@ impl<'a> Rekey<'a> {
             .pick_forms
             .get(key)
             .cloned()
-            .unwrap_or_else(|| self.spec.rekey(key));
+            .unwrap_or_else(|| self.spec.rekey(&respelled(key)));
         self.cache.insert(key.to_string(), keys.clone());
         keys
     }
@@ -384,8 +369,7 @@ impl<'a> Rekey<'a> {
     fn edges(&mut self, edges: &HashMap<String, f64>) -> HashMap<String, f64> {
         let mut out = HashMap::with_capacity(edges.len());
         for (key, &weight) in edges {
-            let ends: Vec<&str> = key.split('|').collect();
-            let [left, right] = ends.as_slice() else {
+            let Some((left, right)) = link_ends(key) else {
                 continue;
             };
             let (Some(left), Some(right)) =

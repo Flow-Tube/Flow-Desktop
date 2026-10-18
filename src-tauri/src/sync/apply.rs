@@ -12,15 +12,17 @@
 //!     full rollback, leaving the database untouched and the backup intact.
 //!
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
+use crate::flow_neuro::key_migration::{after_sync, spelled_before};
 use crate::flow_neuro::scoring::UserBrain;
 use crate::music_brain::model::MusicBrain;
 use crate::sync::brain_attrib::{
     self, MUSIC_BASELINE_KEY, MusicBaseline, NEURO_BASELINE_KEY, NeuroBaseline, attribution,
 };
+use crate::sync::brain_rekey;
 use crate::sync::brainmap;
 use crate::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, Hlc, Like, LikeState, MusicBrainSnapshot, Playlist,
@@ -449,18 +451,37 @@ async fn apply_flow_neuro(
     device_id: &str,
     ndjson: &[u8],
 ) -> Result<ApplyStats, SyncError> {
-    let incoming = parse_ndjson::<FlowNeuroBrainSnapshot>(ndjson)?;
+    let received = parse_ndjson::<FlowNeuroBrainSnapshot>(ndjson)?;
 
     let mut merged: MergedFlowNeuroBrain = match get_setting(tx, NEURO_MERGED_KEY).await? {
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedFlowNeuroBrain::default(),
     };
-    let base = get_setting(tx, NEURO_BRAIN_KEY)
+    let mut base = get_setting(tx, NEURO_BRAIN_KEY)
         .await?
         .and_then(|s| serde_json::from_str::<UserBrain>(&s).ok());
-    let baseline: Option<NeuroBaseline> = get_setting(tx, NEURO_BASELINE_KEY)
+    let mut baseline: Option<NeuroBaseline> = get_setting(tx, NEURO_BASELINE_KEY)
         .await?
         .and_then(|s| serde_json::from_str(&s).ok());
+
+    // A peer on an older key spec writes other spellings of this brain's keys; read them first so
+    // they merge into the keys they mean instead of sitting beside them as new topics.
+    let mut reader = brain_rekey::align_flow(base.as_mut(), &mut merged, baseline.as_mut());
+    let mut spelled = HashMap::new();
+    for snap in &received {
+        spelled.extend(spelled_before(
+            &snap
+                .vectors
+                .global_vector
+                .topics
+                .clone()
+                .into_iter()
+                .collect(),
+            reader.spec(),
+        ));
+    }
+    let incoming: Vec<FlowNeuroBrainSnapshot> =
+        received.iter().map(|snap| reader.snapshot(snap)).collect();
 
     if let Some(ub) = &base {
         let prior_applies = prior_applies(tx, Collection::FlowNeuroBrain).await?;
@@ -476,7 +497,13 @@ async fn apply_flow_neuro(
     set_setting(tx, NEURO_MERGED_KEY, &serde_json::to_string(&merged)?).await?;
 
     // Derive the effective brain for the engine, preserving device-local fields.
-    let effective = brainmap::merged_flow_to_userbrain(&merged, &base.unwrap_or_default());
+    let base = base.unwrap_or_else(|| {
+        let mut fresh = UserBrain::default();
+        fresh.settle_languages(&reader.spec().key_language);
+        fresh
+    });
+    let mut effective = brainmap::merged_flow_to_userbrain(&merged, &base);
+    after_sync(&mut effective, &spelled);
     set_setting(tx, NEURO_BRAIN_KEY, &serde_json::to_string(&effective)?).await?;
     set_setting(
         tx,

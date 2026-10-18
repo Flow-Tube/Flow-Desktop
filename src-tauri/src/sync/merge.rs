@@ -519,6 +519,10 @@ pub struct MergedFlowNeuroBrain {
     pub flags: BrainFlags,
     /// device_id -> that device's latest vector snapshot.
     pub device_vectors: BTreeMap<String, DeviceVectors>,
+    /// The key spec and key language the topic-keyed state above is written in; 0 and "" for
+    /// state from before key spec 2 ([`crate::sync::brain_rekey`]).
+    pub key_spec: u32,
+    pub key_language: String,
 }
 
 impl MergedFlowNeuroBrain {

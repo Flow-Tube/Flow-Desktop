@@ -22,6 +22,7 @@ use crate::sync::apply::{MUSIC_BRAIN_KEY, MUSIC_MERGED_KEY, NEURO_BRAIN_KEY, NEU
 use crate::sync::brain_attrib::{
     self, MUSIC_BASELINE_KEY, MusicBaseline, NEURO_BASELINE_KEY, NeuroBaseline, attribution,
 };
+use crate::sync::brain_rekey;
 use crate::sync::brainmap;
 use crate::sync::canonical::{Collection, Hlc, Playlist, SettingEntry, WatchHistoryRecord};
 use crate::sync::changes::{self, Stamp};
@@ -240,15 +241,17 @@ async fn current_merged_flow(
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),
         None => MergedFlowNeuroBrain::default(),
     };
-    let Some(ub) = get_setting(pool, NEURO_BRAIN_KEY)
+    let Some(mut ub) = get_setting(pool, NEURO_BRAIN_KEY)
         .await?
         .and_then(|s| serde_json::from_str::<UserBrain>(&s).ok())
     else {
+        brain_rekey::align_flow(None, &mut merged, None);
         return Ok(merged);
     };
-    let baseline: Option<NeuroBaseline> = get_setting(pool, NEURO_BASELINE_KEY)
+    let mut baseline: Option<NeuroBaseline> = get_setting(pool, NEURO_BASELINE_KEY)
         .await?
         .and_then(|s| serde_json::from_str(&s).ok());
+    brain_rekey::align_flow(Some(&mut ub), &mut merged, baseline.as_mut());
     let prior_applies = prior_applies(pool, Collection::FlowNeuroBrain).await?;
     brain_attrib::fold_local_flow(
         &mut merged,

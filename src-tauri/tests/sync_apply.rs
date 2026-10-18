@@ -5,6 +5,7 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
+use flow_desktop_lib::flow_neuro::keyspec::KeySpec;
 use flow_desktop_lib::sync::apply::apply_payload;
 use flow_desktop_lib::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, GCounter, Hlc, Like, LikeKind, LikeState,
@@ -524,10 +525,15 @@ async fn apply_flow_neuro_brain_merges_into_effective_userbrain() {
     assert_eq!(brain["idf_total_documents"], 300);
     let blocked: Vec<String> = serde_json::from_value(brain["blocked_topics"].clone()).unwrap();
     assert!(blocked.contains(&"politics".to_string()) && blocked.contains(&"gaming".to_string()));
+    // The peer wrote "coding" before key spec 2; it reads as the key titles give it here, and the
+    // peer's spelling labels it.
+    let coding = KeySpec::default().key_of("coding");
     assert!(
-        brain["global_vector"]["topics"].get("coding").is_some(),
+        brain["global_vector"]["topics"].get(&coding).is_some(),
         "peer's learned topic blended into the effective vector"
     );
+    assert!(brain["global_vector"]["topics"].get("coding").is_none());
+    assert_eq!(brain["display_forms"][&coding]["form"], "Coding");
 
     // The per-device merged CRDT state is persisted for idempotent future syncs.
     let merged: Option<String> =
@@ -619,7 +625,11 @@ async fn an_android_shaped_brain_record_applies_instead_of_rolling_back_everythi
     assert_eq!(brain["watch_history_map"]["vid1"], 0.75);
     assert!(brain["suppressed_video_ids"].get("vidbad").is_some());
     assert_eq!(brain["has_completed_onboarding"], true);
-    assert!(brain["global_vector"]["topics"].get("coding").is_some());
+    assert!(
+        brain["global_vector"]["topics"]
+            .get(KeySpec::default().key_of("coding"))
+            .is_some()
+    );
     // Android's SCREAMING_SNAKE bucket key maps onto our own spelling.
     assert!(
         brain["time_vectors"]["WeekdayEvening"]["topics"]

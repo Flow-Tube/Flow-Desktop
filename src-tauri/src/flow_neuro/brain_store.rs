@@ -5,9 +5,11 @@ use std::time::Duration;
 use sqlx::SqlitePool;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use crate::db::watch_history;
 use crate::errors::AppResult;
+use crate::flow_neuro::key_migration::fill_gaps_from_titles;
 use crate::flow_neuro::scoring::UserBrain;
-use crate::flow_neuro::signals::{get_or_create_brain, save_brain};
+use crate::flow_neuro::signals::{SPELLING_TITLES, get_or_create_brain, save_brain};
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(3);
 
@@ -81,10 +83,14 @@ impl BrainStore {
         Ok(())
     }
 
+    /// Replaces the resident brain with the stored one, after a sync merge or a restore wrote it.
+    /// Keys a peer brought in are spelled from the watch history that came with them.
     pub async fn reload(&self) -> AppResult<()> {
-        let fresh = get_or_create_brain(&self.pool).await?;
+        let mut fresh = get_or_create_brain(&self.pool).await?;
+        let titles = watch_history::recent_video_titles(&self.pool, SPELLING_TITLES).await?;
+        let spelled = fill_gaps_from_titles(&mut fresh, &titles);
         *self.brain.write().await = fresh;
-        self.dirty.store(false, Ordering::Relaxed);
+        self.dirty.store(spelled, Ordering::Relaxed);
         Ok(())
     }
 

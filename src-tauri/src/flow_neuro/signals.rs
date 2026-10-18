@@ -25,7 +25,7 @@ use crate::flow_neuro::scoring::{
 
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.40;
 /// How many recent titles spell the keys of a brain converted to key spec 2.
-const SPELLING_TITLES: i64 = 500;
+pub const SPELLING_TITLES: i64 = 500;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InteractionType {

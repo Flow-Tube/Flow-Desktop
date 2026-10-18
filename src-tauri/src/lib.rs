@@ -10,7 +10,7 @@ pub mod commands;
 mod config;
 mod db;
 mod errors;
-mod flow_neuro;
+pub mod flow_neuro;
 #[cfg(target_os = "linux")]
 mod linux_startup;
 #[cfg(target_os = "macos")]

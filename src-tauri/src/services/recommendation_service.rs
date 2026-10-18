@@ -314,6 +314,11 @@ impl RecommendationService {
         self.brain_store.flush().await
     }
 
+    /// The language the brain's keys are stemmed for, which sync advertises.
+    pub async fn key_language(&self) -> String {
+        self.brain_store.read().await.key_spec().key_language
+    }
+
     /// Reload the resident brain from the database after a sync merge wrote it directly.
     pub async fn reload_brain(&self) -> AppResult<()> {
         self.brain_store.reload().await

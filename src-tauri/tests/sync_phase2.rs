@@ -39,6 +39,7 @@ fn caps(entries: &[(Collection, bool, bool)]) -> CapabilitiesFrame {
                 schema: 1,
                 produce: *produce,
                 consume: *consume,
+                ..Default::default()
             },
         );
     }

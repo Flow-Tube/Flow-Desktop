@@ -108,6 +108,7 @@ fn caps(collections: &[Collection]) -> CapabilitiesFrame {
                         schema: 1,
                         produce: true,
                         consume: true,
+                        ..Default::default()
                     },
                 )
             })

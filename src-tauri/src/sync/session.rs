@@ -51,6 +51,8 @@ use serde_json::Value;
 
 /// Per-collection schema version this build advertises in its capabilities.
 const CAP_SCHEMA: i32 = 1;
+/// The key spec the brain's topic keys are written in (Android `NeuroKeySpec.VERSION`).
+const NEURO_KEY_SPEC: i32 = crate::flow_neuro::keyspec::VERSION as i32;
 /// How long the QR / host listener stays open waiting for a peer.
 const HOST_TTL: Duration = Duration::from_secs(180);
 /// How long to wait for the TCP/WebSocket connect when joining, across every address in the code.
@@ -289,21 +291,38 @@ fn our_hello(device_id: &str, device_name: &str) -> HelloFrame {
     }
 }
 
-/// What the desktop can produce/consume. Subscriptions are neither (no desktop table).
-pub fn desktop_capabilities() -> CapabilitiesFrame {
+/// What the desktop can produce/consume: every collection. The brain says which key spec and key
+/// language its topic keys are written in, so a peer only sends it keys this brain reads.
+#[must_use]
+pub fn desktop_capabilities(key_language: &str) -> CapabilitiesFrame {
     let mut collections = BTreeMap::new();
     for c in Collection::ALL {
-        // The desktop produces and consumes every collection.
+        let keyed = c == Collection::FlowNeuroBrain;
         collections.insert(
             c.key().to_string(),
             Capability {
                 schema: CAP_SCHEMA,
                 produce: true,
                 consume: true,
+                key_spec: if keyed { NEURO_KEY_SPEC } else { 0 },
+                key_language: if keyed {
+                    key_language.to_string()
+                } else {
+                    String::new()
+                },
             },
         );
     }
     CapabilitiesFrame { collections }
+}
+
+/// The desktop's capabilities, with the resident brain's key language.
+async fn our_capabilities(app: &AppHandle) -> CapabilitiesFrame {
+    let key_language = match app.try_state::<RecommendationService>() {
+        Some(svc) => svc.key_language().await,
+        None => crate::flow_neuro::language::system_language(),
+    };
+    desktop_capabilities(&key_language)
 }
 
 fn platform_str(p: Platform) -> String {
@@ -584,7 +603,7 @@ async fn host_receive_session(
     let pool = pool_of(app);
     let device_name = ledger::device_name(&pool).await?;
     let hello = our_hello(device_id, &device_name);
-    let caps = desktop_capabilities();
+    let caps = our_capabilities(app).await;
 
     let outcome = run_host_receiver(
         ch,
@@ -662,7 +681,7 @@ async fn host_run(
         })
         .await??;
     let hello = our_hello(device_id, device_name);
-    let caps = desktop_capabilities();
+    let caps = our_capabilities(app).await;
 
     // The host shows the SAS on its screen for the user to verify; the receiver is the consent
     // gate (one-way consent). We surface "waiting for the other device to accept".
@@ -767,7 +786,7 @@ async fn client_recv_session(
     let ch = connect_any(&payload).await?;
     let cipher = SessionCipher::new(&master, session_id, Role::Client);
     let hello = our_hello(&device_id, &device_name);
-    let caps = desktop_capabilities();
+    let caps = our_capabilities(app).await;
 
     let outcome = run_receiver(
         ch,
@@ -812,7 +831,7 @@ async fn client_send_session(
     let ch = connect_any(&payload).await?;
     let cipher = SessionCipher::new(&master, session_id, Role::Client);
     let hello = our_hello(&device_id, &device_name);
-    let caps = desktop_capabilities();
+    let caps = our_capabilities(app).await;
 
     manager
         .set_status(

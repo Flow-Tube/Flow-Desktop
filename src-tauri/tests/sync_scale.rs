@@ -77,6 +77,7 @@ fn caps() -> CapabilitiesFrame {
             schema: 1,
             produce: true,
             consume: true,
+            ..Default::default()
         },
     );
     CapabilitiesFrame { collections: c }

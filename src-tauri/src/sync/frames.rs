@@ -106,12 +106,17 @@ pub struct HelloAckFrame {
 }
 
 /// What a device can produce/consume for one collection, with its schema version.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Capability {
     pub schema: i32,
     pub produce: bool,
     pub consume: bool,
+    /// The key spec the collection's topic keys are written in; 0 when it has none or predates
+    /// them (Flow for Android #907).
+    pub key_spec: i32,
+    /// The language those keys are stemmed for.
+    pub key_language: String,
 }
 
 /// Advertised capabilities keyed by the collection's wire name (e.g. `"watch_history"`).

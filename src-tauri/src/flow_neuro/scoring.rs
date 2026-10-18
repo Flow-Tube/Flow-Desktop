@@ -1,3 +1,4 @@
+use crate::flow_neuro::display_forms::DisplayForms;
 use crate::flow_neuro::features::title_words;
 use crate::flow_neuro::keyspec::{self, KeySpec};
 use chrono::{Datelike, Local, Timelike, Weekday};
@@ -309,6 +310,8 @@ pub struct UserBrain {
     #[serde(default)]
     pub key_spec: u32,
     pub language_votes: HashMap<String, u32>,
+    /// How titles write the keys that are spelled differently from the key.
+    pub display_forms: DisplayForms,
     /// Videos already counted toward document frequency in this run of the app.
     #[serde(skip)]
     pub counted_documents: HashSet<String>,
@@ -350,6 +353,7 @@ impl Default for UserBrain {
             key_language: None,
             key_spec: keyspec::VERSION,
             language_votes: HashMap::new(),
+            display_forms: DisplayForms::new(),
             counted_documents: HashSet::new(),
         }
     }

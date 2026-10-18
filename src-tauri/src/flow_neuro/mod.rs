@@ -1,4 +1,5 @@
 pub(crate) mod brain_store;
+pub(crate) mod display_forms;
 #[cfg(test)]
 pub(crate) mod eval;
 pub(crate) mod features;

@@ -5,6 +5,7 @@ use tracing::warn;
 
 use crate::db::settings;
 use crate::errors::AppResult;
+use crate::flow_neuro::display_forms::{fill_gaps, record, spellings_in};
 use crate::flow_neuro::features::{TopicReader, VideoText, document_terms, extract_features};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::{
@@ -660,6 +661,19 @@ pub fn apply_interaction(
                 brain.rejection_patterns.remove(&key);
             }
         }
+    }
+
+    if learning_rate > 0.0 {
+        let keys: Vec<String> = video_vector.topics.keys().cloned().collect();
+        let keep = |key: &str| new_global.topics.contains_key(key);
+        let from_title = record(
+            &brain.display_forms,
+            &spellings_in(title, &keys, &spec),
+            keep,
+        );
+        // Keys read from the channel name still read as written somewhere.
+        brain.display_forms =
+            fill_gaps(&from_title, &spellings_in(channel_name, &keys, &spec), keep);
     }
 
     brain.total_interactions += 1;

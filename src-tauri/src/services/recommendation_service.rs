@@ -9,6 +9,7 @@ use tracing::{debug, info};
 use crate::db::recommendations;
 use crate::errors::AppResult;
 use crate::flow_neuro::brain_store::BrainStore;
+use crate::flow_neuro::display_forms::with_pick_spellings;
 use crate::flow_neuro::features::{
     TopicReader, VideoText, extract_features, pick_keys, title_words,
 };
@@ -1801,6 +1802,8 @@ impl RecommendationService {
             preferred.insert(trimmed.to_string());
         }
 
+        brain.display_forms =
+            with_pick_spellings(&brain.display_forms, &preferred, &brain.key_spec());
         brain.preferred_topics = preferred;
         brain.has_completed_onboarding = true;
         Ok(())
@@ -2209,6 +2212,11 @@ impl RecommendationService {
             .blocked_topics
             .retain(|blocked| blocked.to_lowercase() != normalized);
         brain.preferred_topics.insert(trimmed.to_string());
+        brain.display_forms = with_pick_spellings(
+            &brain.display_forms,
+            &[trimmed.to_string()],
+            &brain.key_spec(),
+        );
         for token in brain.key_spec().keys_of(trimmed) {
             let current = *brain.global_vector.topics.get(&token).unwrap_or(&0.0);
             brain

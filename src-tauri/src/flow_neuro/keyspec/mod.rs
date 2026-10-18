@@ -8,12 +8,13 @@
 //! 4. Possessives and French and Italian elisions come off.
 //! 5. Stop words, years, bare numbers, short words and punctuation end a chunk.
 //! 6. Runs of two or three words inside one chunk are candidates ([`Chunks::runs`]).
-//! 7. A run becomes a key once it is a phrase, a tag or a catalog topic.
+//! 7. A run becomes a key once it is a phrase ([`phrases`]), a tag or a catalog topic.
 //! 8. Each word's lemma is stemmed by its script and the key language ([`stemmer`]).
 
 mod chars;
 mod chunker;
 pub mod languages;
+pub mod phrases;
 pub mod stemmer;
 pub mod tables;
 pub mod text;
@@ -23,10 +24,15 @@ use std::sync::LazyLock;
 
 pub use chunker::{Chunks, Run};
 
+use chars::trim;
 use tables::{raw_stop_list, tables};
+use text::{fold, is_word_char};
 
 /// The key spec version Android advertises in sync (`NeuroKeySpec.VERSION`).
 pub const VERSION: u32 = 2;
+
+/// A word-level rejection pattern ("~guitar") keeps its mark through a re-key.
+const WORD_PATTERN: char = '~';
 
 /// How one viewer's text becomes keys: the stop words of `language_profile` apply to every
 /// title, and words stem for `key_language`, which unlike the profile never follows what the
@@ -97,6 +103,60 @@ impl KeySpec {
         }
     }
 
+    /// The keys a short label stands for, such as an onboarding pick: one per chunk, so "Lo-Fi"
+    /// reads "lofi" and "Health & Fitness" reads "health" and "fitness", the keys titles produce.
+    #[must_use]
+    pub fn keys_of(&self, label: &str) -> Vec<String> {
+        let chunks = self.chunk(label).chunks;
+        if !chunks.is_empty() {
+            return chunks.iter().map(|chunk| chunk.join(" ")).collect();
+        }
+        let key = self.key_of(trim(&fold(label)));
+        if trim(&key).is_empty() {
+            Vec::new()
+        } else {
+            vec![key]
+        }
+    }
+
+    /// The keys a stored key reads as under this spec (Android `NeuroKeyMigration.keyFunction`,
+    /// which sync's `BrainKeyRekey` applies to a peer's brain): one, several when it splits, none
+    /// when it goes. A key holding punctuation or an expression is chunked again; any other key is
+    /// read word by word, which leaves a key already read unchanged. A "~" mark and a ":domain"
+    /// tag are kept.
+    #[must_use]
+    pub fn rekey(&self, key: &str) -> Vec<String> {
+        if let Some(word) = key.strip_prefix(WORD_PATTERN) {
+            return self
+                .rekey(word)
+                .into_iter()
+                .map(|read| format!("{WORD_PATTERN}{read}"))
+                .collect();
+        }
+        let (base, tag) = match key.split_once(':') {
+            Some((base, tag)) if !tag.is_empty() => (base, tag),
+            _ => (key, ""),
+        };
+        let parts = if needs_rechunk(base) {
+            self.chunk(base)
+                .chunks
+                .iter()
+                .map(|chunk| chunk.join(" "))
+                .collect()
+        } else {
+            let words: Vec<String> = base.split(' ').map(|word| self.key_of(word)).collect();
+            vec![words.join(" ")]
+        };
+        if tag.is_empty() {
+            parts
+        } else {
+            parts
+                .into_iter()
+                .map(|part| format!("{part}:{tag}"))
+                .collect()
+        }
+    }
+
     /// `language`'s stop words, less the words no list may remove; none when it has no list.
     #[must_use]
     pub fn stop_list(language: &str) -> &'static HashSet<String> {
@@ -112,4 +172,13 @@ impl KeySpec {
             .map_or(&*NO_STOP_WORDS, Self::stop_list);
         move |word| base.contains(word) || profile.contains(word) || title.contains(word)
     }
+}
+
+fn needs_rechunk(base: &str) -> bool {
+    let expressions = &tables().expressions;
+    base.chars().any(|c| c != ' ' && !is_word_char(c))
+        || expressions.contains_key(base)
+        || expressions.keys().any(|variant| {
+            variant.contains(' ') && format!(" {base} ").contains(&format!(" {variant} "))
+        })
 }

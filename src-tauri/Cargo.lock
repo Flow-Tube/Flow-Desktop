@@ -1488,13 +1488,11 @@ dependencies = [
  "mp4",
  "rand 0.8.6",
  "reqwest",
- "rust-stemmers",
  "serde",
  "serde_json",
  "sha2",
  "snowstem",
  "sqlx",
- "stop-words",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
@@ -1516,7 +1514,6 @@ dependencies = [
  "unicode-normalization",
  "uuid 1.24.0",
  "webm-iterable",
- "whatlang",
  "windows 0.62.2",
  "windows-registry 0.6.1",
  "zeroize",
@@ -4141,16 +4138,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-stemmers"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e46a2036019fdb888131db7a4c847a1063a7493f971ed94ea82c67eada63ca54"
-dependencies = [
- "serde",
- "serde_derive",
-]
-
-[[package]]
 name = "rustc-hash"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4954,15 +4941,6 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
-
-[[package]]
-name = "stop-words"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68df56303396bcfb639455b3c166804aeb7994005010aab5e9e8a1277b8871d"
-dependencies = [
- "serde_json",
-]
 
 [[package]]
 name = "string_cache"
@@ -6591,15 +6569,6 @@ dependencies = [
  "thiserror 2.0.19",
  "windows 0.61.3",
  "windows-core 0.61.2",
-]
-
-[[package]]
-name = "whatlang"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e8f38b596e2a359b755342473520a99421e43658548c79489ee221b728c107"
-dependencies = [
- "hashbrown 0.15.5",
 ]
 
 [[package]]

@@ -355,9 +355,13 @@ impl RecommendationService {
         }
     }
 
-    fn has_confirmed_topic_evidence(brain: &UserBrain, topic: &str) -> bool {
+    fn has_confirmed_topic_evidence(
+        brain: &UserBrain,
+        picks: &HashSet<String>,
+        topic: &str,
+    ) -> bool {
         let base = strip_domain_tag(topic);
-        if pick_keys(brain).contains(&base) {
+        if picks.contains(&base) {
             return true;
         }
 
@@ -526,6 +530,7 @@ impl RecommendationService {
         time_topic_scores: &HashMap<String, f64>,
     ) -> Vec<MatureTopic> {
         let spec = brain.key_spec();
+        let picks = pick_keys(brain);
         let mut topic_scores: HashMap<String, (f64, f64)> = HashMap::new();
 
         for (name, score) in &brain.global_vector.topics {
@@ -592,7 +597,11 @@ impl RecommendationService {
                     maturity,
                     category_support,
                     has_time_context,
-                    has_discovery_evidence: Self::has_confirmed_topic_evidence(brain, &normalized),
+                    has_discovery_evidence: Self::has_confirmed_topic_evidence(
+                        brain,
+                        &picks,
+                        &normalized,
+                    ),
                 }
             })
             .collect();
@@ -1011,6 +1020,7 @@ impl RecommendationService {
     pub async fn generate_discovery_queries(&self) -> AppResult<Vec<String>> {
         let mut brain = self.brain_store.write().await;
         let spec = brain.key_spec();
+        let picks = pick_keys(&brain);
         let persona = classify_persona(&brain);
         let current_bucket = TimeBucket::current();
         let current_year = chrono::Local::now().year();
@@ -1247,7 +1257,7 @@ impl RecommendationService {
                 .filter_map(|(topic, weight)| {
                     let normalized = strip_domain_tag(topic);
                     if Self::is_substantial_topic(&normalized)
-                        && Self::has_confirmed_topic_evidence(&brain, &normalized)
+                        && Self::has_confirmed_topic_evidence(&brain, &picks, &normalized)
                     {
                         Some((normalized, *weight))
                     } else {
@@ -1276,7 +1286,7 @@ impl RecommendationService {
             .fold(HashMap::<String, f64>::new(), |mut acc, (topic, weight)| {
                 let normalized = strip_domain_tag(topic);
                 if Self::is_substantial_topic(&normalized)
-                    && Self::has_confirmed_topic_evidence(&brain, &normalized)
+                    && Self::has_confirmed_topic_evidence(&brain, &picks, &normalized)
                 {
                     *acc.entry(normalized).or_insert(0.0) += *weight;
                 }

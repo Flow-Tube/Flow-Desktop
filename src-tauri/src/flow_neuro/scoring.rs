@@ -1,5 +1,6 @@
 use crate::flow_neuro::display_forms::DisplayForms;
 use crate::flow_neuro::features::title_words;
+use crate::flow_neuro::keyed_lists::keyed_lists;
 use crate::flow_neuro::keyspec::{self, KeySpec};
 use chrono::{Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
@@ -707,34 +708,8 @@ pub fn get_topic_categories() -> &'static Vec<TopicCategory> {
     })
 }
 
-pub fn extract_rejection_keys(video_vector: &ContentVector) -> Vec<String> {
-    let broad_topics: HashSet<&str> = [
-        "music",
-        "game",
-        "video",
-        "sport",
-        "food",
-        "art",
-        "tech",
-        "science",
-        "news",
-        "show",
-        "movie",
-        "film",
-        "learn",
-        "education",
-        "entertainment",
-        "review",
-        "react",
-        "challenge",
-        "build",
-        "design",
-        "travel",
-    ]
-    .iter()
-    .copied()
-    .collect();
-
+pub fn extract_rejection_keys(video_vector: &ContentVector, spec: &KeySpec) -> Vec<String> {
+    let lists = keyed_lists(spec);
     let mut top_topics: Vec<(String, f64)> = video_vector
         .topics
         .iter()
@@ -753,10 +728,7 @@ pub fn extract_rejection_keys(video_vector: &ContentVector) -> Vec<String> {
     }
 
     let mut keys = Vec::new();
-    if let Some(primary) = top_topics
-        .iter()
-        .find(|topic| !broad_topics.contains(topic.as_str()))
-    {
+    if let Some(primary) = top_topics.iter().find(|topic| !lists.is_broad_topic(topic)) {
         keys.push(primary.clone());
     }
     if top_topics.len() >= 2 {
@@ -771,6 +743,7 @@ pub fn calculate_rejection_pattern_penalty(
     video_vector: &ContentVector,
     rejection_patterns: &HashMap<String, RejectionSignal>,
     now_ms: u64,
+    spec: &KeySpec,
 ) -> f64 {
     if rejection_patterns.is_empty() {
         return 1.0;
@@ -778,7 +751,7 @@ pub fn calculate_rejection_pattern_penalty(
 
     let expiry_ms = REJECTION_EXPIRY_DAYS * 86_400_000;
     let mut max_count = 0;
-    for key in extract_rejection_keys(video_vector) {
+    for key in extract_rejection_keys(video_vector, spec) {
         if let Some(signal) = rejection_patterns.get(&key) {
             if now_ms.saturating_sub(signal.last_rejected_at) < expiry_ms {
                 max_count = max_count.max(signal.count);
@@ -1491,18 +1464,10 @@ pub fn classify_persona(brain: &UserBrain) -> FlowPersona {
         0.0
     };
 
-    let music_keywords = [
-        "music",
-        "song",
-        "lyrics",
-        "remix",
-        "lofi",
-        "playlist",
-        "official audio",
-    ];
+    let lists = keyed_lists(&brain.key_spec());
     let mut music_score = 0.0;
     for (k, val) in &v.topics {
-        if music_keywords.iter().any(|&kw| k.contains(kw)) || k.contains("feat") {
+        if lists.is_music(k) {
             music_score += val;
         }
     }

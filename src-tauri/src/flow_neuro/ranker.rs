@@ -1,3 +1,4 @@
+use crate::flow_neuro::keyspec::KeySpec;
 use crate::flow_neuro::scoring::{
     AFFINITY_BOOST_PER_PAIR, AFFINITY_MAX_BOOST_PER_VIDEO, BINGE_NOVELTY_FACTOR, BINGE_THRESHOLD,
     CLASSIC_VIEW_THRESHOLD, COLD_START_THRESHOLD, CURIOSITY_GAP_BONUS, ContentVector,
@@ -46,6 +47,8 @@ pub struct RankInputs<'a> {
     pub exploration_scale: f64,
     /// The keys the viewer's onboarding picks read as.
     pub pick_keys: &'a HashSet<String>,
+    /// How the brain reads text into keys.
+    pub spec: &'a KeySpec,
 }
 
 /// Per-candidate inputs. Borrows the candidate's extracted vector and metadata.
@@ -214,7 +217,8 @@ fn multiplicative_penalties(inputs: &RankInputs, candidate: &Candidate, personal
     };
 
     mult *= calculate_channel_score_multiplier(brain, candidate.channel_id);
-    mult *= calculate_rejection_pattern_penalty(vector, &brain.rejection_patterns, now_ms);
+    mult *=
+        calculate_rejection_pattern_penalty(vector, &brain.rejection_patterns, now_ms, inputs.spec);
     mult *= calculate_feed_history_penalty(
         candidate.video_id,
         &brain.feed_history,
@@ -322,9 +326,11 @@ mod tests {
             candidate_pool_size: 50,
             exploration_scale: 0.6,
             pick_keys: &NO_PICKS,
+            spec: &DEFAULT_SPEC,
         }
     }
 
+    static DEFAULT_SPEC: std::sync::LazyLock<KeySpec> = std::sync::LazyLock::new(KeySpec::default);
     static NO_PICKS: std::sync::LazyLock<HashSet<String>> = std::sync::LazyLock::new(HashSet::new);
 
     fn candidate_for<'a>(

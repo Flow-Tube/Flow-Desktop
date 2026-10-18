@@ -164,10 +164,100 @@ const CATALOG_PHRASES: [&str; 49] = [
     "Current Events",
 ];
 
+/// Words that make no discovery search by themselves ("tutorial", "shorts").
+pub const DISCOVERY_NOISE_WORDS: [&str; 39] = [
+    "prompt",
+    "prompts",
+    "prompting",
+    "use",
+    "used",
+    "using",
+    "guide",
+    "tutorial",
+    "tips",
+    "tricks",
+    "thing",
+    "things",
+    "stuff",
+    "way",
+    "ways",
+    "type",
+    "types",
+    "kind",
+    "level",
+    "sensei",
+    "guru",
+    "master",
+    "pro",
+    "official",
+    "studio",
+    "studios",
+    "media",
+    "network",
+    "viral",
+    "popular",
+    "meme",
+    "memes",
+    "tiktok",
+    "tiktoks",
+    "short",
+    "shorts",
+    "minute",
+    "minutes",
+    "now",
+];
+
+/// Words that mean different things in different subjects, so a search needs context with them.
+const POLYSEMOUS_WORDS: [&str; 24] = [
+    "code", "design", "build", "run", "play", "model", "train", "stream", "rock", "metal",
+    "spring", "cell", "plant", "jam", "wave", "track", "scale", "craft", "mix", "beat", "sound",
+    "flow", "space", "match",
+];
+
+/// Subjects too broad for one rejected video to say the viewer dislikes them.
+const REJECTION_BROAD_TOPICS: [&str; 21] = [
+    "music",
+    "game",
+    "video",
+    "sport",
+    "food",
+    "art",
+    "tech",
+    "science",
+    "news",
+    "show",
+    "movie",
+    "film",
+    "learn",
+    "education",
+    "entertainment",
+    "review",
+    "react",
+    "challenge",
+    "build",
+    "design",
+    "travel",
+];
+
+/// What a music-led profile's keys hold.
+const MUSIC_WORDS: [&str; 7] = [
+    "music",
+    "song",
+    "lyrics",
+    "remix",
+    "lofi",
+    "playlist",
+    "official audio",
+];
+
 /// The lists above, keyed by one key spec.
 pub struct KeyedLists {
     generic: HashSet<String>,
     known_phrases: HashSet<String>,
+    discovery_noise: HashSet<String>,
+    polysemous: HashSet<String>,
+    broad_topics: HashSet<String>,
+    music: Vec<String>,
 }
 
 impl KeyedLists {
@@ -184,10 +274,42 @@ impl KeyedLists {
             }))
             .chain(tables().expressions.values().cloned())
             .collect();
+        let keyed = |words: &[&str]| -> HashSet<String> {
+            words.iter().flat_map(|word| spec.keys_of(word)).collect()
+        };
         Self {
             generic: GENERIC_WORDS.iter().map(|word| spec.key_of(word)).collect(),
             known_phrases,
+            discovery_noise: keyed(&DISCOVERY_NOISE_WORDS),
+            polysemous: keyed(&POLYSEMOUS_WORDS),
+            broad_topics: keyed(&REJECTION_BROAD_TOPICS),
+            // "feat" marks a song title's featured artist.
+            music: keyed(&MUSIC_WORDS)
+                .into_iter()
+                .chain(std::iter::once("feat".to_string()))
+                .collect(),
         }
+    }
+
+    #[must_use]
+    pub fn is_discovery_noise(&self, key: &str) -> bool {
+        self.discovery_noise.contains(key)
+    }
+
+    #[must_use]
+    pub fn is_polysemous(&self, key: &str) -> bool {
+        self.polysemous.contains(key)
+    }
+
+    #[must_use]
+    pub fn is_broad_topic(&self, key: &str) -> bool {
+        self.broad_topics.contains(key)
+    }
+
+    /// Whether a key names music, by holding one of the music words.
+    #[must_use]
+    pub fn is_music(&self, key: &str) -> bool {
+        self.music.iter().any(|word| key.contains(word.as_str()))
     }
 
     /// Whether `key` is a single word too broad to describe a video by itself.
@@ -234,5 +356,11 @@ mod tests {
         assert!(lists.is_known_phrase("hip hop"));
         assert!(lists.is_known_phrase(&KeySpec::default().rekey("machine learn")[0]));
         assert!(!lists.is_known_phrase("review after"));
+        let spec = KeySpec::default();
+        assert!(lists.is_broad_topic(&spec.key_of("entertainment")));
+        assert!(lists.is_discovery_noise(&spec.key_of("tutorials")));
+        assert!(lists.is_polysemous(&spec.key_of("models")));
+        assert!(lists.is_music(&spec.key_of("lyrics")));
+        assert!(!lists.is_music("guitar"));
     }
 }

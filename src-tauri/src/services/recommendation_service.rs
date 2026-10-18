@@ -13,7 +13,7 @@ use crate::flow_neuro::display_forms::{label, with_pick_spellings};
 use crate::flow_neuro::features::{
     TopicReader, VideoText, extract_features, pick_keys, title_words,
 };
-use crate::flow_neuro::keyed_lists::keyed_lists;
+use crate::flow_neuro::keyed_lists::{DISCOVERY_NOISE_WORDS, keyed_lists};
 use crate::flow_neuro::keyspec::KeySpec;
 use crate::flow_neuro::ranker;
 use crate::flow_neuro::scoring::{
@@ -162,47 +162,7 @@ impl RecommendationService {
     }
 
     fn discovery_noise_words() -> &'static [&'static str] {
-        &[
-            "prompt",
-            "prompts",
-            "prompting",
-            "use",
-            "used",
-            "using",
-            "guide",
-            "tutorial",
-            "tips",
-            "tricks",
-            "thing",
-            "things",
-            "stuff",
-            "way",
-            "ways",
-            "type",
-            "types",
-            "kind",
-            "level",
-            "sensei",
-            "guru",
-            "master",
-            "pro",
-            "official",
-            "studio",
-            "studios",
-            "media",
-            "network",
-            "viral",
-            "popular",
-            "meme",
-            "memes",
-            "tiktok",
-            "tiktoks",
-            "short",
-            "shorts",
-            "minute",
-            "minutes",
-            "now",
-        ]
+        &DISCOVERY_NOISE_WORDS
     }
 
     fn discovery_filler_words() -> &'static [&'static str] {
@@ -235,14 +195,6 @@ impl RecommendationService {
             "watch",
             "see",
             "latest",
-        ]
-    }
-
-    fn discovery_polysemous_words() -> &'static [&'static str] {
-        &[
-            "code", "design", "build", "run", "play", "model", "train", "stream", "rock", "metal",
-            "spring", "cell", "plant", "jam", "wave", "track", "scale", "craft", "mix", "beat",
-            "sound", "flow", "space", "match",
         ]
     }
 
@@ -382,12 +334,14 @@ impl RecommendationService {
         )
     }
 
-    fn is_substantial_topic(topic: &str) -> bool {
+    fn is_substantial_topic(topic: &str, spec: &KeySpec) -> bool {
         let lower = topic.trim().to_lowercase();
         if lower.len() < 3 {
             return false;
         }
-        if Self::discovery_noise_words().contains(&lower.as_str()) {
+        if Self::discovery_noise_words().contains(&lower.as_str())
+            || keyed_lists(spec).is_discovery_noise(&strip_domain_tag(&lower))
+        {
             return false;
         }
         if !lower.chars().any(|c| c.is_ascii_alphabetic()) {
@@ -407,7 +361,7 @@ impl RecommendationService {
         let base = strip_domain_tag(topic);
         Self::is_broad_singleton_query(&base, spec)
             || base.len() < 6
-            || Self::discovery_polysemous_words().contains(&base.as_str())
+            || keyed_lists(spec).is_polysemous(&base)
     }
 
     fn is_broad_singleton_query(query: &str, spec: &KeySpec) -> bool {
@@ -458,12 +412,12 @@ impl RecommendationService {
                 let left = strip_domain_tag(parts[0]);
                 let right = strip_domain_tag(parts[1]);
                 if left == base
-                    && Self::is_substantial_topic(&right)
+                    && Self::is_substantial_topic(&right, &spec)
                     && !Self::is_broad_singleton_query(&right, &spec)
                 {
                     Some((right, *score))
                 } else if right == base
-                    && Self::is_substantial_topic(&left)
+                    && Self::is_substantial_topic(&left, &spec)
                     && !Self::is_broad_singleton_query(&left, &spec)
                 {
                     Some((left, *score))
@@ -486,7 +440,7 @@ impl RecommendationService {
                 let co_topic = strip_domain_tag(topic_name);
                 if co_topic != base
                     && *score > 0.05
-                    && Self::is_substantial_topic(&co_topic)
+                    && Self::is_substantial_topic(&co_topic, &spec)
                     && !Self::is_broad_singleton_query(&co_topic, &spec)
                 {
                     Some((co_topic, *score))
@@ -535,7 +489,7 @@ impl RecommendationService {
 
         for (name, score) in &brain.global_vector.topics {
             let normalized = strip_domain_tag(name);
-            if !Self::is_substantial_topic(&normalized) {
+            if !Self::is_substantial_topic(&normalized, &spec) {
                 continue;
             }
             let entry = topic_scores.entry(normalized).or_insert((0.0, 0.0));
@@ -544,7 +498,7 @@ impl RecommendationService {
 
         for (name, score) in time_topic_scores {
             let normalized = strip_domain_tag(name);
-            if !Self::is_substantial_topic(&normalized) {
+            if !Self::is_substantial_topic(&normalized, &spec) {
                 continue;
             }
             let entry = topic_scores.entry(normalized).or_insert((0.0, 0.0));
@@ -695,14 +649,15 @@ impl RecommendationService {
     }
 
     fn top_anchor_topics(brain: &UserBrain) -> Vec<String> {
+        let spec = brain.key_spec();
+        // A pick of several words is one key now ("machin learn"), so phrases anchor too.
         let mut anchors: Vec<(String, f64, f64)> = brain
             .global_vector
             .anchor_topics
             .iter()
             .filter_map(|topic| {
                 let normalized = strip_domain_tag(topic);
-                if normalized.contains(' ')
-                    || !Self::is_substantial_topic(&normalized)
+                if !Self::is_substantial_topic(&normalized, &spec)
                     || brain
                         .blocked_topics
                         .iter()
@@ -1033,7 +988,7 @@ impl RecommendationService {
                     .topics
                     .iter()
                     .map(|(topic, score)| (strip_domain_tag(topic), *score))
-                    .filter(|(topic, _)| Self::is_substantial_topic(topic))
+                    .filter(|(topic, _)| Self::is_substantial_topic(topic, &spec))
                     .collect();
                 topics.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
                 topics.into_iter().take(5).collect()
@@ -1203,8 +1158,8 @@ impl RecommendationService {
         {
             let parts: Vec<&str> = key.split('|').collect();
             if parts.len() == 2
-                && Self::is_substantial_topic(parts[0])
-                && Self::is_substantial_topic(parts[1])
+                && Self::is_substantial_topic(parts[0], &spec)
+                && Self::is_substantial_topic(parts[1], &spec)
             {
                 queries.push(DiscoveryQuery {
                     query: format!(
@@ -1256,7 +1211,7 @@ impl RecommendationService {
                 .iter()
                 .filter_map(|(topic, weight)| {
                     let normalized = strip_domain_tag(topic);
-                    if Self::is_substantial_topic(&normalized)
+                    if Self::is_substantial_topic(&normalized, &spec)
                         && Self::has_confirmed_topic_evidence(&brain, &picks, &normalized)
                     {
                         Some((normalized, *weight))
@@ -1285,7 +1240,7 @@ impl RecommendationService {
             .flat_map(|profile| profile.iter())
             .fold(HashMap::<String, f64>::new(), |mut acc, (topic, weight)| {
                 let normalized = strip_domain_tag(topic);
-                if Self::is_substantial_topic(&normalized)
+                if Self::is_substantial_topic(&normalized, &spec)
                     && Self::has_confirmed_topic_evidence(&brain, &picks, &normalized)
                 {
                     *acc.entry(normalized).or_insert(0.0) += *weight;
@@ -1610,6 +1565,7 @@ impl RecommendationService {
             candidate_pool_size: candidate_count,
             exploration_scale,
             pick_keys: &pick_keys,
+            spec: &spec,
         };
 
         let mut candidates_map: HashMap<String, VideoSummary> =
@@ -2357,8 +2313,14 @@ mod tests {
 
     #[test]
     fn rejects_viral_and_numeric_discovery_fragments() {
-        assert!(!RecommendationService::is_substantial_topic("viral"));
-        assert!(!RecommendationService::is_substantial_topic("3.1"));
+        assert!(!RecommendationService::is_substantial_topic(
+            "viral",
+            &KeySpec::default()
+        ));
+        assert!(!RecommendationService::is_substantial_topic(
+            "3.1",
+            &KeySpec::default()
+        ));
         assert_eq!(
             RecommendationService::sanitize_discovery_query("3.1 pro"),
             None

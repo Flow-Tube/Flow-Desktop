@@ -100,6 +100,7 @@ pub fn evaluate(brain: &UserBrain, candidates: &[EvalCandidate], k: usize) -> Ev
         candidate_pool_size: candidates.len(),
         exploration_scale: 0.6,
         pick_keys: &HashSet::new(),
+        spec: &brain.key_spec(),
     };
 
     let scores: Vec<f64> = candidates

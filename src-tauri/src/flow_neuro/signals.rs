@@ -635,7 +635,7 @@ pub fn apply_interaction(
                 .insert(channel_id.to_string(), (current * 0.10).max(0.01));
         }
 
-        for key in extract_rejection_keys(&video_vector) {
+        for key in extract_rejection_keys(&video_vector, &spec) {
             let existing = brain
                 .rejection_patterns
                 .get(&key)

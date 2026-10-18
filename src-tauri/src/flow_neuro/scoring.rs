@@ -1,3 +1,4 @@
+use crate::flow_neuro::keyspec;
 pub use crate::flow_neuro::tokenizer::{
     get_polysemous_words, get_priority_bigrams, is_generic_word, normalize_lemma, strip_domain_tag,
     tokenize, tokenize_unigrams, unigram_weight_multiplier,
@@ -302,6 +303,15 @@ pub struct UserBrain {
     pub recent_query_tokens: Vec<HashSet<String>>,
     pub topic_evidence: HashMap<String, TopicEvidence>,
     pub schema_version: i32,
+    /// The viewer's language: its stop words apply to every title ([`crate::flow_neuro::language`]).
+    pub language_profile: Option<String>,
+    /// The language keys are stemmed for. Set once, so a word keeps one key for the brain's life.
+    pub key_language: Option<String>,
+    /// The key spec the brain's keys are written in. Brains from before key spec 2 read 0, which
+    /// converts them once on load.
+    #[serde(default)]
+    pub key_spec: u32,
+    pub language_votes: HashMap<String, u32>,
 }
 
 impl Default for UserBrain {
@@ -336,6 +346,10 @@ impl Default for UserBrain {
             recent_query_tokens: Vec::new(),
             topic_evidence: HashMap::new(),
             schema_version: SCHEMA_VERSION,
+            language_profile: None,
+            key_language: None,
+            key_spec: keyspec::VERSION,
+            language_votes: HashMap::new(),
         }
     }
 }

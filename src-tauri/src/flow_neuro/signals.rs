@@ -5,6 +5,7 @@ use tracing::warn;
 
 use crate::db::settings;
 use crate::errors::AppResult;
+use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::{
     AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES,
     AFFINITY_PRUNE_THRESHOLD, CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, CHANNEL_INFERRED_BLOCK_DAYS,
@@ -188,8 +189,11 @@ pub async fn get_or_create_brain(pool: &SqlitePool) -> AppResult<UserBrain> {
     if let Some(json_str) = settings::get_setting(pool, "user_neuro_brain").await? {
         match serde_json::from_str::<UserBrain>(&json_str) {
             Ok(mut brain) => {
-                if brain.schema_version != crate::flow_neuro::scoring::SCHEMA_VERSION {
-                    brain.schema_version = crate::flow_neuro::scoring::SCHEMA_VERSION;
+                let mut changed =
+                    brain.schema_version != crate::flow_neuro::scoring::SCHEMA_VERSION;
+                brain.schema_version = crate::flow_neuro::scoring::SCHEMA_VERSION;
+                changed |= brain.settle_languages(&system_language());
+                if changed {
                     save_brain(pool, &brain).await?;
                 }
                 return Ok(brain);
@@ -203,7 +207,8 @@ pub async fn get_or_create_brain(pool: &SqlitePool) -> AppResult<UserBrain> {
             }
         }
     }
-    let default_brain = UserBrain::default();
+    let mut default_brain = UserBrain::default();
+    default_brain.settle_languages(&system_language());
     let json_str = serde_json::to_string(&default_brain).unwrap();
     settings::set_setting(pool, "user_neuro_brain", &json_str).await?;
     Ok(default_brain)
@@ -347,6 +352,10 @@ pub fn apply_interaction(
 
     if is_short {
         learning_rate *= SHORTS_LEARNING_PENALTY;
+    }
+
+    if interaction_type == InteractionType::Watched && learning_rate > 0.0 {
+        brain.vote_language(title, description);
     }
 
     let topic_evidence_signal =

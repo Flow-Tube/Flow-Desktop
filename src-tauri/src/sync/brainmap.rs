@@ -9,8 +9,8 @@
 //!
 //! Device-local/derived fields that are intentionally NOT synced (and are taken from `base` when
 //! reconstructing): `consecutive_skips`, `last_persona`, `persona_stability`,
-//! `recent_query_tokens`, `last_rotation_decay`, and per-`ContentVector` `topic_confidence` /
-//! `anchor_topics`.
+//! `recent_query_tokens`, `last_rotation_decay`, the language profile and key language with their
+//! votes, and per-`ContentVector` `topic_confidence` / `anchor_topics`.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -380,6 +380,10 @@ pub fn merged_flow_to_userbrain(m: &MergedFlowNeuroBrain, base: &UserBrain) -> U
             })
             .collect(),
         schema_version: m.schema.max(base.schema_version),
+        language_profile: base.language_profile.clone(),
+        key_language: base.key_language.clone(),
+        key_spec: base.key_spec,
+        language_votes: base.language_votes.clone(),
     }
 }
 

@@ -208,4 +208,104 @@ mod tests {
         assert!(metrics.ndcg > 0.9, "ndcg was {}", metrics.ndcg);
         assert!(metrics.topic_coverage > 0.0);
     }
+
+    /// End to end through the text pipeline: a brain learned from titles ranks unseen titles on the
+    /// same subjects above unrelated ones, however the titles inflect their words.
+    #[test]
+    fn a_brain_learned_from_titles_ranks_related_titles_first() {
+        use crate::flow_neuro::features::{TopicReader, VideoText, extract_features};
+        use crate::flow_neuro::scoring::IdfSnapshot;
+        use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+
+        let watched = [
+            ("Restoring Vintage Guitars", "Guitar Workshop"),
+            ("Fingerstyle Guitar Lesson for Beginners", "Acoustic Life"),
+            ("Best Electric Guitars Under 500", "Gear Review"),
+            ("Lofi Hip Hop Beats to Study", "Chillhop Music"),
+            ("Lo-Fi Hip Hop Radio for Relaxing", "Lofi Girl"),
+            ("Learning Rust Programming in 2025", "Code Academy"),
+            (
+                "Rust Programming Tutorial: Ownership Explained",
+                "Let's Get Rusty",
+            ),
+        ];
+        let mut brain = UserBrain::default();
+        for round in 0..6 {
+            for (i, (title, channel)) in watched.iter().enumerate() {
+                apply_interaction(
+                    &mut brain,
+                    &format!("w{round}-{i}"),
+                    title,
+                    channel,
+                    &format!("ch{i}"),
+                    None,
+                    Some(600),
+                    false,
+                    false,
+                    InteractionType::Watched,
+                    0.9,
+                );
+            }
+        }
+        let idf = IdfSnapshot {
+            word_frequencies: brain.idf_word_frequency.clone(),
+            total_documents: brain.idf_total_documents,
+        };
+        let reader = TopicReader {
+            spec: brain.key_spec(),
+            idf: &idf,
+        };
+        let candidates: Vec<EvalCandidate> = [
+            (
+                "Guitar Restoration: Fixing an Old Acoustic",
+                "Luthier Bench",
+                1.0,
+            ),
+            ("Top 10 Guitar Riffs for Beginners", "Riff Daily", 1.0),
+            ("Lofi Hip Hop Mix for Coding", "Beat Tape", 1.0),
+            (
+                "Rust Ownership and Borrowing Deep Dive",
+                "Systems Talk",
+                1.0,
+            ),
+            ("Welding Basics for Beginners", "Shop Floor", 0.0),
+            ("Easy Pasta Recipes at Home", "Home Kitchen", 0.0),
+            ("Crypto Market Update Today", "Coin Desk", 0.0),
+            ("Makeup Tutorial Fall Look", "Glam Studio", 0.0),
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, (title, channel, relevance))| EvalCandidate {
+            vector: extract_features(
+                &VideoText {
+                    title,
+                    channel_name: channel,
+                    description: None,
+                    duration_seconds: Some(600),
+                    is_live: false,
+                    is_short: false,
+                },
+                &reader,
+            ),
+            channel_id: format!("k{i}"),
+            is_subscription: false,
+            relevance: *relevance,
+        })
+        .collect();
+
+        let at_8 = evaluate(&brain, &candidates, 8);
+        let at_4 = evaluate(&brain, &candidates, 4);
+        println!(
+            "titles: ndcg@8 {:.4} ild@8 {:.4} coverage@8 {:.4} | ndcg@4 {:.4} ild@4 {:.4} coverage@4 {:.4}",
+            at_8.ndcg,
+            at_8.intra_list_diversity,
+            at_8.topic_coverage,
+            at_4.ndcg,
+            at_4.intra_list_diversity,
+            at_4.topic_coverage
+        );
+        // The key spec 1 build scored 0.955 and 0.832 here (origin/main 4476a68).
+        assert!(at_8.ndcg >= 0.95, "ndcg@8 was {}", at_8.ndcg);
+        assert!(at_4.ndcg >= 0.83, "ndcg@4 was {}", at_4.ndcg);
+    }
 }

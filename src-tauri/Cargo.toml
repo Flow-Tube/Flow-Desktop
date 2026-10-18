@@ -65,8 +65,9 @@ base64 = "0.23"
 rust-stemmers = "1.2"
 stop-words = "0.10"
 whatlang = "0.18"
-# FlowNeuro key spec 2, Android parity: NFKC folding, Java-style character classes and the
-# ICU dictionary word breaker.
+# FlowNeuro key spec 2, Android parity: Snowball 3.1.1 stems (rust-stemmers predates it),
+# NFKC folding, Java-style character classes and the ICU dictionary word breaker.
+snowstem = "0.1"
 unicode-normalization = "0.1"
 icu_properties = "2"
 icu_segmenter = { version = "2", default-features = false, features = ["compiled_data"] }

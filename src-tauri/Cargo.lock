@@ -1492,6 +1492,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "snowstem",
  "sqlx",
  "stop-words",
  "tauri",
@@ -4672,6 +4673,12 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "snowstem"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "163b77ad35037ed96d52a237ff97b3e26c2d74fd66c9d80a46ff6a4eb77f70b0"
 
 [[package]]
 name = "socket2"

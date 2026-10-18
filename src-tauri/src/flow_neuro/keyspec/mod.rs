@@ -13,6 +13,7 @@
 
 mod chars;
 pub mod languages;
+pub mod stemmer;
 pub mod tables;
 pub mod text;
 

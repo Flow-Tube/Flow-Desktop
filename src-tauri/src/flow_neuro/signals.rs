@@ -3,10 +3,11 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use tracing::warn;
 
-use crate::db::settings;
+use crate::db::{settings, watch_history};
 use crate::errors::AppResult;
 use crate::flow_neuro::display_forms::{fill_gaps, record, spellings_in};
 use crate::flow_neuro::features::{TopicReader, VideoText, document_terms, extract_features};
+use crate::flow_neuro::key_migration::{spell_from_titles, to_key_spec_2};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::{
     AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES,
@@ -23,6 +24,8 @@ use crate::flow_neuro::scoring::{
 };
 
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.40;
+/// How many recent titles spell the keys of a brain converted to key spec 2.
+const SPELLING_TITLES: i64 = 500;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InteractionType {
@@ -195,6 +198,12 @@ pub async fn get_or_create_brain(pool: &SqlitePool) -> AppResult<UserBrain> {
                     brain.schema_version != crate::flow_neuro::scoring::SCHEMA_VERSION;
                 brain.schema_version = crate::flow_neuro::scoring::SCHEMA_VERSION;
                 changed |= brain.settle_languages(&system_language());
+                if to_key_spec_2(&mut brain) {
+                    let titles = watch_history::recent_video_titles(pool, SPELLING_TITLES).await?;
+                    spell_from_titles(&mut brain, &titles);
+                    tracing::info!("[FlowNeuro] brain converted to key spec 2");
+                    changed = true;
+                }
                 if changed {
                     save_brain(pool, &brain).await?;
                 }

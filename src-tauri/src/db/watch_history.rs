@@ -152,6 +152,17 @@ pub async fn get_watch_history(
     Ok(records)
 }
 
+/// Titles of the latest videos watched, songs left out, newest first.
+pub async fn recent_video_titles(pool: &SqlitePool, limit: i64) -> AppResult<Vec<String>> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT title FROM watch_history WHERE is_music = 0 ORDER BY watch_date DESC, created_at DESC LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
 pub async fn get_music_history(
     pool: &SqlitePool,
     limit: i64,

@@ -1,0 +1,574 @@
+//! Brings a brain to key spec 2 once (Android `NeuroKeyMigration.toKeySpec2`, plus the schema 18
+//! pass a desktop brain never had), and reads keys again after every sync merge
+//! (`NeuroKeyMigration.afterSync`). Keys written differently are read again and merged: "guitars"
+//! joins "guitar", "lo-fi" joins "lofi". Records that meet keep the stronger one, so a merge never
+//! counts anything twice; document frequency sums, since two spellings were two counts of one word.
+
+use std::collections::{HashMap, HashSet};
+
+use crate::flow_neuro::display_forms::{
+    DisplayForm, DisplayForms, capitalized, fill_gaps, record, spellings_in, with_pick_spellings,
+};
+use crate::flow_neuro::keyed_lists::keyed_lists;
+use crate::flow_neuro::keyspec::phrases::{self, MIN_COUNT};
+use crate::flow_neuro::keyspec::{self, KeySpec, normalize_lemma};
+use crate::flow_neuro::scoring::{
+    ContentVector, IdfSnapshot, RejectionSignal, TopicEvidence, UserBrain, strip_domain_tag,
+};
+use crate::flow_neuro::signals::make_affinity_key;
+
+/// A pair the viewer engaged with beyond one chance title weighs at least this much.
+const KEPT_PAIR_WEIGHT: f64 = 0.30;
+/// What Android's onboarding gave every pair of picks; a link past it has co-watching behind it.
+const ONBOARDING_EDGE: f64 = 0.3;
+const TOPIC_EVIDENCE_MAX_SCORE: f64 = 50.0;
+
+/// Converts a brain written before key spec 2, once. Returns whether it converted.
+pub fn to_key_spec_2(brain: &mut UserBrain) -> bool {
+    if brain.key_spec >= keyspec::VERSION {
+        return false;
+    }
+    let spec = brain.key_spec();
+    respell_desktop_keys(brain);
+
+    let mut rekey = Rekey::new(&spec, HashMap::new());
+    let mut forms = merged_forms(&brain.display_forms, &mut rekey);
+    for (stemmed, before) in spelled_before(&weighted_keys(brain), &spec) {
+        forms.entry(stemmed).or_insert(DisplayForm {
+            form: capitalized(&before),
+            votes: 1,
+        });
+    }
+    brain.idf_word_frequency = rekey.merged(&brain.idf_word_frequency, |a, b| a + b);
+    brain.recent_query_tokens = brain
+        .recent_query_tokens
+        .iter()
+        .map(|tokens| {
+            tokens
+                .iter()
+                .flat_map(|token| rekey.keys_for(token))
+                .collect()
+        })
+        .collect();
+
+    rekey_brain(brain, &spec, TopicEvidence::merged_with, Pass::Migration);
+    brain.display_forms = forms;
+    brain.key_spec = keyspec::VERSION;
+    true
+}
+
+/// Reads a merged brain's keys again, since a peer on an older key spec sends old spellings.
+/// `spelled` holds the spellings the peer's keys had before they were read ([`spelled_before`]);
+/// they and the picks fill keys no title has spelled yet.
+pub fn after_sync(brain: &mut UserBrain, spelled: &HashMap<String, String>) {
+    let spec = brain.key_spec();
+    rekey_brain(
+        brain,
+        &spec,
+        |a, b| {
+            if a.positive_score >= b.positive_score {
+                a
+            } else {
+                b
+            }
+        },
+        Pass::AfterSync,
+    );
+    let global = &brain.global_vector.topics;
+    let keep = |key: &str| global.contains_key(key);
+    let forms = fill_gaps(&brain.display_forms, spelled, keep);
+    let unspelled: Vec<String> = brain
+        .preferred_topics
+        .iter()
+        .filter(|label| {
+            spec.keys_of(label)
+                .iter()
+                .any(|key| !forms.contains_key(key))
+        })
+        .cloned()
+        .collect();
+    brain.display_forms = with_pick_spellings(&forms, &unspelled, &spec);
+}
+
+/// Spells a converted brain's keys from `titles`, oldest first, the way learning from them would
+/// have: the stems an older build kept ("vintag") never reached a label.
+pub fn spell_from_titles(brain: &mut UserBrain, titles: &[String]) {
+    let spec = brain.key_spec();
+    let keys: Vec<String> = weighted_keys(brain).into_keys().collect();
+    let global = &brain.global_vector.topics;
+    let mut forms = std::mem::take(&mut brain.display_forms);
+    for title in titles.iter().rev() {
+        forms = record(&forms, &spellings_in(title, &keys, &spec), |key| {
+            global.contains_key(key)
+        });
+    }
+    brain.display_forms = forms;
+}
+
+/// The readable spelling a key had before `spec` stemmed it ("guitars" for "guitar"), for keys
+/// that read as one other key. Of two spellings the heavier wins; a key already spelled that way
+/// in `keys` needs none.
+#[must_use]
+pub fn spelled_before(keys: &HashMap<String, f64>, spec: &KeySpec) -> HashMap<String, String> {
+    let mut before: HashMap<String, (String, f64)> = HashMap::new();
+    for (key, &weight) in keys {
+        let base = strip_domain_tag(key);
+        let read = spec.rekey(&base);
+        let [stemmed] = read.as_slice() else {
+            continue;
+        };
+        if *stemmed != base
+            && before
+                .get(stemmed)
+                .is_none_or(|(_, heaviest)| weight > *heaviest)
+        {
+            before.insert(stemmed.clone(), (base, weight));
+        }
+    }
+    let unchanged: HashSet<String> = keys.keys().map(|key| strip_domain_tag(key)).collect();
+    before
+        .into_iter()
+        .filter(|(stemmed, _)| !unchanged.contains(stemmed))
+        .map(|(stemmed, (spelling, _))| (stemmed, spelling))
+        .collect()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pass {
+    /// Once: chance pairs leave the brain, onboarding links stay.
+    Migration,
+    /// After every merge: no pair is judged again, Android's onboarding links go.
+    AfterSync,
+}
+
+fn rekey_brain(
+    brain: &mut UserBrain,
+    spec: &KeySpec,
+    merge_evidence: impl Fn(TopicEvidence, TopicEvidence) -> TopicEvidence,
+    pass: Pass,
+) {
+    // A pick was once keyed by its whole label ("machine learning"); titles key it by its chunks.
+    let pick_forms: HashMap<String, Vec<String>> = brain
+        .preferred_topics
+        .iter()
+        .map(|label| (normalize_lemma(label), spec.keys_of(label)))
+        .filter(|(old, keys)| keys.as_slice() != [old.clone()])
+        .collect();
+    let mut rekey = Rekey::new(spec, pick_forms);
+    rekey.vector(&mut brain.global_vector);
+    for vector in brain.time_vectors.values_mut() {
+        rekey.vector(vector);
+    }
+    brain.topic_affinities = rekey.edges(&brain.topic_affinities);
+    for profile in brain.channel_topic_profiles.values_mut() {
+        *profile = rekey.merged(profile, f64::max);
+    }
+    brain.topic_evidence = rekey.merged(&brain.topic_evidence, &merge_evidence);
+    brain.rejection_patterns = rekey.merged(&brain.rejection_patterns, |a, b| RejectionSignal {
+        count: a.count.max(b.count),
+        last_rejected_at: a.last_rejected_at.max(b.last_rejected_at),
+    });
+
+    let picks: HashSet<String> = brain
+        .preferred_topics
+        .iter()
+        .flat_map(|label| spec.keys_of(label))
+        .collect();
+    let chance = if pass == Pass::Migration {
+        chance_pairs(brain, spec, &picks)
+    } else {
+        HashSet::new()
+    };
+    let drop_vector = |vector: &mut ContentVector| {
+        vector.topics.retain(|key, _| !chance.contains(key));
+        vector
+            .topic_confidence
+            .retain(|key, _| !chance.contains(key));
+        vector.anchor_topics.retain(|key| !chance.contains(key));
+    };
+    drop_vector(&mut brain.global_vector);
+    brain.time_vectors.values_mut().for_each(drop_vector);
+    for profile in brain.channel_topic_profiles.values_mut() {
+        profile.retain(|key, _| !chance.contains(key));
+    }
+    brain.topic_evidence.retain(|key, _| !chance.contains(key));
+    brain.topic_affinities.retain(|key, weight| {
+        let ends: Vec<&str> = key.split('|').collect();
+        !ends.iter().any(|end| chance.contains(*end))
+            && !(pass == Pass::AfterSync
+                && ends.iter().all(|end| picks.contains(*end))
+                && (*weight - ONBOARDING_EDGE).abs() < 1e-9)
+    });
+}
+
+/// Pairs that are no phrase by the viewer's own per-video counts and carry no other proof.
+fn chance_pairs(brain: &UserBrain, spec: &KeySpec, picks: &HashSet<String>) -> HashSet<String> {
+    // Earlier versions counted every event of a video, about two per video.
+    let per_video = IdfSnapshot {
+        word_frequencies: brain
+            .idf_word_frequency
+            .iter()
+            .map(|(word, count)| (word.clone(), (count + 1) / 2))
+            .collect(),
+        total_documents: (brain.idf_total_documents + 1) / 2,
+    };
+    let lists = keyed_lists(spec);
+    let mut weights: HashMap<&String, f64> = HashMap::new();
+    for vector in std::iter::once(&brain.global_vector).chain(brain.time_vectors.values()) {
+        for (key, &weight) in &vector.topics {
+            let entry = weights.entry(key).or_insert(weight);
+            *entry = entry.max(weight);
+        }
+    }
+    let linked: Vec<String> = brain
+        .topic_affinities
+        .keys()
+        .flat_map(|key| key.split('|').map(str::to_string))
+        .collect();
+    let keys = weights
+        .keys()
+        .map(|key| (*key).clone())
+        .chain(brain.topic_evidence.keys().cloned())
+        .chain(
+            brain
+                .channel_topic_profiles
+                .values()
+                .flat_map(|p| p.keys().cloned()),
+        )
+        .chain(linked);
+    keys.filter(|key| {
+        let base = strip_domain_tag(key);
+        let evidence = brain
+            .topic_evidence
+            .get(&base)
+            .or_else(|| brain.topic_evidence.get(key));
+        base.contains(' ')
+            && !picks.contains(&base)
+            && !lists.is_known_phrase(&base)
+            && !(base.matches(' ').count() == 1 && phrases::is_phrase(&base, &per_video))
+            && evidence.is_none_or(|e| e.explicit_signals == 0)
+            && evidence.is_none_or(|e| e.video_ids.len() < usize::try_from(MIN_COUNT).unwrap_or(3))
+            && weights.get(key).copied().unwrap_or(0.0) < KEPT_PAIR_WEIGHT
+    })
+    .collect()
+}
+
+/// Every key a label or a search can reach, with its weight in the global vector (0 elsewhere).
+fn weighted_keys(brain: &UserBrain) -> HashMap<String, f64> {
+    let mut keys = brain.global_vector.topics.clone();
+    let linked = brain
+        .topic_affinities
+        .keys()
+        .flat_map(|key| key.split('|').map(str::to_string));
+    for key in linked.chain(brain.topic_evidence.keys().cloned()) {
+        keys.entry(key).or_insert(0.0);
+    }
+    keys
+}
+
+fn merged_forms(forms: &DisplayForms, rekey: &mut Rekey) -> DisplayForms {
+    rekey.merged(forms, |a, b| if a.votes >= b.votes { a } else { b })
+}
+
+/// The desktop's own spellings before key spec 2: word pairs joined by "_" ("leg_day") and links
+/// written "a:b". Read the way Android writes them ("leg day", "a|b"), so the key spec reads them as
+/// pairs and links rather than as punctuation.
+fn respell_desktop_keys(brain: &mut UserBrain) {
+    let pair = |key: &String| key.replace('_', " ");
+    let respell = |map: &HashMap<String, f64>| -> HashMap<String, f64> {
+        let mut out = HashMap::with_capacity(map.len());
+        for (key, &value) in map {
+            let entry = out.entry(pair(key)).or_insert(value);
+            *entry = f64::max(*entry, value);
+        }
+        out
+    };
+    let respell_vector = |vector: &mut ContentVector| {
+        vector.topics = respell(&vector.topics);
+        vector.topic_confidence = respell(&vector.topic_confidence);
+        vector.anchor_topics = vector.anchor_topics.iter().map(pair).collect();
+    };
+    respell_vector(&mut brain.global_vector);
+    brain.time_vectors.values_mut().for_each(respell_vector);
+    for profile in brain.channel_topic_profiles.values_mut() {
+        *profile = respell(profile);
+    }
+    brain.topic_evidence = brain
+        .topic_evidence
+        .drain()
+        .map(|(key, evidence)| (pair(&key), evidence))
+        .collect();
+    brain.rejection_patterns = brain
+        .rejection_patterns
+        .drain()
+        .map(|(key, signal)| (pair(&key), signal))
+        .collect();
+    let mut frequencies = HashMap::new();
+    for (key, count) in brain.idf_word_frequency.drain() {
+        *frequencies.entry(pair(&key)).or_insert(0) += count;
+    }
+    brain.idf_word_frequency = frequencies;
+    let mut edges = HashMap::new();
+    for (key, weight) in &brain.topic_affinities {
+        let ends: Vec<&str> = if key.contains('|') {
+            key.split('|').collect()
+        } else {
+            key.split(':').collect()
+        };
+        if let [left, right] = ends.as_slice() {
+            let edge = make_affinity_key(&pair(&(*left).to_string()), &pair(&(*right).to_string()));
+            let entry = edges.entry(edge).or_insert(*weight);
+            *entry = f64::max(*entry, *weight);
+        }
+    }
+    brain.topic_affinities = edges;
+}
+
+/// Reads keys again by a key spec (Android `NeuroKeyMigration.Rekey`), caching each key's reading.
+struct Rekey<'a> {
+    spec: &'a KeySpec,
+    pick_forms: HashMap<String, Vec<String>>,
+    cache: HashMap<String, Vec<String>>,
+}
+
+impl<'a> Rekey<'a> {
+    fn new(spec: &'a KeySpec, pick_forms: HashMap<String, Vec<String>>) -> Self {
+        Self {
+            spec,
+            pick_forms,
+            cache: HashMap::new(),
+        }
+    }
+
+    fn keys_for(&mut self, key: &str) -> Vec<String> {
+        if let Some(keys) = self.cache.get(key) {
+            return keys.clone();
+        }
+        let keys = self
+            .pick_forms
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| self.spec.rekey(key));
+        self.cache.insert(key.to_string(), keys.clone());
+        keys
+    }
+
+    fn merged<V: Clone>(
+        &mut self,
+        map: &HashMap<String, V>,
+        merge: impl Fn(V, V) -> V,
+    ) -> HashMap<String, V> {
+        let mut out: HashMap<String, V> = HashMap::with_capacity(map.len());
+        for (key, value) in map {
+            for read in self.keys_for(key) {
+                let next = match out.remove(&read) {
+                    Some(existing) => merge(existing, value.clone()),
+                    None => value.clone(),
+                };
+                out.insert(read, next);
+            }
+        }
+        out
+    }
+
+    fn vector(&mut self, vector: &mut ContentVector) {
+        vector.topics = self.merged(&vector.topics, f64::max);
+        vector.topic_confidence = self.merged(&vector.topic_confidence, f64::max);
+        vector.anchor_topics = vector
+            .anchor_topics
+            .iter()
+            .flat_map(|key| self.keys_for(key))
+            .collect();
+    }
+
+    fn edges(&mut self, edges: &HashMap<String, f64>) -> HashMap<String, f64> {
+        let mut out = HashMap::with_capacity(edges.len());
+        for (key, &weight) in edges {
+            let ends: Vec<&str> = key.split('|').collect();
+            let [left, right] = ends.as_slice() else {
+                continue;
+            };
+            let (Some(left), Some(right)) =
+                (single(self.keys_for(left)), single(self.keys_for(right)))
+            else {
+                continue;
+            };
+            if left != right {
+                let entry = out
+                    .entry(make_affinity_key(&left, &right))
+                    .or_insert(weight);
+                *entry = f64::max(*entry, weight);
+            }
+        }
+        out
+    }
+}
+
+fn single(keys: Vec<String>) -> Option<String> {
+    let mut keys = keys.into_iter();
+    match (keys.next(), keys.next()) {
+        (Some(key), None) => Some(key),
+        _ => None,
+    }
+}
+
+impl TopicEvidence {
+    /// Two records of one key as one (Android `TopicEvidence.mergedWith`).
+    #[must_use]
+    pub fn merged_with(self, other: Self) -> Self {
+        let capped = |a: HashSet<String>, b: HashSet<String>| -> HashSet<String> {
+            let mut all: Vec<String> = a
+                .into_iter()
+                .chain(b)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            all.sort();
+            let skip = all
+                .len()
+                .saturating_sub(crate::flow_neuro::scoring::TOPIC_EVIDENCE_MAX_IDS);
+            all.into_iter().skip(skip).collect()
+        };
+        let first_seen = [self.first_seen_at, other.first_seen_at]
+            .into_iter()
+            .filter(|at| *at > 0)
+            .min()
+            .unwrap_or(0);
+        Self {
+            positive_signals: self.positive_signals + other.positive_signals,
+            negative_signals: self.negative_signals + other.negative_signals,
+            watch_signals: self.watch_signals + other.watch_signals,
+            explicit_signals: self.explicit_signals + other.explicit_signals,
+            positive_score: (self.positive_score + other.positive_score)
+                .min(TOPIC_EVIDENCE_MAX_SCORE),
+            video_ids: capped(self.video_ids, other.video_ids),
+            channel_ids: capped(self.channel_ids, other.channel_ids),
+            first_seen_at: first_seen,
+            last_seen_at: self.last_seen_at.max(other.last_seen_at),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn legacy_brain() -> UserBrain {
+        let mut brain: UserBrain = serde_json::from_value(serde_json::json!({
+            "global_vector": {
+                "topics": {
+                    "guitars": 0.5,
+                    "guitar": 0.4,
+                    "restoring": 0.35,
+                    "leg_day": 0.12,
+                    "vintag_guitar": 0.45
+                },
+                "anchor_topics": ["guitars"],
+                "duration": 0.5, "pacing": 0.5, "complexity": 0.5, "is_live": 0.0
+            },
+            "topic_affinities": { "game:guitars": 0.2, "game|guitar": 0.3 },
+            "idf_word_frequency": { "guitars": 3, "guitar": 5, "leg_day": 2 },
+            "idf_total_documents": 40,
+            "topic_evidence": {
+                "guitars": { "positive_signals": 1, "positive_score": 1.0 },
+                "guitar": { "positive_signals": 2, "positive_score": 2.0 }
+            },
+            "channel_topic_profiles": { "c1": { "guitars": 0.2, "guitar": 0.6 } },
+            "preferred_topics": ["Machine Learning"]
+        }))
+        .unwrap();
+        brain.settle_languages("en");
+        brain
+    }
+
+    #[test]
+    fn a_legacy_brain_reads_every_key_once() {
+        let mut brain = legacy_brain();
+        assert_eq!(brain.key_spec, 0);
+        assert!(to_key_spec_2(&mut brain));
+        let spec = brain.key_spec();
+        let restor = spec.key_of("restoring");
+
+        let topics = &brain.global_vector.topics;
+        assert_eq!(topics.get("guitar"), Some(&0.5), "spellings merge by max");
+        assert!(!topics.contains_key("guitars"));
+        assert!(topics.contains_key(&restor));
+        assert!(
+            !topics.contains_key("leg day"),
+            "a chance pair leaves the vector"
+        );
+        assert!(
+            topics.contains_key(&format!("{} guitar", spec.key_of("vintag"))),
+            "a heavy pair stays"
+        );
+        assert!(brain.global_vector.anchor_topics.contains("guitar"));
+
+        assert_eq!(
+            brain.idf_word_frequency.get("guitar"),
+            Some(&8),
+            "counts sum"
+        );
+        assert_eq!(
+            brain.idf_word_frequency.get("leg day"),
+            Some(&2),
+            "a pair keeps its count, so it can still prove to be a phrase"
+        );
+        assert_eq!(brain.topic_affinities.get("game|guitar"), Some(&0.3));
+        assert_eq!(brain.topic_affinities.len(), 1);
+        assert_eq!(brain.topic_evidence["guitar"].positive_signals, 3);
+        assert_eq!(brain.channel_topic_profiles["c1"].get("guitar"), Some(&0.6));
+        assert_eq!(brain.display_forms[&restor].form, "Restoring");
+        assert!(!brain.display_forms.contains_key("guitar"));
+        assert_eq!(brain.key_spec, keyspec::VERSION);
+    }
+
+    #[test]
+    fn converting_twice_changes_nothing() {
+        let mut brain = legacy_brain();
+        to_key_spec_2(&mut brain);
+        let once = serde_json::to_value(&brain).unwrap();
+        assert!(!to_key_spec_2(&mut brain));
+        after_sync(&mut brain, &HashMap::new());
+        after_sync(&mut brain, &HashMap::new());
+        let mut again = serde_json::to_value(&brain).unwrap();
+        // Picks gain their spelling on the first merge, as they do on Android's first load.
+        again["display_forms"] = once["display_forms"].clone();
+        assert_eq!(once, again);
+    }
+
+    #[test]
+    fn titles_spell_a_converted_brain() {
+        let mut brain = legacy_brain();
+        to_key_spec_2(&mut brain);
+        spell_from_titles(&mut brain, &["Restoring Vintage Guitars".to_string()]);
+        let spec = brain.key_spec();
+        assert_eq!(brain.display_forms["guitar"].form, "Guitars");
+        assert_eq!(
+            brain.display_forms[&spec.key_of("restoring")].form,
+            "Restoring"
+        );
+    }
+
+    #[test]
+    fn a_peer_spelling_fills_a_gap_after_a_merge() {
+        let spec = KeySpec::default();
+        let keys = HashMap::from([("restoring".to_string(), 0.4), ("guitar".to_string(), 0.2)]);
+        let spelled = spelled_before(&keys, &spec);
+        assert_eq!(
+            spelled.get(&spec.key_of("restoring")).map(String::as_str),
+            Some("restoring")
+        );
+        assert!(!spelled.contains_key("guitar"));
+
+        let mut brain = UserBrain::default();
+        brain
+            .global_vector
+            .topics
+            .insert(spec.key_of("restoring"), 0.4);
+        after_sync(&mut brain, &spelled);
+        assert_eq!(
+            brain.display_forms[&spec.key_of("restoring")].form,
+            "Restoring"
+        );
+    }
+}

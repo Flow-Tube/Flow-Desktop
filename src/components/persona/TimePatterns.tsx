@@ -1,4 +1,5 @@
 import type { ContentVector, UserBrain } from "../../lib/api/recommendation";
+import { topicLabel } from "../../lib/topicLabel";
 import { Activity, Brain, Clock, Moon, Sun, Sunrise, Sunset } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -132,7 +133,7 @@ export function TimePatterns({ brain }: TimePatternsProps) {
             const topTopics = Object.entries(vector.topics || {})
               .sort((a, b) => b[1] - a[1])
               .slice(0, 2)
-              .map(([topic]) => topic);
+              .map(([topic]) => topicLabel(brain, topic));
 
             return (
               <article

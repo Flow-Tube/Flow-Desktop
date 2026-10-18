@@ -1,4 +1,4 @@
-import type { ContentVector, UserBrain } from "./api/recommendation";
+import type { ContentVector, DisplayForm, UserBrain } from "./api/recommendation";
 
 const TIME_BUCKETS = [
   "WeekdayMorning",
@@ -70,6 +70,22 @@ const mapContentVector = (value: unknown): ContentVector => {
     is_live: toNumber(vector.isLive ?? vector.is_live, 0.0),
   };
 };
+
+const mapDisplayForms = (value: unknown): Record<string, DisplayForm> => {
+  const output: Record<string, DisplayForm> = {};
+  Object.entries(asObject(value)).forEach(([key, raw]) => {
+    const entry = asObject(raw);
+    if (typeof entry.form === "string") {
+      output[key] = { form: entry.form, votes: toNumber(entry.votes, 1) };
+    }
+  });
+  return output;
+};
+
+const toLanguage = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
+
+// Flow for Android writes key spec 2 keys from its brain schema 20 on.
+const ANDROID_KEY_SPEC_2_SCHEMA = 20;
 
 const mapTopicEvidence = (value: unknown): UserBrain["topic_evidence"] => {
   const input = asObject(value);
@@ -174,12 +190,22 @@ export function convertFlowNeuroBrainData(value: unknown): UserBrain {
     };
   });
 
+  const schemaVersion = toNumber(data.schemaVersion ?? data.schema_version, 13);
+  const keySpec = toNumber(
+    data.keySpec ?? data.key_spec,
+    typeof data.schemaVersion === "number" && data.schemaVersion >= ANDROID_KEY_SPEC_2_SCHEMA ? 2 : 0,
+  );
+
   const recentQueryTokens = Array.isArray(data.recentQueryTokens ?? data.recent_query_tokens)
     ? (data.recentQueryTokens ?? data.recent_query_tokens).map((tokens: unknown) => toArray(tokens))
     : [];
 
   return {
-    schema_version: toNumber(data.schemaVersion ?? data.schema_version, 13),
+    schema_version: schemaVersion,
+    language_profile: toLanguage(data.languageProfile ?? data.language_profile),
+    key_language: toLanguage(data.keyLanguage ?? data.key_language),
+    key_spec: keySpec,
+    display_forms: mapDisplayForms(data.displayForms ?? data.display_forms),
     time_vectors: timeVectors,
     global_vector: globalVector,
     channel_scores: channelScores,

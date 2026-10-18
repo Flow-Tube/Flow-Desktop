@@ -1,4 +1,5 @@
 import type { TopicEvidence, UserBrain } from "../../lib/api/recommendation";
+import { topicLabel } from "../../lib/topicLabel";
 
 interface InterestWeightsProps {
   brain: UserBrain;
@@ -56,7 +57,7 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
                   key={topic}
                   className="h-full bg-[var(--color-primary)]"
                   style={{ width: `${widthPct}%`, opacity }}
-                  title={`${topic}: ${formatPercent(weight)}`}
+                  title={`${topicLabel(brain, topic)}: ${formatPercent(weight)}`}
                 />
               );
             })}
@@ -69,7 +70,7 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
                   className="h-2 w-2 shrink-0 rounded-full bg-[var(--color-primary)]"
                   style={{ opacity: 0.95 - index * 0.1 }}
                 />
-                <span className="truncate text-[var(--color-on-surface)]">{topic}</span>
+                <span className="truncate text-[var(--color-on-surface)]">{topicLabel(brain, topic)}</span>
                 <span className="font-mono text-[var(--color-on-surface-variant)]">
                   {formatPercent(weight)}
                 </span>
@@ -116,7 +117,7 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
                     <tr key={topic} className="bg-[var(--color-surface-container-low)]">
                       <td className="px-4 py-3 text-[var(--color-on-surface)]">
                         <div className="flex min-w-0 flex-col">
-                          <span className="truncate font-medium">{topic}</span>
+                          <span className="truncate font-medium">{topicLabel(brain, topic)}</span>
                           <span className="mt-0.5 text-xs text-[var(--color-on-surface-variant)]">
                             Model weight {formatPercent(weight)}
                           </span>

@@ -224,6 +224,11 @@ export interface TopicEvidence {
   last_seen_at: number;
 }
 
+export interface DisplayForm {
+  form: string;
+  votes: number;
+}
+
 export interface UserBrain {
   time_vectors: Record<string, ContentVector>;
   global_vector: ContentVector;
@@ -249,6 +254,11 @@ export interface UserBrain {
   recent_query_tokens: string[][];
   topic_evidence: Record<string, TopicEvidence>;
   schema_version: number;
+  language_profile?: string | null;
+  key_language?: string | null;
+  key_spec?: number;
+  /** How titles write the keys that are spelled differently from the key. */
+  display_forms?: Record<string, DisplayForm>;
 }
 
 const MOCK_BRAIN: UserBrain = {

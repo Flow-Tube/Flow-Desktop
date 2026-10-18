@@ -41,6 +41,12 @@ SYNC
 - Settings sync with Flow for Android under the names it understands, and a newer change made on the desktop is no longer overwritten. The video codec preference now stays on each device.
 - Recommendation counts no longer grow on every sync, and a channel, topic or artist you unblock on the desktop stays unblocked. Counts that had already grown are corrected once.
 
+RECOMMENDATIONS
+- Topics are read from titles the way Flow for Android reads them, so "Guitars" and "guitar" are one interest and a synced profile no longer splits one word into several topics.
+- Your existing recommendation profile is converted once on the first start, keeping what it learned without counting anything twice.
+- Interests, time patterns and discovery searches show topics the way titles write them instead of as shortened word stems.
+- Flow for Android sends its recommendation profile to the desktop again. Each device only sends it to a device that reads topics in the same language.
+
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)
 - macOS 13+ (Intel and Apple Silicon)

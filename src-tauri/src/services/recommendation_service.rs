@@ -9,7 +9,7 @@ use tracing::{debug, info};
 use crate::db::recommendations;
 use crate::errors::AppResult;
 use crate::flow_neuro::brain_store::BrainStore;
-use crate::flow_neuro::display_forms::with_pick_spellings;
+use crate::flow_neuro::display_forms::{label, with_pick_spellings};
 use crate::flow_neuro::features::{
     TopicReader, VideoText, extract_features, pick_keys, title_words,
 };
@@ -414,18 +414,24 @@ impl RecommendationService {
                 .any(|seed| spec.key_of(seed) == key)
     }
 
+    /// A topic key as search text: the spelling titles use for it, never the stemmed key.
+    fn spoken(brain: &UserBrain, topic: &str) -> String {
+        label(&brain.display_forms, topic)
+    }
+
     fn build_discovery_query(topic: &str, brain: &UserBrain) -> String {
         let spec = brain.key_spec();
         let base = strip_domain_tag(topic);
         let normalized_base = spec.key_of(&base);
+        let spoken_base = Self::spoken(brain, &base);
         if !Self::needs_query_enrichment(&base, &spec) {
-            return base;
+            return spoken_base;
         }
 
         if let Some((_, domain)) = topic.split_once(':') {
             return match Self::domain_to_query_word(domain) {
-                Some(qualifier) => format!("{} {}", base, qualifier),
-                None => format!("{} {}", base, domain),
+                Some(qualifier) => format!("{spoken_base} {qualifier}"),
+                None => format!("{spoken_base} {domain}"),
             };
         }
 
@@ -436,7 +442,7 @@ impl RecommendationService {
                 if *score <= 0.10 {
                     return None;
                 }
-                let parts: Vec<&str> = key.split([':', '|']).collect();
+                let parts: Vec<&str> = key.split('|').collect();
                 if parts.len() != 2 {
                     return None;
                 }
@@ -460,7 +466,7 @@ impl RecommendationService {
             .map(|(partner, _)| partner);
 
         if let Some(partner) = affinity_partner {
-            return format!("{} {}", base, partner);
+            return format!("{spoken_base} {}", Self::spoken(brain, &partner));
         }
 
         if let Some((co_topic, _)) = brain
@@ -481,7 +487,7 @@ impl RecommendationService {
             })
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
         {
-            return format!("{} {}", base, co_topic);
+            return format!("{spoken_base} {}", Self::spoken(brain, &co_topic));
         }
 
         if let Some(category_keyword) = get_topic_categories()
@@ -504,10 +510,10 @@ impl RecommendationService {
                     .cloned()
             })
         {
-            return format!("{} {}", base, category_keyword.to_lowercase());
+            return format!("{spoken_base} {}", category_keyword.to_lowercase());
         }
 
-        base
+        spoken_base
     }
 
     fn analyze_mature_topics(
@@ -773,7 +779,11 @@ impl RecommendationService {
                 if emerging == anchor || emerging.split(' ').any(|part| part == anchor) {
                     continue;
                 }
-                let query = format!("{} {}", anchor, emerging);
+                let query = format!(
+                    "{} {}",
+                    Self::spoken(brain, anchor),
+                    Self::spoken(brain, emerging)
+                );
                 if Self::discovery_query_blocked(&query, &brain.blocked_topics) {
                     continue;
                 }
@@ -1098,8 +1108,8 @@ impl RecommendationService {
                 queries.push(DiscoveryQuery {
                     query: format!(
                         "{} {}",
-                        strip_domain_tag(&primary_topic.name),
-                        strip_domain_tag(&topic.name)
+                        Self::spoken(&brain, &primary_topic.name),
+                        Self::spoken(&brain, &topic.name)
                     ),
                     confidence: 0.60,
                     strategy: "cross_topic",
@@ -1110,8 +1120,8 @@ impl RecommendationService {
                 queries.push(DiscoveryQuery {
                     query: format!(
                         "{} {}",
-                        strip_domain_tag(&secondary[0].name),
-                        strip_domain_tag(&secondary[1].name)
+                        Self::spoken(&brain, &secondary[0].name),
+                        Self::spoken(&brain, &secondary[1].name)
                     ),
                     confidence: 0.50,
                     strategy: "cross_topic",
@@ -1133,7 +1143,10 @@ impl RecommendationService {
             };
             if let Some(format_word) = format_word {
                 queries.push(DiscoveryQuery {
-                    query: format!("{} {}", strip_domain_tag(&primary_topic.name), format_word),
+                    query: format!(
+                        "{} {format_word}",
+                        Self::spoken(&brain, &primary_topic.name)
+                    ),
                     confidence: 0.55,
                     strategy: "format_driven",
                 });
@@ -1154,7 +1167,7 @@ impl RecommendationService {
             queries.push(DiscoveryQuery {
                 query: format!(
                     "{} {}",
-                    strip_domain_tag(&secondary[0].name),
+                    Self::spoken(&brain, &secondary[0].name),
                     Self::discovery_freshness_words()[0]
                 ),
                 confidence: 0.50,
@@ -1173,7 +1186,7 @@ impl RecommendationService {
             .filter(|(_, score)| *score > 0.15)
             .take(3)
         {
-            let parts: Vec<&str> = key.split([':', '|']).collect();
+            let parts: Vec<&str> = key.split('|').collect();
             if parts.len() == 2
                 && Self::is_substantial_topic(parts[0])
                 && Self::is_substantial_topic(parts[1])
@@ -1181,8 +1194,8 @@ impl RecommendationService {
                 queries.push(DiscoveryQuery {
                     query: format!(
                         "{} {}",
-                        strip_domain_tag(parts[0]),
-                        strip_domain_tag(parts[1])
+                        Self::spoken(&brain, parts[0]),
+                        Self::spoken(&brain, parts[1])
                     ),
                     confidence: 0.55 + (score * 0.25),
                     strategy: "cross_topic",
@@ -1205,7 +1218,11 @@ impl RecommendationService {
         }
         if confirmed_time_topics.len() >= 2 {
             queries.push(DiscoveryQuery {
-                query: format!("{} {}", confirmed_time_topics[0], confirmed_time_topics[1]),
+                query: format!(
+                    "{} {}",
+                    Self::spoken(&brain, &confirmed_time_topics[0]),
+                    Self::spoken(&brain, &confirmed_time_topics[1])
+                ),
                 confidence: 0.70,
                 strategy: "contextual",
             });
@@ -1236,7 +1253,11 @@ impl RecommendationService {
             top_topics.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             if top_topics.len() >= 2 {
                 queries.push(DiscoveryQuery {
-                    query: format!("{} {}", top_topics[0].0, top_topics[1].0),
+                    query: format!(
+                        "{} {}",
+                        Self::spoken(&brain, &top_topics[0].0),
+                        Self::spoken(&brain, &top_topics[1].0)
+                    ),
                     confidence: 0.50 + (*score * 0.15),
                     strategy: "channel_discovery",
                 });
@@ -2288,15 +2309,15 @@ mod tests {
 
         assert_eq!(
             RecommendationService::build_discovery_query("technology", &brain),
-            "technology code"
+            "Technology code"
         );
         assert_eq!(
             RecommendationService::build_discovery_query("science", &brain),
-            "science physics"
+            "Science physics"
         );
         assert_eq!(
             RecommendationService::build_discovery_query("day", &brain),
-            "day"
+            "Day"
         );
     }
 
@@ -2355,8 +2376,57 @@ mod tests {
         let queries = RecommendationService::build_query_bonding_candidates(&brain);
         let query_text: Vec<String> = queries.into_iter().map(|query| query.query).collect();
 
-        assert!(query_text.contains(&"game leg day".to_string()));
-        assert!(query_text.contains(&"game roblox thief".to_string()));
+        assert!(query_text.contains(&"Game Leg Day".to_string()));
+        assert!(query_text.contains(&"Game Roblox Thief".to_string()));
+    }
+
+    #[test]
+    fn search_text_is_spelled_as_titles_write_it() {
+        use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+
+        let mut brain = UserBrain::default();
+        let titles = [
+            "Restoring Vintage Guitars",
+            "Vintage Guitars Restoration Tips",
+            "Restoring Vintage Amplifiers",
+        ];
+        for round in 0..4 {
+            for (index, title) in titles.iter().enumerate() {
+                apply_interaction(
+                    &mut brain,
+                    &format!("v{round}{index}"),
+                    title,
+                    "Luthier Bench",
+                    "c1",
+                    None,
+                    Some(900),
+                    false,
+                    false,
+                    InteractionType::Watched,
+                    0.9,
+                );
+            }
+        }
+        let spec = brain.key_spec();
+        let stems: Vec<String> = ["restoring", "vintage", "amplifiers", "luthier"]
+            .iter()
+            .map(|word| spec.key_of(word))
+            .filter(|key| {
+                !["restoring", "vintage", "amplifiers", "luthier"].contains(&key.as_str())
+            })
+            .collect();
+        assert!(!stems.is_empty(), "the fixture must hold stemmed keys");
+
+        let topics: Vec<String> = brain.global_vector.topics.keys().cloned().collect();
+        for topic in &topics {
+            let query = RecommendationService::build_discovery_query(topic, &brain).to_lowercase();
+            for stem in &stems {
+                assert!(
+                    !query.split(' ').any(|word| word == stem),
+                    "{query} holds the stem {stem}"
+                );
+            }
+        }
     }
 
     #[test]

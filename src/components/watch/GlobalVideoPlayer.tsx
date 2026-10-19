@@ -88,13 +88,18 @@ export function GlobalVideoPlayer() {
   useEffect(() => {
     if (isFloating || isPoppedOut || isVideoFullscreen || !currentVideo) return;
 
-    const writeFrameBounds = (bounds: PlayerBounds) => {
+    // Position is owned here alone and moves with a transform, which the
+    // compositor applies without a layout pass on every scroll frame. React's
+    // frameStyle sets only the size, so a re-render can't snap the frame back
+    // to a stale position.
+    const writeFrameBounds = (bounds: PlayerBounds, prev: PlayerBounds | null) => {
       const frame = frameRef.current;
       if (!frame) return;
-      frame.style.top = `${bounds.top}px`;
-      frame.style.left = `${bounds.left}px`;
-      frame.style.width = `${bounds.width}px`;
-      frame.style.height = `${bounds.height}px`;
+      frame.style.transform = `translate3d(${bounds.left}px, ${bounds.top}px, 0)`;
+      if (!prev || prev.width !== bounds.width || prev.height !== bounds.height) {
+        frame.style.width = `${bounds.width}px`;
+        frame.style.height = `${bounds.height}px`;
+      }
     };
 
     const sync = () => {
@@ -102,7 +107,7 @@ export function GlobalVideoPlayer() {
       if (!next) return;
       const prev = lastSlotBoundsRef.current;
       lastSlotBoundsRef.current = next;
-      if (!boundsEqual(prev, next)) writeFrameBounds(next);
+      if (!boundsEqual(prev, next)) writeFrameBounds(next, prev);
       if (!prev || prev.width !== next.width || prev.height !== next.height) {
         setSlotBounds((old) => (boundsEqual(old, next) ? old : next));
       }
@@ -123,7 +128,10 @@ export function GlobalVideoPlayer() {
     window.addEventListener("resize", onResize);
 
     let scrollRaf: number | null = null;
-    const onScroll = () => {
+    const onScroll = (event: Event) => {
+      // Scrolling a menu, the sidebar or a comments panel can't move the slot.
+      const scroller = event.target;
+      if (slot && scroller instanceof Element && !scroller.contains(slot)) return;
       if (scrollRaf !== null) return;
       scrollRaf = window.requestAnimationFrame(() => {
         scrollRaf = null;
@@ -143,6 +151,9 @@ export function GlobalVideoPlayer() {
 
     return () => {
       observer.disconnect();
+      // Floating and fullscreen layouts position the frame with insets.
+      if (frameRef.current) frameRef.current.style.transform = "";
+      lastSlotBoundsRef.current = null;
       if (resizeRaf !== null) window.cancelAnimationFrame(resizeRaf);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("scroll", onScroll, { capture: true });
@@ -224,10 +235,11 @@ export function GlobalVideoPlayer() {
     }
 
     return {
-      top: `${slotBounds.top}px`,
-      left: `${slotBounds.left}px`,
+      top: 0,
+      left: 0,
       width: `${slotBounds.width}px`,
       height: `${slotBounds.height}px`,
+      willChange: "transform",
     };
   }, [isFloating, isVideoFullscreen, slotBounds]);
 

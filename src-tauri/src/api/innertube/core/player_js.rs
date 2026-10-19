@@ -188,7 +188,7 @@ async fn run_solver(player: &PlayerScript, n: &str) -> Option<String> {
     };
     let output = tokio::time::timeout(
         SOLVE_TIMEOUT,
-        tokio::process::Command::new(node_command())
+        crate::appimage::host_tokio_command(node_command())
             .arg(&solver)
             .arg(&player.path)
             .arg(n)

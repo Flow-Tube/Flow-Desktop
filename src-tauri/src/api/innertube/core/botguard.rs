@@ -95,7 +95,7 @@ async fn run_sidecar(content_binding: &str) -> Option<MintedToken> {
         return None;
     };
 
-    let output = match tokio::process::Command::new(node_command())
+    let output = match crate::appimage::host_tokio_command(node_command())
         .arg(&script)
         .arg(content_binding)
         .output()

@@ -3,7 +3,6 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod api;
-#[cfg(any(target_os = "linux", test))]
 mod appimage;
 mod bridge;
 #[cfg(target_os = "linux")]

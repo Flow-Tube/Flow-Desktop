@@ -166,6 +166,9 @@ pub async fn open_pip_window<R: Runtime>(
         )))
     })?;
 
+    #[cfg(target_os = "linux")]
+    crate::web_process::watch(&window);
+
     let handle = app.clone();
     window.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {

@@ -23,6 +23,8 @@ mod security;
 mod services;
 mod streaming;
 pub mod sync;
+#[cfg(any(target_os = "linux", test))]
+mod web_process;
 
 use std::sync::Arc;
 use tauri::Manager;
@@ -383,6 +385,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Some(main_window) = app.get_webview_window("main") {
                 macos_window::install_close_handler(&main_window);
+            }
+
+            #[cfg(target_os = "linux")]
+            if let Some(main_window) = app.get_webview_window("main") {
+                web_process::watch(&main_window);
             }
 
             // Other platforms quit with the main window, including the pop-out.

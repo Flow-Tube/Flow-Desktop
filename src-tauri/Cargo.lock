@@ -1508,6 +1508,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-normalization",
  "uuid 1.28.0",
+ "webkit2gtk",
  "webm-iterable",
  "windows",
  "windows-registry",

@@ -24,6 +24,8 @@ mod streaming;
 pub mod sync;
 #[cfg(any(target_os = "linux", test))]
 mod web_process;
+#[cfg(any(windows, test))]
+mod webview2;
 
 use std::sync::Arc;
 use tauri::Manager;

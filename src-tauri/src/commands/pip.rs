@@ -157,7 +157,7 @@ pub async fn open_pip_window<R: Runtime>(
     // playing without a user gesture of its own.
     #[cfg(windows)]
     {
-        builder = builder.additional_browser_args("--autoplay-policy=no-user-gesture-required");
+        builder = builder.additional_browser_args(crate::webview2::BROWSER_ARGS);
     }
 
     let window = builder.build().map_err(|error| {

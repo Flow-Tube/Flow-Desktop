@@ -105,16 +105,19 @@ pub async fn mint(content_binding: &str) -> Option<PotResult> {
             let _ = existing.close();
         }
         if let Ok(parsed) = tauri::Url::parse(&url_str) {
-            match tauri::WebviewWindowBuilder::new(
+            let builder = tauri::WebviewWindowBuilder::new(
                 &app_for_build,
                 WINDOW_LABEL,
                 tauri::WebviewUrl::External(parsed),
             )
             .visible(false)
             .skip_taskbar(true)
-            .focused(false)
-            .build()
-            {
+            .focused(false);
+            // WebView2 won't open a second webview on the main window's data
+            // directory with different arguments (see `webview2`).
+            #[cfg(windows)]
+            let builder = builder.additional_browser_args(crate::webview2::BROWSER_ARGS);
+            match builder.build() {
                 Ok(_) => debug!("Opened hidden WebView pot minter"),
                 Err(error) => warn!(%error, "Failed to open WebView pot minter"),
             }

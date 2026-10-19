@@ -17,6 +17,7 @@ MUSIC
 - Songs change with no gap: the next song is buffered before the current one ends, even while Flow is in the background.
 - A song that stops loading recovers on its own and carries on from where it stopped, and Retry no longer restarts the song.
 - Listening time is saved while Flow is in the background, so history and recommendations count those plays.
+- Open lyrics stop redrawing once the song is paused and the lines have settled, and the song clock no longer runs a frame loop the whole time music plays. On Linux, lyrics fade instead of blurring.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
@@ -37,6 +38,7 @@ INTERFACE
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.
 - Share buttons open the system share sheet where there is one and copy the link where there isn't. A copy that fails now says so instead of showing "copied".
 - A maximized or fullscreen window no longer shows a resize cursor along its edges.
+- Artist, album and playlist headers, the music player background, playlist cards and blocked-video cards draw their soft artwork once instead of blurring it on every repaint. Player menus and overlays use solid backgrounds instead of blurring what is behind them.
 
 PLAYER
 - Fewer "Sign in to confirm you're not a bot" errors: when YouTube asks, the player gets a fresh visitor session and tries again before moving on.
@@ -76,6 +78,7 @@ UNDER THE HOOD
 - Updated the database layer, sync encryption libraries, cover-art tagging and random number generation to their current major versions.
 - Updated React, the video players (dash.js and hls.js), icons, translations and the build tools to their latest compatible releases.
 - Linux nightly builds package again. The updated bundler rejected the nightly version number for the RPM package, which stopped the AppImage and Debian builds from being published too.
+- On Windows, Flow keeps WebView2's default protections, including SmartScreen, and opens its hidden playback-token window with the same settings as the main window.
 
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)

@@ -7,6 +7,8 @@ import type { Rgb } from "../../lib/useDominantColor";
 import { findCurrentLineIndex } from "../../lib/lyrics/lyricsUtils";
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
 import { getString } from "../../lib/i18n/index";
+import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 
 const ANCHOR_RATIO = 0.35;
 const LINE_SPACING = 1.18;
@@ -214,6 +216,8 @@ export function LyricsCanvas({
   const smoothPositionRef = useRef(0);
   const animRef = useRef<Map<number, LineVisual>>(new Map());
   const gapAnimRef = useRef<Map<number, GapVisual>>(new Map());
+  // Restarts the draw loop after it stopped on a paused, settled frame.
+  const wakeRef = useRef<(() => void) | null>(null);
   const [manual, setManual] = useState(false);
 
   const relayout = () => {
@@ -238,6 +242,7 @@ export function LyricsCanvas({
     currentTopsRef.current = [];
     currentHeightsRef.current = [];
     initializedRef.current = false;
+    wakeRef.current?.();
   };
 
   useEffect(() => {
@@ -263,14 +268,30 @@ export function LyricsCanvas({
     };
   }, [lines]);
 
+  // A full-window canvas redrawn every frame costs real time at 4K, so the loop
+  // runs only while the song plays or an animation is still settling. Paused
+  // and settled, nothing is drawn until a seek, a scroll or a resize wakes it.
   useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      draw();
-      raf = requestAnimationFrame(loop);
+    let raf: number | null = null;
+    const frame = () => {
+      raf = null;
+      const moving = draw();
+      const element = musicAudioEngine.getActiveElement();
+      if (moving || (element !== null && !element.paused)) raf = requestAnimationFrame(frame);
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    const wake = () => {
+      if (raf === null) raf = requestAnimationFrame(frame);
+    };
+    wakeRef.current = wake;
+    wake();
+    const unsubscribe = useMusicPlayerStore.subscribe((state, previous) => {
+      if (state.isPlaying !== previous.isPlaying || state.progress !== previous.progress) wake();
+    });
+    return () => {
+      unsubscribe();
+      wakeRef.current = null;
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
   }, [accent, lines]);
 
   useEffect(
@@ -280,9 +301,14 @@ export function LyricsCanvas({
     [],
   );
 
-  function computeTops(layout: Layout, pos: number, isManual: boolean): { tops: number[]; heights: number[] } {
+  function computeTops(
+    layout: Layout,
+    pos: number,
+    isManual: boolean,
+  ): { tops: number[]; heights: number[]; moving: boolean } {
     const tops: number[] = [];
     const heights: number[] = [];
+    let moving = false;
     let y = 0;
 
     layout.items.forEach((item, idx) => {
@@ -301,6 +327,7 @@ export function LyricsCanvas({
         g.alpha += (targetAlpha - g.alpha) * GAP_LERP;
         if (Math.abs(g.height - targetHeight) < 0.35) g.height = targetHeight;
         if (Math.abs(g.alpha - targetAlpha) < 0.01) g.alpha = targetAlpha;
+        if (g.height !== targetHeight || g.alpha !== targetAlpha) moving = true;
         height = g.height;
       }
       heights[idx] = height;
@@ -310,15 +337,16 @@ export function LyricsCanvas({
 
     currentTopsRef.current = tops;
     currentHeightsRef.current = heights;
-    return { tops, heights };
+    return { tops, heights, moving };
   }
 
-  function draw() {
+  /** Draws one frame; true while any animation is still easing toward its target. */
+  function draw(): boolean {
     const canvas = canvasRef.current;
     const layout = layoutRef.current;
-    if (!canvas || !layout) return;
+    if (!canvas || !layout) return false;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) return false;
     const { w: cssW, h: cssH } = sizeRef.current;
     const rawPos = musicAudioEngine.getCurrentTime() * 1000;
     if (!initializedRef.current || Math.abs(rawPos - smoothPositionRef.current) > SEEK_SNAP_MS) {
@@ -326,11 +354,14 @@ export function LyricsCanvas({
     } else {
       smoothPositionRef.current += (rawPos - smoothPositionRef.current) * POSITION_LERP;
     }
+    let moving = Math.abs(rawPos - smoothPositionRef.current) > 0.5;
+    if (!moving) smoothPositionRef.current = rawPos;
     const pos = smoothPositionRef.current;
     const anchorY = cssH * ANCHOR_RATIO;
     const isManual = modeRef.current === "manual";
     const active = Math.max(0, findCurrentLineIndex(lines, rawPos));
-    const { tops, heights } = computeTops(layout, rawPos, isManual);
+    const { tops, heights, moving: gapsMoving } = computeTops(layout, rawPos, isManual);
+    if (gapsMoving) moving = true;
     const activeItem = layout.lineToItem[active] ?? 0;
     const activeTop = tops[activeItem] ?? 0;
     const activeBlock = heights[activeItem] || layout.items[activeItem]?.blockHeight || 0;
@@ -343,6 +374,8 @@ export function LyricsCanvas({
       } else {
         offsetRef.current += (target - offsetRef.current) * SCROLL_LERP;
       }
+      if (Math.abs(target - offsetRef.current) > 0.25) moving = true;
+      else offsetRef.current = target;
     }
     const offset = offsetRef.current;
 
@@ -381,6 +414,11 @@ export function LyricsCanvas({
         a.alpha += (tAlpha - a.alpha) * lerp;
         a.blur += (tBlur - a.blur) * lerp;
         a.y += (targetTop - a.y) * Math.max(0.2, lerp);
+        a.scale = settle(a.scale, tScale, 0.0005);
+        a.alpha = settle(a.alpha, tAlpha, 0.002);
+        a.blur = settle(a.blur, tBlur, 0.02);
+        a.y = settle(a.y, targetTop, 0.2);
+        if (a.scale !== tScale || a.alpha !== tAlpha || a.blur !== tBlur || a.y !== targetTop) moving = true;
       }
 
       const rowH = item.fontPx * LINE_SPACING;
@@ -388,7 +426,8 @@ export function LyricsCanvas({
       const centerYBlock = top + item.blockHeight / 2;
 
       ctx.save();
-      ctx.filter = a.blur > 0.35 ? `blur(${a.blur.toFixed(2)}px)` : "none";
+      // WebKitGTK blurs canvas text on the CPU; there the fade alone sets lines apart.
+      ctx.filter = !IS_LINUX_RUNTIME && a.blur > 0.35 ? `blur(${a.blur.toFixed(2)}px)` : "none";
       ctx.globalAlpha = a.alpha;
       ctx.translate(cssW / 2, centerYBlock);
       ctx.scale(a.scale, a.scale);
@@ -408,6 +447,7 @@ export function LyricsCanvas({
       ctx.globalAlpha = 1;
       ctx.restore();
     });
+    return moving;
   }
 
   function drawGap(
@@ -562,6 +602,7 @@ export function LyricsCanvas({
     resyncTimer.current = window.setTimeout(() => {
       modeRef.current = "auto";
       setManual(false);
+      wakeRef.current?.();
     }, PREVIEW_RESYNC_MS);
   };
 
@@ -581,6 +622,7 @@ export function LyricsCanvas({
     modeRef.current = "manual";
     setManual(true);
     scheduleResync();
+    wakeRef.current?.();
   };
 
   const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -600,6 +642,7 @@ export function LyricsCanvas({
         onSeek(Math.max(0, lines[item.lineIndex]!.time / 1000));
         modeRef.current = "auto";
         setManual(false);
+        wakeRef.current?.();
         return;
       }
     }
@@ -609,6 +652,7 @@ export function LyricsCanvas({
     if (resyncTimer.current) window.clearTimeout(resyncTimer.current);
     modeRef.current = "auto";
     setManual(false);
+    wakeRef.current?.();
   };
 
   const fadeMask = "linear-gradient(to bottom, transparent 0%, #000 15%, #000 80%, transparent 100%)";
@@ -640,6 +684,11 @@ export function LyricsCanvas({
       </AnimatePresence>
     </div>
   );
+}
+
+/** Snaps an eased value onto its target once the gap is too small to see. */
+function settle(value: number, target: number, epsilon: number): number {
+  return Math.abs(target - value) < epsilon ? target : value;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

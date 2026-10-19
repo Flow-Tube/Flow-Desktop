@@ -55,18 +55,14 @@ export function PlaylistDetailsPage({
     loadMoreFailed,
     loadMore,
     loadAllVideos,
+    setVideos,
   } = usePlaylistDetails(playlistId);
   usePublishTitle(meta?.title);
 
   const [storedSortOrder, setStoredSortOrder] = useState<string | null>(() =>
     playlistId ? loadPlaylistSortOrder(playlistId) : null,
   );
-  const [manualVideos, setManualVideos] = useState<VideoSummary[]>([]);
   const [savedInLibrary, setSavedInLibrary] = useState(false);
-
-  useEffect(() => {
-    setManualVideos(videos);
-  }, [videos]);
 
   useEffect(() => {
     setStoredSortOrder(playlistId ? loadPlaylistSortOrder(playlistId) : null);
@@ -94,11 +90,11 @@ export function PlaylistDetailsPage({
   }, [sortOrder, hasMore, loadAllVideos]);
 
   const displayVideos = useMemo(
-    () => sortPlaylistVideos(manualVideos, sortOrder, isProtected),
-    [manualVideos, sortOrder, isProtected],
+    () => sortPlaylistVideos(videos, sortOrder, isProtected),
+    [videos, sortOrder, isProtected],
   );
 
-  const leadVideo = manualVideos[0];
+  const leadVideo = videos[0];
   const heroThumbnailUrl = leadVideo?.thumbnailUrl ?? meta?.thumbnailUrl ?? null;
 
   const startPlaylistDownload = useCollectionDownloadStore((state) => state.startPlaylist);
@@ -119,7 +115,7 @@ export function PlaylistDetailsPage({
   };
 
   const handleReorder = async (nextVideos: VideoSummary[]) => {
-    setManualVideos(nextVideos);
+    setVideos(nextVideos);
     if (storedPlaylist) {
       await updateStoredPlaylistTracks(storedPlaylist.id, nextVideos);
     }
@@ -161,7 +157,7 @@ export function PlaylistDetailsPage({
     try {
       const playlists = await savePlaylistToLibrary(summary);
       const saved = playlists.find((playlist) => playlist.id === meta.id);
-      if (saved) setManualVideos(saved.tracks);
+      if (saved) setVideos(saved.tracks);
       setSavedInLibrary(true);
       showToast({
         variant: "success",
@@ -261,7 +257,7 @@ export function PlaylistDetailsPage({
         />
 
         <PlaylistSortableList
-          videos={manualVideos}
+          videos={videos}
           displayVideos={displayVideos}
           sortOrder={sortOrder}
           sortOptions={availablePlaylistSortOrders(isLocalPlaylist)}

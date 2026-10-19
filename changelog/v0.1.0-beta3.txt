@@ -22,6 +22,11 @@ MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
 - The window background now follows your theme. A Tauri bug was clearing it, which showed a mismatched color around the app while resizing.
 
+LINUX
+- The AppImage is built on Ubuntu 24.04 with a newer WebKitGTK that no longer crashes on color emoji fonts, the cause of the freeze on Fedora 44 and Bazzite. It needs glibc 2.39 or newer, so on Ubuntu 22.04, Mint 21 or Debian 12 use the .deb instead.
+- The AppImage drops its bundled Wayland libraries on both x64 and ARM64 again, which avoids the EGL_BAD_PARAMETER startup crash on newer Mesa.
+- The AppImage uses your system's VA-API libraries, so hardware video decoding can work with your installed drivers.
+
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.

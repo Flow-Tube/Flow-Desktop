@@ -13,7 +13,7 @@ mod config;
 mod db;
 mod errors;
 pub mod flow_neuro;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", test))]
 mod linux_startup;
 #[cfg(target_os = "macos")]
 mod macos_window;
@@ -34,7 +34,8 @@ use commands::db::{
     get_music_history, get_setting, get_watch_history, set_setting,
 };
 use commands::diagnostics::{
-    clear_logs, log_frontend_event, logs_dir_path, read_logs, reveal_logs_folder, startup_render_ok,
+    clear_logs, get_graphics_mode, log_frontend_event, logs_dir_path, read_logs,
+    reveal_logs_folder, set_graphics_mode, startup_render_ok,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
@@ -168,7 +169,10 @@ pub fn run() {
     let context = tauri::generate_context!();
 
     #[cfg(target_os = "linux")]
-    let boot_report = linux_startup::begin(context.config().identifier.as_str());
+    let boot_report = linux_startup::begin(
+        context.config().identifier.as_str(),
+        &context.package_info().version.to_string(),
+    );
     #[cfg(target_os = "linux")]
     let libva_fallback = appimage::apply_libva_fallback();
 
@@ -236,6 +240,9 @@ pub fn run() {
             tracing::info!(
                 tier = boot_report.tier,
                 prior_failed_boots = boot_report.failed_boots,
+                nvidia_preset = boot_report.nvidia_preset,
+                safe_graphics = boot_report.safe_graphics,
+                graphics_mode = boot_report.mode.as_str(),
                 libva_fallback,
                 "linux_startup_workarounds_applied"
             );
@@ -478,6 +485,8 @@ pub fn run() {
             logs_dir_path,
             reveal_logs_folder,
             startup_render_ok,
+            get_graphics_mode,
+            set_graphics_mode,
             set_player_fullscreen,
             commands::window::set_window_background,
             // --- Pop-out (picture-in-picture) player window ---

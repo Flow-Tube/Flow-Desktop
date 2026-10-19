@@ -130,13 +130,46 @@ pub fn reveal_logs_folder(app: tauri::AppHandle) -> Result<(), ErrorResponse> {
     Ok(())
 }
 
-/// Signals that the webview mounted and rendered successfully, clearing the
-/// Linux startup-crash sentinel so the next launch starts at tier 0 (see
-/// `linux_startup`). No-op on other platforms and when the sentinel is absent.
+/// Signals that the webview mounted and rendered, so the next Linux launch
+/// starts from this launch's workaround tier (see `linux_startup`). No-op on
+/// other platforms.
 #[tauri::command]
 pub fn startup_render_ok(app: tauri::AppHandle) {
     #[cfg(target_os = "linux")]
-    crate::linux_startup::clear(&app.config().identifier);
+    crate::linux_startup::confirm_render(
+        &app.config().identifier,
+        &app.package_info().version.to_string(),
+    );
     #[cfg(not(target_os = "linux"))]
     let _ = app;
+}
+
+/// The Linux graphics compatibility mode chosen in Settings: "automatic",
+/// "compatible" or "safe". Always "automatic" on other platforms.
+#[tauri::command]
+pub fn get_graphics_mode(app: tauri::AppHandle) -> &'static str {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux_startup::graphics_mode(&app.config().identifier).as_str()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        "automatic"
+    }
+}
+
+/// Stores the Linux graphics compatibility mode for the next launch.
+#[tauri::command]
+pub fn set_graphics_mode(app: tauri::AppHandle, mode: String) -> Result<(), ErrorResponse> {
+    #[cfg(target_os = "linux")]
+    {
+        let parsed = crate::linux_startup::GraphicsMode::parse(&mode)
+            .ok_or_else(|| AppError::Validation(format!("Unknown graphics mode: {mode}")))?;
+        crate::linux_startup::set_graphics_mode(&app.config().identifier, parsed)
+            .map_err(AppError::from)?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (app, mode);
+    Ok(())
 }

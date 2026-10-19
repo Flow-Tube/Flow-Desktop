@@ -3,6 +3,8 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod api;
+#[cfg(any(target_os = "linux", test))]
+mod appimage;
 mod bridge;
 #[cfg(target_os = "linux")]
 mod codec_probe;
@@ -167,6 +169,8 @@ pub fn run() {
 
     #[cfg(target_os = "linux")]
     let boot_report = linux_startup::begin(context.config().identifier.as_str());
+    #[cfg(target_os = "linux")]
+    let libva_fallback = appimage::apply_libva_fallback();
 
     let mut builder = tauri::Builder::default();
 
@@ -232,6 +236,7 @@ pub fn run() {
             tracing::info!(
                 tier = boot_report.tier,
                 prior_failed_boots = boot_report.failed_boots,
+                libva_fallback,
                 "linux_startup_workarounds_applied"
             );
 

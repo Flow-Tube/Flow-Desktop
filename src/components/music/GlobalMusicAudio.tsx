@@ -12,7 +12,6 @@ const HISTORY_PERSIST_MS = 5000;
  * Media-time delta below which a progress write is skipped. A seek always
  * exceeds it, so scrubbing still lands immediately.
  */
-const PROGRESS_SYNC_STEP_S = 0.25;
 
 /**
  * Wraps a media-element handler so only the element that is playing drives the
@@ -76,42 +75,6 @@ export function GlobalMusicAudio() {
   }, []);
 
   useEffect(() => {
-    if (!isPlaying) return;
-    let raf = 0;
-    let lastSyncedTime = -1;
-    let lastSyncedDuration = -1;
-    const tick = () => {
-      const el = musicAudioEngine.getActiveElement();
-      if (el) {
-        const duration = Number.isFinite(el.duration)
-          ? el.duration
-          : lastProgressRef.current.duration;
-
-        /*
-          A store write notifies every subscriber, so each one costs a selector
-          run across the whole music UI — and MusicItemCard holds six of them per
-          card. At 60 Hz that was tens of thousands of evaluations a second to
-          move a progress bar by a fraction of a pixel. The only consumer of
-          `progress` is MusicScrubber, whose bar and second-granularity time
-          readout cannot show more than this; the lyrics canvas reads the audio
-          engine directly and keeps full frame accuracy.
-        */
-        if (
-          Math.abs(el.currentTime - lastSyncedTime) >= PROGRESS_SYNC_STEP_S ||
-          duration !== lastSyncedDuration
-        ) {
-          lastSyncedTime = el.currentTime;
-          lastSyncedDuration = duration;
-          useMusicPlayerStore.getState()._syncTime(el.currentTime, el.duration);
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [isPlaying]);
-
-  useEffect(() => {
     if (!("mediaSession" in navigator)) return;
     const store = () => useMusicPlayerStore.getState();
 
@@ -154,6 +117,7 @@ export function GlobalMusicAudio() {
     onWaiting: fromActive(() => store()._setBuffering(true)),
     onPlaying: fromActive(() => store()._setBuffering(false)),
     onDurationChange: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
+    onSeeked: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
     // Near the end, buffer the next track on the standby element so the change
     // is a swap. Driven by the element rather than the frame loop, which WebKit
     // pauses while the window is hidden, as it usually is while music plays.
@@ -162,7 +126,17 @@ export function GlobalMusicAudio() {
       const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : store().duration;
       if (duration > 0 && duration - el.currentTime <= PRELOAD_LEAD_SECONDS) store()._preloadUpcoming();
 
-      // History is persisted from here for the same reason: the frame loop
+      /*
+        The store's clock follows this event (about 4 Hz) instead of a frame
+        loop. A store write notifies every subscriber, so each one costs a
+        selector run across the whole music UI, and MusicItemCard holds six of
+        them per card. The only consumer of `progress` is MusicScrubber, whose
+        bar and second-granularity readout can't show more than this; the
+        lyrics canvas reads the audio engine directly for frame accuracy.
+      */
+      store()._syncTime(el.currentTime, el.duration);
+
+      // History is persisted from here for the same reason: a frame loop
       // stops in the background, and listening there is the common case.
       lastProgressRef.current = { time: el.currentTime, duration };
       const now = Date.now();

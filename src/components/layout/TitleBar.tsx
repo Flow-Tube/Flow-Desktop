@@ -13,7 +13,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 export function TitleBar() {
   const { t } = useTranslation();
   const { text, section } = useResolvedWindowTitle();
-  const { isMaximized, minimize, toggleMaximize, close } = useWindowControls();
+  const { isMaximized, isFullscreen, minimize, toggleMaximize, close } = useWindowControls();
   useNativeWindowTitle(text || t("appName"));
 
   if (IS_MACOS_RUNTIME) return null;
@@ -69,7 +69,9 @@ export function TitleBar() {
           </button>
         </div>
       </div>
-      <WindowResizeEdges />
+      {/* A maximized or fullscreen window can't be resized, so its edges would
+          only show a resize cursor over controls that still look clickable (#75). */}
+      {!isMaximized && !isFullscreen && <WindowResizeEdges />}
     </>
   );
 }

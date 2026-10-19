@@ -13,6 +13,7 @@ function runWindowAction(action: (window: Window) => Promise<void>) {
 
 export function useWindowControls() {
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (IS_MACOS_RUNTIME) return;
@@ -23,8 +24,14 @@ export function useWindowControls() {
       let observation = 0;
       const refresh = async () => {
         const currentObservation = ++observation;
-        const maximized = await appWindow.isMaximized();
-        if (!disposed && currentObservation === observation) setIsMaximized(maximized);
+        const [maximized, fullscreen] = await Promise.all([
+          appWindow.isMaximized(),
+          appWindow.isFullscreen(),
+        ]);
+        if (!disposed && currentObservation === observation) {
+          setIsMaximized(maximized);
+          setIsFullscreen(fullscreen);
+        }
       };
       const dispose = await appWindow.onResized(() => {
         void refresh().catch(reportFailure);
@@ -45,6 +52,7 @@ export function useWindowControls() {
 
   return {
     isMaximized,
+    isFullscreen,
     minimize: () => runWindowAction((window) => window.minimize()),
     toggleMaximize: () => runWindowAction((window) => window.toggleMaximize()),
     close: () => runWindowAction((window) => window.close()),

@@ -6,6 +6,7 @@ import { useWindowControls } from "./useWindowControls";
 const native = vi.hoisted(() => ({
   macos: false,
   isMaximized: vi.fn(async () => true),
+  isFullscreen: vi.fn(async () => false),
   onResized: vi.fn(),
 }));
 
@@ -27,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   native.macos = false;
   native.isMaximized.mockResolvedValue(true);
+  native.isFullscreen.mockResolvedValue(false);
   root = createRoot(document.createElement("div"));
 });
 
@@ -70,6 +72,20 @@ describe("useWindowControls", () => {
     native.isMaximized.mockResolvedValue(false);
     await act(async () => { resized(); });
     expect(latest.isMaximized).toBe(false);
+  });
+
+  it("reports fullscreen so the resize edges can step aside", async () => {
+    let resized!: () => void;
+    native.onResized.mockImplementation(async (handler: () => void) => {
+      resized = handler;
+      return vi.fn();
+    });
+    await act(async () => { root.render(createElement(Harness)); });
+    expect(latest.isFullscreen).toBe(false);
+
+    native.isFullscreen.mockResolvedValue(true);
+    await act(async () => { resized(); });
+    expect(latest.isFullscreen).toBe(true);
   });
 
   it("leaves macOS window controls to the native title bar", async () => {

@@ -818,7 +818,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
       <div
         className={cx(
-          "absolute bottom-20 right-3 z-40 w-[min(92vw,360px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover/65 p-2 text-chrome-white shadow-2xl backdrop-blur-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] transform sm:right-5",
+          "absolute bottom-20 right-3 z-40 w-[min(92vw,360px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover/95 p-2 text-chrome-white shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] transform sm:right-5",
           settingsOpen
             ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
             : "opacity-0 translate-y-4 scale-95 pointer-events-none"

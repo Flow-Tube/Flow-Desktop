@@ -2606,7 +2606,7 @@ export const Player: React.FC<PlayerProps> = ({
       />
 
       {pendingQualitySwitch && (
-        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/30 px-4 py-1.5 text-xs font-bold text-chrome-white backdrop-blur-md animate-fade-in">
+        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/60 px-4 py-1.5 text-xs font-bold text-chrome-white animate-fade-in">
           {pendingQualitySwitch.etaSeconds && pendingQualitySwitch.etaSeconds > 1
             ? getString("player_quality_switch_in", pendingQualitySwitch.label, pendingQualitySwitch.etaSeconds)
             : getString("player_quality_switching", pendingQualitySwitch.label)}

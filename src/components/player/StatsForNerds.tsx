@@ -118,7 +118,7 @@ export function StatsForNerds({
 
   return (
     <div
-      className={`pointer-events-none absolute z-40 rounded-xl border border-chrome-white/10 bg-chrome-black/70 p-3 text-xs font-semibold text-chrome-zinc-100 shadow-2xl backdrop-blur-md animate-fade-in ${
+      className={`pointer-events-none absolute z-40 rounded-xl border border-chrome-white/10 bg-chrome-black/80 p-3 text-xs font-semibold text-chrome-zinc-100 shadow-2xl animate-fade-in ${
         compact ? "w-[min(82vw,300px)]" : "w-[min(92vw,320px)]"
       } ${className}`}
     >

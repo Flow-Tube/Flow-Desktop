@@ -307,7 +307,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           className="pointer-events-none absolute inset-0 z-30 grid place-items-center"
         >
           <div
-            className={`grid place-items-center rounded-full bg-chrome-black/30 text-chrome-white backdrop-blur-md animate-player-feedback ${
+            className={`grid place-items-center rounded-full bg-chrome-black/60 text-chrome-white animate-player-feedback ${
               isCompact ? "h-16 w-16" : "h-28 w-28"
             }`}
           >
@@ -321,7 +321,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {isBoosting && (
-        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/30 px-5 py-2 text-sm font-bold text-chrome-white backdrop-blur-md animate-fade-in">
+        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/60 px-5 py-2 text-sm font-bold text-chrome-white animate-fade-in">
           {longPressPlaybackRate}x
         </div>
       )}
@@ -329,7 +329,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       {volumeFeedback && (
         <div
           key={volumeFeedback.id}
-          className="pointer-events-none absolute left-1/2 top-8 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-chrome-black/30 px-5 py-2 text-chrome-white backdrop-blur-md animate-fade-in"
+          className="pointer-events-none absolute left-1/2 top-8 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-chrome-black/60 px-5 py-2 text-chrome-white animate-fade-in"
         >
           {volumeFeedback.muted || volumeFeedback.volume === 0 ? (
             <VolumeX size={18} />
@@ -358,7 +358,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           }`}
         >
           <div
-            className={`flex flex-col items-center justify-center rounded-full bg-chrome-black/30 text-chrome-white backdrop-blur-md animate-player-seek ${
+            className={`flex flex-col items-center justify-center rounded-full bg-chrome-black/60 text-chrome-white animate-player-seek ${
               isCompact ? "h-14 w-14" : "h-24 w-24"
             }`}
           >
@@ -377,7 +377,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
       {contextMenu && (
         <div
-          className="absolute z-50 w-[342px] overflow-hidden rounded-xl border border-chrome-white/10 bg-background/45 p-2 text-chrome-white shadow-2xl backdrop-blur-xl animate-fade-in"
+          className="absolute z-50 w-[342px] overflow-hidden rounded-xl border border-chrome-white/10 bg-background/90 p-2 text-chrome-white shadow-2xl animate-fade-in"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
@@ -397,7 +397,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       )}
 
       {copiedLabel && (
-        <div className="pointer-events-none absolute left-1/2 top-8 z-50 -translate-x-1/2 rounded-full bg-chrome-black/75 px-4 py-2 text-xs font-bold text-chrome-white shadow-xl backdrop-blur-md animate-fade-in">
+        <div className="pointer-events-none absolute left-1/2 top-8 z-50 -translate-x-1/2 rounded-full bg-chrome-black/80 px-4 py-2 text-xs font-bold text-chrome-white shadow-xl animate-fade-in">
           {copiedLabel}
         </div>
       )}

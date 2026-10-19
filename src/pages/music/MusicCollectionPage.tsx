@@ -188,7 +188,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
       className="h-full min-h-0 overflow-y-auto pb-32"
     >
       <div
-        className={`sticky top-0 z-40 -mb-14 flex h-14 items-center border-b border-chrome-neutral-800 bg-surface/95 px-8 transition-all duration-200 ease-out backdrop-blur ${
+        className={`sticky top-0 z-40 -mb-14 flex h-14 items-center border-b border-chrome-neutral-800 bg-surface/95 px-8 transition-all duration-200 ease-out ${
           showMiniHeader
             ? 'translate-y-0 opacity-100'
             : 'pointer-events-none -translate-y-full opacity-0'

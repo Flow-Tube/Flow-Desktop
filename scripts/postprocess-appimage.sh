@@ -44,6 +44,7 @@ echo "::group::AppImage layout"
 find "$root/usr/lib" \( -name 'libwayland-*.so*' -o -name 'libva.so*' -o -name 'libva-*.so*' \) -print | sort
 ls -1 "$root/apprun-hooks" 2>/dev/null || echo "(no apprun-hooks)"
 grep -Hn 'GDK_BACKEND' "$root"/apprun-hooks/*.sh 2>/dev/null || echo "(no hook mentions GDK_BACKEND)"
+cat "$root"/*.desktop
 echo "::endgroup::"
 
 if grep -En '^[[:space:]]*export[[:space:]]+GDK_BACKEND=' "$root"/apprun-hooks/*.sh 2>/dev/null; then

@@ -545,6 +545,36 @@ async fn handle_connection(
         return handle_sabr_route(&mut socket, &manager, &path, head_only).await;
     }
 
+    if let Some(token) = path.strip_prefix("/img/") {
+        let url = request_url
+            .query_pairs()
+            .find_map(|(key, value)| (key == "u").then(|| value.into_owned()))
+            .unwrap_or_default();
+        let Some(target_url) = super::images::image_route_target(token, &url) else {
+            write_status_only(&mut socket, 403, "Forbidden", "Image URL not allowed").await?;
+            return Ok(());
+        };
+        let session = StreamSession {
+            kind: StreamSessionKind::Remote {
+                remote_url: target_url.clone(),
+            },
+            content_type: super::images::image_content_type(&target_url),
+            expires_at: 0,
+            user_agent: crate::api::http::BROWSER_USER_AGENT.to_string(),
+        };
+        return relay_remote(
+            &mut socket,
+            &client,
+            &manager,
+            &session,
+            &target_url,
+            head.range.as_deref(),
+            &path,
+            head_only,
+        )
+        .await;
+    }
+
     // Legacy direct/inline routes ------------------------------------------------
     let (token, target_url_override) = if let Some(token) = path.strip_prefix("/stream/") {
         (token.trim_start_matches('/').to_string(), None)

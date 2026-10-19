@@ -29,6 +29,7 @@ use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 use crate::music_brain::store::MusicBrainStore;
 use crate::security::validation::{validate_search_query, validate_video_id};
 use crate::services::music_service::{Freshness, MusicService};
+use crate::streaming::images::{image_content_type, is_local_host, proxyable_image_url};
 use crate::streaming::proxy::StreamingManager;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
@@ -432,51 +433,6 @@ pub async fn get_music_stream(
     Ok(info)
 }
 
-fn image_content_type(url: &str) -> String {
-    let lower = url.split('?').next().unwrap_or(url).to_ascii_lowercase();
-    if lower.ends_with(".png") {
-        "image/png".to_string()
-    } else if lower.ends_with(".webp") {
-        "image/webp".to_string()
-    } else if lower.ends_with(".gif") {
-        "image/gif".to_string()
-    } else if lower.ends_with(".svg") {
-        "image/svg+xml".to_string()
-    } else {
-        "image/jpeg".to_string()
-    }
-}
-
-fn google_size_param_start(url: &str) -> Option<usize> {
-    ["=w", "=h", "=s"]
-        .iter()
-        .filter_map(|marker| url.find(marker))
-        .min()
-}
-
-fn proxyable_image_url(parsed: &reqwest::Url) -> String {
-    let url = parsed.as_str();
-    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
-    if !(host.starts_with("yt3.") || host == "yt3.googleusercontent.com" || host == "yt3.ggpht.com")
-    {
-        return url.to_string();
-    }
-
-    let (base_and_path, query) = url
-        .split_once('?')
-        .map_or((url, ""), |(base, query)| (base, query));
-
-    if google_size_param_start(base_and_path).is_some() {
-        return url.to_string();
-    }
-
-    if query.is_empty() {
-        format!("{base_and_path}=s512")
-    } else {
-        format!("{base_and_path}=s512?{query}")
-    }
-}
-
 #[tauri::command]
 pub async fn proxy_image_url(
     url: String,
@@ -495,11 +451,7 @@ pub async fn proxy_image_url(
         }
     }
 
-    let host = parsed.host_str().unwrap_or_default();
-    if host.eq_ignore_ascii_case("localhost")
-        || host.eq_ignore_ascii_case("127.0.0.1")
-        || host.eq_ignore_ascii_case("::1")
-    {
+    if parsed.host_str().is_none_or(is_local_host) {
         return Err(ErrorResponse::from(AppError::Validation(
             "Local image URLs cannot be proxied".into(),
         )));
@@ -519,4 +471,19 @@ pub async fn proxy_image_url(
         streaming_manager.get_image_port(),
         token
     ))
+}
+
+/// Base URL of the proxy's image route when the webview can't fetch HTTPS
+/// images itself (the Linux AppImage, see `streaming::images`); `None`
+/// everywhere else, where images load directly.
+#[tauri::command]
+pub fn image_proxy_base(streaming_manager: State<'_, StreamingManager>) -> Option<String> {
+    let needed = cfg!(target_os = "linux") && std::env::var_os("APPIMAGE").is_some();
+    needed.then(|| {
+        format!(
+            "http://127.0.0.1:{}/img/{}",
+            streaming_manager.get_image_port(),
+            crate::streaming::images::route_token()
+        )
+    })
 }

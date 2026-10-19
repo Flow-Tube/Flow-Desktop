@@ -26,6 +26,10 @@ LINUX
 - The AppImage is built on Ubuntu 24.04 with a newer WebKitGTK that no longer crashes on color emoji fonts, the cause of the freeze on Fedora 44 and Bazzite. It needs glibc 2.39 or newer, so on Ubuntu 22.04, Mint 21 or Debian 12 use the .deb instead.
 - The AppImage drops its bundled Wayland libraries on both x64 and ARM64 again, which avoids the EGL_BAD_PARAMETER startup crash on newer Mesa.
 - The AppImage uses your system's VA-API libraries, so hardware video decoding can work with your installed drivers.
+- Flow remembers which graphics workaround last worked instead of dropping back to none every other launch, and starts NVIDIA systems on Wayland with the DMABUF renderer off.
+- A new Graphics compatibility setting under Appearance, and a "Start with safe graphics" launcher action, help when the window opens blank.
+- If the page inside the window crashes, Flow reloads it instead of freezing, and quits after three crashes in a minute so the next launch starts clean.
+- Programs Flow starts from the AppImage no longer load the AppImage's own libraries, and the startup log reports its bundled video decoders correctly.
 
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.

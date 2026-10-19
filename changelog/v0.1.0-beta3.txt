@@ -36,6 +36,7 @@ INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.
 - Share buttons open the system share sheet where there is one and copy the link where there isn't. A copy that fails now says so instead of showing "copied".
+- A maximized or fullscreen window no longer shows a resize cursor along its edges.
 
 PLAYER
 - Fewer "Sign in to confirm you're not a bot" errors: when YouTube asks, the player gets a fresh visitor session and tries again before moving on.
@@ -45,6 +46,9 @@ PLAYER
 - Subtitles look and behave like YouTube's: auto-generated captions roll up two lines as words are spoken, and manual captions keep all their lines.
 - Subtitles scale with the player, with a size setting from 50% to 400% in Settings, Subtitle Style or the + and - keys. Saved subtitle sizes and positions from older builds reset to the defaults.
 - Drag subtitles anywhere on the player for the current video. Clicking them still pauses, seeks or opens the menu as before.
+- Theater mode is lighter: the color glow around the video is drawn without a blur filter, samples the video less often, and can be turned off with the new Ambient mode setting. It is off on Linux, where it cost the most.
+- The player follows the page while you scroll without re-laying out the window, and scrolling a menu or side panel no longer moves it.
+- The seek bar and time stop redrawing every frame while the video is paused or the controls are hidden.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

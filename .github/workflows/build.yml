@@ -170,16 +170,32 @@ jobs:
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             args: --target aarch64-pc-windows-msvc --bundles nsis
+          # .deb and .rpm use the system WebKitGTK, so they build on the oldest
+          # supported base. The AppImage bundles its own WebKitGTK and GStreamer,
+          # so it builds on 24.04 to ship a WebKitGTK that still gets security
+          # fixes and doesn't crash on COLRv1 emoji fonts (issue #70).
           - name: Linux x64
             slug: linux-x64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: --target x86_64-unknown-linux-gnu --bundles appimage,deb,rpm
+            args: --target x86_64-unknown-linux-gnu --bundles deb,rpm
+          - name: Linux x64 AppImage
+            slug: linux-x64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            appimage: x86_64
+            args: --target x86_64-unknown-linux-gnu --bundles appimage
           - name: Linux ARM64
             slug: linux-arm64
             runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-            args: --target aarch64-unknown-linux-gnu --bundles appimage,deb,rpm
+            args: --target aarch64-unknown-linux-gnu --bundles deb,rpm
+          - name: Linux ARM64 AppImage
+            slug: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            appimage: aarch64
+            args: --target aarch64-unknown-linux-gnu --bundles appimage
           - name: macOS Intel
             slug: macos-x64
             runner: macos-15-intel
@@ -243,7 +259,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-          shared-key: nightly-${{ matrix.target }}
+          # Per runner image: build scripts compiled against 24.04's glibc
+          # can't run on 22.04.
+          shared-key: nightly-${{ matrix.target }}-${{ matrix.runner }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -254,31 +272,18 @@ jobs:
       - name: Build nightly packages
         run: pnpm tauri build ${{ matrix.args }} --config src-tauri/tauri.nightly.generated.json
 
-      # Strip the bundled libwayland-* libs so the AppImage doesn't abort with
-      # EGL_BAD_PARAMETER on newer Mesa (issue #40). Nightly AppImages ship as
-      # plain artifacts (no updater signature), so no re-sign is needed here.
-      - name: Strip bundled Wayland libs from the AppImage
-        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu'
-        continue-on-error: true
-        shell: bash
-        run: |
-          appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
-          bash scripts/fix-appimage-wayland.sh "$appimage"
+      - name: Log the bundled media stack versions
+        if: matrix.appimage
+        run: dpkg-query -W -f='${Package} ${Version}\n' libwebkit2gtk-4.1-0 libgstreamer1.0-0 libva2
 
-      - name: Verify AppImage bundles GStreamer codecs
-        if: runner.os == 'Linux'
+      # Nightly AppImages ship as plain artifacts (no updater signature), so no
+      # re-sign is needed here.
+      - name: Post-process the AppImage
+        if: matrix.appimage
         shell: bash
         run: |
           appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
-          chmod +x "$appimage"
-          "$appimage" --appimage-extract > /dev/null
-          for plugin in libgstlibav.so libgstplayback.so libgstvpx.so; do
-            if ! find squashfs-root -name "$plugin" -print -quit | grep -q .; then
-              echo "::error::$plugin missing from the AppImage — GStreamer bundling is broken." >&2
-              exit 1
-            fi
-          done
-          rm -rf squashfs-root
+          bash scripts/postprocess-appimage.sh "$appimage" "${{ matrix.appimage }}"
 
       - name: Report package sizes
         run: node scripts/report-bundle-sizes.mjs src-tauri/target/${{ matrix.target }}/release/bundle
@@ -302,7 +307,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Linux nightly AppImage
-        if: runner.os == 'Linux'
+        if: matrix.appimage
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-appimage-${{ github.run_number }}
@@ -311,7 +316,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Linux nightly Debian package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.appimage
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-deb-${{ github.run_number }}
@@ -320,7 +325,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Linux nightly RPM package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.appimage
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-rpm-${{ github.run_number }}

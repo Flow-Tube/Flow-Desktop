@@ -5,7 +5,10 @@ const baseConfig = JSON.parse(
 );
 const baseVersion = String(baseConfig.version).split(/[+-]/, 1)[0];
 const runNumber = process.env.GITHUB_RUN_NUMBER || String(Date.now());
-const version = `${baseVersion}-nightly.${runNumber}`;
+// The RPM bundler rejects "-" in versions; "+" (semver build metadata) is
+// accepted there, while the NSIS and DMG bundlers keep the pre-release form.
+const separator = process.platform === "linux" ? "+" : "-";
+const version = `${baseVersion}${separator}nightly.${runNumber}`;
 
 const nightlyConfig = {
   $schema: "https://schema.tauri.app/config/2",

@@ -61,6 +61,7 @@ UNDER THE HOOD
 - Updated Tauri to 2.12 and its plugins (updater, deep links, dialogs, notifications and others), with the app and its web side kept on matching versions.
 - Updated the database layer, sync encryption libraries, cover-art tagging and random number generation to their current major versions.
 - Updated React, the video players (dash.js and hls.js), icons, translations and the build tools to their latest compatible releases.
+- Linux nightly builds package again. The updated bundler rejected the nightly version number for the RPM package, which stopped the AppImage and Debian builds from being published too.
 
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)

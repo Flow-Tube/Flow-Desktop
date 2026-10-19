@@ -14,6 +14,8 @@ import {
   type CustomThemeDefinition,
 } from "../../../lib/themes";
 import { useTheme } from "../../../lib/useTheme";
+import { IS_LINUX_RUNTIME } from "../../../lib/platform";
+import { GraphicsCompatibilitySection } from "../GraphicsCompatibilitySection";
 
 export function AppearanceTab() {
   const {
@@ -83,6 +85,8 @@ export function AppearanceTab() {
         </div>
         <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
       </section>
+
+      {IS_LINUX_RUNTIME && <GraphicsCompatibilitySection />}
 
       <section className="mt-8">
         <div className="flex items-end justify-between gap-4">

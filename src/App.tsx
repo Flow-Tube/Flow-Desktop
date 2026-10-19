@@ -12,6 +12,7 @@ import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectio
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
 import { useStartupHealth } from "./lib/useStartupHealth";
+import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
 import type { VideoSummary } from "./types/video";
 
@@ -87,6 +88,7 @@ function App() {
 
   // Clear the Linux startup-crash sentinel as soon as the app mounts
   useStartupHealth();
+  useImageProxyBootstrap();
 
   const [loadingOnboarding, setLoadingOnboarding] = useState(true);
 

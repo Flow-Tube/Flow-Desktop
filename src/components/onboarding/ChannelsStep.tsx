@@ -2,12 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useSubscriptionStore } from "../../store/useSubscriptionStore";
 import { CuratedChannel } from "./constants";
 import { searchVideos } from "../../lib/api/youtube";
+import { useProxyImageSrc } from "../../lib/useImageProxy";
 
 interface ChannelsStepProps {
   selectedTopics: string[];
 }
 
 export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _selectedTopics }) => {
+  const toSrc = useProxyImageSrc();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<CuratedChannel[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -91,7 +93,7 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
 
   const renderAvatar = (avatar: string, name: string) => {
     if (avatar && avatar.startsWith("http")) {
-      return <img src={avatar} alt={name} className="w-full h-full object-cover" />;
+      return <img src={toSrc(avatar)} alt={name} className="w-full h-full object-cover" />;
     }
     return (
       <div className="w-full h-full flex items-center justify-center bg-chrome-zinc-800 text-chrome-zinc-300 text-sm font-black uppercase">

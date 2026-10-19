@@ -1,3 +1,5 @@
+import { originalImageUrl } from "./imageProxy";
+
 export type ThumbnailQuality = "standard" | "large";
 
 const YOUTUBE_VIDEO_ID = /^[a-zA-Z0-9_-]{11}$/;
@@ -100,7 +102,7 @@ export function resolveYoutubeThumbnailCandidates(
 
 export function isUnavailableYoutubeThumbnail(img: HTMLImageElement): boolean {
   try {
-    const url = new URL(img.currentSrc || img.src);
+    const url = new URL(originalImageUrl(img.currentSrc || img.src));
     if (!YOUTUBE_THUMBNAIL_HOST_RE.test(url.hostname)) return false;
   } catch {
     return false;

@@ -2,6 +2,7 @@ import { ChevronRight, Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { getString } from '../../lib/i18n/index';
+import { useProxyImageSrc } from '../../lib/useImageProxy';
 import type { MusicSeedArt } from '../../types/music';
 
 interface MusicSectionHeaderProps {
@@ -24,11 +25,12 @@ export function MusicSectionHeader({
   onSeeAll,
 }: MusicSectionHeaderProps) {
   const { t } = useTranslation('common');
+  const toSrc = useProxyImageSrc();
   const heading = (
     <div className="flex min-w-0 items-center gap-3">
       {seedArt?.url && (
         <img
-          src={seedArt.url}
+          src={toSrc(seedArt.url)}
           alt=""
           loading="lazy"
           className={`h-10 w-10 shrink-0 object-cover ${seedArt.round ? 'rounded-full' : 'rounded-md'}`}

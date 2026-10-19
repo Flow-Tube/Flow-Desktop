@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
+import { useProxyImageSrc } from "../../lib/useImageProxy";
 import { usePlayerStore, type RepeatMode } from "../../store/usePlayerStore";
 
 const repeatLabels: Record<RepeatMode, string> = {
@@ -33,6 +34,7 @@ function formatDuration(seconds?: number | null) {
 }
 
 export function QueuePanel() {
+  const toSrc = useProxyImageSrc();
   const queue = usePlayerStore((state) => state.queue);
   const currentIndex = usePlayerStore((state) => state.currentIndex);
   const repeatMode = usePlayerStore((state) => state.repeatMode);
@@ -131,7 +133,7 @@ export function QueuePanel() {
                   >
                     {video.thumbnailUrl ? (
                       <img
-                        src={video.thumbnailUrl}
+                        src={toSrc(video.thumbnailUrl)}
                         alt=""
                         className="h-full w-full object-cover"
                         loading="lazy"

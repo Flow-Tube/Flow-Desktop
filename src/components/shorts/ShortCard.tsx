@@ -26,6 +26,7 @@ import {
 import { getString } from "../../lib/i18n/index";
 import { youtubeShortsUrl } from "../../lib/youtubeUrl";
 import { copyText } from "../../lib/clipboard";
+import { useProxyImageSrc } from "../../lib/useImageProxy";
 import type { ShortVideoSummary, VideoSummary } from "../../types/video";
 
 interface ShortCardProps {
@@ -36,6 +37,7 @@ interface ShortCardProps {
 
 export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
   const navigate = useNavigate();
+  const toSrc = useProxyImageSrc();
   const showToast = useUiStore((s) => s.showToast);
   const notInterestedAction = useFeedActionsStore((s) => s.notInterested);
   const blockChannelAction = useFeedActionsStore((s) => s.blockChannel);
@@ -165,7 +167,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
         <span className="relative block aspect-[9/16] w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container">
           {short.thumbnailUrl && (
             <img
-              src={short.thumbnailUrl}
+              src={toSrc(short.thumbnailUrl)}
               alt={title}
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
               loading="lazy"

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Play } from 'lucide-react';
 
+import { useProxyImageSrc } from '../../lib/useImageProxy';
 import type { PlaylistItem, SongItem } from '../../types/music';
 
 interface Props {
@@ -16,6 +17,7 @@ const PREVIEW_ROWS = 3;
 /** A playlist sampler: cover mosaic, three playable tracks, then Play and Open. */
 export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPlayPreview }: Props) {
   const { t } = useTranslation('common');
+  const toSrc = useProxyImageSrc();
   const covers = preview.map((track) => track.thumbnail).filter(Boolean).slice(0, 4);
   const byline = playlist.author?.name || playlist.songCountText;
   return (
@@ -23,9 +25,9 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
       <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-left">
         <div className="grid h-20 w-20 shrink-0 grid-cols-2 overflow-hidden rounded-xl bg-surface-container-high">
           {covers.length === 4
-            ? covers.map((url) => <img key={url} src={url} alt="" loading="lazy" className="h-full w-full object-cover" />)
+            ? covers.map((url) => <img key={url} src={toSrc(url)} alt="" loading="lazy" className="h-full w-full object-cover" />)
             : playlist.thumbnail && (
-              <img src={playlist.thumbnail} alt="" loading="lazy" className="col-span-2 row-span-2 h-full w-full object-cover" />
+              <img src={toSrc(playlist.thumbnail)} alt="" loading="lazy" className="col-span-2 row-span-2 h-full w-full object-cover" />
             )}
         </div>
         <div className="min-w-0">

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Rgb } from "../../lib/useDominantColor";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
+import { useProxyImageSrc } from "../../lib/useImageProxy";
 
 /**
  * Ported from the Android player's `MusicPlayerBackgroundStyle`, so a user who
@@ -53,6 +54,7 @@ interface AmbientBackdropProps {
 }
 
 export function AmbientBackdrop({ src, accent, style = "blur_gradient" }: AmbientBackdropProps) {
+  const toSrc = useProxyImageSrc();
   const imageSrc = upgradeMusicImageUrl(src);
   const showArtwork = style === "blur_gradient" || style === "blur";
   const overlay = gradientFor(style, accent);
@@ -62,7 +64,7 @@ export function AmbientBackdrop({ src, accent, style = "blur_gradient" }: Ambien
       {showArtwork && imageSrc && (
         <img
           key={imageSrc}
-          src={imageSrc}
+          src={toSrc(imageSrc)}
           alt=""
           aria-hidden
           className={`absolute inset-0 h-full w-full scale-125 object-cover blur-[100px] saturate-150 ${

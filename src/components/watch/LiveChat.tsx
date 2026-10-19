@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown, RotateCw } from "lucide-react";
 import { useLiveChat } from "../../lib/useLiveChat";
 import { getString } from "../../lib/i18n/index";
+import { useProxyImageSrc } from "../../lib/useImageProxy";
 import type { LiveChatMessage, LiveChatSegment } from "../../types/video";
 import type { LiveChatProps } from "./types";
 
@@ -24,6 +25,7 @@ function prefersDarkText(argb?: number | null): boolean {
 }
 
 function MessageBody({ segments, message }: { segments: LiveChatSegment[]; message: string }) {
+  const toSrc = useProxyImageSrc();
   if (!segments?.length) return <>{message}</>;
   return (
     <>
@@ -31,7 +33,7 @@ function MessageBody({ segments, message }: { segments: LiveChatSegment[]; messa
         segment.emojiImageUrl ? (
           <img
             key={index}
-            src={segment.emojiImageUrl}
+            src={toSrc(segment.emojiImageUrl)}
             alt={segment.text}
             className="inline-block h-[1.15em] w-[1.15em] align-text-bottom"
           />
@@ -51,18 +53,20 @@ function authorNameClass(message: LiveChatMessage): string {
 }
 
 function AuthorBadges({ message }: { message: LiveChatMessage }) {
+  const toSrc = useProxyImageSrc();
   return (
     <>
       {message.isModerator && <ShieldCheck size={11} className="shrink-0 text-chrome-blue-400" />}
       {message.isVerified && <BadgeCheck size={11} className="shrink-0 text-chrome-neutral-400" />}
       {message.isMember && message.memberBadgeUrl && (
-        <img src={message.memberBadgeUrl} alt="" className="h-3 w-3 shrink-0 rounded-full" />
+        <img src={toSrc(message.memberBadgeUrl)} alt="" className="h-3 w-3 shrink-0 rounded-full" />
       )}
     </>
   );
 }
 
 function ChatRow({ message }: { message: LiveChatMessage }) {
+  const toSrc = useProxyImageSrc();
   if (message.messageType === "superChat") {
     const background = argbToCss(message.superChatArgb);
     const darkText = prefersDarkText(message.superChatArgb);
@@ -104,7 +108,7 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
     <div className="flex gap-2 px-1">
       {message.authorPhotoUrl ? (
         <img
-          src={message.authorPhotoUrl}
+          src={toSrc(message.authorPhotoUrl)}
           alt=""
           className="mt-0.5 h-6 w-6 shrink-0 rounded-full object-cover"
         />

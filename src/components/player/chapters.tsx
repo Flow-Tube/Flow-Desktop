@@ -9,6 +9,7 @@ import { Select } from "../ui/Select";
 import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import { copyText } from "../../lib/clipboard";
 import { getString } from "../../lib/i18n/index";
+import { useProxyImageSrc } from "../../lib/useImageProxy";
 
 interface ChaptersProps {
   chapters: VideoChapter[];
@@ -44,6 +45,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
 }) => {
   const currentTime = usePlayerStore((state) => state.currentTime);
   const showToast = useUiStore((state) => state.showToast);
+  const toSrc = useProxyImageSrc();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Tabs state
@@ -248,7 +250,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
                     <div className="relative w-28 aspect-video rounded-md overflow-hidden bg-chrome-zinc-900 border border-chrome-white/5 shadow shrink-0">
                       {videoThumbnail ? (
                         <img
-                          src={videoThumbnail}
+                          src={toSrc(videoThumbnail)}
                           alt={chapter.title}
                           className="w-full h-full object-cover"
                         />

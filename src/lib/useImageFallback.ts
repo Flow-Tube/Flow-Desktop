@@ -1,5 +1,8 @@
 import { useCallback, useState } from "react";
 
+import { proxiedImage } from "./imageProxy";
+import { useImageProxyStore } from "../store/useImageProxyStore";
+
 /**
  * Steps through candidate image URLs as each one fails to load; `src` is null
  * once all have failed. Progress is tied to the candidate list itself, so a new
@@ -7,7 +10,14 @@ import { useCallback, useState } from "react";
  * fires before it runs (an offline load fails within a millisecond).
  */
 export function useImageFallback(candidates: ReadonlyArray<string | null | undefined>) {
-  const urls = [...new Set(candidates.filter((url): url is string => Boolean(url)))];
+  const proxyBase = useImageProxyStore((state) => state.base);
+  const urls = [
+    ...new Set(
+      candidates
+        .filter((url): url is string => Boolean(url))
+        .map((url) => proxiedImage(url, proxyBase)),
+    ),
+  ];
   const key = urls.join("\n");
   const [failures, setFailures] = useState({ key, count: 0 });
   const count = failures.key === key ? failures.count : 0;

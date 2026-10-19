@@ -13,6 +13,7 @@ import {
 import { useCallback, useState, type MouseEvent, type ReactNode } from "react";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
+import { SoftBackdrop } from "../ui/SoftBackdrop";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { getString } from "../../lib/i18n/index";
 import type { PlaylistDetailsMeta } from "../../lib/usePlaylistDetails";
@@ -126,13 +127,11 @@ export function PlaylistAmbientHeader({
       <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden rounded-3xl p-6">
         {ambientSrc ? (
           <>
-            <img
+            <SoftBackdrop
               src={ambientSrc}
-              alt=""
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-3xl"
+              detail={12}
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60"
               onError={onThumbnailError}
-              decoding="async"
             />
             <div
               aria-hidden="true"

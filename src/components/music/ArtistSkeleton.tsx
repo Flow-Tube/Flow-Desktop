@@ -79,7 +79,7 @@ export function ArtistSkeleton() {
   return (
     <div className="min-h-full animate-pulse bg-[var(--color-background)] pb-32">
       <header className="relative flex h-[50vh] min-h-[400px] w-full items-end overflow-hidden bg-[var(--color-surface)] px-8 pb-8">
-        <div aria-hidden="true" className="absolute inset-0 bg-surface-container-low opacity-40 blur-[100px]" />
+        <div aria-hidden="true" className="absolute inset-0 bg-surface-container-low opacity-40" />
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-[var(--color-surface)]/80 to-[var(--color-background)]"

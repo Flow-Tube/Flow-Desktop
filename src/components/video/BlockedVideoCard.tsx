@@ -5,6 +5,7 @@ import { getString } from "../../lib/i18n/index";
 import { hasRevealPin, useBlockedRevealStore, verifyRevealPin } from "../../lib/blockedContent";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { TextInput } from "../ui/TextInput";
+import { SoftBackdrop } from "../ui/SoftBackdrop";
 import type { VideoSummary } from "../../types/video";
 
 interface BlockedVideoCardProps {
@@ -44,14 +45,7 @@ export function BlockedVideoCard({ video, keyword, listLayout }: BlockedVideoCar
         }`}
       >
         {thumbnail && (
-          <img
-            src={thumbnail}
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full scale-110 object-cover blur-xl"
-            loading="lazy"
-            decoding="async"
-          />
+          <SoftBackdrop src={thumbnail} detail={16} className="h-full w-full object-cover" />
         )}
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-chrome-black/70 px-3 text-center">
           <EyeOff size={listLayout ? 16 : 20} className="text-chrome-neutral-300" />

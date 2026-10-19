@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Check, ChevronRight, Music2, Play, Plus } from 'lucide-react';
 
 import { Button, type ButtonProps } from '../../components/ui/Button';
+import { SoftBackdrop } from '../../components/ui/SoftBackdrop';
 import { AlbumTrackRow } from '../../components/music/AlbumTrackRow';
 import { ArtistSkeleton } from '../../components/music/ArtistSkeleton';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
@@ -127,12 +128,10 @@ function ArtistHeroScaffold({
   return (
     <header className="relative flex h-[50vh] min-h-[400px] w-full items-end overflow-hidden bg-[var(--color-surface)] px-8 pb-8">
       {imageUrl ? (
-        <img
+        <SoftBackdrop
           src={imageUrl}
-          alt=""
-          aria-hidden="true"
-          decoding="async"
-          className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover object-center opacity-40 blur-[100px]"
+          detail={8}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center opacity-40"
         />
       ) : (
         <div aria-hidden="true" className="absolute inset-0 bg-surface-container" />
@@ -179,7 +178,7 @@ function ArtistHeroScaffold({
             </ArtistActionButton>
             <ArtistActionButton
               onClick={onToggleFollow}
-              className="bg-chrome-white/10 text-chrome-white backdrop-blur-md hover:bg-chrome-white/20"
+              className="bg-chrome-white/10 text-chrome-white hover:bg-chrome-white/20"
               aria-pressed={following}
             >
               {following ? (
@@ -192,7 +191,7 @@ function ArtistHeroScaffold({
             <ArtistActionButton
               disabled={!hasSongs}
               onClick={onShuffle}
-              className="h-12 w-12 bg-chrome-white/10 px-0 text-chrome-neutral-50 backdrop-blur-md hover:bg-chrome-white/20 [&>svg]:shrink-0"
+              className="h-12 w-12 bg-chrome-white/10 px-0 text-chrome-neutral-50 hover:bg-chrome-white/20 [&>svg]:shrink-0"
               aria-label={getString('music_shuffle')}
               title={getString('music_shuffle')}
             >
@@ -201,7 +200,7 @@ function ArtistHeroScaffold({
             <ArtistActionButton
               disabled={!hasSongs}
               onClick={onRadio}
-              className="h-12 w-12 bg-chrome-white/10 px-0 text-chrome-neutral-50 backdrop-blur-md hover:bg-chrome-white/20 [&>svg]:shrink-0"
+              className="h-12 w-12 bg-chrome-white/10 px-0 text-chrome-neutral-50 hover:bg-chrome-white/20 [&>svg]:shrink-0"
               aria-label="Radio"
               title="Radio"
             >

@@ -18,9 +18,6 @@ export function DiscoveryQueries({ queries }: DiscoveryQueriesProps) {
 
   return (
     <div className="relative w-full rounded-2xl overflow-hidden bg-chrome-zinc-950/60 border border-chrome-zinc-800/80 p-6 md:p-8 shadow-xl">
-      {/* Background glow */}
-      <div className="absolute top-0 left-0 w-60 h-60 bg-chrome-red-600/5 rounded-full blur-[80px] -ml-20 -mt-20 pointer-events-none" />
-
       <div className="flex items-center gap-2.5 mb-6">
         <div className="p-2 rounded-xl bg-chrome-red-950/30 border border-chrome-red-900/30 text-primary">
           <Sparkles className="h-5 w-5 animate-pulse" />

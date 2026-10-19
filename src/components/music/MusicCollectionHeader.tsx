@@ -6,6 +6,7 @@ import { upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { ExplicitBadge } from './ExplicitBadge';
+import { SoftBackdrop } from '../ui/SoftBackdrop';
 
 interface MusicCollectionHeaderProps {
   meta: CollectionMeta;
@@ -66,12 +67,10 @@ export function MusicCollectionHeader({
   return (
     <header className="relative flex h-[45vh] min-h-[350px] w-full items-end overflow-hidden bg-surface px-8 pb-8">
       {thumbnailUrl ? (
-        <img
+        <SoftBackdrop
           src={thumbnailUrl}
-          alt=""
-          aria-hidden="true"
-          decoding="async"
-          className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-60 blur-[80px]"
+          detail={8}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-60"
         />
       ) : (
         <div aria-hidden="true" className="absolute inset-0 bg-surface-container" />

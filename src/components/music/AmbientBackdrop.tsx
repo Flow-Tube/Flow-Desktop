@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Rgb } from "../../lib/useDominantColor";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
+import { SoftBackdrop } from "../ui/SoftBackdrop";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
 
 /**
@@ -62,12 +63,11 @@ export function AmbientBackdrop({ src, accent, style = "blur_gradient" }: Ambien
   return (
     <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-chrome-neutral-950">
       {showArtwork && imageSrc && (
-        <img
-          key={imageSrc}
+        <SoftBackdrop
           src={toSrc(imageSrc)}
-          alt=""
-          aria-hidden
-          className={`absolute inset-0 h-full w-full scale-125 object-cover blur-[100px] saturate-150 ${
+          detail={8}
+          saturate
+          className={`absolute inset-0 h-full w-full object-cover ${
             style === "blur" ? "opacity-60" : "opacity-30"
           }`}
         />

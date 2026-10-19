@@ -14,6 +14,7 @@ import { useImageFallback } from '../../lib/useImageFallback';
 import { useUiStore } from '../../store/useUiStore';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
+import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 
 interface PlaylistCardProps {
@@ -60,24 +61,16 @@ function StackedPlaylistThumbnail({
         aria-hidden="true"
         className="pointer-events-none absolute left-4 right-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
       >
-        <img
-          src={src}
-          alt=""
-          className="h-full w-full scale-110 object-cover blur-md brightness-[0.45] saturate-75"
-          loading="lazy"
-        />
+        <SoftBackdrop src={src} detail={24} className="h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-chrome-black/55" />
       </div>
 
       <div
         aria-hidden="true"
         className="pointer-events-none absolute left-2 right-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
       >
-        <img
-          src={src}
-          alt=""
-          className="h-full w-full scale-105 object-cover blur-sm brightness-[0.65] saturate-90"
-          loading="lazy"
-        />
+        <SoftBackdrop src={src} detail={40} className="h-full w-full object-cover" />
+        <div className="absolute inset-0 bg-chrome-black/35" />
       </div>
 
       <div className="relative z-10 aspect-video w-full overflow-hidden rounded-xl bg-chrome-zinc-900">

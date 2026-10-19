@@ -30,6 +30,7 @@ LINUX
 - A new Graphics compatibility setting under Appearance, and a "Start with safe graphics" launcher action, help when the window opens blank.
 - If the page inside the window crashes, Flow reloads it instead of freezing, and quits after three crashes in a minute so the next launch starts clean.
 - Programs Flow starts from the AppImage no longer load the AppImage's own libraries, and the startup log reports its bundled video decoders correctly.
+- Thumbnails, avatars and artwork load in the AppImage on openSUSE, Fedora and other distros where they showed blank. They now come through Flow's own connection, which finds your system's certificates.
 
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.

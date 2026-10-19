@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   AudioLines,
   Captions,
@@ -28,6 +28,13 @@ import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSett
 import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../../types/video";
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
+import {
+  PROGRESS_EVENTS,
+  segmentFillPercent,
+  setStyleIfChanged,
+  setTextIfChanged,
+  shouldAnimateProgress,
+} from "../../lib/playerProgress";
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
@@ -194,7 +201,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const chapterPillRef = useRef<HTMLButtonElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
-  const timeTextRef = useRef<HTMLDivElement>(null);
+  const currentTimeRef = useRef<HTMLSpanElement>(null);
+  const durationTimeRef = useRef<HTMLSpanElement>(null);
   const hoverPillRef = useRef<HTMLDivElement>(null);
   const hoverTextRef = useRef<HTMLSpanElement>(null);
   const hoverSegmentRef = useRef<HTMLSpanElement>(null);
@@ -224,94 +232,87 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     return capped;
   }, [chapters, duration, isLive]);
 
+  const bufferedPctRef = useRef(bufferedPct);
+  useLayoutEffect(() => {
+    bufferedPctRef.current = bufferedPct;
+  }, [bufferedPct]);
+  const animateProgress = shouldAnimateProgress(isPlaying, shouldShowControls, isScrubbing);
+
   useEffect(() => {
-    let animId: number;
+    const container = containerRef.current;
+    if (!container) return;
+    // `segments` is a dependency, so these fills are current for this run.
+    const progressFills = [...container.querySelectorAll<HTMLElement>(".chapter-progress-fill")];
+    const bufferedFills = [...container.querySelectorAll<HTMLElement>(".chapter-buffered-fill")];
+    const chapterTitle = chapterPillRef.current?.querySelector<HTMLElement>(".chapter-title");
+    let video = container.querySelector("video");
+
     const updateProgress = () => {
-      const video = containerRef.current?.querySelector("video");
-      if (video) {
-        const cur = video.currentTime;
+      if (!video?.isConnected) video = container.querySelector("video");
+      if (!video) return;
+      const cur = video.currentTime;
 
-        // Live: the seekbar tracks the DVR window and the time shows real broadcast elapsed.
-        if (isLive) {
-          const { start, end } = liveWindow(video);
-          const win = Math.max(1, end - start);
-          const livePct = Math.min(100, Math.max(0, ((cur - start) / win) * 100));
-          if (progressBarRef.current) progressBarRef.current.style.width = `${livePct}%`;
-          containerRef.current
-            ?.querySelectorAll(".chapter-progress-fill, .chapter-buffered-fill")
-            .forEach((fill) => ((fill as HTMLElement).style.width = `${livePct}%`));
-          if (playheadRef.current) playheadRef.current.style.left = `${livePct}%`;
-          if (chapterPillRef.current) chapterPillRef.current.style.display = "none";
-          if (timeTextRef.current) {
-            const offset = parseFloat(video.dataset.liveOffset || "0");
-            timeTextRef.current.textContent = formatTime(cur + offset);
-          }
-          animId = requestAnimationFrame(updateProgress);
-          return;
-        }
-
-        const dur = video.duration || duration || 0;
-        const pct = dur > 0 ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0;
-
-        if (progressBarRef.current) {
-          progressBarRef.current.style.width = `${pct}%`;
-        }
-
-        // Update split segments progress fills
-        const progressFills = containerRef.current?.querySelectorAll(".chapter-progress-fill");
-        progressFills?.forEach((fill) => {
-          const start = parseFloat(fill.getAttribute("data-start") || "0");
-          const end = parseFloat(fill.getAttribute("data-end") || "0");
-          let segmentPct = 0;
-          if (cur > end) segmentPct = 100;
-          else if (cur < start) segmentPct = 0;
-          else if (end > start) segmentPct = ((cur - start) / (end - start)) * 100;
-          (fill as HTMLElement).style.width = `${segmentPct}%`;
-        });
-
-        // Update split segments buffered fills
-        const bufferedFills = containerRef.current?.querySelectorAll(".chapter-buffered-fill");
-        const bufferedTime = (bufferedPct / 100) * dur;
-        bufferedFills?.forEach((fill) => {
-          const start = parseFloat(fill.getAttribute("data-start") || "0");
-          const end = parseFloat(fill.getAttribute("data-end") || "0");
-          let segmentPct = 0;
-          if (bufferedTime > end) segmentPct = 100;
-          else if (bufferedTime < start) segmentPct = 0;
-          else if (end > start) segmentPct = ((bufferedTime - start) / (end - start)) * 100;
-          (fill as HTMLElement).style.width = `${segmentPct}%`;
-        });
-
-        if (playheadRef.current) {
-          playheadRef.current.style.left = `${pct}%`;
-        }
-
-        const activeChapter = segments?.find(
-          (c) => cur >= c.startSeconds && cur <= c.endSeconds
-        );
-
-        if (timeTextRef.current) {
-          timeTextRef.current.innerHTML = `${formatTime(cur)} <span class="text-chrome-zinc-400">/</span> ${formatTime(dur)}`;
-        }
-
-        if (chapterPillRef.current) {
-          if (activeChapter && activeChapter.title) {
-            chapterPillRef.current.style.display = "flex";
-            const titleEl = chapterPillRef.current.querySelector(".chapter-title");
-            if (titleEl) {
-              titleEl.textContent = activeChapter.title;
-            }
-          } else {
-            chapterPillRef.current.style.display = "none";
-          }
-        }
+      // Live: the seekbar tracks the DVR window and the time shows real broadcast elapsed.
+      if (isLive) {
+        const { start, end } = liveWindow(video);
+        const win = Math.max(1, end - start);
+        const livePct = `${Math.min(100, Math.max(0, ((cur - start) / win) * 100))}%`;
+        setStyleIfChanged(progressBarRef.current, "width", livePct);
+        for (const fill of [...progressFills, ...bufferedFills]) setStyleIfChanged(fill, "width", livePct);
+        setStyleIfChanged(playheadRef.current, "left", livePct);
+        setStyleIfChanged(chapterPillRef.current, "display", "none");
+        const offset = parseFloat(video.dataset.liveOffset || "0");
+        setTextIfChanged(currentTimeRef.current, formatTime(cur + offset));
+        return;
       }
-      animId = requestAnimationFrame(updateProgress);
+
+      const dur = video.duration || duration || 0;
+      const pct = `${dur > 0 ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0}%`;
+      setStyleIfChanged(progressBarRef.current, "width", pct);
+      setStyleIfChanged(playheadRef.current, "left", pct);
+
+      for (const fill of progressFills) {
+        const start = parseFloat(fill.dataset.start || "0");
+        const end = parseFloat(fill.dataset.end || "0");
+        setStyleIfChanged(fill, "width", `${segmentFillPercent(cur, start, end)}%`);
+      }
+      const bufferedTime = (bufferedPctRef.current / 100) * dur;
+      for (const fill of bufferedFills) {
+        const start = parseFloat(fill.dataset.start || "0");
+        const end = parseFloat(fill.dataset.end || "0");
+        setStyleIfChanged(fill, "width", `${segmentFillPercent(bufferedTime, start, end)}%`);
+      }
+
+      setTextIfChanged(currentTimeRef.current, formatTime(cur));
+      setTextIfChanged(durationTimeRef.current, formatTime(dur));
+
+      const activeChapter = segments?.find((c) => cur >= c.startSeconds && cur <= c.endSeconds);
+      if (activeChapter?.title) {
+        setStyleIfChanged(chapterPillRef.current, "display", "flex");
+        setTextIfChanged(chapterTitle, activeChapter.title);
+      } else {
+        setStyleIfChanged(chapterPillRef.current, "display", "none");
+      }
     };
 
-    animId = requestAnimationFrame(updateProgress);
-    return () => cancelAnimationFrame(animId);
-  }, [containerRef, duration, segments, bufferedPct, isLive]);
+    updateProgress();
+    const source = video;
+    for (const event of PROGRESS_EVENTS) source?.addEventListener(event, updateProgress);
+
+    let frame: number | null = null;
+    if (animateProgress) {
+      const tick = () => {
+        updateProgress();
+        frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
+    }
+
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      for (const event of PROGRESS_EVENTS) source?.removeEventListener(event, updateProgress);
+    };
+  }, [animateProgress, containerRef, duration, segments, isLive]);
 
   const progressPct =
     duration > 0
@@ -660,10 +661,16 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               </div>
 
               <div className="ml-1 flex items-center gap-1.5">
-                <div
-                  ref={timeTextRef}
-                  className="whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm bg-chrome-black/20 rounded-full px-2 py-1"
-                />
+                <div className="whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm bg-chrome-black/20 rounded-full px-2 py-1">
+                  <span ref={currentTimeRef} />
+                  {!isLive && (
+                    <>
+                      {" "}
+                      <span className="text-chrome-zinc-400">/</span>{" "}
+                      <span ref={durationTimeRef} />
+                    </>
+                  )}
+                </div>
                 {isLive && (
                   <button
                     type="button"

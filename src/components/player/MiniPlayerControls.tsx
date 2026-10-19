@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { FastForward, Pause, Play, Rewind, SkipBack, SkipForward } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
+import { PROGRESS_EVENTS, setStyleIfChanged, shouldAnimateProgress } from "../../lib/playerProgress";
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -38,20 +39,35 @@ export const MiniPlayerControls: React.FC<MiniPlayerControlsProps> = ({
   const fillRef = useRef<HTMLDivElement>(null);
   const scrubbingRef = useRef(false);
 
+  // The mini bar is always on screen, so only a paused video skips the loop.
   useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      const video = containerRef.current?.querySelector("video");
-      if (video && fillRef.current) {
-        const dur = video.duration || duration || 0;
-        const pct = dur > 0 ? clamp((video.currentTime / dur) * 100, 0, 100) : 0;
-        fillRef.current.style.width = `${pct}%`;
-      }
-      raf = requestAnimationFrame(tick);
+    const container = containerRef.current;
+    if (!container) return;
+    let video = container.querySelector("video");
+    const update = () => {
+      if (!video?.isConnected) video = container.querySelector("video");
+      if (!video) return;
+      const dur = video.duration || duration || 0;
+      const pct = dur > 0 ? clamp((video.currentTime / dur) * 100, 0, 100) : 0;
+      setStyleIfChanged(fillRef.current, "width", `${pct}%`);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [containerRef, duration]);
+
+    update();
+    const source = video;
+    for (const event of PROGRESS_EVENTS) source?.addEventListener(event, update);
+    let raf: number | null = null;
+    if (shouldAnimateProgress(isPlaying, true, false)) {
+      const tick = () => {
+        update();
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      for (const event of PROGRESS_EVENTS) source?.removeEventListener(event, update);
+    };
+  }, [containerRef, duration, isPlaying]);
 
   const seekFromClientX = (clientX: number) => {
     const track = trackRef.current;

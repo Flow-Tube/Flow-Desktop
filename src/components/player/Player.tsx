@@ -160,7 +160,10 @@ type AmbientSample = {
 
 const AMBIENT_SAMPLE_WIDTH = 36;
 const AMBIENT_SAMPLE_HEIGHT = 20;
-const AMBIENT_SAMPLE_INTERVAL_MS = 520;
+const AMBIENT_SAMPLE_INTERVAL_MS = 1500;
+// Applied to the sampled colors in place of a CSS saturate() filter, which would
+// re-rasterize the whole window-wide glow layer on every repaint.
+const AMBIENT_SATURATION = 1.5;
 const DEFAULT_AMBIENT_SAMPLE: AmbientSample = {
   top: "var(--color-player-ambient-1)",
   right: "var(--color-player-ambient-2)",
@@ -172,7 +175,10 @@ const DEFAULT_AMBIENT_SAMPLE: AmbientSample = {
 
 function ambientRgba([r, g, b]: [number, number, number], alpha: number) {
   const lift = 1.08;
-  return `rgba(${Math.round(clamp(r * lift, 0, 255))}, ${Math.round(clamp(g * lift, 0, 255))}, ${Math.round(clamp(b * lift, 0, 255))}, ${alpha})`;
+  const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const channel = (value: number) =>
+    Math.round(clamp((gray + (value - gray) * AMBIENT_SATURATION) * lift, 0, 255));
+  return `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${alpha})`;
 }
 
 function sampleRegion(
@@ -479,7 +485,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [cursorHidden, setCursorHidden] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [ambientMode] = useState(true);
+  const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
   const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
   const {
     sponsorBlockEnabled,
@@ -575,21 +581,26 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
-  const showAmbient = ambientMode && isTheaterSurface && !error;
+  // Never on Linux: WebKitGTK repaints large filtered layers on the CPU, and the
+  // glow sat almost black there because sampling video frames is too costly.
+  // Not in fullscreen either, where the video covers it.
+  const showAmbient = ambientMode && isTheaterSurface && !error && !isFullscreen && !IS_LINUX_RUNTIME;
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
   const ambientBackdropStyle = useMemo<React.CSSProperties>(() => ({
     background: [
-      `radial-gradient(ellipse at 50% -6%, ${ambientSample.top} 0%, transparent 58%)`,
-      `radial-gradient(ellipse at 50% 106%, ${ambientSample.bottom} 0%, transparent 58%)`,
-      `radial-gradient(ellipse at -6% 50%, ${ambientSample.left} 0%, transparent 54%)`,
-      `radial-gradient(ellipse at 106% 50%, ${ambientSample.right} 0%, transparent 54%)`,
-      `radial-gradient(circle at 50% 50%, ${ambientSample.center} 0%, transparent 46%)`,
+      // Stops reach further than they did under the old CSS blur, which spread
+      // each color past its stop; a gradient is already soft on its own.
+      `radial-gradient(ellipse at 50% -6%, ${ambientSample.top} 0%, transparent 72%)`,
+      `radial-gradient(ellipse at 50% 106%, ${ambientSample.bottom} 0%, transparent 72%)`,
+      `radial-gradient(ellipse at -6% 50%, ${ambientSample.left} 0%, transparent 68%)`,
+      `radial-gradient(ellipse at 106% 50%, ${ambientSample.right} 0%, transparent 68%)`,
+      `radial-gradient(circle at 50% 50%, ${ambientSample.center} 0%, transparent 60%)`,
       "linear-gradient(180deg, color-mix(in srgb, var(--color-chrome-black) 88%, transparent) 0%, color-mix(in srgb, var(--color-chrome-black) 50%, transparent) 45%, color-mix(in srgb, var(--color-chrome-black) 88%, transparent) 100%)",
     ].join(", "),
   }), [ambientSample]);
 
   useEffect(() => {
-    if (!showAmbient || IS_LINUX_RUNTIME) {
+    if (!showAmbient) {
       ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
       setAmbientSample(DEFAULT_AMBIENT_SAMPLE);
       return;
@@ -612,6 +623,7 @@ export const Player: React.FC<PlayerProps> = ({
       if (
         cancelled ||
         samplingBlocked ||
+        document.hidden ||
         video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
         video.videoWidth <= 0 ||
         video.videoHeight <= 0
@@ -658,7 +670,11 @@ export const Player: React.FC<PlayerProps> = ({
     if (frameVideo.requestVideoFrameCallback) {
       scheduleNextFrame();
     } else {
-      intervalId = window.setInterval(sampleFrame, AMBIENT_SAMPLE_INTERVAL_MS);
+      // requestVideoFrameCallback only fires for new frames; a timer has to
+      // skip a paused video itself.
+      intervalId = window.setInterval(() => {
+        if (!video.paused) sampleFrame();
+      }, AMBIENT_SAMPLE_INTERVAL_MS);
     }
 
     video.addEventListener("loadeddata", sampleFrame);
@@ -2477,7 +2493,7 @@ export const Player: React.FC<PlayerProps> = ({
           className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-chrome-black"
         >
           <div
-            className="absolute inset-[-18%] opacity-95 blur-3xl saturate-150 transition-colors duration-700 ease-out"
+            className="absolute inset-[-18%] opacity-95"
             style={ambientBackdropStyle}
           />
           <div className="absolute inset-0 bg-chrome-black/25" />

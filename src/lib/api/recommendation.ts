@@ -199,7 +199,11 @@ export async function getOnboardingStatus(): Promise<boolean> {
   return invokeBackend<boolean>("get_onboarding_status");
 }
 
-export async function generateDiscoveryQueries(): Promise<string[]> {
+/**
+ * Home's discovery searches. A refresh passes `resetDepth`; each load-more call after it digs one
+ * level deeper into every interest.
+ */
+export async function generateDiscoveryQueries(resetDepth = false): Promise<string[]> {
   if (!(await isTauriEnv())) {
     const preferred = localStorage.getItem("mock_setting_preferred_topics");
     const topics: string[] = preferred ? JSON.parse(preferred) : [];
@@ -208,7 +212,13 @@ export async function generateDiscoveryQueries(): Promise<string[]> {
     }
     return ["technology", "music", "gaming", "science", "documentary"];
   }
-  return invokeBackend<string[]>("generate_discovery_queries");
+  return invokeBackend<string[]>("generate_discovery_queries", { resetDepth });
+}
+
+/** Tells the engine what a discovery search returned, so one that keeps returning shown videos rests. */
+export async function reportDiscoveryResults(query: string, videoIds: string[]): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  await invokeBackend<void>("report_discovery_results", { query, videoIds });
 }
 
 export async function getFlowPersona(): Promise<PersonaDetails> {

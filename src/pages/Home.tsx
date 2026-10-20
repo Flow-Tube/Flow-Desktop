@@ -11,6 +11,7 @@ import {
   generateDiscoveryQueries,
   getFeedQuotas,
   rankVideos,
+  reportDiscoveryResults,
 } from "../lib/api/recommendation";
 import type { FeedQuotas } from "../lib/api/recommendation";
 import { useFeedActionsStore, useFeedHiddenFilter } from "../store/useFeedActionsStore";
@@ -609,6 +610,16 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       }),
     );
 
+    requests.forEach(({ query, pageToken }, index) => {
+      const result = settled[index];
+      if (!pageToken && result?.status === "fulfilled") {
+        void reportDiscoveryResults(
+          query,
+          result.value.items.map((item) => item.id),
+        ).catch(() => undefined);
+      }
+    });
+
     const queryBreakdown = queries.map((query, index) => {
       const result = settled[index];
       if (result?.status !== "fulfilled") {
@@ -1202,7 +1213,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       const [subscriptionIds, watchedHistory, queryCandidates, feedQuotas] = await Promise.all([
         loadSubscriptions(),
         getWatchHistory(200, 0),
-        generateDiscoveryQueries(),
+        generateDiscoveryQueries(true),
         getFeedQuotas(),
       ]);
       const watchedIds = getMostlyWatchedIds(watchedHistory);

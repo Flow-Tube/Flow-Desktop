@@ -23,6 +23,8 @@ use crate::flow_neuro::scoring::{
 };
 
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.40;
+/// The setting the brain is stored under.
+pub const BRAIN_SETTING: &str = "user_neuro_brain";
 /// How many recent titles spell the keys of a brain converted to key spec 2.
 pub const SPELLING_TITLES: i64 = 500;
 
@@ -194,44 +196,55 @@ fn update_topic_evidence(
     }
 }
 
+/// Brings a brain read from storage or an import up to the running schema, languages and key
+/// spec. Returns whether anything changed, so the caller knows to save it.
+pub async fn settle_brain(pool: &SqlitePool, brain: &mut UserBrain) -> AppResult<bool> {
+    let mut changed = brain.schema_version != crate::flow_neuro::scoring::SCHEMA_VERSION;
+    brain.schema_version = crate::flow_neuro::scoring::SCHEMA_VERSION;
+    changed |= brain.settle_languages(&system_language());
+    if to_key_spec_2(brain) {
+        let titles = watch_history::recent_video_titles(pool, SPELLING_TITLES).await?;
+        spell_from_titles(brain, &titles);
+        tracing::info!("[FlowNeuro] brain converted to key spec 2");
+        changed = true;
+    }
+    Ok(changed)
+}
+
 pub async fn get_or_create_brain(pool: &SqlitePool) -> AppResult<UserBrain> {
-    if let Some(json_str) = settings::get_setting(pool, "user_neuro_brain").await? {
+    if let Some(json_str) = settings::get_setting(pool, BRAIN_SETTING).await? {
         match serde_json::from_str::<UserBrain>(&json_str) {
             Ok(mut brain) => {
-                let mut changed =
-                    brain.schema_version != crate::flow_neuro::scoring::SCHEMA_VERSION;
-                brain.schema_version = crate::flow_neuro::scoring::SCHEMA_VERSION;
-                changed |= brain.settle_languages(&system_language());
-                if to_key_spec_2(&mut brain) {
-                    let titles = watch_history::recent_video_titles(pool, SPELLING_TITLES).await?;
-                    spell_from_titles(&mut brain, &titles);
-                    tracing::info!("[FlowNeuro] brain converted to key spec 2");
-                    changed = true;
-                }
-                if changed {
+                if settle_brain(pool, &mut brain).await? {
                     save_brain(pool, &brain).await?;
                 }
                 return Ok(brain);
             }
             Err(error) => {
+                // The next save writes a fresh brain over this key, so the unreadable one is
+                // kept under its own key for recovery first.
+                let backup = format!(
+                    "{BRAIN_SETTING}_corrupt_{}",
+                    chrono::Utc::now().format("%Y%m%d%H%M%S")
+                );
+                settings::set_setting(pool, &backup, &json_str).await?;
                 warn!(
                     error = %error,
-                    "[FlowNeuro] Stored brain failed to deserialize; preserving raw setting instead of overwriting it"
+                    backup = %backup,
+                    "[FlowNeuro] Stored brain failed to deserialize; kept a copy and started a new one"
                 );
-                return Ok(UserBrain::default());
             }
         }
     }
     let mut default_brain = UserBrain::default();
     default_brain.settle_languages(&system_language());
-    let json_str = serde_json::to_string(&default_brain).unwrap();
-    settings::set_setting(pool, "user_neuro_brain", &json_str).await?;
+    save_brain(pool, &default_brain).await?;
     Ok(default_brain)
 }
 
 pub async fn save_brain(pool: &SqlitePool, brain: &UserBrain) -> AppResult<()> {
     let json_str = serde_json::to_string(brain).unwrap();
-    settings::set_setting(pool, "user_neuro_brain", &json_str).await?;
+    settings::set_setting(pool, BRAIN_SETTING, &json_str).await?;
     Ok(())
 }
 
@@ -936,5 +949,53 @@ mod tests {
             ),
         );
         assert!(brain.topic_affinities.len() <= 3);
+    }
+
+    async fn pool() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_brain_is_kept_before_a_new_one_replaces_it() {
+        let pool = pool().await;
+        settings::set_setting(&pool, BRAIN_SETTING, "{not json")
+            .await
+            .unwrap();
+        let brain = get_or_create_brain(&pool).await.unwrap();
+        assert_eq!(brain.total_interactions, 0);
+
+        let backups: Vec<(String, String)> = sqlx::query_as(
+            "SELECT key, value FROM settings WHERE key LIKE 'user_neuro_brain_corrupt_%'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(backups[0].1, "{not json");
+        let stored = settings::get_setting(&pool, BRAIN_SETTING)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(serde_json::from_str::<UserBrain>(&stored).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_stored_brain_loads_as_saved() {
+        let pool = pool().await;
+        let mut brain = UserBrain::default();
+        apply(&mut brain, &event("v1", TITLE, InteractionType::Liked, 0.0));
+        save_brain(&pool, &brain).await.unwrap();
+        let loaded = get_or_create_brain(&pool).await.unwrap();
+        assert_eq!(loaded.total_interactions, 1);
+        assert_eq!(
+            loaded.global_vector.topics.len(),
+            brain.global_vector.topics.len()
+        );
     }
 }

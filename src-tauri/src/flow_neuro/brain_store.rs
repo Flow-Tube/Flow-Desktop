@@ -9,7 +9,7 @@ use crate::db::watch_history;
 use crate::errors::AppResult;
 use crate::flow_neuro::key_migration::fill_gaps_from_titles;
 use crate::flow_neuro::scoring::UserBrain;
-use crate::flow_neuro::signals::{SPELLING_TITLES, get_or_create_brain, save_brain};
+use crate::flow_neuro::signals::{SPELLING_TITLES, get_or_create_brain, save_brain, settle_brain};
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(3);
 
@@ -91,6 +91,17 @@ impl BrainStore {
         let spelled = fill_gaps_from_titles(&mut fresh, &titles);
         *self.brain.write().await = fresh;
         self.dirty.store(spelled, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Makes an imported brain the resident one and saves it at once, so the next flush cannot
+    /// write the old brain back over it.
+    pub async fn replace(&self, mut brain: UserBrain) -> AppResult<()> {
+        settle_brain(&self.pool, &mut brain).await?;
+        let mut resident = self.brain.write().await;
+        save_brain(&self.pool, &brain).await?;
+        *resident = brain;
+        self.dirty.store(false, Ordering::Relaxed);
         Ok(())
     }
 

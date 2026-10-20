@@ -1299,5 +1299,9 @@
   "learning_event_skipped": "Skipped",
   "learning_event_disliked": "Disliked",
   "learning_event_not_interested": "Not interested",
-  "feed_action_failed": "Couldn't save that. Try again."
+  "feed_action_failed": "Couldn't save that. Try again.",
+  "persona_load_failed_title": "Couldn't read your recommendation profile",
+  "persona_load_failed_body": "The local recommendation engine didn't answer. Nothing was changed.",
+  "persona_load_retry": "Try again",
+  "persona_load_empty_body": "Your recommendation profile isn't ready yet."
 }

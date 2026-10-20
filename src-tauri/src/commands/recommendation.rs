@@ -295,6 +295,17 @@ pub async fn block_channel(
 }
 
 #[tauri::command]
+pub async fn import_brain(
+    brain: serde_json::Value,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<(), ErrorResponse> {
+    recommendation_service
+        .import_brain(brain)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
 pub async fn reset_brain(
     recommendation_service: State<'_, RecommendationService>,
 ) -> Result<(), ErrorResponse> {

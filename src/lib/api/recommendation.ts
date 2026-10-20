@@ -287,124 +287,39 @@ export interface UserBrain {
   display_forms?: Record<string, DisplayForm>;
 }
 
-const MOCK_BRAIN: UserBrain = {
-  time_vectors: {
-    "WeekdayMorning": {
-      topics: { "Coding": 0.8, "Tech News": 0.6, "Acoustic": 0.4 },
-      topic_confidence: {},
-      anchor_topics: [],
-      duration: 0.35,
-      pacing: 0.3,
-      complexity: 0.75,
-      is_live: 0.0
-    },
-    "WeekdayEvening": {
-      topics: { "Gaming": 0.7, "Chill Lofi": 0.8, "Pop Culture": 0.5 },
-      topic_confidence: {},
-      anchor_topics: [],
-      duration: 0.45,
-      pacing: 0.4,
-      complexity: 0.45,
-      is_live: 0.1
-    }
-  },
-  global_vector: {
-    topics: {
-      "Coding": 0.85,
-      "TypeScript": 0.72,
-      "React": 0.68,
-      "Lofi Beats": 0.64,
-      "Astrophysics": 0.58,
-      "Space Tech": 0.52,
-      "Synthwave": 0.48,
-      "System Architecture": 0.62,
-      "Documentaries": 0.45,
-      "Rust Language": 0.75
-    },
-    topic_confidence: {},
-    anchor_topics: [],
-    duration: 0.48,
-    pacing: 0.32,
-    complexity: 0.78,
-    is_live: 0.05
-  },
-  channel_scores: {
-    "UCsBjURrdUw78urAxx45z2eg": 0.95,
-    "UC3sELt4nY_Msu7881_oIiCw": 0.82,
-    "UCeVMnSShP_Iviwkknt83cww": 0.88,
-    "UCvn_XCl_mBa1dPf0uVaMglA": 0.45,
-    "UCXuqSBlHAE6Xw-yeJA0Tunw": 0.72
-  },
-  topic_affinities: {
-    "coding:typescript": 0.85,
-    "coding:rust": 0.9,
-    "space:astrophysics": 0.78
-  },
-  total_interactions: 168,
-  consecutive_skips: 0,
-  blocked_topics: ["gossip", "clickbait sensationalism", "celebrity drama"],
-  blocked_channels: ["UC_blocked_channel_123"],
-  preferred_topics: ["Coding", "Technology", "Ambient Music", "Astrophysics"],
-  has_completed_onboarding: true,
-  last_persona: "Silicon Alchemist",
-  persona_stability: 18,
-  idf_word_frequency: {},
-  idf_total_documents: 168,
-  watch_signal_progress: {},
-  watch_history_map: {
-    "vid1": 0.95,
-    "vid2": 1.0,
-    "vid3": 0.2
-  },
-  channel_topic_profiles: {
-    "UCsBjURrdUw78urAxx45z2eg": { "Coding": 0.9, "Tech News": 0.8 }
-  },
-  suppressed_video_ids: {},
-  suppressed_channels: {},
-  rejection_patterns: {
-    "drama": { count: 3, last_rejected_at: Date.now() - 3600000 }
-  },
-  feed_history: {
-    "vid1": { last_shown: Date.now() - 5000, show_count: 2 }
-  },
-  recent_query_tokens: [],
-  topic_evidence: {
-    "Coding": {
-      positive_signals: 45,
-      negative_signals: 1,
-      watch_signals: 38,
-      explicit_signals: 4,
-      positive_score: 18.5,
-      video_ids: ["vid_code_1", "vid_code_2"],
-      channel_ids: ["UCsBjURrdUw78urAxx45z2eg"],
-      first_seen_at: Date.now() - 10 * 24 * 3600000,
-      last_seen_at: Date.now() - 30 * 60000
-    },
-    "Rust Language": {
-      positive_signals: 28,
-      negative_signals: 0,
-      watch_signals: 24,
-      explicit_signals: 2,
-      positive_score: 12.2,
-      video_ids: ["vid_rust_1"],
-      channel_ids: ["UCeVMnSShP_Iviwkknt83cww"],
-      first_seen_at: Date.now() - 8 * 24 * 3600000,
-      last_seen_at: Date.now() - 60 * 60000
-    },
-    "Astrophysics": {
-      positive_signals: 15,
-      negative_signals: 3,
-      watch_signals: 12,
-      explicit_signals: 1,
-      positive_score: 6.4,
-      video_ids: ["vid_astro_1"],
-      channel_ids: ["UCXuqSBlHAE6Xw-yeJA0Tunw"],
-      first_seen_at: Date.now() - 5 * 24 * 3600000,
-      last_seen_at: Date.now() - 120 * 60000
-    }
-  },
-  schema_version: 1
-};
+function emptyContentVector(): ContentVector {
+  return { topics: {}, topic_confidence: {}, anchor_topics: [], duration: 0.5, pacing: 0.5, complexity: 0.5, is_live: 0 };
+}
+
+/** What the browser-only dev build shows: an empty brain, never invented interests. */
+function emptyBrain(): UserBrain {
+  return {
+    time_vectors: {},
+    global_vector: emptyContentVector(),
+    channel_scores: {},
+    topic_affinities: {},
+    total_interactions: 0,
+    consecutive_skips: 0,
+    blocked_topics: [],
+    blocked_channels: [],
+    preferred_topics: [],
+    has_completed_onboarding: false,
+    last_persona: null,
+    persona_stability: 0,
+    idf_word_frequency: {},
+    idf_total_documents: 0,
+    watch_signal_progress: {},
+    watch_history_map: {},
+    channel_topic_profiles: {},
+    suppressed_video_ids: {},
+    suppressed_channels: {},
+    rejection_patterns: {},
+    feed_history: {},
+    recent_query_tokens: [],
+    topic_evidence: {},
+    schema_version: 1,
+  };
+}
 
 let brainCache: UserBrain | null = null;
 let brainCacheTime = 0;
@@ -417,30 +332,24 @@ export async function getBrainSnapshot(forceRefresh?: boolean): Promise<UserBrai
 
   if (!(await isTauriEnv())) {
     const preferred = localStorage.getItem("mock_setting_preferred_topics");
-    const topics: string[] = preferred ? JSON.parse(preferred) : [];
-    
-    const mockCopy = JSON.parse(JSON.stringify(MOCK_BRAIN));
-    if (topics.length > 0) {
-      mockCopy.preferred_topics = topics;
-      mockCopy.global_vector.topics = {};
-      topics.forEach((t, i) => {
-        mockCopy.global_vector.topics[t] = 0.9 - i * 0.1;
-      });
-    }
-    brainCache = mockCopy;
+    const brain = emptyBrain();
+    brain.preferred_topics = preferred ? JSON.parse(preferred) : [];
+    brainCache = brain;
     brainCacheTime = now;
-    return mockCopy;
+    return brain;
   }
 
-  try {
-    const result = await invokeBackend<UserBrain>("get_brain_snapshot");
-    brainCache = result;
-    brainCacheTime = now;
-    return result;
-  } catch (err) {
-    console.error("Failed to load brain snapshot from Tauri, using mock fallback:", err);
-    return MOCK_BRAIN;
-  }
+  const result = await invokeBackend<UserBrain>("get_brain_snapshot");
+  brainCache = result;
+  brainCacheTime = now;
+  return result;
+}
+
+/** Makes an imported brain the engine's own; the backend checks it and converts its keys. */
+export async function importBrain(brain: unknown): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  await invokeBackend<void>("import_brain", { brain });
+  brainCache = null;
 }
 
 export async function unblockTopic(topic: string): Promise<void> {

@@ -6,7 +6,7 @@ import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { unzipSync } from "fflate";
 import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
 import { useHistoryStore } from "../store/useHistoryStore";
-import { logInteraction } from "../lib/api/recommendation";
+import { importBrain, logInteraction } from "../lib/api/recommendation";
 import {
   convertFlowNeuroBrainData,
   extractFlowNeuroBrainCandidate,
@@ -255,7 +255,7 @@ export const ImportData: React.FC = () => {
         if (isJson && backupData) brainToImport = extractFlowNeuroBrainCandidate(backupData);
         if (importNeuro && brainToImport && isFlowNeuroBrainCandidate(brainToImport)) {
           setStatusMessage(getString("import_importing_neuro"));
-          await setSetting("user_neuro_brain", JSON.stringify(convertFlowNeuroBrainData(brainToImport)));
+          await importBrain(convertFlowNeuroBrainData(brainToImport));
           setNeuroCount(1);
         }
 

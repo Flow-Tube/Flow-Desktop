@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, info};
 
 use crate::db::recommendations;
-use crate::errors::AppResult;
+use crate::errors::{AppError, AppResult};
 use crate::flow_neuro::brain_store::BrainStore;
 use crate::flow_neuro::display_forms::{label, with_pick_spellings};
 use crate::flow_neuro::features::{
@@ -2378,6 +2378,13 @@ impl RecommendationService {
         brain.suppressed_channels.remove(&channel_id);
         brain.channel_strikes.remove(&channel_id);
         Ok(())
+    }
+
+    /// Replaces the resident brain with an imported one, after checking it reads as a brain.
+    pub async fn import_brain(&self, brain: serde_json::Value) -> AppResult<()> {
+        let brain: UserBrain = serde_json::from_value(brain)
+            .map_err(|error| AppError::Validation(format!("Not a FlowNeuro brain: {error}")))?;
+        self.brain_store.replace(brain).await
     }
 
     pub async fn reset_brain(&self) -> AppResult<()> {

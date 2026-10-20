@@ -79,9 +79,9 @@ use commands::pip::{
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, complete_onboarding, end_watch_session,
     generate_discovery_queries, get_brain_snapshot, get_feed_quotas, get_flow_persona,
-    get_onboarding_status, get_recommendation_events, log_interaction, mark_not_interested,
-    rank_videos, record_feed_impressions, remove_preferred_topic, report_watch_progress,
-    reset_brain, unblock_channel, unblock_topic,
+    get_onboarding_status, get_recommendation_events, import_brain, log_interaction,
+    mark_not_interested, rank_videos, record_feed_impressions, remove_preferred_topic,
+    report_watch_progress, reset_brain, unblock_channel, unblock_topic,
 };
 use commands::shorts::{get_shorts_feed, load_more_shorts, reset_shorts_feed};
 use commands::sync::{
@@ -472,6 +472,7 @@ pub fn run() {
             log_interaction,
             report_watch_progress,
             end_watch_session,
+            import_brain,
             mark_not_interested,
             record_feed_impressions,
             complete_onboarding,

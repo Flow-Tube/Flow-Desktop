@@ -15,6 +15,7 @@ export function usePersonaData() {
   const [musicProfile, setMusicProfile] = useState<MusicTasteProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const refresh = useCallback(async (force = false) => {
     if (force) setRefreshing(true);
@@ -23,8 +24,10 @@ export function usePersonaData() {
       setBrain(snapshot);
       const personaDetails = await getFlowPersona();
       setPersona(personaDetails);
+      setFailed(false);
     } catch (e) {
       console.error("Failed to load recommendation telemetry:", e);
+      setFailed(true);
     }
 
     try {
@@ -42,5 +45,5 @@ export function usePersonaData() {
     void refresh();
   }, [refresh]);
 
-  return { brain, persona, musicProfile, loading, refreshing, refresh };
+  return { brain, persona, musicProfile, loading, refreshing, failed, refresh };
 }

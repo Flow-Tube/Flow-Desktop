@@ -10,6 +10,15 @@ const LEARNING_RATE: f64 = 0.1;
 const FADE: f64 = 0.01;
 const FORGET_BELOW: f64 = 0.01;
 
+/// The word a search uses for `format`.
+#[must_use]
+pub fn search_word(format: &str) -> &str {
+    match format {
+        "explainer" => "explained",
+        other => other,
+    }
+}
+
 /// The affinity after a positive signal on a video of `formats`; the others fade a little.
 pub fn learn(affinity: &mut HashMap<String, f64>, formats: &HashSet<String>) {
     if formats.is_empty() {

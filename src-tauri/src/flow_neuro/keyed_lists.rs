@@ -8,36 +8,6 @@ use crate::flow_neuro::feature_tables::feature_tables;
 use crate::flow_neuro::keyspec::{KeySpec, tables::tables};
 use crate::flow_neuro::topic_catalog::onboarding_topics;
 
-/// Words so broad that a title naming them says little about its subject.
-const GENERIC_WORDS: [&str; 26] = [
-    "day",
-    "video",
-    "new",
-    "best",
-    "top",
-    "latest",
-    "music",
-    "song",
-    "build",
-    "make",
-    "game",
-    "science",
-    "technology",
-    "tech",
-    "sport",
-    "food",
-    "news",
-    "show",
-    "thing",
-    "stuff",
-    "way",
-    "part",
-    "level",
-    "review",
-    "reaction",
-    "guide",
-];
-
 /// The onboarding catalog's topics of more than one word (Android `NeuroTopicCatalog`); one that
 /// reads as a single chunk is a phrase from the first title.
 const CATALOG_PHRASES: [&str; 49] = [
@@ -92,54 +62,14 @@ const CATALOG_PHRASES: [&str; 49] = [
     "Current Events",
 ];
 
-/// Words that make no discovery search by themselves ("tutorial", "shorts").
-pub const DISCOVERY_NOISE_WORDS: [&str; 39] = [
-    "prompt",
-    "prompts",
-    "prompting",
-    "use",
-    "used",
-    "using",
-    "guide",
-    "tutorial",
-    "tips",
-    "tricks",
-    "thing",
-    "things",
-    "stuff",
-    "way",
-    "ways",
-    "type",
-    "types",
-    "kind",
-    "level",
-    "sensei",
-    "guru",
-    "master",
-    "pro",
-    "official",
-    "studio",
-    "studios",
-    "media",
-    "network",
-    "viral",
-    "popular",
-    "meme",
-    "memes",
-    "tiktok",
-    "tiktoks",
-    "short",
-    "shorts",
-    "minute",
-    "minutes",
-    "now",
-];
-
-/// Words that mean different things in different subjects, so a search needs context with them.
-const POLYSEMOUS_WORDS: [&str; 24] = [
-    "code", "design", "build", "run", "play", "model", "train", "stream", "rock", "metal",
-    "spring", "cell", "plant", "jam", "wave", "track", "scale", "craft", "mix", "beat", "sound",
-    "flow", "space", "match",
+/// Words that mean different things in different subjects, so a search needs context with them
+/// (Android `NeuroTokenizer.polysemousWords`).
+const POLYSEMOUS_WORDS: [&str; 51] = [
+    "train", "model", "build", "plant", "stream", "react", "design", "film", "run", "play", "cook",
+    "fire", "spring", "match", "cell", "power", "drive", "board", "frame", "scale", "lead",
+    "light", "block", "drop", "track", "craft", "host", "mine", "pitch", "wave", "bass", "bow",
+    "clip", "dart", "fan", "gear", "jam", "kit", "lab", "log", "net", "pad", "port", "rig", "set",
+    "tap", "tip", "web", "metal", "rock", "bar",
 ];
 
 /// Subjects too broad for one rejected video to say the viewer dislikes them.
@@ -180,9 +110,7 @@ const MUSIC_WORDS: [&str; 7] = [
 
 /// The lists above, keyed by one key spec.
 pub struct KeyedLists {
-    generic: HashSet<String>,
     known_phrases: HashSet<String>,
-    discovery_noise: HashSet<String>,
     polysemous: HashSet<String>,
     broad_topics: HashSet<String>,
     catalog: HashSet<String>,
@@ -208,9 +136,7 @@ impl KeyedLists {
             words.iter().flat_map(|word| spec.keys_of(word)).collect()
         };
         Self {
-            generic: GENERIC_WORDS.iter().map(|word| spec.key_of(word)).collect(),
             known_phrases,
-            discovery_noise: keyed(&DISCOVERY_NOISE_WORDS),
             polysemous: keyed(&POLYSEMOUS_WORDS),
             broad_topics: keyed(&REJECTION_BROAD_TOPICS),
             catalog: onboarding_topics()
@@ -222,11 +148,6 @@ impl KeyedLists {
                 .chain(std::iter::once("feat".to_string()))
                 .collect(),
         }
-    }
-
-    #[must_use]
-    pub fn is_discovery_noise(&self, key: &str) -> bool {
-        self.discovery_noise.contains(key)
     }
 
     #[must_use]
@@ -249,12 +170,6 @@ impl KeyedLists {
     #[must_use]
     pub fn is_music(&self, key: &str) -> bool {
         self.music.iter().any(|word| key.contains(word.as_str()))
-    }
-
-    /// Whether `key` is a single word too broad to describe a video by itself.
-    #[must_use]
-    pub fn is_generic(&self, key: &str) -> bool {
-        !key.contains(' ') && self.generic.contains(key)
     }
 
     /// Whether a run is an interest without the viewer's own counts saying so.
@@ -291,13 +206,11 @@ mod tests {
     #[test]
     fn lists_are_read_as_keys() {
         let lists = keyed_lists(&KeySpec::default());
-        assert!(lists.is_generic(&KeySpec::default().key_of("science")));
         assert!(lists.is_known_phrase("hip hop"));
         assert!(lists.is_known_phrase(&KeySpec::default().rekey("machine learn")[0]));
         assert!(!lists.is_known_phrase("review after"));
         let spec = KeySpec::default();
         assert!(lists.is_broad_topic(&spec.key_of("entertainment")));
-        assert!(lists.is_discovery_noise(&spec.key_of("tutorials")));
         assert!(lists.is_polysemous(&spec.key_of("models")));
         assert!(lists.is_music(&spec.key_of("lyrics")));
         assert!(!lists.is_music("guitar"));

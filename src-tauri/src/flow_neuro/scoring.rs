@@ -135,14 +135,6 @@ pub const REJECTION_PENALTY_2: f64 = 0.20;
 pub const REJECTION_PENALTY_3_PLUS: f64 = 0.05;
 pub const FEED_HISTORY_MAX: usize = 3000;
 pub const FEED_HISTORY_EXPIRY_DAYS: u64 = 14;
-pub const RECENT_QUERY_TOKENS_MAX: usize = 20;
-pub const QUERY_OVERLAP_THRESHOLD: f64 = 0.4;
-// Rotation compares new discovery queries against only the most recent few persisted token
-// sets, and never rotates the pool below a floor: comparing against the full history made
-// rotation monotonic, so the persisted pool self-poisoned down to a repeating rump set and
-// the Home feed's load-more starved permanently (issue #33).
-pub const QUERY_ROTATION_RECENT_WINDOW: usize = 6;
-pub const QUERY_ROTATION_FLOOR: usize = 5;
 pub const TOPIC_EVIDENCE_MAX_ENTRIES: usize = 500;
 pub const TOPIC_EVIDENCE_MAX_IDS: usize = 6;
 
@@ -265,6 +257,10 @@ pub struct UserBrain {
     pub rejection_patterns: HashMap<String, RejectionSignal>,
     pub feed_history: HashMap<String, FeedEntry>,
     pub recent_query_tokens: Vec<HashSet<String>>,
+    /// When Home's discovery last served each interest cluster, by its representative.
+    pub cluster_rotation: HashMap<String, u64>,
+    /// Discovery queries whose recent results were mostly already shown, by token key.
+    pub stale_queries: HashMap<String, u64>,
     pub topic_evidence: HashMap<String, TopicEvidence>,
     pub schema_version: i32,
     /// The viewer's language: its stop words apply to every title ([`crate::flow_neuro::language`]).
@@ -379,6 +375,8 @@ impl Default for UserBrain {
             rejection_patterns: HashMap::new(),
             feed_history: HashMap::new(),
             recent_query_tokens: Vec::new(),
+            cluster_rotation: HashMap::new(),
+            stale_queries: HashMap::new(),
             topic_evidence: HashMap::new(),
             schema_version: SCHEMA_VERSION,
             language_profile: None,

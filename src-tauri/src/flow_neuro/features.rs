@@ -503,12 +503,6 @@ pub fn document_terms(title: &str, vector: &ContentVector, spec: &KeySpec) -> Ha
     terms
 }
 
-/// A title's words, the way two titles are compared for near-duplicates.
-#[must_use]
-pub fn title_words(title: &str, spec: &KeySpec) -> HashSet<String> {
-    spec.chunk(title).words().into_iter().collect()
-}
-
 /// A key that is vocabulary noise rather than an interest (Android `NeuroTokenizer.isNoiseTopic`).
 #[must_use]
 pub fn is_noise_topic(topic: &str, spec: &KeySpec) -> bool {

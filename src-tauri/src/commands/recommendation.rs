@@ -9,7 +9,9 @@ use crate::flow_neuro::gates::LANE_RELEVANCE_FLOOR;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
-use crate::services::recommendation_service::{FeedQuotas, RecommendationService};
+use crate::services::recommendation_service::{
+    DiscoverySurface, FeedQuotas, RecommendationService,
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -183,12 +185,25 @@ pub async fn get_onboarding_status(
 
 #[tauri::command]
 pub async fn generate_discovery_queries(
+    reset_depth: Option<bool>,
     recommendation_service: State<'_, RecommendationService>,
 ) -> Result<Vec<String>, ErrorResponse> {
     recommendation_service
-        .generate_discovery_queries()
+        .generate_discovery_queries(DiscoverySurface::Home, reset_depth.unwrap_or(false))
         .await
         .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn report_discovery_results(
+    query: String,
+    video_ids: Vec<String>,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<(), ErrorResponse> {
+    recommendation_service
+        .report_discovery_results(&query, &video_ids)
+        .await;
+    Ok(())
 }
 
 #[tauri::command]

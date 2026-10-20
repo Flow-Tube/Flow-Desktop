@@ -11,7 +11,7 @@ use crate::models::channel::ChannelItem;
 use crate::models::search::SearchVideosRequest;
 use crate::models::shorts::{ShortItem, ShortsFeed};
 use crate::models::video::VideoSummary;
-use crate::services::recommendation_service::RecommendationService;
+use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
 
 /// Channel "Shorts" tab browse params — the videos-tab token with `videos`
@@ -400,11 +400,14 @@ fn drain(buffer: &mut VecDeque<ShortItem>, count: usize) -> Vec<ShortItem> {
 /// Topic discovery: search the engine's learned-interest queries for on-topic
 /// Shorts so the pool is taste-aligned before ranking.
 async fn gather_discovery(yt: &YoutubeService, rec: &RecommendationService) -> Vec<VideoSummary> {
-    let mut queries = timeout(DISCOVERY_QUERY_TIMEOUT, rec.generate_discovery_queries())
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .unwrap_or_default();
+    let mut queries = timeout(
+        DISCOVERY_QUERY_TIMEOUT,
+        rec.generate_discovery_queries(DiscoverySurface::Shorts, false),
+    )
+    .await
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or_default();
     if queries.is_empty() {
         queries = fallback_discovery_queries();
     }

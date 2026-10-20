@@ -218,13 +218,13 @@ impl CoWatchStore {
         .await
     }
 
-    /// For each channel beside one the viewer watches, its strongest confirmed pair.
+    /// Confirmed pairs of channels watched together.
     #[must_use]
-    pub fn prior(&self, is_watched: &dyn Fn(&str) -> bool, now_ms: u64) -> HashMap<String, f64> {
-        let state = self.state.lock().unwrap();
-        neighbours(
-            &edges(state.sources.values(), is_watched, now_ms),
+    pub fn edges(&self, is_watched: &dyn Fn(&str) -> bool, now_ms: u64) -> HashMap<String, f64> {
+        edges(
+            self.state.lock().unwrap().sources.values(),
             is_watched,
+            now_ms,
         )
     }
 

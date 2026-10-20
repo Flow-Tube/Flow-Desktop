@@ -5,12 +5,14 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::flow_neuro::categories::ChannelCategory;
+use crate::flow_neuro::clusters::{ClusterInputs, build_clusters};
 use crate::flow_neuro::diversity::apply_smart_diversity;
 use crate::flow_neuro::features::{TopicReader, VideoText, extract_features_with_prior, pick_keys};
 use crate::flow_neuro::gates::{
     BlockedMatchers, UNRELATED_SIMILARITY, adaptive_jitter, apply_seen_gate, blocks_topics,
     is_known_channel, topic_similarity,
 };
+use crate::flow_neuro::interest_share;
 use crate::flow_neuro::ranker::{
     Candidate, MomentumEntry, ScoringParams, affinity_neighbours, score_candidate,
 };
@@ -50,6 +52,8 @@ pub struct RankContext<'a> {
     pub session: SessionState<'a>,
     pub category_of: &'a dyn Fn(&str) -> Option<ChannelCategory>,
     pub co_watch_prior: &'a HashMap<String, f64>,
+    /// Confirmed pairs of channels watched together, which link interests into groups.
+    pub channel_edges: &'a HashMap<String, f64>,
     /// What a video read as when it was watched, for a candidate met again with its title alone.
     pub stored_topics: &'a dyn Fn(&str) -> Option<HashMap<String, f64>>,
     pub seed: u64,
@@ -136,6 +140,18 @@ fn feed_overlap(brain: &UserBrain, candidates: &[VideoSummary], now_ms: u64) -> 
     ratio.clamp(0.0, 1.0)
 }
 
+/// The median score, at least [`MIN_MEDIAN_SCORE`]: jitter scales with it, so noise stays in
+/// proportion to the scores it shuffles.
+fn median_of(scores: &[f64]) -> f64 {
+    let mut sorted = scores.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    sorted
+        .get(sorted.len() / 2)
+        .copied()
+        .unwrap_or(0.0)
+        .max(MIN_MEDIAN_SCORE)
+}
+
 /// The candidates in feed order; some may be left out.
 #[must_use]
 pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummary> {
@@ -203,19 +219,14 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
         .iter()
         .map(|(video, vector)| score_candidate(&params, &candidate(video, vector)))
         .collect();
-    let mut sorted = base.clone();
-    sorted.sort_by(f64::total_cmp);
-    let median = sorted
-        .get(sorted.len() / 2)
-        .copied()
-        .unwrap_or(0.0)
-        .max(MIN_MEDIAN_SCORE);
-    let jitter_unit = adaptive_jitter(brain.total_interactions, overlap) * median;
+    let jitter_unit = adaptive_jitter(brain.total_interactions, overlap) * median_of(&base);
     let mut jitter = Jitter(ctx.seed);
 
     let mut by_id: HashMap<String, VideoSummary> = HashMap::with_capacity(vectors.len());
+    let mut topics_by_id: HashMap<String, HashMap<String, f64>> = HashMap::new();
     let mut scored: Vec<ScoredVideo> = Vec::with_capacity(vectors.len());
     for ((video, vector), score) in vectors.into_iter().zip(base) {
+        topics_by_id.insert(video.id.clone(), vector.topics.clone());
         scored.push(ScoredVideo {
             id: video.id.clone(),
             title: video.title.clone(),
@@ -233,7 +244,7 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
             && topic_similarity(&interests, &candidate.vector, Some(&specific))
                 < UNRELATED_SIMILARITY
     };
-    apply_smart_diversity(
+    let ordered: Vec<VideoSummary> = apply_smart_diversity(
         scored,
         &spec,
         extra_exploration,
@@ -242,7 +253,53 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
     )
     .into_iter()
     .filter_map(|id| by_id.remove(&id))
-    .collect()
+    .collect();
+    // A lane kept to the viewer's interests also shares its places between them.
+    if ctx.min_relevance > 0.0 {
+        share_by_interest(ctx, ordered, &topics_by_id)
+    } else {
+        ordered
+    }
+}
+
+/// `ranked` with its places shared between the viewer's lasting interests, so the strongest one
+/// does not fill every page.
+fn share_by_interest(
+    ctx: &RankContext,
+    ranked: Vec<VideoSummary>,
+    topics_by_id: &HashMap<String, HashMap<String, f64>>,
+) -> Vec<VideoSummary> {
+    let brain = ctx.brain;
+    let interests: HashMap<String, f64> = brain
+        .interests()
+        .map(|(key, weight)| (key.clone(), weight))
+        .collect();
+    let clusters = build_clusters(&ClusterInputs {
+        topic_scores: &interests,
+        affinities: &brain.topic_affinities,
+        channel_topic_profiles: &brain.channel_topic_profiles,
+        channel_edges: ctx.channel_edges,
+        spec: &brain.key_spec(),
+    });
+    let weights = interest_share::weights(&clusters);
+    if weights.len() < 2 {
+        return ranked;
+    }
+    let group_by_topic: HashMap<String, String> = clusters
+        .iter()
+        .filter(|cluster| weights.contains_key(&cluster.representative))
+        .flat_map(|cluster| {
+            cluster
+                .topics
+                .iter()
+                .map(|topic| (topic.clone(), cluster.representative.clone()))
+        })
+        .collect();
+    interest_share::interleave(ranked, &weights, |video| {
+        topics_by_id
+            .get(&video.id)
+            .and_then(|topics| interest_share::group_of(topics, &group_by_topic))
+    })
 }
 
 /// Each candidate with its vector, leaving out those whose leading topics are blocked and, in a
@@ -372,6 +429,7 @@ mod tests {
             },
             category_of: &|_| None,
             co_watch_prior: prior,
+            channel_edges: prior,
             stored_topics: &|_| None,
             seed: 7,
         }

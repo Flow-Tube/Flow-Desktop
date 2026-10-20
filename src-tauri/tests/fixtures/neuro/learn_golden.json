@@ -9235,5 +9235,189 @@
                 ]
             }
         ]
+    },
+    "specificity": [
+        {
+            "keyLanguage": "en",
+            "languageProfile": "en",
+            "keys": {
+                "anleitung": 1.0,
+                "best": 0.05,
+                "better": 0.05,
+                "buy": 0.13333333333333344,
+                "fútbol": 1.0,
+                "galaxi s26": 1.0,
+                "guitar": 0.8000000000000002,
+                "long": 0.05,
+                "long term": 0.18257418583505536,
+                "mejor": 1.0,
+                "minecraft": 1.0,
+                "normal": 0.39999999999999974,
+                "phone": 0.05,
+                "pixel": 1.0,
+                "pixel:tech": 1.0,
+                "receta": 1.0,
+                "snapdragon": 1.0,
+                "sourdough": 1.0,
+                "spiel": 1.0,
+                "test": 0.3333333333333333,
+                "the": 0.05,
+                "top": 0.19999999999999987,
+                "video": 0.5333333333333332,
+                "year": 0.05
+            },
+            "phrases": {
+                "galaxi s26": 1.0,
+                "long term": 0.18257418583505536,
+                "pixel:tech": 1.0
+            }
+        },
+        {
+            "keyLanguage": "es",
+            "languageProfile": "es",
+            "keys": {
+                "anleitung": 1.0,
+                "best": 0.05,
+                "bett": 0.05,
+                "buy": 0.13333333333333344,
+                "futbol": 0.6000000000000002,
+                "galaxi s26": 1.0,
+                "guitar": 0.8000000000000002,
+                "long": 0.05,
+                "long term": 0.2,
+                "mejor": 0.05,
+                "minecraft": 1.0,
+                "normal": 0.3333333333333333,
+                "phone": 0.05,
+                "pixel": 1.0,
+                "pixel:tech": 1.0,
+                "recet": 1.0,
+                "snapdragon": 1.0,
+                "sourdough": 1.0,
+                "spiel": 1.0,
+                "test": 0.3333333333333333,
+                "the": 0.05,
+                "top": 0.19999999999999987,
+                "video": 0.5333333333333332,
+                "year": 0.05
+            },
+            "phrases": {
+                "galaxi s26": 1.0,
+                "long term": 0.2,
+                "pixel:tech": 1.0
+            }
+        },
+        {
+            "keyLanguage": "de",
+            "languageProfile": "de",
+            "keys": {
+                "anleit": 1.0,
+                "best": 0.05,
+                "bett": 0.05,
+                "buy": 0.13333333333333344,
+                "fútbol": 1.0,
+                "galaxi s26": 1.0,
+                "guitar": 0.8000000000000002,
+                "long": 0.05,
+                "long term": 0.18257418583505536,
+                "mejor": 1.0,
+                "minecraft": 1.0,
+                "normal": 0.39999999999999974,
+                "phone": 0.05,
+                "pixel": 1.0,
+                "pixel:tech": 1.0,
+                "receta": 1.0,
+                "snapdragon": 1.0,
+                "sourdough": 1.0,
+                "spiel": 0.06666666666666643,
+                "test": 0.3333333333333333,
+                "the": 0.05,
+                "top": 0.19999999999999987,
+                "video": 0.5333333333333332,
+                "year": 0.05
+            },
+            "phrases": {
+                "galaxi s26": 1.0,
+                "long term": 0.18257418583505536,
+                "pixel:tech": 1.0
+            }
+        },
+        {
+            "keyLanguage": "en",
+            "languageProfile": "es",
+            "keys": {
+                "anleitung": 1.0,
+                "best": 0.05,
+                "better": 0.05,
+                "buy": 0.13333333333333344,
+                "fútbol": 0.6000000000000002,
+                "galaxi s26": 1.0,
+                "guitar": 0.8000000000000002,
+                "long": 0.05,
+                "long term": 0.18257418583505536,
+                "mejor": 0.05,
+                "minecraft": 1.0,
+                "normal": 0.3333333333333333,
+                "phone": 0.05,
+                "pixel": 1.0,
+                "pixel:tech": 1.0,
+                "receta": 1.0,
+                "snapdragon": 1.0,
+                "sourdough": 1.0,
+                "spiel": 1.0,
+                "test": 0.3333333333333333,
+                "the": 0.05,
+                "top": 0.19999999999999987,
+                "video": 0.5333333333333332,
+                "year": 0.05
+            },
+            "phrases": {
+                "galaxi s26": 1.0,
+                "long term": 0.18257418583505536,
+                "pixel:tech": 1.0
+            }
+        }
+    ],
+    "channelNames": {
+        "Binging with Babish": [],
+        "Chillhop Music": [
+            "music"
+        ],
+        "Coding Sloth": [
+            "code"
+        ],
+        "DW News": [],
+        "Fireship": [],
+        "Gaming with Jen": [
+            "game"
+        ],
+        "Guitar Lessons 365": [
+            "guitar"
+        ],
+        "History Matters": [
+            "history"
+        ],
+        "Kurzgesagt – In a Nutshell": [],
+        "Linus Tech Tips": [
+            "tech"
+        ],
+        "Mark Rober": [],
+        "Minecraft": [
+            "minecraft"
+        ],
+        "NASA": [],
+        "Python Engineer": [
+            "python"
+        ],
+        "Science Channel": [
+            "science"
+        ],
+        "TechLinked": [],
+        "The Cooking Foodie": [
+            "cook"
+        ],
+        "Woodworking for Mere Mortals": [
+            "woodworking"
+        ]
     }
 }

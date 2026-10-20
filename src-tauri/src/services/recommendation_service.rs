@@ -20,6 +20,7 @@ use crate::flow_neuro::features::{
 };
 use crate::flow_neuro::keyed_lists::{DISCOVERY_NOISE_WORDS, keyed_lists};
 use crate::flow_neuro::keyspec::KeySpec;
+use crate::flow_neuro::keyspec::text::is_topic_sized;
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::learning::{Interaction, apply_interaction};
 use crate::flow_neuro::ranker;
@@ -34,6 +35,7 @@ use crate::flow_neuro::scoring::{
 };
 use crate::flow_neuro::search_learning::learn_search;
 use crate::flow_neuro::signals::InteractionType;
+use crate::flow_neuro::specificity::specificity;
 use crate::flow_neuro::vector_math::{RECENT_SHARE, blend};
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
 use crate::models::video::{MusicHomeChip, MusicHomeSection, VideoSummary};
@@ -47,6 +49,8 @@ const QUERY_BONDING_ANCHOR_LIMIT: usize = 4;
 const QUERY_BONDING_EMERGING_LIMIT: usize = 6;
 const QUERY_BONDING_QUERY_LIMIT: usize = 8;
 const EMERGING_TOKEN_MAX_WEIGHT: f64 = 0.18;
+/// A word every subject uses ("normal", "better") searches up any subject (Android #907).
+const QUERY_MIN_SPECIFICITY: f64 = 0.65;
 /// How much of a candidate's base score is taste (long-term, recent and time of day).
 const TASTE_WEIGHT: f64 = 0.8;
 const NOVELTY_WEIGHT: f64 = 0.2;
@@ -365,27 +369,30 @@ impl RecommendationService {
         )
     }
 
+    /// A topic worth a search of its own: sized like a topic in any script, not filler, a year
+    /// or a number, and specific enough that searching it does not bring up any subject (#907).
     fn is_substantial_topic(topic: &str, spec: &KeySpec) -> bool {
+        if !is_topic_sized(topic) {
+            return false;
+        }
         let lower = topic.trim().to_lowercase();
-        if lower.len() < 3 {
-            return false;
-        }
-        if Self::discovery_noise_words().contains(&lower.as_str())
-            || keyed_lists(spec).is_discovery_noise(&strip_domain_tag(&lower))
-        {
-            return false;
-        }
-        if !lower.chars().any(|c| c.is_ascii_alphabetic()) {
-            return false;
-        }
-        if lower.starts_with("20") && lower.len() == 4 && lower.chars().all(|c| c.is_ascii_digit())
-        {
-            return false;
-        }
         let base = strip_domain_tag(&lower);
-        base.len() >= 3
-            && base.chars().any(|c| c.is_ascii_alphabetic())
-            && !base.chars().all(|c| c.is_ascii_digit())
+        if Self::discovery_noise_words().contains(&lower.as_str())
+            || keyed_lists(spec).is_discovery_noise(&base)
+        {
+            return false;
+        }
+        // Unicode letters, so Arabic, Cyrillic, CJK and Thai topics qualify and "3.1" does not.
+        if !lower.chars().any(char::is_alphabetic) {
+            return false;
+        }
+        let is_year = lower.len() == 4
+            && (lower.starts_with("19") || lower.starts_with("20"))
+            && lower.chars().all(|c| c.is_ascii_digit());
+        if is_year || lower.chars().all(char::is_numeric) || !is_topic_sized(&base) {
+            return false;
+        }
+        specificity(spec).of(&lower) >= QUERY_MIN_SPECIFICITY
     }
 
     fn needs_query_enrichment(topic: &str, spec: &KeySpec) -> bool {
@@ -2577,6 +2584,23 @@ mod tests {
     }
 
     #[test]
+    fn topics_in_any_script_can_become_queries() {
+        let spec = KeySpec::default();
+        for topic in ["طبخ", "кулинария", "料理", "snapdragon"] {
+            assert!(
+                RecommendationService::is_substantial_topic(topic, &spec),
+                "{topic}"
+            );
+        }
+        for topic in ["better", "normal", "2026", "3.1"] {
+            assert!(
+                !RecommendationService::is_substantial_topic(topic, &spec),
+                "{topic}"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_viral_and_numeric_discovery_fragments() {
         assert!(!RecommendationService::is_substantial_topic(
             "viral",
@@ -2600,12 +2624,18 @@ mod tests {
     fn bonds_anchor_topics_to_emerging_bigrams_for_young_profiles() {
         let mut brain = UserBrain::default();
         brain.total_interactions = 12;
-        brain.global_vector.topics.insert("game".to_string(), 0.75);
+        brain
+            .global_vector
+            .topics
+            .insert("minecraft".to_string(), 0.75);
         brain
             .global_vector
             .topic_confidence
-            .insert("game".to_string(), 1.0);
-        brain.global_vector.anchor_topics.insert("game".to_string());
+            .insert("minecraft".to_string(), 1.0);
+        brain
+            .global_vector
+            .anchor_topics
+            .insert("minecraft".to_string());
         brain
             .global_vector
             .topics
@@ -2618,8 +2648,8 @@ mod tests {
         let queries = RecommendationService::build_query_bonding_candidates(&brain);
         let query_text: Vec<String> = queries.into_iter().map(|query| query.query).collect();
 
-        assert!(query_text.contains(&"Game Leg Day".to_string()));
-        assert!(query_text.contains(&"Game Roblox Thief".to_string()));
+        assert!(query_text.contains(&"Minecraft Leg Day".to_string()));
+        assert!(query_text.contains(&"Minecraft Roblox Thief".to_string()));
     }
 
     #[test]

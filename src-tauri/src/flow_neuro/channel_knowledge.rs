@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::flow_neuro::features::{is_noise_topic, pick_keys};
+use crate::flow_neuro::features::{channel_topics, is_noise_topic, pick_keys};
 use crate::flow_neuro::keyspec::KeySpec;
 use crate::flow_neuro::scoring::{
     CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS, ContentVector, UserBrain,
@@ -137,12 +137,8 @@ pub fn subscription_changed(
         current.max(SUBSCRIBED_CHANNEL_SCORE),
     );
     brain.suppressed_channels.remove(channel_id);
-    let spec = brain.key_spec();
-    let name_words: HashMap<String, f64> = spec
-        .chunk(channel_name)
-        .words()
+    let name_words: HashMap<String, f64> = channel_topics(channel_name, &brain.key_spec())
         .into_iter()
-        .filter(|word| !is_noise_topic(word, &spec))
         .map(|word| (word, 0.5))
         .collect();
     if name_words.is_empty() {

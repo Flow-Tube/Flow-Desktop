@@ -3,10 +3,11 @@
 //! key per word. The weights stay this engine's own.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 
 use crate::flow_neuro::keyed_lists::{KeyedLists, keyed_lists};
 use crate::flow_neuro::keyspec::tables::{format_of, tables};
-use crate::flow_neuro::keyspec::text::is_topic_sized;
+use crate::flow_neuro::keyspec::text::{fold, is_topic_sized, is_word_char, words};
 use crate::flow_neuro::keyspec::{KeySpec, normalize_lemma, phrases};
 use crate::flow_neuro::scoring::{
     BIGRAM_PRIORITY_WEIGHT, BIGRAM_WEIGHT, CHANNEL_KEYWORD_WEIGHT, COMPLEXITY_CHAPTER_BONUS,
@@ -50,12 +51,11 @@ pub fn extract_features(video: &VideoText, reader: &TopicReader) -> ContentVecto
     };
     let never_alone = &tables().never_alone;
 
+    // Only a channel name's topic words count: "Linus Tech Tips" is about tech, not "linus".
     let mut topics: HashMap<String, f64> = HashMap::new();
-    for word in spec.chunk(video.channel_name).words() {
-        if !never_alone.contains(&word) {
-            let value = weight(&word, CHANNEL_KEYWORD_WEIGHT);
-            topics.insert(word, value);
-        }
+    for word in channel_topics(video.channel_name, spec) {
+        let value = calculate_idf_weight(&word, CHANNEL_KEYWORD_WEIGHT, idf);
+        topics.insert(word, value);
     }
 
     // A run of the title is a key only once it is known to be a phrase; until then it only counts
@@ -150,6 +150,52 @@ pub fn plant_filter<'a>(
             || (!base.contains(' ')
                 && idf.word_frequencies.get(key).copied().unwrap_or(0) > own_documents)
     }
+}
+
+const ALWAYS_TOPICAL: &str = include_str!("../../resources/neuro/topical/always.txt");
+const TOPICAL_ZH: &str = include_str!("../../resources/neuro/topical/zh.txt");
+
+/// Words that make a channel name topical: Android's English list and its Chinese one (#1350).
+static CHANNEL_TOPIC_WORDS: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    [ALWAYS_TOPICAL, TOPICAL_ZH]
+        .iter()
+        .flat_map(|text| text.lines())
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(fold)
+        .collect()
+});
+
+/// The topic words of a channel name, the only part of it that says what the channel is about
+/// (Android `NeuroTokenizer.tokenizeChannelName`): "Coding Sloth" is about code, "Fireship" says
+/// nothing.
+#[must_use]
+pub fn channel_topics(name: &str, spec: &KeySpec) -> Vec<String> {
+    let is_topic = |word: &str| CHANNEL_TOPIC_WORDS.contains(word);
+    let name_words: Vec<String> = words(&fold(name))
+        .into_iter()
+        .map(|word| word.trim_matches(|c: char| !is_word_char(c)).to_string())
+        .filter(|word| word.encode_utf16().count() > 1)
+        .collect();
+    let mut topics: Vec<String> = Vec::new();
+    for word in &name_words {
+        let lower = word.to_lowercase();
+        let key = spec.key_of(&lower);
+        let topic = if is_topic(&key) {
+            Some(key)
+        } else if is_topic(&lower) {
+            // A lone word that is a topic only as written still stands for its key.
+            Some(if name_words.len() == 1 { key } else { lower })
+        } else {
+            None
+        };
+        if let Some(topic) = topic
+            && !topics.contains(&topic)
+        {
+            topics.push(topic);
+        }
+    }
+    topics
 }
 
 /// What one video counts toward document frequency: its keys, and every word, run and model pair
@@ -544,5 +590,25 @@ mod tests {
         assert!(is_noise_topic("the", &spec));
         assert!(!is_noise_topic("guitar", &spec));
         assert!(!is_noise_topic("hip hop", &spec));
+    }
+
+    #[test]
+    fn channel_names_teach_only_their_topic_words_as_android_reads_them() {
+        let golden: Value =
+            serde_json::from_str(include_str!("../../tests/fixtures/neuro/learn_golden.json"))
+                .unwrap();
+        let spec = KeySpec::default();
+        for (name, expected) in golden["channelNames"].as_object().unwrap() {
+            let mut expected: Vec<String> = serde_json::from_value(expected.clone()).unwrap();
+            let mut got = channel_topics(name, &spec);
+            expected.sort();
+            got.sort();
+            assert_eq!(got, expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_chinese_channel_name_keeps_its_topic_word() {
+        assert_eq!(channel_topics("央視新聞", &KeySpec::default()), ["新聞"]);
     }
 }

@@ -236,3 +236,55 @@ pub async fn remint_po_token(content_binding: &str) -> Option<String> {
     generate_po_token(content_binding).await
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resource_dir_is_tried_first() {
+        let candidates = sidecar_candidates(
+            "nsig.cjs",
+            Some(Path::new("/usr/lib/Flow Beta")),
+            None,
+            Some(Path::new("/usr/bin/flow")),
+        );
+        assert_eq!(
+            candidates.first(),
+            Some(&PathBuf::from("/usr/lib/Flow Beta/sidecar/nsig.cjs"))
+        );
+    }
+
+    #[test]
+    fn flatpak_resource_dir_is_a_candidate() {
+        let candidates = sidecar_candidates(
+            "integrity.cjs",
+            Some(Path::new("/app/lib/Flow")),
+            None,
+            Some(Path::new("/app/bin/flow")),
+        );
+        assert!(candidates.contains(&PathBuf::from("/app/lib/Flow/sidecar/integrity.cjs")));
+    }
+
+    #[test]
+    fn executable_ancestors_are_still_walked() {
+        let candidates = sidecar_candidates(
+            "nsig.cjs",
+            None,
+            None,
+            Some(Path::new("C:/Program Files/Flow/flow.exe")),
+        );
+        assert!(
+            candidates.contains(
+                &Path::new("C:/Program Files/Flow")
+                    .join("sidecar")
+                    .join("nsig.cjs")
+            )
+        );
+    }
+
+    #[test]
+    fn dev_layouts_follow_the_working_directory() {
+        let candidates = sidecar_candidates("integrity.cjs", None, Some(Path::new("/repo")), None);
+        assert!(candidates.contains(&PathBuf::from("/repo/src-tauri/sidecar/integrity.cjs")));
+    }
+}

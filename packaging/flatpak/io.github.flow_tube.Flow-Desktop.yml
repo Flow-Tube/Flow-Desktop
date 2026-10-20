@@ -35,6 +35,7 @@ modules:
     buildsystem: simple
     build-commands:
       - /usr/lib/sdk/node24/install.sh
+      - /app/node/bin/node --version
 
   - name: flow
     buildsystem: simple

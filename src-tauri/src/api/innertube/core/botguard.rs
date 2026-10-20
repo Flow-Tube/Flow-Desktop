@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -57,8 +57,18 @@ pub(crate) fn node_command() -> String {
     std::env::var("FLOW_NODE").unwrap_or_else(|_| "node".to_string())
 }
 
-/// Locate a bundled `sidecar/<name>` script, in dev (repo or `src-tauri`) and
-/// packaged (next to the executable or under its `resources`) layouts.
+static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Record Tauri's resource directory. Linux bundles install resources under
+/// `<prefix>/lib/<productName>/`, which is not an ancestor of the executable,
+/// so the walk in [`sidecar_candidates`] alone never finds them there.
+pub(crate) fn set_resource_dir(dir: PathBuf) {
+    let _ = RESOURCE_DIR.set(dir);
+}
+
+/// Locate a bundled `sidecar/<name>` script, in packaged (Tauri resource dir,
+/// next to the executable or under its `resources`) and dev (repo or
+/// `src-tauri`) layouts.
 pub(crate) fn sidecar_script_path(name: &str, override_var: &str) -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var(override_var) {
         let path = PathBuf::from(explicit);
@@ -67,26 +77,48 @@ pub(crate) fn sidecar_script_path(name: &str, override_var: &str) -> Option<Path
         }
     }
 
-    let rel = std::path::Path::new("sidecar").join(name);
-    let mut candidates: Vec<PathBuf> =
-        vec![rel.clone(), std::path::Path::new("src-tauri").join(&rel)];
+    let cwd = std::env::current_dir().ok();
+    let exe = std::env::current_exe().ok();
+    sidecar_candidates(
+        name,
+        RESOURCE_DIR.get().map(PathBuf::as_path),
+        cwd.as_deref(),
+        exe.as_deref(),
+    )
+    .into_iter()
+    .find(|path| path.is_file())
+}
 
-    if let Ok(cwd) = std::env::current_dir() {
+fn sidecar_candidates(
+    name: &str,
+    resource_dir: Option<&Path>,
+    cwd: Option<&Path>,
+    exe: Option<&Path>,
+) -> Vec<PathBuf> {
+    let rel = Path::new("sidecar").join(name);
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Some(dir) = resource_dir {
+        candidates.push(dir.join(&rel));
+    }
+
+    candidates.push(rel.clone());
+    candidates.push(Path::new("src-tauri").join(&rel));
+
+    if let Some(cwd) = cwd {
         candidates.push(cwd.join(&rel));
         candidates.push(cwd.join("src-tauri").join(&rel));
     }
 
-    if let Ok(exe) = std::env::current_exe() {
-        let mut dir = exe.parent().map(|p| p.to_path_buf());
-        for _ in 0..5 {
-            let Some(current) = dir else { break };
-            candidates.push(current.join(&rel));
-            candidates.push(current.join("resources").join(&rel));
-            dir = current.parent().map(|p| p.to_path_buf());
-        }
+    let mut dir = exe.and_then(Path::parent);
+    for _ in 0..5 {
+        let Some(current) = dir else { break };
+        candidates.push(current.join(&rel));
+        candidates.push(current.join("resources").join(&rel));
+        dir = current.parent();
     }
 
-    candidates.into_iter().find(|path| path.is_file())
+    candidates
 }
 
 async fn run_sidecar(content_binding: &str) -> Option<MintedToken> {
@@ -203,3 +235,4 @@ pub async fn remint_po_token(content_binding: &str) -> Option<String> {
     token_cache().lock().await.remove(content_binding);
     generate_po_token(content_binding).await
 }
+

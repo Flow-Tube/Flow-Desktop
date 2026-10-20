@@ -259,6 +259,11 @@ pub fn run() {
             // poToken (falls back to the headless Node sidecar without this).
             api::innertube::core::webview_pot::set_app_handle(app.handle().clone());
 
+            // Linux bundles keep the Node sidecar scripts in the resource dir.
+            if let Ok(dir) = app.path().resource_dir() {
+                api::innertube::core::botguard::set_resource_dir(dir);
+            }
+
             // Register Flow's AppUserModelID + logo so Windows attributes toasts to
             // "Flow" instead of the launching shell / PowerShell.
             #[cfg(windows)]

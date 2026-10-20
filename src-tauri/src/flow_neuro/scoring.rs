@@ -369,6 +369,17 @@ pub fn time_bucket_confidence(brain: &UserBrain, bucket: TimeBucket) -> f64 {
 }
 
 impl UserBrain {
+    /// The long-term topics strong enough to be interests. Weaker ones are traces of evidence
+    /// still adding up: ranking reads them, but nothing searches for, groups or lists a topic from
+    /// one half-watched video (Android `UserBrain.interests`).
+    pub fn interests(&self) -> impl Iterator<Item = (&String, f64)> {
+        self.global_vector
+            .topics
+            .iter()
+            .filter(|(_, weight)| **weight >= TOPIC_PRUNE_THRESHOLD)
+            .map(|(key, weight)| (key, *weight))
+    }
+
     /// A fresh brain that still carries every block and "not interested" mark of this one.
     #[must_use]
     pub fn keeping_hidden_content(&self) -> Self {

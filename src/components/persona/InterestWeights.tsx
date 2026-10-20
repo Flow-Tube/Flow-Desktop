@@ -1,4 +1,4 @@
-import type { TopicEvidence, UserBrain } from "../../lib/api/recommendation";
+import { interestTopics, type TopicEvidence, type UserBrain } from "../../lib/api/recommendation";
 import { topicLabel } from "../../lib/topicLabel";
 
 interface InterestWeightsProps {
@@ -17,7 +17,7 @@ function formatPercent(value: number) {
 }
 
 export function InterestWeights({ brain }: InterestWeightsProps) {
-  const topicsMap = brain.global_vector.topics || {};
+  const topicsMap = interestTopics(brain.global_vector.topics);
   const sortedTopics = Object.entries(topicsMap)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 12);

@@ -525,13 +525,13 @@ impl RecommendationService {
         let picks = pick_keys(brain);
         let mut topic_scores: HashMap<String, (f64, f64)> = HashMap::new();
 
-        for (name, score) in &brain.global_vector.topics {
+        for (name, score) in brain.interests() {
             let normalized = strip_domain_tag(name);
             if !Self::is_substantial_topic(&normalized, &spec) {
                 continue;
             }
             let entry = topic_scores.entry(normalized).or_insert((0.0, 0.0));
-            entry.0 = entry.0.max(*score);
+            entry.0 = entry.0.max(score);
         }
 
         for (name, score) in time_topic_scores {
@@ -724,15 +724,12 @@ impl RecommendationService {
     fn emerging_specific_tokens(brain: &UserBrain) -> Vec<String> {
         let picks = pick_keys(brain);
         let mut tokens: Vec<(String, f64)> = brain
-            .global_vector
-            .topics
-            .iter()
+            .interests()
             .filter_map(|(topic, weight)| {
                 let normalized = strip_domain_tag(topic);
                 if !normalized.contains(' ')
                     || picks.contains(topic)
-                    || *weight <= 0.0
-                    || *weight > EMERGING_TOKEN_MAX_WEIGHT
+                    || weight > EMERGING_TOKEN_MAX_WEIGHT
                     || brain
                         .blocked_topics
                         .iter()
@@ -740,7 +737,7 @@ impl RecommendationService {
                 {
                     return None;
                 }
-                Some((normalized, *weight))
+                Some((normalized, weight))
             })
             .collect();
 
@@ -2556,6 +2553,26 @@ mod tests {
         assert!(RecommendationService::topic_is_discovery_eligible(
             roblox, false
         ));
+    }
+
+    #[test]
+    fn traces_of_a_half_watched_video_are_never_searched_for() {
+        let mut brain = UserBrain::default();
+        brain
+            .global_vector
+            .topics
+            .insert("snapdragon".to_string(), 0.5);
+        brain
+            .global_vector
+            .topics
+            .insert("sourdough".to_string(), 0.0115);
+        let names: Vec<String> =
+            RecommendationService::analyze_mature_topics(&brain, &HashMap::new())
+                .into_iter()
+                .map(|topic| topic.name)
+                .collect();
+        assert!(names.contains(&"snapdragon".to_string()));
+        assert!(!names.contains(&"sourdough".to_string()));
     }
 
     #[test]

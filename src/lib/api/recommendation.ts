@@ -21,6 +21,16 @@ export interface FeedQuotas {
   viralLimit: number;
 }
 
+/** Below this a topic is a trace of evidence still adding up, not an interest to show. */
+export const INTEREST_MIN_WEIGHT = 0.03;
+
+/** The topics of a taste vector strong enough to be interests. */
+export function interestTopics(topics: Record<string, number> | undefined): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(topics ?? {}).filter(([, weight]) => weight >= INTEREST_MIN_WEIGHT),
+  );
+}
+
 const MOCK_FEED_QUOTAS: FeedQuotas = {
   maturity: "mature",
   totalInteractions: 168,

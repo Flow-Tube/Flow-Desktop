@@ -7,7 +7,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import type { UserBrain } from "../../lib/api/recommendation";
+import { interestTopics, type UserBrain } from "../../lib/api/recommendation";
 
 interface TasteShapeProps {
   brain: UserBrain;
@@ -89,8 +89,8 @@ export function TasteShape({ brain }: TasteShapeProps) {
       key: "breadth",
       label: "Topic Breadth",
       helper: "Narrow focus to broad exploration",
-      global: calculateBreadth(brain.global_vector.topics),
-      context: calculateBreadth(currentVector.topics),
+      global: calculateBreadth(interestTopics(brain.global_vector.topics)),
+      context: calculateBreadth(interestTopics(currentVector.topics)),
     },
   ];
 

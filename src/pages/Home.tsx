@@ -1800,9 +1800,9 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         <VideoGrid loading={true} onPlay={handlePlayVideo} />
       ) : visibleVideos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-chrome-zinc-800 rounded-3xl p-8 bg-chrome-zinc-900/10">
-          <h3 className="font-bold text-chrome-zinc-300">No content found</h3>
+          <h3 className="font-bold text-chrome-zinc-300">{getString("home_feed_empty_title")}</h3>
           <p className="text-chrome-zinc-500 text-xs mt-1 max-w-sm">
-            Try playing some videos or searching to help the recommendation engine learn your profile
+            {getString("home_feed_empty_body")}
           </p>
         </div>
       ) : (
@@ -1841,18 +1841,18 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
                     {loadingMore ? (
                       <>
                         <Loader2 size={16} className="animate-spin text-chrome-red-400" />
-                        Loading more
+                        {getString("home_feed_loading_more")}
                       </>
                     ) : (
                       <>
                         <ChevronDown size={16} />
-                        Load more
+                        {getString("home_feed_load_more")}
                       </>
                     )}
                   </button>
                   {!loadingMore && (
                     <p className="text-xs text-chrome-zinc-500">
-                      More recommendations load automatically as you scroll.
+                      {getString("home_feed_autoload_hint")}
                     </p>
                   )}
                 </>

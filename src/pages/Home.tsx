@@ -12,7 +12,6 @@ import {
   getFeedQuotas,
   recordFeedImpressions,
   rankVideos,
-  logInteraction,
 } from "../lib/api/recommendation";
 import type { FeedQuotas } from "../lib/api/recommendation";
 import { cleanChannelId, useFeedActionsStore, useFeedHiddenFilter } from "../store/useFeedActionsStore";
@@ -1714,26 +1713,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     them, so an unstable identity here is what decides whether `React.memo` on
     VideoCard can bail out at all.
   */
-  const handlePlayVideo = useCallback(async (video: VideoSummary) => {
-    onPlay(video);
-    try {
-      await logInteraction(
-        video.id,
-        video.title,
-        video.channelName,
-        video.channelId ?? video.id,
-        null,
-        video.durationSeconds ?? null,
-        false,
-        (video.durationSeconds ?? 0) <= 60,
-        "CLICK",
-        0.0
-      );
-    } catch (err) {
-      console.warn("Failed to log interaction", err);
-    }
-  }, [onPlay]);
-
   const handleRemoveFromContinueWatching = useCallback((videoId: string) => {
     hideContinueWatchingVideo(videoId);
     setContinueWatchingVideos((current) => current.filter((video) => video.id !== videoId));
@@ -1768,7 +1747,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       <VideoShelf
         title={getString("continue_watching_shelf_title")}
         videos={visibleContinueWatchingVideos}
-        onPlay={handlePlayVideo}
+        onPlay={onPlay}
         onAddToQueue={onAddToQueue}
         onRemoveFromContinueWatching={handleRemoveFromContinueWatching}
         variant="continue"
@@ -1777,7 +1756,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     [
       shouldInsertContinueShelf,
       visibleContinueWatchingVideos,
-      handlePlayVideo,
+      onPlay,
       onAddToQueue,
       handleRemoveFromContinueWatching,
     ],
@@ -1797,7 +1776,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           </p>
         </div>
       ) : loading ? (
-        <VideoGrid loading={true} onPlay={handlePlayVideo} />
+        <VideoGrid loading={true} onPlay={onPlay} />
       ) : visibleVideos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-chrome-zinc-800 rounded-3xl p-8 bg-chrome-zinc-900/10">
           <h3 className="font-bold text-chrome-zinc-300">{getString("home_feed_empty_title")}</h3>
@@ -1809,7 +1788,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         <>
           <VideoGrid
             videos={visibleVideos}
-            onPlay={handlePlayVideo}
+            onPlay={onPlay}
             onAddToQueue={onAddToQueue}
             insertNode={continueShelfNode}
           />

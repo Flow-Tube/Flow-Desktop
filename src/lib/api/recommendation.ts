@@ -99,6 +99,31 @@ export async function logInteraction(
   });
 }
 
+/** What the player reports about the video it is playing; see `report_watch_progress`. */
+export interface WatchReport {
+  videoId: string;
+  title: string;
+  channelName: string;
+  channelId: string;
+  description: string | null;
+  isLive: boolean;
+  position: number;
+  duration: number;
+  playedDelta: number;
+}
+
+/** Feeds the backend watch session. It turns a whole viewing into one click and one watch or skip. */
+export async function reportWatchProgress(report: WatchReport): Promise<void> {
+  if (isDeepFlowCurrentlyActive() || !(await isTauriEnv())) return;
+  return invokeBackend<void>("report_watch_progress", { report });
+}
+
+/** `natural` is a video that played to its end; any other end waits briefly for the video to resume. */
+export async function endWatchSession(report: WatchReport, natural: boolean): Promise<void> {
+  if (isDeepFlowCurrentlyActive() || !(await isTauriEnv())) return;
+  return invokeBackend<void>("end_watch_session", { report, natural });
+}
+
 export async function markNotInterested(
   videoId: string,
   title: string,

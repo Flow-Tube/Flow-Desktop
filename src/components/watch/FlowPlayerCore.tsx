@@ -8,7 +8,7 @@ import {
   clearLocalWatchProgress,
 } from "../../lib/useVideoStream";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
-import { logInteraction } from "../../lib/api/recommendation";
+import { useWatchSession } from "../../lib/useWatchSession";
 import { addWatchRecord } from "../../lib/api/db";
 import { isMusicVideo } from "../../lib/utils";
 import { SETTINGS } from "../../lib/settings/schema";
@@ -47,7 +47,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const stream = useVideoStream(videoId);
 
   const lastProgressPersistedAtRef = useRef(0);
-  const latestProgressRef = useRef<{ time: number; duration: number } | null>(null);
+  const latestProgressRef = useRef<{ videoId: string; time: number; duration: number } | null>(null);
   const prefetchedNextForRef = useRef<string | null>(null);
 
   /** Warm whatever plays after this video, once the end is close enough that it
@@ -71,8 +71,22 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     prefetchedNextForRef.current = null;
   }, [currentVideo?.id]);
 
-  const resolvedChannelId =
-    videoDetails?.channelId || currentVideo?.channelId || currentVideo?.id || "";
+  const resolvedChannelId = videoDetails?.channelId || currentVideo?.channelId || "";
+  const watchSubject = useMemo(
+    () =>
+      currentVideo
+        ? {
+            videoId: currentVideo.id,
+            title: currentVideo.title,
+            channelName: currentVideo.channelName,
+            channelId: resolvedChannelId.replace(/^channel:/, ""),
+            description: videoDetails?.description || null,
+            isLive: stream.isLive,
+          }
+        : null,
+    [currentVideo, resolvedChannelId, videoDetails?.description, stream.isLive],
+  );
+  const { onTime: reportWatchTime, onEnded: endWatchSession } = useWatchSession(watchSubject);
 
   const handleTimeUpdate = useCallback(
     (time: number, mediaDuration: number) => {
@@ -82,89 +96,58 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       prefetchNextVideo(time, nextDuration);
 
       if (!currentVideo) return;
-      latestProgressRef.current = { time, duration: nextDuration };
-      const recordHistory = shouldRecordWatchHistory();
+      reportWatchTime(time, mediaDuration);
+      latestProgressRef.current = { videoId: currentVideo.id, time, duration: nextDuration };
+      if (!shouldRecordWatchHistory()) return;
 
       const now = Date.now();
       if (now - lastProgressPersistedAtRef.current < 5000) return;
       lastProgressPersistedAtRef.current = now;
 
       // localStorage writes are synchronous main-thread IO; keep them behind
-      // the 5s gate instead of every timeupdate tick. persistLatestProgress
-      // below flushes the exact final position on unmount/beforeunload.
-      if (recordHistory) {
-        saveLocalWatchProgress(currentVideo.id, time, nextDuration);
-      }
-
-      const percentWatched = nextDuration > 0 ? Math.min(1, Math.max(0, time / nextDuration)) : 0;
-      void logInteraction(
-        currentVideo.id,
-        currentVideo.title,
-        currentVideo.channelName,
-        resolvedChannelId || currentVideo.id,
-        videoDetails?.description || null,
-        Math.floor(nextDuration) || null,
-        false,
-        nextDuration <= 60,
-        "WATCHED",
-        percentWatched,
-      ).catch((err) => console.warn("Failed to log watch interaction", err));
-
-      if (recordHistory) {
-        void addWatchRecord({
-          videoId: currentVideo.id,
-          title: currentVideo.title,
-          channelName: currentVideo.channelName,
-          channelId: currentVideo.channelId ?? null,
-          watchDate: new Date().toISOString(),
-          watchDurationSeconds: Math.floor(time),
-          totalDurationSeconds: Math.floor(nextDuration || 0),
-          isMusic: isMusicVideo(currentVideo),
-        });
-      }
+      // the 5s gate instead of every timeupdate tick. The history effect
+      // below flushes the exact final position when the video changes.
+      saveLocalWatchProgress(currentVideo.id, time, nextDuration);
+      void addWatchRecord({
+        videoId: currentVideo.id,
+        title: currentVideo.title,
+        channelName: currentVideo.channelName,
+        channelId: currentVideo.channelId ?? null,
+        watchDate: new Date().toISOString(),
+        watchDurationSeconds: Math.floor(time),
+        totalDurationSeconds: Math.floor(nextDuration || 0),
+        isMusic: isMusicVideo(currentVideo),
+      });
     },
-    [currentVideo, prefetchNextVideo, resolvedChannelId, setCurrentTime, setDuration, videoDetails],
+    [currentVideo, prefetchNextVideo, reportWatchTime, setCurrentTime, setDuration],
   );
 
+  // Keyed by video id alone: details or a channel id arriving later must not
+  // flush, and the progress written always belongs to the video it is filed under.
+  const currentVideoRef = useRef(currentVideo);
   useEffect(() => {
-    if (!currentVideo) return;
+    currentVideoRef.current = currentVideo;
+  }, [currentVideo]);
+  const currentVideoId = currentVideo?.id ?? null;
+  useEffect(() => {
+    if (!currentVideoId) return;
 
     const persistLatestProgress = () => {
       const latest = latestProgressRef.current;
-      if (!latest) return;
-      const recordHistory = shouldRecordWatchHistory();
-      if (recordHistory) {
-        saveLocalWatchProgress(currentVideo.id, latest.time, latest.duration);
-      }
-
-      const duration = latest.duration || currentVideo.durationSeconds || 1;
-      const percentWatched = duration > 0 ? Math.min(1, Math.max(0, latest.time / duration)) : 0;
-      const finalType = latest.time < 15 && percentWatched < 0.15 ? "SKIPPED" : "WATCHED";
-      void logInteraction(
-        currentVideo.id,
-        currentVideo.title,
-        currentVideo.channelName,
-        resolvedChannelId || currentVideo.id,
-        videoDetails?.description || null,
-        Math.floor(duration) || null,
-        false,
-        duration <= 60,
-        finalType,
-        percentWatched,
-      ).catch((err) => console.warn("Failed to log final watch interaction", err));
-
-      if (recordHistory) {
-        void addWatchRecord({
-          videoId: currentVideo.id,
-          title: currentVideo.title,
-          channelName: currentVideo.channelName,
-          channelId: currentVideo.channelId ?? null,
-          watchDate: new Date().toISOString(),
-          watchDurationSeconds: Math.floor(latest.time),
-          totalDurationSeconds: Math.floor(latest.duration || currentVideo.durationSeconds || 0),
-          isMusic: isMusicVideo(currentVideo),
-        });
-      }
+      const video = currentVideoRef.current;
+      if (!latest || latest.videoId !== currentVideoId || !video || video.id !== currentVideoId) return;
+      if (!shouldRecordWatchHistory()) return;
+      saveLocalWatchProgress(video.id, latest.time, latest.duration);
+      void addWatchRecord({
+        videoId: video.id,
+        title: video.title,
+        channelName: video.channelName,
+        channelId: video.channelId ?? null,
+        watchDate: new Date().toISOString(),
+        watchDurationSeconds: Math.floor(latest.time),
+        totalDurationSeconds: Math.floor(latest.duration || video.durationSeconds || 0),
+        isMusic: isMusicVideo(video),
+      });
     };
 
     window.addEventListener("beforeunload", persistLatestProgress);
@@ -172,24 +155,11 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       window.removeEventListener("beforeunload", persistLatestProgress);
       persistLatestProgress();
     };
-  }, [currentVideo, resolvedChannelId, videoDetails]);
+  }, [currentVideoId]);
 
   const handleEnded = useCallback(() => {
     if (!currentVideo) return;
-    const duration = latestProgressRef.current?.duration || currentVideo.durationSeconds || 1;
-    void logInteraction(
-      currentVideo.id,
-      currentVideo.title,
-      currentVideo.channelName,
-      resolvedChannelId || currentVideo.id,
-      videoDetails?.description || null,
-      Math.floor(duration) || null,
-      false,
-      duration <= 60,
-      "WATCHED",
-      1,
-    ).catch((err) => console.warn("Failed to log watch interaction on ended", err));
-
+    endWatchSession();
     clearLocalWatchProgress(currentVideo.id);
     if (repeatMode === "one") {
       seekToTime(0);
@@ -203,7 +173,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       setIsPlaying(false);
     }
     onEnded?.();
-  }, [autoplayEnabled, currentVideo, onEnded, playNext, repeatMode, resolvedChannelId, setIsPlaying, videoDetails]);
+  }, [autoplayEnabled, currentVideo, endWatchSession, onEnded, playNext, repeatMode, setIsPlaying]);
 
   const title = (dearrowData?.title || currentVideo?.title) ?? "";
   const poster =

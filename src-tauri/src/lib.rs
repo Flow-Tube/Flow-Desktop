@@ -77,11 +77,11 @@ use commands::pip::{
     set_pip_always_on_top,
 };
 use commands::recommendation::{
-    add_blocked_topic, add_preferred_topic, block_channel, complete_onboarding,
+    add_blocked_topic, add_preferred_topic, block_channel, complete_onboarding, end_watch_session,
     generate_discovery_queries, get_brain_snapshot, get_feed_quotas, get_flow_persona,
     get_onboarding_status, get_recommendation_events, log_interaction, mark_not_interested,
-    rank_videos, record_feed_impressions, remove_preferred_topic, reset_brain, unblock_channel,
-    unblock_topic,
+    rank_videos, record_feed_impressions, remove_preferred_topic, report_watch_progress,
+    reset_brain, unblock_channel, unblock_topic,
 };
 use commands::shorts::{get_shorts_feed, load_more_shorts, reset_shorts_feed};
 use commands::sync::{
@@ -470,6 +470,8 @@ pub fn run() {
             delete_download_collections,
             rank_videos,
             log_interaction,
+            report_watch_progress,
+            end_watch_session,
             mark_not_interested,
             record_feed_impressions,
             complete_onboarding,
@@ -599,6 +601,7 @@ pub fn run() {
             // Flush the resident brain to disk on shutdown so the debounce window is never lost.
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 if let Some(service) = app_handle.try_state::<RecommendationService>() {
+                    let _ = tauri::async_runtime::block_on(service.settle_watch_session(None));
                     let _ = tauri::async_runtime::block_on(service.flush_brain());
                 }
                 if let Some(store) =

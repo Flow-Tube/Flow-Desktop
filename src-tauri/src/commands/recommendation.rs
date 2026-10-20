@@ -1,9 +1,11 @@
 use serde::Serialize;
 use std::collections::HashSet;
-use tauri::State;
+use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
 
 use crate::errors::ErrorResponse;
 use crate::flow_neuro::signals::InteractionType;
+use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
 use crate::services::recommendation_service::{FeedQuotas, RecommendationService};
 
@@ -71,6 +73,40 @@ pub async fn log_interaction(
         )
         .await
         .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn report_watch_progress(
+    report: WatchReport,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<(), ErrorResponse> {
+    recommendation_service
+        .report_watch_progress(report)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn end_watch_session(
+    report: WatchReport,
+    natural: bool,
+    app: AppHandle,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<(), ErrorResponse> {
+    let pending = recommendation_service
+        .end_watch_session(report, natural)
+        .await
+        .map_err(ErrorResponse::from)?;
+    if let Some(generation) = pending {
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(END_GRACE_SECONDS)).await;
+            let service = app.state::<RecommendationService>();
+            if let Err(error) = service.settle_watch_session(Some(generation)).await {
+                tracing::warn!(%error, "[FlowNeuro] failed to settle a watch session");
+            }
+        });
+    }
+    Ok(())
 }
 
 #[tauri::command]

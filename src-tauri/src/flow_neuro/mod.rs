@@ -10,3 +10,4 @@ pub(crate) mod language;
 pub(crate) mod ranker;
 pub(crate) mod scoring;
 pub(crate) mod signals;
+pub(crate) mod watch_session;

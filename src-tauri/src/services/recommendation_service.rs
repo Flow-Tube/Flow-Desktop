@@ -26,6 +26,7 @@ use crate::flow_neuro::scoring::{
     strip_domain_tag,
 };
 use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
 use crate::models::video::{MusicHomeChip, MusicHomeSection, VideoSummary};
 use crate::services::youtube_service::YoutubeService;
 
@@ -44,8 +45,15 @@ pub struct RecommendationService {
     impression_cache: Mutex<HashMap<String, (i32, u64)>>, // video_id -> (seen_count, last_seen_timestamp)
     session_topic_history: Mutex<Vec<String>>,
     session_video_count: Mutex<i32>,
+    watch: Mutex<WatchSlot>,
     #[allow(dead_code)]
     session_start_time: u64,
+}
+
+#[derive(Default)]
+struct WatchSlot {
+    session: Option<WatchSession>,
+    generation: u64,
 }
 
 #[derive(Clone)]
@@ -257,6 +265,7 @@ impl RecommendationService {
             impression_cache: Mutex::new(HashMap::new()),
             session_topic_history: Mutex::new(Vec::new()),
             session_video_count: Mutex::new(0),
+            watch: Mutex::new(WatchSlot::default()),
             session_start_time: now,
         }
     }
@@ -1693,6 +1702,123 @@ impl RecommendationService {
         }
 
         Ok(())
+    }
+
+    /// Folds a progress report into the open watch session. A report for another video
+    /// finishes the previous session and opens a new one, which counts as the click.
+    pub async fn report_watch_progress(&self, report: WatchReport) -> AppResult<()> {
+        let (finished, opened) = {
+            let mut slot = self.watch.lock().unwrap();
+            match slot.session.as_mut() {
+                Some(session) if session.report.video_id == report.video_id => {
+                    session.ended = false;
+                    session.absorb(report);
+                    (None, None)
+                }
+                _ => {
+                    slot.generation += 1;
+                    let session = WatchSession::start(report, slot.generation);
+                    let opened = session.report.clone();
+                    (slot.session.replace(session), Some(opened))
+                }
+            }
+        };
+        if let Some(previous) = finished {
+            self.finish_watch(previous).await?;
+        }
+        if let Some(report) = opened {
+            self.log_watch_event(&report, InteractionType::Click, 0.0)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Ends the open session for this video. A natural end is final at once; any other end
+    /// waits for the same video to come back, and returns the generation to settle later.
+    pub async fn end_watch_session(
+        &self,
+        report: WatchReport,
+        natural: bool,
+    ) -> AppResult<Option<u64>> {
+        let finished = {
+            let mut slot = self.watch.lock().unwrap();
+            let Some(session) = slot.session.as_mut() else {
+                return Ok(None);
+            };
+            if session.report.video_id != report.video_id {
+                return Ok(None);
+            }
+            session.absorb(report);
+            if !natural {
+                session.ended = true;
+                return Ok(Some(session.generation));
+            }
+            slot.session.take()
+        };
+        if let Some(session) = finished {
+            self.finish_watch(session).await?;
+        }
+        Ok(None)
+    }
+
+    /// Finishes an ended session that nothing resumed. `None` finishes whatever is open, ended
+    /// or not, which is what quitting the app means.
+    pub async fn settle_watch_session(&self, generation: Option<u64>) -> AppResult<()> {
+        let finished = {
+            let mut slot = self.watch.lock().unwrap();
+            let settles = slot
+                .session
+                .as_ref()
+                .is_some_and(|session| match generation {
+                    Some(generation) => session.ended && session.generation == generation,
+                    None => true,
+                });
+            if settles { slot.session.take() } else { None }
+        };
+        if let Some(session) = finished {
+            self.finish_watch(session).await?;
+        }
+        Ok(())
+    }
+
+    async fn finish_watch(&self, session: WatchSession) -> AppResult<()> {
+        let Some(verdict) = session.verdict() else {
+            return Ok(());
+        };
+        self.log_watch_event(
+            &session.report,
+            verdict.interaction,
+            verdict.percent_watched,
+        )
+        .await
+    }
+
+    async fn log_watch_event(
+        &self,
+        report: &WatchReport,
+        interaction: InteractionType,
+        percent_watched: f32,
+    ) -> AppResult<()> {
+        let duration = (report.duration > 0.0)
+            .then(|| std::time::Duration::from_secs_f64(report.duration + 0.5).as_secs());
+        let channel_id = if report.channel_id.is_empty() {
+            &report.video_id
+        } else {
+            &report.channel_id
+        };
+        self.log_video_interaction(
+            &report.video_id,
+            &report.title,
+            &report.channel_name,
+            channel_id,
+            report.description.as_deref(),
+            duration,
+            report.is_live,
+            duration.is_some_and(|seconds| seconds <= 60),
+            interaction,
+            percent_watched,
+        )
+        .await
     }
 
     pub async fn record_feed_impressions(&self, videos: Vec<VideoSummary>) -> AppResult<()> {

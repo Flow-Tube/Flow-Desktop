@@ -87,9 +87,10 @@ pub const SESSION_AFFINITY_STRONG_BOOST: f64 = 0.08;
 pub const SESSION_AFFINITY_MILD_THRESHOLD: usize = 2;
 pub const SESSION_AFFINITY_MILD_BOOST: f64 = 0.04;
 
-pub const AFFINITY_INCREMENT: f64 = 0.02;
+pub const AFFINITY_INCREMENT: f64 = 0.03;
+/// A watch links each pair of its strongest topics.
+pub const AFFINITY_TOP_TOPICS: usize = 3;
 pub const AFFINITY_MAX: f64 = 1.0;
-pub const AFFINITY_PRUNE_THRESHOLD: f64 = 0.05;
 pub const AFFINITY_MAX_ENTRIES: usize = 500;
 pub const AFFINITY_KEEP_TOP: usize = 300;
 pub const AFFINITY_MAX_BOOST_PER_VIDEO: f64 = 0.15;

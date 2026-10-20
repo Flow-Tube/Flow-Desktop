@@ -10,16 +10,16 @@ use crate::flow_neuro::features::{TopicReader, VideoText, document_terms, extrac
 use crate::flow_neuro::key_migration::{spell_from_titles, to_key_spec_2};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::{
-    AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES,
-    AFFINITY_PRUNE_THRESHOLD, CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, CHANNEL_KEEP_HIGH,
-    CHANNEL_KEEP_LOW, CHANNEL_PROFILE_LEARNING_RATE, CHANNEL_PROFILE_MAX_CHANNELS,
-    CHANNEL_PROFILE_MAX_TOPICS, CHANNEL_PROFILE_PRUNE_THRESHOLD, CHANNEL_SUPPRESSION_DAYS,
-    ContentVector, DISLIKE_CHANNEL_FACTOR, IDF_KEEP_KEYS, IDF_MAX_KEYS, IdfSnapshot,
-    MAX_CHANNEL_SCORES, MAX_CONSECUTIVE_SKIPS, MAX_SUPPRESSED_CHANNELS, MAX_SUPPRESSED_VIDEOS,
-    PERSONA_MAX_STABILITY, REJECTION_EXPIRY_DAYS, REJECTION_MEMORY_MAX, RejectionSignal,
-    TOPIC_EVIDENCE_MAX_ENTRIES, TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain,
-    WATCH_HISTORY_MAX, WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, adjust_vector,
-    apply_anchor_decay, classify_persona, extract_rejection_keys, strip_domain_tag,
+    AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES, AFFINITY_TOP_TOPICS,
+    CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, CHANNEL_KEEP_HIGH, CHANNEL_KEEP_LOW,
+    CHANNEL_PROFILE_LEARNING_RATE, CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS,
+    CHANNEL_PROFILE_PRUNE_THRESHOLD, CHANNEL_SUPPRESSION_DAYS, ContentVector,
+    DISLIKE_CHANNEL_FACTOR, IDF_KEEP_KEYS, IDF_MAX_KEYS, IdfSnapshot, MAX_CHANNEL_SCORES,
+    MAX_CONSECUTIVE_SKIPS, MAX_SUPPRESSED_CHANNELS, MAX_SUPPRESSED_VIDEOS, PERSONA_MAX_STABILITY,
+    REJECTION_EXPIRY_DAYS, REJECTION_MEMORY_MAX, RejectionSignal, TOPIC_EVIDENCE_MAX_ENTRIES,
+    TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain, WATCH_HISTORY_MAX,
+    WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, adjust_vector, apply_anchor_decay,
+    classify_persona, extract_rejection_keys, strip_domain_tag,
 };
 
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.40;
@@ -438,30 +438,32 @@ pub fn apply_interaction(
     };
     brain.consecutive_skips = new_skips;
 
-    // 5. Topic co-occurrence
+    // 5. Topic co-occurrence. No per-update value prune: links start below any useful prune
+    // line, so one would delete every new link in the update that made it. The size cap evicts
+    // the weakest links instead (Android does the same).
     if learning_rate > 0.0 {
-        let mut top_topics: Vec<(String, f64)> = video_vector.topics.clone().into_iter().collect();
-        top_topics.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        let top_topics: Vec<String> = top_topics.into_iter().take(5).map(|(k, _)| k).collect();
+        let mut top_topics: Vec<(&String, &f64)> = video_vector.topics.iter().collect();
+        top_topics.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let top_topics: Vec<&String> = top_topics
+            .into_iter()
+            .take(AFFINITY_TOP_TOPICS)
+            .map(|(key, _)| key)
+            .collect();
 
-        if top_topics.len() >= 2 {
-            for i in 0..top_topics.len() {
-                for j in i + 1..top_topics.len() {
-                    let key = make_affinity_key(&top_topics[i], &top_topics[j]);
-                    let current = *brain.topic_affinities.get(&key).unwrap_or(&0.0);
-                    let new_val = (current + AFFINITY_INCREMENT).min(AFFINITY_MAX);
-                    brain.topic_affinities.insert(key, new_val);
-                }
+        for i in 0..top_topics.len() {
+            for j in i + 1..top_topics.len() {
+                let key = make_affinity_key(top_topics[i], top_topics[j]);
+                let current = brain.topic_affinities.get(&key).copied().unwrap_or(0.0);
+                brain
+                    .topic_affinities
+                    .insert(key, (current + AFFINITY_INCREMENT).min(AFFINITY_MAX));
             }
-            brain
-                .topic_affinities
-                .retain(|_, &mut v| v > AFFINITY_PRUNE_THRESHOLD);
-            if brain.topic_affinities.len() > AFFINITY_MAX_ENTRIES {
-                let mut sorted: Vec<(String, f64)> =
-                    brain.topic_affinities.clone().into_iter().collect();
-                sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-                brain.topic_affinities = sorted.into_iter().take(AFFINITY_KEEP_TOP).collect();
-            }
+        }
+        if brain.topic_affinities.len() > AFFINITY_MAX_ENTRIES {
+            let mut sorted: Vec<(String, f64)> = brain.topic_affinities.drain().collect();
+            sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            sorted.truncate(AFFINITY_KEEP_TOP);
+            brain.topic_affinities = sorted.into_iter().collect();
         }
     }
 
@@ -893,5 +895,46 @@ mod tests {
         assert_eq!(brain.suppressed_video_ids.len(), MAX_SUPPRESSED_VIDEOS);
         assert!(!brain.suppressed_video_ids.contains_key("old0"));
         assert!(brain.suppressed_video_ids.contains_key("new"));
+    }
+
+    #[test]
+    fn a_topic_link_survives_its_first_update() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Watched, 0.9),
+        );
+        assert!(!brain.topic_affinities.is_empty());
+        assert!(
+            brain
+                .topic_affinities
+                .values()
+                .all(|v| (v - AFFINITY_INCREMENT).abs() < 1e-9)
+        );
+        apply(
+            &mut brain,
+            &event("v2", TITLE, InteractionType::Watched, 0.9),
+        );
+        assert!(
+            brain
+                .topic_affinities
+                .values()
+                .any(|v| (v - 2.0 * AFFINITY_INCREMENT).abs() < 1e-9)
+        );
+    }
+
+    #[test]
+    fn topic_links_join_only_the_top_three_topics() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event(
+                "v1",
+                "Rust compiler internals explained with borrow checker lifetimes",
+                InteractionType::Liked,
+                0.0,
+            ),
+        );
+        assert!(brain.topic_affinities.len() <= 3);
     }
 }

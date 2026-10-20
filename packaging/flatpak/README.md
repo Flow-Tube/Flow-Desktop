@@ -97,3 +97,9 @@ GNOME 51 is supported until about September 2027. GNOME 52 drops
 `webkit2gtk-4.1`, which Tauri 2 uses. If Tauri has not moved to WebKitGTK 6.0
 by then, the fallback is building WebKitGTK as a module in this manifest, the
 way `com.pot_app.pot` does on Flathub.
+
+## Flathub
+
+`io.github.flow_tube.Flow-Desktop.metainfo.xml` is the AppStream listing the
+Flatpak installs. The steps for the Flathub submission are in
+[FLATHUB.md](FLATHUB.md).

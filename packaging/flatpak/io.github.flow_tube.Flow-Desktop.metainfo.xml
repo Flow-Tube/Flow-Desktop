@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.flow_tube.Flow-Desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>Flow</name>
+  <summary>Private YouTube and YouTube Music</summary>
+  <developer id="io.github.flow_tube">
+    <name>Flow-Tube</name>
+  </developer>
+  <description>
+    <p>Flow is a privacy-first desktop client for YouTube and YouTube Music, and
+    the desktop companion to Flow for Android. It needs no account and contains
+    no ads, analytics or telemetry. History, playlists, settings and
+    recommendations stay on your computer.</p>
+    <ul>
+      <li>Native video playback with quality and codec choice, chapters,
+      subtitles, playback speed, queues and a mini player</li>
+      <li>YouTube Music with search, artists, albums, playlists and synced
+      lyrics</li>
+      <li>A Shorts feed, channel pages, comments and live chat</li>
+      <li>Local subscriptions, playlists, Watch Later, likes and history</li>
+      <li>Recommendations ranked on your device by FlowNeuro, with a Control
+      Center to inspect and reset what it learned</li>
+      <li>SponsorBlock, DeArrow and Return YouTube Dislike</li>
+      <li>Downloads of videos and songs</li>
+      <li>Sync with Flow for Android over your local network</li>
+      <li>Imports from Google Takeout, NewPipe, LibreTube, FreeTube and OPML</li>
+    </ul>
+    <p>Flow is under active development. Features and storage formats may change
+    before the first stable release.</p>
+  </description>
+  <launchable type="desktop-id">io.github.flow_tube.Flow-Desktop.desktop</launchable>
+
+  <content_rating type="oars-1.1" />
+
+  <url type="homepage">https://github.com/Flow-Tube/Flow-Desktop</url>
+  <url type="bugtracker">https://github.com/Flow-Tube/Flow-Desktop/issues</url>
+  <url type="vcs-browser">https://github.com/Flow-Tube/Flow-Desktop</url>
+  <url type="donation">https://opencollective.com/flow-tube</url>
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <recommends>
+    <internet>always</internet>
+  </recommends>
+  <requires>
+    <display_length compare="ge">640</display_length>
+  </requires>
+
+  <releases>
+    <release version="0.1.0-beta2" date="2026-08-26" type="development">
+      <url type="details">https://github.com/Flow-Tube/Flow-Desktop/releases/tag/v0.1.0-beta2</url>
+      <description>
+        <p>A bug-fix release built on beta-tester feedback: Linux startup and
+        packaging, livestreams, the Home feed, the player, subscriptions, search,
+        backups and downloads, plus faster starts for videos, Shorts and
+        music.</p>
+      </description>
+    </release>
+  </releases>
+</component>

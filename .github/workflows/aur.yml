@@ -1,0 +1,111 @@
+name: AUR packages
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packaging/aur/**"
+      - ".github/workflows/aur.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  aur:
+    name: Build and lint the AUR packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      # git must be installed before checkout so it clones a real repository,
+      # which the source build archives below.
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git jq namcap
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      # makepkg refuses to run as root; -s installs dependencies through sudo.
+      - name: Create the build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          cp -r packaging/aur /home/builder/aur
+          chown -R builder:builder /home/builder/aur
+
+      - name: Check the shared install steps are identical
+        run: |
+          shared() { sed -n '/^# --- Shared flow-desktop install steps/,/^# --- End of shared steps/p' "$1"; }
+          test -n "$(shared packaging/aur/flow-desktop/PKGBUILD)"
+          diff <(shared packaging/aur/flow-desktop/PKGBUILD) <(shared packaging/aur/flow-desktop-bin/PKGBUILD)
+
+      - name: Check .SRCINFO matches each PKGBUILD
+        run: |
+          for pkg in flow-desktop-bin flow-desktop; do
+            (cd "/home/builder/aur/$pkg" && sudo -u builder -H makepkg --printsrcinfo | diff - .SRCINFO)
+          done
+
+      - name: Lint the PKGBUILDs
+        run: |
+          namcap packaging/aur/flow-desktop-bin/PKGBUILD packaging/aur/flow-desktop/PKGBUILD | tee namcap-pkgbuild.txt
+          ! grep -q ' E: ' namcap-pkgbuild.txt
+
+      - name: Build flow-desktop-bin from the pinned release
+        working-directory: /home/builder/aur/flow-desktop-bin
+        run: sudo -u builder -H makepkg -s --noconfirm
+
+      # The PKGBUILD stays pinned to the last release; here it builds this
+      # checkout instead, from an archive laid out like GitHub's tag tarball.
+      - name: Build flow-desktop from this checkout
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          tag="$(jq -r .version package.json)"
+          pkgver="${tag//-/}"
+          dir=/home/builder/aur/flow-desktop
+          git archive --prefix="Flow-Desktop-$tag/" -o "$dir/flow-desktop-$pkgver.tar.gz" HEAD
+          sed -i "s/^pkgver=.*/pkgver=$pkgver/; s/^pkgrel=.*/pkgrel=1/" "$dir/PKGBUILD"
+          chown -R builder:builder "$dir"
+          cd "$dir"
+          sudo -u builder -H makepkg -s --noconfirm --skipchecksums
+
+      - name: Lint the packages
+        run: |
+          namcap /home/builder/aur/flow-desktop-bin/flow-desktop-bin-[0-9]*.pkg.tar.zst \
+            /home/builder/aur/flow-desktop/flow-desktop-[0-9]*.pkg.tar.zst | tee namcap-packages.txt
+          ! grep -q ' E: ' namcap-packages.txt
+
+      - name: Install each package and check its files
+        run: |
+          set -euo pipefail
+
+          check_installed() {
+            local pkg=$1 product='Flow'
+            [[ "$(pacman -Q "$pkg" | cut -d' ' -f2)" =~ (beta|rc) ]] && product='Flow Beta'
+            local resdir="/usr/lib/$product" desktop="/usr/share/applications/$product.desktop"
+            echo "Checking $pkg ($product)"
+            pacman -Ql "$pkg"
+
+            test -x /usr/bin/flow-desktop
+            test ! -e /usr/bin/flow
+            test -f "$resdir/sidecar/integrity.cjs"
+            test -f "$resdir/distro-managed"
+            if ldd /usr/bin/flow-desktop | grep 'not found'; then exit 1; fi
+
+            grep -E '^(Exec|StartupWMClass)=' "$desktop"
+            grep -q '^Exec=flow-desktop' "$desktop"
+            grep -qx 'StartupWMClass=flow-desktop' "$desktop"
+            if grep '^Exec=' "$desktop" | grep -Ev '^Exec=flow-desktop( |$)'; then exit 1; fi
+          }
+
+          pacman -U --noconfirm /home/builder/aur/flow-desktop-bin/flow-desktop-bin-[0-9]*.pkg.tar.zst
+          check_installed flow-desktop-bin
+          pacman -R --noconfirm flow-desktop-bin
+
+          pacman -U --noconfirm /home/builder/aur/flow-desktop/flow-desktop-[0-9]*.pkg.tar.zst
+          check_installed flow-desktop

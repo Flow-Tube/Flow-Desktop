@@ -20,6 +20,8 @@ pub enum InteractionType {
     Watched,
     Skipped,
     Disliked,
+    /// Watch later, a playlist or a download: a strong signal, weaker than a like.
+    Saved,
     /// "Not interested" on a card: hides the video for good and its channel for a while.
     NotInterested,
 }
@@ -32,6 +34,7 @@ impl InteractionType {
             Self::Watched => "WATCHED",
             Self::Skipped => "SKIPPED",
             Self::Disliked => "DISLIKED",
+            Self::Saved => "SAVED",
             Self::NotInterested => "NOT_INTERESTED",
         }
     }

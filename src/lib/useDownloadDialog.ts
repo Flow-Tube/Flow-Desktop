@@ -12,6 +12,7 @@ import { SETTINGS } from "./settings/schema";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { MusicStreamInfo, SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
+import { noteVideoSaved } from "./videoSaved";
 
 export const MUSIC_QUALITY_VALUES = new Set(["Auto", "High", "Medium", "Low"]);
 
@@ -135,6 +136,7 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
         durationSeconds: video.durationSeconds ?? undefined,
       });
       setStartedId(started.id);
+      noteVideoSaved(video);
       return started;
     } catch (reason) {
       setError(getBackendErrorMessage(reason));

@@ -32,6 +32,7 @@ use crate::flow_neuro::vector_math::{
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.01;
 const CLICK_RATE: f64 = 0.03;
 const LIKED_RATE: f64 = 0.30;
+const SAVED_RATE: f64 = 0.22;
 const WATCH_RATE: f64 = 0.15;
 const WATCH_TIME_BONUS: f64 = 0.08;
 const SKIPPED_RATE: f64 = -0.15;
@@ -69,6 +70,7 @@ pub fn base_rate(kind: InteractionType, percent_watched: f32, duration_sec: Opti
     match kind {
         InteractionType::Click => CLICK_RATE,
         InteractionType::Liked => LIKED_RATE,
+        InteractionType::Saved => SAVED_RATE,
         InteractionType::Watched => {
             let percent = f64::from(percent_watched);
             #[allow(clippy::cast_precision_loss)]
@@ -187,7 +189,10 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
     learn_taste(brain, event, &video_vector, &idf, learning_rate, strength);
     learn_channel_score(brain, event, learning_rate);
     brain.consecutive_skips = match kind {
-        InteractionType::Click | InteractionType::Liked | InteractionType::Watched => 0,
+        InteractionType::Click
+        | InteractionType::Liked
+        | InteractionType::Saved
+        | InteractionType::Watched => 0,
         // A swiped-away Short is how Shorts are browsed, and a rejection says what the viewer
         // does not want; neither is boredom with the feed (Android #907).
         InteractionType::Skipped if event.is_short => brain.consecutive_skips,
@@ -324,7 +329,7 @@ fn learn_taste(
 
     // A real watch, like or save counts at least the acquisition floor for its top topics, so a
     // new interest can establish on a mature profile at all.
-    let strong = event.kind == InteractionType::Liked
+    let strong = matches!(event.kind, InteractionType::Liked | InteractionType::Saved)
         || (event.kind == InteractionType::Watched && event.percent_watched >= 0.40);
     if strong && !event.is_short {
         let own_documents = i32::from(brain.counted_documents.contains(event.video_id));
@@ -349,6 +354,7 @@ fn learn_taste(
         let shorts_rate = match event.kind {
             InteractionType::Click => 0.08,
             InteractionType::Liked => 0.20,
+            InteractionType::Saved => 0.15,
             InteractionType::Watched => 0.10 * f64::from(event.percent_watched),
             InteractionType::Skipped => -0.12,
             InteractionType::Disliked | InteractionType::NotInterested => -0.30,
@@ -513,6 +519,7 @@ fn topic_evidence_signal(kind: InteractionType, percent_watched: f32, is_short: 
     let base = match kind {
         InteractionType::Click => 0.20,
         InteractionType::Liked => 2.0,
+        InteractionType::Saved => 1.2,
         InteractionType::Watched if percent_watched >= WATCHED_THRESHOLD_FULL => 1.5,
         InteractionType::Watched if percent_watched >= 0.40 => 1.0,
         InteractionType::Watched if percent_watched >= WATCHED_THRESHOLD_SAMPLED => 0.35,
@@ -557,7 +564,7 @@ fn update_topic_evidence(
         return current.clone();
     }
     let is_watch_signal = event.kind == InteractionType::Watched && event.percent_watched >= 0.40;
-    let is_explicit_signal = event.kind == InteractionType::Liked;
+    let is_explicit_signal = matches!(event.kind, InteractionType::Liked | InteractionType::Saved);
     let mut updated = current.clone();
     for topic in evidence_topics(video_vector) {
         let existing = updated.get(&topic).cloned().unwrap_or_default();
@@ -1058,5 +1065,21 @@ mod tests {
             ),
         );
         assert!(brain.topic_affinities.len() <= 3);
+    }
+
+    #[test]
+    fn a_save_is_a_strong_explicit_signal_weaker_than_a_like() {
+        let mut saved = UserBrain::default();
+        let rate = apply(&mut saved, &event("v1", TITLE, InteractionType::Saved, 0.0))
+            .learning_rate
+            .unwrap();
+        assert!(rate > 0.0 && rate < LIKED_RATE);
+        assert!(
+            saved
+                .topic_evidence
+                .values()
+                .all(|e| e.explicit_signals == 1)
+        );
+        assert_eq!(saved.consecutive_skips, 0);
     }
 }

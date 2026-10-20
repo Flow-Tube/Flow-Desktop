@@ -8,6 +8,7 @@ import {
   removeVideoFromWatchLater,
 } from "../lib/playlistLibrary";
 import type { VideoSummary } from "../types/video";
+import { noteVideoSaved } from "../lib/videoSaved";
 
 /**
  * Watch Later membership as a set of video ids.
@@ -70,6 +71,7 @@ export const useWatchLaterStore = create<WatchLaterState>((set, get) => ({
     set({ ids: new Set(previous).add(video.id) });
     try {
       await addVideoToWatchLater(video);
+      noteVideoSaved(video);
     } catch (error) {
       set({ ids: previous });
       throw error;

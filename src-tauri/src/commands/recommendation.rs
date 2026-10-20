@@ -52,6 +52,7 @@ pub async fn log_interaction(
         "WATCHED" => InteractionType::Watched,
         "SKIPPED" => InteractionType::Skipped,
         "DISLIKED" => InteractionType::Disliked,
+        "SAVED" => InteractionType::Saved,
         _ => {
             return Err(ErrorResponse::from(crate::errors::AppError::Validation(
                 "Invalid interaction type provided".to_string(),

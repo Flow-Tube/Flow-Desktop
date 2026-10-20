@@ -28,6 +28,7 @@ use crate::flow_neuro::scoring::{
     QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX, SESSION_TOPIC_HISTORY_MAX, ScoredVideo,
     TimeBucket, TopicEvidence, UserBrain, apply_smart_diversity, channel_inferred_blocked,
     classify_persona, get_topic_categories, is_known_short, is_music_track, strip_domain_tag,
+    time_bucket_confidence,
 };
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::vector_math::{RECENT_SHARE, blend};
@@ -43,6 +44,9 @@ const QUERY_BONDING_ANCHOR_LIMIT: usize = 4;
 const QUERY_BONDING_EMERGING_LIMIT: usize = 6;
 const QUERY_BONDING_QUERY_LIMIT: usize = 8;
 const EMERGING_TOKEN_MAX_WEIGHT: f64 = 0.18;
+/// How much of a candidate's base score is taste (long-term, recent and time of day).
+const TASTE_WEIGHT: f64 = 0.8;
+const NOVELTY_WEIGHT: f64 = 0.2;
 
 pub struct RecommendationService {
     pool: SqlitePool,
@@ -1523,11 +1527,11 @@ impl RecommendationService {
             .cloned()
             .unwrap_or_default();
 
-        // Boredom detection & dynamic temperatures
-        let boredom_factor = (brain.consecutive_skips as f64 / 20.0).clamp(0.0, 0.5);
-        let w_personality = 0.4 - (boredom_factor * 0.5);
-        let w_context = 0.4 - (boredom_factor * 0.5);
-        let w_novelty = 0.2 + boredom_factor;
+        // A time of day counts for up to half the taste once it has seen enough events; skipping
+        // never reweights scoring, where it once lifted less relevant videos (Android #907).
+        let w_context = TASTE_WEIGHT * 0.5 * time_bucket_confidence(&brain, current_bucket);
+        let w_personality = TASTE_WEIGHT - w_context;
+        let w_novelty = NOVELTY_WEIGHT;
 
         let is_onboarding = brain.total_interactions < ONBOARDING_WARMUP_INTERACTIONS;
         let onboarding_warmup = if is_onboarding {

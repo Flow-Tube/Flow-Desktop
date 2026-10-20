@@ -333,6 +333,16 @@ pub struct UserBrain {
     pub counted_documents: HashSet<String>,
 }
 
+/// Events a time bucket needs before its vector weighs as much as the whole profile.
+pub const TIME_BUCKET_CONFIDENT_EVENTS: i32 = 30;
+
+/// How far a time of day's vector can be trusted, from 0 to 1.
+#[must_use]
+pub fn time_bucket_confidence(brain: &UserBrain, bucket: TimeBucket) -> f64 {
+    let events = brain.time_bucket_counts.get(&bucket).copied().unwrap_or(0);
+    (f64::from(events) / f64::from(TIME_BUCKET_CONFIDENT_EVENTS)).clamp(0.0, 1.0)
+}
+
 impl UserBrain {
     /// A fresh brain that still carries every block and "not interested" mark of this one.
     #[must_use]

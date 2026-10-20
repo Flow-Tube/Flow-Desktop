@@ -14,6 +14,7 @@ import {
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlaylistModalStore } from "../../store/usePlaylistModalStore";
 import { useUiStore } from "../../store/useUiStore";
+import { noteVideoSaved } from "../../lib/videoSaved";
 
 function PlaylistChoiceCard({
   fallbackThumbnailUrl,
@@ -106,6 +107,7 @@ export function AddToPlaylistModal() {
     try {
       const updated = await addVideoToStoredPlaylist(playlistId, addTarget);
       if (!updated) throw new Error("Playlist not found");
+      noteVideoSaved(addTarget);
 
       showToast({
         variant: "success",
@@ -128,6 +130,7 @@ export function AddToPlaylistModal() {
     try {
       const playlist = await createStoredPlaylist(newName);
       await addVideoToStoredPlaylist(playlist.id, addTarget);
+      noteVideoSaved(addTarget);
       showToast({
         variant: "success",
         message: getString("video_added_to_playlist"),

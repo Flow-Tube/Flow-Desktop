@@ -176,7 +176,6 @@ pub const MAX_SUPPRESSED_CHANNELS: usize = 100;
 pub const CHANNEL_STRIKE_BLOCK_THRESHOLD: i32 = 3;
 pub const CHANNEL_STRIKE_MIN_SPREAD_MS: u64 = 86_400_000;
 pub const CHANNEL_INFERRED_BLOCK_DAYS: u64 = 60;
-pub const REJECTION_EXPIRY_DAYS: u64 = 14;
 pub const REJECTION_MEMORY_MAX: usize = 200;
 pub const REJECTION_PENALTY_1: f64 = 0.50;
 pub const REJECTION_PENALTY_2: f64 = 0.20;
@@ -748,65 +747,6 @@ pub fn get_topic_categories() -> &'static Vec<TopicCategory> {
             },
         ]
     })
-}
-
-pub fn extract_rejection_keys(video_vector: &ContentVector, spec: &KeySpec) -> Vec<String> {
-    let lists = keyed_lists(spec);
-    let mut top_topics: Vec<(String, f64)> = video_vector
-        .topics
-        .iter()
-        .filter(|(topic, _)| strip_domain_tag(topic).len() >= 3)
-        .map(|(topic, score)| (strip_domain_tag(topic), *score))
-        .collect();
-    top_topics.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    let top_topics: Vec<String> = top_topics
-        .into_iter()
-        .map(|(topic, _)| topic)
-        .take(3)
-        .collect();
-
-    if top_topics.is_empty() {
-        return Vec::new();
-    }
-
-    let mut keys = Vec::new();
-    if let Some(primary) = top_topics.iter().find(|topic| !lists.is_broad_topic(topic)) {
-        keys.push(primary.clone());
-    }
-    if top_topics.len() >= 2 {
-        let mut pair = [top_topics[0].clone(), top_topics[1].clone()];
-        pair.sort();
-        keys.push(format!("{}|{}", pair[0], pair[1]));
-    }
-    keys
-}
-
-pub fn calculate_rejection_pattern_penalty(
-    video_vector: &ContentVector,
-    rejection_patterns: &HashMap<String, RejectionSignal>,
-    now_ms: u64,
-    spec: &KeySpec,
-) -> f64 {
-    if rejection_patterns.is_empty() {
-        return 1.0;
-    }
-
-    let expiry_ms = REJECTION_EXPIRY_DAYS * 86_400_000;
-    let mut max_count = 0;
-    for key in extract_rejection_keys(video_vector, spec) {
-        if let Some(signal) = rejection_patterns.get(&key) {
-            if now_ms.saturating_sub(signal.last_rejected_at) < expiry_ms {
-                max_count = max_count.max(signal.count);
-            }
-        }
-    }
-
-    match max_count {
-        count if count >= 3 => REJECTION_PENALTY_3_PLUS,
-        2 => REJECTION_PENALTY_2,
-        1 => REJECTION_PENALTY_1,
-        _ => 1.0,
-    }
 }
 
 pub fn calculate_feed_history_penalty(

@@ -1,4 +1,6 @@
+use crate::flow_neuro::keyed_lists::keyed_lists;
 use crate::flow_neuro::keyspec::KeySpec;
+use crate::flow_neuro::rejections::rejection_penalty;
 use crate::flow_neuro::scoring::{
     AFFINITY_BOOST_PER_PAIR, AFFINITY_MAX_BOOST_PER_VIDEO, BINGE_NOVELTY_FACTOR, BINGE_THRESHOLD,
     CLASSIC_VIEW_THRESHOLD, COLD_START_THRESHOLD, CURIOSITY_GAP_BONUS, ContentVector,
@@ -11,8 +13,7 @@ use crate::flow_neuro::scoring::{
     WATCHED_THRESHOLD_HALF, WATCHED_THRESHOLD_SAMPLED, calculate_anti_recommendation_penalty,
     calculate_channel_profile_boost, calculate_channel_score_multiplier,
     calculate_cosine_similarity, calculate_feed_history_penalty,
-    calculate_implicit_disinterest_penalty, calculate_rejection_pattern_penalty,
-    calculate_relevance_floor, strip_domain_tag,
+    calculate_implicit_disinterest_penalty, calculate_relevance_floor, strip_domain_tag,
 };
 use crate::flow_neuro::signals::make_affinity_key;
 use std::collections::HashSet;
@@ -215,8 +216,12 @@ fn multiplicative_penalties(inputs: &RankInputs, candidate: &Candidate, personal
     };
 
     mult *= calculate_channel_score_multiplier(brain, candidate.channel_id);
-    mult *=
-        calculate_rejection_pattern_penalty(vector, &brain.rejection_patterns, now_ms, inputs.spec);
+    mult *= rejection_penalty(
+        vector,
+        &brain.rejection_patterns,
+        now_ms,
+        &keyed_lists(inputs.spec),
+    );
     mult *= calculate_feed_history_penalty(
         candidate.video_id,
         &brain.feed_history,

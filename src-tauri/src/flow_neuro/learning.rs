@@ -8,16 +8,17 @@ use crate::flow_neuro::display_forms::{fill_gaps, record, spellings_in};
 use crate::flow_neuro::features::{
     TopicReader, VideoText, document_terms, extract_features, pick_keys, plant_filter,
 };
+use crate::flow_neuro::keyed_lists::{KeyedLists, keyed_lists};
+use crate::flow_neuro::rejections::{record_rejection, reject_topics, rejection_aggression};
 use crate::flow_neuro::scoring::{
     AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES, AFFINITY_TOP_TOPICS,
     CHANNEL_EMA_ALPHA, CHANNEL_KEEP_HIGH, CHANNEL_KEEP_LOW, CHANNEL_PROFILE_LEARNING_RATE,
     CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS, CHANNEL_PROFILE_PRUNE_THRESHOLD,
     CHANNEL_SUPPRESSION_DAYS, ContentVector, DISLIKE_CHANNEL_FACTOR, IDF_KEEP_KEYS, IDF_MAX_KEYS,
     IdfSnapshot, MAX_CHANNEL_SCORES, MAX_CONSECUTIVE_SKIPS, MAX_SUPPRESSED_CHANNELS,
-    MAX_SUPPRESSED_VIDEOS, PERSONA_MAX_STABILITY, REJECTION_EXPIRY_DAYS, REJECTION_MEMORY_MAX,
-    RejectionSignal, TOPIC_ACQUISITION_FLOOR, TOPIC_ACQUISITION_TOP_K, TOPIC_EVIDENCE_MAX_ENTRIES,
-    TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain, WATCH_HISTORY_MAX,
-    WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, classify_persona, extract_rejection_keys,
+    MAX_SUPPRESSED_VIDEOS, PERSONA_MAX_STABILITY, TOPIC_ACQUISITION_FLOOR, TOPIC_ACQUISITION_TOP_K,
+    TOPIC_EVIDENCE_MAX_ENTRIES, TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain,
+    WATCH_HISTORY_MAX, WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, classify_persona,
     strip_domain_tag,
 };
 use crate::flow_neuro::signals::{InteractionType, make_affinity_key};
@@ -37,8 +38,8 @@ const WATCH_RATE: f64 = 0.15;
 const WATCH_TIME_BONUS: f64 = 0.08;
 const SKIPPED_RATE: f64 = -0.15;
 const REJECTED_RATE: f64 = -0.40;
-/// What "not interested" leaves of the channel's score, a deeper cut than a thumbs-down.
-const NOT_INTERESTED_CHANNEL_FACTOR: f64 = 0.10;
+/// How far "not interested" pulls the time of day it happened in away from the video.
+const NOT_INTERESTED_TIME_RATE: f64 = -0.25;
 
 /// One event the engine learns from.
 #[derive(Debug, Clone, Copy)]
@@ -136,6 +137,27 @@ fn should_learn_from_watch(existing_progress: f32, next_progress: f32) -> bool {
             .any(|milestone| existing_progress < *milestone && next_progress >= *milestone)
 }
 
+fn video_vector_of(
+    event: &Interaction,
+    spec: &crate::flow_neuro::keyspec::KeySpec,
+    idf: &IdfSnapshot,
+) -> ContentVector {
+    extract_features(
+        &VideoText {
+            title: event.title,
+            channel_name: event.channel_name,
+            description: event.description,
+            duration_seconds: event.duration_sec,
+            is_live: event.is_live,
+            is_short: event.is_short,
+        },
+        &TopicReader {
+            spec: spec.clone(),
+            idf,
+        },
+    )
+}
+
 /// Applies one interaction to the in-memory brain.
 pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> InteractionOutcome {
     let now_ms = chrono::Utc::now().timestamp_millis().cast_unsigned();
@@ -153,25 +175,20 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
         total_documents: brain.idf_total_documents,
     };
     let spec = brain.key_spec();
-    let video_vector = extract_features(
-        &VideoText {
-            title: event.title,
-            channel_name: event.channel_name,
-            description: event.description,
-            duration_seconds: event.duration_sec,
-            is_live: event.is_live,
-            is_short: event.is_short,
-        },
-        &TopicReader {
-            spec: spec.clone(),
-            idf: &idf,
-        },
-    );
+    let video_vector = video_vector_of(event, &spec, &idf);
     let primary_topic = video_vector
         .topics
         .iter()
         .max_by(|a, b| a.1.total_cmp(b.1))
         .map(|(topic, _)| topic.clone());
+
+    if kind == InteractionType::NotInterested {
+        let cut = not_interested(brain, event, &video_vector, &keyed_lists(&spec), now_ms);
+        return InteractionOutcome {
+            learning_rate: Some(-cut),
+            primary_topic,
+        };
+    }
 
     let mut learning_rate = base_rate(kind, percent, event.duration_sec);
     if event.is_short {
@@ -212,17 +229,11 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
             now_ms,
         );
     }
-    if matches!(
-        kind,
-        InteractionType::Skipped | InteractionType::Disliked | InteractionType::NotInterested
-    ) {
+    if matches!(kind, InteractionType::Skipped | InteractionType::Disliked) {
         record_negative_topic_evidence(&mut brain.topic_evidence, &video_vector, now_ms);
     }
-    if matches!(
-        kind,
-        InteractionType::Disliked | InteractionType::NotInterested
-    ) {
-        reject(brain, event, &video_vector, &spec, now_ms);
+    if kind == InteractionType::Disliked {
+        reject(brain, event, &video_vector, &keyed_lists(&spec), now_ms);
     }
 
     let persona = classify_persona(brain).name().to_string();
@@ -383,19 +394,17 @@ fn learn_channel_score(brain: &mut UserBrain, event: &Interaction, learning_rate
         .get(event.channel_id)
         .copied()
         .unwrap_or(0.5);
-    let updated = match event.kind {
-        InteractionType::Disliked => (current * DISLIKE_CHANNEL_FACTOR).max(0.01),
-        InteractionType::NotInterested => (current * NOT_INTERESTED_CHANNEL_FACTOR).max(0.01),
-        _ => {
-            // A swiped Short moves its channel 1 % of what a long-form video does (Android A7).
-            let alpha = if event.is_short {
-                CHANNEL_EMA_ALPHA * SHORTS_LEARNING_PENALTY
-            } else {
-                CHANNEL_EMA_ALPHA
-            };
-            let outcome = if learning_rate > 0.0 { 1.0 } else { 0.0 };
-            current * (1.0 - alpha) + outcome * alpha
-        }
+    let updated = if event.kind == InteractionType::Disliked {
+        (current * DISLIKE_CHANNEL_FACTOR).max(0.01)
+    } else {
+        // A swiped Short moves its channel 1 % of what a long-form video does (Android A7).
+        let alpha = if event.is_short {
+            CHANNEL_EMA_ALPHA * SHORTS_LEARNING_PENALTY
+        } else {
+            CHANNEL_EMA_ALPHA
+        };
+        let outcome = if learning_rate > 0.0 { 1.0 } else { 0.0 };
+        current * (1.0 - alpha) + outcome * alpha
     };
     brain
         .channel_scores
@@ -634,17 +643,32 @@ pub(crate) fn suppress_video(brain: &mut UserBrain, video_id: &str, now_ms: u64)
     }
 }
 
+/// A thumbs-down: the video is hidden and remembered among the viewer's rejections.
 fn reject(
     brain: &mut UserBrain,
     event: &Interaction,
     video_vector: &ContentVector,
-    spec: &crate::flow_neuro::keyspec::KeySpec,
+    lists: &KeyedLists,
     now_ms: u64,
 ) {
     suppress_video(brain, event.video_id, now_ms);
-    // A rolling, self-healing window: an inferred rejection never becomes a permanent block,
-    // only an explicit block_channel does, so two mis-taps cannot hide a channel forever.
-    if event.kind == InteractionType::NotInterested && !event.channel_id.is_empty() {
+    record_rejection(&mut brain.rejection_patterns, video_vector, now_ms, lists);
+}
+
+/// "Not interested" (Android `markNotInterested`): the video goes for good, the channel for a
+/// rolling window, and the video's topics are cut by how often the viewer rejected the same thing.
+/// Returns the share of those topics that was cut.
+fn not_interested(
+    brain: &mut UserBrain,
+    event: &Interaction,
+    video_vector: &ContentVector,
+    lists: &KeyedLists,
+    now_ms: u64,
+) -> f64 {
+    suppress_video(brain, event.video_id, now_ms);
+    // Never a permanent block, only an explicit block_channel is, so two mis-taps cannot hide a
+    // channel forever.
+    if !event.channel_id.is_empty() {
         brain
             .suppressed_channels
             .insert(event.channel_id.to_string(), now_ms);
@@ -654,32 +678,36 @@ fn reject(
         }
     }
 
-    for key in extract_rejection_keys(video_vector, spec) {
-        let count = brain.rejection_patterns.get(&key).map_or(0, |s| s.count);
-        brain.rejection_patterns.insert(
-            key,
-            RejectionSignal {
-                count: count + 1,
-                last_rejected_at: now_ms,
-            },
-        );
+    // Read before this rejection is recorded, so a first rejection cuts by half as designed
+    // (Android reads it after, which cuts the first one to a quarter).
+    let aggression = rejection_aggression(video_vector, &brain.rejection_patterns, now_ms, lists);
+    record_rejection(&mut brain.rejection_patterns, video_vector, now_ms, lists);
+    brain.global_vector = reject_topics(&brain.global_vector, video_vector, aggression);
+    brain.recent_vector = reject_topics(&brain.recent_vector, video_vector, aggression);
+    if !event.channel_id.is_empty() {
+        let score = brain
+            .channel_scores
+            .get(event.channel_id)
+            .copied()
+            .unwrap_or(0.5);
+        brain
+            .channel_scores
+            .insert(event.channel_id.to_string(), (score * aggression).max(0.01));
     }
-    let cutoff = now_ms.saturating_sub(REJECTION_EXPIRY_DAYS * 86_400_000);
-    brain
-        .rejection_patterns
-        .retain(|_, signal| signal.last_rejected_at >= cutoff);
-    if brain.rejection_patterns.len() > REJECTION_MEMORY_MAX {
-        let mut entries: Vec<(String, u64)> = brain
-            .rejection_patterns
-            .iter()
-            .map(|(key, signal)| (key.clone(), signal.last_rejected_at))
-            .collect();
-        entries.sort_by_key(|(_, at)| *at);
-        let excess = entries.len() - REJECTION_MEMORY_MAX;
-        for (key, _) in entries.into_iter().take(excess) {
-            brain.rejection_patterns.remove(&key);
-        }
-    }
+    let bucket = TimeBucket::current();
+    let bucket_vector = brain.time_vectors.get(&bucket).cloned().unwrap_or_default();
+    brain.time_vectors.insert(
+        bucket,
+        adjust_vector(
+            &bucket_vector,
+            video_vector,
+            NOT_INTERESTED_TIME_RATE,
+            EVIDENCE_PRUNE_THRESHOLD,
+        ),
+    );
+    record_negative_topic_evidence(&mut brain.topic_evidence, video_vector, now_ms);
+    brain.total_interactions += 1;
+    1.0 - aggression
 }
 
 /// Drops the entry with the smallest share, the least informative one, when a per-video map is
@@ -1081,5 +1109,35 @@ mod tests {
                 .all(|e| e.explicit_signals == 1)
         );
         assert_eq!(saved.consecutive_skips, 0);
+    }
+
+    #[test]
+    fn not_interested_cuts_half_then_more_as_rejections_repeat() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("w1", TITLE, InteractionType::Watched, 0.9),
+        );
+        let cuts: Vec<f64> = ["n1", "n2", "n3"]
+            .iter()
+            .map(|id| {
+                -apply(
+                    &mut brain,
+                    &event(id, TITLE, InteractionType::NotInterested, 0.0),
+                )
+                .learning_rate
+                .unwrap()
+            })
+            .collect();
+        assert!((cuts[0] - 0.5).abs() < 1e-9, "{cuts:?}");
+        assert!((cuts[1] - 0.75).abs() < 1e-9, "{cuts:?}");
+        assert!((cuts[2] - 0.9).abs() < 1e-9, "{cuts:?}");
+        assert!(
+            brain
+                .global_vector
+                .topics
+                .values()
+                .all(|weight| *weight <= 0.3)
+        );
     }
 }

@@ -12,6 +12,7 @@ pub(crate) mod language;
 mod learn_golden;
 pub(crate) mod learning;
 pub(crate) mod ranker;
+pub(crate) mod rejections;
 pub(crate) mod scoring;
 pub(crate) mod signals;
 pub(crate) mod vector_math;

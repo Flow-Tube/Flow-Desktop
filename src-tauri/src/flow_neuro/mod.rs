@@ -13,6 +13,7 @@ pub(crate) mod language;
 #[cfg(test)]
 mod learn_golden;
 pub(crate) mod learning;
+pub(crate) mod maintenance;
 pub(crate) mod ranker;
 pub(crate) mod rejections;
 pub(crate) mod scoring;

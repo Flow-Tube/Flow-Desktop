@@ -688,13 +688,12 @@ impl RecommendationService {
 
     fn top_anchor_topics(brain: &UserBrain) -> Vec<String> {
         let spec = brain.key_spec();
-        // A pick of several words is one key now ("machin learn"), so phrases anchor too.
-        let mut anchors: Vec<(String, f64, f64)> = brain
-            .global_vector
-            .anchor_topics
-            .iter()
+        // The viewer's picks anchor a young profile; a pick of several words is one key
+        // ("machin learn"), so phrases anchor too.
+        let mut anchors: Vec<(String, f64)> = pick_keys(brain)
+            .into_iter()
             .filter_map(|topic| {
-                let normalized = strip_domain_tag(topic);
+                let normalized = strip_domain_tag(&topic);
                 if !Self::is_substantial_topic(&normalized, &spec)
                     || brain
                         .blocked_topics
@@ -703,38 +702,27 @@ impl RecommendationService {
                 {
                     return None;
                 }
-
                 let weight = brain
                     .global_vector
                     .topics
-                    .get(topic)
+                    .get(&topic)
                     .copied()
                     .unwrap_or(0.0);
-                let confidence = brain
-                    .global_vector
-                    .topic_confidence
-                    .get(topic)
-                    .copied()
-                    .unwrap_or(0.0);
-                Some((normalized, weight, confidence))
+                Some((normalized, weight))
             })
             .collect();
 
-        anchors.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal))
-                .then_with(|| a.0.cmp(&b.0))
-        });
+        anchors.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         anchors.dedup_by(|a, b| a.0 == b.0);
         anchors
             .into_iter()
             .take(QUERY_BONDING_ANCHOR_LIMIT)
-            .map(|(topic, _, _)| topic)
+            .map(|(topic, _)| topic)
             .collect()
     }
 
     fn emerging_specific_tokens(brain: &UserBrain) -> Vec<String> {
+        let picks = pick_keys(brain);
         let mut tokens: Vec<(String, f64)> = brain
             .global_vector
             .topics
@@ -742,7 +730,7 @@ impl RecommendationService {
             .filter_map(|(topic, weight)| {
                 let normalized = strip_domain_tag(topic);
                 if !normalized.contains(' ')
-                    || brain.global_vector.anchor_topics.contains(topic)
+                    || picks.contains(topic)
                     || *weight <= 0.0
                     || *weight > EMERGING_TOKEN_MAX_WEIGHT
                     || brain
@@ -1952,12 +1940,7 @@ impl RecommendationService {
                 0.30
             };
             for token in brain.key_spec().keys_of(trimmed) {
-                brain.global_vector.topics.insert(token.clone(), weight);
-                brain
-                    .global_vector
-                    .topic_confidence
-                    .insert(token.clone(), 1.0);
-                brain.global_vector.anchor_topics.insert(token.clone());
+                brain.global_vector.topics.insert(token, weight);
             }
             preferred.insert(trimmed.to_string());
         }
@@ -2384,15 +2367,7 @@ impl RecommendationService {
         );
         for token in brain.key_spec().keys_of(trimmed) {
             let current = *brain.global_vector.topics.get(&token).unwrap_or(&0.0);
-            brain
-                .global_vector
-                .topics
-                .insert(token.clone(), current.max(0.5));
-            brain
-                .global_vector
-                .topic_confidence
-                .insert(token.clone(), 1.0);
-            brain.global_vector.anchor_topics.insert(token);
+            brain.global_vector.topics.insert(token, current.max(0.5));
         }
         brain.has_completed_onboarding = true;
         Ok(())
@@ -2621,21 +2596,14 @@ mod tests {
     }
 
     #[test]
-    fn bonds_anchor_topics_to_emerging_bigrams_for_young_profiles() {
+    fn bonds_picks_to_emerging_bigrams_for_young_profiles() {
         let mut brain = UserBrain::default();
         brain.total_interactions = 12;
         brain
             .global_vector
             .topics
             .insert("minecraft".to_string(), 0.75);
-        brain
-            .global_vector
-            .topic_confidence
-            .insert("minecraft".to_string(), 1.0);
-        brain
-            .global_vector
-            .anchor_topics
-            .insert("minecraft".to_string());
+        brain.preferred_topics.insert("Minecraft".to_string());
         brain
             .global_vector
             .topics
@@ -2710,7 +2678,7 @@ mod tests {
         let mut brain = UserBrain::default();
         brain.total_interactions = 50;
         brain.global_vector.topics.insert("game".to_string(), 0.75);
-        brain.global_vector.anchor_topics.insert("game".to_string());
+        brain.preferred_topics.insert("Game".to_string());
         brain
             .global_vector
             .topics

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::OnceLock;
 
-pub const SCHEMA_VERSION: i32 = 13;
+pub const SCHEMA_VERSION: i32 = 14;
 
 // --- Scoring Constants ---
 pub const SUBSCRIPTION_BOOST: f64 = 0.15;

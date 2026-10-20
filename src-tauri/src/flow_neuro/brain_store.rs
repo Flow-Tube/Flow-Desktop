@@ -8,6 +8,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use crate::db::watch_history;
 use crate::errors::AppResult;
 use crate::flow_neuro::key_migration::fill_gaps_from_titles;
+use crate::flow_neuro::maintenance::migrate;
 use crate::flow_neuro::scoring::UserBrain;
 use crate::flow_neuro::signals::{SPELLING_TITLES, get_or_create_brain, save_brain, settle_brain};
 
@@ -98,6 +99,8 @@ impl BrainStore {
     /// write the old brain back over it.
     pub async fn replace(&self, mut brain: UserBrain) -> AppResult<()> {
         settle_brain(&self.pool, &mut brain).await?;
+        // An imported brain may come from before the evidence horizons, whatever this device did.
+        migrate(&mut brain);
         let mut resident = self.brain.write().await;
         save_brain(&self.pool, &brain).await?;
         *resident = brain;

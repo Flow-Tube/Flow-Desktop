@@ -156,6 +156,13 @@ pub const WATCHED_PENALTY_HALF: f64 = 0.30;
 pub const WATCHED_PENALTY_FULL: f64 = 0.02;
 
 pub const MUSIC_REWATCH_MAX_DURATION: u64 = 480;
+/// Longest a video can be and still count as a Short.
+pub const SHORT_MAX_SECONDS: u64 = 60;
+
+/// A Short only when its length is known: an unknown length is not a guess at one.
+pub fn is_known_short(duration_seconds: Option<u64>) -> bool {
+    duration_seconds.is_some_and(|seconds| seconds > 0 && seconds <= SHORT_MAX_SECONDS)
+}
 pub const VIDEO_SUPPRESSION_DAYS: u64 = 30;
 pub const CHANNEL_SUPPRESSION_DAYS: u64 = 14;
 pub const MAX_SUPPRESSED_VIDEOS: usize = 500;
@@ -1530,6 +1537,14 @@ pub fn classify_persona(brain: &UserBrain) -> FlowPersona {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_known_length_makes_a_short() {
+        assert!(is_known_short(Some(45)));
+        assert!(!is_known_short(Some(61)));
+        assert!(!is_known_short(Some(0)));
+        assert!(!is_known_short(None));
+    }
 
     #[test]
     fn disjoint_topics_are_damped_below_relevance_floor() {

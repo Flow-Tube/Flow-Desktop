@@ -18,6 +18,7 @@ import { ShortsShelf } from "../components/shelf/ShortsShelf";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
 import { upgradeAvatarUrl } from "../lib/thumbnails";
 import { useProxiedImageUrl } from "../lib/useProxiedImageUrl";
+import { isKnownShort } from "../lib/videoKind";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { ShortVideoSummary, VideoSummary } from "../types/video";
 
@@ -214,9 +215,6 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     });
   }, [isHidden, query, selectedChannelId, selectedGroup, videos]);
 
-  const isShortVideo = (video: VideoSummary) => {
-    return video.durationSeconds != null && video.durationSeconds > 0 && video.durationSeconds <= 60;
-  };
 
   const isLiveVideo = (video: VideoSummary) => {
     const published = video.publishedText?.toLowerCase() ?? "";
@@ -228,7 +226,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     const shorts: ShortVideoSummary[] = [];
     const regular: VideoSummary[] = [];
     for (const video of filteredVideos) {
-      if (isShortVideo(video)) {
+      if (isKnownShort(video.durationSeconds)) {
         if (showSubscriptionShorts) {
           shorts.push({
             type: "short",

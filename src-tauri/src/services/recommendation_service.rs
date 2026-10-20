@@ -22,8 +22,8 @@ use crate::flow_neuro::scoring::{
     ONBOARDING_WARMUP_INTERACTIONS, QUERY_OVERLAP_THRESHOLD, QUERY_ROTATION_FLOOR,
     QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX, SESSION_TOPIC_HISTORY_MAX, ScoredVideo,
     TimeBucket, TopicEvidence, UserBrain, VIDEO_SUPPRESSION_DAYS, apply_smart_diversity,
-    channel_inferred_blocked, classify_persona, get_topic_categories, is_music_track,
-    strip_domain_tag,
+    channel_inferred_blocked, classify_persona, get_topic_categories, is_known_short,
+    is_music_track, strip_domain_tag,
 };
 use crate::flow_neuro::signals::{InteractionType, apply_interaction};
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
@@ -1583,14 +1583,14 @@ impl RecommendationService {
 
         for video in filtered {
             let channel_id = video.channel_id.clone().unwrap_or_else(|| video.id.clone());
-            let is_short = video.duration_seconds.unwrap_or(0) <= 60;
+            let is_short = is_known_short(video.duration_seconds);
             let video_vector = extract_features(
                 &VideoText {
                     title: &video.title,
                     channel_name: &video.channel_name,
                     description: None, // Feeds don't carry descriptions
                     duration_seconds: video.duration_seconds,
-                    is_live: false,
+                    is_live: video.is_live,
                     is_short,
                 },
                 &TopicReader {
@@ -1814,7 +1814,7 @@ impl RecommendationService {
             report.description.as_deref(),
             duration,
             report.is_live,
-            duration.is_some_and(|seconds| seconds <= 60),
+            is_known_short(duration),
             interaction,
             percent_watched,
         )

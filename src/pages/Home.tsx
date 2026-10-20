@@ -30,6 +30,7 @@ import {
   hideContinueWatchingVideo,
 } from "../lib/continueWatching";
 import { reconcileHomeFeedResults } from "../lib/homeFeedResults";
+import { isKnownShort } from "../lib/videoKind";
 import {
   createDiscoveryPaging,
   hasDiscoveryPagesLeft,
@@ -348,12 +349,12 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     return published.includes("live") || views.includes("watching");
   };
 
+  // Android's filterValid: no Shorts, and a known length unless the video is live.
   const isValidFeedVideo = (video: VideoSummary) => {
-    const duration = video.durationSeconds ?? 0;
-    if (isLikelyLive(video)) {
+    if (video.isLive || isLikelyLive(video)) {
       return true;
     }
-    return duration > 120;
+    return (video.durationSeconds ?? 0) > 0 && !isKnownShort(video.durationSeconds);
   };
 
   const getMostlyWatchedIds = (history: WatchHistoryRecord[]) => {
@@ -800,8 +801,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     const freshValid = uniqueByVideoId(fresh)
       .filter((video) => {
         if (watched.has(video.id) || isHidden(video)) return false;
-        const duration = video.durationSeconds;
-        return duration == null || duration > 60;
+        return !isKnownShort(video.durationSeconds);
       })
       .slice(0, maxFresh);
     const freshIds = new Set(freshValid.map((video) => video.id));

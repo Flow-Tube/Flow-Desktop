@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isKnownShort } from "./videoKind";
 import { logInteraction, markNotInterested } from "./api/recommendation";
 import { getString } from "./i18n/index";
 import { useLikesStore } from "../store/useLikesStore";
@@ -37,7 +38,7 @@ export function useVideoReactions(video: VideoSummary | null, videoMeta: Reactio
   }, [likedInLibrary, video?.id]);
 
   const channelId = videoMeta?.channelId || video?.channelId || video?.id || "";
-  const isShort = (video?.durationSeconds ?? 0) <= 60;
+  const isShort = isKnownShort(video?.durationSeconds);
 
   const like = () => {
     if (!video) return;

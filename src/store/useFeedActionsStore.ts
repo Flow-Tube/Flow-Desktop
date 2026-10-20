@@ -7,6 +7,7 @@ import {
   blockChannel as apiBlockChannel,
 } from "../lib/api/recommendation";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
+import { isKnownShort } from "../lib/videoKind";
 import type { VideoSummary } from "../types/video";
 import { SETTINGS } from "../lib/settings/schema";
 import { useAppSettingsStore } from "./useAppSettingsStore";
@@ -93,7 +94,7 @@ function meta(video: VideoSummary) {
   return {
     channelId: cleanChannelId(video.channelId),
     duration,
-    isShort: (duration ?? 0) > 0 && (duration ?? 0) <= 60,
+    isShort: isKnownShort(duration),
   };
 }
 

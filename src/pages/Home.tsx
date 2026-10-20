@@ -31,6 +31,15 @@ import {
   hideContinueWatchingVideo,
 } from "../lib/continueWatching";
 import { reconcileHomeFeedResults } from "../lib/homeFeedResults";
+import {
+  createDiscoveryPaging,
+  hasDiscoveryPagesLeft,
+  recordDiscoveryPages,
+  resetDiscoveryPaging,
+  takeDiscoveryRequests,
+  withDiscoveryQueries,
+} from "../lib/homeFeedPaging";
+import type { DiscoveryRequest } from "../lib/homeFeedPaging";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -206,8 +215,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const videosRef = useRef<VideoSummary[]>([]);
   const loadMoreBackoffUntilRef = useRef(0);
   const loadMoreMissesRef = useRef(0);
-  const discoveryQueriesRef = useRef<string[]>([]);
-  const discoveryIndexRef = useRef(0);
+  const discoveryPagingRef = useRef(createDiscoveryPaging());
   const subscriptionIdsRef = useRef<string[]>([]);
   const subscriptionIndexRef = useRef(0);
   const watchHistoryRef = useRef<WatchHistoryRecord[]>([]);
@@ -614,11 +622,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   };
 
   const fetchDiscoveryPool = async (
-    queryCandidates: string[],
+    requests: DiscoveryRequest[],
     stage = "discovery-pool",
-    queryLimit = 6,
   ) => {
-    const queries = queryCandidates.slice(0, queryLimit);
+    const queries = requests.map(({ query }) => query);
     if (queries.length === 0) {
       logHomeFeed(stage, {
         queries,
@@ -629,8 +636,19 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       return [];
     }
 
+    const epoch = discoveryPagingRef.current.epoch;
     const settled = await Promise.allSettled(
-      queries.map((query) => searchVideos({ query })),
+      requests.map(({ query, pageToken }) => searchVideos({ query, pageToken })),
+    );
+    discoveryPagingRef.current = recordDiscoveryPages(
+      discoveryPagingRef.current,
+      epoch,
+      requests.flatMap(({ query }, index) => {
+        const result = settled[index];
+        return result?.status === "fulfilled"
+          ? [{ query, nextPageToken: result.value.nextPageToken }]
+          : [];
+      }),
     );
 
     const queryBreakdown = queries.map((query, index) => {
@@ -638,7 +656,13 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       if (result?.status !== "fulfilled") {
         return { query, status: "rejected", count: 0 };
       }
-      return { query, status: "fulfilled", count: result.value.items.length };
+      return {
+        query,
+        page: requests[index]?.pageToken ? "continuation" : "first",
+        status: "fulfilled",
+        count: result.value.items.length,
+        hasNextPage: Boolean(result.value.nextPageToken),
+      };
     });
 
     const pool = uniqueByVideoId(
@@ -870,43 +894,39 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      let queryPool = discoveryQueriesRef.current;
-      if (queryPool.length === 0 || discoveryIndexRef.current >= queryPool.length) {
-        queryPool = await withTimeout(
+      if (!hasDiscoveryPagesLeft(discoveryPagingRef.current)) {
+        const regeneratedQueries = await withTimeout(
           generateDiscoveryQueries(),
           5000,
           [] as string[],
           "load-more-query-refresh",
         );
-        discoveryQueriesRef.current = queryPool;
-        discoveryIndexRef.current = 0;
+        discoveryPagingRef.current = withDiscoveryQueries(discoveryPagingRef.current, regeneratedQueries);
         logHomeFeed("load-more-refresh-discovery-queries", {
-          queryPool,
-          queryCount: queryPool.length,
+          queryPool: discoveryPagingRef.current.queries,
+          queryCount: discoveryPagingRef.current.queries.length,
+          pagesLeft: hasDiscoveryPagesLeft(discoveryPagingRef.current),
         });
       }
 
       // Two queries per page (not three): the pool refreshes less often, so the backend's
       // rotation memory saturates far slower while result volume stays ample.
-      const queryA = queryPool[discoveryIndexRef.current];
-      const queryB = queryPool[discoveryIndexRef.current + 1];
-      discoveryIndexRef.current += 2;
-
-      const searchQueries = [queryA, queryB].filter(
-        (query): query is string => typeof query === "string" && query.length > 0,
-      );
-      const finalQueries = searchQueries;
+      const taken = takeDiscoveryRequests(discoveryPagingRef.current, 2);
+      discoveryPagingRef.current = taken.paging;
+      const discoveryRequests = taken.requests;
+      const finalQueries = discoveryRequests.map(({ query }) => query);
       const subscriptionBatchIds = getRotatedSubscriptionBatch(subscriptionIdsRef.current, 3);
       logHomeFeed("load-more-inputs", {
-        queryPoolSize: queryPool.length,
-        discoveryIndex: discoveryIndexRef.current,
+        queryPoolSize: discoveryPagingRef.current.queries.length,
+        discoveryCursor: discoveryPagingRef.current.cursor,
         finalQueries,
+        continuedQueries: discoveryRequests.filter(({ pageToken }) => pageToken).length,
         subscriptionBatchIds,
       });
 
       const [rawDiscoveryVideos, rawSubscriptionVideos, subscriptionRotationVideos, personalizedMusicVideos, relatedVideos] = await Promise.all([
         withTimeout(
-          fetchDiscoveryPool(finalQueries, "load-more-discovery-pool", 2),
+          fetchDiscoveryPool(discoveryRequests, "load-more-discovery-pool"),
           LOAD_MORE_SOURCE_TIMEOUT_MS,
           [] as VideoSummary[],
           "load-more-discovery",
@@ -1025,10 +1045,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       } else {
         loadMoreMissesRef.current += 1;
         loadMoreBackoffUntilRef.current = Date.now() + Math.min(8000, 1500 * loadMoreMissesRef.current);
-        if (discoveryIndexRef.current >= discoveryQueriesRef.current.length) {
-          discoveryQueriesRef.current = [];
-          discoveryIndexRef.current = 0;
-        }
         logHomeFeed("load-more-no-append", {
           dedupedBatchCount: dedupedBatch.length,
           misses: loadMoreMissesRef.current,
@@ -1231,10 +1247,11 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       watchHistoryRef.current = watchedHistory;
       setContinueWatchingVideos(buildContinueWatchingVideos(watchedHistory));
       watchedIdsRef.current = watchedIds;
-      discoveryQueriesRef.current = queryCandidates;
-      // The initial discover pool consumes queries 0-3 (queryLimit 4) — load-more starts
-      // after them so page one doesn't re-run a query whose results are all session-seen.
-      discoveryIndexRef.current = 4;
+      // The initial discover pool takes page one of queries 0-3, so load-more starts with
+      // the queries it left unused before continuing the others onto their next pages.
+      discoveryPagingRef.current = resetDiscoveryPaging(discoveryPagingRef.current, queryCandidates, 4);
+      const firstPageRequests = (limit: number): DiscoveryRequest[] =>
+        discoveryPagingRef.current.queries.slice(0, limit).map((query) => ({ query }));
       loadMoreMissesRef.current = 0;
       loadMoreBackoffUntilRef.current = 0;
       setHasMoreDiscover(true);
@@ -1271,7 +1288,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         updateCache("trending", trendingList);
       } else {
         const starterRotationPoolPromise = fetchSubscriptionRotationPool();
-        const starterDiscoveryPoolPromise = fetchDiscoveryPool(queryCandidates, "discovery-starter-pool", 2);
+        const starterDiscoveryPoolPromise = fetchDiscoveryPool(firstPageRequests(2), "discovery-starter-pool");
         const [starterRotationPool, starterDiscoveryPool] = await Promise.all([
           withTimeout(
             starterRotationPoolPromise,
@@ -1370,7 +1387,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
 
         const subscriptionPoolPromise = fetchSubscriptionPool(subscriptionIds, 3);
         const subscriptionRotationPoolPromise = fetchSubscriptionRotationPool();
-        const discoveryPoolPromise = fetchDiscoveryPool(queryCandidates, "discovery-pool", 4);
+        const discoveryPoolPromise = fetchDiscoveryPool(firstPageRequests(4), "discovery-pool");
         const relatedPoolPromise = fetchWatchHistoryRelatedPool(watchedHistory, 2);
         const personalizedMusicPoolPromise = fetchPersonalizedMusicPool();
         const freshSubsPromise = fetchFreshSubscriptionUploads(subscriptionIds, 8);

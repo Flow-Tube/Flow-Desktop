@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { matchBlockedKeyword, normalizeKeyword } from "./useFeedActionsStore";
+const api = vi.hoisted(() => ({
+  markNotInterested: vi.fn(),
+  blockChannel: vi.fn(),
+  logInteraction: vi.fn(),
+}));
+vi.mock("../lib/api/recommendation", () => api);
+vi.mock("../lib/api/db", () => ({
+  getSetting: vi.fn(async () => null),
+  setSetting: vi.fn(async () => undefined),
+  addWatchRecord: vi.fn(async () => undefined),
+}));
+
+import { matchBlockedKeyword, normalizeKeyword, useFeedActionsStore } from "./useFeedActionsStore";
 import type { VideoSummary } from "../types/video";
 
 function video(title: string, channelName = "Some Channel"): VideoSummary {
@@ -37,5 +49,44 @@ describe("matchBlockedKeyword", () => {
 
   it("returns the first matching keyword", () => {
     expect(matchBlockedKeyword(video("Spoilers and drama"), ["drama", "spoilers"])).toBe("drama");
+  });
+});
+
+describe("feed actions", () => {
+  const card = (id: string): VideoSummary => ({ id, title: "A video", channelName: "Chan", channelId: "UC1" });
+
+  beforeEach(() => {
+    useFeedActionsStore.setState({
+      dismissedVideoIds: new Set(),
+      blockedChannelIds: new Set(),
+      suppressedChannelIds: new Map(),
+    });
+    api.markNotInterested.mockReset().mockResolvedValue(undefined);
+    api.blockChannel.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("never turns a second not interested into a channel block", async () => {
+    await useFeedActionsStore.getState().notInterested(card("a"));
+    await useFeedActionsStore.getState().notInterested(card("b"));
+    const state = useFeedActionsStore.getState();
+    expect(state.blockedChannelIds.size).toBe(0);
+    expect(api.blockChannel).not.toHaveBeenCalled();
+    expect(api.markNotInterested).toHaveBeenCalledTimes(2);
+    expect(state.suppressedChannelIds.has("UC1")).toBe(true);
+    expect([...state.dismissedVideoIds]).toEqual(["a", "b"]);
+  });
+
+  it("rolls not interested back when the backend fails", async () => {
+    api.markNotInterested.mockRejectedValue(new Error("db"));
+    await expect(useFeedActionsStore.getState().notInterested(card("a"))).rejects.toThrow("db");
+    const state = useFeedActionsStore.getState();
+    expect(state.dismissedVideoIds.size).toBe(0);
+    expect(state.suppressedChannelIds.size).toBe(0);
+  });
+
+  it("rolls a channel block back when the backend fails", async () => {
+    api.blockChannel.mockRejectedValue(new Error("db"));
+    await expect(useFeedActionsStore.getState().blockChannel(card("a"))).rejects.toThrow("db");
+    expect(useFeedActionsStore.getState().blockedChannelIds.size).toBe(0);
   });
 });

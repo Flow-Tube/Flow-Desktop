@@ -424,7 +424,7 @@ function VideoCardComponent({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            void notInterested(video);
+            void notInterested(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
             setShowMenu(false);
           }}
           className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
@@ -445,7 +445,7 @@ function VideoCardComponent({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              void blockChannelAction(video);
+              void blockChannelAction(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
               setShowMenu(false);
             }}
             className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"

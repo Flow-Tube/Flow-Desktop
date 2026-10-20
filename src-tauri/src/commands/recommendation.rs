@@ -131,7 +131,7 @@ pub async fn mark_not_interested(
             duration_seconds,
             is_live,
             is_short,
-            InteractionType::Disliked,
+            InteractionType::NotInterested,
             0.0,
         )
         .await

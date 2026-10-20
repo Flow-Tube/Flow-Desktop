@@ -1,12 +1,14 @@
 import { Activity } from "lucide-react";
 import { useLearningActivity } from "../../lib/useLearningActivity";
+import { getString, type StringKey } from "../../lib/i18n/index";
 
-const EVENT_STYLES: Record<string, { label: string; tone: string }> = {
-  CLICK: { label: "Opened", tone: "text-chrome-sky-400" },
-  LIKED: { label: "Liked", tone: "text-chrome-emerald-400" },
-  WATCHED: { label: "Watched", tone: "text-chrome-emerald-400" },
-  SKIPPED: { label: "Skipped", tone: "text-chrome-amber-400" },
-  DISLIKED: { label: "Not interested", tone: "text-chrome-red-400" },
+const EVENT_STYLES: Record<string, { label: StringKey; tone: string }> = {
+  CLICK: { label: "learning_event_opened", tone: "text-chrome-sky-400" },
+  LIKED: { label: "learning_event_liked", tone: "text-chrome-emerald-400" },
+  WATCHED: { label: "learning_event_watched", tone: "text-chrome-emerald-400" },
+  SKIPPED: { label: "learning_event_skipped", tone: "text-chrome-amber-400" },
+  DISLIKED: { label: "learning_event_disliked", tone: "text-chrome-red-400" },
+  NOT_INTERESTED: { label: "learning_event_not_interested", tone: "text-chrome-red-400" },
 };
 
 // SQLite stores UTC timestamps without a zone marker; normalize before parsing.
@@ -43,10 +45,10 @@ export function LearningActivity() {
       ) : (
         <ul className="flex max-h-80 flex-col divide-y divide-[var(--color-outline-variant)] overflow-y-auto">
           {events.map((event, index) => {
-            const style = EVENT_STYLES[event.eventType] ?? {
-              label: event.eventType,
-              tone: "text-[var(--color-on-surface-variant)]",
-            };
+            const known = EVENT_STYLES[event.eventType];
+            const style = known
+              ? { label: getString(known.label), tone: known.tone }
+              : { label: event.eventType, tone: "text-[var(--color-on-surface-variant)]" };
             return (
               <li
                 key={event.id ?? index}

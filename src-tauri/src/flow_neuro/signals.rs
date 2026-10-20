@@ -11,16 +11,15 @@ use crate::flow_neuro::key_migration::{spell_from_titles, to_key_spec_2};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::{
     AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES,
-    AFFINITY_PRUNE_THRESHOLD, CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, CHANNEL_INFERRED_BLOCK_DAYS,
-    CHANNEL_KEEP_HIGH, CHANNEL_KEEP_LOW, CHANNEL_PROFILE_LEARNING_RATE,
-    CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS, CHANNEL_PROFILE_PRUNE_THRESHOLD,
-    CHANNEL_SUPPRESSION_DAYS, ChannelStrike, ContentVector, IDF_KEEP_KEYS, IDF_MAX_KEYS,
-    IdfSnapshot, MAX_CHANNEL_SCORES, MAX_CHANNEL_STRIKES, MAX_CONSECUTIVE_SKIPS,
-    MAX_SUPPRESSED_CHANNELS, MAX_SUPPRESSED_VIDEOS, NOT_INTERESTED_SKIP_INCREMENT,
+    AFFINITY_PRUNE_THRESHOLD, CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, CHANNEL_KEEP_HIGH,
+    CHANNEL_KEEP_LOW, CHANNEL_PROFILE_LEARNING_RATE, CHANNEL_PROFILE_MAX_CHANNELS,
+    CHANNEL_PROFILE_MAX_TOPICS, CHANNEL_PROFILE_PRUNE_THRESHOLD, CHANNEL_SUPPRESSION_DAYS,
+    ContentVector, DISLIKE_CHANNEL_FACTOR, IDF_KEEP_KEYS, IDF_MAX_KEYS, IdfSnapshot,
+    MAX_CHANNEL_SCORES, MAX_CONSECUTIVE_SKIPS, MAX_SUPPRESSED_CHANNELS, MAX_SUPPRESSED_VIDEOS,
     PERSONA_MAX_STABILITY, REJECTION_EXPIRY_DAYS, REJECTION_MEMORY_MAX, RejectionSignal,
     TOPIC_EVIDENCE_MAX_ENTRIES, TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain,
-    VIDEO_SUPPRESSION_DAYS, WATCH_HISTORY_MAX, WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED,
-    adjust_vector, apply_anchor_decay, classify_persona, extract_rejection_keys, strip_domain_tag,
+    WATCH_HISTORY_MAX, WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, adjust_vector,
+    apply_anchor_decay, classify_persona, extract_rejection_keys, strip_domain_tag,
 };
 
 pub const SHORTS_LEARNING_PENALTY: f64 = 0.40;
@@ -34,6 +33,8 @@ pub enum InteractionType {
     Watched,
     Skipped,
     Disliked,
+    /// "Not interested" on a card: hides the video for good and its channel for a while.
+    NotInterested,
 }
 
 impl InteractionType {
@@ -44,6 +45,7 @@ impl InteractionType {
             Self::Watched => "WATCHED",
             Self::Skipped => "SKIPPED",
             Self::Disliked => "DISLIKED",
+            Self::NotInterested => "NOT_INTERESTED",
         }
     }
 }
@@ -98,7 +100,9 @@ fn calculate_topic_evidence_signal(
                 0.0
             }
         }
-        InteractionType::Skipped | InteractionType::Disliked => 0.0,
+        InteractionType::Skipped | InteractionType::Disliked | InteractionType::NotInterested => {
+            0.0
+        }
     };
 
     if is_short { base * 0.35 } else { base }
@@ -238,25 +242,21 @@ pub struct InteractionOutcome {
     pub primary_topic: Option<String>,
 }
 
-fn prune_channel_strikes(brain: &mut UserBrain, now_ms: u64) {
-    let cutoff = now_ms.saturating_sub(CHANNEL_INFERRED_BLOCK_DAYS * 86_400_000);
+/// Hides a rejected video for good. Past the cap the oldest rejections make room.
+fn suppress_video(brain: &mut UserBrain, video_id: &str, now_ms: u64) {
     brain
-        .channel_strikes
-        .retain(|_, strike| strike.last_at >= cutoff);
-    if brain.channel_strikes.len() > MAX_CHANNEL_STRIKES {
+        .suppressed_video_ids
+        .insert(video_id.to_string(), now_ms);
+    if brain.suppressed_video_ids.len() > MAX_SUPPRESSED_VIDEOS {
         let mut entries: Vec<(String, u64)> = brain
-            .channel_strikes
+            .suppressed_video_ids
             .iter()
-            .map(|(id, strike)| (id.clone(), strike.last_at))
+            .map(|(id, ts)| (id.clone(), *ts))
             .collect();
-        entries.sort_by(|a, b| a.1.cmp(&b.1));
-        let removable: Vec<String> = entries
-            .into_iter()
-            .take(brain.channel_strikes.len() - MAX_CHANNEL_STRIKES)
-            .map(|(id, _)| id)
-            .collect();
-        for id in removable {
-            brain.channel_strikes.remove(&id);
+        entries.sort_by_key(|(_, ts)| *ts);
+        let excess = entries.len() - MAX_SUPPRESSED_VIDEOS;
+        for (id, _) in entries.into_iter().take(excess) {
+            brain.suppressed_video_ids.remove(&id);
         }
     }
 }
@@ -364,7 +364,7 @@ pub fn apply_interaction(
             base_watch_rate + time_bonus
         }
         InteractionType::Skipped => -0.15,
-        InteractionType::Disliked => -0.40,
+        InteractionType::Disliked | InteractionType::NotInterested => -0.40,
     };
 
     if is_short {
@@ -396,8 +396,14 @@ pub fn apply_interaction(
 
     // 3. Channel score
     let current_ch_score = *brain.channel_scores.get(channel_id).unwrap_or(&0.5);
-    let outcome = if learning_rate > 0.0 { 1.0 } else { 0.0 };
-    let new_ch_score = (current_ch_score * CHANNEL_EMA_DECAY) + (outcome * CHANNEL_EMA_ALPHA);
+    let new_ch_score = match interaction_type {
+        InteractionType::Disliked => (current_ch_score * DISLIKE_CHANNEL_FACTOR).max(0.01),
+        InteractionType::NotInterested => (current_ch_score * 0.10).max(0.01),
+        _ => {
+            let outcome = if learning_rate > 0.0 { 1.0 } else { 0.0 };
+            (current_ch_score * CHANNEL_EMA_DECAY) + (outcome * CHANNEL_EMA_ALPHA)
+        }
+    };
     brain
         .channel_scores
         .insert(channel_id.to_string(), new_ch_score);
@@ -422,13 +428,13 @@ pub fn apply_interaction(
         brain.channel_scores = new_channel_scores;
     }
 
-    // 4. Consecutive skips (explicit dislikes weigh heavier toward boredom than implicit skips)
+    // 4. Consecutive skips. Boredom is passive skipping; a rejection says what the viewer does
+    // not want, which is no reason to make the next feed more random (Android #907).
     let new_skips = match interaction_type {
         InteractionType::Click | InteractionType::Liked | InteractionType::Watched => 0,
+        InteractionType::Skipped if is_short => brain.consecutive_skips,
         InteractionType::Skipped => (brain.consecutive_skips + 1).min(MAX_CONSECUTIVE_SKIPS),
-        InteractionType::Disliked => {
-            (brain.consecutive_skips + NOT_INTERESTED_SKIP_INCREMENT).min(MAX_CONSECUTIVE_SKIPS)
-        }
+        InteractionType::Disliked | InteractionType::NotInterested => brain.consecutive_skips,
     };
     brain.consecutive_skips = new_skips;
 
@@ -586,53 +592,24 @@ pub fn apply_interaction(
         );
     }
 
-    if matches!(
+    let rejected = matches!(
         interaction_type,
-        InteractionType::Skipped | InteractionType::Disliked
-    ) {
-        brain
-            .suppressed_video_ids
-            .insert(video_id.to_string(), now_ms);
-        if brain.suppressed_video_ids.len() > MAX_SUPPRESSED_VIDEOS {
-            let cutoff = now_ms.saturating_sub(VIDEO_SUPPRESSION_DAYS * 86_400_000);
-            brain.suppressed_video_ids.retain(|_, ts| *ts >= cutoff);
-        }
-    }
-
-    if interaction_type == InteractionType::Disliked {
+        InteractionType::Disliked | InteractionType::NotInterested
+    );
+    if rejected {
+        suppress_video(brain, video_id, now_ms);
         record_negative_topic_evidence(&mut brain.topic_evidence, &video_vector, now_ms);
 
-        if !channel_id.is_empty() {
-            if brain.suppressed_channels.contains_key(channel_id) {
-                brain.blocked_channels.insert(channel_id.to_string());
-                brain.suppressed_channels.remove(channel_id);
-                brain.channel_strikes.remove(channel_id);
-            } else {
-                brain
-                    .suppressed_channels
-                    .insert(channel_id.to_string(), now_ms);
-            }
+        // A rolling, self-healing window: an inferred rejection never becomes a permanent block,
+        // only an explicit block_channel does, so two mis-taps cannot hide a channel forever.
+        if interaction_type == InteractionType::NotInterested && !channel_id.is_empty() {
+            brain
+                .suppressed_channels
+                .insert(channel_id.to_string(), now_ms);
             if brain.suppressed_channels.len() > MAX_SUPPRESSED_CHANNELS {
                 let cutoff = now_ms.saturating_sub(CHANNEL_SUPPRESSION_DAYS * 86_400_000);
                 brain.suppressed_channels.retain(|_, ts| *ts >= cutoff);
             }
-
-            let strike = brain
-                .channel_strikes
-                .entry(channel_id.to_string())
-                .or_insert(ChannelStrike {
-                    count: 0,
-                    first_at: now_ms,
-                    last_at: now_ms,
-                });
-            strike.count += 1;
-            strike.last_at = now_ms;
-            prune_channel_strikes(brain, now_ms);
-
-            let current = *brain.channel_scores.get(channel_id).unwrap_or(&0.5);
-            brain
-                .channel_scores
-                .insert(channel_id.to_string(), (current * 0.10).max(0.01));
         }
 
         for key in extract_rejection_keys(&video_vector, &spec) {
@@ -839,5 +816,82 @@ mod tests {
         );
         assert!(!brain.rejection_patterns.is_empty());
         assert!(brain.channel_scores["chan1"] < 0.5);
+    }
+
+    #[test]
+    fn not_interested_twice_never_blocks_a_channel() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::NotInterested, 0.0),
+        );
+        apply(
+            &mut brain,
+            &event("v2", TITLE, InteractionType::NotInterested, 0.0),
+        );
+        assert!(brain.blocked_channels.is_empty());
+        assert!(brain.channel_strikes.is_empty());
+        assert!(brain.suppressed_channels.contains_key("chan1"));
+        assert!(brain.suppressed_video_ids.contains_key("v1"));
+        assert!(brain.suppressed_video_ids.contains_key("v2"));
+    }
+
+    #[test]
+    fn a_thumbs_down_hides_the_video_but_not_the_channel() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Disliked, 0.0),
+        );
+        assert!(brain.suppressed_video_ids.contains_key("v1"));
+        assert!(brain.suppressed_channels.is_empty());
+        assert!((brain.channel_scores["chan1"] - 0.5 * DISLIKE_CHANNEL_FACTOR).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rejections_do_not_count_as_boredom() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Disliked, 0.0),
+        );
+        apply(
+            &mut brain,
+            &event("v2", TITLE, InteractionType::NotInterested, 0.0),
+        );
+        assert_eq!(brain.consecutive_skips, 0);
+    }
+
+    #[test]
+    fn a_skip_hides_nothing() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Skipped, 0.05),
+        );
+        assert!(brain.suppressed_video_ids.is_empty());
+        assert!(brain.suppressed_channels.is_empty());
+    }
+
+    #[test]
+    fn swiping_past_a_short_is_not_boredom() {
+        let mut brain = UserBrain::default();
+        let mut short = event("s1", TITLE, InteractionType::Skipped, 0.05);
+        short.is_short = true;
+        short.duration = Some(30);
+        apply(&mut brain, &short);
+        assert_eq!(brain.consecutive_skips, 0);
+    }
+
+    #[test]
+    fn hidden_videos_past_the_cap_drop_the_oldest() {
+        let mut brain = UserBrain::default();
+        for i in 0..MAX_SUPPRESSED_VIDEOS as u64 {
+            brain.suppressed_video_ids.insert(format!("old{i}"), i + 1);
+        }
+        suppress_video(&mut brain, "new", 1_000_000);
+        assert_eq!(brain.suppressed_video_ids.len(), MAX_SUPPRESSED_VIDEOS);
+        assert!(!brain.suppressed_video_ids.contains_key("old0"));
+        assert!(brain.suppressed_video_ids.contains_key("new"));
     }
 }

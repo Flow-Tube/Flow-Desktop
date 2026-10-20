@@ -20,6 +20,8 @@ pub const CHANNEL_BOREDOM_MULTIPLIER: f64 = 0.5;
 pub const CHANNEL_BOREDOM_THRESHOLD: f64 = 0.05;
 pub const CHANNEL_EMA_ALPHA: f64 = 0.05;
 pub const CHANNEL_EMA_DECAY: f64 = 1.0 - CHANNEL_EMA_ALPHA;
+/// A thumbs-down halves the channel's score; it never hides the channel.
+pub const DISLIKE_CHANNEL_FACTOR: f64 = 0.5;
 pub const MAX_CHANNEL_SCORES: usize = 500;
 pub const CHANNEL_KEEP_LOW: usize = 50;
 pub const CHANNEL_KEEP_HIGH: usize = 200;
@@ -40,7 +42,6 @@ pub const DEVELOPING_DECAY_RATE: f64 = 0.993;
 pub const EMERGING_DECAY_RATE: f64 = 0.97;
 
 pub const MAX_CONSECUTIVE_SKIPS: i32 = 30;
-pub const NOT_INTERESTED_SKIP_INCREMENT: i32 = 3;
 
 pub const COLD_START_THRESHOLD: i32 = 30;
 pub const ONBOARDING_WARMUP_INTERACTIONS: i32 = 50;
@@ -163,9 +164,9 @@ pub const SHORT_MAX_SECONDS: u64 = 60;
 pub fn is_known_short(duration_seconds: Option<u64>) -> bool {
     duration_seconds.is_some_and(|seconds| seconds > 0 && seconds <= SHORT_MAX_SECONDS)
 }
-pub const VIDEO_SUPPRESSION_DAYS: u64 = 30;
 pub const CHANNEL_SUPPRESSION_DAYS: u64 = 14;
-pub const MAX_SUPPRESSED_VIDEOS: usize = 500;
+/// A rejected video stays hidden for good; past this many the oldest rejections are dropped.
+pub const MAX_SUPPRESSED_VIDEOS: usize = 5_000;
 pub const MAX_SUPPRESSED_CHANNELS: usize = 100;
 
 // Channel strike escalation: an inferred (reversible, expiring) block requires sustained,
@@ -173,7 +174,6 @@ pub const MAX_SUPPRESSED_CHANNELS: usize = 100;
 pub const CHANNEL_STRIKE_BLOCK_THRESHOLD: i32 = 3;
 pub const CHANNEL_STRIKE_MIN_SPREAD_MS: u64 = 86_400_000;
 pub const CHANNEL_INFERRED_BLOCK_DAYS: u64 = 60;
-pub const MAX_CHANNEL_STRIKES: usize = 200;
 pub const REJECTION_EXPIRY_DAYS: u64 = 14;
 pub const REJECTION_MEMORY_MAX: usize = 200;
 pub const REJECTION_PENALTY_1: f64 = 0.50;

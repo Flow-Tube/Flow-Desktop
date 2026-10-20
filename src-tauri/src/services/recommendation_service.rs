@@ -21,9 +21,8 @@ use crate::flow_neuro::scoring::{
     IMPRESSION_CACHE_MAX, IdfSnapshot, JITTER_COLD_START, JITTER_NORMAL,
     ONBOARDING_WARMUP_INTERACTIONS, QUERY_OVERLAP_THRESHOLD, QUERY_ROTATION_FLOOR,
     QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX, SESSION_TOPIC_HISTORY_MAX, ScoredVideo,
-    TimeBucket, TopicEvidence, UserBrain, VIDEO_SUPPRESSION_DAYS, apply_smart_diversity,
-    channel_inferred_blocked, classify_persona, get_topic_categories, is_known_short,
-    is_music_track, strip_domain_tag,
+    TimeBucket, TopicEvidence, UserBrain, apply_smart_diversity, channel_inferred_blocked,
+    classify_persona, get_topic_categories, is_known_short, is_music_track, strip_domain_tag,
 };
 use crate::flow_neuro::signals::{InteractionType, apply_interaction};
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
@@ -1445,7 +1444,6 @@ impl RecommendationService {
 
         let brain = self.brain_store.read().await;
         let now_ms = self.get_current_time_ms();
-        let video_cutoff = now_ms.saturating_sub(VIDEO_SUPPRESSION_DAYS * 86_400_000);
         let channel_cutoff = now_ms.saturating_sub(CHANNEL_SUPPRESSION_DAYS * 86_400_000);
 
         // 1. Pre-filter blocked channels and topics
@@ -1453,12 +1451,7 @@ impl RecommendationService {
             .into_iter()
             .filter(|video| {
                 let channel_id = video.channel_id.as_deref().unwrap_or(&video.id);
-                if brain
-                    .suppressed_video_ids
-                    .get(&video.id)
-                    .map(|ts| *ts >= video_cutoff)
-                    .unwrap_or(false)
-                {
+                if brain.suppressed_video_ids.contains_key(&video.id) {
                     return false;
                 }
                 if !lenient

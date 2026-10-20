@@ -33,6 +33,8 @@ interface FeedActionsState {
   loaded: boolean;
   load: () => Promise<void>;
   notInterested: (video: VideoSummary) => Promise<void>;
+  /** Hides a video from every feed, e.g. after a thumbs-down on the watch page. */
+  hideVideo: (videoId: string) => void;
   blockChannel: (video: VideoSummary) => Promise<void>;
   markWatched: (video: VideoSummary) => Promise<void>;
   moreLikeThis: (video: VideoSummary) => Promise<void>;
@@ -163,14 +165,9 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
 
     notInterested: async (video) => {
       const m = meta(video);
-      // Escalating: a second "not interested" on a still-suppressed channel promotes it to a
-      // permanent block (mirrors the backend, which blocks a channel on its 2nd dislike).
-      const active = activeSuppressedChannels(get().suppressedChannelIds);
-      if (m.channelId && active.has(m.channelId)) {
-        set((s) => ({ dismissedVideoIds: addCapped(s.dismissedVideoIds, video.id, DISMISSED_CAP) }));
-        await get().blockChannel(video);
-        return;
-      }
+      const previous = { dismissedVideoIds: get().dismissedVideoIds, suppressedChannelIds: get().suppressedChannelIds };
+      // Hides the video for good and its channel for a rolling window; it never escalates to a
+      // block, so two mis-taps cannot hide a channel forever. Only blockChannel does that.
       set((s) => ({
         dismissedVideoIds: addCapped(s.dismissedVideoIds, video.id, DISMISSED_CAP),
         suppressedChannelIds: m.channelId
@@ -191,18 +188,30 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
         );
       } catch (e) {
         console.warn("Failed to record not interested", e);
+        set(previous);
+        persist();
+        throw e;
       }
+    },
+
+    hideVideo: (videoId) => {
+      set((s) => ({ dismissedVideoIds: addCapped(s.dismissedVideoIds, videoId, DISMISSED_CAP) }));
+      persist();
     },
 
     blockChannel: async (video) => {
       const channelId = cleanChannelId(video.channelId);
       if (!channelId) return;
+      const previous = get().blockedChannelIds;
       set((s) => ({ blockedChannelIds: addCapped(s.blockedChannelIds, channelId, BLOCKED_CAP) }));
       persist();
       try {
         await apiBlockChannel(channelId);
       } catch (e) {
         console.warn("Failed to block channel", e);
+        set({ blockedChannelIds: previous });
+        persist();
+        throw e;
       }
     },
 

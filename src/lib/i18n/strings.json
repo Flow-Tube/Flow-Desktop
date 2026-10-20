@@ -1292,5 +1292,12 @@
   "settings_blocked_pin_desc": "Ask for a PIN before a blocked video can be revealed. This is a lock against accident, not encryption — anyone with access to this computer's files can still read the block list.",
   "settings_blocked_pin_set": "Set PIN",
   "settings_blocked_pin_clear": "Clear PIN",
-  "settings_blocked_pin_placeholder": "New PIN"
+  "settings_blocked_pin_placeholder": "New PIN",
+  "learning_event_opened": "Opened",
+  "learning_event_liked": "Liked",
+  "learning_event_watched": "Watched",
+  "learning_event_skipped": "Skipped",
+  "learning_event_disliked": "Disliked",
+  "learning_event_not_interested": "Not interested",
+  "feed_action_failed": "Couldn't save that. Try again."
 }

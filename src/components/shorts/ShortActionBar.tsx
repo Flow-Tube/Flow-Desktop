@@ -143,7 +143,7 @@ export function ShortActionBar({
 
   const notInterested = () => {
     setMenuOpen(false);
-    void notInterestedAction(video);
+    void notInterestedAction(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
     showToast({ variant: "success", message: getString("shorts_not_interested") });
     onRequestAdvance?.();
   };
@@ -151,7 +151,7 @@ export function ShortActionBar({
   const dontRecommendChannel = () => {
     setMenuOpen(false);
     if (!short.channelId) return;
-    void blockChannelAction(video);
+    void blockChannelAction(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
     showToast({ variant: "success", message: getString("shorts_channel_not_recommended") });
     onRequestAdvance?.();
   };

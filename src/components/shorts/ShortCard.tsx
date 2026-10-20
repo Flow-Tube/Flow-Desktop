@@ -137,14 +137,14 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
 
   const notInterested = () => {
     setMenuAnchor(null);
-    void notInterestedAction(video);
+    void notInterestedAction(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
     showToast({ variant: "success", message: getString("shorts_not_interested") });
   };
 
   const dontRecommendChannel = () => {
     setMenuAnchor(null);
     if (!short.channelId) return;
-    void blockChannelAction(video);
+    void blockChannelAction(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
     showToast({ variant: "success", message: getString("shorts_channel_not_recommended") });
   };
 

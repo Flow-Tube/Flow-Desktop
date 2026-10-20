@@ -1,0 +1,130 @@
+# Maintainer: A-EDev
+
+pkgname=flow-desktop
+pkgver=0.1.0beta2
+pkgrel=1
+# Release tags are v0.1.0-beta3 or v0.1.0; pkgver can't hold a "-".
+_tag=${pkgver/beta/-beta}
+_tag=${_tag/rc/-rc}
+pkgdesc='Privacy-first YouTube and YouTube Music client, the desktop companion to Flow for Android'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Flow-Tube/Flow-Desktop'
+license=('GPL-3.0-only')
+depends=(
+  'cairo'
+  'dbus'
+  'gcc-libs'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gst-libav'
+  'gst-plugins-bad'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libsoup3'
+  'nodejs'
+  'webkit2gtk-4.1'
+)
+makedepends=('pnpm' 'rust')
+optdepends=('gst-plugins-ugly: more audio and video codecs')
+conflicts=("$pkgname-bin")
+# The release profile already strips symbols, so a debug package would be empty.
+options=('!debug')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$_tag.tar.gz")
+sha256sums=('c812728e887ffe35480f432313169be682e198d1f961bfaf56911d0d95a00e16')
+
+# --- Shared flow-desktop install steps: keep identical in both PKGBUILDs. ---
+
+# The release workflow builds every tag with a "-" (betas, release
+# candidates) with src-tauri/tauri.prerelease.conf.json, which renames the app.
+_flow_product() {
+  if [[ $_tag == *-* ]]; then
+    printf 'Flow Beta'
+  else
+    printf 'Flow'
+  fi
+}
+
+# Installs the data tree of a Flow .deb into $pkgdir.
+_flow_install() {
+  local data=$1 product resdir desktop
+  product=$(_flow_product)
+  resdir="$pkgdir/usr/lib/$product"
+  desktop="$pkgdir/usr/share/applications/$product.desktop"
+
+  cp -a --no-preserve=ownership "$data/usr" "$pkgdir/"
+  if [[ ! -f $resdir/sidecar/integrity.cjs || ! -f $desktop ]]; then
+    error "The .deb does not have the expected '$product' layout."
+    return 1
+  fi
+
+  # /usr/bin/flow belongs to the AUR's flow and flow-bin packages.
+  mv "$pkgdir/usr/bin/flow" "$pkgdir/usr/bin/flow-desktop"
+  sed -Ei 's/^(Exec|StartupWMClass)=flow( |$)/\1=flow-desktop\2/' "$desktop"
+  if grep -Eq '^Exec=flow( |$)' "$desktop"; then
+    error "Could not point $product.desktop at flow-desktop."
+    return 1
+  fi
+
+  # Tells Flow that pacman owns its updates, so the in-app updater stays off.
+  install -m644 /dev/null "$resdir/distro-managed"
+}
+
+# --- End of shared steps. ---
+
+# package.json pins pnpm 11.9.0 in "packageManager", and pnpm 11+ then
+# downloads and re-runs that exact version by default (pmOnFail=download),
+# outside makepkg's checksums and again for the nested `pnpm build` that
+# Tauri starts. pnpm 12 keeps pnpm 11's lockfile format and settings, so use
+# Arch's pnpm and only log the mismatch.
+_flow_pnpm_env() {
+  export pnpm_config_pm_on_fail=warn
+}
+
+prepare() {
+  cd "Flow-Desktop-$_tag"
+  _flow_pnpm_env
+  pnpm install --frozen-lockfile
+
+  cd src-tauri
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "Flow-Desktop-$_tag"
+  _flow_pnpm_env
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  export CARGO_NET_OFFLINE=true
+  # makepkg sets RUSTFLAGS, and cargo then ignores the build.rustflags in
+  # src-tauri/.cargo/config.toml, so repeat its cfg here.
+  export RUSTFLAGS+=" --cfg reqwest_unstable"
+  # The C parts of ring, aws-lc and SQLite are linked by rustc, which can't
+  # read makepkg's slim LTO objects.
+  export CFLAGS+=" -ffat-lto-objects"
+
+  # Inline config instead of src-tauri/tauri.local.conf.json, which older tags
+  # don't have: no updater artifacts, so no signing key is needed.
+  local config=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
+  if [[ $_tag == *-* ]]; then
+    config+=(--config src-tauri/tauri.prerelease.conf.json)
+  fi
+  pnpm tauri build --bundles deb "${config[@]}"
+}
+
+package() {
+  cd "Flow-Desktop-$_tag"
+  local debarch
+  case $CARCH in
+    x86_64) debarch=amd64 ;;
+    aarch64) debarch=arm64 ;;
+  esac
+
+  mkdir -p "$srcdir/deb-data"
+  bsdtar -xOf "src-tauri/target/release/bundle/deb/$(_flow_product)_${_tag}_$debarch.deb" 'data.tar.*' |
+    bsdtar -xf - -C "$srcdir/deb-data"
+  _flow_install "$srcdir/deb-data"
+}

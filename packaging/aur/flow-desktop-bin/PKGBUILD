@@ -1,0 +1,86 @@
+# Maintainer: A-EDev
+
+pkgname=flow-desktop-bin
+_pkgname=flow-desktop
+pkgver=0.1.0beta2
+pkgrel=1
+# Release tags are v0.1.0-beta3 or v0.1.0; pkgver can't hold a "-".
+_tag=${pkgver/beta/-beta}
+_tag=${_tag/rc/-rc}
+pkgdesc='Privacy-first YouTube and YouTube Music client, the desktop companion to Flow for Android (binary release)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Flow-Tube/Flow-Desktop'
+license=('GPL-3.0-only')
+depends=(
+  'cairo'
+  'dbus'
+  'gcc-libs'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gst-libav'
+  'gst-plugins-bad'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libsoup3'
+  'nodejs'
+  'webkit2gtk-4.1'
+)
+optdepends=('gst-plugins-ugly: more audio and video codecs')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+options=('!strip' '!debug')
+source_x86_64=("$pkgname-$pkgver-x86_64.deb::$url/releases/download/v$_tag/Flow_${_tag}_linux_amd64.deb")
+source_aarch64=("$pkgname-$pkgver-aarch64.deb::$url/releases/download/v$_tag/Flow_${_tag}_linux_arm64.deb")
+sha256sums_x86_64=('e62f9be1b83f077c4585c779b22ea88d7045558abe0448229d1b5fab202599f7')
+sha256sums_aarch64=('d9f228a06e86449d6f4da0015e7d3b3678acb86d34d2cccd9c61df6ab3300e9c')
+
+# --- Shared flow-desktop install steps: keep identical in both PKGBUILDs. ---
+
+# The release workflow builds every tag with a "-" (betas, release
+# candidates) with src-tauri/tauri.prerelease.conf.json, which renames the app.
+_flow_product() {
+  if [[ $_tag == *-* ]]; then
+    printf 'Flow Beta'
+  else
+    printf 'Flow'
+  fi
+}
+
+# Installs the data tree of a Flow .deb into $pkgdir.
+_flow_install() {
+  local data=$1 product resdir desktop
+  product=$(_flow_product)
+  resdir="$pkgdir/usr/lib/$product"
+  desktop="$pkgdir/usr/share/applications/$product.desktop"
+
+  cp -a --no-preserve=ownership "$data/usr" "$pkgdir/"
+  if [[ ! -f $resdir/sidecar/integrity.cjs || ! -f $desktop ]]; then
+    error "The .deb does not have the expected '$product' layout."
+    return 1
+  fi
+
+  # /usr/bin/flow belongs to the AUR's flow and flow-bin packages.
+  mv "$pkgdir/usr/bin/flow" "$pkgdir/usr/bin/flow-desktop"
+  sed -Ei 's/^(Exec|StartupWMClass)=flow( |$)/\1=flow-desktop\2/' "$desktop"
+  if grep -Eq '^Exec=flow( |$)' "$desktop"; then
+    error "Could not point $product.desktop at flow-desktop."
+    return 1
+  fi
+
+  # Tells Flow that pacman owns its updates, so the in-app updater stays off.
+  install -m644 /dev/null "$resdir/distro-managed"
+}
+
+# --- End of shared steps. ---
+
+prepare() {
+  mkdir -p deb-data
+  bsdtar -xf data.tar.* -C deb-data
+}
+
+package() {
+  _flow_install "$srcdir/deb-data"
+}

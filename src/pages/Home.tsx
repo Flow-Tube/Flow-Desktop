@@ -973,7 +973,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           : Promise.resolve([]),
         filteredDiscovery.length > 0
           ? withTimeout(
-              rankVideos(filteredDiscovery, subscriptionIdsRef.current),
+              rankVideos(filteredDiscovery, subscriptionIdsRef.current, true),
               5000,
               filteredDiscovery,
               "load-more-rank-discovery",
@@ -1060,7 +1060,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       }
 
       const fallback = lane.slice(0, limit);
-      const ranked = rankVideos(lane, subscriptionIds).then((items) => items.slice(0, limit));
+      const relevantOnly = label === "discovery" || label === "related";
+      const ranked = rankVideos(lane, subscriptionIds, relevantOnly).then((items) =>
+        items.slice(0, limit),
+      );
       return rankTimeoutMs
         ? withTimeout(ranked, rankTimeoutMs, fallback, `${rankLabelPrefix}-rank-${label}`)
         : ranked;
@@ -1132,7 +1135,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
         : Promise.resolve([]),
       starterDiscovery.length > 0
         ? withTimeout(
-            rankVideos(starterDiscovery, subscriptionIds),
+            rankVideos(starterDiscovery, subscriptionIds, true),
             1800,
             starterDiscovery,
             `${rankLabelPrefix}-rank-discovery`,

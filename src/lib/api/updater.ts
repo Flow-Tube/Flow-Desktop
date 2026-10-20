@@ -1,7 +1,29 @@
 import { isTauriEnv } from "./env";
+import { invokeBackend } from "./errors";
+import { parseUpdateSupport, type UpdateSupport } from "../updateSupport";
 import type { DownloadEvent, Update } from "@tauri-apps/plugin-updater";
 
 export type { Update } from "@tauri-apps/plugin-updater";
+
+let updateSupportRequest: Promise<UpdateSupport> | null = null;
+
+/**
+ * Whether this install may update itself. Flatpak, package-manager and unbundled
+ * builds can't, and the backend leaves the updater plugin out for them. Fixed for
+ * the life of the process, so it is asked once.
+ */
+export function getUpdateSupport(): Promise<UpdateSupport> {
+  updateSupportRequest ??= (async (): Promise<UpdateSupport> => {
+    if (!(await isTauriEnv())) return { supported: false, reason: "unbundled" };
+    try {
+      return parseUpdateSupport(await invokeBackend<unknown>("updates_supported"));
+    } catch (error) {
+      console.error("Couldn't read update support", error);
+      return { supported: true, reason: null };
+    }
+  })();
+  return updateSupportRequest;
+}
 
 /**
  * Asks the Tauri updater whether a newer signed build is published. It reads the

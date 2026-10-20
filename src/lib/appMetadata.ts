@@ -43,7 +43,7 @@ export async function getAppMetadata(): Promise<AppMetadata> {
       settleString(appApi.getVersion, FALLBACK_METADATA.version),
       settleString(appApi.getIdentifier, FALLBACK_METADATA.identifier),
       settleString(appApi.getTauriVersion, FALLBACK_METADATA.tauriVersion),
-      settleString(async () => String(await appApi.getBundleType()), "dev"),
+      settleString(async () => String((await appApi.getBundleType()) ?? "unbundled"), "dev"),
     ]);
 
     cachedMetadata = {

@@ -3,9 +3,11 @@ import { getSetting, setSetting } from "../lib/api/db";
 import {
   checkForAppUpdate,
   downloadAndInstallUpdate,
+  getUpdateSupport,
   relaunchApp,
   type Update,
 } from "../lib/api/updater";
+import type { UpdateSupport } from "../lib/updateSupport";
 
 const UPDATER_PREFS_KEY = "updater_preferences";
 
@@ -43,12 +45,15 @@ interface UpdaterState {
   autoCheck: boolean;
   skippedVersion: string | null;
   prefsLoaded: boolean;
+  /** `null` until the backend has said whether this install updates itself. */
+  support: UpdateSupport | null;
 
   loadPreferences: () => Promise<void>;
+  loadSupport: () => Promise<UpdateSupport>;
   setAutoCheck: (enabled: boolean) => Promise<void>;
   checkForUpdates: (
     options?: { silent?: boolean },
-  ) => Promise<"available" | "uptodate" | "error">;
+  ) => Promise<"available" | "uptodate" | "error" | "unsupported">;
   installUpdate: () => Promise<void>;
   skipCurrentVersion: () => Promise<void>;
   dismiss: () => void;
@@ -71,6 +76,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
   autoCheck: true,
   skippedVersion: null,
   prefsLoaded: false,
+  support: null,
 
   loadPreferences: async () => {
     if (get().prefsLoaded) return;
@@ -88,6 +94,12 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     }
   },
 
+  loadSupport: async () => {
+    const support = await getUpdateSupport();
+    set({ support });
+    return support;
+  },
+
   setAutoCheck: async (enabled) => {
     set({ autoCheck: enabled });
     try {
@@ -101,6 +113,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     const silent = options?.silent ?? false;
     const phase = get().phase;
     if (phase === "checking" || phase === "downloading") return "error";
+    if (!(await get().loadSupport()).supported) return "unsupported";
 
     set({ phase: "checking", errorMessage: null });
     try {

@@ -9,6 +9,7 @@ import { openExternal } from '../../../lib/openExternal';
 import { getAppMetadata, type AppMetadata } from '../../../lib/appMetadata';
 import { getSystemMetadata, type SystemMetadata } from '../../../lib/systemMetadata';
 import { useUpdaterStore } from '../../../store/useUpdaterStore';
+import { updateBlockedStringKey } from '../../../lib/updateSupport';
 import { useUiStore } from '../../../store/useUiStore';
 
 function GithubIcon({ size = 16 }: { size?: number }) {
@@ -68,6 +69,7 @@ export function AboutTab() {
   const autoCheck = useUpdaterStore((s) => s.autoCheck);
   const setAutoCheck = useUpdaterStore((s) => s.setAutoCheck);
   const checkForUpdates = useUpdaterStore((s) => s.checkForUpdates);
+  const updateSupport = useUpdaterStore((s) => s.support);
   const showToast = useUiStore((s) => s.showToast);
 
   useEffect(() => {
@@ -90,7 +92,9 @@ export function AboutTab() {
   }, []);
 
   useEffect(() => {
-    void useUpdaterStore.getState().loadPreferences();
+    const store = useUpdaterStore.getState();
+    void store.loadPreferences();
+    void store.loadSupport();
   }, []);
 
   const handleCheckForUpdates = async () => {
@@ -131,26 +135,39 @@ export function AboutTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_updates')}>
-        <div className="flex items-center justify-between px-5 py-4">
-          <div className="flex-1 min-w-0 mr-4">
-            <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_check_for_updates')}</div>
+        {updateSupport && !updateSupport.supported && updateSupport.reason ? (
+          <div className="px-5 py-4">
+            <div className="text-sm font-medium text-chrome-neutral-200">
+              {getString(updateBlockedStringKey(updateSupport.reason))}
+            </div>
             <div className="text-xs text-chrome-neutral-400 mt-0.5">
               {getString('settings_check_for_updates_desc', appMetadata?.version ?? unknown())}
             </div>
           </div>
-          <Button variant="secondary" size="sm" onClick={handleCheckForUpdates} disabled={checkingUpdate}>
-            <RefreshCw size={14} className={checkingUpdate ? 'animate-spin' : undefined} />
-            {checkingUpdate ? getString('settings_checking') : getString('settings_check_for_updates')}
-          </Button>
-        </div>
-        <div className="border-t border-chrome-neutral-800/50" />
-        <div className="flex items-center justify-between px-5 py-4">
-          <div className="flex-1 min-w-0 mr-4">
-            <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_auto_update')}</div>
-            <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_auto_update_desc')}</div>
-          </div>
-          <ToggleSwitch checked={autoCheck} onChange={(value) => void setAutoCheck(value)} />
-        </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex-1 min-w-0 mr-4">
+                <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_check_for_updates')}</div>
+                <div className="text-xs text-chrome-neutral-400 mt-0.5">
+                  {getString('settings_check_for_updates_desc', appMetadata?.version ?? unknown())}
+                </div>
+              </div>
+              <Button variant="secondary" size="sm" onClick={handleCheckForUpdates} disabled={checkingUpdate}>
+                <RefreshCw size={14} className={checkingUpdate ? 'animate-spin' : undefined} />
+                {checkingUpdate ? getString('settings_checking') : getString('settings_check_for_updates')}
+              </Button>
+            </div>
+            <div className="border-t border-chrome-neutral-800/50" />
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex-1 min-w-0 mr-4">
+                <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_auto_update')}</div>
+                <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_auto_update_desc')}</div>
+              </div>
+              <ToggleSwitch checked={autoCheck} onChange={(value) => void setAutoCheck(value)} />
+            </div>
+          </>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_contact')}>

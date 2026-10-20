@@ -8,6 +8,9 @@ use tracing::{debug, info};
 
 use crate::db::recommendations;
 use crate::errors::{AppError, AppResult};
+use crate::flow_neuro::bootstrap::{
+    ImportedVideo, bootstrap_from_history, bootstrap_from_subscriptions,
+};
 use crate::flow_neuro::brain_store::BrainStore;
 use crate::flow_neuro::display_forms::{label, with_pick_spellings};
 use crate::flow_neuro::features::{
@@ -2378,6 +2381,27 @@ impl RecommendationService {
         brain.suppressed_channels.remove(&channel_id);
         brain.channel_strikes.remove(&channel_id);
         Ok(())
+    }
+
+    /// Learns gently from an imported watch history; returns how many videos it learned from.
+    pub async fn bootstrap_from_history(&self, videos: Vec<ImportedVideo>) -> AppResult<usize> {
+        let learned = bootstrap_from_history(&mut *self.brain_store.write().await, videos);
+        info!(learned, "[FlowNeuro] bootstrapped from imported history");
+        Ok(learned)
+    }
+
+    /// Seeds topics from imported subscription names; returns how many topics it seeded.
+    pub async fn bootstrap_from_subscriptions(
+        &self,
+        channel_names: Vec<String>,
+    ) -> AppResult<usize> {
+        let seeded =
+            bootstrap_from_subscriptions(&mut *self.brain_store.write().await, &channel_names);
+        info!(
+            seeded,
+            "[FlowNeuro] bootstrapped from imported subscriptions"
+        );
+        Ok(seeded)
     }
 
     /// Replaces the resident brain with an imported one, after checking it reads as a brain.

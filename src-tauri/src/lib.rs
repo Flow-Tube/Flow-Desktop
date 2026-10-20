@@ -77,7 +77,8 @@ use commands::pip::{
     set_pip_always_on_top,
 };
 use commands::recommendation::{
-    add_blocked_topic, add_preferred_topic, block_channel, complete_onboarding, end_watch_session,
+    add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
+    bootstrap_from_subscriptions, complete_onboarding, end_watch_session,
     generate_discovery_queries, get_brain_snapshot, get_feed_quotas, get_flow_persona,
     get_onboarding_status, get_recommendation_events, import_brain, log_interaction,
     mark_not_interested, rank_videos, record_feed_impressions, remove_preferred_topic,
@@ -473,6 +474,8 @@ pub fn run() {
             report_watch_progress,
             end_watch_session,
             import_brain,
+            bootstrap_from_history,
+            bootstrap_from_subscriptions,
             mark_not_interested,
             record_feed_impressions,
             complete_onboarding,

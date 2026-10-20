@@ -345,6 +345,33 @@ export async function getBrainSnapshot(forceRefresh?: boolean): Promise<UserBrai
   return result;
 }
 
+/** One imported watch-history entry the engine can learn from. */
+export interface ImportedVideo {
+  videoId: string;
+  title: string;
+  channelName: string;
+  channelId: string | null;
+  durationSeconds: number | null;
+  watchedAt: number;
+  isMusic: boolean;
+}
+
+/** Learns gently from an imported history: newest first, no music, capped per channel. */
+export async function bootstrapFromHistory(videos: ImportedVideo[]): Promise<number> {
+  if (videos.length === 0 || !(await isTauriEnv())) return 0;
+  const learned = await invokeBackend<number>("bootstrap_from_history", { videos });
+  brainCache = null;
+  return learned;
+}
+
+/** Seeds topics from imported subscription names when the brain has not learned yet. */
+export async function bootstrapFromSubscriptions(channelNames: string[]): Promise<number> {
+  if (channelNames.length === 0 || !(await isTauriEnv())) return 0;
+  const seeded = await invokeBackend<number>("bootstrap_from_subscriptions", { channelNames });
+  brainCache = null;
+  return seeded;
+}
+
 /** Makes an imported brain the engine's own; the backend checks it and converts its keys. */
 export async function importBrain(brain: unknown): Promise<void> {
   if (!(await isTauriEnv())) return;

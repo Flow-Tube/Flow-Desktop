@@ -1,3 +1,4 @@
+pub(crate) mod bootstrap;
 pub(crate) mod brain_store;
 pub(crate) mod display_forms;
 #[cfg(test)]

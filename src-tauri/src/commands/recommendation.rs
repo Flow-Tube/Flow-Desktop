@@ -4,6 +4,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
 use crate::errors::ErrorResponse;
+use crate::flow_neuro::bootstrap::ImportedVideo;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
@@ -290,6 +291,28 @@ pub async fn block_channel(
 ) -> Result<(), ErrorResponse> {
     recommendation_service
         .block_channel(channel_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn bootstrap_from_history(
+    videos: Vec<ImportedVideo>,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<usize, ErrorResponse> {
+    recommendation_service
+        .bootstrap_from_history(videos)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn bootstrap_from_subscriptions(
+    channel_names: Vec<String>,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<usize, ErrorResponse> {
+    recommendation_service
+        .bootstrap_from_subscriptions(channel_names)
         .await
         .map_err(ErrorResponse::from)
 }

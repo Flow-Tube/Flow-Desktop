@@ -6,7 +6,7 @@ import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { unzipSync } from "fflate";
 import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
 import { useHistoryStore } from "../store/useHistoryStore";
-import { importBrain, logInteraction } from "../lib/api/recommendation";
+import { bootstrapFromHistory, bootstrapFromSubscriptions, importBrain } from "../lib/api/recommendation";
 import {
   convertFlowNeuroBrainData,
   extractFlowNeuroBrainCandidate,
@@ -267,6 +267,7 @@ export const ImportData: React.FC = () => {
             setStatusMessage(getString("import_importing_subs", parsedSubs.length));
             for (let i = 0; i < parsedSubs.length; i++) { const sub = parsedSubs[i]; if (sub) { await subscribe(sub.id, sub.name); subbedCount++; } setProgress(60 + Math.round((subbedCount / parsedSubs.length) * 15)); }
             setSubsCount(subbedCount);
+            await bootstrapFromSubscriptions(parsedSubs.map((sub) => sub.name).filter(Boolean));
           }
         }
 
@@ -301,14 +302,15 @@ export const ImportData: React.FC = () => {
               setProgress(75 + Math.round((timelineCount / valid.length) * 20));
             }
 
-            const seedLimit = Math.min(valid.length, 50);
-            for (let i = 0; i < seedLimit; i++) {
-              const r = valid[i];
-              if (!r) continue;
-              const total = r.totalDurationSeconds ?? 0;
-              const frac = total > 0 ? Math.min(1, Math.max(0, (r.watchDurationSeconds ?? 0) / total)) : 0.8;
-              try { await logInteraction(r.videoId, r.title, r.channelName || "Unknown", r.channelName || r.videoId, "Seeded from backup", r.totalDurationSeconds || 300, false, false, "WATCHED", frac); } catch {}
-            }
+            await bootstrapFromHistory(valid.map((record) => ({
+              videoId: record.videoId,
+              title: record.title,
+              channelName: record.channelName ?? "",
+              channelId: record.channelId ?? null,
+              durationSeconds: record.totalDurationSeconds ?? null,
+              watchedAt: Date.parse(record.watchDate) || 0,
+              isMusic: Boolean(record.isMusic),
+            })));
             setHistoryCount(timelineCount);
             void useHistoryStore.getState().load(true);
           }

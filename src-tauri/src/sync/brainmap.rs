@@ -282,7 +282,10 @@ pub fn merged_flow_to_userbrain(m: &MergedFlowNeuroBrain, base: &UserBrain) -> U
 
     UserBrain {
         time_vectors,
+        time_bucket_counts: base.time_bucket_counts.clone(),
         global_vector: wire_to_cv(&ev.global_vector, &base.global_vector),
+        recent_vector: base.recent_vector.clone(),
+        shorts_vector: base.shorts_vector.clone(),
         channel_scores: to_hash_f64(&ev.channel_scores),
         topic_affinities: to_hash_f64(&ev.topic_affinities),
         total_interactions: m.counters.total_interactions.total() as i32,

@@ -263,22 +263,26 @@ mod tests {
 
     #[test]
     fn learning_from_a_title_keeps_its_spellings() {
+        use crate::flow_neuro::learning::{Interaction, apply_interaction};
         use crate::flow_neuro::scoring::UserBrain;
-        use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+        use crate::flow_neuro::signals::InteractionType;
 
         let mut brain = UserBrain::default();
         apply_interaction(
             &mut brain,
-            "v1",
-            "Restoring Vintage Guitars",
-            "Guitar Workshop",
-            "c1",
-            None,
-            Some(600),
-            false,
-            false,
-            InteractionType::Watched,
-            0.9,
+            &Interaction {
+                video_id: "v1",
+                title: "Restoring Vintage Guitars",
+                channel_name: "Guitar Workshop",
+                channel_id: "c1",
+                description: None,
+                duration_sec: Some(600),
+                is_live: false,
+                is_short: false,
+                kind: InteractionType::Watched,
+                percent_watched: 0.9,
+                seconds_since_impression: None,
+            },
         );
         let spec = brain.key_spec();
         assert_eq!(label(&brain.display_forms, "guitar"), "Guitars");

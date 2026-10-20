@@ -6,12 +6,15 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use crate::flow_neuro::features::{TopicReader, VideoText, document_terms, extract_features};
+use crate::flow_neuro::features::{
+    TopicReader, VideoText, document_terms, extract_features, pick_keys,
+};
 use crate::flow_neuro::scoring::{
     AFFINITY_MAX, CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, ESTABLISHED_TOPIC_THRESHOLD, IdfSnapshot,
-    ONBOARDING_WARMUP_INTERACTIONS, TopicEvidence, UserBrain, adjust_vector,
+    ONBOARDING_WARMUP_INTERACTIONS, TopicEvidence, UserBrain,
 };
 use crate::flow_neuro::signals::make_affinity_key;
+use crate::flow_neuro::vector_math::{DECAY_REFERENCE_RATE, LONG_TERM, learn};
 
 const HISTORY_MAX_VIDEOS: usize = 500;
 const HISTORY_MAX_PER_CHANNEL: usize = 20;
@@ -77,6 +80,44 @@ fn learnable(videos: Vec<ImportedVideo>) -> Vec<ImportedVideo> {
         .collect()
 }
 
+/// Links among an imported video's top topics, and positive evidence for them.
+fn learn_imported_links_and_evidence(
+    brain: &mut UserBrain,
+    vector: &crate::flow_neuro::scoring::ContentVector,
+    video_id: &str,
+    channel_id: &str,
+    now_ms: u64,
+) {
+    let mut top: Vec<(&String, &f64)> = vector.topics.iter().collect();
+    top.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let top: Vec<&String> = top
+        .into_iter()
+        .take(HISTORY_AFFINITY_TOP_TOPICS)
+        .map(|(key, _)| key)
+        .collect();
+    for i in 0..top.len() {
+        for j in i + 1..top.len() {
+            let key = make_affinity_key(top[i], top[j]);
+            let current = brain.topic_affinities.get(&key).copied().unwrap_or(0.0);
+            brain.topic_affinities.insert(
+                key,
+                (current + HISTORY_AFFINITY_INCREMENT).min(AFFINITY_MAX),
+            );
+        }
+    }
+    for key in top {
+        let evidence: &mut TopicEvidence = brain.topic_evidence.entry(key.clone()).or_default();
+        evidence.positive_signals += 1;
+        evidence.positive_score = (evidence.positive_score + HISTORY_EVIDENCE_SIGNAL).min(50.0);
+        evidence.video_ids.insert(video_id.to_string());
+        evidence.channel_ids.insert(channel_id.to_string());
+        if evidence.first_seen_at == 0 {
+            evidence.first_seen_at = now_ms;
+        }
+        evidence.last_seen_at = now_ms;
+    }
+}
+
 /// Learns from an imported watch history. Returns how many videos it learned from.
 pub fn bootstrap_from_history(brain: &mut UserBrain, videos: Vec<ImportedVideo>) -> usize {
     let videos = learnable(videos);
@@ -90,6 +131,7 @@ pub fn bootstrap_from_history(brain: &mut UserBrain, videos: Vec<ImportedVideo>)
         HISTORY_RATE
     };
     let spec = brain.key_spec();
+    let picks = pick_keys(brain);
     let now_ms = chrono::Utc::now().timestamp_millis().cast_unsigned();
 
     for (index, video) in videos.iter().enumerate() {
@@ -113,10 +155,14 @@ pub fn bootstrap_from_history(brain: &mut UserBrain, videos: Vec<ImportedVideo>)
         );
         #[allow(clippy::cast_precision_loss)]
         let index_decay = 1.0 - (index as f64 / HISTORY_MAX_VIDEOS as f64 * 0.4);
-        brain.global_vector = adjust_vector(
+        let effective_rate = rate * index_decay.clamp(0.6, 1.0);
+        brain.global_vector = learn(
             &brain.global_vector,
             &vector,
-            rate * index_decay.clamp(0.6, 1.0),
+            effective_rate / DECAY_REFERENCE_RATE,
+            LONG_TERM,
+            effective_rate,
+            &picks,
         );
 
         let channel_id = video
@@ -134,34 +180,7 @@ pub fn bootstrap_from_history(brain: &mut UserBrain, videos: Vec<ImportedVideo>)
             score * CHANNEL_EMA_DECAY + CHANNEL_EMA_ALPHA,
         );
 
-        let mut top: Vec<(&String, &f64)> = vector.topics.iter().collect();
-        top.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
-        let top: Vec<&String> = top
-            .into_iter()
-            .take(HISTORY_AFFINITY_TOP_TOPICS)
-            .map(|(key, _)| key)
-            .collect();
-        for i in 0..top.len() {
-            for j in i + 1..top.len() {
-                let key = make_affinity_key(top[i], top[j]);
-                let current = brain.topic_affinities.get(&key).copied().unwrap_or(0.0);
-                brain.topic_affinities.insert(
-                    key,
-                    (current + HISTORY_AFFINITY_INCREMENT).min(AFFINITY_MAX),
-                );
-            }
-        }
-        for key in top {
-            let evidence: &mut TopicEvidence = brain.topic_evidence.entry(key.clone()).or_default();
-            evidence.positive_signals += 1;
-            evidence.positive_score = (evidence.positive_score + HISTORY_EVIDENCE_SIGNAL).min(50.0);
-            evidence.video_ids.insert(video.video_id.clone());
-            evidence.channel_ids.insert(channel_id.clone());
-            if evidence.first_seen_at == 0 {
-                evidence.first_seen_at = now_ms;
-            }
-            evidence.last_seen_at = now_ms;
-        }
+        learn_imported_links_and_evidence(brain, &vector, &video.video_id, &channel_id, now_ms);
 
         if brain.counted_documents.insert(video.video_id.clone()) {
             for term in document_terms(&video.title, &vector, &spec) {
@@ -311,8 +330,10 @@ mod tests {
 
     #[test]
     fn subscriptions_leave_a_learned_brain_alone() {
-        let mut brain = UserBrain::default();
-        brain.total_interactions = 20;
+        let mut brain = UserBrain {
+            total_interactions: 20,
+            ..UserBrain::default()
+        };
         brain.global_vector.topics.insert("rust".into(), 0.6);
         assert_eq!(
             bootstrap_from_subscriptions(&mut brain, &["Chess Club".to_string()]),

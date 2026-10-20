@@ -111,6 +111,45 @@ fn is_promoted(run: &str, lists: &KeyedLists, idf: &IdfSnapshot) -> bool {
     lists.is_known_phrase(run) || (run.matches(' ').count() == 1 && phrases::is_phrase(run, idf))
 }
 
+/// Which keys of a video a strong signal may plant at the acquisition floor: known phrases of its
+/// title, title words its description repeats, and words another video already used. A bare title
+/// the viewer meets for the first time plants nothing (Android `NeuroTokenizer.plantFilter`;
+/// desktop videos carry no tags, so the tag confirmations do not apply). `own_documents` is how
+/// many of `idf`'s counts are this video itself.
+pub fn plant_filter<'a>(
+    title: &str,
+    description: Option<&str>,
+    idf: &'a IdfSnapshot,
+    spec: &KeySpec,
+    own_documents: i32,
+) -> impl Fn(&str) -> bool + 'a {
+    let lists = keyed_lists(spec);
+    let title_chunks = spec.chunk(title);
+    let title_words: HashSet<String> = title_chunks.words().into_iter().collect();
+    let description_words: HashSet<String> = description
+        .filter(|text| !text.trim().is_empty())
+        .map(|text| {
+            let head: Vec<&str> = text.lines().take(DESCRIPTION_TAKE_LINES).collect();
+            spec.chunk(&head.join(" ")).words().into_iter().collect()
+        })
+        .unwrap_or_default();
+    let mut confirmed: HashSet<String> = title_words
+        .intersection(&description_words)
+        .cloned()
+        .collect();
+    for run in title_chunks.runs() {
+        if is_promoted(&run.key, &lists, idf) {
+            confirmed.insert(run.key);
+        }
+    }
+    move |key: &str| {
+        let base = strip_domain_tag(key);
+        confirmed.contains(&base)
+            || (!base.contains(' ')
+                && idf.word_frequencies.get(key).copied().unwrap_or(0) > own_documents)
+    }
+}
+
 /// What one video counts toward document frequency: its keys, and every word, run and model pair
 /// of its title, so a pair can prove to be a phrase.
 #[must_use]

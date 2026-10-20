@@ -86,6 +86,7 @@ pub fn evaluate(brain: &UserBrain, candidates: &[EvalCandidate], k: usize) -> Ev
     let time_context = ContentVector::default();
     let inputs = RankInputs {
         brain,
+        taste: &brain.global_vector,
         time_context: &time_context,
         weights: ScoringWeights {
             personality: 0.4,
@@ -212,8 +213,9 @@ mod tests {
     #[test]
     fn a_brain_learned_from_titles_ranks_related_titles_first() {
         use crate::flow_neuro::features::{TopicReader, VideoText, extract_features};
+        use crate::flow_neuro::learning::{Interaction, apply_interaction};
         use crate::flow_neuro::scoring::IdfSnapshot;
-        use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+        use crate::flow_neuro::signals::InteractionType;
 
         let watched = [
             ("Restoring Vintage Guitars", "Guitar Workshop"),
@@ -232,16 +234,19 @@ mod tests {
             for (i, (title, channel)) in watched.iter().enumerate() {
                 apply_interaction(
                     &mut brain,
-                    &format!("w{round}-{i}"),
-                    title,
-                    channel,
-                    &format!("ch{i}"),
-                    None,
-                    Some(600),
-                    false,
-                    false,
-                    InteractionType::Watched,
-                    0.9,
+                    &Interaction {
+                        video_id: &format!("w{round}-{i}"),
+                        title,
+                        channel_name: channel,
+                        channel_id: &format!("ch{i}"),
+                        description: None,
+                        duration_sec: Some(600),
+                        is_live: false,
+                        is_short: false,
+                        kind: InteractionType::Watched,
+                        percent_watched: 0.9,
+                        seconds_since_impression: None,
+                    },
                 );
             }
         }

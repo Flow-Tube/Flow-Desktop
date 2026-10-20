@@ -19,6 +19,7 @@ use crate::flow_neuro::features::{
 use crate::flow_neuro::keyed_lists::{DISCOVERY_NOISE_WORDS, keyed_lists};
 use crate::flow_neuro::keyspec::KeySpec;
 use crate::flow_neuro::language::system_language;
+use crate::flow_neuro::learning::{Interaction, apply_interaction};
 use crate::flow_neuro::ranker;
 use crate::flow_neuro::scoring::{
     CHANNEL_SUPPRESSION_DAYS, FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona,
@@ -28,7 +29,8 @@ use crate::flow_neuro::scoring::{
     TimeBucket, TopicEvidence, UserBrain, apply_smart_diversity, channel_inferred_blocked,
     classify_persona, get_topic_categories, is_known_short, is_music_track, strip_domain_tag,
 };
-use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+use crate::flow_neuro::signals::InteractionType;
+use crate::flow_neuro::vector_math::{RECENT_SHARE, blend};
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
 use crate::models::video::{MusicHomeChip, MusicHomeSection, VideoSummary};
 use crate::services::youtube_service::YoutubeService;
@@ -1555,8 +1557,10 @@ impl RecommendationService {
 
         let spec = brain.key_spec();
         let pick_keys = pick_keys(&brain);
+        let taste = blend(&brain.global_vector, &brain.recent_vector, RECENT_SHARE);
         let rank_inputs = ranker::RankInputs {
             brain: &brain,
+            taste: &taste,
             time_context: &time_context_vec,
             weights: ranker::ScoringWeights {
                 personality: w_personality,
@@ -1649,22 +1653,36 @@ impl RecommendationService {
         percent_watched: f32,
     ) -> AppResult<()> {
         let channel_id = channel_id.trim().trim_start_matches("channel:");
+        let now_ms = self.get_current_time_ms();
+        #[allow(clippy::cast_precision_loss)]
+        let seconds_since_impression = self
+            .impression_cache
+            .lock()
+            .unwrap()
+            .get(video_id)
+            .map(|(_, shown_at)| now_ms.saturating_sub(*shown_at) as f64 / 1000.0);
         let outcome = {
             let mut brain = self.brain_store.write().await;
             apply_interaction(
                 &mut brain,
-                video_id,
-                title,
-                channel_name,
-                channel_id,
-                description,
-                duration_sec,
-                is_live,
-                is_short,
-                interaction_type,
-                percent_watched,
+                &Interaction {
+                    video_id,
+                    title,
+                    channel_name,
+                    channel_id,
+                    description,
+                    duration_sec,
+                    is_live,
+                    is_short,
+                    kind: interaction_type,
+                    percent_watched,
+                    seconds_since_impression,
+                },
             )
         };
+        if outcome.learning_rate.is_some_and(|rate| rate > 0.0) {
+            self.impression_cache.lock().unwrap().remove(video_id);
+        }
 
         let Some(learning_rate) = outcome.learning_rate else {
             return Ok(());
@@ -2307,7 +2325,12 @@ impl RecommendationService {
             let key_lower = key.to_lowercase();
             !key_lower.contains(&lemma) && !key_lower.contains(&normalized)
         });
-        for vector in brain.time_vectors.values_mut() {
+        let brain = &mut *brain;
+        for vector in brain
+            .time_vectors
+            .values_mut()
+            .chain([&mut brain.recent_vector, &mut brain.shorts_vector])
+        {
             vector.topics.retain(|key, _| {
                 let key_lower = key.to_lowercase();
                 !key_lower.contains(&lemma) && !key_lower.contains(&normalized)
@@ -2517,7 +2540,8 @@ mod tests {
 
     #[test]
     fn search_text_is_spelled_as_titles_write_it() {
-        use crate::flow_neuro::signals::{InteractionType, apply_interaction};
+        use crate::flow_neuro::learning::{Interaction, apply_interaction};
+        use crate::flow_neuro::signals::InteractionType;
 
         let mut brain = UserBrain::default();
         let titles = [
@@ -2529,16 +2553,19 @@ mod tests {
             for (index, title) in titles.iter().enumerate() {
                 apply_interaction(
                     &mut brain,
-                    &format!("v{round}{index}"),
-                    title,
-                    "Luthier Bench",
-                    "c1",
-                    None,
-                    Some(900),
-                    false,
-                    false,
-                    InteractionType::Watched,
-                    0.9,
+                    &Interaction {
+                        video_id: &format!("v{round}{index}"),
+                        title,
+                        channel_name: "Luthier Bench",
+                        channel_id: "c1",
+                        description: None,
+                        duration_sec: Some(900),
+                        is_live: false,
+                        is_short: false,
+                        kind: InteractionType::Watched,
+                        percent_watched: 0.9,
+                        seconds_since_impression: None,
+                    },
                 );
             }
         }

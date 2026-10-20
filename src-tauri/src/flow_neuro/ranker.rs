@@ -35,6 +35,8 @@ pub struct ScoringWeights {
 /// Per-refresh inputs shared by every candidate in one ranking pass.
 pub struct RankInputs<'a> {
     pub brain: &'a UserBrain,
+    /// The taste candidates are scored against: long-term with a quarter of the recent taste.
+    pub taste: &'a ContentVector,
     pub time_context: &'a ContentVector,
     pub weights: ScoringWeights,
     pub now_ms: u64,
@@ -66,10 +68,9 @@ pub struct Candidate<'a> {
 /// range (`0 ..= (1 + ADDITIVE_BONUS_CAP) * max_age_boost`) and a single, interpretable shape,
 /// replacing the previous order-dependent interleaving of additions and multiplications.
 pub fn score_candidate(inputs: &RankInputs, candidate: &Candidate) -> f64 {
-    let brain = inputs.brain;
     let vector = candidate.video_vector;
 
-    let personality = calculate_cosine_similarity(&brain.global_vector, vector);
+    let personality = calculate_cosine_similarity(inputs.taste, vector);
     let context = calculate_cosine_similarity(inputs.time_context, vector);
     let novelty = 1.0 - personality;
 
@@ -302,6 +303,7 @@ mod tests {
     fn base_inputs<'a>(brain: &'a UserBrain, ctx: &'a ContentVector) -> RankInputs<'a> {
         RankInputs {
             brain,
+            taste: &brain.global_vector,
             time_context: ctx,
             weights: ScoringWeights {
                 personality: 0.4,

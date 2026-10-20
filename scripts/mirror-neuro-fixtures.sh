@@ -27,8 +27,9 @@ tokenizer="$android/app/src/main/java/io/github/aedev/flow/data/recommendation/N
 } > "$here/src-tauri/resources/neuro/topical/always.txt"
 
 cp "$fixtures/key_spec_tables.json" "$here/src-tauri/resources/neuro/key_spec_tables.json"
+cp "$fixtures/feature_tables.json" "$here/src-tauri/resources/neuro/feature_tables.json"
 for file in key_spec_tables.json key_spec_golden.json stem_golden.tsv language_titles.tsv \
-  language_detected.tsv learn_golden.json; do
+  language_detected.tsv learn_golden.json rank_golden.json features_golden.json; do
   cp "$fixtures/$file" "$here/src-tauri/tests/fixtures/neuro/$file"
 done
 

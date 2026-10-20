@@ -1,25 +1,37 @@
-//! A video's text read into its topic vector by key spec 2 (Android `NeuroTokenizer.extractFeatures`):
-//! the keys are the ones Flow for Android writes for the same title, so a synced brain holds one
-//! key per word. The weights stay this engine's own.
+//! A video's text read into its topic vector the way Flow for Android reads it
+//! (`NeuroTokenizer.extractFeatures`), checked against its `features_golden.json`: the channel
+//! name's topic words, known phrases and words of the title, polysemous words tagged by the words
+//! around them ("metal:music"), the description's content lines and hashtags, and a channel's known
+//! topics for a bare title.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
+use crate::flow_neuro::feature_tables::feature_tables;
 use crate::flow_neuro::keyed_lists::{KeyedLists, keyed_lists};
+use crate::flow_neuro::keyspec::Chunks;
 use crate::flow_neuro::keyspec::tables::{format_of, tables};
 use crate::flow_neuro::keyspec::text::{fold, is_topic_sized, is_word_char, words};
 use crate::flow_neuro::keyspec::{KeySpec, normalize_lemma, phrases};
 use crate::flow_neuro::scoring::{
-    BIGRAM_PRIORITY_WEIGHT, BIGRAM_WEIGHT, CHANNEL_KEYWORD_WEIGHT, COMPLEXITY_CHAPTER_BONUS,
-    COMPLEXITY_TITLE_LEN_MAX, COMPLEXITY_TITLE_LEN_WEIGHT, COMPLEXITY_WORD_LEN_DIVISOR,
-    COMPLEXITY_WORD_LEN_WEIGHT, ContentVector, DESCRIPTION_LINE_MIN_LENGTH, DESCRIPTION_MIN_LENGTH,
-    DESCRIPTION_TAKE_CHARS, DESCRIPTION_TAKE_LINES, DESCRIPTION_TAKE_WORDS,
-    DESCRIPTION_WORD_WEIGHT, IdfSnapshot, TITLE_KEYWORD_WEIGHT, UserBrain, calculate_idf_weight,
-    strip_domain_tag,
+    BIGRAM_PRIORITY_WEIGHT, CHANNEL_KEYWORD_WEIGHT, CHANNEL_PROFILE_BLEND_WEIGHT,
+    CHANNEL_PROFILE_MIN_VIDEOS, COMPLEXITY_CHAPTER_BONUS, COMPLEXITY_TITLE_LEN_MAX,
+    COMPLEXITY_TITLE_LEN_WEIGHT, COMPLEXITY_WORD_LEN_DIVISOR, COMPLEXITY_WORD_LEN_WEIGHT,
+    ContentVector, DESCRIPTION_LINE_MIN_LENGTH, DESCRIPTION_MIN_LENGTH, DESCRIPTION_TAKE_LINES,
+    DESCRIPTION_TAKE_WORDS, DESCRIPTION_WORD_WEIGHT, IdfSnapshot, TITLE_KEYWORD_WEIGHT, UserBrain,
+    calculate_idf_weight, strip_domain_tag,
 };
 
-const GENERIC_TOKEN_WEIGHT: f64 = 0.18;
-const PHRASE_WEIGHT: f64 = BIGRAM_WEIGHT * BIGRAM_PRIORITY_WEIGHT;
+const TAG_MAX_INGEST: usize = 15;
+const TAG_PHRASE_MAX_WORDS: usize = 3;
+const TAG_PHRASE_WORD_SHARE: f64 = 0.5;
+const HASHTAG_MAX: usize = 5;
+const HASHTAG_MIN_CHARS: usize = 3;
+const HASHTAG_MAX_CHARS: usize = 40;
+const TAG_VERIFIED_WEIGHT: f64 = 0.65;
+const TAG_UNVERIFIED_WEIGHT: f64 = 0.10;
+const TAG_MIN_LENGTH: usize = 3;
+const TAG_MAX_LENGTH: usize = 40;
 
 /// What a video says about itself.
 pub struct VideoText<'a> {
@@ -38,36 +50,52 @@ pub struct TopicReader<'a> {
 }
 
 pub fn extract_features(video: &VideoText, reader: &TopicReader) -> ContentVector {
+    extract_features_with_prior(video, reader, None)
+}
+
+/// As [`extract_features`], with what the video's channel is known for: a bare title also reads
+/// as its channel's topics, at a fraction of their weight.
+pub fn extract_features_with_prior(
+    video: &VideoText,
+    reader: &TopicReader,
+    channel_profile: Option<&HashMap<String, f64>>,
+) -> ContentVector {
     let spec = &reader.spec;
     let idf = reader.idf;
     let lists = keyed_lists(spec);
-    let weight = |key: &str, base: f64| {
-        let damping = if lists.is_generic(key) {
-            GENERIC_TOKEN_WEIGHT
-        } else {
-            1.0
-        };
-        calculate_idf_weight(key, base * damping, idf)
-    };
     let never_alone = &tables().never_alone;
+    let weight = |key: &str, base: f64| calculate_idf_weight(key, base, idf);
 
     // Only a channel name's topic words count: "Linus Tech Tips" is about tech, not "linus".
     let mut topics: HashMap<String, f64> = HashMap::new();
     for word in channel_topics(video.channel_name, spec) {
-        let value = calculate_idf_weight(&word, CHANNEL_KEYWORD_WEIGHT, idf);
+        let value = weight(&word, CHANNEL_KEYWORD_WEIGHT);
         topics.insert(word, value);
     }
 
+    let tags = topic_tags(video.description);
+    let context = context_words(video, &tags);
+    let tag_chunks: Vec<Chunks> = tags
+        .iter()
+        .take(TAG_MAX_INGEST)
+        .map(|tag| spec.chunk(tag))
+        .collect();
+    let tag_phrase_keys: HashSet<String> = tag_chunks.iter().flat_map(tag_phrases).collect();
+    let title = spec.chunk(video.title);
+    let formats: HashSet<String> = title
+        .formats
+        .iter()
+        .chain(tag_chunks.iter().flat_map(|chunks| chunks.formats.iter()))
+        .cloned()
+        .collect();
+
     // A run of the title is a key only once it is known to be a phrase; until then it only counts
     // toward document frequency, which is how it can become one. A phrase takes its words.
-    let title = spec.chunk(video.title);
     let mut claimed: HashSet<(usize, usize)> = HashSet::new();
     for run in title.runs() {
-        if is_promoted(&run.key, &lists, idf) {
-            topics.insert(
-                run.key.clone(),
-                calculate_idf_weight(&run.key, PHRASE_WEIGHT, idf),
-            );
+        if tag_phrase_keys.contains(&run.key) || is_promoted(&run.key, &lists, idf) {
+            let value = weight(&run.key, BIGRAM_PRIORITY_WEIGHT);
+            topics.insert(run.key.clone(), value);
             claimed.extend((run.from..run.to).map(|index| (run.chunk, index)));
         }
     }
@@ -76,18 +104,41 @@ pub fn extract_features(video: &VideoText, reader: &TopicReader) -> ContentVecto
             if claimed.contains(&(chunk_index, index)) || never_alone.contains(word) {
                 continue;
             }
-            *topics.entry(word.clone()).or_insert(0.0) += weight(word, TITLE_KEYWORD_WEIGHT);
+            let resolved = disambiguate(word, &context);
+            let value = weight(&resolved, TITLE_KEYWORD_WEIGHT);
+            *topics.entry(resolved).or_insert(0.0) += value;
         }
     }
 
-    if let Some(description) = video.description {
-        let head: String = description.chars().take(DESCRIPTION_TAKE_CHARS).collect();
-        for word in description_words(spec, &head) {
-            *topics.entry(word.clone()).or_insert(0.0) += weight(&word, DESCRIPTION_WORD_WEIGHT);
+    for (word, value) in description_keywords(video.description, spec, idf) {
+        *topics.entry(disambiguate(&word, &context)).or_insert(0.0) += value;
+    }
+
+    if !tags.is_empty() {
+        let description_words = video
+            .description
+            .map(|text| {
+                let head: Vec<&str> = text.lines().take(DESCRIPTION_TAKE_LINES).collect();
+                spec.chunk(&head.join(" ")).words()
+            })
+            .unwrap_or_default();
+        for (key, value) in process_tags(&tags, &title.words(), &description_words, spec, idf) {
+            *topics.entry(key).or_insert(0.0) += value;
         }
     }
 
     topics.retain(|key, _| !is_noise_topic(key, spec));
+
+    if let Some(profile) =
+        channel_profile.filter(|profile| profile.len() >= CHANNEL_PROFILE_MIN_VIDEOS)
+    {
+        for (topic, channel_weight) in profile {
+            let entry = topics.entry(topic.clone()).or_insert(0.0);
+            if *entry == 0.0 {
+                *entry = channel_weight * CHANNEL_PROFILE_BLEND_WEIGHT;
+            }
+        }
+    }
 
     let magnitude = topics.values().map(|v| v * v).sum::<f64>().sqrt();
     if magnitude > 0.0 {
@@ -100,11 +151,248 @@ pub fn extract_features(video: &VideoText, reader: &TopicReader) -> ContentVecto
         topics,
         topic_confidence: HashMap::new(),
         anchor_topics: HashSet::new(),
+        formats,
         duration: duration_score(video),
         pacing: pacing_score(video),
         complexity: complexity_score(video),
         is_live: if video.is_live { 1.0 } else { 0.0 },
     }
+}
+
+/// Splits on the whitespace Kotlin's `\s` means, dropping the empty pieces.
+fn ascii_whitespace_split(text: &str) -> impl Iterator<Item = &str> {
+    text.split([' ', '\t', '\n', '\u{b}', '\u{c}', '\r'])
+        .filter(|piece| !piece.is_empty())
+}
+
+fn utf16_len(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+/// Folded words of `text` stripped of edge punctuation, longer than `min` UTF-16 units.
+fn plain_words(text: &str, min: usize) -> impl Iterator<Item = String> + '_ {
+    let folded = fold(text);
+    ascii_whitespace_split(&folded)
+        .map(|word| {
+            word.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_string()
+        })
+        .filter(move |word| utf16_len(word) > min)
+        .collect::<Vec<_>>()
+        .into_iter()
+}
+
+/// The words a polysemous word is read against: the title, the channel name, the description's
+/// first lines and the tags (Android `buildContextWordList`).
+fn context_words(video: &VideoText, tags: &[String]) -> Vec<String> {
+    let mut context: Vec<String> = plain_words(video.title, 1).collect();
+    context.extend(name_words(video.channel_name));
+    if let Some(description) = video.description.filter(|text| !text.trim().is_empty()) {
+        let head: Vec<&str> = description.lines().take(3).collect();
+        context.extend(plain_words(&head.join(" "), 2));
+    }
+    for tag in tags.iter().take(TAG_MAX_INGEST) {
+        context.extend(plain_words(tag, 1));
+    }
+    context
+}
+
+/// "metal" in a video about bands is "metal:music"; a word without a clear reading stays itself.
+fn disambiguate(word: &str, context: &[String]) -> String {
+    let Some(domains) = feature_tables().domains.get(word) else {
+        return word.to_string();
+    };
+    let mut best: Option<&str> = None;
+    let mut best_score = 0;
+    let mut second_score = 0;
+    for domain in domains {
+        let score = domain
+            .context_words
+            .iter()
+            .filter(|cue| {
+                context
+                    .iter()
+                    .any(|word| word.starts_with(cue.as_str()) || cue.starts_with(word.as_str()))
+            })
+            .count();
+        if score > best_score {
+            second_score = best_score;
+            best_score = score;
+            best = Some(&domain.domain);
+        } else if score > second_score {
+            second_score = score;
+        }
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let clear = second_score == 0 || best_score as f64 >= second_score as f64 * 1.5 + 1.0;
+    match best {
+        Some(domain) if best_score >= 1 && clear => format!("{word}:{domain}"),
+        _ => word.to_string(),
+    }
+}
+
+/// The description's hashtags, the tags a desktop video has: `#guitar_lessons` reads as
+/// "guitar lessons" (Android `topicTags`; desktop videos carry no creator tags).
+fn topic_tags(description: Option<&str>) -> Vec<String> {
+    let Some(description) = description.filter(|text| text.contains('#')) else {
+        return Vec::new();
+    };
+    let chars: Vec<char> = description.chars().collect();
+    let is_tag_char = |c: char| c.is_alphabetic() || c.is_numeric() || c == '_';
+    let mut tags: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() && tags.len() < HASHTAG_MAX {
+        if chars[i] != '#' {
+            i += 1;
+            continue;
+        }
+        let run = chars[i + 1..]
+            .iter()
+            .take_while(|c| is_tag_char(**c))
+            .count();
+        if run < HASHTAG_MIN_CHARS {
+            i += 1;
+            continue;
+        }
+        let taken = run.min(HASHTAG_MAX_CHARS);
+        let tag: String = chars[i + 1..=i + taken]
+            .iter()
+            .map(|c| if *c == '_' { ' ' } else { *c })
+            .collect();
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+        i += 1 + taken;
+    }
+    tags
+}
+
+/// The unbroken parts of a tag that hold two or three words.
+fn tag_phrases(tag: &Chunks) -> Vec<String> {
+    tag.chunks
+        .iter()
+        .filter(|chunk| {
+            chunk.len() >= 2
+                && chunk
+                    .iter()
+                    .map(|word| word.matches(' ').count() + 1)
+                    .sum::<usize>()
+                    <= TAG_PHRASE_MAX_WORDS
+        })
+        .map(|chunk| chunk.join(" "))
+        .collect()
+}
+
+/// A tag the title or description confirms weighs as a creator's declaration; one they do not
+/// barely counts (Android `processTags`).
+fn process_tags(
+    tags: &[String],
+    title_words: &[String],
+    description_words: &[String],
+    spec: &KeySpec,
+    idf: &IdfSnapshot,
+) -> HashMap<String, f64> {
+    let key_tables = tables();
+    let spam = &feature_tables().tag_spam_words;
+    let verification: HashSet<&String> = title_words.iter().chain(description_words).collect();
+    let mut context: Vec<String> = tags
+        .iter()
+        .take(TAG_MAX_INGEST)
+        .flat_map(|tag| plain_words(tag, 1).collect::<Vec<_>>())
+        .collect();
+    context.extend(title_words.iter().cloned());
+    context.extend(description_words.iter().cloned());
+
+    let mut result: HashMap<String, f64> = HashMap::new();
+    for raw in tags.iter().take(TAG_MAX_INGEST) {
+        let cleaned = fold(raw).trim().to_string();
+        let length = utf16_len(&cleaned);
+        if (length < TAG_MIN_LENGTH && !key_tables.short_topics.contains(&cleaned))
+            || length > TAG_MAX_LENGTH
+            || spam.contains(&cleaned)
+            || key_tables.stop_words.contains(&cleaned)
+            || is_year_tag(&cleaned)
+        {
+            continue;
+        }
+        let chunked = spec.chunk(&cleaned);
+        let tokens = chunked.words();
+        if tokens.is_empty() {
+            continue;
+        }
+        let base = if tokens.iter().any(|token| verification.contains(token)) {
+            TAG_VERIFIED_WEIGHT
+        } else {
+            TAG_UNVERIFIED_WEIGHT
+        };
+        let phrases = tag_phrases(&chunked);
+        for phrase in &phrases {
+            *result.entry(phrase.clone()).or_insert(0.0) += calculate_idf_weight(phrase, base, idf);
+        }
+        let word_weight = if phrases.is_empty() {
+            base
+        } else {
+            base * TAG_PHRASE_WORD_SHARE
+        };
+        for token in &tokens {
+            if key_tables.never_alone.contains(token) {
+                continue;
+            }
+            let resolved = disambiguate(token, &context);
+            let value = calculate_idf_weight(&resolved, word_weight, idf);
+            *result.entry(resolved).or_insert(0.0) += value;
+        }
+    }
+    result
+}
+
+/// The description's first content lines, without sponsor blocks, links, hashtags or shouting,
+/// as weighted words (Android `extractDescriptionKeywords`).
+fn description_keywords(
+    description: Option<&str>,
+    spec: &KeySpec,
+    idf: &IdfSnapshot,
+) -> Vec<(String, f64)> {
+    let Some(description) = description.filter(|text| !text.trim().is_empty()) else {
+        return Vec::new();
+    };
+    if utf16_len(description) < DESCRIPTION_MIN_LENGTH {
+        return Vec::new();
+    }
+    let sponsor = &feature_tables().sponsor_line_patterns;
+    let content: Vec<&str> = description
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim();
+            let lower = trimmed.to_lowercase();
+            utf16_len(trimmed) > DESCRIPTION_LINE_MIN_LENGTH
+                && !sponsor
+                    .iter()
+                    .any(|pattern| lower.contains(pattern.as_str()))
+                && !lower.contains("http")
+                && !lower.trim_start().starts_with('#')
+                && (utf16_len(trimmed) <= 5 || trimmed != trimmed.to_uppercase())
+        })
+        .take(DESCRIPTION_TAKE_LINES)
+        .collect();
+    let content = content.join(" ");
+    if content.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut weights: Vec<(String, f64)> = Vec::new();
+    for word in spec
+        .chunk(&content)
+        .words()
+        .into_iter()
+        .take(DESCRIPTION_TAKE_WORDS)
+    {
+        let value = calculate_idf_weight(&word, DESCRIPTION_WORD_WEIGHT, idf);
+        match weights.iter_mut().find(|(existing, _)| *existing == word) {
+            Some((_, total)) => *total += value,
+            None => weights.push((word, value)),
+        }
+    }
+    weights
 }
 
 /// Whether a run of title words is an interest: a phrase the engine knows, or a pair the viewer's
@@ -172,11 +460,7 @@ static CHANNEL_TOPIC_WORDS: LazyLock<HashSet<String>> = LazyLock::new(|| {
 #[must_use]
 pub fn channel_topics(name: &str, spec: &KeySpec) -> Vec<String> {
     let is_topic = |word: &str| CHANNEL_TOPIC_WORDS.contains(word);
-    let name_words: Vec<String> = words(&fold(name))
-        .into_iter()
-        .map(|word| word.trim_matches(|c: char| !is_word_char(c)).to_string())
-        .filter(|word| word.encode_utf16().count() > 1)
-        .collect();
+    let name_words = name_words(name);
     let mut topics: Vec<String> = Vec::new();
     for word in &name_words {
         let lower = word.to_lowercase();
@@ -196,6 +480,15 @@ pub fn channel_topics(name: &str, spec: &KeySpec) -> Vec<String> {
         }
     }
     topics
+}
+
+/// Words of a channel name; scripts written without spaces are split by the word breaker.
+fn name_words(name: &str) -> Vec<String> {
+    words(&fold(name))
+        .into_iter()
+        .map(|word| word.trim_matches(|c: char| !is_word_char(c)).to_string())
+        .filter(|word| utf16_len(word) > 1)
+        .collect()
 }
 
 /// What one video counts toward document frequency: its keys, and every word, run and model pair
@@ -262,39 +555,6 @@ fn is_year_tag(word: &str) -> bool {
         && bytes[3].is_ascii_digit()
 }
 
-fn description_words(spec: &KeySpec, description: &str) -> Vec<String> {
-    if description.len() < DESCRIPTION_MIN_LENGTH {
-        return Vec::new();
-    }
-    let content = description
-        .lines()
-        .filter(|line| is_description_content_line(line))
-        .take(DESCRIPTION_TAKE_LINES)
-        .collect::<Vec<&str>>()
-        .join(" ");
-    let mut words = spec.chunk(&content).words();
-    words.truncate(DESCRIPTION_TAKE_WORDS);
-    words
-}
-
-fn is_description_content_line(line: &str) -> bool {
-    let trimmed = line.trim();
-    if trimmed.len() <= DESCRIPTION_LINE_MIN_LENGTH {
-        return false;
-    }
-    let lower = trimmed.to_lowercase();
-    if SPONSOR_LINE_PATTERNS
-        .iter()
-        .any(|pattern| lower.contains(pattern))
-    {
-        return false;
-    }
-    if lower.contains("http") || trimmed.starts_with('#') {
-        return false;
-    }
-    !(trimmed.len() > 5 && trimmed == trimmed.to_uppercase())
-}
-
 fn duration_score(video: &VideoText) -> f64 {
     #[allow(clippy::cast_precision_loss)]
     let seconds = match video.duration_seconds {
@@ -308,9 +568,14 @@ fn duration_score(video: &VideoText) -> f64 {
 #[allow(clippy::cast_precision_loss)]
 fn pacing_score(video: &VideoText) -> f64 {
     let title = video.title.to_lowercase();
-    let count = |words: &[&str]| words.iter().filter(|word| title.contains(*word)).count() as f64;
-    let high = count(&HIGH_PACING_WORDS);
-    let low = count(&LOW_PACING_WORDS);
+    let count = |words: &[String]| {
+        words
+            .iter()
+            .filter(|word| title.contains(word.as_str()))
+            .count() as f64
+    };
+    let high = count(&feature_tables().high_pacing_words);
+    let low = count(&feature_tables().low_pacing_words);
     if high > low {
         (0.6 + high * 0.1).min(0.95)
     } else if low > high {
@@ -376,99 +641,6 @@ fn has_chapters(description: &str) -> bool {
     timestamps >= 3
 }
 
-/// A sponsor block or link line says nothing about what the video is about.
-const SPONSOR_LINE_PATTERNS: [&str; 39] = [
-    "use code ",
-    "% off",
-    "free trial",
-    "link in",
-    "sponsored by",
-    "brought to you",
-    "check out",
-    "sign up",
-    "discount",
-    "promo code",
-    "coupon",
-    "affiliate",
-    "partner",
-    "merch",
-    "merchandise",
-    "patreon",
-    "ko-fi",
-    "buymeacoffee",
-    "buy me a coffee",
-    "subscribe",
-    "follow me",
-    "social media",
-    "instagram",
-    "twitter",
-    "tiktok",
-    "discord",
-    "join the",
-    "become a member",
-    "membership",
-    "business inquiries",
-    "business email",
-    "contact:",
-    "►",
-    "→",
-    "⬇",
-    "⇩",
-    "👇",
-    "timestamps:",
-    "chapters:",
-];
-
-const HIGH_PACING_WORDS: [&str; 24] = [
-    "compilation",
-    "tiktok",
-    "tiktoks",
-    "highlights",
-    "speedrun",
-    "trailer",
-    "shorts",
-    "montage",
-    "moments",
-    "best of",
-    "try not to",
-    "memes",
-    "funny",
-    "fails",
-    "rapid",
-    "fast",
-    "quick",
-    "minute",
-    "seconds",
-    "top 10",
-    "top 5",
-    "ranked",
-    "tier list",
-    "versus",
-];
-
-const LOW_PACING_WORDS: [&str; 20] = [
-    "podcast",
-    "essay",
-    "ambient",
-    "explained",
-    "study",
-    "meditation",
-    "sleep",
-    "asmr",
-    "relaxing",
-    "calm",
-    "deep dive",
-    "analysis",
-    "lecture",
-    "course",
-    "documentary",
-    "interview",
-    "conversation",
-    "discussion",
-    "breakdown",
-    "walkthrough",
-];
-
 /// The keys the viewer's onboarding picks read as ("Machine Learning" reads "machin learn").
 #[must_use]
 pub fn pick_keys(brain: &UserBrain) -> HashSet<String> {
@@ -528,8 +700,10 @@ mod tests {
                     }
                 }
             }
+            // A polysemous word keeps its spelling under a domain tag ("play:gaming").
             for key in read(input, &no_counts()).topics.keys() {
-                assert!(spelled.contains(key), "{input}: {key} is not {spelled:?}");
+                let base = strip_domain_tag(key);
+                assert!(spelled.contains(&base), "{input}: {key} is not {spelled:?}");
             }
         }
     }

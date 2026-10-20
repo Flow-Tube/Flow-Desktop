@@ -31,6 +31,8 @@ pub const CHANNEL_PROFILE_MAX_TOPICS: usize = 15;
 pub const CHANNEL_PROFILE_PRUNE_THRESHOLD: f64 = 0.05;
 pub const CHANNEL_PROFILE_MAX_CHANNELS: usize = 200;
 pub const CHANNEL_PROFILE_BLEND_WEIGHT: f64 = 0.30;
+/// A channel known from fewer topics than this lends a bare title none of them.
+pub const CHANNEL_PROFILE_MIN_VIDEOS: usize = 3;
 pub const ANTI_REC_PENALTY_THRESHOLD: f64 = 0.6;
 pub const ANTI_REC_PENALTY: f64 = 0.4;
 
@@ -123,15 +125,13 @@ pub const COMPLEXITY_WORD_LEN_WEIGHT: f64 = 0.4;
 pub const COMPLEXITY_CHAPTER_BONUS: f64 = 0.2;
 
 pub const DESCRIPTION_MIN_LENGTH: usize = 20;
-pub const DESCRIPTION_TAKE_CHARS: usize = 200;
 pub const DESCRIPTION_TAKE_WORDS: usize = 15;
 pub const DESCRIPTION_TAKE_LINES: usize = 5;
 pub const DESCRIPTION_LINE_MIN_LENGTH: usize = 15;
 pub const DESCRIPTION_WORD_WEIGHT: f64 = 0.2;
 
-pub const CHANNEL_KEYWORD_WEIGHT: f64 = 1.0;
+pub const CHANNEL_KEYWORD_WEIGHT: f64 = 0.6;
 pub const TITLE_KEYWORD_WEIGHT: f64 = 0.5;
-pub const BIGRAM_WEIGHT: f64 = 0.75;
 pub const BIGRAM_PRIORITY_WEIGHT: f64 = 1.2;
 
 pub const PERSONA_STABILITY_THRESHOLD: i32 = 3;
@@ -211,6 +211,9 @@ pub struct ContentVector {
     pub topics: HashMap<String, f64>,
     pub topic_confidence: HashMap<String, f64>,
     pub anchor_topics: HashSet<String>,
+    /// What kind of video it is ("tutorial", "review"); on a video's vector only.
+    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
+    pub formats: HashSet<String>,
     pub duration: f64,
     pub pacing: f64,
     pub complexity: f64,
@@ -223,6 +226,7 @@ impl Default for ContentVector {
             topics: HashMap::new(),
             topic_confidence: HashMap::new(),
             anchor_topics: HashSet::new(),
+            formats: HashSet::new(),
             duration: 0.5,
             pacing: 0.5,
             complexity: 0.5,
@@ -940,16 +944,17 @@ pub struct IdfSnapshot {
     pub total_documents: i32,
 }
 
+/// `base_weight` scaled by how rare `word` is among the viewer's own documents, from
+/// [`IDF_MIN_WEIGHT`] for a word in every one to the full weight for an unseen one (Android
+/// `NeuroTokenizer.calculateIdfWeight`). Below 30 documents nothing is rare yet.
 pub fn calculate_idf_weight(word: &str, base_weight: f64, idf: &IdfSnapshot) -> f64 {
     if idf.total_documents < 30 {
         return base_weight;
     }
-    let freq = *idf.word_frequencies.get(word).unwrap_or(&0) as f64;
-    if freq <= 0.0 {
-        return base_weight * IDF_MIN_WEIGHT;
-    }
-    let idf_val = (1.0 + (idf.total_documents as f64 / freq).ln()).max(0.0);
-    base_weight * idf_val.min(10.0)
+    let documents = f64::from(idf.total_documents);
+    let frequency = f64::from(idf.word_frequencies.get(word).copied().unwrap_or(0));
+    let rarity = (1.0 + documents / (frequency + 1.0)).ln() / (1.0 + documents).ln();
+    base_weight * rarity.clamp(IDF_MIN_WEIGHT, 1.0)
 }
 
 // --- Cosine Similarity ---
@@ -1058,12 +1063,7 @@ pub fn calculate_anti_recommendation_penalty(
         if let Some(profile) = brain.channel_topic_profiles.get(channel_id) {
             let neg_vector = ContentVector {
                 topics: profile.clone(),
-                topic_confidence: HashMap::new(),
-                anchor_topics: HashSet::new(),
-                duration: 0.5,
-                pacing: 0.5,
-                complexity: 0.5,
-                is_live: 0.0,
+                ..ContentVector::default()
             };
             let similarity = calculate_cosine_similarity(&neg_vector, video_vector);
             if similarity > max_similarity {

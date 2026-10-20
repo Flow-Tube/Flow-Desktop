@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
+use crate::flow_neuro::feature_tables::feature_tables;
 use crate::flow_neuro::keyspec::{KeySpec, tables::tables};
 use crate::flow_neuro::topic_catalog::ONBOARDING_TOPICS;
 
@@ -35,80 +36,6 @@ const GENERIC_WORDS: [&str; 26] = [
     "review",
     "reaction",
     "guide",
-];
-
-/// Pairs that are an interest on their own from the first title (Android `compoundTerms`).
-const COMPOUND_TERMS: [&str; 70] = [
-    "train model",
-    "train ai",
-    "machine learn",
-    "deep learn",
-    "neural network",
-    "train data",
-    "fine tune",
-    "train network",
-    "train system",
-    "build model",
-    "build ai",
-    "build network",
-    "model train",
-    "model ai",
-    "model build",
-    "react native",
-    "react component",
-    "react hook",
-    "react app",
-    "react tutorial",
-    "react project",
-    "build system",
-    "build tool",
-    "build project",
-    "run test",
-    "run code",
-    "run server",
-    "run script",
-    "design pattern",
-    "design system",
-    "web design",
-    "game design",
-    "sound design",
-    "power plant",
-    "plant base",
-    "plant based",
-    "fire base",
-    "fire wall",
-    "fire fight",
-    "spring boot",
-    "spring framework",
-    "spring board",
-    "stream deck",
-    "stream lab",
-    "stream setup",
-    "film make",
-    "film edit",
-    "film score",
-    "scale model",
-    "block chain",
-    "block list",
-    "host server",
-    "host name",
-    "web development",
-    "web app",
-    "web site",
-    "net work",
-    "net worth",
-    "bass guitar",
-    "bass boost",
-    "bass drop",
-    "drum track",
-    "sound track",
-    "race track",
-    "lofi hip hop",
-    "game laptop",
-    "speed run",
-    "play through",
-    "build guide",
-    "build order",
 ];
 
 /// The onboarding catalog's topics of more than one word (Android `NeuroTopicCatalog`); one that
@@ -264,7 +191,8 @@ pub struct KeyedLists {
 
 impl KeyedLists {
     fn build(spec: &KeySpec) -> Self {
-        let known_phrases = COMPOUND_TERMS
+        let known_phrases = feature_tables()
+            .compound_terms
             .iter()
             .flat_map(|term| spec.rekey(term))
             .chain(CATALOG_PHRASES.iter().filter_map(|topic| {

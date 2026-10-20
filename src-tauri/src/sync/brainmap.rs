@@ -96,6 +96,7 @@ fn wire_to_cv(w: &ContentVectorWire, base: &ContentVector) -> ContentVector {
         // derived signals are recomputed locally; keep whatever the base had.
         topic_confidence: base.topic_confidence.clone(),
         anchor_topics: base.anchor_topics.clone(),
+        formats: HashSet::new(),
         duration: dim("duration", base.duration),
         pacing: dim("pacing", base.pacing),
         complexity: dim("complexity", base.complexity),

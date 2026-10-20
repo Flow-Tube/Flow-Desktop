@@ -5,7 +5,10 @@ pub(crate) mod deep_flow;
 pub(crate) mod display_forms;
 #[cfg(test)]
 pub(crate) mod eval;
+pub(crate) mod feature_tables;
 pub(crate) mod features;
+#[cfg(test)]
+mod features_golden;
 pub(crate) mod key_migration;
 pub(crate) mod keyed_lists;
 pub mod keyspec;

@@ -13,6 +13,7 @@ use crate::flow_neuro::bootstrap::{
 };
 use crate::flow_neuro::brain_store::BrainStore;
 use crate::flow_neuro::channel_knowledge::{learn_from_uploads, subscription_changed};
+use crate::flow_neuro::deep_flow::learning_paused;
 use crate::flow_neuro::display_forms::{label, with_pick_spellings};
 use crate::flow_neuro::features::{
     TopicReader, VideoText, extract_features, pick_keys, title_words,
@@ -297,6 +298,13 @@ impl RecommendationService {
     /// Reload the resident brain from the database after a sync merge wrote it directly.
     pub async fn reload_brain(&self) -> AppResult<()> {
         self.brain_store.reload().await
+    }
+
+    /// Deep Flow keeps a session out of the profile: nothing learns while it runs.
+    async fn learning_paused(&self) -> bool {
+        learning_paused(&self.pool, self.get_current_time_ms())
+            .await
+            .unwrap_or(false)
     }
 
     fn get_current_time_ms(&self) -> u64 {
@@ -1661,6 +1669,9 @@ impl RecommendationService {
         interaction_type: InteractionType,
         percent_watched: f32,
     ) -> AppResult<()> {
+        if self.learning_paused().await {
+            return Ok(());
+        }
         let channel_id = channel_id.trim().trim_start_matches("channel:");
         let now_ms = self.get_current_time_ms();
         #[allow(clippy::cast_precision_loss)]
@@ -1728,7 +1739,7 @@ impl RecommendationService {
     /// Folds a progress report into the open watch session. A report for another video
     /// finishes the previous session and opens a new one, which counts as the click.
     pub async fn report_watch_progress(&self, report: WatchReport) -> AppResult<()> {
-        if report.is_music {
+        if report.is_music || self.learning_paused().await {
             return Ok(());
         }
         let (finished, opened) = {
@@ -1846,7 +1857,7 @@ impl RecommendationService {
     }
 
     pub async fn record_feed_impressions(&self, videos: Vec<VideoSummary>) -> AppResult<()> {
-        if videos.is_empty() {
+        if videos.is_empty() || self.learning_paused().await {
             return Ok(());
         }
 
@@ -2418,6 +2429,9 @@ impl RecommendationService {
 
     /// Learns from a typed search; returns whether the query held a usable topic.
     pub async fn learn_from_search(&self, query: String) -> AppResult<bool> {
+        if self.learning_paused().await {
+            return Ok(false);
+        }
         let now_ms = self.get_current_time_ms();
         Ok(learn_search(
             &mut *self.brain_store.write().await,
@@ -2432,6 +2446,9 @@ impl RecommendationService {
         channel_name: String,
         subscribed: bool,
     ) -> AppResult<()> {
+        if self.learning_paused().await {
+            return Ok(());
+        }
         let channel_id = channel_id.trim().trim_start_matches("channel:");
         subscription_changed(
             &mut *self.brain_store.write().await,
@@ -2445,6 +2462,9 @@ impl RecommendationService {
     /// Reads what channels are about from upload titles a feed already fetched, once per channel
     /// per session.
     pub async fn observe_channel_uploads(&self, uploads: Vec<VideoSummary>) -> AppResult<()> {
+        if self.learning_paused().await {
+            return Ok(());
+        }
         let mut by_channel: HashMap<String, Vec<String>> = HashMap::new();
         {
             let profiled = self.profiled_channels.lock().unwrap();

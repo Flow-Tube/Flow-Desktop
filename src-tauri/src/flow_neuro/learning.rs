@@ -343,7 +343,7 @@ fn learn_taste(
     let strong = matches!(event.kind, InteractionType::Liked | InteractionType::Saved)
         || (event.kind == InteractionType::Watched && event.percent_watched >= 0.40);
     if strong && !event.is_short {
-        let own_documents = i32::from(brain.counted_documents.contains(event.video_id));
+        let own_documents = i32::from(is_counted(brain, event.video_id));
         let plantable = plant_filter(
             event.title,
             event.description,
@@ -451,6 +451,11 @@ fn learn_links(brain: &mut UserBrain, video_vector: &ContentVector) {
     }
 }
 
+/// A watched video was counted when it was watched, whichever list still says so.
+fn is_counted(brain: &UserBrain, video_id: &str) -> bool {
+    brain.watch_history_map.contains_key(video_id) || brain.counted_documents.contains(video_id)
+}
+
 /// Document frequency counts each video once, so pair counts can say what is a phrase.
 fn count_document(
     brain: &mut UserBrain,
@@ -459,7 +464,7 @@ fn count_document(
     video_vector: &ContentVector,
     spec: &crate::flow_neuro::keyspec::KeySpec,
 ) {
-    if !brain.counted_documents.insert(video_id.to_string()) {
+    if brain.watch_history_map.contains_key(video_id) || !brain.counted_documents.insert(video_id) {
         return;
     }
     for term in document_terms(title, video_vector, spec) {

@@ -182,7 +182,7 @@ pub fn bootstrap_from_history(brain: &mut UserBrain, videos: Vec<ImportedVideo>)
 
         learn_imported_links_and_evidence(brain, &vector, &video.video_id, &channel_id, now_ms);
 
-        if brain.counted_documents.insert(video.video_id.clone()) {
+        if brain.counted_documents.insert(&video.video_id) {
             for term in document_terms(&video.title, &vector, &spec) {
                 *brain.idf_word_frequency.entry(term).or_insert(0) += 1;
             }

@@ -4,7 +4,7 @@ use crate::flow_neuro::keyed_lists::keyed_lists;
 use crate::flow_neuro::keyspec::{self, KeySpec};
 use chrono::{Datelike, Local, Timelike, Weekday};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::OnceLock;
 
 pub const SCHEMA_VERSION: i32 = 13;
@@ -327,9 +327,35 @@ pub struct UserBrain {
     pub language_votes: HashMap<String, u32>,
     /// How titles write the keys that are spelled differently from the key.
     pub display_forms: DisplayForms,
-    /// Videos already counted toward document frequency in this run of the app.
-    #[serde(skip)]
-    pub counted_documents: HashSet<String>,
+    /// Videos already counted toward document frequency, so a rewatch never counts twice.
+    pub counted_documents: CountedDocuments,
+}
+
+/// Videos counted toward document frequency, oldest first, bounded like Android's
+/// `COUNTED_DOCUMENTS_MAX`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct CountedDocuments(VecDeque<String>);
+
+impl CountedDocuments {
+    pub const MAX: usize = 500;
+
+    #[must_use]
+    pub fn contains(&self, video_id: &str) -> bool {
+        self.0.iter().any(|id| id == video_id)
+    }
+
+    /// Records `video_id`; false when it was already counted.
+    pub fn insert(&mut self, video_id: &str) -> bool {
+        if self.contains(video_id) {
+            return false;
+        }
+        self.0.push_back(video_id.to_string());
+        if self.0.len() > Self::MAX {
+            self.0.pop_front();
+        }
+        true
+    }
 }
 
 /// Events a time bucket needs before its vector weighs as much as the whole profile.
@@ -396,7 +422,7 @@ impl Default for UserBrain {
             key_spec: keyspec::VERSION,
             language_votes: HashMap::new(),
             display_forms: DisplayForms::new(),
-            counted_documents: HashSet::new(),
+            counted_documents: CountedDocuments::default(),
         }
     }
 }
@@ -1526,5 +1552,23 @@ mod tests {
         assert!(fresh.blocked_topics.contains("drama"));
         assert!(fresh.suppressed_video_ids.contains_key("v1"));
         assert!(fresh.suppressed_channels.contains_key("UCy"));
+    }
+
+    #[test]
+    fn counted_documents_are_saved_and_keep_the_newest_five_hundred() {
+        let mut counted = CountedDocuments::default();
+        assert!(counted.insert("v0"));
+        assert!(!counted.insert("v0"));
+        for i in 1..=CountedDocuments::MAX {
+            counted.insert(&format!("v{i}"));
+        }
+        assert!(!counted.contains("v0"));
+        assert!(counted.contains(&format!("v{}", CountedDocuments::MAX)));
+
+        let mut brain = UserBrain::default();
+        brain.counted_documents.insert("seen");
+        let restored: UserBrain =
+            serde_json::from_str(&serde_json::to_string(&brain).unwrap()).unwrap();
+        assert!(restored.counted_documents.contains("seen"));
     }
 }

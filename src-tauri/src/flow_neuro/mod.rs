@@ -1,6 +1,7 @@
 pub(crate) mod bootstrap;
 pub(crate) mod brain_store;
 pub(crate) mod channel_knowledge;
+pub(crate) mod deep_flow;
 pub(crate) mod display_forms;
 #[cfg(test)]
 pub(crate) mod eval;

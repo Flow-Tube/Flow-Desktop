@@ -13,6 +13,9 @@ dist
 dist-ssr
 *.local
 src-tauri/tauri.nightly.generated.json
+/packaging/flatpak/generated-sources/
+/.flatpak-builder/
+/flatpak_app/
 
 # Editor directories and files
 .vscode/*

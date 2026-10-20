@@ -1,0 +1,15 @@
+[Desktop Entry]
+Categories=AudioVideo;Video;Player;
+Comment=The privacy-first desktop companion to Flow for Android.
+Exec=flow %u
+StartupWMClass=flow
+Icon=io.github.flow_tube.Flow-Desktop
+Name=Flow
+Terminal=false
+Type=Application
+MimeType=x-scheme-handler/flow;
+Actions=safe-graphics;
+
+[Desktop Action safe-graphics]
+Name=Start with safe graphics
+Exec=flow --safe-graphics

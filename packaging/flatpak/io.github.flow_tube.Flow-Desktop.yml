@@ -1,0 +1,87 @@
+id: io.github.flow_tube.Flow-Desktop
+# GNOME 51 is the last runtime that ships webkit2gtk-4.1, which Tauri 2 needs.
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: flow
+
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node24
+  - org.freedesktop.Sdk.Extension.rust-stable
+
+build-options:
+  append-path: /usr/lib/sdk/node24/bin:/usr/lib/sdk/rust-stable/bin
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  # tauri-plugin-notification talks to the notification daemon directly.
+  - --talk-name=org.freedesktop.Notifications
+  - --filesystem=xdg-videos/Flow:create
+  - --filesystem=xdg-music/Flow:create
+  - --filesystem=xdg-download
+  # The poToken and n-signature helpers run on the Node copied in by the node
+  # module below; the sandbox has no host Node.
+  - --env=FLOW_NODE=/app/node/bin/node
+  - --env=FLOW_INTEGRITY_SCRIPT=/app/lib/Flow/sidecar/integrity.cjs
+  - --env=FLOW_NSIG_SCRIPT=/app/lib/Flow/sidecar/nsig.cjs
+
+modules:
+  - name: node
+    buildsystem: simple
+    build-commands:
+      - /usr/lib/sdk/node24/install.sh
+
+  - name: flow
+    buildsystem: simple
+    build-options:
+      env:
+        HOME: /run/build/flow
+        CARGO_HOME: /run/build/flow/cargo
+        CARGO_NET_OFFLINE: 'true'
+        XDG_CACHE_HOME: /run/build/flow/flatpak-node/cache
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .claude
+          - repo
+          - node_modules
+          - dist
+          - src-tauri/target
+          - packaging/flatpak/generated-sources
+          - FlowApp_mobile
+          - NewPipeExtractor-dev
+          - InnertubeAPI
+          - notes
+          - scratch
+          - graphify-out
+      # Written by scripts/flatpak-sources.sh.
+      - generated-sources/pnpm-release.json
+      - generated-sources/node-sources.json
+      - generated-sources/cargo-sources.json
+    build-commands:
+      - node flatpak-pnpm/bin/pnpm.mjs install --offline --frozen-lockfile
+      - node flatpak-pnpm/bin/pnpm.mjs build
+      # `tauri build` rejects the underscore Flathub requires in this app ID, so
+      # cargo is called directly with the feature and merged config the CLI
+      # would pass. RUSTFLAGS overrides the rustflags in .cargo/config.toml, so
+      # reqwest_unstable is added to whatever the SDK already sets.
+      - |
+        cd src-tauri
+        export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--cfg reqwest_unstable"
+        export TAURI_CONFIG="$(cat tauri.flatpak.conf.json)"
+        cargo build --offline --release --bins --features tauri/custom-protocol
+      - install -Dm755 src-tauri/target/release/flow ${FLATPAK_DEST}/bin/flow
+      - install -Dm644 -t ${FLATPAK_DEST}/lib/Flow/sidecar src-tauri/sidecar/integrity.cjs src-tauri/sidecar/nsig.cjs
+      - install -Dm644 packaging/flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 src-tauri/icons/32x32.png ${FLATPAK_DEST}/share/icons/hicolor/32x32/apps/${FLATPAK_ID}.png
+      - install -Dm644 src-tauri/icons/64x64.png ${FLATPAK_DEST}/share/icons/hicolor/64x64/apps/${FLATPAK_ID}.png
+      - install -Dm644 src-tauri/icons/128x128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
+      - install -Dm644 src-tauri/icons/128x128@2x.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
+      - install -Dm644 src-tauri/icons/icon.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png

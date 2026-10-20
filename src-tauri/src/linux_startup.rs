@@ -10,7 +10,7 @@
 //! * Tier 0 (default): nothing. Upstream defaults are the fast path.
 //! * Tier 1: disable explicit sync and the DMABUF renderer.
 //! * Tier 2: also force software compositing.
-//! * Tier 3: also fall back to X11 (XWayland).
+//! * Tier 3: also fall back to X11 (XWayland), when an X server is reachable.
 //!
 //! The order follows Tauri's Linux graphics guide, which lists these remedies
 //! "in order. The earlier ones keep hardware acceleration" — and warns: "Only
@@ -44,6 +44,7 @@
 //! `WEBKIT_DISABLE_DMABUF_RENDERER=0` from the user still wins.
 
 use serde::{Deserialize, Serialize};
+use std::ffi::OsStr;
 use std::path::Path;
 
 const STATE_FILE: &str = "startup_state.json";
@@ -209,7 +210,7 @@ fn save_state(dir: &Path, state: &StartupState) {
 
 /// The variables a tier applies. Split out from [`apply_tier`] so the escalation
 /// ladder can be asserted without mutating this process's environment.
-fn tier_vars(tier: u8) -> Vec<(&'static str, &'static str)> {
+fn tier_vars(tier: u8, x11_available: bool) -> Vec<(&'static str, &'static str)> {
     // Tier 0 deliberately yields nothing — see the module docs.
     let mut vars = Vec::new();
     if tier >= 1 {
@@ -219,10 +220,17 @@ fn tier_vars(tier: u8) -> Vec<(&'static str, &'static str)> {
     if tier >= 2 {
         vars.push(("WEBKIT_DISABLE_COMPOSITING_MODE", "1"));
     }
-    if tier >= 3 {
+    if tier >= 3 && x11_available {
         vars.push(("GDK_BACKEND", "x11"));
     }
     vars
+}
+
+/// Forcing X11 without an X server leaves GTK unable to open any window. That
+/// is the case on a Wayland session without Xwayland, and inside a Flatpak with
+/// `--socket=fallback-x11`, which hides the X socket whenever Wayland is up.
+fn x11_available(display: Option<&OsStr>) -> bool {
+    display.is_some_and(|display| !display.is_empty())
 }
 
 /// GTK's Wayland input module segfaults under X11, so a session that exported
@@ -258,7 +266,8 @@ impl LaunchFacts {
 fn apply_tier(tier: u8) {
     // SAFETY (every env write below): called at the very start of `run()`,
     // before the Tauri builder spawns any threads or initializes GTK/WebKitGTK.
-    for (key, value) in tier_vars(tier) {
+    let x11 = x11_available(std::env::var_os("DISPLAY").as_deref());
+    for (key, value) in tier_vars(tier, x11) {
         if std::env::var_os(key).is_none() {
             unsafe { std::env::set_var(key, value) };
         }
@@ -326,14 +335,18 @@ pub fn set_graphics_mode(identifier: &str, mode: GraphicsMode) -> std::io::Resul
 mod tests {
     use super::{
         GraphicsMode, LaunchFacts, MAX_TIER, StartupState, drops_im_module, load_state, save_state,
-        tier_vars,
+        tier_vars, x11_available,
     };
+    use std::ffi::OsStr;
 
     const V1: &str = "0.1.0-beta3";
     const V2: &str = "0.1.0-beta4";
 
     fn keys(tier: u8) -> Vec<&'static str> {
-        tier_vars(tier).into_iter().map(|(key, _)| key).collect()
+        tier_vars(tier, true)
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect()
     }
 
     fn nvidia_wayland() -> LaunchFacts {
@@ -356,7 +369,7 @@ mod tests {
     /// The point of the ladder: a machine that renders fine is left alone.
     #[test]
     fn tier_0_applies_nothing() {
-        assert!(tier_vars(0).is_empty());
+        assert!(tier_vars(0, true).is_empty());
     }
 
     #[test]
@@ -380,6 +393,20 @@ mod tests {
     fn tier_3_adds_the_x11_fallback() {
         assert!(keys(3).contains(&"GDK_BACKEND"));
         assert!(!keys(2).contains(&"GDK_BACKEND"));
+    }
+
+    #[test]
+    fn the_x11_fallback_needs_an_x_server() {
+        let without_x = tier_vars(MAX_TIER, false);
+        assert!(without_x.iter().all(|(key, _)| *key != "GDK_BACKEND"));
+        assert_eq!(without_x, tier_vars(2, false));
+    }
+
+    #[test]
+    fn an_x_server_is_only_assumed_when_display_is_set() {
+        assert!(x11_available(Some(OsStr::new(":0"))));
+        assert!(!x11_available(Some(OsStr::new(""))));
+        assert!(!x11_available(None));
     }
 
     /// Escalation must only ever add remedies: a higher tier that dropped one

@@ -144,6 +144,14 @@ pub fn startup_render_ok(app: tauri::AppHandle) {
     let _ = app;
 }
 
+/// Whether this install updates itself, and if not, what updates it instead.
+#[tauri::command]
+pub fn updates_supported(
+    support: tauri::State<'_, crate::update_support::UpdateSupport>,
+) -> crate::update_support::UpdateSupport {
+    *support
+}
+
 /// The Linux graphics compatibility mode chosen in Settings: "automatic",
 /// "compatible" or "safe". Always "automatic" on other platforms.
 #[tauri::command]

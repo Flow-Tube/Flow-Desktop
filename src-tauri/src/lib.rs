@@ -22,6 +22,7 @@ mod security;
 mod services;
 mod streaming;
 pub mod sync;
+mod update_support;
 #[cfg(any(target_os = "linux", test))]
 mod web_process;
 #[cfg(any(windows, test))]
@@ -38,7 +39,7 @@ use commands::db::{
 };
 use commands::diagnostics::{
     clear_logs, get_graphics_mode, log_frontend_event, logs_dir_path, read_logs,
-    reveal_logs_folder, set_graphics_mode, startup_render_ok,
+    reveal_logs_folder, set_graphics_mode, startup_render_ok, updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
@@ -179,6 +180,12 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     let libva_fallback = appimage::apply_libva_fallback();
 
+    let update_support = update_support::detect(
+        tauri::utils::platform::resource_dir(context.package_info(), &tauri::Env::default())
+            .ok()
+            .as_deref(),
+    );
+
     let mut builder = tauri::Builder::default();
 
     // Single-instance MUST be the first plugin. A second `flow://` launch is
@@ -208,9 +215,11 @@ pub fn run() {
 
         // In-app updater (GitHub releases, signature-verified) plus the process
         // plugin so the frontend can relaunch into the freshly installed build.
-        builder = builder
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_process::init());
+        // Installs that something else updates never get the updater at all.
+        if update_support.supported {
+            builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        }
+        builder = builder.plugin(tauri_plugin_process::init());
     }
 
     builder
@@ -361,13 +370,14 @@ pub fn run() {
                 proxy_listeners.images,
             ));
             app.manage(streaming_manager);
+            app.manage(update_support);
 
             services::notification_service::spawn_poll_loop(app.handle().clone(), pool.clone());
 
             // Register the flow:// scheme at runtime. Production installers
             // (NSIS/MSI, .desktop) do this, but dev builds and Linux need it.
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            {
+            if !update_support.package_owns_desktop_entry() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 if let Err(error) = app.deep_link().register_all() {
                     tracing::warn!("failed to register flow:// scheme: {error}");
@@ -500,6 +510,7 @@ pub fn run() {
             startup_render_ok,
             get_graphics_mode,
             set_graphics_mode,
+            updates_supported,
             set_player_fullscreen,
             commands::window::set_window_background,
             // --- Pop-out (picture-in-picture) player window ---

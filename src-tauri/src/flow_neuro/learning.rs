@@ -27,6 +27,7 @@ use crate::flow_neuro::vector_math::{
     PHRASE_WORD_SHARE, RECENT, TIME_OF_DAY, adjust_vector, cap_topics, learn, phrase_first,
     plant_topics,
 };
+use crate::flow_neuro::{categories, formats};
 
 /// A Short teaches the taste vectors 1 % of what a long-form video does: Shorts are browsed by
 /// swiping, so each one says little (Android #907). The Shorts vector learns from them in full.
@@ -56,6 +57,8 @@ pub struct Interaction<'a> {
     pub percent_watched: f32,
     /// Seconds since the card was last shown: a quick click says more than a late one.
     pub seconds_since_impression: Option<f64>,
+    /// YouTube's category, as the player's microformat names it; feeds carry none.
+    pub category: Option<&'a str>,
 }
 
 /// Result of applying one interaction. `learning_rate` is `None` when a watch update taught
@@ -63,6 +66,8 @@ pub struct Interaction<'a> {
 pub struct InteractionOutcome {
     pub learning_rate: Option<f64>,
     pub primary_topic: Option<String>,
+    /// What the video read as, for the content store.
+    pub topics: HashMap<String, f64>,
 }
 
 /// The event's learning rate, before Shorts, click speed and maturity adjust it.
@@ -167,6 +172,7 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
         return InteractionOutcome {
             learning_rate: None,
             primary_topic: None,
+            topics: HashMap::new(),
         };
     }
 
@@ -187,6 +193,7 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
         return InteractionOutcome {
             learning_rate: Some(-cut),
             primary_topic,
+            topics: video_vector.topics,
         };
     }
 
@@ -250,6 +257,14 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
     if kind == InteractionType::Watched && learning_rate > 0.0 {
         brain.vote_language(event.title, event.description);
     }
+    if learning_rate > 0.0 && !event.is_short {
+        formats::learn(&mut brain.format_affinity, &video_vector.formats);
+        if is_strong(event)
+            && let Some(category) = categories::id_of(event.category)
+        {
+            categories::learn(&mut brain.category_affinity, category);
+        }
+    }
     if learning_rate > 0.0 {
         learn_spellings(brain, event, &video_vector, &spec);
     }
@@ -258,6 +273,7 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
     InteractionOutcome {
         learning_rate: Some(learning_rate),
         primary_topic,
+        topics: video_vector.topics,
     }
 }
 
@@ -300,6 +316,12 @@ fn learn_spellings(
     );
 }
 
+/// A real watch, a like or a save: what may plant topics and teach the category mix.
+pub fn is_strong(event: &Interaction) -> bool {
+    matches!(event.kind, InteractionType::Liked | InteractionType::Saved)
+        || (event.kind == InteractionType::Watched && event.percent_watched >= 0.40)
+}
+
 /// The long-term, recent and time-of-day taste, and the Shorts vector for a Short.
 fn learn_taste(
     brain: &mut UserBrain,
@@ -340,9 +362,7 @@ fn learn_taste(
 
     // A real watch, like or save counts at least the acquisition floor for its top topics, so a
     // new interest can establish on a mature profile at all.
-    let strong = matches!(event.kind, InteractionType::Liked | InteractionType::Saved)
-        || (event.kind == InteractionType::Watched && event.percent_watched >= 0.40);
-    if strong && !event.is_short {
+    if is_strong(event) && !event.is_short {
         let own_documents = i32::from(is_counted(brain, event.video_id));
         let plantable = plant_filter(
             event.title,
@@ -766,6 +786,7 @@ mod tests {
                 kind: e.kind,
                 percent_watched: e.percent,
                 seconds_since_impression: None,
+                category: None,
             },
         )
     }
@@ -821,6 +842,7 @@ mod tests {
                     kind: InteractionType::Click,
                     percent_watched: 0.0,
                     seconds_since_impression: Some(seconds),
+                    category: None,
                 },
             )
             .learning_rate

@@ -12,33 +12,31 @@ use crate::flow_neuro::bootstrap::{
     ImportedVideo, bootstrap_from_history, bootstrap_from_subscriptions,
 };
 use crate::flow_neuro::brain_store::BrainStore;
+use crate::flow_neuro::categories;
 use crate::flow_neuro::channel_knowledge::{learn_from_uploads, subscription_changed};
+use crate::flow_neuro::co_watch::RelatedChannel;
 use crate::flow_neuro::deep_flow::learning_paused;
 use crate::flow_neuro::display_forms::{label, with_pick_spellings};
-use crate::flow_neuro::features::{
-    TopicReader, VideoText, extract_features, pick_keys, title_words,
-};
+use crate::flow_neuro::features::{pick_keys, title_words};
 use crate::flow_neuro::keyed_lists::{DISCOVERY_NOISE_WORDS, keyed_lists};
 use crate::flow_neuro::keyspec::KeySpec;
 use crate::flow_neuro::keyspec::text::is_topic_sized;
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::learning::{Interaction, apply_interaction};
-use crate::flow_neuro::ranker;
+use crate::flow_neuro::rank::{RankContext, SessionState, rank};
+use crate::flow_neuro::ranker::MomentumEntry;
 use crate::flow_neuro::scoring::{
-    CHANNEL_SUPPRESSION_DAYS, FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona,
-    IMPRESSION_CACHE_MAX, IdfSnapshot, JITTER_COLD_START, JITTER_NORMAL,
-    ONBOARDING_WARMUP_INTERACTIONS, QUERY_OVERLAP_THRESHOLD, QUERY_ROTATION_FLOOR,
-    QUERY_ROTATION_RECENT_WINDOW, RECENT_QUERY_TOKENS_MAX, SESSION_TOPIC_HISTORY_MAX, ScoredVideo,
-    TimeBucket, TopicEvidence, UserBrain, apply_smart_diversity, channel_inferred_blocked,
+    FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX,
+    QUERY_OVERLAP_THRESHOLD, QUERY_ROTATION_FLOOR, QUERY_ROTATION_RECENT_WINDOW,
+    RECENT_QUERY_TOKENS_MAX, SESSION_TOPIC_HISTORY_MAX, TimeBucket, TopicEvidence, UserBrain,
     classify_persona, get_topic_categories, is_known_short, is_music_track, strip_domain_tag,
-    time_bucket_confidence,
 };
 use crate::flow_neuro::search_learning::learn_search;
+use crate::flow_neuro::side_stores::SideStores;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::specificity::specificity;
-use crate::flow_neuro::vector_math::{RECENT_SHARE, blend};
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
-use crate::models::video::{MusicHomeChip, MusicHomeSection, VideoSummary};
+use crate::models::video::{MusicHomeChip, MusicHomeSection, RelatedContentItem, VideoSummary};
 use crate::services::youtube_service::YoutubeService;
 
 const TIME_CONTEXT_SELECTION_MULTIPLIER: f64 = 3.0;
@@ -51,13 +49,16 @@ const QUERY_BONDING_QUERY_LIMIT: usize = 8;
 const EMERGING_TOKEN_MAX_WEIGHT: f64 = 0.18;
 /// A word every subject uses ("normal", "better") searches up any subject (Android #907).
 const QUERY_MIN_SPECIFICITY: f64 = 0.65;
-/// How much of a candidate's base score is taste (long-term, recent and time of day).
-const TASTE_WEIGHT: f64 = 0.8;
-const NOVELTY_WEIGHT: f64 = 0.2;
+/// A channel above its starting score is one the viewer has watched.
+const NEUTRAL_CHANNEL_SCORE: f64 = 0.5;
+const SESSION_RESET_IDLE_MINUTES: u64 = 120;
+const SESSION_RESET_EMPTY_MINUTES: u64 = 30;
+const MOMENTUM_WINDOW: usize = 10;
 
 pub struct RecommendationService {
     pool: SqlitePool,
     brain_store: Arc<BrainStore>,
+    stores: Arc<SideStores>,
     impression_cache: Mutex<HashMap<String, (i32, u64)>>, // video_id -> (seen_count, last_seen_timestamp)
     session_topic_history: Mutex<Vec<String>>,
     session_video_count: Mutex<i32>,
@@ -65,7 +66,10 @@ pub struct RecommendationService {
     /// Channels whose upload titles were already read this session.
     profiled_channels: Mutex<HashSet<String>>,
     #[allow(dead_code)]
-    session_start_time: u64,
+    /// When the viewer last ranked or watched anything, for the idle session reset.
+    last_activity_ms: Mutex<u64>,
+    /// The last few interactions' topics and whether they were positive.
+    momentum: Mutex<Vec<MomentumEntry>>,
 }
 
 #[derive(Default)]
@@ -272,7 +276,7 @@ impl RecommendationService {
         }
     }
 
-    pub fn new(pool: SqlitePool, brain_store: Arc<BrainStore>) -> Self {
+    pub fn new(pool: SqlitePool, brain_store: Arc<BrainStore>, stores: Arc<SideStores>) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -280,12 +284,14 @@ impl RecommendationService {
         Self {
             pool,
             brain_store,
+            stores,
             impression_cache: Mutex::new(HashMap::new()),
             session_topic_history: Mutex::new(Vec::new()),
             session_video_count: Mutex::new(0),
             watch: Mutex::new(WatchSlot::default()),
             profiled_channels: Mutex::new(HashSet::new()),
-            session_start_time: now,
+            last_activity_ms: Mutex::new(now),
+            momentum: Mutex::new(Vec::new()),
         }
     }
 
@@ -983,18 +989,6 @@ impl RecommendationService {
         (rotated, saturated)
     }
 
-    fn calculate_adaptive_jitter(total_interactions: i32, feed_overlap_ratio: f64) -> f64 {
-        if total_interactions < ONBOARDING_WARMUP_INTERACTIONS {
-            JITTER_COLD_START
-        } else if feed_overlap_ratio > 0.5 {
-            0.12
-        } else if feed_overlap_ratio > 0.2 {
-            0.06
-        } else {
-            JITTER_NORMAL
-        }
-    }
-
     pub async fn generate_discovery_queries(&self) -> AppResult<Vec<String>> {
         let mut brain = self.brain_store.write().await;
         let spec = brain.key_spec();
@@ -1426,12 +1420,15 @@ impl RecommendationService {
         Ok(deduped)
     }
 
+    /// Ranks feed candidates; above 0, `min_relevance` leaves out what shares less than that with
+    /// the viewer's interests.
     pub async fn rank_candidates(
         &self,
         candidates: Vec<VideoSummary>,
         user_subs: HashSet<String>,
+        min_relevance: f64,
     ) -> AppResult<Vec<VideoSummary>> {
-        self.rank_candidates_inner(candidates, user_subs, false)
+        self.rank_candidates_inner(candidates, user_subs, min_relevance, false)
             .await
     }
 
@@ -1442,210 +1439,83 @@ impl RecommendationService {
         candidates: Vec<VideoSummary>,
         user_subs: HashSet<String>,
     ) -> AppResult<Vec<VideoSummary>> {
-        self.rank_candidates_inner(candidates, user_subs, true)
+        self.rank_candidates_inner(candidates, user_subs, 0.0, true)
             .await
+    }
+
+    /// Keeps the related list shown beside `video_id` until the viewer watches or likes the video,
+    /// when it becomes a co-watch source. Music never counts.
+    pub fn note_related(&self, video_id: &str, related: &[RelatedContentItem]) {
+        let channels = related
+            .iter()
+            .filter(|item| item.item_type == "video")
+            .filter_map(|item| {
+                Some(RelatedChannel {
+                    channel_id: item.channel_id.clone()?,
+                    channel_name: item.channel_name.clone(),
+                })
+            })
+            .collect();
+        self.stores.co_watch.note_related(video_id, channels);
     }
 
     async fn rank_candidates_inner(
         &self,
         candidates: Vec<VideoSummary>,
         user_subs: HashSet<String>,
+        min_relevance: f64,
         lenient: bool,
     ) -> AppResult<Vec<VideoSummary>> {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
-        let candidate_count = candidates.len();
-
-        let brain = self.brain_store.read().await;
+        self.reset_idle_session();
         let now_ms = self.get_current_time_ms();
-        let channel_cutoff = now_ms.saturating_sub(CHANNEL_SUPPRESSION_DAYS * 86_400_000);
-
-        // 1. Pre-filter blocked channels and topics
-        let filtered: Vec<VideoSummary> = candidates
-            .into_iter()
-            .filter(|video| {
-                let channel_id = video.channel_id.as_deref().unwrap_or(&video.id);
-                if brain.suppressed_video_ids.contains_key(&video.id) {
-                    return false;
-                }
-                if !lenient
-                    && brain
-                        .suppressed_channels
-                        .get(channel_id)
-                        .map(|ts| *ts >= channel_cutoff)
-                        .unwrap_or(false)
-                {
-                    return false;
-                }
-                if brain.blocked_channels.contains(channel_id) {
-                    return false;
-                }
-                if !lenient {
-                    if let Some(strike) = brain.channel_strikes.get(channel_id) {
-                        if channel_inferred_blocked(strike, now_ms) {
-                            return false;
-                        }
-                    }
-                }
-                let title_lower = video.title.to_lowercase();
-                let channel_lower = video.channel_name.to_lowercase();
-                !brain
-                    .blocked_topics
-                    .iter()
-                    .any(|blocked| title_lower.contains(blocked) || channel_lower.contains(blocked))
-            })
-            .collect();
-
-        if filtered.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        // Snapshots of caches
-        let idf_snapshot = IdfSnapshot {
-            word_frequencies: brain.idf_word_frequency.clone(),
-            total_documents: brain.idf_total_documents,
-        };
-        let impression_snap = self.impression_cache.lock().unwrap().clone();
         let session_topics = self.session_topic_history.lock().unwrap().clone();
-        let session_vid_count = *self.session_video_count.lock().unwrap();
-        let feed_overlap_ratio = if filtered.is_empty() || brain.feed_history.is_empty() {
-            0.0
-        } else {
-            let candidate_ids: HashSet<String> =
-                filtered.iter().map(|video| video.id.clone()).collect();
-            let history_ids: HashSet<String> = brain
-                .feed_history
-                .iter()
-                .filter(|(_, entry)| now_ms.saturating_sub(entry.last_shown) < 172_800_000)
-                .map(|(video_id, _)| video_id.clone())
-                .collect();
-            let overlap = candidate_ids.intersection(&history_ids).count();
-            overlap as f64 / candidate_ids.len() as f64
+        let session_video_count = *self.session_video_count.lock().unwrap();
+        let momentum = self.momentum.lock().unwrap().clone();
+        let brain = self.brain_store.read().await;
+        let is_watched = |channel: &str| {
+            brain.channel_scores.get(channel).copied().unwrap_or(0.0) > NEUTRAL_CHANNEL_SCORE
         };
-
-        // Time context vector
-        let current_bucket = TimeBucket::current();
-        let time_context_vec = brain
-            .time_vectors
-            .get(&current_bucket)
-            .cloned()
-            .unwrap_or_default();
-
-        // A time of day counts for up to half the taste once it has seen enough events; skipping
-        // never reweights scoring, where it once lifted less relevant videos (Android #907).
-        let w_context = TASTE_WEIGHT * 0.5 * time_bucket_confidence(&brain, current_bucket);
-        let w_personality = TASTE_WEIGHT - w_context;
-        let w_novelty = NOVELTY_WEIGHT;
-
-        let is_onboarding = brain.total_interactions < ONBOARDING_WARMUP_INTERACTIONS;
-        let onboarding_warmup = if is_onboarding {
-            1.0 - (brain.total_interactions as f64 / ONBOARDING_WARMUP_INTERACTIONS as f64) * 0.5
-        } else {
-            0.5
-        };
-
-        let mut seed = now_ms;
-        let mut next_random = move || {
-            seed = seed
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (seed as f64) / (u64::MAX as f64)
-        };
-
-        // Score every candidate through the normalized ranking pipeline (ranker module).
-        let mut rng = next_random();
-        let jitter_amount =
-            Self::calculate_adaptive_jitter(brain.total_interactions, feed_overlap_ratio);
-
-        let exploration_scale = match classify_persona(&brain) {
-            FlowPersona::Specialist => 0.3,
-            FlowPersona::Explorer => 1.0,
-            _ => 0.6,
-        };
-
-        let spec = brain.key_spec();
-        let pick_keys = pick_keys(&brain);
-        let taste = blend(&brain.global_vector, &brain.recent_vector, RECENT_SHARE);
-        let rank_inputs = ranker::RankInputs {
+        let co_watch_prior = self.stores.co_watch.prior(&is_watched, now_ms);
+        let category_of = |channel: &str| self.stores.categories.category_of(channel);
+        let stored_topics = |video_id: &str| self.stores.content.topics_for(video_id);
+        let ctx = RankContext {
             brain: &brain,
-            taste: &taste,
-            time_context: &time_context_vec,
-            weights: ranker::ScoringWeights {
-                personality: w_personality,
-                context: w_context,
-                novelty: w_novelty,
-            },
+            user_subs: &user_subs,
             now_ms,
-            is_onboarding,
-            onboarding_warmup,
-            session_topics: &session_topics,
-            session_video_count: session_vid_count,
-            candidate_pool_size: candidate_count,
-            exploration_scale,
-            pick_keys: &pick_keys,
-            spec: &spec,
+            min_relevance,
+            keep_suppressed_channels: lenient,
+            session: SessionState {
+                topics: &session_topics,
+                video_count: session_video_count,
+                momentum: &momentum,
+            },
+            category_of: &category_of,
+            co_watch_prior: &co_watch_prior,
+            stored_topics: &stored_topics,
+            seed: now_ms,
         };
+        Ok(rank(&ctx, candidates))
+    }
 
-        let mut candidates_map: HashMap<String, VideoSummary> =
-            HashMap::with_capacity(filtered.len());
-        let mut scored: Vec<ScoredVideo> = Vec::with_capacity(filtered.len());
-
-        for video in filtered {
-            let channel_id = video.channel_id.clone().unwrap_or_else(|| video.id.clone());
-            let is_short = is_known_short(video.duration_seconds);
-            let video_vector = extract_features(
-                &VideoText {
-                    title: &video.title,
-                    channel_name: &video.channel_name,
-                    description: None, // Feeds don't carry descriptions
-                    duration_seconds: video.duration_seconds,
-                    is_live: video.is_live,
-                    is_short,
-                },
-                &TopicReader {
-                    spec: spec.clone(),
-                    idf: &idf_snapshot,
-                },
-            );
-
-            let candidate = ranker::Candidate {
-                video_vector: &video_vector,
-                video_id: &video.id,
-                channel_id: &channel_id,
-                published_text: video.published_text.as_deref().unwrap_or(""),
-                view_count: Self::parse_view_count(video.view_count_text.as_deref()),
-                is_subscription: user_subs.contains(&channel_id),
-                impression: impression_snap.get(&video.id).copied(),
-            };
-
-            let score = ranker::score_candidate(&rank_inputs, &candidate) + rng * jitter_amount;
-            rng = next_random();
-
-            scored.push(ScoredVideo {
-                id: video.id.clone(),
-                title: video.title.clone(),
-                channel_id,
-                score,
-                vector: video_vector,
-            });
-            candidates_map.insert(video.id.clone(), video);
+    /// A session idle for two hours, or half an hour without a video, starts over (Android A16:
+    /// measured from the last activity, not from when the app opened).
+    fn reset_idle_session(&self) {
+        let now_ms = self.get_current_time_ms();
+        let mut last = self.last_activity_ms.lock().unwrap();
+        let idle_minutes = now_ms.saturating_sub(*last) / 60_000;
+        let empty = *self.session_video_count.lock().unwrap() == 0;
+        if idle_minutes > SESSION_RESET_IDLE_MINUTES
+            || (empty && idle_minutes > SESSION_RESET_EMPTY_MINUTES)
+        {
+            self.session_topic_history.lock().unwrap().clear();
+            *self.session_video_count.lock().unwrap() = 0;
+            self.momentum.lock().unwrap().clear();
+            self.impression_cache.lock().unwrap().clear();
         }
-
-        let reranked_ids = apply_smart_diversity(scored, &spec);
-
-        // Reassemble VideoSummary records in reranked order, then append any diversity drop-outs.
-        let mut final_results = Vec::with_capacity(candidates_map.len());
-        for id in reranked_ids {
-            if let Some(video) = candidates_map.remove(&id) {
-                final_results.push(video);
-            }
-        }
-        for (_, video) in candidates_map {
-            final_results.push(video);
-        }
-
-        Ok(final_results)
+        *last = now_ms;
     }
 
     pub async fn log_video_interaction(
@@ -1660,6 +1530,7 @@ impl RecommendationService {
         is_short: bool,
         interaction_type: InteractionType,
         percent_watched: f32,
+        category: Option<&str>,
     ) -> AppResult<()> {
         if self.learning_paused().await {
             return Ok(());
@@ -1689,9 +1560,48 @@ impl RecommendationService {
                     kind: interaction_type,
                     percent_watched,
                     seconds_since_impression,
+                    category,
                 },
             )
         };
+        // A finished viewing says which category its channel posts in, whatever it taught.
+        if matches!(
+            interaction_type,
+            InteractionType::Watched | InteractionType::Skipped
+        ) && let Some(category) = categories::id_of(category)
+        {
+            #[allow(clippy::cast_possible_wrap)]
+            self.stores
+                .categories
+                .record(channel_id, category, now_ms as i64)
+                .await?;
+        }
+        *self.last_activity_ms.lock().unwrap() = now_ms;
+        let learned = outcome.learning_rate.is_some_and(|rate| rate > 0.0);
+        if learned && !is_short && is_strong_signal(interaction_type, percent_watched) {
+            self.stores
+                .co_watch
+                .record_pending(video_id, channel_id, now_ms)
+                .await?;
+        }
+        // Feeds carry titles alone; a video watched with its description is scored on that later.
+        if learned && description.is_some_and(|text| !text.trim().is_empty()) {
+            #[allow(clippy::cast_possible_wrap)]
+            self.stores
+                .content
+                .put(video_id, &outcome.topics, now_ms as i64)
+                .await?;
+        }
+        if let (Some(topic), Some(rate)) = (&outcome.primary_topic, outcome.learning_rate) {
+            let mut momentum = self.momentum.lock().unwrap();
+            momentum.push(MomentumEntry {
+                topic: topic.clone(),
+                positive: rate > 0.0,
+            });
+            if momentum.len() > MOMENTUM_WINDOW {
+                momentum.remove(0);
+            }
+        }
         if outcome.learning_rate.is_some_and(|rate| rate > 0.0) {
             self.impression_cache.lock().unwrap().remove(video_id);
         }
@@ -1856,6 +1766,7 @@ impl RecommendationService {
             is_known_short(duration),
             interaction,
             percent_watched,
+            report.category.as_deref(),
         )
         .await
     }
@@ -2522,6 +2433,8 @@ impl RecommendationService {
         self.session_topic_history.lock().unwrap().clear();
         *self.session_video_count.lock().unwrap() = 0;
         self.watch.lock().unwrap().session = None;
+        self.momentum.lock().unwrap().clear();
+        self.stores.clear().await?;
         recommendations::clear_recommendation_events(&self.pool).await
     }
 }
@@ -2676,6 +2589,7 @@ mod tests {
                         kind: InteractionType::Watched,
                         percent_watched: 0.9,
                         seconds_since_impression: None,
+                        category: None,
                     },
                 );
             }
@@ -2863,4 +2777,10 @@ mod tests {
         assert_eq!(rotated, queries);
         assert!(!saturated);
     }
+}
+
+/// A real watch, a like or a save, as learning counts it.
+fn is_strong_signal(kind: InteractionType, percent_watched: f32) -> bool {
+    matches!(kind, InteractionType::Liked | InteractionType::Saved)
+        || (kind == InteractionType::Watched && percent_watched >= 0.40)
 }

@@ -282,6 +282,7 @@ mod tests {
                 kind: InteractionType::Watched,
                 percent_watched: 0.9,
                 seconds_since_impression: None,
+                category: None,
             },
         );
         let spec = brain.key_spec();

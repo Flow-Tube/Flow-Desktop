@@ -51,6 +51,8 @@ export interface VideoDetails {
   publishedText?: string | null;
   chapters?: VideoChapter[];
   isLive?: boolean | null;
+  /** YouTube's category ("Gaming", "Education") from the player's microformat. */
+  category?: string | null;
 }
 
 export interface StreamInfo {

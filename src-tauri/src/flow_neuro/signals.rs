@@ -174,6 +174,7 @@ mod tests {
                 kind: InteractionType::Liked,
                 percent_watched: 0.0,
                 seconds_since_impression: None,
+                category: None,
             },
         );
         save_brain(&pool, &brain).await.unwrap();

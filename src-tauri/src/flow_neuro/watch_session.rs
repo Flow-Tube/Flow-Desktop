@@ -23,6 +23,9 @@ pub struct WatchReport {
     /// Music played in the video player; the video engine never learns from it.
     #[serde(default)]
     pub is_music: bool,
+    /// YouTube's category from the video's details, once they load.
+    #[serde(default)]
+    pub category: Option<String>,
     /// Playback position in seconds.
     pub position: f64,
     /// Media length in seconds, 0 while unknown.
@@ -77,6 +80,10 @@ impl WatchSession {
             .clone()
             .filter(|text| !text.is_empty())
             .or_else(|| self.report.description.take());
+        let category = report
+            .category
+            .clone()
+            .or_else(|| self.report.category.take());
         let duration = if report.duration > 0.0 {
             report.duration
         } else {
@@ -103,6 +110,7 @@ impl WatchSession {
             channel_id,
             description,
             duration,
+            category,
             ..report
         };
     }
@@ -156,6 +164,7 @@ mod tests {
             description: None,
             is_live: false,
             is_music: false,
+            category: None,
             position,
             duration: 600.0,
             played_delta,

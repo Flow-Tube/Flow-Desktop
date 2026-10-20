@@ -1920,6 +1920,9 @@ impl InnertubeClient {
             published_text,
             chapters,
             is_live: res["videoDetails"]["isLive"].as_bool().unwrap_or(false),
+            category: res["microformat"]["playerMicroformatRenderer"]["category"]
+                .as_str()
+                .map(str::to_string),
         })
     }
 

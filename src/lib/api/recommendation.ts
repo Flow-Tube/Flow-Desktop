@@ -42,15 +42,20 @@ const MOCK_FEED_QUOTAS: FeedQuotas = {
   viralLimit: 10,
 };
 
+/**
+ * Ranks feed candidates. A lane that must stay on the viewer's subjects (discovery, related)
+ * passes `relevantOnly`, which leaves out what shares next to nothing with their interests.
+ */
 export async function rankVideos(
   candidates: VideoSummary[],
   userSubs: string[],
+  relevantOnly = false,
 ): Promise<VideoSummary[]> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning candidates with mock ranking.");
     return [...candidates].sort(() => 0.5 - Math.random());
   }
-  return invokeBackend<VideoSummary[]>("rank_videos", { candidates, userSubs });
+  return invokeBackend<VideoSummary[]>("rank_videos", { candidates, userSubs, relevantOnly });
 }
 
 export async function getFeedQuotas(): Promise<FeedQuotas> {
@@ -118,6 +123,7 @@ export interface WatchReport {
   description: string | null;
   isLive: boolean;
   isMusic: boolean;
+  category: string | null;
   position: number;
   duration: number;
   playedDelta: number;

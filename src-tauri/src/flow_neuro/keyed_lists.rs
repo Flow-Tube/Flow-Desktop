@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::flow_neuro::feature_tables::feature_tables;
 use crate::flow_neuro::keyspec::{KeySpec, tables::tables};
-use crate::flow_neuro::topic_catalog::ONBOARDING_TOPICS;
+use crate::flow_neuro::topic_catalog::onboarding_topics;
 
 /// Words so broad that a title naming them says little about its subject.
 const GENERIC_WORDS: [&str; 26] = [
@@ -213,7 +213,9 @@ impl KeyedLists {
             discovery_noise: keyed(&DISCOVERY_NOISE_WORDS),
             polysemous: keyed(&POLYSEMOUS_WORDS),
             broad_topics: keyed(&REJECTION_BROAD_TOPICS),
-            catalog: keyed(&ONBOARDING_TOPICS),
+            catalog: onboarding_topics()
+                .flat_map(|topic| spec.keys_of(topic))
+                .collect(),
             // "feat" marks a song title's featured artist.
             music: keyed(&MUSIC_WORDS)
                 .into_iter()

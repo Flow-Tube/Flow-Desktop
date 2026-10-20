@@ -289,6 +289,8 @@ pub fn merged_flow_to_userbrain(m: &MergedFlowNeuroBrain, base: &UserBrain) -> U
         time_bucket_counts: base.time_bucket_counts.clone(),
         global_vector: wire_to_cv(&ev.global_vector, &base.global_vector),
         recent_vector: base.recent_vector.clone(),
+        format_affinity: base.format_affinity.clone(),
+        category_affinity: base.category_affinity.clone(),
         shorts_vector: ev.shorts_vector.as_ref().map_or_else(
             || base.shorts_vector.clone(),
             |w| wire_to_cv(w, &base.shorts_vector),

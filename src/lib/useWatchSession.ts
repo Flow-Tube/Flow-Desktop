@@ -14,6 +14,7 @@ export interface WatchSubject {
   isLive: boolean;
   /** Music played in the video player never teaches the video engine. */
   isMusic: boolean;
+  category: string | null;
 }
 
 interface Progress {

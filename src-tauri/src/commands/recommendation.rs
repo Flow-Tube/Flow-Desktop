@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::errors::ErrorResponse;
 use crate::flow_neuro::bootstrap::ImportedVideo;
+use crate::flow_neuro::gates::LANE_RELEVANCE_FLOOR;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
@@ -23,11 +24,17 @@ pub struct PersonaDetails {
 pub async fn rank_videos(
     candidates: Vec<VideoSummary>,
     user_subs: Vec<String>,
+    relevant_only: Option<bool>,
     recommendation_service: State<'_, RecommendationService>,
 ) -> Result<Vec<VideoSummary>, ErrorResponse> {
     let subs_set = user_subs.into_iter().collect::<HashSet<String>>();
+    let min_relevance = if relevant_only.unwrap_or(false) {
+        LANE_RELEVANCE_FLOOR
+    } else {
+        0.0
+    };
     recommendation_service
-        .rank_candidates(candidates, subs_set)
+        .rank_candidates(candidates, subs_set, min_relevance)
         .await
         .map_err(ErrorResponse::from)
 }
@@ -72,6 +79,7 @@ pub async fn log_interaction(
             is_short,
             interaction,
             percent_watched,
+            None,
         )
         .await
         .map_err(ErrorResponse::from)
@@ -135,6 +143,7 @@ pub async fn mark_not_interested(
             is_short,
             InteractionType::NotInterested,
             0.0,
+            None,
         )
         .await
         .map_err(ErrorResponse::from)

@@ -68,6 +68,9 @@ pub struct VideoDetails {
     pub chapters: Vec<VideoChapter>,
     #[serde(default)]
     pub is_live: bool,
+    /// YouTube's category ("Gaming", "Education") from the player's microformat.
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

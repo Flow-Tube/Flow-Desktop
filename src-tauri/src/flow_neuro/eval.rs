@@ -6,9 +6,9 @@
 //! fail if a change regresses ranking quality, and developers can reuse `evaluate` to compare
 //! parameter choices on fixtures instead of guessing.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::flow_neuro::ranker::{Candidate, RankInputs, ScoringWeights, score_candidate};
+use crate::flow_neuro::ranker::{Candidate, ScoringParams, affinity_neighbours, score_candidate};
 use crate::flow_neuro::scoring::{
     ContentVector, UserBrain, calculate_cosine_similarity, strip_domain_tag,
 };
@@ -83,25 +83,36 @@ pub fn topic_coverage(vectors: &[&ContentVector]) -> f64 {
 /// Scores every candidate with the live ranker (deterministic, no jitter), orders by score, and
 /// reports ranking-quality metrics against the candidates' relevance labels.
 pub fn evaluate(brain: &UserBrain, candidates: &[EvalCandidate], k: usize) -> EvalMetrics {
-    let time_context = ContentVector::default();
-    let inputs = RankInputs {
+    let context = ContentVector::default();
+    let user_subs: HashSet<String> = candidates
+        .iter()
+        .filter(|c| c.is_subscription)
+        .map(|c| c.channel_id.clone())
+        .collect();
+    let spec = brain.key_spec();
+    let no_category = |_: &str| None;
+    let params = ScoringParams {
         brain,
+        user_subs: &user_subs,
         taste: &brain.global_vector,
-        time_context: &time_context,
-        weights: ScoringWeights {
-            personality: 0.4,
-            context: 0.4,
-            novelty: 0.2,
-        },
-        now_ms: 0,
+        context: &context,
+        w_personality: 0.4,
+        w_context: 0.4,
+        w_novelty: 0.2,
+        is_cold_start: false,
         is_onboarding: false,
         onboarding_warmup: 0.5,
+        picks: &HashSet::new(),
         session_topics: &[],
         session_video_count: 0,
+        momentum: &[],
         candidate_pool_size: candidates.len(),
-        exploration_scale: 0.6,
-        pick_keys: &HashSet::new(),
-        spec: &brain.key_spec(),
+        now_ms: 0,
+        explore_weight: 0.6,
+        category_of: &no_category,
+        co_watch_prior: &HashMap::new(),
+        spec: &spec,
+        affinity_neighbours: affinity_neighbours(brain),
     };
 
     let scores: Vec<f64> = candidates
@@ -109,16 +120,20 @@ pub fn evaluate(brain: &UserBrain, candidates: &[EvalCandidate], k: usize) -> Ev
         .enumerate()
         .map(|(i, c)| {
             let id = i.to_string();
-            let candidate = Candidate {
-                video_vector: &c.vector,
-                video_id: &id,
-                channel_id: &c.channel_id,
-                published_text: "1 day ago",
-                view_count: 0,
-                is_subscription: c.is_subscription,
-                impression: None,
-            };
-            score_candidate(&inputs, &candidate)
+            score_candidate(
+                &params,
+                &Candidate {
+                    video_id: &id,
+                    channel_id: &c.channel_id,
+                    vector: &c.vector,
+                    upload_date: "1 day ago",
+                    view_count: 0,
+                    like_count: 0,
+                    category: None,
+                    is_live: false,
+                    is_short: false,
+                },
+            )
         })
         .collect();
 
@@ -246,6 +261,7 @@ mod tests {
                         kind: InteractionType::Watched,
                         percent_watched: 0.9,
                         seconds_since_impression: None,
+                        category: None,
                     },
                 );
             }

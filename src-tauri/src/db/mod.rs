@@ -7,6 +7,7 @@ pub mod download_collections;
 pub mod downloads;
 pub mod music_content;
 pub mod music_home;
+pub mod neuro_stores;
 pub mod notifications;
 pub mod recommendations;
 pub mod settings;

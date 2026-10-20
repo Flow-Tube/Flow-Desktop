@@ -533,13 +533,16 @@ pub async fn get_video_details(
 pub async fn get_related_videos(
     video_id: String,
     youtube_service: State<'_, YoutubeService>,
+    recommendation_service: State<'_, RecommendationService>,
 ) -> Result<Vec<RelatedContentItem>, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
-    youtube_service
+    let related = youtube_service
         .get_related_videos(&video_id)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    recommendation_service.note_related(&video_id, &related);
+    Ok(related)
 }
 
 #[tauri::command]

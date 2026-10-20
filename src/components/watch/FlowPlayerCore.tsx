@@ -84,9 +84,18 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
             description: videoDetails?.description || null,
             isLive: stream.isLive,
             isMusic: isMusicVideo(currentVideo),
+            category: videoDetails?.category ?? null,
           }
         : null,
-    [currentVideo, resolvedChannelId, videoDetails?.title, videoDetails?.channelName, videoDetails?.description, stream.isLive],
+    [
+      currentVideo,
+      resolvedChannelId,
+      videoDetails?.title,
+      videoDetails?.channelName,
+      videoDetails?.description,
+      videoDetails?.category,
+      stream.isLive,
+    ],
   );
   const { onTime: reportWatchTime, onEnded: endWatchSession } = useWatchSession(watchSubject);
 

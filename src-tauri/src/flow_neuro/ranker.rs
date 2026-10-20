@@ -1,199 +1,617 @@
+//! Scores one candidate the way Flow for Android does (`NeuroScoring.scoreCandidate`), term by term
+//! in its order, checked against its `rank_golden.json`. Additive terms and factors interleave as on
+//! Android; the impression-fatigue factor is left out because it can never fire there (Android A1),
+//! and a watched song gets no exemption from the watched penalty (music never trains this engine).
+
+use std::collections::{HashMap, HashSet};
+
+use crate::flow_neuro::categories::{ChannelCategory, factor as category_factor, id_of};
+use crate::flow_neuro::formats;
 use crate::flow_neuro::keyed_lists::keyed_lists;
 use crate::flow_neuro::keyspec::KeySpec;
+use crate::flow_neuro::keyspec::text::is_topic_sized;
 use crate::flow_neuro::rejections::rejection_penalty;
 use crate::flow_neuro::scoring::{
-    AFFINITY_BOOST_PER_PAIR, AFFINITY_MAX_BOOST_PER_VIDEO, BINGE_NOVELTY_FACTOR, BINGE_THRESHOLD,
-    CLASSIC_VIEW_THRESHOLD, COLD_START_THRESHOLD, CURIOSITY_GAP_BONUS, ContentVector,
-    IMPRESSION_DECAY_RATE, IMPRESSION_PENALTY_HEAVY, IMPRESSION_PENALTY_LIGHT,
-    IMPRESSION_PENALTY_MEDIUM, IMPRESSION_THRESHOLD_DROP, IMPRESSION_THRESHOLD_HEAVY,
-    IMPRESSION_THRESHOLD_LIGHT, ONBOARDING_MAX_BOOST, SERENDIPITY_BONUS,
-    SESSION_AFFINITY_MILD_BOOST, SESSION_AFFINITY_MILD_THRESHOLD, SESSION_AFFINITY_STRONG_BOOST,
-    SESSION_AFFINITY_STRONG_THRESHOLD, SUBSCRIPTION_BOOST, TimeDecay, UserBrain,
-    WATCHED_PENALTY_FULL, WATCHED_PENALTY_HALF, WATCHED_PENALTY_SAMPLED, WATCHED_THRESHOLD_FULL,
-    WATCHED_THRESHOLD_HALF, WATCHED_THRESHOLD_SAMPLED, calculate_anti_recommendation_penalty,
-    calculate_channel_profile_boost, calculate_channel_score_multiplier,
-    calculate_cosine_similarity, calculate_feed_history_penalty,
-    calculate_implicit_disinterest_penalty, calculate_relevance_floor, strip_domain_tag,
+    COLD_START_THRESHOLD, ContentVector, FeedEntry, UserBrain, calculate_cosine_similarity,
+    strip_domain_tag,
 };
-use crate::flow_neuro::signals::make_affinity_key;
-use std::collections::HashSet;
 
-/// Summed additive bonuses are capped so boosts (subscription, affinity, serendipity, …) can lift
-/// a candidate but never dominate the topical similarity that forms the base score.
-pub const ADDITIVE_BONUS_CAP: f64 = 0.5;
+const SUBSCRIPTION_BOOST: f64 = 0.15;
+/// The reel feed has its own subscription lane; more than this made every page one.
+const SHORTS_SUBSCRIPTION_BOOST_MULTIPLIER: f64 = 1.5;
+const SUBSCRIPTION_BOOST_MAX: f64 = 0.30;
+/// Where the channel sigmoid sits for a channel at its starting score, so knowing a channel is
+/// neutral and only how it was received moves it.
+const CHANNEL_SIGNAL_NEUTRAL: f64 = 0.7801;
+const SERENDIPITY_BONUS: f64 = 0.10;
+const CURIOSITY_GAP_BONUS: f64 = 0.10;
+const NOT_INTERESTED_CHANNEL_FLOOR: f64 = 0.20;
+const ONBOARDING_MAX_BOOST: f64 = 0.15;
+const ENGAGEMENT_RATE_BASELINE: f64 = 0.05;
+const ENGAGEMENT_MAX_BOOST: f64 = 0.05;
+const ENGAGEMENT_MIN_VIEWS: u64 = 1000;
+const ENGAGEMENT_FLOOR_RATE: f64 = 0.01;
+const ENGAGEMENT_FLOOR_MIN_VIEWS: u64 = 50_000;
+const ENGAGEMENT_FLOOR_PENALTY: f64 = 0.2;
+const COLD_START_ENGAGEMENT_FLOOR_RATE: f64 = 0.02;
+const COLD_START_ENGAGEMENT_FLOOR_MIN_VIEWS: u64 = 10_000;
+const BINGE_THRESHOLD: i32 = 20;
+const BINGE_NOVELTY_FACTOR: f64 = 0.15;
+const CLASSIC_VIEW_THRESHOLD: u64 = 5_000_000;
+const ANTI_REC_PENALTY_THRESHOLD: f64 = 0.6;
+const ANTI_REC_PENALTY: f64 = 0.4;
+const MOMENTUM_WINDOW: usize = 10;
+const MOMENTUM_BOOST: f64 = 0.08;
+const MOMENTUM_THRESHOLD: usize = 3;
+const WATCHED_PENALTY_FULL: f64 = 0.02;
+const WATCHED_PENALTY_HALF: f64 = 0.30;
+const WATCHED_PENALTY_SAMPLED: f64 = 0.70;
+const WATCHED_THRESHOLD_FULL: f32 = 0.85;
+const WATCHED_THRESHOLD_HALF: f32 = 0.50;
+const WATCHED_THRESHOLD_SAMPLED: f32 = 0.15;
+const AFFINITY_MAX_BOOST_PER_VIDEO: f64 = 0.15;
+const AFFINITY_BOOST_PER_PAIR: f64 = 0.05;
+const EXPLORE_BETA_C: f64 = 0.28;
+const EXPLORE_MAX_BONUS: f64 = 0.08;
+const NOVELTY_RELEVANCE_GATE: f64 = 0.08;
+const RELEVANCE_FLOOR_MIN_INTERACTIONS: i32 = 80;
+const RELEVANCE_FLOOR_SEVERE_THRESHOLD: f64 = 0.05;
+const RELEVANCE_FLOOR_MODERATE_THRESHOLD: f64 = 0.10;
+const RELEVANCE_FLOOR_SEVERE_PENALTY: f64 = 0.15;
+const RELEVANCE_FLOOR_MODERATE_PENALTY: f64 = 0.40;
+const IMPLICIT_DISINTEREST_WINDOW_HOURS: f64 = 48.0;
+const IMPLICIT_DISINTEREST_THRESHOLD_HEAVY: i32 = 5;
+const IMPLICIT_DISINTEREST_THRESHOLD_LIGHT: i32 = 3;
+const IMPLICIT_DISINTEREST_PENALTY_HEAVY: f64 = 0.10;
+const IMPLICIT_DISINTEREST_PENALTY_LIGHT: f64 = 0.30;
+/// The most a channel watched alongside the viewer's own adds to a score.
+const COWATCH_MAX_PRIOR: f64 = 0.04;
+const HOUR_MS: f64 = 3_600_000.0;
 
-/// UCB exploration: under-sampled topics get a confidence bonus `c * sqrt(ln(1+N) / (1+n))`,
-/// nudging the feed toward what the profile is uncertain about instead of only what it knows.
-pub const EXPLORE_C: f64 = 0.03;
-pub const EXPLORE_BONUS_CAP: f64 = 0.08;
-
-pub struct ScoringWeights {
-    pub personality: f64,
-    pub context: f64,
-    pub novelty: f64,
+/// A recent interaction's topic and whether it was positive, for session momentum.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MomentumEntry {
+    pub topic: String,
+    pub positive: bool,
 }
 
-/// Per-refresh inputs shared by every candidate in one ranking pass.
-pub struct RankInputs<'a> {
+/// Everything one ranking pass shares across its candidates.
+pub struct ScoringParams<'a> {
     pub brain: &'a UserBrain,
-    /// The taste candidates are scored against: long-term with a quarter of the recent taste.
+    pub user_subs: &'a HashSet<String>,
+    /// Long-term taste with a quarter of the recent one.
     pub taste: &'a ContentVector,
-    pub time_context: &'a ContentVector,
-    pub weights: ScoringWeights,
-    pub now_ms: u64,
+    pub context: &'a ContentVector,
+    pub w_personality: f64,
+    pub w_context: f64,
+    pub w_novelty: f64,
+    pub is_cold_start: bool,
     pub is_onboarding: bool,
     pub onboarding_warmup: f64,
+    /// The keys the viewer's own picks read as.
+    pub picks: &'a HashSet<String>,
     pub session_topics: &'a [String],
     pub session_video_count: i32,
+    pub momentum: &'a [MomentumEntry],
     pub candidate_pool_size: usize,
-    /// Persona-scaled exploration appetite (Explorer high, Specialist low). 0 disables UCB.
-    pub exploration_scale: f64,
-    /// The keys the viewer's onboarding picks read as.
-    pub pick_keys: &'a HashSet<String>,
-    /// How the brain reads text into keys.
+    pub now_ms: u64,
+    /// Persona-scaled appetite for exploration: explorers roam, specialists stay focused.
+    pub explore_weight: f64,
+    pub category_of: &'a dyn Fn(&str) -> Option<ChannelCategory>,
+    /// Channel to the strength (0..1) of its strongest pair with a channel the viewer watches.
+    pub co_watch_prior: &'a HashMap<String, f64>,
     pub spec: &'a KeySpec,
+    /// The topic links as topic to (other topic to weight), built once per pass.
+    pub affinity_neighbours: HashMap<String, HashMap<String, f64>>,
 }
 
-/// Per-candidate inputs. Borrows the candidate's extracted vector and metadata.
+/// The topic links of `brain` as topic to (other topic to weight).
+#[must_use]
+pub fn affinity_neighbours(brain: &UserBrain) -> HashMap<String, HashMap<String, f64>> {
+    let mut neighbours: HashMap<String, HashMap<String, f64>> = HashMap::new();
+    for (key, &weight) in &brain.topic_affinities {
+        let Some((a, b)) = key.split_once('|') else {
+            continue;
+        };
+        if a.is_empty() {
+            continue;
+        }
+        neighbours
+            .entry(a.to_string())
+            .or_default()
+            .insert(b.to_string(), weight);
+        neighbours
+            .entry(b.to_string())
+            .or_default()
+            .insert(a.to_string(), weight);
+    }
+    neighbours
+}
+
+/// One candidate: its vector and what its card says.
 pub struct Candidate<'a> {
-    pub video_vector: &'a ContentVector,
     pub video_id: &'a str,
     pub channel_id: &'a str,
-    pub published_text: &'a str,
+    pub vector: &'a ContentVector,
+    /// "3 days ago" as the card writes it.
+    pub upload_date: &'a str,
     pub view_count: u64,
-    pub is_subscription: bool,
-    pub impression: Option<(i32, u64)>,
+    /// 0 when unknown, which feeds always are.
+    pub like_count: u64,
+    pub category: Option<&'a str>,
+    pub is_live: bool,
+    pub is_short: bool,
 }
 
-/// Scores one candidate as `(base + capped_bonuses) * penalties`. This gives the score a defined
-/// range (`0 ..= (1 + ADDITIVE_BONUS_CAP) * max_age_boost`) and a single, interpretable shape,
-/// replacing the previous order-dependent interleaving of additions and multiplications.
-pub fn score_candidate(inputs: &RankInputs, candidate: &Candidate) -> f64 {
-    let vector = candidate.video_vector;
+/// The deterministic score of one candidate; the caller adds the exploration jitter.
+#[must_use]
+pub fn score_candidate(p: &ScoringParams, c: &Candidate) -> f64 {
+    let brain = p.brain;
+    let vector = c.vector;
 
-    let personality = calculate_cosine_similarity(inputs.taste, vector);
-    let context = calculate_cosine_similarity(inputs.time_context, vector);
-    let novelty = 1.0 - personality;
+    let personality = if c.is_short && !brain.shorts_vector.topics.is_empty() {
+        calculate_cosine_similarity(p.taste, vector) * 0.4
+            + calculate_cosine_similarity(&brain.shorts_vector, vector) * 0.6
+    } else {
+        calculate_cosine_similarity(p.taste, vector)
+    };
+    let context = calculate_cosine_similarity(p.context, vector);
+    // A smooth ramp instead of a cliff at the gate, so two near-identical candidates straddling it
+    // get near-identical novelty credit.
+    let novelty = if p.is_cold_start {
+        1.0 - personality
+    } else {
+        smoothstep(
+            NOVELTY_RELEVANCE_GATE,
+            NOVELTY_RELEVANCE_GATE + 0.1,
+            personality,
+        ) * (1.0 - personality)
+    };
 
-    let base = (personality * inputs.weights.personality
-        + context * inputs.weights.context
-        + novelty * inputs.weights.novelty)
-        .clamp(0.0, 1.0);
+    let mut total = personality * p.w_personality + context * p.w_context + novelty * p.w_novelty;
+    total *= topic_probation(vector, brain, p.picks);
+    if !brain.topic_affinities.is_empty() {
+        total += affinity_boost(vector, &p.affinity_neighbours);
+    }
+    total += formats::score_term(&brain.format_affinity, &vector.formats);
+    total += channel_signal(c, brain, p.user_subs);
+    total += p.co_watch_prior.get(c.channel_id).copied().unwrap_or(0.0) * COWATCH_MAX_PRIOR;
+    total += serendipity(novelty, context);
+    if p.is_cold_start && c.view_count > 0 {
+        #[allow(clippy::cast_precision_loss)]
+        let popularity = (1.0 + c.view_count as f64).log10() / 10.0 * 0.05;
+        total += popularity;
+    }
+    total *= engagement_quality(c, p.is_cold_start);
 
-    let bonus =
-        additive_bonuses(inputs, candidate, personality, context, novelty).min(ADDITIVE_BONUS_CAP);
-    let penalty = multiplicative_penalties(inputs, candidate, personality);
+    let age = time_decay(c.upload_date, c.is_live);
+    let is_sub = p.user_subs.contains(c.channel_id);
+    total *= if c.view_count >= CLASSIC_VIEW_THRESHOLD || is_sub {
+        f64::midpoint(age, 1.0)
+    } else {
+        age
+    };
+    total *= category_term(c, p, is_sub);
+    total += curiosity(
+        personality,
+        brain.global_vector.complexity,
+        vector.complexity,
+    );
+    total *= freshness(vector, personality, p.session_topics, p.session_video_count);
+    if p.is_onboarding && p.picks.iter().any(|key| vector.topics.contains_key(key)) {
+        total += p.onboarding_warmup * ONBOARDING_MAX_BOOST;
+    }
+    total *= watched_penalty(brain.watch_history_map.get(c.video_id).copied());
+    total *= anti_recommendation(vector, brain);
+    total *= rejection_penalty(
+        vector,
+        &brain.rejection_patterns,
+        p.now_ms,
+        &keyed_lists(p.spec),
+    );
+    total *= relevance_floor(personality, brain.total_interactions, is_sub);
+    total *= feed_history_penalty(
+        brain.feed_history.get(c.video_id),
+        p.now_ms,
+        p.candidate_pool_size,
+    );
+    total *= implicit_disinterest(
+        brain.feed_history.get(c.video_id),
+        brain.watch_history_map.contains_key(c.video_id),
+        p.now_ms,
+    );
+    total += momentum_boost(vector, p.momentum, personality);
+    total += exploration_bonus(vector, brain, p.explore_weight);
+    total
+}
 
-    ((base + bonus) * penalty).max(0.0)
+/// Hermite smoothstep: a continuous ramp from 0 at `edge0` to 1 at `edge1`.
+fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn primary_topic(vector: &ContentVector) -> Option<&String> {
     vector
         .topics
         .iter()
-        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(topic, _)| topic)
+        .max_by(|a, b| a.1.total_cmp(b.1))
+        .map(|(key, _)| key)
 }
 
-fn additive_bonuses(
-    inputs: &RankInputs,
-    candidate: &Candidate,
+fn ranked_topics(vector: &ContentVector) -> Vec<&String> {
+    let mut ranked: Vec<(&String, f64)> = vector.topics.iter().map(|(k, &v)| (k, v)).collect();
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+    ranked.into_iter().map(|(key, _)| key).collect()
+}
+
+/// Leading digits of `text`, as Kotlin's `filter { it.isDigit() }.toIntOrNull()` reads them.
+fn number_in(text: &str) -> Option<u32> {
+    let digits: String = text.chars().filter(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// How a card's age lifts or lowers it: new uploads up, years-old ones down.
+fn time_decay(date_text: &str, is_live: bool) -> f64 {
+    let text = date_text.to_lowercase();
+    if is_live {
+        return 1.15;
+    }
+    if text.contains("second") || text.contains("minute") || text.contains("hour") {
+        1.15
+    } else if text.contains("day") {
+        1.12
+    } else if text.contains("week") {
+        1.08
+    } else if text.contains("month") {
+        let months = f64::from(number_in(&text).unwrap_or(1));
+        (1.0 / (1.0 + 0.08 * months)).max(0.75)
+    } else if text.contains("year") {
+        let years = f64::from(number_in(&text).unwrap_or(1));
+        1.0 / (1.0 + 0.35 * years)
+    } else {
+        0.85
+    }
+}
+
+fn is_older_than_24_hours(date_text: &str) -> bool {
+    let text = date_text.to_lowercase();
+    !(text.contains("second") || text.contains("minute") || text.contains("hour"))
+}
+
+/// A subscription's lift, larger for a fresh upload, and how the channel's past videos were
+/// received, neutral for a channel at its starting score.
+fn channel_signal(c: &Candidate, brain: &UserBrain, user_subs: &HashSet<String>) -> f64 {
+    let mut signal = 0.0;
+    if user_subs.contains(c.channel_id) {
+        let boost = if c.is_short {
+            SUBSCRIPTION_BOOST * SHORTS_SUBSCRIPTION_BOOST_MULTIPLIER
+        } else {
+            SUBSCRIPTION_BOOST
+        };
+        let text = c.upload_date.to_lowercase();
+        let freshness = if !is_older_than_24_hours(&text) {
+            2.0
+        } else if text.contains("day") && number_in(&text).unwrap_or(99) <= 2 {
+            1.5
+        } else if text.contains("week") && number_in(&text).unwrap_or(99) <= 1 {
+            1.2
+        } else {
+            1.0
+        };
+        signal += (boost * freshness).min(SUBSCRIPTION_BOOST_MAX);
+    }
+    if let Some(&click_rate) = brain.channel_scores.get(c.channel_id) {
+        let quality = 1.0 / (1.0 + (-8.0 * (click_rate - 0.35)).exp());
+        signal += 0.05 + 0.95 * quality - CHANNEL_SIGNAL_NEUTRAL;
+    }
+    signal
+}
+
+/// A strong like rate lifts a card a little and a clickbait one lowers it. Feeds carry no like
+/// count, and 0 means unknown, not a bad ratio.
+fn engagement_quality(c: &Candidate, is_cold_start: bool) -> f64 {
+    if c.view_count < ENGAGEMENT_MIN_VIEWS || c.like_count == 0 {
+        return 1.0;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let rate = c.like_count as f64 / c.view_count as f64;
+    let (floor_views, floor_rate) = if is_cold_start {
+        (
+            COLD_START_ENGAGEMENT_FLOOR_MIN_VIEWS,
+            COLD_START_ENGAGEMENT_FLOOR_RATE,
+        )
+    } else {
+        (ENGAGEMENT_FLOOR_MIN_VIEWS, ENGAGEMENT_FLOOR_RATE)
+    };
+    if c.view_count > floor_views && is_older_than_24_hours(c.upload_date) && rate < floor_rate {
+        return (ENGAGEMENT_FLOOR_PENALTY + (1.0 - ENGAGEMENT_FLOOR_PENALTY) * (rate / floor_rate))
+            .clamp(ENGAGEMENT_FLOOR_PENALTY, 1.0);
+    }
+    1.0 + (rate / ENGAGEMENT_RATE_BASELINE).clamp(0.0, 1.0) * ENGAGEMENT_MAX_BOOST
+}
+
+/// Session fatigue on the same topic and novelty in a long binge.
+fn freshness(
+    vector: &ContentVector,
     personality: f64,
-    context: f64,
-    novelty: f64,
+    session_topics: &[String],
+    session_video_count: i32,
 ) -> f64 {
-    let brain = inputs.brain;
-    let vector = candidate.video_vector;
-    let mut bonus = 0.0;
-
-    bonus += calculate_channel_profile_boost(brain, candidate.channel_id, vector);
-    bonus += affinity_bonus(brain, vector);
-    if candidate.is_subscription {
-        bonus += SUBSCRIPTION_BOOST;
-    }
-
-    // Serendipity: reward novel-but-context-relevant items via smooth ramps.
-    let novelty_ramp = ((novelty - 0.4) / 0.4).clamp(0.0, 1.0);
-    let context_ramp = ((context - 0.3) / 0.4).clamp(0.0, 1.0);
-    bonus += SERENDIPITY_BONUS * novelty_ramp * context_ramp;
-
-    if brain.total_interactions < COLD_START_THRESHOLD && candidate.view_count > 0 {
-        bonus += (1.0 + candidate.view_count as f64).log10() / 10.0 * 0.05;
-    }
-
-    // Curiosity gap: nudge complexity above the user's norm, gated by topical safety (the ramp is
-    // zero below personality 0.5, so no hard cutoff is needed).
-    let complexity_diff = (brain.global_vector.complexity - vector.complexity).abs();
-    let curiosity_ramp = ((complexity_diff - 0.2) / 0.3).clamp(0.0, 1.0);
-    let topic_safety = ((personality - 0.5) / 0.3).clamp(0.0, 1.0);
-    bonus += CURIOSITY_GAP_BONUS * curiosity_ramp * topic_safety;
-
-    let topic = primary_topic(vector);
-
-    if inputs.is_onboarding {
-        let has_preferred = inputs
-            .pick_keys
-            .iter()
-            .any(|key| vector.topics.contains_key(key));
-        if has_preferred {
-            bonus += inputs.onboarding_warmup * ONBOARDING_MAX_BOOST;
-        }
-    }
-
-    if let Some(topic) = topic {
-        if !inputs.session_topics.is_empty() {
-            let recent_count = inputs
-                .session_topics
-                .iter()
-                .rev()
-                .take(5)
-                .filter(|t| *t == topic)
-                .count();
-            if recent_count >= SESSION_AFFINITY_STRONG_THRESHOLD {
-                bonus += SESSION_AFFINITY_STRONG_BOOST;
-            } else if recent_count >= SESSION_AFFINITY_MILD_THRESHOLD {
-                bonus += SESSION_AFFINITY_MILD_BOOST;
+    let momentum = match primary_topic(vector) {
+        Some(topic) => {
+            let repeats = session_topics.iter().filter(|t| *t == topic).count();
+            if repeats > 0 {
+                #[allow(clippy::cast_precision_loss)]
+                let fatigue = (-0.16 * repeats as f64).exp();
+                fatigue.clamp(0.15, 1.0)
+            } else {
+                1.0
             }
         }
-    }
-
-    if inputs.session_video_count > BINGE_THRESHOLD {
-        bonus += novelty * BINGE_NOVELTY_FACTOR;
-    }
-
-    bonus += exploration_bonus(inputs, vector);
-
-    bonus
+        None => 1.0,
+    };
+    let binge = if session_video_count > BINGE_THRESHOLD {
+        1.0 + (1.0 - personality) * BINGE_NOVELTY_FACTOR
+    } else {
+        1.0
+    };
+    (momentum * binge).clamp(0.05, 1.3)
 }
 
-fn exploration_bonus(inputs: &RankInputs, vector: &ContentVector) -> f64 {
-    if inputs.exploration_scale <= 0.0 {
+fn curiosity(personality: f64, brain_complexity: f64, video_complexity: f64) -> f64 {
+    if personality <= 0.5 {
+        return 0.0;
+    }
+    let difference = (brain_complexity - video_complexity).abs();
+    if difference <= 0.2 {
+        return 0.0;
+    }
+    let ramp = ((difference - 0.2) / 0.3).clamp(0.0, 1.0);
+    let safety = ((personality - 0.5) / 0.3).clamp(0.0, 1.0);
+    CURIOSITY_GAP_BONUS * ramp * safety
+}
+
+fn serendipity(novelty: f64, context: f64) -> f64 {
+    let novelty_ramp = ((novelty - 0.4) / 0.4).clamp(0.0, 1.0);
+    let context_ramp = ((context - 0.3) / 0.4).clamp(0.0, 1.0);
+    SERENDIPITY_BONUS * novelty_ramp * context_ramp
+}
+
+fn watched_penalty(percent_watched: Option<f32>) -> f64 {
+    match percent_watched {
+        Some(percent) if percent > WATCHED_THRESHOLD_FULL => WATCHED_PENALTY_FULL,
+        Some(percent) if percent > WATCHED_THRESHOLD_HALF => WATCHED_PENALTY_HALF,
+        Some(percent) if percent > WATCHED_THRESHOLD_SAMPLED => WATCHED_PENALTY_SAMPLED,
+        _ => 1.0,
+    }
+}
+
+/// A card much like what channels the viewer rejected are about.
+fn anti_recommendation(vector: &ContentVector, brain: &UserBrain) -> f64 {
+    let max_similarity = brain
+        .channel_scores
+        .iter()
+        .filter(|(_, score)| **score < NOT_INTERESTED_CHANNEL_FLOOR)
+        .filter_map(|(channel, _)| brain.channel_topic_profiles.get(channel))
+        .map(|profile| {
+            let negative = ContentVector {
+                topics: profile.clone(),
+                ..ContentVector::default()
+            };
+            calculate_cosine_similarity(&negative, vector)
+        })
+        .fold(0.0, f64::max);
+    if max_similarity > ANTI_REC_PENALTY_THRESHOLD {
+        let strength = ((max_similarity - ANTI_REC_PENALTY_THRESHOLD)
+            / (1.0 - ANTI_REC_PENALTY_THRESHOLD))
+            .clamp(0.0, 1.0);
+        1.0 - strength * (1.0 - ANTI_REC_PENALTY)
+    } else {
+        1.0
+    }
+}
+
+/// A topic the viewer kept watching this session gets a little more, unless it already leads.
+fn momentum_boost(vector: &ContentVector, momentum: &[MomentumEntry], personality: f64) -> f64 {
+    if momentum.len() < MOMENTUM_THRESHOLD {
         return 0.0;
     }
     let Some(topic) = primary_topic(vector) else {
         return 0.0;
     };
-    let samples = inputs
-        .brain
-        .topic_evidence
-        .get(&strip_domain_tag(topic))
-        .map(|e| (e.positive_signals + e.negative_signals).max(0) as f64)
-        .unwrap_or(0.0);
-    let total = inputs.brain.total_interactions.max(0) as f64;
-    let ucb = EXPLORE_C * ((1.0 + total).ln() / (1.0 + samples)).sqrt();
-    (ucb * inputs.exploration_scale).min(EXPLORE_BONUS_CAP)
-}
-
-fn affinity_bonus(brain: &UserBrain, vector: &ContentVector) -> f64 {
-    if brain.topic_affinities.is_empty() {
+    let recent = &momentum[momentum.len().saturating_sub(MOMENTUM_WINDOW)..];
+    let positives = recent
+        .iter()
+        .filter(|entry| &entry.topic == topic && entry.positive)
+        .count();
+    if positives < MOMENTUM_THRESHOLD {
         return 0.0;
     }
-    let topics: Vec<&String> = vector.topics.keys().collect();
+    #[allow(clippy::cast_precision_loss)]
+    let raw = (positives as f64 / MOMENTUM_WINDOW as f64 * MOMENTUM_BOOST).min(MOMENTUM_BOOST);
+    let dominance = if personality > 0.6 {
+        (1.0 - (personality - 0.6) / 0.4).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    raw * dominance
+}
+
+/// A card shown recently or often waits, recovering over two weeks; a thin pool relaxes it.
+#[must_use]
+pub fn feed_history_penalty(entry: Option<&FeedEntry>, now_ms: u64, pool_size: usize) -> f64 {
+    let Some(entry) = entry else {
+        return 1.0;
+    };
+    #[allow(clippy::cast_precision_loss)]
+    let hours = now_ms.saturating_sub(entry.last_shown) as f64 / HOUR_MS;
+    let relaxation: f64 = if pool_size < 10 {
+        0.4
+    } else if pool_size < 25 {
+        0.7
+    } else {
+        1.0
+    };
+    let repeated: f64 = if entry.show_count >= 5 {
+        0.7
+    } else if entry.show_count >= 3 {
+        0.85
+    } else {
+        1.0
+    };
+    let base: f64 = if hours < 2.0 {
+        0.05
+    } else if hours < 8.0 {
+        0.15
+    } else if hours < 24.0 {
+        0.35
+    } else if hours < 72.0 {
+        0.60
+    } else if hours < 168.0 {
+        0.80
+    } else if hours < 336.0 {
+        0.92
+    } else {
+        1.0
+    };
+    let penalty = (base * repeated).clamp(0.0, 1.0);
+    penalty + (1.0 - penalty) * (1.0 - relaxation)
+}
+
+/// A card shown several times lately and never watched is quietly uninteresting.
+fn implicit_disinterest(entry: Option<&FeedEntry>, watched: bool, now_ms: u64) -> f64 {
+    let Some(entry) = entry else {
+        return 1.0;
+    };
+    if watched {
+        return 1.0;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let hours = now_ms.saturating_sub(entry.last_shown) as f64 / HOUR_MS;
+    if hours > IMPLICIT_DISINTEREST_WINDOW_HOURS {
+        1.0
+    } else if entry.show_count >= IMPLICIT_DISINTEREST_THRESHOLD_HEAVY {
+        IMPLICIT_DISINTEREST_PENALTY_HEAVY
+    } else if entry.show_count >= IMPLICIT_DISINTEREST_THRESHOLD_LIGHT {
+        IMPLICIT_DISINTEREST_PENALTY_LIGHT
+    } else {
+        1.0
+    }
+}
+
+/// A mature profile lowers what shares next to nothing with it; subscriptions are exempt.
+fn relevance_floor(personality: f64, total_interactions: i32, is_subscription: bool) -> f64 {
+    if is_subscription || total_interactions < RELEVANCE_FLOOR_MIN_INTERACTIONS {
+        1.0
+    } else if personality < RELEVANCE_FLOOR_SEVERE_THRESHOLD {
+        RELEVANCE_FLOOR_SEVERE_PENALTY
+    } else if personality < RELEVANCE_FLOOR_MODERATE_THRESHOLD {
+        RELEVANCE_FLOOR_MODERATE_PENALTY
+    } else {
+        1.0
+    }
+}
+
+fn topic_score(brain: &UserBrain, topic: &str) -> f64 {
+    if let Some(&weight) = brain.global_vector.topics.get(topic) {
+        return weight;
+    }
+    brain
+        .global_vector
+        .topics
+        .iter()
+        .find(|(key, _)| strip_domain_tag(key) == topic)
+        .map_or(0.0, |(_, &weight)| weight)
+}
+
+fn has_confirmed_evidence(topic: &str, brain: &UserBrain, picks: &HashSet<String>) -> bool {
+    let base = strip_domain_tag(topic);
+    if picks.iter().any(|pick| pick.eq_ignore_ascii_case(&base)) {
+        return true;
+    }
+    brain
+        .topic_evidence
+        .get(&base)
+        .or_else(|| brain.topic_evidence.get(topic))
+        .is_some_and(|evidence| {
+            evidence.explicit_signals > 0
+                || evidence.watch_signals >= 2
+                || evidence.video_ids.len() >= 2
+                || evidence.positive_score >= 1.2
+        })
+}
+
+/// On a mature profile, a card whose topics are mostly brand-new and unconfirmed waits a little.
+fn topic_probation(vector: &ContentVector, brain: &UserBrain, picks: &HashSet<String>) -> f64 {
+    if brain.total_interactions < COLD_START_THRESHOLD {
+        return 1.0;
+    }
+    let mut top: Vec<String> = Vec::new();
+    for key in ranked_topics(vector).into_iter().take(4) {
+        let base = strip_domain_tag(key);
+        if is_topic_sized(&base) && !top.contains(&base) {
+            top.push(base);
+        }
+    }
+    if top.is_empty() {
+        return 1.0;
+    }
+    let probationary = top
+        .iter()
+        .filter(|topic| {
+            let score = topic_score(brain, topic);
+            (0.015..=0.20).contains(&score) && !has_confirmed_evidence(topic, brain, picks)
+        })
+        .count();
+    if probationary == 0 {
+        return 1.0;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let ratio = probationary as f64 / top.len() as f64;
+    if ratio <= 0.5 {
+        1.0
+    } else {
+        (1.0 - ratio * 0.20).clamp(0.75, 1.0)
+    }
+}
+
+/// Beta-posterior exploration: high while a topic's evidence is thin, low once it is clearly liked
+/// or disliked, so rejected topics are not re-surfaced as exploration.
+fn exploration_bonus(vector: &ContentVector, brain: &UserBrain, explore_weight: f64) -> f64 {
+    if explore_weight <= 0.0 || brain.total_interactions < COLD_START_THRESHOLD {
+        return 0.0;
+    }
+    let Some(primary) = primary_topic(vector).map(|key| strip_domain_tag(key)) else {
+        return 0.0;
+    };
+    let evidence = brain.topic_evidence.get(&primary);
+    let alpha = 1.0 + f64::from(evidence.map_or(0, |e| e.positive_signals));
+    let beta = 1.0 + f64::from(evidence.map_or(0, |e| e.negative_signals));
+    let total = alpha + beta;
+    let std = (alpha * beta / (total * total * (total + 1.0))).sqrt();
+    (EXPLORE_BETA_C * std * explore_weight).min(EXPLORE_MAX_BONUS)
+}
+
+/// A lift for the card's topic pairs the viewer watches together, capped per card.
+fn affinity_boost(
+    vector: &ContentVector,
+    neighbours: &HashMap<String, HashMap<String, f64>>,
+) -> f64 {
+    let mut topics: Vec<String> = Vec::new();
+    for key in vector.topics.keys() {
+        let base = strip_domain_tag(key);
+        if !topics.contains(&base) {
+            topics.push(base);
+        }
+    }
     let mut boost = 0.0;
-    for i in 0..topics.len() {
-        for j in (i + 1)..topics.len() {
-            let key = make_affinity_key(topics[i], topics[j]);
-            if let Some(&affinity) = brain.topic_affinities.get(&key) {
+    for (i, topic) in topics.iter().enumerate() {
+        let Some(of_topic) = neighbours.get(topic) else {
+            continue;
+        };
+        for other in &topics[i + 1..] {
+            if let Some(affinity) = of_topic.get(other) {
                 boost += affinity * AFFINITY_BOOST_PER_PAIR;
             }
         }
@@ -201,210 +619,22 @@ fn affinity_bonus(brain: &UserBrain, vector: &ContentVector) -> f64 {
     boost.min(AFFINITY_MAX_BOOST_PER_VIDEO)
 }
 
-fn multiplicative_penalties(inputs: &RankInputs, candidate: &Candidate, personality: f64) -> f64 {
-    let brain = inputs.brain;
-    let vector = candidate.video_vector;
-    let now_ms = inputs.now_ms;
-    let mut mult = 1.0;
-
-    let age = TimeDecay::calculate_multiplier(candidate.published_text, false);
-    let is_classic = candidate.view_count > CLASSIC_VIEW_THRESHOLD;
-    mult *= if is_classic || candidate.is_subscription {
-        (age + 1.0) / 2.0
-    } else {
-        age
-    };
-
-    mult *= calculate_channel_score_multiplier(brain, candidate.channel_id);
-    mult *= rejection_penalty(
-        vector,
-        &brain.rejection_patterns,
-        now_ms,
-        &keyed_lists(inputs.spec),
-    );
-    mult *= calculate_feed_history_penalty(
-        candidate.video_id,
-        &brain.feed_history,
-        now_ms,
-        inputs.candidate_pool_size,
-    );
-    mult *= calculate_implicit_disinterest_penalty(
-        candidate.video_id,
-        &brain.feed_history,
-        &brain.watch_history_map,
-        now_ms,
-    );
-    mult *= calculate_relevance_floor(
-        personality,
-        brain.total_interactions,
-        candidate.is_subscription,
-    );
-    mult *= calculate_anti_recommendation_penalty(vector, brain);
-    mult *= session_fatigue(inputs, vector);
-    mult *= impression_fatigue(candidate, now_ms);
-    mult *= watched_penalty(candidate, brain);
-
-    mult
-}
-
-fn session_fatigue(inputs: &RankInputs, vector: &ContentVector) -> f64 {
-    let Some(topic) = primary_topic(vector) else {
+/// A soft category mismatch; subscriptions and picked topics are exempt.
+fn category_term(c: &Candidate, p: &ScoringParams, is_sub: bool) -> f64 {
+    if is_sub
+        || p.picks
+            .iter()
+            .any(|pick| c.vector.topics.contains_key(pick))
+    {
         return 1.0;
-    };
-    let count = inputs.session_topics.iter().filter(|t| *t == topic).count();
-    if count >= 5 {
-        0.3
-    } else if count >= 3 {
-        0.5
-    } else if count >= 1 {
-        0.8
-    } else {
-        1.0
     }
-}
-
-fn impression_fatigue(candidate: &Candidate, now_ms: u64) -> f64 {
-    let Some((seen_count, last_seen)) = candidate.impression else {
-        return 1.0;
-    };
-    let hours = now_ms.saturating_sub(last_seen) as f64 / 3_600_000.0;
-    let decayed = (seen_count as f64 * (-IMPRESSION_DECAY_RATE * hours).exp()) as i32;
-    if decayed >= IMPRESSION_THRESHOLD_DROP {
-        IMPRESSION_PENALTY_HEAVY
-    } else if decayed >= IMPRESSION_THRESHOLD_HEAVY {
-        IMPRESSION_PENALTY_MEDIUM
-    } else if decayed >= IMPRESSION_THRESHOLD_LIGHT {
-        IMPRESSION_PENALTY_LIGHT
-    } else {
-        1.0
-    }
-}
-
-fn watched_penalty(candidate: &Candidate, brain: &UserBrain) -> f64 {
-    let Some(&percent) = brain.watch_history_map.get(candidate.video_id) else {
-        return 1.0;
-    };
-    if percent > WATCHED_THRESHOLD_FULL {
-        WATCHED_PENALTY_FULL
-    } else if percent > WATCHED_THRESHOLD_HALF {
-        WATCHED_PENALTY_HALF
-    } else if percent > WATCHED_THRESHOLD_SAMPLED {
-        WATCHED_PENALTY_SAMPLED
-    } else {
-        1.0
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn topic_vector(topic: &str) -> ContentVector {
-        let mut v = ContentVector::default();
-        v.topics.insert(topic.to_string(), 1.0);
-        v
-    }
-
-    fn base_inputs<'a>(brain: &'a UserBrain, ctx: &'a ContentVector) -> RankInputs<'a> {
-        RankInputs {
-            brain,
-            taste: &brain.global_vector,
-            time_context: ctx,
-            weights: ScoringWeights {
-                personality: 0.4,
-                context: 0.4,
-                novelty: 0.2,
-            },
-            now_ms: 1_000_000_000,
-            is_onboarding: false,
-            onboarding_warmup: 0.5,
-            session_topics: &[],
-            session_video_count: 0,
-            candidate_pool_size: 50,
-            exploration_scale: 0.6,
-            pick_keys: &NO_PICKS,
-            spec: &DEFAULT_SPEC,
-        }
-    }
-
-    static DEFAULT_SPEC: std::sync::LazyLock<KeySpec> = std::sync::LazyLock::new(KeySpec::default);
-    static NO_PICKS: std::sync::LazyLock<HashSet<String>> = std::sync::LazyLock::new(HashSet::new);
-
-    fn candidate_for<'a>(
-        vector: &'a ContentVector,
-        id: &'a str,
-        is_subscription: bool,
-    ) -> Candidate<'a> {
-        Candidate {
-            video_vector: vector,
-            video_id: id,
-            channel_id: "chan",
-            published_text: "3 days ago",
-            view_count: 1000,
-            is_subscription,
-            impression: None,
-        }
-    }
-
-    #[test]
-    fn score_is_non_negative_and_bounded() {
-        let brain = UserBrain::default();
-        let ctx = ContentVector::default();
-        let vector = topic_vector("guitar");
-        let inputs = base_inputs(&brain, &ctx);
-        let score = score_candidate(&inputs, &candidate_for(&vector, "v1", true));
-        // Upper bound: (1 + cap) * max age boost (1.15 for fresh content).
-        assert!(score >= 0.0);
-        assert!(
-            score <= (1.0 + ADDITIVE_BONUS_CAP) * 1.15 + 1e-9,
-            "score was {score}"
-        );
-    }
-
-    #[test]
-    fn subscription_boost_increases_score() {
-        let mut brain = UserBrain::default();
-        brain.global_vector.topics.insert("guitar".to_string(), 0.8);
-        let ctx = ContentVector::default();
-        let vector = topic_vector("guitar");
-        let inputs = base_inputs(&brain, &ctx);
-        let with_sub = score_candidate(&inputs, &candidate_for(&vector, "v1", true));
-        let without_sub = score_candidate(&inputs, &candidate_for(&vector, "v1", false));
-        assert!(with_sub > without_sub);
-    }
-
-    #[test]
-    fn under_explored_topic_gets_more_exploration_bonus() {
-        let mut brain = UserBrain::default();
-        brain.total_interactions = 200;
-        brain.topic_evidence.insert(
-            "guitar".to_string(),
-            crate::flow_neuro::scoring::TopicEvidence {
-                positive_signals: 80,
-                ..Default::default()
-            },
-        );
-        let ctx = ContentVector::default();
-        let inputs = base_inputs(&brain, &ctx);
-
-        let familiar = exploration_bonus(&inputs, &topic_vector("guitar"));
-        let novel = exploration_bonus(&inputs, &topic_vector("welding"));
-        assert!(novel > familiar);
-        assert!(novel <= EXPLORE_BONUS_CAP);
-    }
-
-    #[test]
-    fn fully_watched_video_is_penalized() {
-        let mut brain = UserBrain::default();
-        brain.global_vector.topics.insert("guitar".to_string(), 0.8);
-        let ctx = ContentVector::default();
-        let vector = topic_vector("guitar");
-        let inputs = base_inputs(&brain, &ctx);
-        let fresh = score_candidate(&inputs, &candidate_for(&vector, "v1", false));
-
-        brain.watch_history_map.insert("v1".to_string(), 0.95);
-        let inputs2 = base_inputs(&brain, &ctx);
-        let watched = score_candidate(&inputs2, &candidate_for(&vector, "v1", false));
-        assert!(watched < fresh);
-    }
+    let category = id_of(c.category)
+        .map(|id| ChannelCategory {
+            id: id.to_string(),
+            confidence: 1.0,
+        })
+        .or_else(|| (p.category_of)(c.channel_id));
+    category.map_or(1.0, |category| {
+        category_factor(&p.brain.category_affinity, &category)
+    })
 }

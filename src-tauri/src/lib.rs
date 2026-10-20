@@ -337,8 +337,22 @@ pub fn run() {
                 ))
             })?;
 
+            let neuro_stores = tauri::async_runtime::block_on(async {
+                flow_neuro::side_stores::SideStores::load(pool.clone()).await
+            })
+            .map_err(|error| {
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    error.to_string(),
+                ))
+            })?;
+
             // Initialize and manage recommendation service
-            let rec_service = RecommendationService::new(pool.clone(), brain_store);
+            let rec_service = RecommendationService::new(
+                pool.clone(),
+                brain_store,
+                std::sync::Arc::new(neuro_stores),
+            );
             app.manage(rec_service);
 
             let music_brain_store = tauri::async_runtime::block_on(async {

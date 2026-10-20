@@ -37,6 +37,9 @@ pub struct WatchSession {
     pub report: WatchReport,
     pub generation: u64,
     pub ended: bool,
+    /// Whether the click was logged: it waits for a title, which a video opened from a link only
+    /// has once its details load.
+    pub clicked: bool,
     start_position: f64,
     furthest: f64,
     played_seconds: f64,
@@ -55,6 +58,7 @@ impl WatchSession {
             report: report.clone(),
             generation,
             ended: false,
+            clicked: false,
             start_position: (report.position - report.played_delta.max(0.0)).max(0.0),
             furthest: 0.0,
             played_seconds: 0.0,
@@ -78,17 +82,38 @@ impl WatchSession {
         } else {
             self.report.duration
         };
+        let title = if report.title.is_empty() {
+            std::mem::take(&mut self.report.title)
+        } else {
+            report.title.clone()
+        };
+        let channel_name = if report.channel_name.is_empty() {
+            std::mem::take(&mut self.report.channel_name)
+        } else {
+            report.channel_name.clone()
+        };
         let channel_id = if report.channel_id.is_empty() {
             std::mem::take(&mut self.report.channel_id)
         } else {
             report.channel_id.clone()
         };
         self.report = WatchReport {
+            title,
+            channel_name,
             channel_id,
             description,
             duration,
             ..report
         };
+    }
+
+    /// Marks the click logged when the session can say what was clicked; true the one time it is.
+    pub fn take_click(&mut self) -> bool {
+        if self.clicked || self.report.title.trim().is_empty() {
+            return false;
+        }
+        self.clicked = true;
+        true
     }
 
     /// How far the viewer got, by position but never past what they actually played, so a
@@ -191,5 +216,20 @@ mod tests {
         session.absorb(report(15.0, 5.0));
         assert_eq!(session.report.channel_id, "UC1");
         assert_eq!(session.report.description.as_deref(), Some("about it"));
+    }
+
+    #[test]
+    fn the_click_waits_for_a_title_and_is_taken_once() {
+        let mut untitled = report(1.0, 1.0);
+        untitled.title = String::new();
+        let mut session = WatchSession::start(untitled, 1);
+        assert!(!session.take_click());
+        session.absorb(report(5.0, 4.0));
+        assert!(session.take_click());
+        assert!(!session.take_click());
+        let mut blank = report(9.0, 4.0);
+        blank.title = String::new();
+        session.absorb(blank);
+        assert_eq!(session.report.title, "A title");
     }
 }

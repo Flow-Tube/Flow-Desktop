@@ -77,15 +77,16 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       currentVideo
         ? {
             videoId: currentVideo.id,
-            title: currentVideo.title,
-            channelName: currentVideo.channelName,
+            // A video opened from a link carries only its id until its details load.
+            title: currentVideo.title || videoDetails?.title || "",
+            channelName: currentVideo.channelName || videoDetails?.channelName || "",
             channelId: resolvedChannelId.replace(/^channel:/, ""),
             description: videoDetails?.description || null,
             isLive: stream.isLive,
             isMusic: isMusicVideo(currentVideo),
           }
         : null,
-    [currentVideo, resolvedChannelId, videoDetails?.description, stream.isLive],
+    [currentVideo, resolvedChannelId, videoDetails?.title, videoDetails?.channelName, videoDetails?.description, stream.isLive],
   );
   const { onTime: reportWatchTime, onEnded: endWatchSession } = useWatchSession(watchSubject);
 

@@ -1734,26 +1734,30 @@ impl RecommendationService {
         if report.is_music || self.learning_paused().await {
             return Ok(());
         }
-        let (finished, opened) = {
+        let (finished, click) = {
             let mut slot = self.watch.lock().unwrap();
-            match slot.session.as_mut() {
+            let finished = match slot.session.as_mut() {
                 Some(session) if session.report.video_id == report.video_id => {
                     session.ended = false;
                     session.absorb(report);
-                    (None, None)
+                    None
                 }
                 _ => {
                     slot.generation += 1;
                     let session = WatchSession::start(report, slot.generation);
-                    let opened = session.report.clone();
-                    (slot.session.replace(session), Some(opened))
+                    slot.session.replace(session)
                 }
-            }
+            };
+            let click = slot
+                .session
+                .as_mut()
+                .and_then(|session| session.take_click().then(|| session.report.clone()));
+            (finished, click)
         };
         if let Some(previous) = finished {
             self.finish_watch(previous).await?;
         }
-        if let Some(report) = opened {
+        if let Some(report) = click {
             self.log_watch_event(&report, InteractionType::Click, 0.0)
                 .await?;
         }
@@ -1808,7 +1812,15 @@ impl RecommendationService {
         Ok(())
     }
 
-    async fn finish_watch(&self, session: WatchSession) -> AppResult<()> {
+    async fn finish_watch(&self, mut session: WatchSession) -> AppResult<()> {
+        // Without a title the session cannot say what was watched, so it teaches nothing.
+        if session.report.title.trim().is_empty() {
+            return Ok(());
+        }
+        if session.take_click() {
+            self.log_watch_event(&session.report, InteractionType::Click, 0.0)
+                .await?;
+        }
         let Some(verdict) = session.verdict() else {
             return Ok(());
         };

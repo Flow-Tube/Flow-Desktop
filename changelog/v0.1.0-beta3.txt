@@ -34,6 +34,7 @@ LINUX
 - Thumbnails, avatars and artwork load in the AppImage on openSUSE, Fedora and other distros where they showed blank. They now come through Flow's own connection, which finds your system's certificates.
 - The .deb, .rpm and AppImage now find Flow's bundled poToken and signature scripts, which they were looking for in the wrong folder. With Node installed, the backup playback clients that need them now work.
 - Flow no longer offers in-app updates when Flatpak or your package manager installed it, or when it runs as a plain binary. Settings says what handles updates instead, and these installs stop adding a second flow:// link handler.
+- Arch Linux packaging for the AUR: flow-desktop builds Flow from source and flow-desktop-bin installs the release .deb. Both use your system's WebKitGTK and Node, and start with the flow-desktop command so they don't clash with the AUR packages that already use flow.
 
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.

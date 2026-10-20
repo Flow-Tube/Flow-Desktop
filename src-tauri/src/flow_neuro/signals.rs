@@ -693,3 +693,151 @@ pub fn apply_interaction(
         primary_topic,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Event<'a> {
+        id: &'a str,
+        title: &'a str,
+        channel: &'a str,
+        duration: Option<u64>,
+        is_short: bool,
+        kind: InteractionType,
+        percent: f32,
+    }
+
+    fn event<'a>(id: &'a str, title: &'a str, kind: InteractionType, percent: f32) -> Event<'a> {
+        Event {
+            id,
+            title,
+            channel: "chan1",
+            duration: Some(600),
+            is_short: false,
+            kind,
+            percent,
+        }
+    }
+
+    fn apply(brain: &mut UserBrain, e: &Event) -> InteractionOutcome {
+        apply_interaction(
+            brain,
+            e.id,
+            e.title,
+            "Some Channel",
+            e.channel,
+            None,
+            e.duration,
+            false,
+            e.is_short,
+            e.kind,
+            e.percent,
+        )
+    }
+
+    const TITLE: &str = "Rust compiler internals explained";
+
+    #[test]
+    fn learning_rates_follow_the_interaction() {
+        let rate = |kind, percent| {
+            let mut brain = UserBrain::default();
+            apply(&mut brain, &event("v1", TITLE, kind, percent))
+                .learning_rate
+                .unwrap()
+        };
+        assert!((rate(InteractionType::Click, 0.0) - 0.10).abs() < 1e-9);
+        assert!((rate(InteractionType::Liked, 0.0) - 0.30).abs() < 1e-9);
+        assert!((rate(InteractionType::Skipped, 0.0) + 0.15).abs() < 1e-9);
+        assert!((rate(InteractionType::Disliked, 0.0) + 0.40).abs() < 1e-9);
+        // 0.15 * 1.0 plus the log time bonus for ten watched minutes.
+        let full_watch = 0.15 + (11.0_f64).ln() / (61.0_f64).ln() * 0.08;
+        assert!((rate(InteractionType::Watched, 1.0) - full_watch).abs() < 1e-9);
+    }
+
+    #[test]
+    fn shorts_learn_at_a_fraction_of_the_rate() {
+        let mut brain = UserBrain::default();
+        let mut short = event("s1", TITLE, InteractionType::Liked, 0.0);
+        short.is_short = true;
+        short.duration = Some(30);
+        let rate = apply(&mut brain, &short).learning_rate.unwrap();
+        assert!((rate - 0.30 * SHORTS_LEARNING_PENALTY).abs() < 1e-9);
+    }
+
+    #[test]
+    fn watch_progress_learns_only_on_real_progress() {
+        let mut brain = UserBrain::default();
+        let first = apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Watched, 0.20),
+        );
+        assert!(first.learning_rate.is_some());
+        let small_step = apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Watched, 0.25),
+        );
+        assert!(small_step.learning_rate.is_none());
+        let backwards = apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Watched, 0.10),
+        );
+        assert!(backwards.learning_rate.is_none());
+        let milestone = apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Watched, 0.41),
+        );
+        assert!(milestone.learning_rate.is_some());
+        assert_eq!(brain.total_interactions, 2);
+    }
+
+    #[test]
+    fn a_watch_teaches_topics_channel_and_history() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Watched, 0.9),
+        );
+        assert!(!brain.global_vector.topics.is_empty());
+        assert!(brain.channel_scores["chan1"] > 0.5);
+        assert!(brain.watch_history_map.contains_key("v1"));
+        assert!(brain.channel_topic_profiles.contains_key("chan1"));
+        assert_eq!(brain.idf_total_documents, 1);
+        assert!(!brain.topic_evidence.is_empty());
+    }
+
+    #[test]
+    fn a_video_counts_as_one_document() {
+        let mut brain = UserBrain::default();
+        apply(&mut brain, &event("v1", TITLE, InteractionType::Click, 0.0));
+        apply(&mut brain, &event("v1", TITLE, InteractionType::Liked, 0.0));
+        assert_eq!(brain.idf_total_documents, 1);
+    }
+
+    #[test]
+    fn positive_events_reset_consecutive_skips() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Skipped, 0.05),
+        );
+        apply(
+            &mut brain,
+            &event("v2", TITLE, InteractionType::Skipped, 0.05),
+        );
+        assert_eq!(brain.consecutive_skips, 2);
+        apply(&mut brain, &event("v3", TITLE, InteractionType::Click, 0.0));
+        assert_eq!(brain.consecutive_skips, 0);
+    }
+
+    #[test]
+    fn a_dislike_records_rejection_patterns_and_lowers_the_channel() {
+        let mut brain = UserBrain::default();
+        apply(
+            &mut brain,
+            &event("v1", TITLE, InteractionType::Disliked, 0.0),
+        );
+        assert!(!brain.rejection_patterns.is_empty());
+        assert!(brain.channel_scores["chan1"] < 0.5);
+    }
+}

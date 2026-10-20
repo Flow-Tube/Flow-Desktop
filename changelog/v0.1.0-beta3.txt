@@ -75,6 +75,10 @@ RECOMMENDATIONS
 - Your existing recommendation profile is converted once on the first start, keeping what it learned without counting anything twice.
 - Interests, time patterns and discovery searches show topics the way titles write them instead of as shortened word stems.
 - Flow for Android sends its recommendation profile to the desktop again. Each device only sends it to a device that reads topics in the same language.
+- Each video you watch now teaches recommendations once, when you open it and when you leave it, instead of every few seconds. A video you leave within seconds no longer counts as skipped, and the next video is never logged with the last one's progress.
+- "Not interested" hides that video for good and its channel for two weeks, but never blocks the channel, the thumbs-down on a video hides that video, and music played in the video player no longer shapes your video recommendations.
+- Home counts a video as shown only once it stays on screen, related topics can now link up as you watch, and Shorts are recognized only by a known length.
+- Importing a profile or a backup now takes effect right away, a damaged profile is kept as a copy instead of being overwritten, and resetting your profile keeps your blocks and hidden videos.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.

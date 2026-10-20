@@ -13,9 +13,9 @@ import {
   rankVideos,
 } from "../lib/api/recommendation";
 import type { FeedQuotas } from "../lib/api/recommendation";
-import { cleanChannelId, useFeedActionsStore, useFeedHiddenFilter } from "../store/useFeedActionsStore";
+import { useFeedActionsStore, useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import { getSetting, setSetting, getWatchHistory } from "../lib/api/db";
+import { getSetting, getWatchHistory } from "../lib/api/db";
 import { getString } from "../lib/i18n/index";
 import { SETTINGS } from "../lib/settings/schema";
 import type { VideoSummary } from "../types/video";
@@ -29,6 +29,7 @@ import {
   hideContinueWatchingVideo,
 } from "../lib/continueWatching";
 import { reconcileHomeFeedResults } from "../lib/homeFeedResults";
+import { homeFeedCache, loadPersistedDiscoverFeed, persistDiscoverFeed } from "../lib/homeFeedCache";
 import { isKnownShort } from "../lib/videoKind";
 import { isMusicVideo } from "../lib/utils";
 import {
@@ -69,11 +70,6 @@ const STANDARD_DISCOVER_QUOTAS: FeedQuotas = {
   viralLimit: 10,
 };
 
-const homeFeedCache: Record<"discover" | "trending", { videos: VideoSummary[]; timestamp: number }> = {
-  discover: { videos: [], timestamp: 0 },
-  trending: { videos: [], timestamp: 0 },
-};
-
 const logHomeFeed = (stage: string, details: Record<string, unknown>) => {
   console.info(`[home-feed] ${stage}`, details);
 };
@@ -106,48 +102,6 @@ const buildContinueWatchingVideos = (history: WatchHistoryRecord[]): VideoSummar
   }
 
   return videos.slice(0, 20);
-};
-
-// Persistent discover feed: survives process restart for an instant cold-start paint and an
-// offline floor, unlike the in-memory `homeFeedCache`. Reconciled by the background refresh.
-const PERSISTED_FEED_KEY = "home_discover_cache_v1";
-const PERSISTED_FEED_TTL_MS = 24 * 60 * 60 * 1000;
-
-const persistDiscoverFeed = async (videos: VideoSummary[]) => {
-  if (videos.length === 0) return;
-  try {
-    const payload = JSON.stringify({ videos: videos.slice(0, 60), timestamp: Date.now() });
-    await setSetting(PERSISTED_FEED_KEY, payload);
-  } catch (error) {
-    console.warn("Failed to persist discover feed", error);
-  }
-};
-
-const loadPersistedDiscoverFeed = async (): Promise<VideoSummary[] | null> => {
-  try {
-    const raw = await getSetting(PERSISTED_FEED_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { videos?: VideoSummary[]; timestamp?: number };
-    if (!parsed.videos?.length) return null;
-    if (Date.now() - (parsed.timestamp ?? 0) > PERSISTED_FEED_TTL_MS) return null;
-    const { dismissedVideoIds, blockedChannelIds, suppressedChannelIds, watchedVideoIds } = useFeedActionsStore.getState();
-    return parsed.videos.filter(
-      (video) => {
-        if (!video || typeof video.id !== "string") {
-          return false;
-        }
-        const channelId = cleanChannelId(video.channelId);
-        return (
-          !dismissedVideoIds.has(video.id) &&
-          !watchedVideoIds.has(video.id) &&
-          !(channelId && (blockedChannelIds.has(channelId) || suppressedChannelIds.has(channelId)))
-        );
-      },
-    );
-  } catch (error) {
-    console.warn("Failed to load persisted discover feed", error);
-    return null;
-  }
 };
 
   const summarizeVideosForLog = (items: VideoSummary[]) => (

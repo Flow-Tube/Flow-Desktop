@@ -18,6 +18,7 @@ use crate::flow_neuro::features::{
 };
 use crate::flow_neuro::keyed_lists::{DISCOVERY_NOISE_WORDS, keyed_lists};
 use crate::flow_neuro::keyspec::KeySpec;
+use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::ranker;
 use crate::flow_neuro::scoring::{
     CHANNEL_SUPPRESSION_DAYS, FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona,
@@ -2411,11 +2412,18 @@ impl RecommendationService {
         self.brain_store.replace(brain).await
     }
 
+    /// Forgets everything learned but keeps what the viewer hid: blocks and "not interested"
+    /// marks are choices, not learning (Android `keepingHiddenContent`).
     pub async fn reset_brain(&self) -> AppResult<()> {
         {
             let mut brain = self.brain_store.write().await;
-            *brain = UserBrain::default();
+            *brain = brain.keeping_hidden_content();
+            brain.settle_languages(&system_language());
         }
+        self.impression_cache.lock().unwrap().clear();
+        self.session_topic_history.lock().unwrap().clear();
+        *self.session_video_count.lock().unwrap() = 0;
+        self.watch.lock().unwrap().session = None;
         recommendations::clear_recommendation_events(&self.pool).await
     }
 }

@@ -6,6 +6,7 @@ import {
   type UserBrain,
 } from "../lib/api/recommendation";
 import { usePersonaData } from "../lib/usePersonaData";
+import { clearHomeFeedCaches } from "../lib/homeFeedCache";
 
 import { SkeletonLoader } from "../components/persona/SkeletonLoader";
 import { PersonaOverview } from "../components/persona/PersonaOverview";
@@ -60,6 +61,7 @@ export function FlowNeuroPersona() {
   const handleResetBrain = async () => {
     try {
       await resetBrain();
+      await clearHomeFeedCaches();
       await refresh(true);
     } catch (e) {
       console.error("Failed to reset brain:", e);

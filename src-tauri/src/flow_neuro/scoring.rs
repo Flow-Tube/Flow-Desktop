@@ -326,6 +326,20 @@ pub struct UserBrain {
     pub counted_documents: HashSet<String>,
 }
 
+impl UserBrain {
+    /// A fresh brain that still carries every block and "not interested" mark of this one.
+    #[must_use]
+    pub fn keeping_hidden_content(&self) -> Self {
+        Self {
+            blocked_channels: self.blocked_channels.clone(),
+            blocked_topics: self.blocked_topics.clone(),
+            suppressed_video_ids: self.suppressed_video_ids.clone(),
+            suppressed_channels: self.suppressed_channels.clone(),
+            ..Self::default()
+        }
+    }
+}
+
 impl Default for UserBrain {
     fn default() -> Self {
         let mut time_vectors = HashMap::new();
@@ -1671,5 +1685,25 @@ mod tests {
         assert!(brain.global_vector.topic_confidence.is_empty());
         assert!(brain.global_vector.anchor_topics.is_empty());
         assert!(brain.has_completed_onboarding);
+    }
+
+    #[test]
+    fn a_reset_keeps_only_what_the_viewer_hid() {
+        let mut brain = UserBrain::default();
+        brain.total_interactions = 40;
+        brain.global_vector.topics.insert("rust".into(), 0.7);
+        brain.preferred_topics.insert("Rust".into());
+        brain.blocked_channels.insert("UCx".into());
+        brain.blocked_topics.insert("drama".into());
+        brain.suppressed_video_ids.insert("v1".into(), 1);
+        brain.suppressed_channels.insert("UCy".into(), 1);
+        let fresh = brain.keeping_hidden_content();
+        assert_eq!(fresh.total_interactions, 0);
+        assert!(fresh.global_vector.topics.is_empty());
+        assert!(fresh.preferred_topics.is_empty());
+        assert!(fresh.blocked_channels.contains("UCx"));
+        assert!(fresh.blocked_topics.contains("drama"));
+        assert!(fresh.suppressed_video_ids.contains_key("v1"));
+        assert!(fresh.suppressed_channels.contains_key("UCy"));
     }
 }

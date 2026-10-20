@@ -3,6 +3,7 @@ import type { VideoSummary } from '../../types/video';
 import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
 import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
+import { IMPRESSION_ATTRIBUTE, useFeedImpressions } from '../../lib/useFeedImpressions';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -16,6 +17,8 @@ interface VideoGridProps {
   getVideoKey?: (video: VideoSummary, index: number) => string;
   variant?: "default" | "history";
   hideChannelAvatar?: boolean;
+  /** Counts cards the viewer actually sees as feed impressions for the recommendation engine. */
+  trackImpressions?: boolean;
 }
 
 function VideoCardSkeleton() {
@@ -44,8 +47,10 @@ function VideoGridComponent({
   getVideoKey,
   variant = "default",
   hideChannelAvatar,
+  trackImpressions = false,
 }: VideoGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
+  useFeedImpressions(gridRef, videos, trackImpressions && !loading);
   const gridStyle = useGridStyle();
   const columns = useResolvedGridColumns(gridRef, gridStyle);
   const gridClass = "flow-grid gap-y-8 pb-8";
@@ -78,7 +83,10 @@ function VideoGridComponent({
             past the card's own hover bleed, so the colour wash still has room
             at the peak of its expansion — even at two columns on a wide window.
           */}
-          <div className="flow-grid-card p-2 -m-2">
+          <div
+            className="flow-grid-card p-2 -m-2"
+            {...(trackImpressions ? { [IMPRESSION_ATTRIBUTE]: video.id } : {})}
+          >
             <VideoCard
               video={video}
               onPlay={onPlay}

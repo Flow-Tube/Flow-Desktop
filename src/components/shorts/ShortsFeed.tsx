@@ -3,6 +3,7 @@ import { useLocation, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useShortsFeed } from "../../lib/useShortsFeed";
 import { prefetchShortStreams } from "../../lib/useShortStream";
+import { IMPRESSION_DWELL_MS, noteImpression } from "../../lib/feedImpressions";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
@@ -98,6 +99,21 @@ export function ShortsFeed() {
   useEffect(() => {
     setPanelState("none");
   }, [activeIndex]);
+
+  // A reel counts as seen once it stays on screen; buffered ones never do.
+  const activeShort = items[activeIndex];
+  useEffect(() => {
+    if (!activeShort) return;
+    const timer = window.setTimeout(() => {
+      noteImpression({
+        id: activeShort.id,
+        title: activeShort.title,
+        channelName: activeShort.channelName,
+        channelId: activeShort.channelId ?? null,
+      });
+    }, IMPRESSION_DWELL_MS);
+    return () => window.clearTimeout(timer);
+  }, [activeShort]);
 
   // Resolve the Shorts a swipe is about to reach, ahead of the pager mounting a
   // player for them. Forward first — that is where a swipe almost always goes —

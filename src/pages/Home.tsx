@@ -10,7 +10,6 @@ import {
 import {
   generateDiscoveryQueries,
   getFeedQuotas,
-  recordFeedImpressions,
   rankVideos,
 } from "../lib/api/recommendation";
 import type { FeedQuotas } from "../lib/api/recommendation";
@@ -204,7 +203,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
   const scrollContainer = useScrollContainer();
   const requestSequenceRef = useRef(0);
-  const lastImpressionSignatureRef = useRef<string>("");
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreObserverRef = useRef<IntersectionObserver | null>(null);
   // IntersectionObserver only reports transitions, so once the sentinel is intersecting it
@@ -1056,9 +1054,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           appendedCount: appendedVideos.length,
           sample: summarizeVideosForLog(appendedVideos),
         });
-        void recordFeedImpressions(appendedVideos.slice(0, 12)).catch((error) => {
-          console.warn("Failed to record appended feed impressions", error);
-        });
       } else {
         registerLoadMoreMiss("load-more-no-append", { dedupedBatchCount: dedupedBatch.length });
       }
@@ -1613,29 +1608,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     };
   }, [activeTab, homeFeedEnabled, hideWatchedVideos]);
 
-  useEffect(() => {
-    if (loading || videos.length === 0) {
-      return;
-    }
-
-    const impressionBatch = videos.filter((video) => !isHidden(video)).slice(0, 24);
-    const signature = `${activeTab}:${impressionBatch.map((video) => video.id).join("|")}`;
-    if (signature === lastImpressionSignatureRef.current) {
-      return;
-    }
-    lastImpressionSignatureRef.current = signature;
-
-    logHomeFeed("record-impressions", {
-      activeTab,
-      count: impressionBatch.length,
-      sample: summarizeVideosForLog(impressionBatch),
-    });
-
-    void recordFeedImpressions(impressionBatch).catch((error) => {
-      console.warn("Failed to record feed impressions", error);
-    });
-  }, [activeTab, loading, videos, isHidden]);
-
   // handleLoadMore closes over per-render state, so the mount-once observer reaches it
   // through a ref that always points at the latest render's closure.
   useEffect(() => {
@@ -1796,6 +1768,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
             onPlay={onPlay}
             onAddToQueue={onAddToQueue}
             insertNode={continueShelfNode}
+            trackImpressions
           />
 
           {activeTab === "discover" && (

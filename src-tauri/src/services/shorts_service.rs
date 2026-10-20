@@ -339,8 +339,6 @@ impl ShortsService {
             return Ok((Vec::new(), continuation));
         }
 
-        // Record impressions so the ranker's fatigue penalties decay these out of future pages.
-        let _ = rec.record_feed_impressions(ranked.clone()).await;
         self.mark_shown(ranked.iter().map(|video| video.id.clone()));
 
         let items: Vec<_> = ranked

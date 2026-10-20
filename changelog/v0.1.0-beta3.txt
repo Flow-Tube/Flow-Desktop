@@ -79,6 +79,10 @@ RECOMMENDATIONS
 - "Not interested" hides that video for good and its channel for two weeks, but never blocks the channel, the thumbs-down on a video hides that video, and music played in the video player no longer shapes your video recommendations.
 - Home counts a video as shown only once it stays on screen, related topics can now link up as you watch, and Shorts are recognized only by a known length.
 - Importing a profile or a backup now takes effect right away, a damaged profile is kept as a copy instead of being overwritten, and resetting your profile keeps your blocks and hidden videos.
+- Recommendations learn the way Flow for Android does: an interest builds up from many videos, a quarter of the taste follows what you watched lately, a time of day counts once it has seen enough, and a Short teaches a hundredth of a long video.
+- Searches, Watch later, playlists, downloads and subscribing now teach recommendations, and so do the recent upload titles of the channels you follow.
+- "Not interested" cuts a topic by half the first time and more each time you repeat it, and rejections fade over months instead of vanishing after two weeks.
+- Discovery skips words every subject uses and works for topics in any language, a channel name only teaches its topic words, and your profile is tidied once on the first start with a copy kept.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.

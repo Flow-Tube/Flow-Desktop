@@ -240,9 +240,9 @@ function VideoCardComponent({
     const idToToggle = isChannel ? cleanId : channelId;
     if (!idToToggle) return;
     if (subStatus) {
-      unsubscribe(idToToggle);
+      unsubscribe(idToToggle, { learn: true });
     } else {
-      subscribe(idToToggle, isChannel ? video.title : video.channelName, video.thumbnailUrl || undefined);
+      subscribe(idToToggle, isChannel ? video.title : video.channelName, video.thumbnailUrl || undefined, { learn: true });
     }
   };
 

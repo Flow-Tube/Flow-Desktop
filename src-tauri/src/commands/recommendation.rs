@@ -297,6 +297,41 @@ pub async fn block_channel(
 }
 
 #[tauri::command]
+pub async fn learn_from_search(
+    query: String,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<bool, ErrorResponse> {
+    recommendation_service
+        .learn_from_search(query)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn note_subscription(
+    channel_id: String,
+    channel_name: String,
+    subscribed: bool,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<(), ErrorResponse> {
+    recommendation_service
+        .note_subscription(channel_id, channel_name, subscribed)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn observe_channel_uploads(
+    uploads: Vec<VideoSummary>,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<(), ErrorResponse> {
+    recommendation_service
+        .observe_channel_uploads(uploads)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
 pub async fn bootstrap_from_history(
     videos: Vec<ImportedVideo>,
     recommendation_service: State<'_, RecommendationService>,

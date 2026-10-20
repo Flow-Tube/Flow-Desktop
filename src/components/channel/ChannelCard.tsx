@@ -69,9 +69,9 @@ export function ChannelCard({
     e.stopPropagation();
     if (!cleanId) return;
     if (subscribed) {
-      void unsubscribe(cleanId);
+      void unsubscribe(cleanId, { learn: true });
     } else {
-      void subscribe(cleanId, name, avatarUrl ?? undefined);
+      void subscribe(cleanId, name, avatarUrl ?? undefined, { learn: true });
     }
   };
 

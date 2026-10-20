@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, BellOff, Check, ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, Trash2, Upload, User } from "lucide-react";
 import { parseSubscriptionExport } from "../lib/api/youtube";
+import { bootstrapFromSubscriptions } from "../lib/api/recommendation";
 import { SETTINGS } from "../lib/settings/schema";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useNotificationStore } from "../store/useNotificationStore";
@@ -144,6 +145,9 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
         for (const [id, name] of parsed) {
           await subscribe(id, name);
         }
+        void bootstrapFromSubscriptions(parsed.map(([, name]) => name)).catch((err) =>
+          console.warn("Failed to seed topics from subscriptions", err),
+        );
         setImportText("");
         setShowImportModal(false);
       } else {

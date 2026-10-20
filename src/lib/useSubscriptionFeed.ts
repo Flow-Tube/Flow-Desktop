@@ -10,6 +10,7 @@ import { getSetting, setSetting } from './api/db';
 import type { SubscribedChannel } from '../store/useSubscriptionStore';
 import type { ChannelDetails, VideoSummary } from '../types/video';
 import { mapWithConcurrency } from './concurrency';
+import { observeChannelUploads } from './api/recommendation';
 
 export interface ScanProgress {
   processed: number;
@@ -57,6 +58,20 @@ async function persistFeed(key: string, feed: SubscriptionRssFeed): Promise<void
   } catch (err) {
     console.warn('Failed to persist subscription feed cache', err);
   }
+}
+
+/** Upload titles a channel is read by; more than a few say nothing new about it. */
+const UPLOADS_PER_CHANNEL = 6;
+
+export function recentUploadsPerChannel(videos: VideoSummary[]): VideoSummary[] {
+  const counts = new Map<string, number>();
+  return videos.filter((video) => {
+    const channelId = video.channelId ?? '';
+    if (!channelId) return false;
+    const count = counts.get(channelId) ?? 0;
+    counts.set(channelId, count + 1);
+    return count < UPLOADS_PER_CHANNEL;
+  });
 }
 
 export function useSubscriptionFeed(channels: SubscribedChannel[]) {
@@ -139,6 +154,9 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
               cachedAt: Date.now(),
             });
             void persistFeed(channelIds, feed);
+            void observeChannelUploads(recentUploadsPerChannel(feed.videos)).catch((err) =>
+              console.warn('Failed to learn from subscription uploads', err),
+            );
           }
         });
         if (!active) return;

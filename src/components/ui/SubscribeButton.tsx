@@ -55,12 +55,12 @@ export function SubscribeButton({
     event.preventDefault();
 
     if (!active) {
-      subscribe(channelId, channelName, avatarUrl);
+      subscribe(channelId, channelName, avatarUrl, { learn: true });
       return;
     }
 
     if (!showNotificationMenu) {
-      unsubscribe(channelId);
+      unsubscribe(channelId, { learn: true });
       return;
     }
 
@@ -137,7 +137,7 @@ export function SubscribeButton({
             label={getString("subscriptions_unsubscribe")}
             destructive
             onSelect={() => {
-              unsubscribe(channelId);
+              unsubscribe(channelId, { learn: true });
               closeMenu();
             }}
           />

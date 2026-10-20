@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { unzipSync } from "fflate";
 import { parseSubscriptionExport } from "../../lib/api/youtube";
 import { useSubscriptionStore } from "../../store/useSubscriptionStore";
+import { bootstrapFromSubscriptions } from "../../lib/api/recommendation";
 
 interface ParseChannelResult {
   id: string;
@@ -201,6 +202,9 @@ export const ImportStep: React.FC = () => {
         let subbedCount = 0;
         const total = channels.length;
 
+        void bootstrapFromSubscriptions(channels.map(([, title]) => title)).catch((err) =>
+          console.warn("Failed to seed topics from subscriptions", err),
+        );
         for (const channel of channels) {
           if (channel) {
             const [id, title] = channel;

@@ -107,7 +107,9 @@ pub fn extract_features(video: &VideoText, reader: &TopicReader) -> ContentVecto
     }
 }
 
-fn is_promoted(run: &str, lists: &KeyedLists, idf: &IdfSnapshot) -> bool {
+/// Whether a run of title words is an interest: a phrase the engine knows, or a pair the viewer's
+/// own counts prove is one.
+pub(crate) fn is_promoted(run: &str, lists: &KeyedLists, idf: &IdfSnapshot) -> bool {
     lists.is_known_phrase(run) || (run.matches(' ').count() == 1 && phrases::is_phrase(run, idf))
 }
 

@@ -80,9 +80,10 @@ use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
     bootstrap_from_subscriptions, complete_onboarding, end_watch_session,
     generate_discovery_queries, get_brain_snapshot, get_feed_quotas, get_flow_persona,
-    get_onboarding_status, get_recommendation_events, import_brain, log_interaction,
-    mark_not_interested, rank_videos, record_feed_impressions, remove_preferred_topic,
-    report_watch_progress, reset_brain, unblock_channel, unblock_topic,
+    get_onboarding_status, get_recommendation_events, import_brain, learn_from_search,
+    log_interaction, mark_not_interested, note_subscription, observe_channel_uploads, rank_videos,
+    record_feed_impressions, remove_preferred_topic, report_watch_progress, reset_brain,
+    unblock_channel, unblock_topic,
 };
 use commands::shorts::{get_shorts_feed, load_more_shorts, reset_shorts_feed};
 use commands::sync::{
@@ -476,6 +477,9 @@ pub fn run() {
             import_brain,
             bootstrap_from_history,
             bootstrap_from_subscriptions,
+            learn_from_search,
+            note_subscription,
+            observe_channel_uploads,
             mark_not_interested,
             record_feed_impressions,
             complete_onboarding,

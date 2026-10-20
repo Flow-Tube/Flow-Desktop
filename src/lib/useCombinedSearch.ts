@@ -17,6 +17,7 @@ import type {
   PodcastItem,
   SongItem,
 } from '../types/music';
+import { learnFromSearch } from './api/recommendation';
 
 // --- Public types ---------------------------------------------------------
 
@@ -285,6 +286,7 @@ export function useCombinedSearch(
   const sortRef = useRef(sortBy);
   const filtersRef = useRef(filters);
   const hasNextRef = useRef(false);
+  const learnedQueryRef = useRef<string | null>(null);
   const fetchingRef = useRef(false);
   queryRef.current = debouncedQuery;
   filterRef.current = filterType;
@@ -311,6 +313,11 @@ export function useCombinedSearch(
 
       const seq = ++seqRef.current;
       const alive = () => seq === seqRef.current;
+
+      if (mode === 'reset' && q !== learnedQueryRef.current && (category === 'all' || category === 'videos' || category === 'live')) {
+        learnedQueryRef.current = q;
+        void learnFromSearch(q).catch((err) => console.warn('Failed to learn from a search', err));
+      }
 
       if (mode === 'reset') {
         setIsLoading(true);

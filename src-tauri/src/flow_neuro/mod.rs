@@ -1,5 +1,6 @@
 pub(crate) mod bootstrap;
 pub(crate) mod brain_store;
+pub(crate) mod channel_knowledge;
 pub(crate) mod display_forms;
 #[cfg(test)]
 pub(crate) mod eval;
@@ -14,6 +15,8 @@ pub(crate) mod learning;
 pub(crate) mod ranker;
 pub(crate) mod rejections;
 pub(crate) mod scoring;
+pub(crate) mod search_learning;
 pub(crate) mod signals;
+pub(crate) mod topic_catalog;
 pub(crate) mod vector_math;
 pub(crate) mod watch_session;

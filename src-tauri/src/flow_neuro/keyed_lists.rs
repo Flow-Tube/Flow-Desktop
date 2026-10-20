@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use crate::flow_neuro::keyspec::{KeySpec, tables::tables};
+use crate::flow_neuro::topic_catalog::ONBOARDING_TOPICS;
 
 /// Words so broad that a title naming them says little about its subject.
 const GENERIC_WORDS: [&str; 26] = [
@@ -257,6 +258,7 @@ pub struct KeyedLists {
     discovery_noise: HashSet<String>,
     polysemous: HashSet<String>,
     broad_topics: HashSet<String>,
+    catalog: HashSet<String>,
     music: Vec<String>,
 }
 
@@ -283,6 +285,7 @@ impl KeyedLists {
             discovery_noise: keyed(&DISCOVERY_NOISE_WORDS),
             polysemous: keyed(&POLYSEMOUS_WORDS),
             broad_topics: keyed(&REJECTION_BROAD_TOPICS),
+            catalog: keyed(&ONBOARDING_TOPICS),
             // "feat" marks a song title's featured artist.
             music: keyed(&MUSIC_WORDS)
                 .into_iter()
@@ -299,6 +302,12 @@ impl KeyedLists {
     #[must_use]
     pub fn is_polysemous(&self, key: &str) -> bool {
         self.polysemous.contains(key)
+    }
+
+    /// Whether a key is one the onboarding catalog offers, an interest by definition.
+    #[must_use]
+    pub fn is_catalog_key(&self, key: &str) -> bool {
+        self.catalog.contains(key)
     }
 
     #[must_use]

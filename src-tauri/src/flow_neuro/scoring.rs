@@ -897,6 +897,7 @@ pub fn strip_domain_tag(topic: &str) -> String {
 
 // --- IDF Helpers ---
 
+#[derive(Default)]
 pub struct IdfSnapshot {
     pub word_frequencies: HashMap<String, i32>,
     pub total_documents: i32,

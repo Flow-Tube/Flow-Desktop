@@ -23,10 +23,10 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
   const handleToggleSub = async (ch: { id: string; name: string; avatar: string }) => {
     const isSubbed = isSubscribed(ch.id);
     if (isSubbed) {
-      await unsubscribe(ch.id);
+      await unsubscribe(ch.id, { learn: true });
     } else {
       const avatarUrl = ch.avatar && ch.avatar.startsWith("http") ? ch.avatar : undefined;
-      await subscribe(ch.id, ch.name, avatarUrl);
+      await subscribe(ch.id, ch.name, avatarUrl, { learn: true });
     }
   };
 

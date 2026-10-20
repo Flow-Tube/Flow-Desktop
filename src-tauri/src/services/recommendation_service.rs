@@ -12,6 +12,7 @@ use crate::flow_neuro::bootstrap::{
     ImportedVideo, bootstrap_from_history, bootstrap_from_subscriptions,
 };
 use crate::flow_neuro::brain_store::BrainStore;
+use crate::flow_neuro::channel_knowledge::{learn_from_uploads, subscription_changed};
 use crate::flow_neuro::display_forms::{label, with_pick_spellings};
 use crate::flow_neuro::features::{
     TopicReader, VideoText, extract_features, pick_keys, title_words,
@@ -30,6 +31,7 @@ use crate::flow_neuro::scoring::{
     classify_persona, get_topic_categories, is_known_short, is_music_track, strip_domain_tag,
     time_bucket_confidence,
 };
+use crate::flow_neuro::search_learning::learn_search;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::vector_math::{RECENT_SHARE, blend};
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
@@ -55,6 +57,8 @@ pub struct RecommendationService {
     session_topic_history: Mutex<Vec<String>>,
     session_video_count: Mutex<i32>,
     watch: Mutex<WatchSlot>,
+    /// Channels whose upload titles were already read this session.
+    profiled_channels: Mutex<HashSet<String>>,
     #[allow(dead_code)]
     session_start_time: u64,
 }
@@ -275,6 +279,7 @@ impl RecommendationService {
             session_topic_history: Mutex::new(Vec::new()),
             session_video_count: Mutex::new(0),
             watch: Mutex::new(WatchSlot::default()),
+            profiled_channels: Mutex::new(HashSet::new()),
             session_start_time: now,
         }
     }
@@ -2408,6 +2413,61 @@ impl RecommendationService {
         brain.channel_scores.remove(&channel_id);
         brain.suppressed_channels.remove(&channel_id);
         brain.channel_strikes.remove(&channel_id);
+        Ok(())
+    }
+
+    /// Learns from a typed search; returns whether the query held a usable topic.
+    pub async fn learn_from_search(&self, query: String) -> AppResult<bool> {
+        let now_ms = self.get_current_time_ms();
+        Ok(learn_search(
+            &mut *self.brain_store.write().await,
+            &query,
+            now_ms,
+        ))
+    }
+
+    pub async fn note_subscription(
+        &self,
+        channel_id: String,
+        channel_name: String,
+        subscribed: bool,
+    ) -> AppResult<()> {
+        let channel_id = channel_id.trim().trim_start_matches("channel:");
+        subscription_changed(
+            &mut *self.brain_store.write().await,
+            channel_id,
+            &channel_name,
+            subscribed,
+        );
+        Ok(())
+    }
+
+    /// Reads what channels are about from upload titles a feed already fetched, once per channel
+    /// per session.
+    pub async fn observe_channel_uploads(&self, uploads: Vec<VideoSummary>) -> AppResult<()> {
+        let mut by_channel: HashMap<String, Vec<String>> = HashMap::new();
+        {
+            let profiled = self.profiled_channels.lock().unwrap();
+            for video in uploads {
+                let Some(channel_id) = video
+                    .channel_id
+                    .as_deref()
+                    .map(|id| id.trim().trim_start_matches("channel:").to_string())
+                    .filter(|id| !id.is_empty() && !profiled.contains(id))
+                else {
+                    continue;
+                };
+                by_channel.entry(channel_id).or_default().push(video.title);
+            }
+        }
+        if by_channel.is_empty() {
+            return Ok(());
+        }
+        self.profiled_channels
+            .lock()
+            .unwrap()
+            .extend(by_channel.keys().cloned());
+        learn_from_uploads(&mut *self.brain_store.write().await, &by_channel);
         Ok(())
     }
 

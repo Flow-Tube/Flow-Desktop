@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown, RefreshCw } from "lucide-react";
 import {
   getChannelTab,
   getRelatedVideos,
@@ -34,6 +34,7 @@ import { reconcileHomeFeedResults } from "../lib/homeFeedResults";
 import {
   createDiscoveryPaging,
   hasDiscoveryPagesLeft,
+  isDiscoverFeedExhausted,
   recordDiscoveryPages,
   resetDiscoveryPaging,
   takeDiscoveryRequests,
@@ -196,7 +197,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const suppressedChannelIds = useFeedActionsStore((s) => s.suppressedChannelIds);
   const watchedVideoIds = useFeedActionsStore((s) => s.watchedVideoIds);
   const [loading, setLoading] = useState(true);
-  const [, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [continueWatchingVideos, setContinueWatchingVideos] = useState<VideoSummary[]>([]);
   const [hasMoreDiscover, setHasMoreDiscover] = useState(true);
@@ -866,6 +867,24 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     }, delayMs);
   };
 
+  const registerLoadMoreMiss = (stage: string, details: Record<string, unknown>) => {
+    loadMoreMissesRef.current += 1;
+    loadMoreBackoffUntilRef.current = Date.now() + Math.min(8000, 1500 * loadMoreMissesRef.current);
+    logHomeFeed(stage, { ...details, misses: loadMoreMissesRef.current });
+
+    const paging = discoveryPagingRef.current;
+    if (!isDiscoverFeedExhausted(paging, loadMoreMissesRef.current)) {
+      return;
+    }
+    clearLoadMoreRetryTimer();
+    setHasMoreDiscover(false);
+    logHomeFeed("load-more-end-of-feed", {
+      reason: paging.queries.length === 0 ? "no-discovery-queries" : "all-queries-out-of-pages",
+      queries: paging.queries,
+      misses: loadMoreMissesRef.current,
+    });
+  };
+
   const handleLoadMore = async (options?: { manual?: boolean }) => {
     if (
       activeTab !== "discover" ||
@@ -983,13 +1002,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       });
 
       if (filteredDiscovery.length === 0 && filteredSubscriptions.length === 0) {
-        loadMoreMissesRef.current += 1;
-        loadMoreBackoffUntilRef.current = Date.now() + Math.min(8000, 1500 * loadMoreMissesRef.current);
-        logHomeFeed("load-more-empty", {
-          finalQueries,
-          subscriptionBatchIds,
-          misses: loadMoreMissesRef.current,
-        });
+        registerLoadMoreMiss("load-more-empty", { finalQueries, subscriptionBatchIds });
         return;
       }
 
@@ -1043,12 +1056,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           console.warn("Failed to record appended feed impressions", error);
         });
       } else {
-        loadMoreMissesRef.current += 1;
-        loadMoreBackoffUntilRef.current = Date.now() + Math.min(8000, 1500 * loadMoreMissesRef.current);
-        logHomeFeed("load-more-no-append", {
-          dedupedBatchCount: dedupedBatch.length,
-          misses: loadMoreMissesRef.current,
-        });
+        registerLoadMoreMiss("load-more-no-append", { dedupedBatchCount: dedupedBatch.length });
       }
     } catch (error) {
       console.warn("Failed to load more videos", error);
@@ -1809,27 +1817,45 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           {activeTab === "discover" && (
             <div className="flex flex-col items-center gap-3 pb-20">
               <div ref={attachLoadMoreSentinel} className="h-px w-full" />
-              <button
-                onClick={() => void handleLoadMore({ manual: true })}
-                disabled={loadingMore}
-                className="inline-flex items-center gap-2 rounded-2xl border border-chrome-zinc-800 bg-chrome-zinc-900/40 px-5 py-3 text-sm font-semibold text-chrome-zinc-300 transition-all hover:border-chrome-zinc-700 hover:text-chrome-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin text-chrome-red-400" />
-                    Loading more
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown size={16} />
-                    Load more
-                  </>
-                )}
-              </button>
-              {!loadingMore && (
-                <p className="text-xs text-chrome-zinc-500">
-                  More recommendations load automatically as you scroll.
-                </p>
+              {!hasMoreDiscover ? (
+                <>
+                  <p className="text-sm text-chrome-zinc-400">
+                    {getString("home_feed_end_title")}
+                  </p>
+                  <button
+                    onClick={() => void fetchFeed(true)}
+                    disabled={refreshing}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-chrome-zinc-800 bg-chrome-zinc-900/40 px-5 py-3 text-sm font-semibold text-chrome-zinc-300 transition-all hover:border-chrome-zinc-700 hover:text-chrome-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />
+                    {getString("refresh")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => void handleLoadMore({ manual: true })}
+                    disabled={loadingMore}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-chrome-zinc-800 bg-chrome-zinc-900/40 px-5 py-3 text-sm font-semibold text-chrome-zinc-300 transition-all hover:border-chrome-zinc-700 hover:text-chrome-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin text-chrome-red-400" />
+                        Loading more
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={16} />
+                        Load more
+                      </>
+                    )}
+                  </button>
+                  {!loadingMore && (
+                    <p className="text-xs text-chrome-zinc-500">
+                      More recommendations load automatically as you scroll.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}

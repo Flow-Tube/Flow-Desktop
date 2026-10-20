@@ -49,6 +49,7 @@
   "home_refresh_feed": "Refresh Feed",
   "home_feed_disabled_title": "Home Feed Disabled",
   "home_feed_disabled_body": "Turn Home Feed back on in Settings to load recommendations.",
+  "home_feed_end_title": "You've seen everything for now",
   "explore_overline": "Explore",
   "explore_title": "Explore",
   "explore_subtitle": "Trending videos in %s",

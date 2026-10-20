@@ -332,3 +332,65 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
           if-no-files-found: error
           retention-days: 14
+
+  # The Flatpak builds offline inside flatpak-builder, so its Cargo and pnpm
+  # sources are generated on the host first and handed to the build job.
+  flatpak-sources:
+    name: Nightly (Linux x64 Flatpak sources)
+    if: github.event_name != 'pull_request'
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Prototype: drop continue-on-error here and in nightly-flatpak before the
+    # Flathub submission, so a broken Flatpak fails the nightly run.
+    continue-on-error: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Generate offline Flatpak sources
+        run: bash scripts/flatpak-sources.sh
+
+      - name: Upload Flatpak sources
+        uses: actions/upload-artifact@v7
+        with:
+          name: flatpak-sources-${{ github.run_number }}
+          path: packaging/flatpak/generated-sources/
+          if-no-files-found: error
+          retention-days: 1
+
+  nightly-flatpak:
+    name: Nightly (Linux x64 Flatpak)
+    if: github.event_name != 'pull_request'
+    needs: flatpak-sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    continue-on-error: true
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Download Flatpak sources
+        uses: actions/download-artifact@v8
+        with:
+          name: flatpak-sources-${{ github.run_number }}
+          path: packaging/flatpak/generated-sources
+
+      - name: Build the Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/io.github.flow_tube.Flow-Desktop.yml
+          bundle: Flow-Desktop.flatpak
+          arch: x86_64
+          cache-key: flatpak-builder-${{ hashFiles('src-tauri/Cargo.lock', 'pnpm-lock.yaml') }}
+          artifact-name: Flow-nightly-linux-x64-flatpak-${{ github.run_number }}

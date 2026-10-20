@@ -82,6 +82,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
             channelId: resolvedChannelId.replace(/^channel:/, ""),
             description: videoDetails?.description || null,
             isLive: stream.isLive,
+            isMusic: isMusicVideo(currentVideo),
           }
         : null,
     [currentVideo, resolvedChannelId, videoDetails?.description, stream.isLive],

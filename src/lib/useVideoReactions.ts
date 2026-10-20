@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isKnownShort } from "./videoKind";
+import { isMusicVideo } from "./utils";
 import { logInteraction, markNotInterested } from "./api/recommendation";
 import { getString } from "./i18n/index";
 import { useLikesStore } from "../store/useLikesStore";
@@ -56,7 +57,8 @@ export function useVideoReactions(video: VideoSummary | null, videoMeta: Reactio
       console.warn("Failed to update likes", err);
       showToast({ variant: "error", message: getString("liked_update_failed") });
     });
-    if (next !== "liked") return;
+    // Music played in the video player never teaches the video engine.
+    if (next !== "liked" || isMusicVideo(video)) return;
     void logInteraction(
       video.id,
       video.title,
@@ -81,6 +83,7 @@ export function useVideoReactions(video: VideoSummary | null, videoMeta: Reactio
         console.warn("Failed to remove disliked video from likes", err)
       ));
     }
+    if (isMusicVideo(video)) return;
     void markNotInterested(
       video.id,
       video.title,

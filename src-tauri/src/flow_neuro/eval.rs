@@ -111,10 +111,7 @@ pub fn evaluate(brain: &UserBrain, candidates: &[EvalCandidate], k: usize) -> Ev
             let candidate = Candidate {
                 video_vector: &c.vector,
                 video_id: &id,
-                title: "",
-                channel_name: "",
                 channel_id: &c.channel_id,
-                duration_seconds: Some(600),
                 published_text: "1 day ago",
                 view_count: 0,
                 is_subscription: c.is_subscription,

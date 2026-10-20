@@ -8,6 +8,7 @@ import {
 } from "../lib/api/recommendation";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
 import { isKnownShort } from "../lib/videoKind";
+import { isMusicVideo } from "../lib/utils";
 import type { VideoSummary } from "../types/video";
 import { SETTINGS } from "../lib/settings/schema";
 import { useAppSettingsStore } from "./useAppSettingsStore";
@@ -209,19 +210,23 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
       set((s) => ({ watchedVideoIds: addCapped(s.watchedVideoIds, video.id, WATCHED_CAP) }));
       persist();
       const m = meta(video);
+      const isMusic = isMusicVideo(video);
       try {
-        await logInteraction(
-          video.id,
-          video.title,
-          video.channelName,
-          m.channelId,
-          null,
-          m.duration,
-          false,
-          m.isShort,
-          "WATCHED",
-          1.0,
-        );
+        // Music never teaches the video engine; the card is still marked watched.
+        if (!isMusic) {
+          await logInteraction(
+            video.id,
+            video.title,
+            video.channelName,
+            m.channelId,
+            null,
+            m.duration,
+            false,
+            m.isShort,
+            "WATCHED",
+            1.0,
+          );
+        }
         if (shouldRecordWatchHistory()) {
           await addWatchRecord({
             videoId: video.id,
@@ -231,6 +236,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
             watchDate: new Date().toISOString(),
             watchDurationSeconds: m.duration ?? 0,
             totalDurationSeconds: m.duration ?? 0,
+            isMusic,
           });
         }
       } catch (e) {
@@ -239,6 +245,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
     },
 
     moreLikeThis: async (video) => {
+      if (isMusicVideo(video)) return;
       const m = meta(video);
       try {
         await logInteraction(

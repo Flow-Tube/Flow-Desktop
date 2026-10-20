@@ -12,7 +12,7 @@ use crate::flow_neuro::scoring::{
     calculate_channel_profile_boost, calculate_channel_score_multiplier,
     calculate_cosine_similarity, calculate_feed_history_penalty,
     calculate_implicit_disinterest_penalty, calculate_rejection_pattern_penalty,
-    calculate_relevance_floor, is_music_track, strip_domain_tag,
+    calculate_relevance_floor, strip_domain_tag,
 };
 use crate::flow_neuro::signals::make_affinity_key;
 use std::collections::HashSet;
@@ -55,10 +55,7 @@ pub struct RankInputs<'a> {
 pub struct Candidate<'a> {
     pub video_vector: &'a ContentVector,
     pub video_id: &'a str,
-    pub title: &'a str,
-    pub channel_name: &'a str,
     pub channel_id: &'a str,
-    pub duration_seconds: Option<u64>,
     pub published_text: &'a str,
     pub view_count: u64,
     pub is_subscription: bool,
@@ -281,14 +278,7 @@ fn watched_penalty(candidate: &Candidate, brain: &UserBrain) -> f64 {
     let Some(&percent) = brain.watch_history_map.get(candidate.video_id) else {
         return 1.0;
     };
-    let is_music = is_music_track(
-        candidate.title,
-        candidate.channel_name,
-        candidate.duration_seconds,
-    );
-    if is_music && percent > WATCHED_THRESHOLD_HALF {
-        1.0
-    } else if percent > WATCHED_THRESHOLD_FULL {
+    if percent > WATCHED_THRESHOLD_FULL {
         WATCHED_PENALTY_FULL
     } else if percent > WATCHED_THRESHOLD_HALF {
         WATCHED_PENALTY_HALF
@@ -341,10 +331,7 @@ mod tests {
         Candidate {
             video_vector: vector,
             video_id: id,
-            title: "Title",
-            channel_name: "Channel",
             channel_id: "chan",
-            duration_seconds: Some(600),
             published_text: "3 days ago",
             view_count: 1000,
             is_subscription,

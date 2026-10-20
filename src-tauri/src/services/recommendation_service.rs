@@ -1602,10 +1602,7 @@ impl RecommendationService {
             let candidate = ranker::Candidate {
                 video_vector: &video_vector,
                 video_id: &video.id,
-                title: &video.title,
-                channel_name: &video.channel_name,
                 channel_id: &channel_id,
-                duration_seconds: video.duration_seconds,
                 published_text: video.published_text.as_deref().unwrap_or(""),
                 view_count: Self::parse_view_count(video.view_count_text.as_deref()),
                 is_subscription: user_subs.contains(&channel_id),
@@ -1707,6 +1704,9 @@ impl RecommendationService {
     /// Folds a progress report into the open watch session. A report for another video
     /// finishes the previous session and opens a new one, which counts as the click.
     pub async fn report_watch_progress(&self, report: WatchReport) -> AppResult<()> {
+        if report.is_music {
+            return Ok(());
+        }
         let (finished, opened) = {
             let mut slot = self.watch.lock().unwrap();
             match slot.session.as_mut() {

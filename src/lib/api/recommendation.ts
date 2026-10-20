@@ -107,6 +107,7 @@ export interface WatchReport {
   channelId: string;
   description: string | null;
   isLive: boolean;
+  isMusic: boolean;
   position: number;
   duration: number;
   playedDelta: number;

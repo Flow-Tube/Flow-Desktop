@@ -12,6 +12,8 @@ export interface WatchSubject {
   channelId: string;
   description: string | null;
   isLive: boolean;
+  /** Music played in the video player never teaches the video engine. */
+  isMusic: boolean;
 }
 
 interface Progress {
@@ -61,6 +63,7 @@ export function useWatchSession(subject: WatchSubject | null) {
     if (!current || current.videoId !== videoId || !progress || progress.videoId !== videoId) {
       return null;
     }
+    if (current.isMusic) return null;
     const report: WatchReport = {
       ...current,
       position: progress.position,

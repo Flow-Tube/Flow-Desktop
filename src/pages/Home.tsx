@@ -31,6 +31,7 @@ import {
 } from "../lib/continueWatching";
 import { reconcileHomeFeedResults } from "../lib/homeFeedResults";
 import { isKnownShort } from "../lib/videoKind";
+import { isMusicVideo } from "../lib/utils";
 import {
   createDiscoveryPaging,
   hasDiscoveryPagesLeft,
@@ -349,8 +350,12 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     return published.includes("live") || views.includes("watching");
   };
 
-  // Android's filterValid: no Shorts, and a known length unless the video is live.
+  // Android's filterValid: no Shorts, and a known length unless the video is live. Songs
+  // belong to the music player, not the video feed.
   const isValidFeedVideo = (video: VideoSummary) => {
+    if (isMusicVideo(video)) {
+      return false;
+    }
     if (video.isLive || isLikelyLive(video)) {
       return true;
     }

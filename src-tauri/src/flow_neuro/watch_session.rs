@@ -20,6 +20,9 @@ pub struct WatchReport {
     pub channel_id: String,
     pub description: Option<String>,
     pub is_live: bool,
+    /// Music played in the video player; the video engine never learns from it.
+    #[serde(default)]
+    pub is_music: bool,
     /// Playback position in seconds.
     pub position: f64,
     /// Media length in seconds, 0 while unknown.
@@ -127,6 +130,7 @@ mod tests {
             channel_id: String::new(),
             description: None,
             is_live: false,
+            is_music: false,
             position,
             duration: 600.0,
             played_delta,

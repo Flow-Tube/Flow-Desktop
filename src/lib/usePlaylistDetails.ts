@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
-import { getPlaylistDetails } from "./api/youtube";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getPlaylistDetails, getVideoDetails } from "./api/youtube";
 import {
   formatVideoCountText,
   getStoredPlaylistById,
   isProtectedPlaylistId,
   normalizePlaylist,
   resolvePlaylistTitle,
+  updateStoredPlaylistTracks,
   type StoredPlaylist,
 } from "./playlistLibrary";
-import type { VideoSummary } from "../types/video";
+import {
+  applyVideoDetails,
+  ENRICHMENT_CHUNK_DELAY_MS,
+  ENRICHMENT_CHUNK_SIZE,
+  ENRICHMENT_TRACK_LIMIT,
+  needsEnrichment,
+} from "./playlistEnrichment";
+import type { VideoDetails, VideoSummary } from "../types/video";
 
 export interface PlaylistDetailsMeta {
   id: string;
@@ -38,6 +46,8 @@ export function usePlaylistDetails(playlistId: string | undefined) {
 
     setLoading(true);
     setError(null);
+    // Cleared so enrichment never pairs the old list with the new playlist.
+    setVideos([]);
 
     try {
       const stored = await getStoredPlaylistById(playlistId);
@@ -126,6 +136,58 @@ export function usePlaylistDetails(playlistId: string | undefined) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Per playlist, since this hook outlives a switch; a pass stops once its playlist leaves the screen.
+  const attemptedEnrichment = useRef(new Set<string>());
+  const enrichmentRunning = useRef<string | null>(null);
+  const activePlaylistId = useRef(playlistId);
+  useEffect(() => {
+    activePlaylistId.current = playlistId;
+    attemptedEnrichment.current = new Set();
+    return () => {
+      activePlaylistId.current = undefined;
+    };
+  }, [playlistId]);
+
+  const enrichTracks = useCallback((id: string, tracks: VideoSummary[]) => {
+    const targets = tracks
+      .filter((track) => needsEnrichment(track) && !attemptedEnrichment.current.has(track.id))
+      .slice(0, ENRICHMENT_TRACK_LIMIT);
+    if (targets.length === 0) return;
+    if (enrichmentRunning.current === id) return;
+    enrichmentRunning.current = id;
+    for (const track of targets) attemptedEnrichment.current.add(track.id);
+
+    void (async () => {
+      try {
+        for (let start = 0; start < targets.length; start += ENRICHMENT_CHUNK_SIZE) {
+          if (activePlaylistId.current !== id) return;
+          const refreshed = new Map<string, VideoDetails>();
+          for (const track of targets.slice(start, start + ENRICHMENT_CHUNK_SIZE)) {
+            try {
+              refreshed.set(track.id, await getVideoDetails(track.id));
+            } catch {
+              // Private or removed videos are expected in old playlists.
+            }
+          }
+          if (refreshed.size > 0) {
+            setVideos((previous) => applyVideoDetails(previous, refreshed));
+            // Applied to what's stored now, so a reorder or removal meanwhile survives.
+            await updateStoredPlaylistTracks(id, (stored) => applyVideoDetails(stored, refreshed));
+          }
+          await new Promise((resolve) => setTimeout(resolve, ENRICHMENT_CHUNK_DELAY_MS));
+        }
+      } catch (enrichError) {
+        console.warn("Failed to save enriched playlist tracks", enrichError);
+      } finally {
+        if (enrichmentRunning.current === id) enrichmentRunning.current = null;
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (playlistId && storedPlaylist?.id === playlistId) enrichTracks(playlistId, videos);
+  }, [videos, playlistId, storedPlaylist?.id, enrichTracks]);
 
   return {
     loading,

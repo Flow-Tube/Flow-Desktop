@@ -184,7 +184,7 @@ export const getStoredPlaylistById = async (playlistId: string) => {
 
 export const updateStoredPlaylistTracks = async (
   playlistId: string,
-  tracks: VideoSummary[],
+  tracks: VideoSummary[] | ((current: VideoSummary[]) => VideoSummary[]),
 ) => {
   const playlists = await loadStoredPlaylists();
   const index = playlists.findIndex((stored) => stored.id === playlistId);
@@ -193,15 +193,23 @@ export const updateStoredPlaylistTracks = async (
   const current = playlists[index];
   if (!current) return null;
 
-  const videoCount = tracks.length;
+  const nextTracks = typeof tracks === "function" ? tracks(current.tracks) : tracks;
+  if (nextTracks === current.tracks) return current;
+
+  const videoCount = nextTracks.length;
   const updated: StoredPlaylist = normalizePlaylist({
     ...current,
     id: current.id,
     name: current.name,
-    tracks,
-    thumbnailUrl: tracks[0]?.thumbnailUrl ?? current.thumbnailUrl ?? null,
-    videoCount: videoCount > 0 ? videoCount : null,
-    videoCountText: videoCount > 0 ? formatVideoCountText(videoCount) : null,
+    tracks: nextTracks,
+    thumbnailUrl: nextTracks[0]?.thumbnailUrl ?? current.thumbnailUrl ?? null,
+    // A saved playlist stores only its first page; keep its full remote count.
+    ...(current.source === "Saved"
+      ? {}
+      : {
+        videoCount: videoCount > 0 ? videoCount : null,
+        videoCountText: videoCount > 0 ? formatVideoCountText(videoCount) : null,
+      }),
   });
 
   const nextPlaylists = playlists.map((stored, storedIndex) => (

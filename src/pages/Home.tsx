@@ -152,7 +152,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   } else {
     body = (
       <>
-        <div className="flex justify-end">{refreshButton}</div>
         <VideoGrid
           videos={visibleVideos}
           onPlay={onPlay}

@@ -4,12 +4,14 @@ import type { NamedChannel } from "../../../lib/api/recommendation";
 
 interface HiddenChannelsProps {
   channels: NamedChannel[];
+  /** Names this device lacks are being looked up. */
+  resolvingNames: boolean;
   unblocking: string | null;
   onUnblock: (channelId: string) => void;
 }
 
 /** The channels the viewer blocked, by name where this device knows one. */
-export function HiddenChannels({ channels, unblocking, onUnblock }: HiddenChannelsProps) {
+export function HiddenChannels({ channels, resolvingNames, unblocking, onUnblock }: HiddenChannelsProps) {
   if (channels.length === 0) {
     return <p className="text-sm text-chrome-neutral-500">{getString("taste_hidden_channels_empty")}</p>;
   }
@@ -18,7 +20,7 @@ export function HiddenChannels({ channels, unblocking, onUnblock }: HiddenChanne
       {channels.map((channel) => (
         <li key={channel.id} className="flex items-center justify-between gap-4 py-2">
           <span className="min-w-0 truncate text-sm text-chrome-neutral-200">
-            {channel.name || getString("taste_channel_unnamed")}
+            {channel.name || getString(resolvingNames ? "taste_channel_looking_up" : "taste_channel_unnamed")}
           </span>
           <button
             type="button"

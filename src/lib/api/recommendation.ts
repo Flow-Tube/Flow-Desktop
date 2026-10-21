@@ -441,12 +441,13 @@ export async function unblockChannel(channelId: string): Promise<void> {
   brainCache = null;
 }
 
-export async function blockChannel(channelId: string): Promise<void> {
+/** Blocks a channel; its name is kept so Hidden channels can show it without a lookup. */
+export async function blockChannel(channelId: string, channelName?: string): Promise<void> {
   if (!(await isTauriEnv())) {
     console.log(`[FlowNeuro Mock] Blocking channel: ${channelId}`);
     return;
   }
-  await invokeBackend<void>("block_channel", { channelId });
+  await invokeBackend<void>("block_channel", { channelId, channelName: channelName || null });
   brainCache = null;
 }
 
@@ -489,6 +490,12 @@ export interface TasteOverview {
   picks: TasteTopic[];
   groups: TasteGroup[];
   hiddenChannels: NamedChannel[];
+}
+
+/** Names of hidden channels this device does not know, from their RSS feeds. */
+export async function resolveHiddenChannelNames(channelIds: string[]): Promise<Record<string, string>> {
+  if (channelIds.length === 0 || !(await isTauriEnv())) return {};
+  return invokeBackend<Record<string, string>>("resolve_hidden_channel_names", { channelIds });
 }
 
 export async function getTasteOverview(): Promise<TasteOverview> {

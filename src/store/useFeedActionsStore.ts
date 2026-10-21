@@ -209,7 +209,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
       set((s) => ({ blockedChannelIds: addCapped(s.blockedChannelIds, channelId, BLOCKED_CAP) }));
       persist();
       try {
-        await apiBlockChannel(channelId);
+        await apiBlockChannel(channelId, video.channelName);
       } catch (e) {
         console.warn("Failed to block channel", e);
         set({ blockedChannelIds: previous });

@@ -103,6 +103,11 @@ describe("feed actions", () => {
     expect(state.suppressedChannelIds.size).toBe(0);
   });
 
+  it("keeps the channel's name with the block", async () => {
+    await useFeedActionsStore.getState().blockChannel(card("a"));
+    expect(api.blockChannel).toHaveBeenCalledWith("UC1", "Chan");
+  });
+
   it("rolls a channel block back when the backend fails", async () => {
     api.blockChannel.mockRejectedValue(new Error("db"));
     await expect(useFeedActionsStore.getState().blockChannel(card("a"))).rejects.toThrow("db");

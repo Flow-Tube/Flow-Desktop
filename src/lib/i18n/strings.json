@@ -541,6 +541,7 @@
   "taste_hidden_channels_empty": "No hidden channels",
   "taste_unblock_channel": "Unblock",
   "taste_channel_unnamed": "Unnamed channel",
+  "taste_channel_looking_up": "Looking up the name…",
   "taste_unblock_topic": "Unblock topic",
   "settings_group_playback": "Playback",
   "settings_autoplay": "Autoplay",

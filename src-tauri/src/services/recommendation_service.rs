@@ -21,8 +21,8 @@ use crate::flow_neuro::learning::{Interaction, apply_interaction};
 use crate::flow_neuro::rank::{RankContext, SessionState, rank};
 use crate::flow_neuro::ranker::MomentumEntry;
 use crate::flow_neuro::scoring::{
-    FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX,
-    SESSION_TOPIC_HISTORY_MAX, TimeBucket, UserBrain, classify_persona, is_known_short,
+    FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX, SESSION_TOPIC_HISTORY_MAX, TimeBucket, UserBrain,
+    classify_persona, is_known_short,
 };
 use crate::flow_neuro::search_learning::learn_search;
 use crate::flow_neuro::side_stores::SideStores;
@@ -120,6 +120,11 @@ impl RecommendationService {
     }
 
     /// Reload the resident brain from the database after a sync merge wrote it directly.
+    /// Saves the brain and holds saves until [`Self::reload_brain`], around a sync merge.
+    pub async fn flush_and_hold_brain(&self) -> AppResult<()> {
+        self.brain_store.flush_and_hold().await
+    }
+
     pub async fn reload_brain(&self) -> AppResult<()> {
         self.brain_store.reload().await
     }

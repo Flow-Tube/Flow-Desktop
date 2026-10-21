@@ -376,6 +376,17 @@ async fn flush_brains(app: &AppHandle) {
     }
 }
 
+/// As [`flush_brains`], then holds the video brain's saves until [`reload_brains`], so its
+/// background save cannot write the old brain over the one the merge stores.
+async fn flush_and_hold_brains(app: &AppHandle) {
+    flush_brains(app).await;
+    if let Some(svc) = app.try_state::<RecommendationService>() {
+        if let Err(e) = svc.flush_and_hold_brain().await {
+            tracing::warn!(%e, "[sync] hold flow_neuro brain before merge failed");
+        }
+    }
+}
+
 async fn reload_brains(app: &AppHandle) {
     if let Some(svc) = app.try_state::<RecommendationService>() {
         if let Err(e) = svc.reload_brain().await {
@@ -937,14 +948,14 @@ fn apply_step(
             manager
                 .set_status(&app, SyncStatus::simple("transferring", Some(role)))
                 .await;
-            flush_brains(&app).await;
-            let report = apply::apply_payload(&pool, &device_id, &peer.device_id, &staged)
-                .await
-                .map_err(|e| match e {
-                    SyncError::Apply(_) => e,
-                    other => SyncError::Apply(other.to_string()),
-                })?;
+            flush_and_hold_brains(&app).await;
+            let applied = apply::apply_payload(&pool, &device_id, &peer.device_id, &staged).await;
+            // Also after a failed apply, which releases the held brain.
             reload_brains(&app).await;
+            let report = applied.map_err(|e| match e {
+                SyncError::Apply(_) => e,
+                other => SyncError::Apply(other.to_string()),
+            })?;
             let _ =
                 crate::db::settings::set_setting(&pool, "sync_last_backup", &report.backup).await;
             let mut frame = ApplyResultFrame::default();

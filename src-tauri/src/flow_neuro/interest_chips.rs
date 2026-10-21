@@ -1,10 +1,12 @@
 //! Home's interest chips, from Flow for Android's `InterestChips`: the viewer's heaviest interest
-//! groups, kept steady for a day unless one of them grows or shrinks by more than 30 %.
+//! groups, kept steady for a day unless one of them grows or shrinks by more than 30 %. Clusters
+//! in one theme category (Gaming, Sports, ...) become a single theme chip.
 
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::flow_neuro::categories::is_theme;
 use crate::flow_neuro::clusters::TopicCluster;
 use crate::flow_neuro::display_forms::{DisplayForms, label};
 use crate::flow_neuro::scoring::strip_domain_tag;
@@ -16,8 +18,11 @@ const MIN_MASS_SHARE: f64 = 0.08;
 const RECOMPUTE_AFTER_MS: u64 = 86_400_000;
 const MASS_CHANGE: f64 = 0.30;
 const QUERIES_PER_INTEREST: usize = 3;
+pub const THEME_PREFIX: &str = "theme:";
+/// Distinct interests one cluster needs to read as a theme rather than by its strongest topic.
+const THEME_MIN_INTERESTS: usize = 3;
 
-/// The chips last chosen: each group's representative and its mass then, in chip order.
+/// The chips last chosen: each group's key and its mass then, in chip order.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct InterestChipSet {
@@ -28,42 +33,126 @@ pub struct InterestChipSet {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InterestChip {
+    /// A cluster's representative, or `theme:<category>`.
     pub key: String,
     pub label: String,
     pub topics: Vec<String>,
+    /// The theme category; the page names a theme chip after it.
+    pub category: Option<String>,
+    /// A theme's interests, each searched in turn.
+    pub parts: Vec<InterestChip>,
 }
 
-/// Each cluster with whether it may become a chip: enough of the viewer's mass and some evidence
-/// behind it. Heaviest first.
+/// A chip candidate: one cluster, or a theme of clusters in the same category. Only eligible ones
+/// are chosen anew.
+#[derive(Debug, Clone)]
+pub struct Group<'a> {
+    pub key: String,
+    pub members: Vec<&'a TopicCluster>,
+    pub category: Option<String>,
+    pub eligible: bool,
+}
+
+impl Group<'_> {
+    fn mass(&self) -> f64 {
+        self.members.iter().map(|c| c.mass).sum()
+    }
+}
+
+/// A cluster's topics split into interests that share no word: "minecraft redstone" joins
+/// "minecraft", "fortnite" stands apart.
 #[must_use]
-pub fn eligible_clusters(
+pub fn distinct_interests(cluster: &TopicCluster) -> Vec<Vec<String>> {
+    let words = |topic: &str| -> Vec<String> {
+        strip_domain_tag(topic)
+            .split(' ')
+            .map(str::to_string)
+            .collect()
+    };
+    let mut interests: Vec<Vec<String>> = Vec::new();
+    for topic in &cluster.topics {
+        let own = words(topic);
+        match interests.iter_mut().find(|interest| {
+            interest
+                .iter()
+                .any(|other| words(other).iter().any(|w| own.contains(w)))
+        }) {
+            Some(interest) => interest.push(topic.clone()),
+            None => interests.push(vec![topic.clone()]),
+        }
+    }
+    interests
+}
+
+/// Every cluster as a chip candidate, heaviest first. Eligible are those with enough of the
+/// viewer's mass and some evidence behind them. Eligible clusters in one theme category become a
+/// single theme when there are two of them, or one holding three distinct interests: "Gaming"
+/// reads truer than "Minecraft" for a cluster of three games, and leaves room for the others.
+#[must_use]
+pub fn groups(
     clusters: &[TopicCluster],
     has_evidence: impl Fn(&TopicCluster) -> bool,
-) -> Vec<(&TopicCluster, bool)> {
+    category_of: impl Fn(&TopicCluster) -> Option<String>,
+) -> Vec<Group<'_>> {
     let total: f64 = clusters.iter().map(|c| c.mass).sum();
     if total <= 0.0 {
         return Vec::new();
     }
-    let mut groups: Vec<(&TopicCluster, bool)> = clusters
+    let eligible: Vec<&TopicCluster> = clusters
         .iter()
-        .map(|c| (c, c.mass / total >= MIN_MASS_SHARE && has_evidence(c)))
+        .filter(|c| c.mass / total >= MIN_MASS_SHARE && has_evidence(c))
         .collect();
-    groups.sort_by(|a, b| b.0.mass.total_cmp(&a.0.mass));
-    groups
+    let mut by_category: Vec<(String, Vec<&TopicCluster>)> = Vec::new();
+    for cluster in &eligible {
+        let Some(category) = category_of(cluster).filter(|c| is_theme(c)) else {
+            continue;
+        };
+        match by_category.iter_mut().find(|(c, _)| *c == category) {
+            Some((_, members)) => members.push(cluster),
+            None => by_category.push((category, vec![cluster])),
+        }
+    }
+    let theme_groups: Vec<Group> = by_category
+        .into_iter()
+        .filter(|(_, members)| {
+            members.len() >= 2
+                || members
+                    .iter()
+                    .map(|c| distinct_interests(c).len())
+                    .sum::<usize>()
+                    >= THEME_MIN_INTERESTS
+        })
+        .map(|(category, members)| Group {
+            key: format!("{THEME_PREFIX}{category}"),
+            members,
+            category: Some(category),
+            eligible: true,
+        })
+        .collect();
+    let themed: HashSet<&str> = theme_groups
+        .iter()
+        .flat_map(|g| g.members.iter().map(|c| c.representative.as_str()))
+        .collect();
+    let eligible_keys: HashSet<&str> = eligible.iter().map(|c| c.representative.as_str()).collect();
+    let singles = clusters
+        .iter()
+        .filter(|c| !themed.contains(c.representative.as_str()))
+        .map(|c| Group {
+            key: c.representative.clone(),
+            members: vec![c],
+            category: None,
+            eligible: eligible_keys.contains(c.representative.as_str()),
+        });
+    let mut all: Vec<Group> = theme_groups.into_iter().chain(singles).collect();
+    all.sort_by(|a, b| b.mass().total_cmp(&a.mass()));
+    all
 }
 
 /// The set to show: `previous` while it is under a day old and none of its groups moved more than
 /// 30 % or disappeared; otherwise the heaviest eligible groups.
 #[must_use]
-pub fn stable(
-    previous: &InterestChipSet,
-    groups: &[(&TopicCluster, bool)],
-    now_ms: u64,
-) -> InterestChipSet {
-    let mass_of: HashMap<&str, f64> = groups
-        .iter()
-        .map(|(c, _)| (c.representative.as_str(), c.mass))
-        .collect();
+pub fn stable(previous: &InterestChipSet, groups: &[Group], now_ms: u64) -> InterestChipSet {
+    let mass_of: HashMap<&str, f64> = groups.iter().map(|g| (g.key.as_str(), g.mass())).collect();
     let fresh =
         now_ms >= previous.computed_at && now_ms - previous.computed_at < RECOMPUTE_AFTER_MS;
     let steady = !previous.masses.is_empty()
@@ -78,67 +167,105 @@ pub fn stable(
     InterestChipSet {
         masses: groups
             .iter()
-            .filter(|(_, eligible)| *eligible)
+            .filter(|g| g.eligible)
             .take(MAX_CHIPS)
-            .map(|(c, _)| (c.representative.clone(), c.mass))
+            .map(|g| (g.key.clone(), g.mass()))
             .collect(),
         computed_at: now_ms,
     }
 }
 
-/// The chips of `set`, each named after the topic of its group the viewer watched most, never
-/// after a word every subject uses.
+/// The chips of `set`. A chip reads as the topic of its cluster the viewer watched most, never a
+/// word every subject uses; a theme chip is named by the page after its category and keeps each
+/// of its interests as a part.
 #[must_use]
 pub fn chips(
     set: &InterestChipSet,
-    clusters: &[TopicCluster],
+    groups: &[Group],
     forms: &DisplayForms,
     specificity: impl Fn(&str) -> f64,
     evidence_of: impl Fn(&str) -> i32,
 ) -> Vec<InterestChip> {
-    let by_key: HashMap<&str, &TopicCluster> = clusters
-        .iter()
-        .map(|c| (c.representative.as_str(), c))
-        .collect();
+    let by_key: HashMap<&str, &Group> = groups.iter().map(|g| (g.key.as_str(), g)).collect();
+    let nameable = |topics: &[String]| -> Vec<String> {
+        let specific: Vec<String> = topics
+            .iter()
+            .filter(|t| specificity(t) >= LABEL_MIN_SPECIFICITY)
+            .cloned()
+            .collect();
+        if specific.is_empty() {
+            topics.to_vec()
+        } else {
+            specific
+        }
+    };
+    let chip_of = |cluster: &TopicCluster| -> Option<InterestChip> {
+        let candidates = nameable(&cluster.topics);
+        let named = candidates
+            .iter()
+            .max_by_key(|t| evidence_of(t))
+            .filter(|t| evidence_of(t) > 0)
+            .or_else(|| candidates.iter().find(|t| **t == cluster.representative))
+            .or_else(|| candidates.first())?;
+        Some(InterestChip {
+            key: cluster.representative.clone(),
+            label: label(forms, named),
+            topics: cluster.topics.clone(),
+            category: None,
+            parts: Vec::new(),
+        })
+    };
     set.masses
         .iter()
         .filter_map(|(key, _)| {
-            let cluster = by_key.get(key.as_str())?;
-            let nameable: Vec<&String> = cluster
-                .topics
+            let group = by_key.get(key.as_str())?;
+            if group.category.is_none() {
+                return chip_of(group.members.first()?);
+            }
+            let parts: Vec<InterestChip> = group
+                .members
                 .iter()
-                .filter(|t| specificity(t) >= LABEL_MIN_SPECIFICITY)
-                .collect();
-            let candidates = if nameable.is_empty() {
-                cluster.topics.iter().collect()
-            } else {
-                nameable
-            };
-            let named = candidates
-                .iter()
-                .copied()
-                .max_by_key(|t| evidence_of(t))
-                .filter(|t| evidence_of(t) > 0)
-                .or_else(|| {
-                    candidates
-                        .iter()
-                        .copied()
-                        .find(|t| **t == cluster.representative)
+                .flat_map(|c| distinct_interests(c))
+                .filter_map(|topics| {
+                    let name = nameable(&topics).into_iter().next()?;
+                    Some(InterestChip {
+                        key: topics.first()?.clone(),
+                        label: label(forms, &name),
+                        topics,
+                        category: None,
+                        parts: Vec::new(),
+                    })
                 })
-                .or_else(|| candidates.first().copied())?;
+                .collect();
             Some(InterestChip {
-                key: cluster.representative.clone(),
-                label: label(forms, named),
-                topics: cluster.topics.clone(),
+                key: group.key.clone(),
+                label: parts.first()?.label.clone(),
+                topics: group
+                    .members
+                    .iter()
+                    .flat_map(|c| c.topics.iter().cloned())
+                    .collect(),
+                category: group.category.clone(),
+                parts,
             })
         })
         .collect()
 }
 
 /// Searches for a chip: multi-word interests as they are, single words qualified by the chip's
-/// main topic ("chess" with "openings" searches "chess openings").
+/// main topic ("chess" with "openings" searches "chess openings"). A theme takes each part's
+/// searches in turn.
 #[must_use]
 pub fn interest_queries(chip: &InterestChip) -> Vec<String> {
+    if !chip.parts.is_empty() {
+        let per_part: Vec<Vec<String>> = chip.parts.iter().map(interest_queries).collect();
+        let mut seen = HashSet::new();
+        return (0..QUERIES_PER_INTEREST)
+            .flat_map(|round| per_part.iter().filter_map(move |q| q.get(round).cloned()))
+            .filter(|q| seen.insert(q.clone()))
+            .take(QUERIES_PER_INTEREST)
+            .collect();
+    }
     let rep = strip_domain_tag(&chip.key);
     let members: Vec<String> = chip
         .topics
@@ -188,6 +315,10 @@ mod tests {
         }
     }
 
+    fn no_category(_: &TopicCluster) -> Option<String> {
+        None
+    }
+
     #[test]
     fn small_or_unsupported_groups_are_not_chips() {
         let clusters = [
@@ -195,7 +326,7 @@ mod tests {
             cluster("bread", &["bread"], 0.3),
             cluster("guitar", &["guitar"], 4.0),
         ];
-        let groups = eligible_clusters(&clusters, |c| c.topics.len() >= 2);
+        let groups = groups(&clusters, |c| c.topics.len() >= 2, no_category);
         let set = stable(&InterestChipSet::default(), &groups, 1_000);
         assert_eq!(set.masses, [("chess".to_string(), 5.0)]);
     }
@@ -210,17 +341,17 @@ mod tests {
             cluster("chess", &["chess", "opening"], 5.5),
             cluster("go", &["go", "joseki"], 9.0),
         ];
-        let groups = eligible_clusters(&grown, |_| true);
-        assert_eq!(stable(&previous, &groups, 2_000), previous);
+        let g = groups(&grown, |_| true, no_category);
+        assert_eq!(stable(&previous, &g, 2_000), previous);
         let doubled = [
             cluster("chess", &["chess", "opening"], 10.0),
             cluster("go", &["go", "joseki"], 9.0),
         ];
-        let groups = eligible_clusters(&doubled, |_| true);
-        assert_eq!(stable(&previous, &groups, 2_000).masses.len(), 2);
-        let groups = eligible_clusters(&grown, |_| true);
+        let g = groups(&doubled, |_| true, no_category);
+        assert_eq!(stable(&previous, &g, 2_000).masses.len(), 2);
+        let g = groups(&grown, |_| true, no_category);
         assert_eq!(
-            stable(&previous, &groups, 1_000 + RECOMPUTE_AFTER_MS)
+            stable(&previous, &g, 1_000 + RECOMPUTE_AFTER_MS)
                 .masses
                 .len(),
             2
@@ -240,14 +371,41 @@ mod tests {
             _ => 1,
         };
         let specific = |t: &str| if t == "best" { 0.2 } else { 1.0 };
-        let named = chips(
-            &set,
-            &clusters,
-            &DisplayForms::default(),
-            specific,
-            evidence,
-        );
+        let g = groups(&clusters, |_| true, no_category);
+        let named = chips(&set, &g, &DisplayForms::default(), specific, evidence);
         assert_eq!(named[0].label, "Opening");
+    }
+
+    #[test]
+    fn two_clusters_in_one_theme_become_one_chip_with_parts() {
+        let clusters = [
+            cluster("minecraft", &["minecraft", "minecraft redstone"], 4.0),
+            cluster("fortnite", &["fortnite", "season"], 3.0),
+            cluster("chess", &["chess", "opening"], 3.0),
+        ];
+        let gaming = |c: &TopicCluster| (c.representative != "chess").then(|| "gaming".to_string());
+        let g = groups(&clusters, |_| true, gaming);
+        assert_eq!(g[0].key, "theme:gaming");
+        assert_eq!(g[0].members.len(), 2);
+        let set = stable(&InterestChipSet::default(), &g, 1_000);
+        let chips = chips(&set, &g, &DisplayForms::default(), |_| 1.0, |_| 0);
+        assert_eq!(chips[0].category.as_deref(), Some("gaming"));
+        assert_eq!(chips[0].parts.len(), 3, "minecraft, fortnite and season");
+        let queries = interest_queries(&chips[0]);
+        assert_eq!(queries.len(), 3);
+        assert!(queries.iter().any(|q| q.contains("minecraft")));
+        assert!(queries.iter().any(|q| q.contains("fortnite")));
+    }
+
+    #[test]
+    fn a_default_category_never_makes_a_theme() {
+        let clusters = [
+            cluster("vlog", &["vlog", "day"], 4.0),
+            cluster("travel", &["travel", "japan"], 3.0),
+        ];
+        let people = |_: &TopicCluster| Some("people".to_string());
+        let g = groups(&clusters, |_| true, people);
+        assert!(g.iter().all(|group| group.category.is_none()));
     }
 
     #[test]
@@ -256,6 +414,8 @@ mod tests {
             key: "chess".into(),
             label: "Chess".into(),
             topics: vec!["chess".into(), "opening".into(), "magnus carlsen".into()],
+            category: None,
+            parts: Vec::new(),
         };
         assert_eq!(
             interest_queries(&chip),

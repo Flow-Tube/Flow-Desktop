@@ -3,12 +3,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::flow_neuro::categories::cluster_category;
 use crate::flow_neuro::clusters::TopicCluster;
 use crate::flow_neuro::clusters::{ClusterInputs, build_clusters};
 use crate::flow_neuro::co_watch::RelatedChannel;
 use crate::flow_neuro::discovery::exploration_queries;
 use crate::flow_neuro::features::pick_keys;
-use crate::flow_neuro::interest_chips::{InterestChip, chips, eligible_clusters, stable};
+use crate::flow_neuro::interest_chips::{InterestChip, chips, groups, stable};
 use crate::flow_neuro::rank::{about, clusters_of, share_by_interest};
 use crate::flow_neuro::scoring::CHANNEL_SUPPRESSION_DAYS;
 use crate::flow_neuro::scoring::classify_persona;
@@ -217,12 +218,19 @@ impl RecommendationService {
                                     || e.positive_score >= 1.2
                             })
                 };
-                let groups = eligible_clusters(&clusters, has_evidence);
+                let category_of = |cluster: &TopicCluster| {
+                    cluster_category(
+                        &cluster.topics,
+                        &brain.channel_topic_profiles,
+                        ctx.category_of,
+                    )
+                };
+                let groups = groups(&clusters, has_evidence, category_of);
                 let set = stable(&brain.interest_chips, &groups, now_ms);
                 let table = specificity(&brain.key_spec());
                 let chips = chips(
                     &set,
-                    &clusters,
+                    &groups,
                     &brain.display_forms,
                     |topic| table.of(topic),
                     |topic| {
@@ -240,6 +248,22 @@ impl RecommendationService {
             self.brain_store.write().await.interest_chips = set;
         }
         chips
+    }
+
+    /// The videos whose channel is known to post in another category than `category`.
+    #[must_use]
+    pub fn outside_category(&self, videos: &[VideoSummary], category: &str) -> HashSet<String> {
+        videos
+            .iter()
+            .filter(|video| {
+                video
+                    .channel_id
+                    .as_deref()
+                    .and_then(|channel| self.stores.categories.category_of(channel))
+                    .is_some_and(|known| known.id != category)
+            })
+            .map(|video| video.id.clone())
+            .collect()
     }
 
     /// The videos about one of `topics`, as their titles and channels read.

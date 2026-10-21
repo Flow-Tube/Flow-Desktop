@@ -49,6 +49,42 @@ fn specificity(id: &str) -> f64 {
     }
 }
 
+/// Share of the channel votes a category needs before a cluster counts as in it.
+const CLUSTER_MAJORITY: f64 = 0.6;
+
+/// A category that names a theme of interests; the default ones say too little to group by.
+#[must_use]
+pub fn is_theme(id: &str) -> bool {
+    IDS.iter().any(|(_, known)| *known == id) && (specificity(id) - 1.0).abs() < f64::EPSILON
+}
+
+/// The category a cluster of `topics` is in: each channel whose topic profile overlaps them votes
+/// for its own category, weighted by the overlap and how sure the store is of it. None without a
+/// clear majority (Android `NeuroCategories.clusterCategory`).
+#[must_use]
+pub fn cluster_category(
+    topics: &[String],
+    channel_topic_profiles: &HashMap<String, HashMap<String, f64>>,
+    category_of: impl Fn(&str) -> Option<ChannelCategory>,
+) -> Option<String> {
+    let mut votes: HashMap<String, f64> = HashMap::new();
+    for (channel, profile) in channel_topic_profiles {
+        let overlap: f64 = topics.iter().filter_map(|t| profile.get(t)).sum();
+        if overlap <= 0.0 {
+            continue;
+        }
+        let Some(category) = category_of(channel) else {
+            continue;
+        };
+        *votes.entry(category.id).or_insert(0.0) += overlap * category.confidence;
+    }
+    let total: f64 = votes.values().sum();
+    let (top, weight) = votes
+        .into_iter()
+        .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(&a.0)))?;
+    (total > 0.0 && weight / total >= CLUSTER_MAJORITY).then_some(top)
+}
+
 /// The stable id of a category name as the player's microformat writes it.
 #[must_use]
 pub fn id_of(name: Option<&str>) -> Option<&'static str> {

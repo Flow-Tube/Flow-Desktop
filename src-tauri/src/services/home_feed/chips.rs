@@ -198,7 +198,7 @@ impl HomeFeedService {
                     )
                     .await;
                 let stored_ids: HashSet<String> = stored.into_iter().map(|v| v.id).collect();
-                let pool: Vec<Card> = found
+                let mut pool: Vec<Card> = found
                     .into_iter()
                     .chain(
                         known
@@ -208,6 +208,12 @@ impl HomeFeedService {
                             .cloned(),
                     )
                     .collect();
+                // A theme stays in its category: a "Gaming" chip shows no cooking channel.
+                if let Some(category) = &interest.category {
+                    let videos: Vec<_> = pool.iter().map(|c| c.video.clone()).collect();
+                    let outside = rec.outside_category(&videos, category);
+                    pool.retain(|c| !outside.contains(c.id()));
+                }
                 Some(ranked(&rec, &known, pool).await)
             }
             Chip::NewToYou => {

@@ -176,7 +176,7 @@ export function TasteTab() {
                 </p>
               </div>
             </div>
-            <div className="flex min-h-12 flex-wrap gap-2">
+            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pr-1">
               {loading ? (
                 <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
                   <Loader2 size={16} className="animate-spin" />
@@ -288,7 +288,7 @@ export function TasteTab() {
                 {getString("taste_blocked_count", blockedTopics.length)}
               </p>
             </div>
-            <div className="flex min-h-12 flex-wrap gap-2">
+            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pr-1">
               {loading ? (
                 <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
                   <Loader2 size={16} className="animate-spin" />
@@ -315,11 +315,14 @@ export function TasteTab() {
               <h2 className="text-base font-medium text-chrome-neutral-200">{getString("taste_hidden_channels")}</h2>
               <p className="mt-1 text-sm text-chrome-neutral-400">{getString("taste_hidden_channels_desc")}</p>
             </div>
-            <HiddenChannels
-              channels={taste.overview.hiddenChannels}
-              unblocking={unblocking}
-              onUnblock={handleUnblockChannel}
-            />
+            <div className="h-72 overflow-y-auto pr-1">
+              <HiddenChannels
+                channels={taste.overview.hiddenChannels}
+                resolvingNames={taste.resolvingNames}
+                unblocking={unblocking}
+                onUnblock={handleUnblockChannel}
+              />
+            </div>
           </section>
 
           <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">

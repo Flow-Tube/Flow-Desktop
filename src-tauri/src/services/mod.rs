@@ -1,3 +1,4 @@
+pub mod blocked_channel_names;
 pub mod discord_presence;
 pub mod home_engine;
 pub mod home_feed;

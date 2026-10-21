@@ -5,7 +5,7 @@
 //! commands return one, and every later change is emitted as `home-feed`.
 
 mod arrange;
-mod cache;
+pub(crate) mod cache;
 pub mod card;
 mod channel_memory;
 pub mod chips;

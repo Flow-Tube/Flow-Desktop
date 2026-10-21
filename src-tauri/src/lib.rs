@@ -82,7 +82,8 @@ use commands::recommendation::{
     get_flow_persona, get_onboarding_status, get_recommendation_events, get_taste_overview,
     import_brain, learn_from_search, log_interaction, mark_not_interested, note_subscription,
     observe_channel_uploads, record_feed_impressions, remove_preferred_topic,
-    report_watch_progress, reset_brain, unblock_channel, unblock_topic,
+    report_watch_progress, reset_brain, resolve_hidden_channel_names, unblock_channel,
+    unblock_topic,
 };
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
@@ -371,6 +372,7 @@ pub fn run() {
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
             app.manage(ShortsService::new());
+            app.manage(services::blocked_channel_names::BlockedChannelNames::default());
             app.manage(services::home_feed::HomeFeedService::new());
             app.manage(DownloadManager::default());
             app.manage(PlayerFullscreenState::default());
@@ -517,6 +519,7 @@ pub fn run() {
             remove_preferred_topic,
             unblock_channel,
             block_channel,
+            resolve_hidden_channel_names,
             reset_brain,
             get_sponsorblock_segments,
             submit_sponsorblock_segment,

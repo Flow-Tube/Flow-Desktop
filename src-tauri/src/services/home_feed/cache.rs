@@ -268,6 +268,17 @@ pub async fn subscription_uploads(pool: &SqlitePool) -> AppResult<Vec<Card>> {
         .collect())
 }
 
+/// The names of the channels in the subscription store.
+pub async fn subscription_channel_names(pool: &SqlitePool) -> AppResult<Vec<(String, String)>> {
+    Ok(sqlx::query_as::<_, (String, String)>(
+        "SELECT DISTINCT json_extract(card, '$.channelId'), json_extract(card, '$.channelName') \
+         FROM subscription_uploads \
+         WHERE json_extract(card, '$.channelId') IS NOT NULL AND json_extract(card, '$.channelName') != ''",
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
 /// Merges uploads into the store; a known length is never replaced by an unknown one.
 pub async fn merge_subscription_uploads(
     pool: &SqlitePool,

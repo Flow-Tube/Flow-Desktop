@@ -6,22 +6,18 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
-use crate::api::http::bounded_join;
 use crate::db::watch_history::channel_names;
 use crate::flow_neuro::display_forms::label;
 use crate::flow_neuro::features::pick_keys;
 use crate::flow_neuro::rank::clusters_of;
 use crate::flow_neuro::scoring::{UserBrain, strip_domain_tag};
 use crate::flow_neuro::specificity::specificity;
+use crate::services::blocked_channel_names;
+use crate::services::home_feed::cache;
 use crate::services::home_feed::inputs::subscriptions;
 use crate::services::recommendation_service::RecommendationService;
-use crate::services::youtube_service::YoutubeService;
 
 const GROUP_COUNT: usize = 8;
-/// Hidden channels without a name on this device are looked up, a few at a time.
-const NAME_LOOKUPS_MAX: usize = 20;
-const NAME_LOOKUP_CONCURRENCY: usize = 3;
-const NAME_LOOKUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(6);
 const GROUP_LABEL_WORDS: usize = 3;
 /// A word every subject uses is no interest to show, however often titles had it.
 const TASTE_MIN_SPECIFICITY: f64 = 0.3;
@@ -190,6 +186,11 @@ impl RecommendationService {
             .into_iter()
             .collect();
         names.extend(self.stores.co_watch.names());
+        names.extend(
+            cache::subscription_channel_names(&self.pool)
+                .await
+                .unwrap_or_default(),
+        );
         if let Ok(subscriptions) = subscriptions(&self.pool).await {
             names.extend(
                 subscriptions
@@ -198,6 +199,8 @@ impl RecommendationService {
                     .filter(|(_, name)| !name.is_empty()),
             );
         }
+        // A name saved at block time or looked up before wins over an older spelling.
+        names.extend(blocked_channel_names::stored(&self.pool).await);
         self.with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
             let brain = ctx.brain;
             let table = specificity(&brain.key_spec());
@@ -219,41 +222,6 @@ impl RecommendationService {
         })
         .await
     }
-}
-
-/// Looks up online the names this device lacks, so a hidden channel reads as itself; a failed
-/// lookup leaves the row unnamed.
-pub async fn fill_missing_names(yt: &YoutubeService, overview: &mut TasteOverview) {
-    let missing: Vec<String> = overview
-        .hidden_channels
-        .iter()
-        .filter(|c| c.name.is_empty())
-        .take(NAME_LOOKUPS_MAX)
-        .map(|c| c.id.clone())
-        .collect();
-    if missing.is_empty() {
-        return;
-    }
-    let found: HashMap<String, String> =
-        bounded_join(missing, NAME_LOOKUP_CONCURRENCY, |id| async move {
-            let name = tokio::time::timeout(NAME_LOOKUP_TIMEOUT, yt.get_channel_details(&id))
-                .await
-                .ok()
-                .and_then(Result::ok)
-                .map(|details| details.name)
-                .filter(|name| !name.is_empty());
-            (id, name)
-        })
-        .await
-        .into_iter()
-        .filter_map(|(id, name)| Some((id, name?)))
-        .collect();
-    for channel in &mut overview.hidden_channels {
-        if let Some(name) = found.get(&channel.id) {
-            channel.name.clone_from(name);
-        }
-    }
-    overview.hidden_channels = hidden_channel_order(std::mem::take(&mut overview.hidden_channels));
 }
 
 #[cfg(test)]

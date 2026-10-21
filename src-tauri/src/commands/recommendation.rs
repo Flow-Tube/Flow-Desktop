@@ -1,5 +1,8 @@
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
+
+use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager, State};
 
 use crate::errors::ErrorResponse;
@@ -7,6 +10,7 @@ use crate::flow_neuro::bootstrap::ImportedVideo;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
+use crate::services::blocked_channel_names::{self, BlockedChannelNames};
 use crate::services::recommendation_service::RecommendationService;
 
 #[derive(Debug, Serialize)]
@@ -195,11 +199,26 @@ pub async fn get_brain_snapshot(
 #[tauri::command]
 pub async fn get_taste_overview(
     recommendation_service: State<'_, RecommendationService>,
-    youtube_service: State<'_, crate::services::youtube_service::YoutubeService>,
 ) -> Result<crate::services::taste_service::TasteOverview, ErrorResponse> {
-    let mut overview = recommendation_service.taste_overview().await;
-    crate::services::taste_service::fill_missing_names(&youtube_service, &mut overview).await;
-    Ok(overview)
+    Ok(recommendation_service.taste_overview().await)
+}
+
+/// Looks up on their RSS feeds the names of hidden channels this device does not know.
+#[tauri::command]
+pub async fn resolve_hidden_channel_names(
+    channel_ids: Vec<String>,
+    pool: State<'_, SqlitePool>,
+    names: State<'_, BlockedChannelNames>,
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<HashMap<String, String>, ErrorResponse> {
+    let blocked: HashSet<String> = recommendation_service
+        .get_brain_snapshot()
+        .await
+        .map_err(ErrorResponse::from)?
+        .blocked_channels
+        .into_iter()
+        .collect();
+    Ok(names.resolve(&pool, channel_ids, &blocked).await)
 }
 
 #[tauri::command]
@@ -260,8 +279,12 @@ pub async fn remove_preferred_topic(
 #[tauri::command]
 pub async fn unblock_channel(
     channel_id: String,
+    pool: State<'_, SqlitePool>,
     recommendation_service: State<'_, RecommendationService>,
 ) -> Result<(), ErrorResponse> {
+    blocked_channel_names::forget(&pool, &channel_id)
+        .await
+        .map_err(ErrorResponse::from)?;
     recommendation_service
         .unblock_channel(channel_id)
         .await
@@ -271,8 +294,16 @@ pub async fn unblock_channel(
 #[tauri::command]
 pub async fn block_channel(
     channel_id: String,
+    channel_name: Option<String>,
+    pool: State<'_, SqlitePool>,
     recommendation_service: State<'_, RecommendationService>,
 ) -> Result<(), ErrorResponse> {
+    // The name the block was made with, so Hidden channels can show it without a lookup.
+    if let Some(name) = channel_name {
+        blocked_channel_names::remember(&pool, &channel_id, &name)
+            .await
+            .map_err(ErrorResponse::from)?;
+    }
     recommendation_service
         .block_channel(channel_id)
         .await

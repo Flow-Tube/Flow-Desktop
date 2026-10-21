@@ -1,11 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getHomeChipFeed, getHomeChips, type HomeCard, type InterestChip } from "./api/homeFeed";
+import { getString, type StringKey } from "./i18n/index";
 
 export const ALL_CHIP = "all";
 export const NEW_TO_YOU_CHIP = "new";
 export const RECENT_CHIP = "recent";
 
 export const interestChipKey = (chip: InterestChip) => `interest:${chip.key}`;
+
+const THEME_LABELS: Record<string, StringKey> = {
+  music: "home_theme_music",
+  gaming: "home_theme_gaming",
+  sports: "home_theme_sports",
+  education: "home_theme_education",
+  news: "home_theme_news",
+  science: "home_theme_science",
+  comedy: "home_theme_comedy",
+  film: "home_theme_film",
+  autos: "home_theme_autos",
+  pets: "home_theme_pets",
+  travel: "home_theme_travel",
+  howto: "home_theme_howto",
+  nonprofits: "home_theme_nonprofits",
+};
+
+/** A chip's name: a theme reads as its category ("Gaming"), any other as its strongest topic. */
+export function interestChipLabel(chip: InterestChip): string {
+  const theme = chip.category ? THEME_LABELS[chip.category] : undefined;
+  return theme ? getString(theme) : chip.label;
+}
 
 export type ChipFeedState =
   | { status: "loading" }

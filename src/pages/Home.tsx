@@ -6,7 +6,14 @@ import { getString } from "../lib/i18n/index";
 import { SETTINGS } from "../lib/settings/schema";
 import { useHomeFeed } from "../lib/useHomeFeed";
 import { useContinueWatching } from "../lib/useContinueWatching";
-import { ALL_CHIP, NEW_TO_YOU_CHIP, RECENT_CHIP, interestChipKey, useHomeChips } from "../lib/useHomeChips";
+import {
+  ALL_CHIP,
+  NEW_TO_YOU_CHIP,
+  RECENT_CHIP,
+  interestChipKey,
+  interestChipLabel,
+  useHomeChips,
+} from "../lib/useHomeChips";
 import { homeOriginLabel } from "../lib/homeOrigin";
 import type { VideoSummary } from "../types/video";
 import { VideoGrid } from "../components/video/VideoGrid";
@@ -35,7 +42,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const chipOptions = useMemo(
     () => [
       { key: ALL_CHIP, label: getString("home_chip_all") },
-      ...chips.interests.map((chip) => ({ key: interestChipKey(chip), label: chip.label })),
+      ...chips.interests.map((chip) => ({ key: interestChipKey(chip), label: interestChipLabel(chip) })),
       { key: NEW_TO_YOU_CHIP, label: getString("home_chip_new_to_you") },
       { key: RECENT_CHIP, label: getString("home_chip_recently_uploaded") },
     ],

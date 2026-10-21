@@ -78,6 +78,9 @@ export interface InterestChip {
   key: string;
   label: string;
   topics: string[];
+  /** A theme chip's category ("gaming", "science"), which names it. */
+  category: string | null;
+  parts: InterestChip[];
 }
 
 export interface ChipFeed {

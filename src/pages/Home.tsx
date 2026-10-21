@@ -6,6 +6,7 @@ import { getString } from "../lib/i18n/index";
 import { SETTINGS } from "../lib/settings/schema";
 import { useHomeFeed } from "../lib/useHomeFeed";
 import { useContinueWatching } from "../lib/useContinueWatching";
+import { ALL_CHIP, NEW_TO_YOU_CHIP, RECENT_CHIP, interestChipKey, useHomeChips } from "../lib/useHomeChips";
 import { homeOriginLabel } from "../lib/homeOrigin";
 import type { VideoSummary } from "../types/video";
 import { VideoGrid } from "../components/video/VideoGrid";
@@ -13,6 +14,7 @@ import { VideoShelf } from "../components/shelf/VideoShelf";
 import { HomeFeedFooter } from "../components/home/HomeFeedFooter";
 import { HomeFeedMessage } from "../components/home/HomeFeedMessage";
 import { HomeFeedButton } from "../components/home/HomeFeedButton";
+import { HomeChipRow } from "../components/home/HomeChipRow";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -29,6 +31,20 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const isHidden = useFeedHiddenFilter({ hideWatched: hideWatchedVideos });
   const { snapshot, failed, refresh, retryMore, reportViewport } = useHomeFeed(homeFeedEnabled);
   const continueWatching = useContinueWatching(continueWatchingEnabled);
+  const chips = useHomeChips(homeFeedEnabled);
+  const chipOptions = useMemo(
+    () => [
+      { key: ALL_CHIP, label: getString("home_chip_all") },
+      ...chips.interests.map((chip) => ({ key: interestChipKey(chip), label: chip.label })),
+      { key: NEW_TO_YOU_CHIP, label: getString("home_chip_new_to_you") },
+      { key: RECENT_CHIP, label: getString("home_chip_recently_uploaded") },
+    ],
+    [chips.interests],
+  );
+  const chipVideos = useMemo(
+    () => (chips.feed?.status === "ready" ? chips.feed.cards.filter((card) => !isHidden(card)) : []),
+    [chips.feed, isHidden],
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(() => {
@@ -85,7 +101,35 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   );
 
   let body: React.ReactNode;
-  if (!homeFeedEnabled) {
+  if (homeFeedEnabled && chips.feed) {
+    const retryButton = (
+      <HomeFeedButton onClick={chips.reload}>
+        <RefreshCw size={16} />
+        {getString("retry")}
+      </HomeFeedButton>
+    );
+    if (chips.feed.status === "loading") {
+      body = <VideoGrid loading onPlay={onPlay} />;
+    } else if (chips.feed.status === "failed") {
+      body = (
+        <HomeFeedMessage
+          title={getString("home_chip_error_title")}
+          body={getString("home_chip_error_body")}
+          action={retryButton}
+        />
+      );
+    } else if (chipVideos.length === 0) {
+      body = (
+        <HomeFeedMessage
+          title={getString("home_chip_empty_title")}
+          body={getString("home_chip_empty_body")}
+          action={retryButton}
+        />
+      );
+    } else {
+      body = <VideoGrid videos={chipVideos} onPlay={onPlay} onAddToQueue={onAddToQueue} trackImpressions />;
+    }
+  } else if (!homeFeedEnabled) {
     body = <HomeFeedMessage title={getString("home_feed_disabled_title")} body={getString("home_feed_disabled_body")} />;
   } else if (visibleVideos.length === 0 && snapshot.loading) {
     body = <VideoGrid loading onPlay={onPlay} />;
@@ -131,7 +175,12 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   }
 
   // `<main>` above owns the scroll; an auto-height block here would only add a painted layer.
-  return <div className="flex-1 space-y-6 px-8 py-6">{body}</div>;
+  return (
+    <div className="flex-1 space-y-6 px-8 py-6">
+      {homeFeedEnabled && <HomeChipRow chips={chipOptions} selected={chips.selected} onSelect={chips.select} />}
+      {body}
+    </div>
+  );
 };
 
 export default Home;

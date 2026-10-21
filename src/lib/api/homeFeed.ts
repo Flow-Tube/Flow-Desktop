@@ -72,3 +72,26 @@ export async function onHomeFeedChanged(handler: (snapshot: HomeSnapshot) => voi
   if (!(await isTauriEnv())) return () => {};
   return listen<HomeSnapshot>("home-feed", (event) => handler(event.payload));
 }
+
+/** One of the viewer's heaviest interests, named after the topic of it they watched most. */
+export interface InterestChip {
+  key: string;
+  label: string;
+  topics: string[];
+}
+
+export interface ChipFeed {
+  cards: HomeCard[];
+  failed: boolean;
+}
+
+export async function getHomeChips(): Promise<InterestChip[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<InterestChip[]>("home_feed_chips");
+}
+
+/** A chip's own videos: `interest:<key>`, `new` or `recent`. */
+export async function getHomeChipFeed(key: string, refresh: boolean): Promise<ChipFeed> {
+  if (!(await isTauriEnv())) return { cards: [], failed: false };
+  return invokeBackend<ChipFeed>("home_chip_feed", { key, refresh });
+}

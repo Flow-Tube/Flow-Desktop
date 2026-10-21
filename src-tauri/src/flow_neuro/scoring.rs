@@ -264,6 +264,8 @@ pub struct UserBrain {
     pub recent_related_seeds: HashMap<String, u64>,
     /// Shorts already on screen, by when; ranking holds them back for a week. Device-local.
     pub seen_shorts_history: HashMap<String, u64>,
+    /// Home's interest chips as last chosen, so they stay put for a day. Device-local.
+    pub interest_chips: crate::flow_neuro::interest_chips::InterestChipSet,
     pub topic_evidence: HashMap<String, TopicEvidence>,
     pub schema_version: i32,
     /// The viewer's language: its stop words apply to every title ([`crate::flow_neuro::language`]).
@@ -382,6 +384,7 @@ impl Default for UserBrain {
             stale_queries: HashMap::new(),
             recent_related_seeds: HashMap::new(),
             seen_shorts_history: HashMap::new(),
+            interest_chips: crate::flow_neuro::interest_chips::InterestChipSet::default(),
             topic_evidence: HashMap::new(),
             schema_version: SCHEMA_VERSION,
             language_profile: None,

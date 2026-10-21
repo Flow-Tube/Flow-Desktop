@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::flow_neuro::categories::ChannelCategory;
-use crate::flow_neuro::clusters::{ClusterInputs, build_clusters};
+use crate::flow_neuro::clusters::{ClusterInputs, TopicCluster, build_clusters};
 use crate::flow_neuro::diversity::apply_smart_diversity;
 use crate::flow_neuro::features::{TopicReader, VideoText, extract_features_with_prior, pick_keys};
 use crate::flow_neuro::gates::{
@@ -255,22 +255,56 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
     .collect()
 }
 
-/// `ranked` with its places shared between the viewer's lasting interests, so the strongest one
-/// does not fill every page.
+/// The viewer's interests grouped into clusters, as discovery and Home's share read them.
 #[must_use]
-pub fn share_by_interest(ctx: &RankContext, ranked: Vec<VideoSummary>) -> Vec<VideoSummary> {
+pub fn clusters_of(ctx: &RankContext) -> Vec<TopicCluster> {
     let brain = ctx.brain;
     let interests: HashMap<String, f64> = brain
         .interests()
         .map(|(key, weight)| (key.clone(), weight))
         .collect();
-    let clusters = build_clusters(&ClusterInputs {
+    build_clusters(&ClusterInputs {
         topic_scores: &interests,
         affinities: &brain.topic_affinities,
         channel_topic_profiles: &brain.channel_topic_profiles,
         channel_edges: ctx.channel_edges,
         spec: &brain.key_spec(),
-    });
+    })
+}
+
+/// The videos whose topics include one of `topics`.
+#[must_use]
+pub fn about(
+    ctx: &RankContext,
+    videos: Vec<VideoSummary>,
+    topics: &HashSet<String>,
+) -> Vec<VideoSummary> {
+    let brain = ctx.brain;
+    let idf = IdfSnapshot {
+        word_frequencies: brain.idf_word_frequency.clone(),
+        total_documents: brain.idf_total_documents,
+    };
+    let reader = TopicReader {
+        spec: brain.key_spec(),
+        idf: &idf,
+    };
+    videos
+        .into_iter()
+        .filter(|video| {
+            vector_of(ctx, video, &reader)
+                .topics
+                .keys()
+                .any(|topic| topics.contains(topic))
+        })
+        .collect()
+}
+
+/// `ranked` with its places shared between the viewer's lasting interests, so the strongest one
+/// does not fill every page.
+#[must_use]
+pub fn share_by_interest(ctx: &RankContext, ranked: Vec<VideoSummary>) -> Vec<VideoSummary> {
+    let brain = ctx.brain;
+    let clusters = clusters_of(ctx);
     let weights = interest_share::weights(&clusters);
     if weights.len() < 2 {
         return ranked;

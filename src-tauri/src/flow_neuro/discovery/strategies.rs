@@ -311,7 +311,7 @@ impl Discovery<'_> {
 
     /// The strongest adjacent topics: watched together with a real interest, or taught by
     /// channels the viewer rates well.
-    fn exploration_topics(&self) -> Vec<String> {
+    pub(super) fn exploration_topics(&self) -> Vec<String> {
         let brain = self.brain;
         let mut weights: HashMap<String, f64> = HashMap::new();
         for (key, &affinity) in &brain.topic_affinities {

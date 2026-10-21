@@ -105,6 +105,32 @@ fn rotate(candidates: Vec<String>, recent: &[HashSet<String>], spec: &KeySpec) -
     }
 }
 
+/// Searches for the topics next to the viewer's interests, strongest first: watched together with
+/// a real interest, or taught by channels the viewer rates well (Android `explorationQueries`).
+#[must_use]
+pub fn exploration_queries(
+    brain: &UserBrain,
+    persona: FlowPersona,
+    now_ms: u64,
+    channel_edges: &HashMap<String, f64>,
+    limit: usize,
+) -> Vec<String> {
+    let discovery = Discovery::new(
+        brain,
+        persona,
+        TimeBucket::current(),
+        now_ms,
+        channel_edges,
+        &brain.cluster_rotation,
+    );
+    discovery
+        .exploration_topics()
+        .iter()
+        .take(limit)
+        .map(|topic| discovery.natural_query(topic))
+        .collect()
+}
+
 /// The searches one surface runs next, with its memory brought up to date.
 #[allow(clippy::too_many_arguments)]
 pub fn next_queries(

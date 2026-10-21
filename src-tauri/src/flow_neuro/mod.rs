@@ -18,6 +18,7 @@ pub(crate) mod features;
 mod features_golden;
 pub(crate) mod formats;
 pub(crate) mod gates;
+pub(crate) mod interest_chips;
 pub(crate) mod interest_share;
 pub(crate) mod key_migration;
 pub(crate) mod keyed_lists;

@@ -3,10 +3,16 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::flow_neuro::clusters::TopicCluster;
 use crate::flow_neuro::clusters::{ClusterInputs, build_clusters};
 use crate::flow_neuro::co_watch::RelatedChannel;
-use crate::flow_neuro::rank::share_by_interest;
+use crate::flow_neuro::discovery::exploration_queries;
+use crate::flow_neuro::features::pick_keys;
+use crate::flow_neuro::interest_chips::{InterestChip, chips, eligible_clusters, stable};
+use crate::flow_neuro::rank::{about, clusters_of, share_by_interest};
 use crate::flow_neuro::scoring::CHANNEL_SUPPRESSION_DAYS;
+use crate::flow_neuro::scoring::classify_persona;
+use crate::flow_neuro::specificity::specificity;
 use crate::models::video::VideoSummary;
 use crate::services::home_feed::card::Card;
 use crate::services::home_feed::neighbours::{Neighbour, neighbours};
@@ -189,5 +195,80 @@ impl RecommendationService {
             .filter(|(_, entry)| crate::flow_neuro::gates::is_recently_seen(Some(entry), now_ms))
             .map(|(id, _)| id.clone())
             .collect()
+    }
+
+    /// Home's interest chips, kept steady across loads; the chosen set is remembered in the brain.
+    pub async fn interest_chips(&self) -> Vec<InterestChip> {
+        let now_ms = self.get_current_time_ms();
+        let (set, chips) = self
+            .with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
+                let brain = ctx.brain;
+                let clusters = clusters_of(ctx);
+                let picks = pick_keys(brain);
+                let has_evidence = |cluster: &TopicCluster| {
+                    cluster.topics.len() >= 2
+                        || cluster.topics.iter().any(|t| picks.contains(t))
+                        || brain
+                            .topic_evidence
+                            .get(&cluster.representative)
+                            .is_some_and(|e| {
+                                e.watch_signals >= 2
+                                    || e.explicit_signals > 0
+                                    || e.positive_score >= 1.2
+                            })
+                };
+                let groups = eligible_clusters(&clusters, has_evidence);
+                let set = stable(&brain.interest_chips, &groups, now_ms);
+                let table = specificity(&brain.key_spec());
+                let chips = chips(
+                    &set,
+                    &clusters,
+                    &brain.display_forms,
+                    |topic| table.of(topic),
+                    |topic| {
+                        brain
+                            .topic_evidence
+                            .get(topic)
+                            .map_or(0, |e| e.watch_signals + e.explicit_signals)
+                    },
+                );
+                (set, chips)
+            })
+            .await;
+        // Only a new choice writes, so an unchanged brain is not saved again.
+        if self.brain_store.read().await.interest_chips != set {
+            self.brain_store.write().await.interest_chips = set;
+        }
+        chips
+    }
+
+    /// The videos about one of `topics`, as their titles and channels read.
+    pub async fn about(
+        &self,
+        videos: Vec<VideoSummary>,
+        topics: &HashSet<String>,
+    ) -> Vec<VideoSummary> {
+        if videos.is_empty() {
+            return videos;
+        }
+        self.with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
+            about(ctx, videos, topics)
+        })
+        .await
+    }
+
+    /// Searches for the topics next to the viewer's interests, strongest first.
+    pub async fn exploration_queries(&self, limit: usize) -> Vec<String> {
+        let now_ms = self.get_current_time_ms();
+        let brain = self.brain_store.read().await;
+        let is_watched = |channel: &str| is_watched_channel(&brain, channel);
+        let channel_edges = self.stores.co_watch.edges(&is_watched, now_ms);
+        exploration_queries(
+            &brain,
+            classify_persona(&brain),
+            now_ms,
+            &channel_edges,
+            limit,
+        )
     }
 }

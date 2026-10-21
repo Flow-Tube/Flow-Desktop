@@ -73,6 +73,7 @@ export function finishShortView() {
       watchDurationSeconds: Math.floor(view.positionMs / 1000),
       totalDurationSeconds: Math.ceil(view.durationMs / 1000),
       isMusic: false,
+      isShort: true,
     }).catch((error) => {
       console.warn("Failed to save a Short to history", error);
     });

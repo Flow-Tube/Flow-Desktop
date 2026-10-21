@@ -19,7 +19,7 @@ export function buildContinueWatching(history: WatchHistoryRecord[], hidden: Set
     seen.add(record.videoId);
     const duration = record.totalDurationSeconds ?? 0;
     // A Short swiped away is not one to resume.
-    if (duration <= 0 || record.watchDurationSeconds <= 0 || isKnownShort(duration)) continue;
+    if (duration <= 0 || record.watchDurationSeconds <= 0 || record.isShort || isKnownShort(duration)) continue;
     const percent = Math.min(100, Math.max(0, (record.watchDurationSeconds / duration) * 100));
     if (percent >= FINISHED_PERCENT) continue;
     videos.push({

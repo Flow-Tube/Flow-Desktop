@@ -73,7 +73,7 @@ describe("shortViews", () => {
     finishShortView();
     expect(addWatchRecord).toHaveBeenCalledTimes(1);
     expect(addWatchRecord).toHaveBeenCalledWith(
-      expect.objectContaining({ videoId: "b", watchDurationSeconds: 8, totalDurationSeconds: 30 }),
+      expect.objectContaining({ videoId: "b", watchDurationSeconds: 8, totalDurationSeconds: 30, isShort: true }),
     );
   });
 

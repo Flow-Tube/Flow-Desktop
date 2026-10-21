@@ -21,7 +21,8 @@ describe("buildContinueWatching", () => {
     expect(shelf[0]?.viewCountText).toBe("17% watched");
   });
 
-  it("leaves out a Short swiped away halfway", () => {
+  it("leaves out a Short swiped away halfway, however long it is", () => {
     expect(buildContinueWatching([record("short", 15, 30)], new Set())).toEqual([]);
+    expect(buildContinueWatching([{ ...record("long short", 60, 150), isShort: true }], new Set())).toEqual([]);
   });
 });

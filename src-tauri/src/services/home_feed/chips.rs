@@ -14,7 +14,7 @@ use tokio::time::timeout;
 use super::card::Card;
 use super::inputs::Inputs;
 use super::lanes;
-use super::load::local_sources;
+use super::load::{inputs_disliked, local_sources};
 use super::{HomeFeedService, now_ms};
 use crate::flow_neuro::interest_chips::{InterestChip, interest_queries};
 use crate::models::search::SearchVideosRequest;
@@ -26,6 +26,8 @@ pub const RECENTLY_UPLOADED: &str = "recent";
 const INTEREST_PREFIX: &str = "interest:";
 const MAX_VIDEOS: usize = 40;
 const EXPLORATION_QUERIES: usize = 3;
+/// Watches whose related lists New to you also draws on.
+const RELATED_SEEDS: usize = 2;
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(6);
 const RECENT_WINDOW_MS: u64 = 7 * 86_400_000;
 const HOUR_MS: u64 = 3_600_000;
@@ -210,17 +212,40 @@ impl HomeFeedService {
             }
             Chip::NewToYou => {
                 let queries = rec.exploration_queries(EXPLORATION_QUERIES).await;
-                let found = search_all(&yt, &queries, None, now).await?;
+                let disliked = inputs_disliked(&known.inputs);
+                let seeds = rec
+                    .select_related_seeds(&known.inputs.recent_seeds(&disliked), RELATED_SEEDS, &[])
+                    .await;
+                let (found, related) = tokio::join!(
+                    search_all(&yt, &queries, None, now),
+                    join_all(
+                        seeds
+                            .iter()
+                            .map(|id| self.inner.related.get(&yt, &pool, id, now))
+                    )
+                );
+                let related: Vec<Card> = related.into_iter().flatten().collect();
+                if found.is_none() && related.is_empty() {
+                    return None;
+                }
                 let mut channels = HashSet::new();
                 Some(
-                    ranked(&rec, &known, found)
-                        .await
-                        .into_iter()
-                        .filter(|c| {
-                            !c.channel_id().is_empty() && !known.channels.contains(c.channel_id())
-                        })
-                        .filter(|c| channels.insert(c.channel_id().to_string()))
-                        .collect(),
+                    ranked(
+                        &rec,
+                        &known,
+                        found
+                            .unwrap_or_default()
+                            .into_iter()
+                            .chain(related)
+                            .collect(),
+                    )
+                    .await
+                    .into_iter()
+                    .filter(|c| {
+                        !c.channel_id().is_empty() && !known.channels.contains(c.channel_id())
+                    })
+                    .filter(|c| channels.insert(c.channel_id().to_string()))
+                    .collect(),
                 )
             }
             Chip::RecentlyUploaded => {

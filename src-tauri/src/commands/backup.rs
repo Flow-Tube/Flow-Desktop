@@ -300,10 +300,16 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
 
 // Mirror the sync session's flush/reload choreography: flush the resident brains so the
 // export/merge sees the freshest learning, and reload them after a merge wrote the DB so
-// the next debounced flush can't clobber the merged result.
-async fn flush_brains(app: &AppHandle) {
+// the next debounced flush can't clobber the merged result. An import holds the video
+// brain's saves in between, so its background save cannot land mid-merge either.
+async fn flush_brains(app: &AppHandle, hold: bool) {
     if let Some(svc) = app.try_state::<RecommendationService>() {
-        if let Err(e) = svc.flush_brain().await {
+        let flushed = if hold {
+            svc.flush_and_hold_brain().await
+        } else {
+            svc.flush_brain().await
+        };
+        if let Err(e) = flushed {
             tracing::warn!(%e, "[backup] flush flow_neuro brain failed");
         }
     }
@@ -336,7 +342,7 @@ pub async fn export_backup_data(
     if scope_collections(&scope).is_none() {
         return Err(AppError::Validation(format!("unknown backup scope: {scope}")).into());
     }
-    flush_brains(&app).await;
+    flush_brains(&app, false).await;
     export_backup(&pool, &scope).await.map_err(sync_err)
 }
 
@@ -346,10 +352,11 @@ pub async fn import_backup_data(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
 ) -> Result<ImportSummary, ErrorResponse> {
-    flush_brains(&app).await;
-    let summary = import_backup(&pool, &payload).await.map_err(sync_err)?;
+    flush_brains(&app, true).await;
+    let imported = import_backup(&pool, &payload).await;
+    // Also after a failed import, which releases the held brain.
     reload_brains(&app).await;
-    Ok(summary)
+    imported.map_err(sync_err)
 }
 
 // The pool-backed round-trip tests live in `tests/backup_roundtrip.rs` (the same integration

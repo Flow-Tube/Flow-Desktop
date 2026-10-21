@@ -39,7 +39,7 @@ pub fn prune_suppressed_channels(brain: &mut UserBrain, now_ms: u64) {
     }
 }
 
-/// Rejections faded below one go; past the cap the oldest make room.
+/// Rejections faded below half go; past the cap the oldest make room.
 pub fn prune_rejections(patterns: &mut HashMap<String, RejectionSignal>, now_ms: u64) {
     patterns.retain(|_, signal| effective_rejections(signal, now_ms) >= REJECTION_FORGET_BELOW);
     if patterns.len() > REJECTION_MEMORY_MAX {

@@ -261,7 +261,8 @@ async fn a_legacy_peer_snapshot_is_read_into_this_brains_keys() {
         Lww::new(
             RejectionSignalWire {
                 count: 2,
-                last_rejected_at: 7,
+                // Recent: a merge applies this device's limits, and an old rejection has faded.
+                last_rejected_at: u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap(),
             },
             Hlc::new(1_000, 0, PEER),
         ),

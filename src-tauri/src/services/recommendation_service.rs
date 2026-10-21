@@ -21,7 +21,7 @@ use crate::flow_neuro::learning::{Interaction, apply_interaction};
 use crate::flow_neuro::rank::{RankContext, SessionState, rank};
 use crate::flow_neuro::ranker::MomentumEntry;
 use crate::flow_neuro::scoring::{
-    FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX,
+    FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX,
     SESSION_TOPIC_HISTORY_MAX, TimeBucket, UserBrain, classify_persona, is_known_short,
 };
 use crate::flow_neuro::search_learning::learn_search;
@@ -660,26 +660,7 @@ impl RecommendationService {
             entry.show_count += 1;
         }
 
-        let feed_cutoff = now_ms.saturating_sub(FEED_HISTORY_EXPIRY_DAYS * 86_400_000);
-        brain
-            .feed_history
-            .retain(|_, entry| entry.last_shown >= feed_cutoff);
-        if brain.feed_history.len() > FEED_HISTORY_MAX {
-            let mut entries: Vec<(String, FeedEntry)> = brain
-                .feed_history
-                .iter()
-                .map(|(video_id, entry)| (video_id.clone(), entry.clone()))
-                .collect();
-            entries.sort_by(|a, b| b.1.last_shown.cmp(&a.1.last_shown));
-            let retained: HashSet<String> = entries
-                .into_iter()
-                .take(FEED_HISTORY_MAX)
-                .map(|(video_id, _)| video_id)
-                .collect();
-            brain
-                .feed_history
-                .retain(|video_id, _| retained.contains(video_id));
-        }
+        crate::flow_neuro::caps::prune_feed_history(&mut brain, now_ms);
 
         Ok(())
     }

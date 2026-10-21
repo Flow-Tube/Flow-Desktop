@@ -11,15 +11,13 @@ use crate::flow_neuro::features::{
 use crate::flow_neuro::keyed_lists::{KeyedLists, keyed_lists};
 use crate::flow_neuro::rejections::{record_rejection, reject_topics, rejection_aggression};
 use crate::flow_neuro::scoring::{
-    AFFINITY_INCREMENT, AFFINITY_KEEP_TOP, AFFINITY_MAX, AFFINITY_MAX_ENTRIES, AFFINITY_TOP_TOPICS,
-    CHANNEL_EMA_ALPHA, CHANNEL_KEEP_HIGH, CHANNEL_KEEP_LOW, CHANNEL_PROFILE_LEARNING_RATE,
-    CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS, CHANNEL_PROFILE_PRUNE_THRESHOLD,
-    CHANNEL_SUPPRESSION_DAYS, ContentVector, DISLIKE_CHANNEL_FACTOR, IDF_KEEP_KEYS, IDF_MAX_KEYS,
-    IdfSnapshot, MAX_CHANNEL_SCORES, MAX_CONSECUTIVE_SKIPS, MAX_SUPPRESSED_CHANNELS,
-    MAX_SUPPRESSED_VIDEOS, PERSONA_MAX_STABILITY, TOPIC_ACQUISITION_FLOOR, TOPIC_ACQUISITION_TOP_K,
-    TOPIC_EVIDENCE_MAX_ENTRIES, TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain,
-    WATCH_HISTORY_MAX, WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, classify_persona,
-    strip_domain_tag,
+    AFFINITY_INCREMENT, AFFINITY_MAX, AFFINITY_TOP_TOPICS, CHANNEL_EMA_ALPHA,
+    CHANNEL_PROFILE_LEARNING_RATE, CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS,
+    CHANNEL_PROFILE_PRUNE_THRESHOLD, ContentVector, DISLIKE_CHANNEL_FACTOR, IDF_KEEP_KEYS,
+    IDF_MAX_KEYS, IdfSnapshot, MAX_CONSECUTIVE_SKIPS, PERSONA_MAX_STABILITY,
+    TOPIC_ACQUISITION_FLOOR, TOPIC_ACQUISITION_TOP_K, TOPIC_EVIDENCE_MAX_ENTRIES,
+    TOPIC_EVIDENCE_MAX_IDS, TimeBucket, TopicEvidence, UserBrain, WATCH_HISTORY_MAX,
+    WATCHED_THRESHOLD_FULL, WATCHED_THRESHOLD_SAMPLED, classify_persona, strip_domain_tag,
 };
 use crate::flow_neuro::signals::{InteractionType, make_affinity_key};
 use crate::flow_neuro::vector_math::{
@@ -27,7 +25,7 @@ use crate::flow_neuro::vector_math::{
     PHRASE_WORD_SHARE, RECENT, TIME_OF_DAY, adjust_vector, cap_topics, learn, phrase_first,
     plant_topics,
 };
-use crate::flow_neuro::{categories, formats};
+use crate::flow_neuro::{caps, categories, formats};
 
 /// A Short teaches the taste vectors 1 % of what a long-form video does: Shorts are browsed by
 /// swiping, so each one says little (Android #907). The Shorts vector learns from them in full.
@@ -430,17 +428,7 @@ fn learn_channel_score(brain: &mut UserBrain, event: &Interaction, learning_rate
         .channel_scores
         .insert(event.channel_id.to_string(), updated);
 
-    if brain.channel_scores.len() > MAX_CHANNEL_SCORES {
-        let mut sorted: Vec<(String, f64)> = brain.channel_scores.drain().collect();
-        sorted.sort_by(|a, b| a.1.total_cmp(&b.1));
-        let high_from = sorted.len().saturating_sub(CHANNEL_KEEP_HIGH);
-        brain.channel_scores = sorted
-            .into_iter()
-            .enumerate()
-            .filter(|(index, _)| *index < CHANNEL_KEEP_LOW || *index >= high_from)
-            .map(|(_, entry)| entry)
-            .collect();
-    }
+    caps::cap_channel_scores(brain);
 }
 
 /// Links between the video's strongest topics. No per-update value prune: links start below any
@@ -463,12 +451,7 @@ fn learn_links(brain: &mut UserBrain, video_vector: &ContentVector) {
                 .insert(key, (current + AFFINITY_INCREMENT).min(AFFINITY_MAX));
         }
     }
-    if brain.topic_affinities.len() > AFFINITY_MAX_ENTRIES {
-        let mut sorted: Vec<(String, f64)> = brain.topic_affinities.drain().collect();
-        sorted.sort_by(|a, b| b.1.total_cmp(&a.1));
-        sorted.truncate(AFFINITY_KEEP_TOP);
-        brain.topic_affinities = sorted.into_iter().collect();
-    }
+    caps::cap_affinities(&mut brain.topic_affinities);
 }
 
 /// A watched video was counted when it was watched, whichever list still says so.
@@ -654,18 +637,7 @@ pub(crate) fn suppress_video(brain: &mut UserBrain, video_id: &str, now_ms: u64)
     brain
         .suppressed_video_ids
         .insert(video_id.to_string(), now_ms);
-    if brain.suppressed_video_ids.len() > MAX_SUPPRESSED_VIDEOS {
-        let mut entries: Vec<(String, u64)> = brain
-            .suppressed_video_ids
-            .iter()
-            .map(|(id, ts)| (id.clone(), *ts))
-            .collect();
-        entries.sort_by_key(|(_, ts)| *ts);
-        let excess = entries.len() - MAX_SUPPRESSED_VIDEOS;
-        for (id, _) in entries.into_iter().take(excess) {
-            brain.suppressed_video_ids.remove(&id);
-        }
-    }
+    caps::cap_suppressed_videos(brain);
 }
 
 /// A thumbs-down: the video is hidden and remembered among the viewer's rejections.
@@ -697,10 +669,7 @@ fn not_interested(
         brain
             .suppressed_channels
             .insert(event.channel_id.to_string(), now_ms);
-        if brain.suppressed_channels.len() > MAX_SUPPRESSED_CHANNELS {
-            let cutoff = now_ms.saturating_sub(CHANNEL_SUPPRESSION_DAYS * 86_400_000);
-            brain.suppressed_channels.retain(|_, ts| *ts >= cutoff);
-        }
+        caps::prune_suppressed_channels(brain, now_ms);
     }
 
     // Read before this rejection is recorded, so a first rejection cuts by half as designed
@@ -750,6 +719,7 @@ fn drop_lowest(map: &mut HashMap<String, f32>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flow_neuro::scoring::MAX_SUPPRESSED_VIDEOS;
 
     struct Event<'a> {
         id: &'a str,

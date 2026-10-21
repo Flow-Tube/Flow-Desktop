@@ -8,8 +8,8 @@ use std::collections::{HashMap, HashSet};
 use crate::flow_neuro::keyed_lists::KeyedLists;
 use crate::flow_neuro::keyspec::text::is_topic_sized;
 use crate::flow_neuro::scoring::{
-    ContentVector, REJECTION_MEMORY_MAX, REJECTION_PENALTY_1, REJECTION_PENALTY_2,
-    REJECTION_PENALTY_3_PLUS, RejectionSignal, strip_domain_tag,
+    ContentVector, REJECTION_PENALTY_1, REJECTION_PENALTY_2, REJECTION_PENALTY_3_PLUS,
+    RejectionSignal, strip_domain_tag,
 };
 use crate::flow_neuro::signals::make_affinity_key;
 
@@ -192,18 +192,7 @@ pub fn record_rejection(
             },
         );
     }
-    patterns.retain(|_, signal| effective_rejections(signal, now_ms) >= REJECTION_FORGET_BELOW);
-    if patterns.len() > REJECTION_MEMORY_MAX {
-        let mut oldest: Vec<(String, u64)> = patterns
-            .iter()
-            .map(|(key, signal)| (key.clone(), signal.last_rejected_at))
-            .collect();
-        oldest.sort_by_key(|(_, at)| *at);
-        let excess = oldest.len() - REJECTION_MEMORY_MAX;
-        for (key, _) in oldest.into_iter().take(excess) {
-            patterns.remove(&key);
-        }
-    }
+    crate::flow_neuro::caps::prune_rejections(patterns, now_ms);
 }
 
 /// Lowers the rejected video's topics that the vector holds to `aggression` of their weight (never

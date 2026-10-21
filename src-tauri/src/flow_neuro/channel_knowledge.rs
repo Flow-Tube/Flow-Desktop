@@ -7,9 +7,7 @@ use std::collections::HashMap;
 
 use crate::flow_neuro::features::{channel_topics, is_noise_topic, pick_keys};
 use crate::flow_neuro::keyspec::KeySpec;
-use crate::flow_neuro::scoring::{
-    CHANNEL_PROFILE_MAX_CHANNELS, CHANNEL_PROFILE_MAX_TOPICS, ContentVector, UserBrain,
-};
+use crate::flow_neuro::scoring::{CHANNEL_PROFILE_MAX_TOPICS, ContentVector, UserBrain};
 use crate::flow_neuro::vector_math::{DECAY_REFERENCE_RATE, LONG_TERM, learn};
 
 /// Ceiling for topics read from upload titles: inferred, so modest.
@@ -90,24 +88,7 @@ pub fn learn_from_uploads(brain: &mut UserBrain, uploads: &HashMap<String, Vec<S
             .or_default();
         merge_profile(profile, additions);
     }
-    cap_channel_profiles(brain);
-}
-
-/// Evicts the lowest-scored channels' profiles past the cap.
-fn cap_channel_profiles(brain: &mut UserBrain) {
-    if brain.channel_topic_profiles.len() <= CHANNEL_PROFILE_MAX_CHANNELS {
-        return;
-    }
-    let scores = &brain.channel_scores;
-    let mut channels: Vec<String> = brain.channel_topic_profiles.keys().cloned().collect();
-    channels.sort_by(|a, b| {
-        let score = |id: &String| scores.get(id).copied().unwrap_or(0.0);
-        score(a).total_cmp(&score(b))
-    });
-    let excess = channels.len() - CHANNEL_PROFILE_MAX_CHANNELS;
-    for channel in channels.into_iter().take(excess) {
-        brain.channel_topic_profiles.remove(&channel);
-    }
+    crate::flow_neuro::caps::cap_channel_profiles(brain);
 }
 
 /// Following a channel lifts it and teaches the words of its name; unfollowing returns it to

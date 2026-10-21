@@ -13,8 +13,8 @@ use crate::flow_neuro::keyspec::KeySpec;
 use crate::flow_neuro::keyspec::tables::tables;
 use crate::flow_neuro::keyspec::text::fold;
 use crate::flow_neuro::scoring::{
-    ContentVector, IdfSnapshot, TOPIC_ACQUISITION_FLOOR, TOPIC_ACQUISITION_TOP_K,
-    TOPIC_EVIDENCE_MAX_ENTRIES, TopicEvidence, UserBrain,
+    ContentVector, IdfSnapshot, TOPIC_ACQUISITION_FLOOR, TOPIC_ACQUISITION_TOP_K, TopicEvidence,
+    UserBrain,
 };
 use crate::flow_neuro::vector_math::{
     DECAY_REFERENCE_RATE, Horizon, LONG_TERM, RECENT, learn, plant_keys,
@@ -176,7 +176,7 @@ pub fn learn_search(brain: &mut UserBrain, raw_query: &str, now_ms: u64) -> bool
         }
         evidence.last_seen_at = now_ms;
     }
-    cap_evidence(&mut brain.topic_evidence);
+    crate::flow_neuro::caps::cap_evidence(&mut brain.topic_evidence);
 
     let shares: HashMap<String, f64> = topics
         .phrases
@@ -220,20 +220,6 @@ pub fn learn_search(brain: &mut UserBrain, raw_query: &str, now_ms: u64) -> bool
         |key| global.topics.contains_key(key),
     );
     true
-}
-
-fn cap_evidence(evidence: &mut HashMap<String, TopicEvidence>) {
-    if evidence.len() <= TOPIC_EVIDENCE_MAX_ENTRIES {
-        return;
-    }
-    let mut entries: Vec<(String, TopicEvidence)> = evidence.drain().collect();
-    entries.sort_by(|a, b| {
-        b.1.positive_score
-            .total_cmp(&a.1.positive_score)
-            .then_with(|| b.1.last_seen_at.cmp(&a.1.last_seen_at))
-    });
-    entries.truncate(TOPIC_EVIDENCE_MAX_ENTRIES);
-    evidence.extend(entries);
 }
 
 #[cfg(test)]

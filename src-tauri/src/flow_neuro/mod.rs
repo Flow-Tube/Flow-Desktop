@@ -1,5 +1,6 @@
 pub(crate) mod bootstrap;
 pub(crate) mod brain_store;
+pub(crate) mod caps;
 pub(crate) mod categories;
 pub(crate) mod channel_knowledge;
 pub(crate) mod clusters;

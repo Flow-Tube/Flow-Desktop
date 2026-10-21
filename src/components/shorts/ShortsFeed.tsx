@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useShortsFeed } from "../../lib/useShortsFeed";
 import { prefetchShortStreams } from "../../lib/useShortStream";
 import { IMPRESSION_DWELL_MS, noteImpression } from "../../lib/feedImpressions";
+import { finishShortView, startShortView } from "../../lib/shortViews";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
@@ -102,6 +103,10 @@ export function ShortsFeed() {
 
   // A reel counts as seen once it stays on screen; buffered ones never do.
   const activeShort = items[activeIndex];
+  useEffect(() => {
+    if (activeShort) startShortView(activeShort);
+  }, [activeShort]);
+  useEffect(() => finishShortView, []);
   useEffect(() => {
     if (!activeShort) return;
     const timer = window.setTimeout(() => {

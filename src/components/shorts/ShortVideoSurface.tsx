@@ -36,6 +36,7 @@ import type { CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleOverlay } from "../player/SubtitleOverlay";
 import { StatsForNerds } from "../player/StatsForNerds";
 import { MediaScrubber } from "../ui/MediaScrubber";
+import { noteShortEnded, noteShortProgress } from "../../lib/shortViews";
 
 interface ShortVideoSurfaceProps {
   videoId: string;
@@ -318,6 +319,7 @@ export function ShortVideoSurface({
       };
 
       const handleEnded = () => {
+        noteShortEnded(videoId);
         if (shouldLoop) {
           loopBoth();
           return;
@@ -361,6 +363,7 @@ export function ShortVideoSurface({
       };
       const handleDashError = () => onError?.();
       const handleEnded = () => {
+        noteShortEnded(videoId);
         if (shouldLoop || autoAdvanceFiredRef.current) return;
         autoAdvanceFiredRef.current = true;
         onRequestAdvance?.();
@@ -400,7 +403,7 @@ export function ShortVideoSurface({
     }
 
     return teardown;
-  }, [active, audioUrl, dashUrl, hasSeparateAudio, onRequestAdvance, playbackMode, shouldLoop, useDirect, videoUrl]);
+  }, [active, audioUrl, dashUrl, hasSeparateAudio, onRequestAdvance, playbackMode, shouldLoop, useDirect, videoId, videoUrl]);
 
   useEffect(() => {
     if (!active || playbackMode !== "auto_interval" || autoAdvanceFiredRef.current) return;
@@ -417,9 +420,9 @@ export function ShortVideoSurface({
 
     const syncProgress = () => {
       setProgress(video.currentTime || 0);
-      if (Number.isFinite(video.duration) && video.duration > 0) {
-        setDuration(video.duration);
-      }
+      const known = Number.isFinite(video.duration) && video.duration > 0;
+      if (known) setDuration(video.duration);
+      noteShortProgress(videoId, (video.currentTime || 0) * 1000, known ? video.duration * 1000 : 0);
     };
 
     video.addEventListener("timeupdate", syncProgress);
@@ -430,7 +433,7 @@ export function ShortVideoSurface({
       video.removeEventListener("durationchange", syncProgress);
       video.removeEventListener("loadedmetadata", syncProgress);
     };
-  }, [dashUrl, videoUrl]);
+  }, [dashUrl, videoUrl, videoId]);
 
   useEffect(() => {
     const video = videoRef.current;

@@ -49,3 +49,23 @@ export async function resetShortsFeed(): Promise<void> {
   if (!(await isTauriEnv())) return;
   return invokeBackend<void>("reset_shorts_feed");
 }
+
+export interface ShortView {
+  videoId: string;
+  title: string;
+  channelName: string;
+  channelId: string | null;
+  positionMs: number;
+  durationMs: number;
+  completed: boolean;
+}
+
+export async function reportShortView(view: ShortView): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  return invokeBackend<void>("report_short_view", { view });
+}
+
+export async function recordSeenShorts(ids: string[]): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  return invokeBackend<void>("record_seen_shorts", { ids });
+}

@@ -370,6 +370,42 @@ impl RecommendationService {
         *last = now_ms;
     }
 
+    /// What a viewing says about its channel: a finished one which category it posts in, and a
+    /// rejection that Home's channel memory stops offering it until the viewer watches it again.
+    async fn note_channel_verdict(
+        &self,
+        interaction_type: InteractionType,
+        channel_id: &str,
+        channel_name: &str,
+        category: Option<&str>,
+        now_ms: u64,
+    ) -> AppResult<()> {
+        if matches!(
+            interaction_type,
+            InteractionType::Watched | InteractionType::Skipped
+        ) && let Some(category) = categories::id_of(category)
+        {
+            #[allow(clippy::cast_possible_wrap)]
+            self.stores
+                .categories
+                .record(channel_id, category, now_ms as i64)
+                .await?;
+        }
+        if matches!(
+            interaction_type,
+            InteractionType::NotInterested | InteractionType::Disliked
+        ) {
+            crate::services::home_feed::channel_memory::record_rejection(
+                &self.pool,
+                channel_id,
+                channel_name,
+                now_ms,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
     pub async fn log_video_interaction(
         &self,
         video_id: &str,
@@ -416,18 +452,8 @@ impl RecommendationService {
                 },
             )
         };
-        // A finished viewing says which category its channel posts in, whatever it taught.
-        if matches!(
-            interaction_type,
-            InteractionType::Watched | InteractionType::Skipped
-        ) && let Some(category) = categories::id_of(category)
-        {
-            #[allow(clippy::cast_possible_wrap)]
-            self.stores
-                .categories
-                .record(channel_id, category, now_ms as i64)
-                .await?;
-        }
+        self.note_channel_verdict(interaction_type, channel_id, channel_name, category, now_ms)
+            .await?;
         *self.last_activity_ms.lock().unwrap() = now_ms;
         let learned = outcome.learning_rate.is_some_and(|rate| rate > 0.0);
         if learned && !is_short && is_strong_signal(interaction_type, percent_watched) {

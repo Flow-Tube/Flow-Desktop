@@ -8,6 +8,7 @@ use sqlx::SqlitePool;
 
 use super::card::Card;
 use super::seeds::SeedInput;
+use crate::db::settings::{get_setting, set_setting};
 use crate::errors::AppResult;
 
 const MIN_REAL_WATCHES: usize = 2;
@@ -34,6 +35,14 @@ pub struct Remembered {
     pub channel_id: String,
     pub name: String,
     pub score: f64,
+}
+
+/// The channel memory as stored, with when the viewer last cleared all of it.
+#[derive(Debug, Clone, Default)]
+pub struct State {
+    pub entries: HashMap<String, Entry>,
+    /// Watches before this no longer count for any channel.
+    pub cleared_at: u64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -64,13 +73,19 @@ fn is_youtube_channel(channel_id: &str) -> bool {
 pub fn remembered(
     watches: &[Watch],
     likes: &[(String, u64)],
-    entries: &HashMap<String, Entry>,
+    state: &State,
     subscribed: &HashSet<String>,
     blocked: &HashSet<String>,
     not_interested_at: &HashMap<String, u64>,
     now_ms: u64,
 ) -> Vec<Remembered> {
-    let since = |channel: &str| entries.get(channel).map_or(0, |e| e.forgotten_at);
+    let entries = &state.entries;
+    let since = |channel: &str| {
+        entries
+            .get(channel)
+            .map_or(0, |e| e.forgotten_at)
+            .max(state.cleared_at)
+    };
     let mut engagements: HashMap<&str, Engagement> = HashMap::new();
     for watch in watches {
         let percent = if watch.duration_seconds > 0 {
@@ -195,7 +210,21 @@ pub fn keep_uploads(videos: Vec<Card>, now_ms: u64) -> Vec<Card> {
     kept
 }
 
-pub async fn load(pool: &SqlitePool) -> AppResult<HashMap<String, Entry>> {
+/// Device-local settings key; not in the settings sync allowlist.
+const CLEARED_AT_KEY: &str = "home_channel_memory_cleared_at";
+
+pub async fn load(pool: &SqlitePool) -> AppResult<State> {
+    let cleared_at = get_setting(pool, CLEARED_AT_KEY)
+        .await?
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    Ok(State {
+        entries: load_entries(pool).await?,
+        cleared_at,
+    })
+}
+
+async fn load_entries(pool: &SqlitePool) -> AppResult<HashMap<String, Entry>> {
     let rows: Vec<(String, i64, String, i64, i64)> = sqlx::query_as(
         "SELECT channel_id, last_fetched_at, uploads, rejected_at, forgotten_at FROM home_channel_memory",
     )
@@ -213,6 +242,53 @@ pub async fn load(pool: &SqlitePool) -> AppResult<HashMap<String, Entry>> {
             (channel, entry)
         })
         .collect())
+}
+
+/// "Not interested" or a thumbs-down on one of the channel's videos: it is not remembered again
+/// until the viewer comes back to it, and its stored uploads go.
+pub async fn record_rejection(
+    pool: &SqlitePool,
+    channel_id: &str,
+    name: &str,
+    now_ms: u64,
+) -> AppResult<()> {
+    if channel_id.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO home_channel_memory (channel_id, name, rejected_at, uploads) VALUES (?, ?, ?, '[]')
+         ON CONFLICT(channel_id) DO UPDATE SET rejected_at = excluded.rejected_at, uploads = '[]'",
+    )
+    .bind(channel_id)
+    .bind(name)
+    .bind(i64::try_from(now_ms).unwrap_or(i64::MAX))
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// The viewer forgot the channel: only watches after now count toward remembering it again.
+pub async fn forget(pool: &SqlitePool, channel_id: &str, now_ms: u64) -> AppResult<()> {
+    sqlx::query(
+        "INSERT INTO home_channel_memory (channel_id, name, forgotten_at, uploads) VALUES (?, '', ?, '[]')
+         ON CONFLICT(channel_id) DO UPDATE SET forgotten_at = excluded.forgotten_at, uploads = '[]'",
+    )
+    .bind(channel_id)
+    .bind(i64::try_from(now_ms).unwrap_or(i64::MAX))
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Forgets every channel at once; rejections stay, so a rejected channel does not come back.
+pub async fn clear(pool: &SqlitePool, now_ms: u64) -> AppResult<()> {
+    sqlx::query("DELETE FROM home_channel_memory WHERE rejected_at = 0")
+        .execute(pool)
+        .await?;
+    sqlx::query("UPDATE home_channel_memory SET uploads = '[]'")
+        .execute(pool)
+        .await?;
+    set_setting(pool, CLEARED_AT_KEY, &now_ms.to_string()).await
 }
 
 pub async fn save_uploads(
@@ -266,7 +342,7 @@ mod tests {
         let channels = remembered(
             &watches,
             &[],
-            &HashMap::new(),
+            &State::default(),
             &subscribed,
             &HashSet::new(),
             &HashMap::new(),
@@ -285,7 +361,7 @@ mod tests {
             remembered(
                 &watches,
                 &[],
-                &HashMap::new(),
+                &State::default(),
                 &HashSet::new(),
                 &HashSet::new(),
                 &ni,
@@ -293,5 +369,44 @@ mod tests {
             )
             .is_empty()
         );
+    }
+
+    #[test]
+    fn a_rejection_or_a_clear_holds_until_the_viewer_watches_again() {
+        let now = 10 * 86_400_000;
+        let watches = vec![watch("UCa", now - 5000, 550), watch("UCa", now - 6000, 550)];
+        let none = |state: &State| {
+            remembered(
+                &watches,
+                &[],
+                state,
+                &HashSet::new(),
+                &HashSet::new(),
+                &HashMap::new(),
+                now,
+            )
+            .is_empty()
+        };
+        let rejected = State {
+            entries: HashMap::from([(
+                "UCa".to_string(),
+                Entry {
+                    rejected_at: now - 1000,
+                    ..Entry::default()
+                },
+            )]),
+            cleared_at: 0,
+        };
+        assert!(none(&rejected));
+        let cleared = State {
+            entries: HashMap::new(),
+            cleared_at: now - 1000,
+        };
+        assert!(none(&cleared));
+        let earlier_clear = State {
+            entries: HashMap::new(),
+            cleared_at: now - 10_000,
+        };
+        assert!(!none(&earlier_clear));
     }
 }

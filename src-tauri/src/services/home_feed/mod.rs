@@ -7,7 +7,7 @@
 mod arrange;
 pub(crate) mod cache;
 pub mod card;
-mod channel_memory;
+pub(crate) mod channel_memory;
 pub mod chips;
 mod filters;
 pub(crate) mod inputs;

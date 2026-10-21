@@ -132,23 +132,30 @@ pub(super) async fn report_searches(rec: &RecommendationService, searches: &[(St
     }
 }
 
+/// `HomeSnapshot::error` when the device's own data could not be read.
+const LOCAL_DATA_FAILED: &str = "local";
+/// `HomeSnapshot::error` when no source could be reached.
+const NETWORK_FAILED: &str = "network";
+
 impl HomeFeedService {
+    /// Every search's first page, and whether each of them failed (no connection, not no results).
     async fn search_all(
         &self,
         yt: &YoutubeService,
         queries: &[String],
         now: u64,
-    ) -> Vec<(String, Vec<Card>)> {
-        join_all(queries.iter().map(|query| async move {
-            let cards = self
-                .inner
-                .search_pages
-                .first_page(yt, query, now)
-                .await
-                .unwrap_or_default();
-            (query.clone(), cards)
+    ) -> (Vec<(String, Vec<Card>)>, bool) {
+        let pages = join_all(queries.iter().map(|query| async move {
+            let page = self.inner.search_pages.first_page(yt, query, now).await;
+            (query.clone(), page)
         }))
-        .await
+        .await;
+        let all_failed = !pages.is_empty() && pages.iter().all(|(_, page)| page.is_err());
+        let searches = pages
+            .into_iter()
+            .map(|(query, page)| (query, page.unwrap_or_default()))
+            .collect();
+        (searches, all_failed)
     }
 
     pub(super) async fn load(&self, app: &AppHandle, generation: u64) {
@@ -158,17 +165,18 @@ impl HomeFeedService {
         let now = now_ms();
         let wave1 = self.start_discovery(&rec).await;
         let Ok(brain) = rec.get_brain_snapshot().await else {
-            self.settle_without_feed(app, generation);
+            self.settle_without_feed(app, generation, Some(LOCAL_DATA_FAILED));
             return;
         };
         let Ok(inputs) = Inputs::load(&pool, &brain, now).await else {
-            self.settle_without_feed(app, generation);
+            self.settle_without_feed(app, generation, Some(LOCAL_DATA_FAILED));
             return;
         };
-        let (searches, (related_seeds, related)) = tokio::join!(
+        let ((searches, searches_failed), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
             self.related_lane(&yt, &rec, &pool, &inputs, now)
         );
+        let nothing_reached = searches_failed && related.is_empty();
         report_searches(&rec, &searches).await;
 
         let taste = TasteProfile::of(&brain, &classify_persona(&brain));
@@ -205,7 +213,9 @@ impl HomeFeedService {
             .collect();
         let mix = lanes::assemble(&lanes, &on_screen, followed.len(), brain.total_interactions);
         if mix.cards.is_empty() {
-            self.settle_without_feed(app, generation);
+            // Nothing to show because no search could be reached is a failure, not an empty feed.
+            let error = nothing_reached.then_some(NETWORK_FAILED);
+            self.settle_without_feed(app, generation, error);
             return;
         }
         let (laid_out, origins, related_picks) = layout(
@@ -307,11 +317,13 @@ impl HomeFeedService {
         tauri::async_runtime::spawn(async move { service.after_paint(&app, after).await });
     }
 
-    fn settle_without_feed(&self, app: &AppHandle, generation: u64) {
+    /// Ends a load that painted nothing; `error` says why when it failed rather than found nothing.
+    fn settle_without_feed(&self, app: &AppHandle, generation: u64, error: Option<&str>) {
         self.update(app, generation, |feed| {
             feed.snapshot.loading = false;
             if feed.snapshot.cards.is_empty() {
                 feed.snapshot.has_more = false;
+                feed.snapshot.error = error.map(str::to_string);
             }
         });
     }
@@ -539,7 +551,7 @@ impl HomeFeedService {
             return;
         }
         let now = now_ms();
-        let searches = self.search_all(yt, &queries, now).await;
+        let (searches, _) = self.search_all(yt, &queries, now).await;
         report_searches(rec, &searches).await;
         let on_screen: HashSet<String> = self
             .snapshot()
@@ -744,7 +756,8 @@ impl HomeFeedService {
         followed: &HashSet<String>,
     ) {
         let now = now_ms();
-        let queue = channel_memory::refresh_queue(&after.remembered, &after.memory_entries, now);
+        let queue =
+            channel_memory::refresh_queue(&after.remembered, &after.memory_entries.entries, now);
         if queue.is_empty() {
             return;
         }
@@ -872,7 +885,7 @@ impl HomeFeedService {
 /// their uploads, and neighbour channels with theirs.
 pub(super) struct Local {
     pub(super) store: Vec<Card>,
-    pub(super) memory_entries: HashMap<String, channel_memory::Entry>,
+    pub(super) memory_entries: channel_memory::State,
     pub(super) remembered: Vec<channel_memory::Remembered>,
     pub(super) raw_memory: Vec<Card>,
     pub(super) neighbour_store: HashMap<String, neighbours::Stored>,
@@ -907,7 +920,7 @@ pub(super) async fn local_sources(
         &brain.suppressed_channels,
         now,
     );
-    let raw_memory = channel_memory::uploads(&remembered, &memory_entries, now);
+    let raw_memory = channel_memory::uploads(&remembered, &memory_entries.entries, now);
     let neighbour_store = neighbours::load(pool).await.unwrap_or_default();
     let neighbour_list: Vec<neighbours::Neighbour> = rec
         .neighbour_channels(&inputs.subscriptions.names)
@@ -1039,7 +1052,7 @@ pub(super) struct AfterPaint {
     neighbours: Vec<neighbours::Neighbour>,
     off_topic: HashSet<String>,
     remembered: Vec<channel_memory::Remembered>,
-    memory_entries: HashMap<String, channel_memory::Entry>,
+    memory_entries: channel_memory::State,
     neighbour_store: HashMap<String, neighbours::Stored>,
 }
 

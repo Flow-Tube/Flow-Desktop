@@ -203,6 +203,29 @@ pub async fn get_taste_overview(
     Ok(recommendation_service.taste_overview().await)
 }
 
+fn now_ms() -> u64 {
+    u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(0)
+}
+
+/// Home stops drawing on a channel the viewer keeps watching until they watch it again.
+#[tauri::command]
+pub async fn forget_remembered_channel(
+    channel_id: String,
+    pool: State<'_, SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    crate::services::home_feed::channel_memory::forget(&pool, &channel_id, now_ms())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// Forgets every channel the viewer kept watching; the ones they turned down stay turned down.
+#[tauri::command]
+pub async fn clear_channel_memory(pool: State<'_, SqlitePool>) -> Result<(), ErrorResponse> {
+    crate::services::home_feed::channel_memory::clear(&pool, now_ms())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 /// Looks up on their RSS feeds the names of hidden channels this device does not know.
 #[tauri::command]
 pub async fn resolve_hidden_channel_names(

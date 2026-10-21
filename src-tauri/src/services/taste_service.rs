@@ -14,7 +14,8 @@ use crate::flow_neuro::scoring::{UserBrain, strip_domain_tag};
 use crate::flow_neuro::specificity::specificity;
 use crate::services::blocked_channel_names;
 use crate::services::home_feed::cache;
-use crate::services::home_feed::inputs::subscriptions;
+use crate::services::home_feed::channel_memory;
+use crate::services::home_feed::inputs::{Inputs, subscriptions};
 use crate::services::recommendation_service::RecommendationService;
 
 const GROUP_COUNT: usize = 8;
@@ -59,6 +60,8 @@ pub struct TasteOverview {
     pub picks: Vec<TasteTopic>,
     pub groups: Vec<TasteGroup>,
     pub hidden_channels: Vec<NamedChannel>,
+    /// Channels the viewer keeps watching without following, which Home draws uploads from.
+    pub remembered_channels: Vec<NamedChannel>,
 }
 
 fn evidence_of(brain: &UserBrain, key: &str) -> i32 {
@@ -201,6 +204,7 @@ impl RecommendationService {
         }
         // A name saved at block time or looked up before wins over an older spelling.
         names.extend(blocked_channel_names::stored(&self.pool).await);
+        let remembered_channels = self.remembered_channels().await;
         self.with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
             let brain = ctx.brain;
             let table = specificity(&brain.key_spec());
@@ -218,9 +222,37 @@ impl RecommendationService {
                         })
                         .collect(),
                 ),
+                remembered_channels,
             }
         })
         .await
+    }
+
+    /// The channels Home's channel memory holds, strongest first, as its next load reads them.
+    async fn remembered_channels(&self) -> Vec<NamedChannel> {
+        let now_ms = self.get_current_time_ms();
+        let Ok(brain) = self.get_brain_snapshot().await else {
+            return Vec::new();
+        };
+        let Ok(inputs) = Inputs::load(&self.pool, &brain, now_ms).await else {
+            return Vec::new();
+        };
+        let state = channel_memory::load(&self.pool).await.unwrap_or_default();
+        channel_memory::remembered(
+            &inputs.watches(),
+            &inputs.liked_channels(),
+            &state,
+            &inputs.subscriptions.ids(),
+            &brain.blocked_channels,
+            &brain.suppressed_channels,
+            now_ms,
+        )
+        .into_iter()
+        .map(|channel| NamedChannel {
+            id: channel.channel_id,
+            name: channel.name,
+        })
+        .collect()
     }
 }
 

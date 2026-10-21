@@ -292,6 +292,7 @@ async fn known(rec: &RecommendationService, pool: &SqlitePool, now: u64) -> Opti
     channels.extend(
         local
             .memory_entries
+            .entries
             .iter()
             .filter(|(_, entry)| entry.rejected_at > 0)
             .map(|(id, _)| id.clone()),

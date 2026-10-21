@@ -296,7 +296,7 @@ impl HomeFeedService {
         let recently_shown = rec.recently_shown().await;
         let hidden = |c: &Card| inputs.exclusions.hides(c) || recently_shown.contains(c.id());
         let candidates: Vec<Card> = keep_showable(
-            channel_memory::uploads(&remembered, &entries, now),
+            channel_memory::uploads(&remembered, &entries.entries, now),
             &inputs.watched,
             &hidden,
             now,

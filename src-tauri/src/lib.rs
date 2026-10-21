@@ -78,12 +78,12 @@ use commands::pip::{
 };
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
-    bootstrap_from_subscriptions, complete_onboarding, end_watch_session, get_brain_snapshot,
-    get_flow_persona, get_onboarding_status, get_recommendation_events, get_taste_overview,
-    import_brain, learn_from_search, log_interaction, mark_not_interested, note_subscription,
-    observe_channel_uploads, record_feed_impressions, remove_preferred_topic,
-    report_watch_progress, reset_brain, resolve_hidden_channel_names, unblock_channel,
-    unblock_topic,
+    bootstrap_from_subscriptions, clear_channel_memory, complete_onboarding, end_watch_session,
+    forget_remembered_channel, get_brain_snapshot, get_flow_persona, get_onboarding_status,
+    get_recommendation_events, get_taste_overview, import_brain, learn_from_search,
+    log_interaction, mark_not_interested, note_subscription, observe_channel_uploads,
+    record_feed_impressions, remove_preferred_topic, report_watch_progress, reset_brain,
+    resolve_hidden_channel_names, unblock_channel, unblock_topic,
 };
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
@@ -520,6 +520,8 @@ pub fn run() {
             unblock_channel,
             block_channel,
             resolve_hidden_channel_names,
+            forget_remembered_channel,
+            clear_channel_memory,
             reset_brain,
             get_sponsorblock_segments,
             submit_sponsorblock_segment,

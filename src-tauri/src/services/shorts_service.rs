@@ -46,8 +46,6 @@ const SUBS_LANE_TIMEOUT: Duration = Duration::from_secs(5);
 const DISCOVERY_QUERY_TIMEOUT: Duration = Duration::from_millis(800);
 /// Per-search ceiling; discovery searches run in parallel.
 const DISCOVERY_SEARCH_TIMEOUT: Duration = Duration::from_millis(3_500);
-/// Ranking can block behind FlowNeuro writes; startup-sized Shorts batches don't need it.
-const MIN_RANKING_POOL: usize = PAGE_SIZE + 3;
 
 /// Which sources a single gather pass should draw from.
 struct GatherSpec {
@@ -336,26 +334,6 @@ impl ShortsService {
         tracing::info!("[shorts] candidates after dedup: {}", candidates.len());
         if candidates.is_empty() {
             return Ok((Vec::new(), continuation));
-        }
-
-        if candidates.len() < MIN_RANKING_POOL {
-            let items: Vec<_> = candidates
-                .into_iter()
-                .map(|video| {
-                    rich.remove(&video.id)
-                        .unwrap_or_else(|| ShortItem::from_video_summary(video))
-                })
-                .collect();
-            self.mark_shown(items.iter().map(|item| item.id.clone()));
-            let continuation = continuation.or_else(|| {
-                if spec.include_discovery || spec.include_subs {
-                    Some(FLOW_DISCOVERY_CONTINUATION.to_string())
-                } else {
-                    None
-                }
-            });
-            tracing::info!("[shorts] ranked bypassed for small pool: {}", items.len());
-            return Ok((items, continuation));
         }
 
         let subs_set: HashSet<String> = user_subs.iter().cloned().collect();

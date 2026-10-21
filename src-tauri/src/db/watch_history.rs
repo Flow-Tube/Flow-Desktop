@@ -17,6 +17,21 @@ pub struct WatchHistoryRecord {
     pub total_duration_seconds: Option<i64>,
     #[serde(default)]
     pub is_music: bool,
+    /// Watched in the Shorts player or known as a Short elsewhere; a Short stays a Short.
+    #[serde(default)]
+    pub is_short: bool,
+}
+
+impl WatchHistoryRecord {
+    /// A Short: flagged as one, or of a Short's known length.
+    #[must_use]
+    pub fn is_short_video(&self) -> bool {
+        self.is_short
+            || crate::flow_neuro::scoring::is_known_short(
+                self.total_duration_seconds
+                    .and_then(|seconds| u64::try_from(seconds).ok()),
+            )
+    }
 }
 
 pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord) -> AppResult<()> {
@@ -40,6 +55,7 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
                 watch_duration_seconds = ?,
                 total_duration_seconds = ?,
                 is_music = ?,
+                is_short = is_short OR ?,
                 updated_hlc = NULL
              WHERE id = ?",
         )
@@ -50,14 +66,15 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
         .bind(record.watch_duration_seconds)
         .bind(record.total_duration_seconds)
         .bind(record.is_music)
+        .bind(record.is_short)
         .bind(id)
         .execute(pool)
         .await
         .map_err(AppError::from)?;
     } else {
         sqlx::query(
-            "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(&record.video_id)
         .bind(&record.title)
@@ -67,6 +84,7 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
         .bind(record.watch_duration_seconds)
         .bind(record.total_duration_seconds)
         .bind(record.is_music)
+        .bind(record.is_short)
         .execute(pool)
         .await
         .map_err(AppError::from)?;
@@ -103,6 +121,7 @@ pub async fn upsert_watch_records_bulk(
                     watch_duration_seconds = ?,
                     total_duration_seconds = ?,
                     is_music = ?,
+                    is_short = is_short OR ?,
                     updated_hlc = NULL
                  WHERE id = ?",
             )
@@ -113,14 +132,15 @@ pub async fn upsert_watch_records_bulk(
             .bind(record.watch_duration_seconds)
             .bind(record.total_duration_seconds)
             .bind(record.is_music)
+            .bind(record.is_short)
             .bind(id)
             .execute(&mut *tx)
             .await
             .map_err(AppError::from)?;
         } else {
             sqlx::query(
-                "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&record.video_id)
             .bind(&record.title)
@@ -130,6 +150,7 @@ pub async fn upsert_watch_records_bulk(
             .bind(record.watch_duration_seconds)
             .bind(record.total_duration_seconds)
             .bind(record.is_music)
+            .bind(record.is_short)
             .execute(&mut *tx)
             .await
             .map_err(AppError::from)?;
@@ -147,7 +168,7 @@ pub async fn get_watch_history(
     offset: i64,
 ) -> AppResult<Vec<WatchHistoryRecord>> {
     let records = sqlx::query_as::<_, WatchHistoryRecord>(
-        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music
+        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
          FROM watch_history
          ORDER BY watch_date DESC, created_at DESC
          LIMIT ? OFFSET ?"
@@ -190,7 +211,7 @@ pub async fn get_music_history(
     offset: i64,
 ) -> AppResult<Vec<WatchHistoryRecord>> {
     let records = sqlx::query_as::<_, WatchHistoryRecord>(
-        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music
+        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
          FROM watch_history
          WHERE is_music = 1
          ORDER BY watch_date DESC, created_at DESC
@@ -211,7 +232,7 @@ pub async fn get_watch_record(
     video_id: &str,
 ) -> AppResult<Option<WatchHistoryRecord>> {
     let record = sqlx::query_as::<_, WatchHistoryRecord>(
-        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music
+        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
          FROM watch_history
          WHERE video_id = ?
          LIMIT 1"
@@ -258,6 +279,7 @@ mod channel_tests {
             watch_duration_seconds: seconds,
             total_duration_seconds: Some(600),
             is_music: false,
+            is_short: false,
         }
     }
 
@@ -276,5 +298,33 @@ mod channel_tests {
         let history = get_watch_history(&pool, 10, 0).await.unwrap();
         assert_eq!(history[0].channel_id.as_deref(), Some("UC1"));
         assert_eq!(history[0].watch_duration_seconds, 20);
+    }
+
+    #[tokio::test]
+    async fn a_short_stays_a_short_whatever_writes_it_next() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let short = WatchHistoryRecord {
+            total_duration_seconds: Some(150),
+            is_short: true,
+            ..record(Some("UC1"), 40)
+        };
+        upsert_watch_record(&pool, &short).await.unwrap();
+        upsert_watch_record(
+            &pool,
+            &WatchHistoryRecord {
+                total_duration_seconds: Some(150),
+                ..record(Some("UC1"), 90)
+            },
+        )
+        .await
+        .unwrap();
+        let history = get_watch_history(&pool, 10, 0).await.unwrap();
+        assert!(history[0].is_short);
+        assert!(history[0].is_short_video());
     }
 }

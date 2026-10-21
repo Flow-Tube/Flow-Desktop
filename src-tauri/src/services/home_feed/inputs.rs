@@ -150,13 +150,7 @@ impl Inputs {
         self.history
             .iter()
             .filter(|record| !record.is_music)
-            .filter(|record| {
-                !crate::flow_neuro::scoring::is_known_short(
-                    record
-                        .total_duration_seconds
-                        .and_then(|s| u64::try_from(s).ok()),
-                )
-            })
+            .filter(|record| !record.is_short_video())
             .map(|record| {
                 let duration = record.total_duration_seconds.unwrap_or(0).max(0);
                 #[allow(clippy::cast_precision_loss)]
@@ -249,11 +243,11 @@ impl Inputs {
             .filter(|record| !record.is_music)
             .filter_map(|record| {
                 let channel_id = record.channel_id.clone()?;
-                let duration =
-                    u64::try_from(record.total_duration_seconds.unwrap_or(0)).unwrap_or(0);
-                if crate::flow_neuro::scoring::is_known_short(Some(duration)) {
+                if record.is_short_video() {
                     return None;
                 }
+                let duration =
+                    u64::try_from(record.total_duration_seconds.unwrap_or(0)).unwrap_or(0);
                 Some(Watch {
                     channel_id,
                     channel_name: record.channel_name.clone().unwrap_or_default(),

@@ -77,9 +77,7 @@ impl RecommendationService {
         let mut candidates: Vec<ShortSeed> = history
             .iter()
             .filter(|r| !r.is_music)
-            .filter(|r| {
-                is_known_short(r.total_duration_seconds.and_then(|s| u64::try_from(s).ok()))
-            })
+            .filter(|r| r.is_short_video())
             .map(|r| {
                 let total = r.total_duration_seconds.unwrap_or(0).max(1);
                 #[allow(clippy::cast_precision_loss)]

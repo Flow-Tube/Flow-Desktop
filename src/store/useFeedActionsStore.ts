@@ -5,6 +5,7 @@ import {
   logInteraction,
   markNotInterested,
   blockChannel as apiBlockChannel,
+  unblockChannel as apiUnblockChannel,
 } from "../lib/api/recommendation";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
 import { isKnownShort } from "../lib/videoKind";
@@ -36,6 +37,8 @@ interface FeedActionsState {
   /** Hides a video from every feed, e.g. after a thumbs-down on the watch page. */
   hideVideo: (videoId: string) => void;
   blockChannel: (video: VideoSummary) => Promise<void>;
+  /** Lets a channel back into every feed: unblocked, and no longer set aside by "not interested". */
+  unblockChannel: (channelId: string) => Promise<void>;
   markWatched: (video: VideoSummary) => Promise<void>;
   moreLikeThis: (video: VideoSummary) => Promise<void>;
   addBlockedKeyword: (keyword: string) => void;
@@ -210,6 +213,29 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
       } catch (e) {
         console.warn("Failed to block channel", e);
         set({ blockedChannelIds: previous });
+        persist();
+        throw e;
+      }
+    },
+
+    unblockChannel: async (channelId) => {
+      const previous = {
+        blockedChannelIds: get().blockedChannelIds,
+        suppressedChannelIds: get().suppressedChannelIds,
+      };
+      set((s) => {
+        const blockedChannelIds = new Set(s.blockedChannelIds);
+        blockedChannelIds.delete(channelId);
+        const suppressedChannelIds = new Map(s.suppressedChannelIds);
+        suppressedChannelIds.delete(channelId);
+        return { blockedChannelIds, suppressedChannelIds };
+      });
+      persist();
+      try {
+        await apiUnblockChannel(channelId);
+      } catch (e) {
+        console.warn("Failed to unblock channel", e);
+        set(previous);
         persist();
         throw e;
       }

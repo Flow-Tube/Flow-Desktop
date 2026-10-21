@@ -1,12 +1,12 @@
 import {
   unblockTopic,
-  unblockChannel,
   resetBrain,
   importBrain,
   type UserBrain,
 } from "../lib/api/recommendation";
 import { usePersonaData } from "../lib/usePersonaData";
 import { clearHomeFeed } from "../lib/api/homeFeed";
+import { useFeedActionsStore } from "../store/useFeedActionsStore";
 
 import { SkeletonLoader } from "../components/persona/SkeletonLoader";
 import { PersonaOverview } from "../components/persona/PersonaOverview";
@@ -41,7 +41,7 @@ export function FlowNeuroPersona() {
 
   const handleUnblockChannel = async (channelId: string) => {
     try {
-      await unblockChannel(channelId);
+      await useFeedActionsStore.getState().unblockChannel(channelId);
       await refresh(true);
     } catch (e) {
       console.error("Failed to unblock channel:", e);

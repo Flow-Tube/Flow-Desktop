@@ -1,10 +1,14 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
-import { Ban, Check, Heart, Loader2, Plus, RotateCw, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Ban, Heart, Loader2, RotateCw } from "lucide-react";
 
 import { TOPIC_CATEGORIES } from "../../onboarding/constants";
-import { TextInput } from "../../ui/TextInput";
 import { getString } from "../../../lib/i18n/index";
 import { useTastePreferences } from "../../../lib/useTastePreferences";
+import { evidenceLabel, useTasteOverview } from "../../../lib/useTasteOverview";
+import { useFeedActionsStore } from "../../../store/useFeedActionsStore";
+import { AddTopicForm, RemovableChip, TopicChip, cx } from "../taste/TasteChips";
+import { TasteGroups } from "../taste/TasteGroups";
+import { HiddenChannels } from "../taste/HiddenChannels";
 
 type TasteView = "interests" | "blocked";
 
@@ -21,124 +25,6 @@ const BLOCKED_SUGGESTIONS = [
   "challenge",
   "family vlog",
 ];
-
-function cx(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" ");
-}
-
-function submitOnEnter(event: KeyboardEvent<HTMLInputElement>, submit: () => void) {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    submit();
-  }
-}
-
-interface TopicChipProps {
-  topic: string;
-  active?: boolean;
-  blocked?: boolean;
-  saving?: boolean;
-  onClick: () => void;
-}
-
-function TopicChip({ topic, active, blocked, saving, onClick }: TopicChipProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={saving}
-      className={cx(
-        "inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 ease-out disabled:cursor-wait disabled:opacity-60",
-        active
-          ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-          : blocked
-            ? "border border-chrome-red-900/50 bg-chrome-red-950/30 text-chrome-red-400 hover:bg-chrome-red-950/50"
-            : "border border-chrome-neutral-700 bg-transparent text-chrome-neutral-300 hover:bg-chrome-neutral-800 hover:text-chrome-neutral-100",
-      )}
-    >
-      {saving ? (
-        <Loader2 size={15} className="animate-spin" />
-      ) : active ? (
-        <Check size={15} />
-      ) : blocked ? (
-        <Ban size={15} />
-      ) : null}
-      <span>{topic}</span>
-    </button>
-  );
-}
-
-interface RemovableChipProps {
-  topic: string;
-  tone: "interest" | "blocked";
-  saving?: boolean;
-  onRemove: () => void;
-}
-
-function RemovableChip({ topic, tone, saving, onRemove }: RemovableChipProps) {
-  return (
-    <span
-      className={cx(
-        "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
-        tone === "interest"
-          ? "border-chrome-neutral-700 bg-surface-container-high text-chrome-neutral-200"
-          : "border-chrome-red-900/50 bg-chrome-red-950/30 text-chrome-red-400",
-      )}
-    >
-      {tone === "interest" ? <Heart size={14} /> : <Ban size={14} />}
-      <span>{topic}</span>
-      <button
-        type="button"
-        onClick={onRemove}
-        disabled={saving}
-        className="grid h-6 w-6 place-items-center rounded-full text-current transition-colors duration-200 ease-out hover:bg-chrome-neutral-800 disabled:cursor-wait disabled:opacity-60"
-        title={getString(tone === "interest" ? "taste_remove_interest" : "taste_unblock_topic")}
-      >
-        {saving ? <Loader2 size={13} className="animate-spin" /> : <X size={14} />}
-      </button>
-    </span>
-  );
-}
-
-interface AddTopicFormProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  buttonLabel: string;
-  onSubmit: () => void;
-  disabled?: boolean;
-}
-
-function AddTopicForm({
-  value,
-  onChange,
-  placeholder,
-  buttonLabel,
-  onSubmit,
-  disabled,
-}: AddTopicFormProps) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row">
-      <TextInput
-        value={value}
-        onChange={onChange}
-        onKeyDown={(event) => submitOnEnter(event, onSubmit)}
-        placeholder={placeholder}
-        className="h-10 min-w-0 flex-1 rounded-lg"
-        disabled={disabled}
-      />
-      <button
-        type="button"
-        onClick={onSubmit}
-        disabled={disabled || !value.trim()}
-        className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-on-primary)] transition-colors duration-200 ease-out hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Plus size={16} />
-        {buttonLabel}
-      </button>
-    </div>
-  );
-}
 
 export function TasteTab() {
   const [view, setView] = useState<TasteView>("interests");
@@ -159,6 +45,33 @@ export function TasteTab() {
     toggleInterest,
     unblockBlockedTopic,
   } = useTastePreferences();
+  const taste = useTasteOverview();
+  const unblockChannel = useFeedActionsStore((state) => state.unblockChannel);
+  const [unblocking, setUnblocking] = useState<string | null>(null);
+  const pickEvidence = useMemo(
+    () => new Map(taste.overview.picks.map((pick) => [pick.key.toLowerCase(), pick.evidence])),
+    [taste.overview.picks],
+  );
+
+  const refreshAll = () => {
+    void refresh();
+    void taste.refresh();
+  };
+
+  // A learned topic added or blocked leaves its group, so the groups are read again.
+  const addLearned = (label: string) => {
+    void addInterest(label).then(() => taste.refresh());
+  };
+  const blockLearned = (label: string) => {
+    void blockTopic(label).then(() => taste.refresh());
+  };
+  const handleUnblockChannel = (channelId: string) => {
+    setUnblocking(channelId);
+    unblockChannel(channelId)
+      .then(() => taste.refresh())
+      .catch(() => undefined)
+      .finally(() => setUnblocking(null));
+  };
 
   const availableBlockedSuggestions = useMemo(
     () => BLOCKED_SUGGESTIONS.filter((topic) => !blockedSet.has(topic.toLowerCase())),
@@ -215,7 +128,7 @@ export function TasteTab() {
           </div>
           <button
             type="button"
-            onClick={() => void refresh()}
+            onClick={refreshAll}
             disabled={loading}
             className="grid h-10 w-10 place-items-center rounded-full border border-chrome-neutral-800 bg-surface-container-low text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-chrome-neutral-800 hover:text-chrome-neutral-100 disabled:cursor-wait disabled:opacity-60"
             title={getString("taste_refresh")}
@@ -274,6 +187,11 @@ export function TasteTab() {
                   <RemovableChip
                     key={topic}
                     topic={topic}
+                    detail={
+                      pickEvidence.has(topic.toLowerCase())
+                        ? getString(evidenceLabel(pickEvidence.get(topic.toLowerCase()) ?? 0))
+                        : undefined
+                    }
                     tone="interest"
                     saving={savingTopic?.toLowerCase() === topic.toLowerCase()}
                     onRemove={() => void removeInterest(topic)}
@@ -283,6 +201,26 @@ export function TasteTab() {
                 <span className="text-sm text-chrome-neutral-500">{getString("taste_empty_interests")}</span>
               )}
             </div>
+          </section>
+
+          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+            <div className="mb-4">
+              <h2 className="text-base font-medium text-chrome-neutral-200">{getString("taste_groups_title")}</h2>
+              <p className="mt-1 text-sm text-chrome-neutral-400">{getString("taste_groups_desc")}</p>
+            </div>
+            {taste.loading && taste.overview.groups.length === 0 ? (
+              <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
+                <Loader2 size={16} className="animate-spin" />
+                {getString("taste_loading")}
+              </span>
+            ) : (
+              <TasteGroups
+                groups={taste.overview.groups}
+                busy={Boolean(savingTopic)}
+                onAdd={addLearned}
+                onBlock={blockLearned}
+              />
+            )}
           </section>
 
           <section className="col-span-12 space-y-10">
@@ -370,6 +308,18 @@ export function TasteTab() {
                 <span className="text-sm text-chrome-neutral-500">{getString("taste_empty_blocked")}</span>
               )}
             </div>
+          </section>
+
+          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+            <div className="mb-4">
+              <h2 className="text-base font-medium text-chrome-neutral-200">{getString("taste_hidden_channels")}</h2>
+              <p className="mt-1 text-sm text-chrome-neutral-400">{getString("taste_hidden_channels_desc")}</p>
+            </div>
+            <HiddenChannels
+              channels={taste.overview.hiddenChannels}
+              unblocking={unblocking}
+              onUnblock={handleUnblockChannel}
+            />
           </section>
 
           <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">

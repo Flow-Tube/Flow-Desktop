@@ -94,6 +94,7 @@ RECOMMENDATIONS
 - Shorts you watch are kept in history, and the Shorts feed also follows Shorts you liked, saved or watched through.
 - A Short watched in the Shorts player stays a Short in history whatever its length, so longer Shorts stay out of Continue Watching and can lead to more Shorts like them.
 - The Shorts feed follows two Shorts you liked or watched through for a few pages each, and favours reels with more likes for their views.
+- Opening Shorts from a Short shows Shorts like it again, followed by your usual Shorts when YouTube has no more like it.
 - Home has chips for your strongest interests, New to you and Recently uploaded. They stay the same for a day unless your taste moves a lot.
 - Interests that belong to one kind of content share a chip named after it, such as Gaming or Science & tech, which searches each of them and leaves out channels that post something else.
 - Your taste shows the interests Flow learned in groups, how often you watched each pick, and the channels you hid by name, looking up the names of channels hidden on another device. Long lists scroll in place, and unblocking a channel brings its videos back at once.

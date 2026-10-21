@@ -490,6 +490,20 @@ export interface TasteOverview {
   picks: TasteTopic[];
   groups: TasteGroup[];
   hiddenChannels: NamedChannel[];
+  /** Channels watched often without following, which Home draws uploads from. */
+  rememberedChannels: NamedChannel[];
+}
+
+/** Home stops drawing on the channel until the viewer watches it again. */
+export async function forgetRememberedChannel(channelId: string): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  await invokeBackend<void>("forget_remembered_channel", { channelId });
+}
+
+/** Forgets every channel watched often; channels turned down stay turned down. */
+export async function clearChannelMemory(): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  await invokeBackend<void>("clear_channel_memory");
 }
 
 /** Names of hidden channels this device does not know, from their RSS feeds. */
@@ -499,6 +513,6 @@ export async function resolveHiddenChannelNames(channelIds: string[]): Promise<R
 }
 
 export async function getTasteOverview(): Promise<TasteOverview> {
-  if (!(await isTauriEnv())) return { picks: [], groups: [], hiddenChannels: [] };
+  if (!(await isTauriEnv())) return { picks: [], groups: [], hiddenChannels: [], rememberedChannels: [] };
   return invokeBackend<TasteOverview>("get_taste_overview");
 }

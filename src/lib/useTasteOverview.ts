@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  clearChannelMemory,
+  forgetRememberedChannel,
   getTasteOverview,
   resolveHiddenChannelNames,
   type NamedChannel,
@@ -25,7 +27,7 @@ export function hiddenChannelOrder(channels: NamedChannel[]): NamedChannel[] {
   return [...named, ...unnamed];
 }
 
-const EMPTY: TasteOverview = { picks: [], groups: [], hiddenChannels: [] };
+const EMPTY: TasteOverview = { picks: [], groups: [], hiddenChannels: [], rememberedChannels: [] };
 
 /** Your taste as the engine reads it: picks, learned groups and hidden channels. */
 export function useTasteOverview() {
@@ -79,5 +81,23 @@ export function useTasteOverview() {
     void refresh();
   }, [refresh]);
 
-  return { overview, loading, failed, resolvingNames, refresh };
+  const [forgetting, setForgetting] = useState<string | null>(null);
+
+  /** Forgets one remembered channel, or all of them with "all", then reads the taste again. */
+  const forget = useCallback(
+    async (channelId: string | "all") => {
+      setForgetting(channelId);
+      try {
+        await (channelId === "all" ? clearChannelMemory() : forgetRememberedChannel(channelId));
+        await refresh();
+      } catch (error) {
+        console.error("Failed to forget a remembered channel", error);
+      } finally {
+        setForgetting(null);
+      }
+    },
+    [refresh],
+  );
+
+  return { overview, loading, failed, resolvingNames, refresh, forgetting, forget };
 }

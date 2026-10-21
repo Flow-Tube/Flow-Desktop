@@ -9,6 +9,8 @@ import { useFeedActionsStore } from "../../../store/useFeedActionsStore";
 import { AddTopicForm, RemovableChip, TopicChip, cx } from "../taste/TasteChips";
 import { TasteGroups } from "../taste/TasteGroups";
 import { HiddenChannels } from "../taste/HiddenChannels";
+import { RememberedChannels } from "../taste/RememberedChannels";
+import { TasteSection } from "../taste/TasteSection";
 
 type TasteView = "interests" | "blocked";
 
@@ -203,11 +205,7 @@ export function TasteTab() {
             </div>
           </section>
 
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
-            <div className="mb-4">
-              <h2 className="text-base font-medium text-chrome-neutral-200">{getString("taste_groups_title")}</h2>
-              <p className="mt-1 text-sm text-chrome-neutral-400">{getString("taste_groups_desc")}</p>
-            </div>
+          <TasteSection title={getString("taste_groups_title")} description={getString("taste_groups_desc")}>
             {taste.loading && taste.overview.groups.length === 0 ? (
               <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
                 <Loader2 size={16} className="animate-spin" />
@@ -221,7 +219,33 @@ export function TasteTab() {
                 onBlock={blockLearned}
               />
             )}
-          </section>
+          </TasteSection>
+
+          <TasteSection
+            title={getString("taste_remembered_title")}
+            description={getString("taste_remembered_desc")}
+            action={
+              taste.overview.rememberedChannels.length > 0 && (
+                <button
+                  type="button"
+                  disabled={taste.forgetting !== null}
+                  onClick={() => void taste.forget("all")}
+                  className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-chrome-neutral-700 px-3 text-sm text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-chrome-neutral-800 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {taste.forgetting === "all" && <Loader2 size={14} className="animate-spin" />}
+                  {getString("taste_remembered_forget_all")}
+                </button>
+              )
+            }
+          >
+            <div className="h-48 overflow-y-auto pr-1">
+              <RememberedChannels
+                channels={taste.overview.rememberedChannels}
+                forgetting={taste.forgetting}
+                onForget={(channelId) => void taste.forget(channelId)}
+              />
+            </div>
+          </TasteSection>
 
           <section className="col-span-12 space-y-10">
             <div>
@@ -310,11 +334,10 @@ export function TasteTab() {
             </div>
           </section>
 
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
-            <div className="mb-4">
-              <h2 className="text-base font-medium text-chrome-neutral-200">{getString("taste_hidden_channels")}</h2>
-              <p className="mt-1 text-sm text-chrome-neutral-400">{getString("taste_hidden_channels_desc")}</p>
-            </div>
+          <TasteSection
+            title={getString("taste_hidden_channels")}
+            description={getString("taste_hidden_channels_desc")}
+          >
             <div className="h-72 overflow-y-auto pr-1">
               <HiddenChannels
                 channels={taste.overview.hiddenChannels}
@@ -323,7 +346,7 @@ export function TasteTab() {
                 onUnblock={handleUnblockChannel}
               />
             </div>
-          </section>
+          </TasteSection>
 
           <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
             <div className="mb-4">

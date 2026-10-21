@@ -172,6 +172,18 @@ pub async fn recent_video_titles(pool: &SqlitePool, limit: i64) -> AppResult<Vec
     .map_err(AppError::from)
 }
 
+/// Channel names from the watch history, each channel's latest spelling.
+pub async fn channel_names(pool: &SqlitePool) -> AppResult<Vec<(String, String)>> {
+    sqlx::query_as::<_, (String, String)>(
+        "SELECT channel_id, channel_name FROM watch_history \
+         WHERE channel_id IS NOT NULL AND channel_id != '' AND channel_name IS NOT NULL AND channel_name != '' \
+         GROUP BY channel_id HAVING watch_date = MAX(watch_date)",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
 pub async fn get_music_history(
     pool: &SqlitePool,
     limit: i64,

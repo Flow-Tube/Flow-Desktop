@@ -284,7 +284,7 @@ fn is_mostly_watched(record: &WatchHistoryRecord) -> bool {
     }
 }
 
-async fn subscriptions(pool: &SqlitePool) -> AppResult<Subscriptions> {
+pub(crate) async fn subscriptions(pool: &SqlitePool) -> AppResult<Subscriptions> {
     let stored: Vec<StoredSubscription> = get_setting(pool, "subscriptions")
         .await?
         .and_then(|raw| serde_json::from_str(&raw).ok())

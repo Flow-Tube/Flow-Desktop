@@ -191,6 +191,14 @@ pub async fn get_brain_snapshot(
         .map_err(ErrorResponse::from)
 }
 
+/// Your taste: picks, learned interest groups and hidden channels by name.
+#[tauri::command]
+pub async fn get_taste_overview(
+    recommendation_service: State<'_, RecommendationService>,
+) -> Result<crate::services::taste_service::TasteOverview, ErrorResponse> {
+    Ok(recommendation_service.taste_overview().await)
+}
+
 #[tauri::command]
 pub async fn get_recommendation_events(
     limit: i64,

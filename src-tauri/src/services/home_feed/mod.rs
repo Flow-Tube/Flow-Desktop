@@ -10,7 +10,7 @@ pub mod card;
 mod channel_memory;
 pub mod chips;
 mod filters;
-mod inputs;
+pub(crate) mod inputs;
 mod lanes;
 mod load;
 mod mixer;

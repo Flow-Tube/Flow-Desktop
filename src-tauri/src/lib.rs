@@ -79,8 +79,8 @@ use commands::pip::{
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
     bootstrap_from_subscriptions, complete_onboarding, end_watch_session, get_brain_snapshot,
-    get_flow_persona, get_onboarding_status, get_recommendation_events, import_brain,
-    learn_from_search, log_interaction, mark_not_interested, note_subscription,
+    get_flow_persona, get_onboarding_status, get_recommendation_events, get_taste_overview,
+    import_brain, learn_from_search, log_interaction, mark_not_interested, note_subscription,
     observe_channel_uploads, record_feed_impressions, remove_preferred_topic,
     report_watch_progress, reset_brain, unblock_channel, unblock_topic,
 };
@@ -509,6 +509,7 @@ pub fn run() {
             get_onboarding_status,
             get_flow_persona,
             get_brain_snapshot,
+            get_taste_overview,
             get_recommendation_events,
             unblock_topic,
             add_blocked_topic,

@@ -83,6 +83,10 @@ RECOMMENDATIONS
 - Searches, Watch later, playlists, downloads and subscribing now teach recommendations, and so do the recent upload titles of the channels you follow.
 - "Not interested" cuts a topic by half the first time and more each time you repeat it, and rejections fade over months instead of vanishing after two weeks.
 - Discovery skips words every subject uses and works for topics in any language, a channel name only teaches its topic words, and your profile is tidied once on the first start with a copy kept.
+- Videos are ranked the way Flow for Android ranks them, reading descriptions, hashtags and what a channel usually posts, and a video shown a few hours ago or several times this week stays out of Home for a while.
+- Home's discovery and related videos stay on your interests: videos that share nothing with them are left out, and each interest gets its own share of places instead of the strongest filling every page.
+- Discovery searches each of your interests in turn, digs deeper into them as you scroll, and rests a search for a day when it keeps returning videos you were already shown. Home and Shorts rotate their searches separately.
+- Recommendations learn which formats and video categories you watch and which channels are watched together, kept only on this device.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.

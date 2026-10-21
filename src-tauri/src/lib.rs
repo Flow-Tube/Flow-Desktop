@@ -503,6 +503,8 @@ pub fn run() {
             commands::home_feed::home_feed_visible,
             commands::home_feed::home_feed_retry_more,
             commands::home_feed::home_feed_clear,
+            commands::home_feed::home_feed_chips,
+            commands::home_feed::home_chip_feed,
             complete_onboarding,
             get_onboarding_status,
             get_flow_persona,

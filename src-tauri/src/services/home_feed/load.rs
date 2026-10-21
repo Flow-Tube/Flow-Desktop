@@ -870,17 +870,17 @@ impl HomeFeedService {
 
 /// What one load reads from local stores: followed channels' uploads, remembered channels and
 /// their uploads, and neighbour channels with theirs.
-struct Local {
-    store: Vec<Card>,
-    memory_entries: HashMap<String, channel_memory::Entry>,
-    remembered: Vec<channel_memory::Remembered>,
-    raw_memory: Vec<Card>,
-    neighbour_store: HashMap<String, neighbours::Stored>,
-    neighbour_list: Vec<neighbours::Neighbour>,
-    raw_neighbours: Vec<Card>,
+pub(super) struct Local {
+    pub(super) store: Vec<Card>,
+    pub(super) memory_entries: HashMap<String, channel_memory::Entry>,
+    pub(super) remembered: Vec<channel_memory::Remembered>,
+    pub(super) raw_memory: Vec<Card>,
+    pub(super) neighbour_store: HashMap<String, neighbours::Stored>,
+    pub(super) neighbour_list: Vec<neighbours::Neighbour>,
+    pub(super) raw_neighbours: Vec<Card>,
 }
 
-async fn local_sources(
+pub(super) async fn local_sources(
     rec: &RecommendationService,
     pool: &SqlitePool,
     inputs: &Inputs,

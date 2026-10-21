@@ -87,6 +87,9 @@ RECOMMENDATIONS
 - Home's discovery and related videos stay on your interests: videos that share nothing with them are left out, and each interest gets its own share of places instead of the strongest filling every page.
 - Discovery searches each of your interests in turn, digs deeper into them as you scroll, and rests a search for a day when it keeps returning videos you were already shown. Home and Shorts rotate their searches separately.
 - Recommendations learn which formats and video categories you watch and which channels are watched together, kept only on this device.
+- Home is built the way Flow for Android builds it: fresh uploads from channels you follow, videos related to what you watched, liked or saved, searches for each of your interests, new uploads from channels you often watch, and channels like the ones you follow.
+- Home opens at once from the feed you last saw and comes back as you left it within half an hour. New videos arrive below what you are looking at, never under your cursor.
+- Each video's menu says why it is on Home, scrolling loads pages until there is nothing new, a failed page offers Retry, and a Refresh button starts the feed over.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.

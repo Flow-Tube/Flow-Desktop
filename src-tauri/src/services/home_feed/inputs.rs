@@ -9,6 +9,7 @@ use sqlx::SqlitePool;
 use super::card::Card;
 use super::channel_memory::Watch;
 use super::seeds::{SeedInput, SeedSource};
+use crate::db::library;
 use crate::db::settings::get_setting;
 use crate::db::watch_history::{WatchHistoryRecord, get_watch_history};
 use crate::errors::AppResult;
@@ -36,24 +37,6 @@ enum StoredSubscription {
     Id(String),
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredLike {
-    kind: String,
-    #[serde(default)]
-    liked_at: String,
-    video: Option<VideoSummary>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredPlaylist {
-    #[serde(default)]
-    tracks: Vec<VideoSummary>,
-    #[serde(default)]
-    created_at: Option<String>,
-}
-
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct FeedActions {
@@ -65,13 +48,6 @@ struct FeedActions {
     suppressed_channels: Vec<(String, u64)>,
     #[serde(default)]
     watched: Vec<String>,
-}
-
-fn iso_ms(text: &str) -> u64 {
-    chrono::DateTime::parse_from_rfc3339(text)
-        .ok()
-        .and_then(|date| u64::try_from(date.timestamp_millis()).ok())
-        .unwrap_or(0)
 }
 
 /// The channels the viewer follows, by id, with their names and avatars.
@@ -164,8 +140,8 @@ impl Inputs {
             },
             subscriptions,
             watched,
-            likes: likes(pool).await?,
-            saved: saved(pool).await?,
+            likes: library::liked_videos(pool).await?,
+            saved: library::saved_videos(pool).await?,
             history,
         })
     }
@@ -196,7 +172,7 @@ impl Inputs {
                     channel_id: record.channel_id.clone().unwrap_or_default(),
                     source: SeedSource::WatchHistory,
                     engagement_weight: percent / 100.0,
-                    timestamp_ms: iso_ms(&record.watch_date),
+                    timestamp_ms: library::iso_ms(&record.watch_date),
                     duration_seconds: u64::try_from(duration).unwrap_or(0),
                     percent_watched: percent,
                 }
@@ -281,7 +257,7 @@ impl Inputs {
                 Some(Watch {
                     channel_id,
                     channel_name: record.channel_name.clone().unwrap_or_default(),
-                    watched_at_ms: iso_ms(&record.watch_date),
+                    watched_at_ms: library::iso_ms(&record.watch_date),
                     watched_seconds: u64::try_from(record.watch_duration_seconds).unwrap_or(0),
                     duration_seconds: duration,
                 })
@@ -333,30 +309,4 @@ async fn subscriptions(pool: &SqlitePool) -> AppResult<Subscriptions> {
         out.names.insert(id, name);
     }
     Ok(out)
-}
-
-async fn likes(pool: &SqlitePool) -> AppResult<Vec<(VideoSummary, u64)>> {
-    let stored: Vec<StoredLike> = get_setting(pool, "liked_items")
-        .await?
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
-    Ok(stored
-        .into_iter()
-        .filter(|like| like.kind == "video")
-        .filter_map(|like| Some((like.video?, iso_ms(&like.liked_at))))
-        .collect())
-}
-
-async fn saved(pool: &SqlitePool) -> AppResult<Vec<(VideoSummary, u64)>> {
-    let stored: Vec<StoredPlaylist> = get_setting(pool, "user_playlists")
-        .await?
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
-    Ok(stored
-        .into_iter()
-        .flat_map(|playlist| {
-            let at = playlist.created_at.as_deref().map_or(0, iso_ms);
-            playlist.tracks.into_iter().map(move |track| (track, at))
-        })
-        .collect())
 }

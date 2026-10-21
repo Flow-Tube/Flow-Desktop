@@ -5,6 +5,7 @@ use std::time::Duration;
 pub mod cache;
 pub mod download_collections;
 pub mod downloads;
+pub mod library;
 pub mod music_content;
 pub mod music_home;
 pub mod neuro_stores;

@@ -4,7 +4,7 @@ import { useBlockedKeywordMatch, useFeedActionsStore } from '../../store/useFeed
 import { useBlockedRevealStore } from '../../lib/blockedContent';
 import { BlockedVideoCard } from './BlockedVideoCard';
 import { useLiveStore } from '../../store/useLiveStore';
-import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, Download, User } from 'lucide-react';
+import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, Download, User, Info } from 'lucide-react';
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -46,6 +46,8 @@ export interface VideoCardProps {
   isDragActive?: boolean;
   /** List rows in a playlist sorted by date added say when each video was added. */
   showAddedDate?: boolean;
+  /** Why a feed shows this card, at the top of its menu. */
+  reason?: string;
 }
 
 /*
@@ -102,6 +104,7 @@ function VideoCardComponent({
   dragHandleProps,
   isDragActive = false,
   showAddedDate = false,
+  reason,
 }: VideoCardProps) {
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
@@ -340,6 +343,15 @@ function VideoCardComponent({
         onClose={() => setShowMenu(false)}
         className="z-50 w-60 rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
       >
+        {reason ? (
+          <div className="flex items-start gap-3 border-b border-chrome-neutral-800 px-3.5 pb-2.5 pt-1.5 text-xs text-chrome-zinc-400">
+            <Info size={14} className="mt-0.5 shrink-0" />
+            <span>
+              <span className="block font-semibold text-chrome-zinc-300">{getString("home_feed_why")}</span>
+              {reason}
+            </span>
+          </div>
+        ) : null}
         <button
           onClick={(e) => {
             e.stopPropagation();

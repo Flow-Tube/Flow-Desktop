@@ -10,17 +10,6 @@ export interface PersonaDetails {
   icon: string;
 }
 
-export interface FeedQuotas {
-  maturity: "cold_start" | "maturing" | "mature" | string;
-  totalInteractions: number;
-  subscriptionPercent: number;
-  discoveryPercent: number;
-  viralPercent: number;
-  subscriptionLimit: number;
-  discoveryLimit: number;
-  viralLimit: number;
-}
-
 /** Below this a topic is a trace of evidence still adding up, not an interest to show. */
 export const INTEREST_MIN_WEIGHT = 0.03;
 
@@ -29,40 +18,6 @@ export function interestTopics(topics: Record<string, number> | undefined): Reco
   return Object.fromEntries(
     Object.entries(topics ?? {}).filter(([, weight]) => weight >= INTEREST_MIN_WEIGHT),
   );
-}
-
-const MOCK_FEED_QUOTAS: FeedQuotas = {
-  maturity: "mature",
-  totalInteractions: 168,
-  subscriptionPercent: 10 / 35,
-  discoveryPercent: 15 / 35,
-  viralPercent: 10 / 35,
-  subscriptionLimit: 10,
-  discoveryLimit: 15,
-  viralLimit: 10,
-};
-
-/**
- * Ranks feed candidates. A lane that must stay on the viewer's subjects (discovery, related)
- * passes `relevantOnly`, which leaves out what shares next to nothing with their interests.
- */
-export async function rankVideos(
-  candidates: VideoSummary[],
-  userSubs: string[],
-  relevantOnly = false,
-): Promise<VideoSummary[]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning candidates with mock ranking.");
-    return [...candidates].sort(() => 0.5 - Math.random());
-  }
-  return invokeBackend<VideoSummary[]>("rank_videos", { candidates, userSubs, relevantOnly });
-}
-
-export async function getFeedQuotas(): Promise<FeedQuotas> {
-  if (!(await isTauriEnv())) {
-    return MOCK_FEED_QUOTAS;
-  }
-  return invokeBackend<FeedQuotas>("get_feed_quotas");
 }
 
 export interface RecommendationEvent {
@@ -197,28 +152,6 @@ export async function getOnboardingStatus(): Promise<boolean> {
     return status;
   }
   return invokeBackend<boolean>("get_onboarding_status");
-}
-
-/**
- * Home's discovery searches. A refresh passes `resetDepth`; each load-more call after it digs one
- * level deeper into every interest.
- */
-export async function generateDiscoveryQueries(resetDepth = false): Promise<string[]> {
-  if (!(await isTauriEnv())) {
-    const preferred = localStorage.getItem("mock_setting_preferred_topics");
-    const topics: string[] = preferred ? JSON.parse(preferred) : [];
-    if (topics.length > 0) {
-      return topics.slice(0, 5).map((topic) => topic.toLowerCase());
-    }
-    return ["technology", "music", "gaming", "science", "documentary"];
-  }
-  return invokeBackend<string[]>("generate_discovery_queries", { resetDepth });
-}
-
-/** Tells the engine what a discovery search returned, so one that keeps returning shown videos rests. */
-export async function reportDiscoveryResults(query: string, videoIds: string[]): Promise<void> {
-  if (!(await isTauriEnv())) return;
-  await invokeBackend<void>("report_discovery_results", { query, videoIds });
 }
 
 export async function getFlowPersona(): Promise<PersonaDetails> {

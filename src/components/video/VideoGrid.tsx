@@ -4,6 +4,7 @@ import { VideoCard } from './VideoCard';
 import { SkeletonLoader } from '../ui/SkeletonLoader';
 import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
 import { IMPRESSION_ATTRIBUTE, useFeedImpressions } from '../../lib/useFeedImpressions';
+import { GRID_INDEX_ATTRIBUTE, useLastVisibleCard } from '../../lib/useLastVisibleCard';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -19,6 +20,10 @@ interface VideoGridProps {
   hideChannelAvatar?: boolean;
   /** Counts cards the viewer actually sees as feed impressions for the recommendation engine. */
   trackImpressions?: boolean;
+  /** Why a feed shows a card, offered in its menu. */
+  getReason?: (video: VideoSummary) => string | undefined;
+  /** The position of the last card on screen, for a feed that pages as it nears the end. */
+  onLastVisibleIndex?: (index: number) => void;
 }
 
 function VideoCardSkeleton() {
@@ -48,9 +53,12 @@ function VideoGridComponent({
   variant = "default",
   hideChannelAvatar,
   trackImpressions = false,
+  getReason,
+  onLastVisibleIndex,
 }: VideoGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   useFeedImpressions(gridRef, videos, trackImpressions && !loading);
+  useLastVisibleCard(gridRef, loading ? 0 : videos.length, onLastVisibleIndex);
   const gridStyle = useGridStyle();
   const columns = useResolvedGridColumns(gridRef, gridStyle);
   const gridClass = "flow-grid gap-y-8 pb-8";
@@ -86,6 +94,7 @@ function VideoGridComponent({
           <div
             className="flow-grid-card p-2 -m-2"
             {...(trackImpressions ? { [IMPRESSION_ATTRIBUTE]: video.id } : {})}
+            {...(onLastVisibleIndex ? { [GRID_INDEX_ATTRIBUTE]: index } : {})}
           >
             <VideoCard
               video={video}
@@ -94,6 +103,7 @@ function VideoGridComponent({
               onRemoveFromHistory={onRemoveFromHistory}
               variant={variant}
               hideChannelAvatar={hideChannelAvatar}
+              reason={getReason?.(video)}
             />
           </div>
           {insertAfterIndex === index ? (

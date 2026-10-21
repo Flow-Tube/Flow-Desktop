@@ -396,24 +396,6 @@ export async function getLiveChat(
   return invokeBackend<LiveChatResponse>("get_live_chat", { videoId, continuation });
 }
 
-export async function getTrendingVideos(): Promise<VideoSummary[]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock trending videos.");
-    return [
-      {
-        id: "dQw4w9WgXcQ",
-        title: "Trending offline coding masterclass with Rust",
-        channelName: "Fireship",
-        thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-        durationSeconds: 156,
-        publishedText: "1 day ago",
-        viewCountText: "500K views",
-      },
-    ];
-  }
-  return invokeBackend<VideoSummary[]>("get_trending_videos");
-}
-
 export async function getTrendingByCategory(
   category: TrendingCategory,
   region: string,

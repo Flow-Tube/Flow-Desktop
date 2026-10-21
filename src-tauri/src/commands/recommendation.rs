@@ -195,8 +195,11 @@ pub async fn get_brain_snapshot(
 #[tauri::command]
 pub async fn get_taste_overview(
     recommendation_service: State<'_, RecommendationService>,
+    youtube_service: State<'_, crate::services::youtube_service::YoutubeService>,
 ) -> Result<crate::services::taste_service::TasteOverview, ErrorResponse> {
-    Ok(recommendation_service.taste_overview().await)
+    let mut overview = recommendation_service.taste_overview().await;
+    crate::services::taste_service::fill_missing_names(&youtube_service, &mut overview).await;
+    Ok(overview)
 }
 
 #[tauri::command]

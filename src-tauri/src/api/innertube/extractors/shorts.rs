@@ -12,12 +12,13 @@ use crate::streaming::sabr::pb::PbWriter;
 /// (`=`, not URL-encoded `%3D`) — the JSON body must carry the decoded token.
 const HOME_SEQUENCE_PARAMS: &str = "CA8=";
 
-/// Encode the `params` token that seeds a reel sequence from a video. The wire
-/// shape is field 2 (length-delimited) holding the id, base64url'd without padding.
+/// The `sequenceParams` token that seeds a reel sequence from a video: protobuf `{1: videoId}`,
+/// base64url without padding. As Flow for Android found (#931), this is the only accepted seed;
+/// the same token in `params` is rejected with HTTP 400. The response never contains the seed.
 #[must_use]
 pub fn encode_reel_seed_params(video_id: &str) -> String {
     let mut writer = PbWriter::new();
-    writer.write_string(2, video_id);
+    writer.write_string(1, video_id);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(writer.into_bytes())
 }
 
@@ -25,11 +26,10 @@ impl InnertubeClient {
     /// Fetch a sequence of Shorts from `reel/reel_watch_sequence`.
     ///
     /// Home feed: `sequence_params = None`. Seeded from a video:
-    /// `params = Some(encode_reel_seed_params(id))`. Next page: `sequence_params = Some(token)`.
+    /// `sequence_params = Some(encode_reel_seed_params(id))`. Next page: the page's token.
     /// ANDROID is used because it returns the portrait overlay renderers.
     pub async fn get_shorts_sequence(
         &self,
-        params: Option<String>,
         sequence_params: Option<String>,
         region: Option<String>,
     ) -> AppResult<ShortsFeed> {
@@ -47,17 +47,8 @@ impl InnertubeClient {
             .filter(|value| value.len() == 2 && value.chars().all(|c| c.is_ascii_alphabetic()));
         let context = clients::ANDROID.context(visitor_data.as_deref(), region.as_deref());
 
-        let mut payload = json!({ "context": context });
-        if let Some(params) = params {
-            payload["params"] = json!(params);
-        }
-        // A seed uses `params` alone; only fall back to the home sentinel when
-        // neither a seed nor an explicit continuation was supplied.
-        if let Some(seq) = sequence_params {
-            payload["sequenceParams"] = json!(seq);
-        } else if payload.get("params").is_none() {
-            payload["sequenceParams"] = json!(HOME_SEQUENCE_PARAMS);
-        }
+        let payload_params = sequence_params.unwrap_or_else(|| HOME_SEQUENCE_PARAMS.to_string());
+        let mut payload = json!({ "context": context, "sequenceParams": payload_params });
 
         let res = self
             .post_innertube("reel/reel_watch_sequence", &clients::ANDROID, &mut payload)
@@ -226,12 +217,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn seed_params_encode_field_two() {
+    fn seed_params_encode_field_one() {
         let encoded = encode_reel_seed_params("3RmOvxilbPM");
         let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(encoded)
             .unwrap();
-        assert_eq!(bytes[0], 0x12);
+        assert_eq!(bytes[0], 0x0a);
         assert_eq!(bytes[1] as usize, "3RmOvxilbPM".len());
         assert_eq!(&bytes[2..], b"3RmOvxilbPM");
     }

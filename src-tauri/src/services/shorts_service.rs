@@ -83,7 +83,6 @@ impl SeedChain {
 
 struct GatherSpec {
     include_reel: bool,
-    reel_params: Option<String>,
     reel_sequence_params: Option<String>,
     include_discovery: bool,
     include_subs: bool,
@@ -92,31 +91,27 @@ struct GatherSpec {
 impl GatherSpec {
     /// A fresh personalised feed, where seed chains open rather than continue.
     fn is_opening(&self) -> bool {
-        self.include_reel
-            && self.include_subs
-            && self.reel_params.is_none()
-            && self.reel_sequence_params.is_none()
+        self.include_reel && self.include_subs && self.reel_sequence_params.is_none()
     }
 
     /// Personalised home feed: reel feed + topic discovery + subscription Shorts.
     fn home() -> Self {
         Self {
             include_reel: true,
-            reel_params: None,
             reel_sequence_params: None,
             include_discovery: true,
             include_subs: true,
         }
     }
 
-    /// Collaborative "more like this" sequence seeded from a specific video.
+    /// The feed opened from a specific Short: that Short's reel sequence first, with the
+    /// personalised sources beside it, since some reels have no sequence of their own.
     fn seeded(video_id: &str) -> Self {
         Self {
             include_reel: true,
-            reel_params: Some(encode_reel_seed_params(video_id)),
-            reel_sequence_params: None,
-            include_discovery: false,
-            include_subs: false,
+            reel_sequence_params: Some(encode_reel_seed_params(video_id)),
+            include_discovery: true,
+            include_subs: true,
         }
     }
 
@@ -127,7 +122,6 @@ impl GatherSpec {
             .is_some_and(|value| value.starts_with(FLOW_DISCOVERY_CONTINUATION));
         Self {
             include_reel: !flow_discovery,
-            reel_params: None,
             reel_sequence_params: token
                 .filter(|value| !value.starts_with(FLOW_DISCOVERY_CONTINUATION)),
             include_discovery: true,
@@ -142,12 +136,12 @@ async fn advance(
     mut chain: SeedChain,
     region: Option<String>,
 ) -> (SeedChain, Vec<ShortItem>) {
-    let (params, sequence) = if chain.opened {
-        (None, chain.continuation.clone())
+    let sequence = if chain.opened {
+        chain.continuation.clone()
     } else {
-        (Some(encode_reel_seed_params(&chain.seed_id)), None)
+        Some(encode_reel_seed_params(&chain.seed_id))
     };
-    match yt.get_shorts_sequence(params, sequence, region).await {
+    match yt.get_shorts_sequence(sequence, region).await {
         Ok(feed) => {
             chain.opened = true;
             chain.continuation = feed.continuation.filter(|token| !token.is_empty());
@@ -327,12 +321,8 @@ impl ShortsService {
         let seed_region = region.clone();
         let reel_fut = timeout(REEL_LANE_TIMEOUT, async {
             if spec.include_reel {
-                yt.get_shorts_sequence(
-                    spec.reel_params.clone(),
-                    spec.reel_sequence_params.clone(),
-                    region,
-                )
-                .await
+                yt.get_shorts_sequence(spec.reel_sequence_params.clone(), region)
+                    .await
             } else {
                 Ok(ShortsFeed::default())
             }

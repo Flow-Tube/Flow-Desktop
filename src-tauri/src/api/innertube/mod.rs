@@ -143,12 +143,10 @@ impl YoutubeExtractor for InnertubeClient {
 
     async fn get_shorts_sequence(
         &self,
-        params: Option<String>,
         sequence_params: Option<String>,
         region: Option<String>,
     ) -> AppResult<ShortsFeed> {
-        self.get_shorts_sequence(params, sequence_params, region)
-            .await
+        self.get_shorts_sequence(sequence_params, region).await
     }
 
     async fn search_music(&self, query: &str, filter: &str) -> AppResult<Vec<VideoSummary>> {

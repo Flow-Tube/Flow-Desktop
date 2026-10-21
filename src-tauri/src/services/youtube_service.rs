@@ -113,12 +113,11 @@ impl YoutubeService {
 
     pub async fn get_shorts_sequence(
         &self,
-        params: Option<String>,
         sequence_params: Option<String>,
         region: Option<String>,
     ) -> AppResult<ShortsFeed> {
         self.extractor
-            .get_shorts_sequence(params, sequence_params, region)
+            .get_shorts_sequence(sequence_params, region)
             .await
     }
 

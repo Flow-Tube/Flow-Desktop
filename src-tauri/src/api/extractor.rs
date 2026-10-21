@@ -73,7 +73,6 @@ pub trait YoutubeExtractor: Send + Sync {
 
     async fn get_shorts_sequence(
         &self,
-        params: Option<String>,
         sequence_params: Option<String>,
         region: Option<String>,
     ) -> AppResult<ShortsFeed>;

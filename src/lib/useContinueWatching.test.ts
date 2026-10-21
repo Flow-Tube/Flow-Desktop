@@ -20,4 +20,8 @@ describe("buildContinueWatching", () => {
     expect(shelf.map((video) => video.id)).toEqual(["a"]);
     expect(shelf[0]?.viewCountText).toBe("17% watched");
   });
+
+  it("leaves out a Short swiped away halfway", () => {
+    expect(buildContinueWatching([record("short", 15, 30)], new Set())).toEqual([]);
+  });
 });

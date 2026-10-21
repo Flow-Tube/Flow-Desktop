@@ -31,8 +31,12 @@ const SHORTS_PER_SEARCH: usize = 12;
 const MAX_SUB_CHANNELS: usize = 6;
 /// Upper bound (seconds) for a discovery-search result to count as a Short.
 const SHORTS_DISCOVERY_MAX_DURATION: u64 = 180;
-/// Reels kept from the chain one liked or watched-through Short opens, per gather.
+/// Reels kept from one page of a seed chain.
 const SHORTS_PER_SEED_CHAIN: usize = 10;
+/// Seed chains a fresh feed opens at once (Android `ShortsFeedPager.OPENING_SEEDS`).
+const OPENING_SEEDS: usize = 2;
+/// Pages one chain serves before the next seed takes over (Android `PAGES_PER_CHAIN`).
+const PAGES_PER_CHAIN: usize = 3;
 /// Seeds used lately rest while enough others qualify.
 const SEED_COOLDOWN_MAX: usize = 12;
 /// Session de-dup memory cap (prevents re-showing within a session).
@@ -48,6 +52,35 @@ const DISCOVERY_QUERY_TIMEOUT: Duration = Duration::from_millis(800);
 const DISCOVERY_SEARCH_TIMEOUT: Duration = Duration::from_millis(3_500);
 
 /// Which sources a single gather pass should draw from.
+/// A reel chain opened from a Short the viewer liked, saved or watched through, followed for a few
+/// pages (Android `ShortsFeedPager.SeedChain`).
+#[derive(Debug, Clone)]
+struct SeedChain {
+    seed_id: String,
+    continuation: Option<String>,
+    opened: bool,
+    pages_served: usize,
+    failed: bool,
+}
+
+impl SeedChain {
+    fn new(seed_id: String) -> Self {
+        Self {
+            seed_id,
+            continuation: None,
+            opened: false,
+            pages_served: 0,
+            failed: false,
+        }
+    }
+
+    fn has_more(&self) -> bool {
+        !self.failed
+            && (!self.opened || self.continuation.is_some())
+            && self.pages_served < PAGES_PER_CHAIN
+    }
+}
+
 struct GatherSpec {
     include_reel: bool,
     reel_params: Option<String>,
@@ -57,6 +90,14 @@ struct GatherSpec {
 }
 
 impl GatherSpec {
+    /// A fresh personalised feed, where seed chains open rather than continue.
+    fn is_opening(&self) -> bool {
+        self.include_reel
+            && self.include_subs
+            && self.reel_params.is_none()
+            && self.reel_sequence_params.is_none()
+    }
+
     /// Personalised home feed: reel feed + topic discovery + subscription Shorts.
     fn home() -> Self {
         Self {
@@ -95,6 +136,45 @@ impl GatherSpec {
     }
 }
 
+/// One page of `chain`, and the chain moved on by it; a failed request ends the chain.
+async fn advance(
+    yt: &YoutubeService,
+    mut chain: SeedChain,
+    region: Option<String>,
+) -> (SeedChain, Vec<ShortItem>) {
+    let (params, sequence) = if chain.opened {
+        (None, chain.continuation.clone())
+    } else {
+        (Some(encode_reel_seed_params(&chain.seed_id)), None)
+    };
+    match yt.get_shorts_sequence(params, sequence, region).await {
+        Ok(feed) => {
+            chain.opened = true;
+            chain.continuation = feed.continuation.filter(|token| !token.is_empty());
+            chain.pages_served += 1;
+            let seed = chain.seed_id.clone();
+            let items = feed
+                .items
+                .into_iter()
+                .filter(|item| item.id != seed)
+                .take(SHORTS_PER_SEED_CHAIN)
+                .collect();
+            (chain, items)
+        }
+        Err(error) => {
+            tracing::warn!("[shorts] seed chain {} failed: {error}", chain.seed_id);
+            chain.failed = true;
+            (chain, Vec::new())
+        }
+    }
+}
+
+/// A reel's like count from its overlay text ("12K", "1,234 likes"): the number and its suffix
+/// only, since a word like "likes" would read as a thousands mark.
+fn like_count_of(text: &str) -> u64 {
+    crate::flow_neuro::rank::view_count_of(text.split_whitespace().next())
+}
+
 /// Builds and serves the personalised Shorts feed. Candidates come from three
 /// sources (reel sequence, topic discovery, subscription Shorts), then are ranked
 /// by the shared `RecommendationService` — the same brain as the video feed,
@@ -104,6 +184,8 @@ pub struct ShortsService {
     recently_shown: Mutex<HashSet<String>>,
     /// Seeds whose reel chains opened lately, oldest first.
     recent_seeds: Mutex<VecDeque<String>>,
+    /// Seed chains still serving pages, the one being followed first.
+    chains: tokio::sync::Mutex<VecDeque<SeedChain>>,
     buffer: Mutex<VecDeque<ShortItem>>,
     last_continuation: Mutex<Option<String>>,
     // Serializes feed operations so overlapping calls (e.g. React StrictMode's
@@ -117,6 +199,7 @@ impl ShortsService {
         Self {
             recently_shown: Mutex::new(HashSet::new()),
             recent_seeds: Mutex::new(VecDeque::new()),
+            chains: tokio::sync::Mutex::new(VecDeque::new()),
             buffer: Mutex::new(VecDeque::new()),
             last_continuation: Mutex::new(None),
             op_lock: tokio::sync::Mutex::new(()),
@@ -227,6 +310,9 @@ impl ShortsService {
         self.recently_shown.lock().unwrap().clear();
         self.buffer.lock().unwrap().clear();
         *self.last_continuation.lock().unwrap() = None;
+        if let Ok(mut chains) = self.chains.try_lock() {
+            chains.clear();
+        }
     }
 
     /// Gather candidates from the spec's sources, de-dup, then rank through the engine.
@@ -261,7 +347,8 @@ impl ShortsService {
         // Discovery passes also follow one Short the viewer liked or watched through.
         let seed_fut = timeout(REEL_LANE_TIMEOUT, async {
             if spec.include_discovery {
-                self.gather_seed_chain(yt, rec, seed_region).await
+                self.gather_seed_chains(yt, rec, spec.is_opening(), seed_region)
+                    .await
             } else {
                 Vec::new()
             }
@@ -337,7 +424,16 @@ impl ShortsService {
         }
 
         let subs_set: HashSet<String> = user_subs.iter().cloned().collect();
-        let ranked = rec.rank_shorts_candidates(candidates, subs_set).await?;
+        let like_counts: HashMap<String, u64> = rich
+            .iter()
+            .filter_map(|(id, item)| {
+                let likes = like_count_of(item.like_count_text.as_deref()?);
+                (likes > 0).then(|| (id.clone(), likes))
+            })
+            .collect();
+        let ranked = rec
+            .rank_shorts_candidates(candidates, subs_set, &like_counts)
+            .await?;
         tracing::info!("[shorts] ranked: {}", ranked.len());
         if ranked.is_empty() {
             return Ok((Vec::new(), continuation));
@@ -364,40 +460,62 @@ impl ShortsService {
         Ok((items, continuation))
     }
 
-    /// The reel chain of the next Short the viewer liked or watched through, if any qualifies.
-    async fn gather_seed_chain(
+    /// New seeds for chains, resting the ones used lately unless too few others qualify.
+    async fn next_seeds(&self, rec: &RecommendationService, count: usize) -> Vec<String> {
+        let cooled: HashSet<String> = self.recent_seeds.lock().unwrap().iter().cloned().collect();
+        let seeds = rec.short_seeds(count, &cooled).await;
+        let mut recent = self.recent_seeds.lock().unwrap();
+        for seed in &seeds {
+            recent.retain(|id| id != seed);
+            recent.push_back(seed.clone());
+        }
+        while recent.len() > SEED_COOLDOWN_MAX {
+            recent.pop_front();
+        }
+        seeds
+    }
+
+    /// Reels from the seed chains: a fresh feed opens two at once; later passes follow the first
+    /// chain one page further and open a new seed once every chain has served its pages.
+    async fn gather_seed_chains(
         &self,
         yt: &YoutubeService,
         rec: &RecommendationService,
+        opening: bool,
         region: Option<String>,
     ) -> Vec<ShortItem> {
-        let cooled: HashSet<String> = self.recent_seeds.lock().unwrap().iter().cloned().collect();
-        let Some(seed) = rec.short_seeds(1, &cooled).await.into_iter().next() else {
-            return Vec::new();
+        let mut chains = self.chains.lock().await;
+        if opening {
+            chains.clear();
+        }
+        chains.retain(SeedChain::has_more);
+        if chains.is_empty() {
+            let wanted = if opening { OPENING_SEEDS } else { 1 };
+            chains.extend(
+                self.next_seeds(rec, wanted)
+                    .await
+                    .into_iter()
+                    .map(SeedChain::new),
+            );
+        }
+        let advancing = if opening {
+            chains.len()
+        } else {
+            chains.len().min(1)
         };
-        {
-            let mut recent = self.recent_seeds.lock().unwrap();
-            recent.retain(|id| id != &seed);
-            recent.push_back(seed.clone());
-            while recent.len() > SEED_COOLDOWN_MAX {
-                recent.pop_front();
-            }
+        let pages = futures_util::future::join_all(
+            chains
+                .iter()
+                .take(advancing)
+                .map(|chain| advance(yt, chain.clone(), region.clone())),
+        )
+        .await;
+        let mut items = Vec::new();
+        for (index, (chain, page)) in pages.into_iter().enumerate() {
+            chains[index] = chain;
+            items.extend(page);
         }
-        match yt
-            .get_shorts_sequence(Some(encode_reel_seed_params(&seed)), None, region)
-            .await
-        {
-            Ok(feed) => feed
-                .items
-                .into_iter()
-                .filter(|item| item.id != seed)
-                .take(SHORTS_PER_SEED_CHAIN)
-                .collect(),
-            Err(error) => {
-                tracing::warn!("[shorts] seed chain {seed} failed: {error}");
-                Vec::new()
-            }
-        }
+        items
     }
 
     /// Remove blank/duplicate ids and anything already shown this session.
@@ -571,6 +689,34 @@ fn is_short_candidate(video: &VideoSummary) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_seed_chain_serves_three_pages_unless_it_runs_out_or_fails() {
+        let mut chain = SeedChain::new("seed".into());
+        assert!(
+            chain.has_more(),
+            "an unopened chain has its first page to give"
+        );
+        chain.opened = true;
+        chain.continuation = Some("next".into());
+        chain.pages_served = 2;
+        assert!(chain.has_more());
+        chain.pages_served = PAGES_PER_CHAIN;
+        assert!(!chain.has_more());
+        chain.pages_served = 1;
+        chain.continuation = None;
+        assert!(!chain.has_more(), "no continuation, no next page");
+        chain.continuation = Some("next".into());
+        chain.failed = true;
+        assert!(!chain.has_more());
+    }
+
+    #[test]
+    fn a_reel_like_count_reads_its_number_and_suffix_only() {
+        assert_eq!(like_count_of("12K"), 12_000);
+        assert_eq!(like_count_of("1.2M likes"), 1_200_000);
+        assert_eq!(like_count_of("123 likes"), 123);
+    }
     use super::*;
 
     fn video(id: &str, duration: Option<u64>) -> VideoSummary {

@@ -50,6 +50,8 @@ pub struct RankContext<'a> {
     /// The Shorts feed: every candidate is a Short, ranked against the Shorts taste and held back
     /// once seen, and channels the viewer suppressed for a while stay so the feed is not starved.
     pub shorts_feed: bool,
+    /// Like counts the candidates arrived with (Shorts reels carry them; list renderers do not).
+    pub like_counts: &'a HashMap<String, u64>,
     pub session: SessionState<'a>,
     pub category_of: &'a dyn Fn(&str) -> Option<ChannelCategory>,
     pub co_watch_prior: &'a HashMap<String, f64>,
@@ -409,8 +411,8 @@ fn candidate<'a>(
         vector,
         upload_date: video.published_text.as_deref().unwrap_or(""),
         view_count: view_count_of(video.view_count_text.as_deref()),
-        // List renderers carry neither; a category still comes from the channel's.
-        like_count: 0,
+        // List renderers carry no category; it still comes from the channel's.
+        like_count: ctx.like_counts.get(&video.id).copied().unwrap_or(0),
         category: None,
         is_live: video.is_live,
         is_short: ctx.shorts_feed || is_known_short(video.duration_seconds),
@@ -450,6 +452,9 @@ mod tests {
         }
     }
 
+    static NO_LIKES: std::sync::LazyLock<HashMap<String, u64>> =
+        std::sync::LazyLock::new(HashMap::new);
+
     fn context<'a>(
         brain: &'a UserBrain,
         subs: &'a HashSet<String>,
@@ -462,6 +467,7 @@ mod tests {
             now_ms: 1_800_000_000_000,
             min_relevance,
             shorts_feed: false,
+            like_counts: &NO_LIKES,
             session: SessionState {
                 topics: &[],
                 video_count: 0,

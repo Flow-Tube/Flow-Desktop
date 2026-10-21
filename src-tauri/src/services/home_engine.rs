@@ -45,7 +45,7 @@ impl RecommendationService {
         if ranked.len() < 2 {
             return ranked;
         }
-        self.with_rank_context(user_subs, 0.0, false, |ctx| share_by_interest(ctx, ranked))
+        self.with_rank_context(user_subs, 0.0, None, |ctx| share_by_interest(ctx, ranked))
             .await
     }
 
@@ -202,7 +202,7 @@ impl RecommendationService {
     pub async fn interest_chips(&self) -> Vec<InterestChip> {
         let now_ms = self.get_current_time_ms();
         let (set, chips) = self
-            .with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
+            .with_rank_context(&HashSet::new(), 0.0, None, |ctx| {
                 let brain = ctx.brain;
                 let clusters = clusters_of(ctx);
                 let picks = pick_keys(brain);
@@ -275,10 +275,8 @@ impl RecommendationService {
         if videos.is_empty() {
             return videos;
         }
-        self.with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
-            about(ctx, videos, topics)
-        })
-        .await
+        self.with_rank_context(&HashSet::new(), 0.0, None, |ctx| about(ctx, videos, topics))
+            .await
     }
 
     /// Searches for the topics next to the viewer's interests, strongest first.

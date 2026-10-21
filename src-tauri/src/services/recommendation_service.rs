@@ -265,18 +265,20 @@ impl RecommendationService {
         user_subs: HashSet<String>,
         min_relevance: f64,
     ) -> AppResult<Vec<VideoSummary>> {
-        self.rank_candidates_inner(candidates, user_subs, min_relevance, false)
+        self.rank_candidates_inner(candidates, user_subs, min_relevance, None)
             .await
     }
 
     /// Shorts ranking: against the Shorts taste, with Shorts seen this week held back and
     /// channel-level suppression skipped so the high-volume feed isn't starved.
+    /// `like_counts` are the reels' own, which the engagement term reads.
     pub async fn rank_shorts_candidates(
         &self,
         candidates: Vec<VideoSummary>,
         user_subs: HashSet<String>,
+        like_counts: &HashMap<String, u64>,
     ) -> AppResult<Vec<VideoSummary>> {
-        self.rank_candidates_inner(candidates, user_subs, 0.0, true)
+        self.rank_candidates_inner(candidates, user_subs, 0.0, Some(like_counts))
             .await
     }
 
@@ -301,24 +303,25 @@ impl RecommendationService {
         candidates: Vec<VideoSummary>,
         user_subs: HashSet<String>,
         min_relevance: f64,
-        shorts_feed: bool,
+        shorts: Option<&HashMap<String, u64>>,
     ) -> AppResult<Vec<VideoSummary>> {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
         Ok(self
-            .with_rank_context(&user_subs, min_relevance, shorts_feed, |ctx| {
+            .with_rank_context(&user_subs, min_relevance, shorts, |ctx| {
                 rank(ctx, candidates)
             })
             .await)
     }
 
     /// Runs `f` with what one ranking pass reads: the brain, the session and the side stores.
+    /// `shorts` makes it the Shorts feed's pass, with the reels' like counts.
     pub(crate) async fn with_rank_context<R>(
         &self,
         user_subs: &HashSet<String>,
         min_relevance: f64,
-        shorts_feed: bool,
+        shorts: Option<&HashMap<String, u64>>,
         f: impl FnOnce(&RankContext) -> R,
     ) -> R {
         self.reset_idle_session();
@@ -332,12 +335,14 @@ impl RecommendationService {
         let co_watch_prior = neighbours(&channel_edges, &is_watched);
         let category_of = |channel: &str| self.stores.categories.category_of(channel);
         let stored_topics = |video_id: &str| self.stores.content.topics_for(video_id);
+        let no_likes = HashMap::new();
         let ctx = RankContext {
             brain: &brain,
             user_subs,
             now_ms,
             min_relevance,
-            shorts_feed,
+            shorts_feed: shorts.is_some(),
+            like_counts: shorts.unwrap_or(&no_likes),
             session: SessionState {
                 topics: &session_topics,
                 video_count: session_video_count,

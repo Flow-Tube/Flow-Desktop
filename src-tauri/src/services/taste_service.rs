@@ -205,7 +205,7 @@ impl RecommendationService {
         // A name saved at block time or looked up before wins over an older spelling.
         names.extend(blocked_channel_names::stored(&self.pool).await);
         let remembered_channels = self.remembered_channels().await;
-        self.with_rank_context(&HashSet::new(), 0.0, false, |ctx| {
+        self.with_rank_context(&HashSet::new(), 0.0, None, |ctx| {
             let brain = ctx.brain;
             let table = specificity(&brain.key_spec());
             let specific = |key: &str| table.of(key);

@@ -1,4 +1,3 @@
-use serde::Serialize;
 use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -24,7 +23,6 @@ use crate::flow_neuro::ranker::MomentumEntry;
 use crate::flow_neuro::scoring::{
     FEED_HISTORY_EXPIRY_DAYS, FEED_HISTORY_MAX, FeedEntry, FlowPersona, IMPRESSION_CACHE_MAX,
     SESSION_TOPIC_HISTORY_MAX, TimeBucket, UserBrain, classify_persona, is_known_short,
-    is_music_track,
 };
 use crate::flow_neuro::search_learning::learn_search;
 use crate::flow_neuro::side_stores::SideStores;
@@ -33,7 +31,6 @@ use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
 use crate::models::video::{MusicHomeChip, MusicHomeSection, RelatedContentItem, VideoSummary};
 use crate::services::youtube_service::YoutubeService;
 
-const DISCOVER_FEED_TARGET_SIZE: usize = 35;
 /// A channel above its starting score is one the viewer has watched.
 const NEUTRAL_CHANNEL_SCORE: f64 = 0.5;
 const SESSION_RESET_IDLE_MINUTES: u64 = 120;
@@ -57,9 +54,9 @@ struct DiscoveryMemory {
 }
 
 pub struct RecommendationService {
-    pool: SqlitePool,
-    brain_store: Arc<BrainStore>,
-    stores: Arc<SideStores>,
+    pub(crate) pool: SqlitePool,
+    pub(crate) brain_store: Arc<BrainStore>,
+    pub(crate) stores: Arc<SideStores>,
     impression_cache: Mutex<HashMap<String, (i32, u64)>>, // video_id -> (seen_count, last_seen_timestamp)
     session_topic_history: Mutex<Vec<String>>,
     session_video_count: Mutex<i32>,
@@ -80,62 +77,7 @@ struct WatchSlot {
     generation: u64,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct FeedQuotas {
-    pub maturity: String,
-    pub total_interactions: i32,
-    pub subscription_percent: f64,
-    pub discovery_percent: f64,
-    pub viral_percent: f64,
-    pub subscription_limit: usize,
-    pub discovery_limit: usize,
-    pub viral_limit: usize,
-}
-
 impl RecommendationService {
-    pub fn calculate_feed_quotas(total_interactions: i32, target_size: usize) -> FeedQuotas {
-        let target_size = target_size.max(1);
-        let (maturity, subscription_percent, discovery_percent, viral_percent) =
-            if total_interactions < 30 {
-                ("cold_start", 0.60, 0.35, 0.05)
-            } else if total_interactions <= 100 {
-                ("maturing", 0.40, 0.50, 0.10)
-            } else {
-                // Viral stays a small serendipity floor; personalization (subs + discovery) leads
-                // for mature profiles instead of trending growing to ~29% of the feed.
-                ("mature", 0.45, 0.45, 0.10)
-            };
-
-        let subscription_limit = ((target_size as f64) * subscription_percent).round() as usize;
-        let mut discovery_limit = ((target_size as f64) * discovery_percent).round() as usize;
-        let mut viral_limit = ((target_size as f64) * viral_percent).round() as usize;
-
-        let rounded_total = subscription_limit + discovery_limit + viral_limit;
-        if rounded_total > target_size {
-            let overflow = rounded_total - target_size;
-            let viral_reduction = viral_limit.min(overflow);
-            viral_limit -= viral_reduction;
-            let remaining_overflow = overflow - viral_reduction;
-            if remaining_overflow > 0 {
-                discovery_limit = discovery_limit.saturating_sub(remaining_overflow);
-            }
-        } else if rounded_total < target_size {
-            discovery_limit += target_size - rounded_total;
-        }
-
-        FeedQuotas {
-            maturity: maturity.to_string(),
-            total_interactions,
-            subscription_percent,
-            discovery_percent,
-            viral_percent,
-            subscription_limit,
-            discovery_limit,
-            viral_limit,
-        }
-    }
-
     fn has_meaningful_brain_data(brain: &UserBrain) -> bool {
         brain.has_completed_onboarding
             || brain.total_interactions > 0
@@ -183,13 +125,13 @@ impl RecommendationService {
     }
 
     /// Deep Flow keeps a session out of the profile: nothing learns while it runs.
-    async fn learning_paused(&self) -> bool {
+    pub(crate) async fn learning_paused(&self) -> bool {
         learning_paused(&self.pool, self.get_current_time_ms())
             .await
             .unwrap_or(false)
     }
 
-    fn get_current_time_ms(&self) -> u64 {
+    pub(crate) fn get_current_time_ms(&self) -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -229,9 +171,7 @@ impl RecommendationService {
     ) -> AppResult<Vec<String>> {
         let now_ms = self.get_current_time_ms();
         let brain = self.brain_store.read().await;
-        let is_watched = |channel: &str| {
-            brain.channel_scores.get(channel).copied().unwrap_or(0.0) > NEUTRAL_CHANNEL_SCORE
-        };
+        let is_watched = |channel: &str| is_watched_channel(&brain, channel);
         let channel_edges = self.stores.co_watch.edges(&is_watched, now_ms);
         let persona = classify_persona(&brain);
         let bucket = TimeBucket::current();
@@ -361,22 +301,35 @@ impl RecommendationService {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
+        Ok(self
+            .with_rank_context(&user_subs, min_relevance, lenient, |ctx| {
+                rank(ctx, candidates)
+            })
+            .await)
+    }
+
+    /// Runs `f` with what one ranking pass reads: the brain, the session and the side stores.
+    pub(crate) async fn with_rank_context<R>(
+        &self,
+        user_subs: &HashSet<String>,
+        min_relevance: f64,
+        lenient: bool,
+        f: impl FnOnce(&RankContext) -> R,
+    ) -> R {
         self.reset_idle_session();
         let now_ms = self.get_current_time_ms();
         let session_topics = self.session_topic_history.lock().unwrap().clone();
         let session_video_count = *self.session_video_count.lock().unwrap();
         let momentum = self.momentum.lock().unwrap().clone();
         let brain = self.brain_store.read().await;
-        let is_watched = |channel: &str| {
-            brain.channel_scores.get(channel).copied().unwrap_or(0.0) > NEUTRAL_CHANNEL_SCORE
-        };
+        let is_watched = |channel: &str| is_watched_channel(&brain, channel);
         let channel_edges = self.stores.co_watch.edges(&is_watched, now_ms);
         let co_watch_prior = neighbours(&channel_edges, &is_watched);
         let category_of = |channel: &str| self.stores.categories.category_of(channel);
         let stored_topics = |video_id: &str| self.stores.content.topics_for(video_id);
         let ctx = RankContext {
             brain: &brain,
-            user_subs: &user_subs,
+            user_subs,
             now_ms,
             min_relevance,
             keep_suppressed_channels: lenient,
@@ -391,7 +344,7 @@ impl RecommendationService {
             stored_topics: &stored_topics,
             seed: now_ms,
         };
-        Ok(rank(&ctx, candidates))
+        f(&ctx)
     }
 
     /// A session idle for two hours, or half an hour without a video, starts over (Android A16:
@@ -890,118 +843,6 @@ impl RecommendationService {
         Ok(())
     }
 
-    pub async fn get_personalized_music_recommendations(
-        &self,
-        youtube_service: &YoutubeService,
-        limit: usize,
-    ) -> AppResult<Vec<VideoSummary>> {
-        let rows = sqlx::query(
-            "SELECT video_id, title, channel_name, total_duration_seconds FROM watch_history ORDER BY watch_date DESC, created_at DESC LIMIT 500"
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(crate::errors::AppError::from)?;
-
-        let mut music_seeds = Vec::new();
-        for r in rows {
-            let video_id: String = sqlx::Row::get(&r, 0);
-            let title: String = sqlx::Row::get(&r, 1);
-            let channel_name: Option<String> = sqlx::Row::get(&r, 2);
-            let total_duration_seconds: Option<i64> = sqlx::Row::get(&r, 3);
-
-            let ch_name = channel_name.as_deref().unwrap_or("");
-            let duration = total_duration_seconds.map(|d| d as u64);
-            if is_music_track(&title, ch_name, duration) {
-                if !music_seeds.contains(&video_id) {
-                    music_seeds.push(video_id);
-                    if music_seeds.len() >= 10 {
-                        break;
-                    }
-                }
-            }
-        }
-
-        let mut candidates = Vec::new();
-
-        if !music_seeds.is_empty() {
-            let mut seeds = Vec::new();
-            let mut lcg_seed = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u32;
-
-            let count_to_pick = music_seeds.len().min(4);
-            let mut indices: Vec<usize> = (0..music_seeds.len()).collect();
-
-            for i in (1..indices.len()).rev() {
-                lcg_seed = lcg_seed.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff;
-                let j = (lcg_seed as usize) % (i + 1);
-                indices.swap(i, j);
-            }
-
-            for &idx in indices.iter().take(count_to_pick) {
-                seeds.push(music_seeds[idx].clone());
-            }
-
-            let mut futures = Vec::new();
-            for seed in &seeds {
-                futures.push(youtube_service.get_music_related(seed));
-            }
-
-            let results = futures_util::future::join_all(futures).await;
-            let mut seen_ids = HashSet::new();
-
-            for res in results {
-                if let Ok(tracks) = res {
-                    for track in tracks {
-                        if seen_ids.insert(track.id.clone()) {
-                            candidates.push(track);
-                        }
-                    }
-                }
-            }
-        }
-
-        if candidates.is_empty() {
-            if let Ok(trending_music) = youtube_service
-                .search_music("trending songs", "songs")
-                .await
-            {
-                candidates = trending_music;
-            } else if let Ok(trending_fallback) =
-                youtube_service.get_trending_videos(None, None).await
-            {
-                candidates = trending_fallback
-                    .into_iter()
-                    .filter(|v| is_music_track(&v.title, &v.channel_name, v.duration_seconds))
-                    .collect();
-            }
-        }
-
-        let mut deduped: Vec<VideoSummary> = Vec::new();
-        let mut seen = HashSet::new();
-        for v in candidates {
-            if seen.insert(v.id.clone()) {
-                deduped.push(v);
-            }
-        }
-
-        if !deduped.is_empty() {
-            let mut lcg_seed = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u32;
-            for i in (1..deduped.len()).rev() {
-                lcg_seed = lcg_seed.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fffffff;
-                let j = (lcg_seed as usize) % (i + 1);
-                deduped.swap(i, j);
-            }
-        }
-
-        deduped.truncate(limit);
-        Ok(deduped)
-    }
-
     pub async fn get_subscription_rotation_feed(
         &self,
         youtube_service: &YoutubeService,
@@ -1115,14 +956,6 @@ impl RecommendationService {
         limit: i64,
     ) -> AppResult<Vec<recommendations::RecommendationEvent>> {
         recommendations::get_recommendation_events(&self.pool, limit).await
-    }
-
-    pub async fn get_feed_quotas(&self) -> AppResult<FeedQuotas> {
-        let brain = self.brain_store.read().await;
-        Ok(Self::calculate_feed_quotas(
-            brain.total_interactions,
-            DISCOVER_FEED_TARGET_SIZE,
-        ))
     }
 
     pub async fn unblock_topic(&self, topic: String) -> AppResult<()> {
@@ -1333,6 +1166,11 @@ impl RecommendationService {
     }
 }
 
+/// A channel a watch raised above its starting score.
+pub(crate) fn is_watched_channel(brain: &UserBrain, channel: &str) -> bool {
+    brain.channel_scores.get(channel).copied().unwrap_or(0.0) > NEUTRAL_CHANNEL_SCORE
+}
+
 /// A real watch, a like or a save, as learning counts it.
 fn is_strong_signal(kind: InteractionType, percent_watched: f32) -> bool {
     matches!(kind, InteractionType::Liked | InteractionType::Saved)
@@ -1356,36 +1194,5 @@ mod tests {
         assert!(!RecommendationService::has_meaningful_brain_data(
             &empty_brain
         ));
-    }
-
-    #[test]
-    fn calculates_dynamic_cold_start_feed_quotas() {
-        let quotas = RecommendationService::calculate_feed_quotas(15, 35);
-
-        assert_eq!(quotas.maturity, "cold_start");
-        assert_eq!(quotas.subscription_limit, 21);
-        assert_eq!(quotas.discovery_limit, 12);
-        assert_eq!(quotas.viral_limit, 2);
-    }
-
-    #[test]
-    fn calculates_dynamic_maturing_feed_quotas() {
-        let quotas = RecommendationService::calculate_feed_quotas(50, 35);
-
-        assert_eq!(quotas.maturity, "maturing");
-        assert_eq!(quotas.subscription_limit, 14);
-        assert_eq!(quotas.discovery_limit, 18);
-        assert_eq!(quotas.viral_limit, 3);
-    }
-
-    #[test]
-    fn keeps_standard_mature_feed_shape() {
-        let quotas = RecommendationService::calculate_feed_quotas(150, 35);
-
-        assert_eq!(quotas.maturity, "mature");
-        assert_eq!(quotas.subscription_limit, 16);
-        assert_eq!(quotas.discovery_limit, 16);
-        assert_eq!(quotas.viral_limit, 3);
-        assert!(quotas.viral_limit < quotas.discovery_limit);
     }
 }

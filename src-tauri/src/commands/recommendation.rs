@@ -1,17 +1,13 @@
 use serde::Serialize;
-use std::collections::HashSet;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
 
 use crate::errors::ErrorResponse;
 use crate::flow_neuro::bootstrap::ImportedVideo;
-use crate::flow_neuro::gates::LANE_RELEVANCE_FLOOR;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
-use crate::services::recommendation_service::{
-    DiscoverySurface, FeedQuotas, RecommendationService,
-};
+use crate::services::recommendation_service::RecommendationService;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,25 +16,6 @@ pub struct PersonaDetails {
     pub title: String,
     pub description: String,
     pub icon: String,
-}
-
-#[tauri::command]
-pub async fn rank_videos(
-    candidates: Vec<VideoSummary>,
-    user_subs: Vec<String>,
-    relevant_only: Option<bool>,
-    recommendation_service: State<'_, RecommendationService>,
-) -> Result<Vec<VideoSummary>, ErrorResponse> {
-    let subs_set = user_subs.into_iter().collect::<HashSet<String>>();
-    let min_relevance = if relevant_only.unwrap_or(false) {
-        LANE_RELEVANCE_FLOOR
-    } else {
-        0.0
-    };
-    recommendation_service
-        .rank_candidates(candidates, subs_set, min_relevance)
-        .await
-        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]
@@ -153,9 +130,13 @@ pub async fn mark_not_interested(
 
 #[tauri::command]
 pub async fn record_feed_impressions(
+    app: AppHandle,
     videos: Vec<VideoSummary>,
     recommendation_service: State<'_, RecommendationService>,
+    home: State<'_, crate::services::home_feed::HomeFeedService>,
 ) -> Result<(), ErrorResponse> {
+    let ids: Vec<String> = videos.iter().map(|video| video.id.clone()).collect();
+    home.note_impressions(&app, &ids).await;
     recommendation_service
         .record_feed_impressions(videos)
         .await
@@ -184,29 +165,6 @@ pub async fn get_onboarding_status(
 }
 
 #[tauri::command]
-pub async fn generate_discovery_queries(
-    reset_depth: Option<bool>,
-    recommendation_service: State<'_, RecommendationService>,
-) -> Result<Vec<String>, ErrorResponse> {
-    recommendation_service
-        .generate_discovery_queries(DiscoverySurface::Home, reset_depth.unwrap_or(false))
-        .await
-        .map_err(ErrorResponse::from)
-}
-
-#[tauri::command]
-pub async fn report_discovery_results(
-    query: String,
-    video_ids: Vec<String>,
-    recommendation_service: State<'_, RecommendationService>,
-) -> Result<(), ErrorResponse> {
-    recommendation_service
-        .report_discovery_results(&query, &video_ids)
-        .await;
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn get_flow_persona(
     recommendation_service: State<'_, RecommendationService>,
 ) -> Result<PersonaDetails, ErrorResponse> {
@@ -229,16 +187,6 @@ pub async fn get_brain_snapshot(
 ) -> Result<crate::flow_neuro::scoring::UserBrain, ErrorResponse> {
     recommendation_service
         .get_brain_snapshot()
-        .await
-        .map_err(ErrorResponse::from)
-}
-
-#[tauri::command]
-pub async fn get_feed_quotas(
-    recommendation_service: State<'_, RecommendationService>,
-) -> Result<FeedQuotas, ErrorResponse> {
-    recommendation_service
-        .get_feed_quotas()
         .await
         .map_err(ErrorResponse::from)
 }

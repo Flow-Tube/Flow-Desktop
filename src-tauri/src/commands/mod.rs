@@ -4,6 +4,7 @@ pub mod diagnostics;
 pub mod discord;
 pub mod downloads;
 pub mod files;
+pub mod home_feed;
 pub mod music;
 pub mod music_brain;
 pub mod notifications;

@@ -95,6 +95,8 @@ pub fn neighbours(
 #[derive(Default)]
 struct State {
     sources: HashMap<String, Source>,
+    /// Names the related lists showed their channels under.
+    names: HashMap<String, String>,
     /// Video id to its related channels, newest last.
     pending: Vec<(String, Vec<RelatedChannel>)>,
 }
@@ -110,6 +112,9 @@ impl CoWatchStore {
         let mut state = State::default();
         for row in neuro_stores::load_cowatch(&pool).await? {
             let related: Vec<String> = serde_json::from_str(&row.related).unwrap_or_default();
+            let names: HashMap<String, String> =
+                serde_json::from_str(&row.names).unwrap_or_default();
+            state.names.extend(names);
             state.sources.insert(
                 row.video_id,
                 Source {
@@ -155,7 +160,9 @@ impl CoWatchStore {
         self.record(video_id, channel_id, &related, now_ms).await
     }
 
-    async fn record(
+    /// Records `related_videos`, the list beside `video_id`, a video of `channel_id` the viewer
+    /// watched, liked or follows.
+    pub async fn record(
         &self,
         video_id: &str,
         channel_id: &str,
@@ -190,6 +197,7 @@ impl CoWatchStore {
         };
         {
             let mut state = self.state.lock().unwrap();
+            state.names.extend(names);
             state.sources.insert(
                 video_id.to_string(),
                 Source {
@@ -216,6 +224,30 @@ impl CoWatchStore {
             i64::try_from(MAX_SOURCES).unwrap_or(i64::MAX),
         )
         .await
+    }
+
+    /// Every source, for neighbour channels.
+    #[must_use]
+    pub fn sources(&self) -> Vec<Source> {
+        self.state
+            .lock()
+            .unwrap()
+            .sources
+            .values()
+            .cloned()
+            .collect()
+    }
+
+    /// The videos whose related list is already a source.
+    #[must_use]
+    pub fn source_ids(&self) -> HashSet<String> {
+        self.state.lock().unwrap().sources.keys().cloned().collect()
+    }
+
+    /// The names co-watch has seen channels under.
+    #[must_use]
+    pub fn names(&self) -> HashMap<String, String> {
+        self.state.lock().unwrap().names.clone()
     }
 
     /// Confirmed pairs of channels watched together.

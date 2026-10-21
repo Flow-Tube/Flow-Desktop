@@ -1195,18 +1195,6 @@ pub async fn refresh_music_home(
 }
 
 #[tauri::command]
-pub async fn get_personalized_music_recommendations(
-    limit: usize,
-    youtube_service: State<'_, YoutubeService>,
-    recommendation_service: State<'_, RecommendationService>,
-) -> Result<Vec<VideoSummary>, ErrorResponse> {
-    recommendation_service
-        .get_personalized_music_recommendations(&youtube_service, limit)
-        .await
-        .map_err(ErrorResponse::from)
-}
-
-#[tauri::command]
 pub async fn get_subscription_rotation_feed(
     youtube_service: State<'_, YoutubeService>,
     recommendation_service: State<'_, RecommendationService>,
@@ -1221,7 +1209,7 @@ pub async fn get_subscription_rotation_feed(
 /// few at a time on a slow link.
 const DURATION_FILL_CONCURRENCY: usize = 3;
 
-async fn populate_video_durations(
+pub(crate) async fn populate_video_durations(
     videos: &mut [VideoSummary],
     youtube_service: &YoutubeService,
     pool: &sqlx::SqlitePool,
@@ -1309,7 +1297,7 @@ fn dedupe_channel_ids(channel_ids: Vec<String>) -> Result<Vec<String>, ErrorResp
 const SUBSCRIPTION_RSS_BATCH_SIZE: usize = 50;
 
 const SUBSCRIPTION_RSS_CONCURRENCY: usize = 16;
-async fn fetch_rss_channel_batch(
+pub(crate) async fn fetch_rss_channel_batch(
     client: &'static reqwest::Client,
     channel_ids: &[String],
 ) -> Vec<(SubscriptionRssChannel, Vec<(i64, VideoSummary)>)> {
@@ -1384,6 +1372,10 @@ pub async fn get_subscription_rss_feed(
     }
 
     sort_and_dedupe_feed(&mut videos);
+    let published: std::collections::HashMap<String, i64> = videos
+        .iter()
+        .map(|(seconds, video)| (video.id.clone(), *seconds))
+        .collect();
 
     let mut feed_videos: Vec<VideoSummary> = videos
         .into_iter()
@@ -1397,6 +1389,7 @@ pub async fn get_subscription_rss_feed(
         populate_video_durations(&mut feed_videos[..num_to_populate], &youtube_service, &pool)
             .await;
     }
+    crate::services::home_feed::remember_subscription_feed(&pool, &feed_videos, &published).await;
 
     let total = unique_channel_ids.len();
     Ok(SubscriptionRssFeed {
@@ -1445,6 +1438,10 @@ pub async fn stream_subscription_rss_feed(
         });
     }
 
+    let published: std::collections::HashMap<String, i64> = videos
+        .iter()
+        .map(|(seconds, video)| (video.id.clone(), *seconds))
+        .collect();
     let mut feed_videos: Vec<VideoSummary> = videos
         .into_iter()
         .map(|(_, video)| video)
@@ -1455,6 +1452,7 @@ pub async fn stream_subscription_rss_feed(
         populate_video_durations(&mut feed_videos[..num_to_populate], &youtube_service, &pool)
             .await;
     }
+    crate::services::home_feed::remember_subscription_feed(&pool, &feed_videos, &published).await;
     let _ = on_event.send(SubscriptionRssFeed {
         videos: feed_videos,
         channels,

@@ -223,10 +223,8 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
     let mut jitter = Jitter(ctx.seed);
 
     let mut by_id: HashMap<String, VideoSummary> = HashMap::with_capacity(vectors.len());
-    let mut topics_by_id: HashMap<String, HashMap<String, f64>> = HashMap::new();
     let mut scored: Vec<ScoredVideo> = Vec::with_capacity(vectors.len());
     for ((video, vector), score) in vectors.into_iter().zip(base) {
-        topics_by_id.insert(video.id.clone(), vector.topics.clone());
         scored.push(ScoredVideo {
             id: video.id.clone(),
             title: video.title.clone(),
@@ -244,7 +242,7 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
             && topic_similarity(&interests, &candidate.vector, Some(&specific))
                 < UNRELATED_SIMILARITY
     };
-    let ordered: Vec<VideoSummary> = apply_smart_diversity(
+    apply_smart_diversity(
         scored,
         &spec,
         extra_exploration,
@@ -253,22 +251,13 @@ pub fn rank(ctx: &RankContext, candidates: Vec<VideoSummary>) -> Vec<VideoSummar
     )
     .into_iter()
     .filter_map(|id| by_id.remove(&id))
-    .collect();
-    // A lane kept to the viewer's interests also shares its places between them.
-    if ctx.min_relevance > 0.0 {
-        share_by_interest(ctx, ordered, &topics_by_id)
-    } else {
-        ordered
-    }
+    .collect()
 }
 
 /// `ranked` with its places shared between the viewer's lasting interests, so the strongest one
 /// does not fill every page.
-fn share_by_interest(
-    ctx: &RankContext,
-    ranked: Vec<VideoSummary>,
-    topics_by_id: &HashMap<String, HashMap<String, f64>>,
-) -> Vec<VideoSummary> {
+#[must_use]
+pub fn share_by_interest(ctx: &RankContext, ranked: Vec<VideoSummary>) -> Vec<VideoSummary> {
     let brain = ctx.brain;
     let interests: HashMap<String, f64> = brain
         .interests()
@@ -294,6 +283,18 @@ fn share_by_interest(
                 .iter()
                 .map(|topic| (topic.clone(), cluster.representative.clone()))
         })
+        .collect();
+    let idf = IdfSnapshot {
+        word_frequencies: brain.idf_word_frequency.clone(),
+        total_documents: brain.idf_total_documents,
+    };
+    let reader = TopicReader {
+        spec: brain.key_spec(),
+        idf: &idf,
+    };
+    let topics_by_id: HashMap<String, HashMap<String, f64>> = ranked
+        .iter()
+        .map(|video| (video.id.clone(), vector_of(ctx, video, &reader).topics))
         .collect();
     interest_share::interleave(ranked, &weights, |video| {
         topics_by_id

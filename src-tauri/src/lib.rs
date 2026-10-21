@@ -78,11 +78,10 @@ use commands::pip::{
 };
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
-    bootstrap_from_subscriptions, complete_onboarding, end_watch_session,
-    generate_discovery_queries, get_brain_snapshot, get_feed_quotas, get_flow_persona,
-    get_onboarding_status, get_recommendation_events, import_brain, learn_from_search,
-    log_interaction, mark_not_interested, note_subscription, observe_channel_uploads, rank_videos,
-    record_feed_impressions, remove_preferred_topic, report_discovery_results,
+    bootstrap_from_subscriptions, complete_onboarding, end_watch_session, get_brain_snapshot,
+    get_flow_persona, get_onboarding_status, get_recommendation_events, import_brain,
+    learn_from_search, log_interaction, mark_not_interested, note_subscription,
+    observe_channel_uploads, record_feed_impressions, remove_preferred_topic,
     report_watch_progress, reset_brain, unblock_channel, unblock_topic,
 };
 use commands::shorts::{get_shorts_feed, load_more_shorts, reset_shorts_feed};
@@ -94,12 +93,12 @@ use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_details, get_channel_tab, get_comments, get_dearrow_override,
     get_live_chat, get_music_album, get_music_artist, get_music_charts, get_music_explore,
-    get_music_home, get_music_lyrics, get_music_related, get_personalized_music_recommendations,
-    get_playlist_details, get_post_comments, get_related_videos, get_return_youtube_dislike,
-    get_sabr_debug_state, get_search_suggestions, get_sponsorblock_segments, get_stream_info,
-    get_subscription_rotation_feed, get_subscription_rss_feed, get_trending_videos,
-    get_video_details, parse_subscription_export, refresh_music_home, resolve_channel_id,
-    search_music, search_videos, stream_subscription_rss_feed, submit_sponsorblock_segment,
+    get_music_home, get_music_lyrics, get_music_related, get_playlist_details, get_post_comments,
+    get_related_videos, get_return_youtube_dislike, get_sabr_debug_state, get_search_suggestions,
+    get_sponsorblock_segments, get_stream_info, get_subscription_rotation_feed,
+    get_subscription_rss_feed, get_trending_videos, get_video_details, parse_subscription_export,
+    refresh_music_home, resolve_channel_id, search_music, search_videos,
+    stream_subscription_rss_feed, submit_sponsorblock_segment,
 };
 use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
@@ -370,6 +369,7 @@ pub fn run() {
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
             app.manage(ShortsService::new());
+            app.manage(services::home_feed::HomeFeedService::new());
             app.manage(DownloadManager::default());
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
@@ -484,7 +484,6 @@ pub fn run() {
             create_download_collection,
             list_download_collections,
             delete_download_collections,
-            rank_videos,
             log_interaction,
             report_watch_progress,
             end_watch_session,
@@ -496,13 +495,16 @@ pub fn run() {
             observe_channel_uploads,
             mark_not_interested,
             record_feed_impressions,
+            commands::home_feed::home_feed_open,
+            commands::home_feed::home_feed_refresh,
+            commands::home_feed::home_feed_viewport,
+            commands::home_feed::home_feed_visible,
+            commands::home_feed::home_feed_retry_more,
+            commands::home_feed::home_feed_clear,
             complete_onboarding,
             get_onboarding_status,
-            generate_discovery_queries,
-            report_discovery_results,
             get_flow_persona,
             get_brain_snapshot,
-            get_feed_quotas,
             get_recommendation_events,
             unblock_topic,
             add_blocked_topic,
@@ -517,7 +519,6 @@ pub fn run() {
             get_return_youtube_dislike,
             get_music_home,
             refresh_music_home,
-            get_personalized_music_recommendations,
             get_subscription_rotation_feed,
             get_subscription_rss_feed,
             stream_subscription_rss_feed,

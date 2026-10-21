@@ -257,7 +257,9 @@ mod channel_tests {
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        upsert_watch_record(&pool, &record(Some("UC1"), 10)).await.unwrap();
+        upsert_watch_record(&pool, &record(Some("UC1"), 10))
+            .await
+            .unwrap();
         upsert_watch_record(&pool, &record(None, 20)).await.unwrap();
         let history = get_watch_history(&pool, 10, 0).await.unwrap();
         assert_eq!(history[0].channel_id.as_deref(), Some("UC1"));

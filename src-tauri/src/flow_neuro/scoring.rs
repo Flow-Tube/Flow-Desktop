@@ -116,7 +116,6 @@ pub const WATCH_HISTORY_MAX: usize = 2000;
 pub const WATCHED_THRESHOLD_SAMPLED: f32 = 0.15;
 pub const WATCHED_THRESHOLD_FULL: f32 = 0.85;
 
-pub const MUSIC_REWATCH_MAX_DURATION: u64 = 480;
 /// Longest a video can be and still count as a Short.
 pub const SHORT_MAX_SECONDS: u64 = 60;
 
@@ -261,6 +260,8 @@ pub struct UserBrain {
     pub cluster_rotation: HashMap<String, u64>,
     /// Discovery queries whose recent results were mostly already shown, by token key.
     pub stale_queries: HashMap<String, u64>,
+    /// Videos that opened a related lane lately, so the next loads open others.
+    pub recent_related_seeds: HashMap<String, u64>,
     pub topic_evidence: HashMap<String, TopicEvidence>,
     pub schema_version: i32,
     /// The viewer's language: its stop words apply to every title ([`crate::flow_neuro::language`]).
@@ -377,6 +378,7 @@ impl Default for UserBrain {
             recent_query_tokens: Vec::new(),
             cluster_rotation: HashMap::new(),
             stale_queries: HashMap::new(),
+            recent_related_seeds: HashMap::new(),
             topic_evidence: HashMap::new(),
             schema_version: SCHEMA_VERSION,
             language_profile: None,
@@ -859,26 +861,6 @@ pub fn calculate_cosine_similarity(user: &ContentVector, content: &ContentVector
 }
 
 // --- Vector Adjustment ---
-
-pub fn is_music_track(title: &str, channel: &str, duration_sec: Option<u64>) -> bool {
-    if duration_sec.unwrap_or(0) > MUSIC_REWATCH_MAX_DURATION {
-        return false;
-    }
-    let title_lower = title.to_lowercase();
-    let channel_lower = channel.to_lowercase();
-    [
-        "music",
-        "song",
-        "lyrics",
-        "remix",
-        "lofi",
-        "playlist",
-        "official video",
-        "official audio",
-    ]
-    .iter()
-    .any(|kw| title_lower.contains(kw) || channel_lower.contains(kw))
-}
 
 // --- Smart Title Similarity ---
 

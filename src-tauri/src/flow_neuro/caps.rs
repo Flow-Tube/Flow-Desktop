@@ -67,7 +67,7 @@ pub fn prune_feed_history(brain: &mut UserBrain, now_ms: u64) {
             .iter()
             .map(|(id, entry)| (id.clone(), entry.last_shown))
             .collect();
-        entries.sort_by(|a, b| b.1.cmp(&a.1));
+        entries.sort_by_key(|entry| std::cmp::Reverse(entry.1));
         let kept: HashSet<String> = entries
             .into_iter()
             .take(FEED_HISTORY_MAX)
@@ -146,6 +146,7 @@ pub fn apply_all(brain: &mut UserBrain, now_ms: u64) {
     cap_affinities(&mut brain.topic_affinities);
     cap_evidence(&mut brain.topic_evidence);
     cap_channel_profiles(brain);
+    crate::flow_neuro::shorts::cap_seen(brain);
     let picks = pick_keys(brain);
     brain.global_vector = cap_topics(&brain.global_vector, MAX_GLOBAL_TOPICS, &picks);
 }

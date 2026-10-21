@@ -262,6 +262,8 @@ pub struct UserBrain {
     pub stale_queries: HashMap<String, u64>,
     /// Videos that opened a related lane lately, so the next loads open others.
     pub recent_related_seeds: HashMap<String, u64>,
+    /// Shorts already on screen, by when; ranking holds them back for a week. Device-local.
+    pub seen_shorts_history: HashMap<String, u64>,
     pub topic_evidence: HashMap<String, TopicEvidence>,
     pub schema_version: i32,
     /// The viewer's language: its stop words apply to every title ([`crate::flow_neuro::language`]).
@@ -379,6 +381,7 @@ impl Default for UserBrain {
             cluster_rotation: HashMap::new(),
             stale_queries: HashMap::new(),
             recent_related_seeds: HashMap::new(),
+            seen_shorts_history: HashMap::new(),
             topic_evidence: HashMap::new(),
             schema_version: SCHEMA_VERSION,
             language_profile: None,

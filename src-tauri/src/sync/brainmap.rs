@@ -9,7 +9,7 @@
 //!
 //! Device-local/derived fields that are intentionally NOT synced (and are taken from `base` when
 //! reconstructing): `consecutive_skips`, `last_persona`, `persona_stability`,
-//! `recent_query_tokens`, `cluster_rotation`, `stale_queries`, `recent_related_seeds`, `format_affinity`,
+//! `recent_query_tokens`, `cluster_rotation`, `stale_queries`, `recent_related_seeds`, `seen_shorts_history`, `format_affinity`,
 //! `category_affinity`, `last_rotation_decay`, the language profile and key language with their
 //! votes, the display forms, the recent taste and time-bucket counts, and per-`ContentVector`
 //! `topic_confidence` / `anchor_topics`.
@@ -374,6 +374,7 @@ pub fn merged_flow_to_userbrain(m: &MergedFlowNeuroBrain, base: &UserBrain) -> U
         cluster_rotation: base.cluster_rotation.clone(),
         stale_queries: base.stale_queries.clone(),
         recent_related_seeds: base.recent_related_seeds.clone(),
+        seen_shorts_history: base.seen_shorts_history.clone(),
         topic_evidence: m
             .lww_maps
             .topic_evidence

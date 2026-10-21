@@ -15,6 +15,7 @@ use crate::flow_neuro::scoring::{
     COLD_START_THRESHOLD, ContentVector, FeedEntry, UserBrain, calculate_cosine_similarity,
     strip_domain_tag,
 };
+use crate::flow_neuro::shorts::seen_penalty;
 
 const SUBSCRIPTION_BOOST: f64 = 0.15;
 /// The reel feed has its own subscription lane; more than this made every page one.
@@ -222,6 +223,9 @@ pub fn score_candidate(p: &ScoringParams, c: &Candidate) -> f64 {
     );
     total += momentum_boost(vector, p.momentum, personality);
     total += exploration_bonus(vector, brain, p.explore_weight);
+    if c.is_short {
+        total *= seen_penalty(brain.seen_shorts_history.get(c.video_id).copied(), p.now_ms);
+    }
     total
 }
 

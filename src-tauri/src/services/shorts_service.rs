@@ -31,6 +31,10 @@ const SHORTS_PER_SEARCH: usize = 12;
 const MAX_SUB_CHANNELS: usize = 6;
 /// Upper bound (seconds) for a discovery-search result to count as a Short.
 const SHORTS_DISCOVERY_MAX_DURATION: u64 = 180;
+/// Reels kept from the chain one liked or watched-through Short opens, per gather.
+const SHORTS_PER_SEED_CHAIN: usize = 10;
+/// Seeds used lately rest while enough others qualify.
+const SEED_COOLDOWN_MAX: usize = 12;
 /// Session de-dup memory cap (prevents re-showing within a session).
 const MAX_RECENTLY_SHOWN: usize = 300;
 /// Reel browse sometimes needs a little longer, but should not dominate startup.
@@ -100,6 +104,8 @@ impl GatherSpec {
 /// get enforced. Ranked overflow is buffered so `load_more` serves instantly.
 pub struct ShortsService {
     recently_shown: Mutex<HashSet<String>>,
+    /// Seeds whose reel chains opened lately, oldest first.
+    recent_seeds: Mutex<VecDeque<String>>,
     buffer: Mutex<VecDeque<ShortItem>>,
     last_continuation: Mutex<Option<String>>,
     // Serializes feed operations so overlapping calls (e.g. React StrictMode's
@@ -112,6 +118,7 @@ impl ShortsService {
     pub fn new() -> Self {
         Self {
             recently_shown: Mutex::new(HashSet::new()),
+            recent_seeds: Mutex::new(VecDeque::new()),
             buffer: Mutex::new(VecDeque::new()),
             last_continuation: Mutex::new(None),
             op_lock: tokio::sync::Mutex::new(()),
@@ -233,6 +240,7 @@ impl ShortsService {
         user_subs: &[String],
         region: Option<String>,
     ) -> AppResult<(Vec<ShortItem>, Option<String>)> {
+        let seed_region = region.clone();
         let reel_fut = timeout(REEL_LANE_TIMEOUT, async {
             if spec.include_reel {
                 yt.get_shorts_sequence(
@@ -252,6 +260,14 @@ impl ShortsService {
                 Vec::new()
             }
         });
+        // Discovery passes also follow one Short the viewer liked or watched through.
+        let seed_fut = timeout(REEL_LANE_TIMEOUT, async {
+            if spec.include_discovery {
+                self.gather_seed_chain(yt, rec, seed_region).await
+            } else {
+                Vec::new()
+            }
+        });
         let subs_fut = timeout(SUBS_LANE_TIMEOUT, async {
             if spec.include_subs {
                 gather_subscription_shorts(yt, user_subs).await
@@ -260,7 +276,12 @@ impl ShortsService {
             }
         });
 
-        let (reel_res, discovery_res, subs_res) = tokio::join!(reel_fut, discovery_fut, subs_fut);
+        let (reel_res, discovery_res, subs_res, seed_res) =
+            tokio::join!(reel_fut, discovery_fut, subs_fut, seed_fut);
+        let seeded = seed_res.unwrap_or_else(|_| {
+            tracing::warn!("[shorts] seed chain timed out");
+            Vec::new()
+        });
 
         let reel_res = reel_res.unwrap_or_else(|_| {
             tracing::warn!("[shorts] reel lane timed out");
@@ -279,10 +300,11 @@ impl ShortsService {
             tracing::warn!("[shorts] reel lane error: {}", error);
         }
         tracing::info!(
-            "[shorts] gather lanes: reel={} discovery={} subs={}",
+            "[shorts] gather lanes: reel={} discovery={} subs={} seeded={}",
             reel_res.as_ref().map(|feed| feed.items.len()).unwrap_or(0),
             discovery.len(),
             subs.len(),
+            seeded.len(),
         );
 
         // Reel items carry rich overlay metadata (avatar, likes); keep it so the
@@ -297,6 +319,10 @@ impl ShortsService {
                 candidates.push(item.to_video_summary());
                 rich.insert(item.id.clone(), item);
             }
+        }
+        for item in seeded {
+            candidates.push(item.to_video_summary());
+            rich.entry(item.id.clone()).or_insert(item);
         }
         candidates.extend(discovery);
         candidates.extend(subs);
@@ -358,6 +384,42 @@ impl ShortsService {
         });
 
         Ok((items, continuation))
+    }
+
+    /// The reel chain of the next Short the viewer liked or watched through, if any qualifies.
+    async fn gather_seed_chain(
+        &self,
+        yt: &YoutubeService,
+        rec: &RecommendationService,
+        region: Option<String>,
+    ) -> Vec<ShortItem> {
+        let cooled: HashSet<String> = self.recent_seeds.lock().unwrap().iter().cloned().collect();
+        let Some(seed) = rec.short_seeds(1, &cooled).await.into_iter().next() else {
+            return Vec::new();
+        };
+        {
+            let mut recent = self.recent_seeds.lock().unwrap();
+            recent.retain(|id| id != &seed);
+            recent.push_back(seed.clone());
+            while recent.len() > SEED_COOLDOWN_MAX {
+                recent.pop_front();
+            }
+        }
+        match yt
+            .get_shorts_sequence(Some(encode_reel_seed_params(&seed)), None, region)
+            .await
+        {
+            Ok(feed) => feed
+                .items
+                .into_iter()
+                .filter(|item| item.id != seed)
+                .take(SHORTS_PER_SEED_CHAIN)
+                .collect(),
+            Err(error) => {
+                tracing::warn!("[shorts] seed chain {seed} failed: {error}");
+                Vec::new()
+            }
+        }
     }
 
     /// Remove blank/duplicate ids and anything already shown this session.

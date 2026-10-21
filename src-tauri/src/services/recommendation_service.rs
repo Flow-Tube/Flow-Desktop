@@ -269,8 +269,8 @@ impl RecommendationService {
             .await
     }
 
-    /// Shorts ranking: keeps taste ordering and explicit blocks, but skips channel-
-    /// level suppression so the high-volume feed isn't starved
+    /// Shorts ranking: against the Shorts taste, with Shorts seen this week held back and
+    /// channel-level suppression skipped so the high-volume feed isn't starved.
     pub async fn rank_shorts_candidates(
         &self,
         candidates: Vec<VideoSummary>,
@@ -301,13 +301,13 @@ impl RecommendationService {
         candidates: Vec<VideoSummary>,
         user_subs: HashSet<String>,
         min_relevance: f64,
-        lenient: bool,
+        shorts_feed: bool,
     ) -> AppResult<Vec<VideoSummary>> {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
         Ok(self
-            .with_rank_context(&user_subs, min_relevance, lenient, |ctx| {
+            .with_rank_context(&user_subs, min_relevance, shorts_feed, |ctx| {
                 rank(ctx, candidates)
             })
             .await)
@@ -318,7 +318,7 @@ impl RecommendationService {
         &self,
         user_subs: &HashSet<String>,
         min_relevance: f64,
-        lenient: bool,
+        shorts_feed: bool,
         f: impl FnOnce(&RankContext) -> R,
     ) -> R {
         self.reset_idle_session();
@@ -337,7 +337,7 @@ impl RecommendationService {
             user_subs,
             now_ms,
             min_relevance,
-            keep_suppressed_channels: lenient,
+            shorts_feed,
             session: SessionState {
                 topics: &session_topics,
                 video_count: session_video_count,
@@ -646,7 +646,11 @@ impl RecommendationService {
             }
 
             if cache.len() > IMPRESSION_CACHE_MAX {
-                if let Some(oldest_key) = cache.keys().next().cloned() {
+                if let Some(oldest_key) = cache
+                    .iter()
+                    .min_by_key(|(_, (_, shown_at))| *shown_at)
+                    .map(|(id, _)| id.clone())
+                {
                     cache.remove(&oldest_key);
                 }
             }

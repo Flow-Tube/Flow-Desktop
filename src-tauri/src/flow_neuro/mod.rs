@@ -34,6 +34,7 @@ pub(crate) mod ranker;
 pub(crate) mod rejections;
 pub(crate) mod scoring;
 pub(crate) mod search_learning;
+pub(crate) mod shorts;
 pub(crate) mod side_stores;
 pub(crate) mod signals;
 pub(crate) mod specificity;

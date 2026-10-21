@@ -7,6 +7,7 @@ import {
   extractFlowNeuroBrainCandidate,
   isFlowNeuroBrainCandidate,
 } from "../../lib/flowNeuroImport";
+import { getString } from "../../lib/i18n/index";
 
 interface ProfileDataProps {
   brain: UserBrain;
@@ -39,10 +40,10 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
       downloadAnchor.click();
       downloadAnchor.remove();
 
-      showNotification("success", "Brain profile exported.");
+      showNotification("success", getString("persona_export_success"));
     } catch (e) {
       console.error(e);
-      showNotification("error", "Export failed.");
+      showNotification("error", getString("persona_export_failed"));
     }
   };
 
@@ -59,14 +60,14 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
         const brainCandidate = extractFlowNeuroBrainCandidate(parsed);
 
         if (!brainCandidate || !isFlowNeuroBrainCandidate(brainCandidate)) {
-          throw new Error("Invalid FlowNeuro brain schema.");
+          throw new Error(getString("persona_import_invalid"));
         }
 
         await onImport(convertFlowNeuroBrainData(brainCandidate));
-        showNotification("success", "Brain profile imported.");
+        showNotification("success", getString("persona_import_success"));
       } catch (err: any) {
         console.error("Brain import parse failed:", err);
-        showNotification("error", err?.message || "Import failed.");
+        showNotification("error", err?.message || getString("persona_import_failed"));
       } finally {
         setIsImporting(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -74,7 +75,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
     };
 
     reader.onerror = () => {
-      showNotification("error", "Could not read backup file.");
+      showNotification("error", getString("persona_import_read_failed"));
       setIsImporting(false);
     };
 
@@ -86,9 +87,9 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
     try {
       await onReset();
       setShowConfirmReset(false);
-      showNotification("success", "Recommendation engine reset.");
+      showNotification("success", getString("persona_reset_success"));
     } catch (e) {
-      showNotification("error", "Reset failed.");
+      showNotification("error", getString("persona_reset_failed"));
     } finally {
       setIsResetting(false);
     }
@@ -97,9 +98,9 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
   return (
     <section className="w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
       <div className="flex flex-col gap-1">
-        <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">Neuro Data Sync</h3>
+        <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">{getString("persona_data_title")}</h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          Backup, restore, or reset the local recommendation profile.
+          {getString("persona_data_desc")}
         </p>
       </div>
 
@@ -123,8 +124,8 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
         >
           <Download className="h-4 w-4 text-[var(--color-on-surface-variant)]" />
           <span className="flex min-w-0 flex-col">
-            <span className="text-sm font-medium">Export Brain</span>
-            <span className="text-xs text-[var(--color-on-surface-variant)]">Save profile as JSON</span>
+            <span className="text-sm font-medium">{getString("persona_export")}</span>
+            <span className="text-xs text-[var(--color-on-surface-variant)]">{getString("persona_export_desc")}</span>
           </span>
         </button>
 
@@ -139,8 +140,8 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
             <Upload className="h-4 w-4 text-[var(--color-on-surface-variant)]" />
           )}
           <span className="flex min-w-0 flex-col">
-            <span className="text-sm font-medium">{isImporting ? "Importing Brain" : "Import Brain"}</span>
-            <span className="text-xs text-[var(--color-on-surface-variant)]">Restore backup file</span>
+            <span className="text-sm font-medium">{getString(isImporting ? "persona_importing" : "persona_import")}</span>
+            <span className="text-xs text-[var(--color-on-surface-variant)]">{getString("persona_import_desc")}</span>
           </span>
           <input ref={fileInputRef} type="file" onChange={handleFileChange} accept=".json" className="hidden" />
         </button>
@@ -151,8 +152,8 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
         >
           <RotateCcw className="h-4 w-4" />
           <span className="flex min-w-0 flex-col">
-            <span className="text-sm font-medium">Reset Brain</span>
-            <span className="text-xs text-chrome-red-400/70">Delete recommendation memory</span>
+            <span className="text-sm font-medium">{getString("persona_reset")}</span>
+            <span className="text-xs text-chrome-red-400/70">{getString("persona_reset_desc")}</span>
           </span>
         </button>
       </div>
@@ -165,9 +166,9 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
                 <AlertTriangle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">Reset Brain?</h3>
+                <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">{getString("persona_reset_confirm_title")}</h3>
                 <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                  This permanently deletes pacing, topic, channel, and blocklist signals.
+                  {getString("persona_reset_confirm_body")}
                 </p>
               </div>
             </div>
@@ -178,7 +179,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
                 disabled={isResetting}
                 className="rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-2 text-sm text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)] disabled:opacity-50"
               >
-                Keep Profile
+                {getString("persona_reset_keep")}
               </button>
               <button
                 onClick={handleResetConfirm}
@@ -186,7 +187,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
                 className="flex items-center gap-2 rounded-full border border-chrome-red-900/50 bg-chrome-red-950/30 px-4 py-2 text-sm text-chrome-red-400 transition-colors hover:bg-chrome-red-950/40 disabled:opacity-50"
               >
                 {isResetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                Reset
+                {getString("persona_reset_confirm")}
               </button>
             </div>
           </div>

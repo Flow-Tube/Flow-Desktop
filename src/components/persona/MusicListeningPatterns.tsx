@@ -1,5 +1,6 @@
 import { getString } from "../../lib/i18n/index";
 import type { MusicTasteProfile } from "../../types/music";
+import { timeBucketLabel } from "./TimePatterns";
 
 interface MusicListeningPatternsProps {
   profile: MusicTasteProfile;
@@ -20,10 +21,6 @@ function currentBucket(): string {
           ? "Evening"
           : "Night";
   return `${isWeekend ? "Weekend" : "Weekday"}${period}`;
-}
-
-function humanize(bucket: string): string {
-  return bucket.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
 export function MusicListeningPatterns({ profile }: MusicListeningPatternsProps) {
@@ -60,7 +57,7 @@ export function MusicListeningPatterns({ profile }: MusicListeningPatternsProps)
                   <span
                     className={`truncate ${isActive ? "font-semibold text-[var(--color-primary)]" : "text-[var(--color-on-surface)]"}`}
                   >
-                    {humanize(bucket.bucket)}
+                    {timeBucketLabel(bucket.bucket)}
                     {topGenre ? (
                       <span className="ml-2 text-[var(--color-on-surface-variant)]">· {topGenre}</span>
                     ) : null}

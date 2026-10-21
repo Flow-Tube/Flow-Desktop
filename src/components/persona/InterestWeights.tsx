@@ -1,5 +1,6 @@
 import { interestTopics, type TopicEvidence, type UserBrain } from "../../lib/api/recommendation";
 import { topicLabel } from "../../lib/topicLabel";
+import { getString } from "../../lib/i18n/index";
 
 interface InterestWeightsProps {
   brain: UserBrain;
@@ -29,10 +30,10 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
     <section className="flex h-full w-full flex-col rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
-          Semantic Interest Topology
+          {getString("persona_interests_title")}
         </h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          Topic weights and the evidence signals used by the local recommendation model.
+          {getString("persona_interests_desc")}
         </p>
       </div>
 
@@ -40,10 +41,10 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
         <div className="mt-6">
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-              Distribution Ratio
+              {getString("persona_distribution")}
             </p>
             <p className="font-mono text-xs text-[var(--color-on-surface-variant)]">
-              top {segmentTopics.length}
+              {getString("persona_top_count", segmentTopics.length)}
             </p>
           </div>
 
@@ -82,13 +83,13 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
 
       <div className="mt-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-          Evidence Entries
+          {getString("persona_evidence_entries")}
         </p>
 
         {sortedTopics.length === 0 ? (
           <div className="mt-3 flex h-24 items-center justify-center rounded-xl border border-dashed border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]">
             <span className="text-sm text-[var(--color-on-surface-variant)]">
-              No topic evidence has been indexed yet.
+              {getString("persona_evidence_empty")}
             </span>
           </div>
         ) : (
@@ -97,13 +98,13 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
               <thead className="sticky top-0 bg-[var(--color-surface-container-high)]">
                 <tr className="border-b border-[var(--color-outline-variant)]">
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                    Topic Name
+                    {getString("persona_col_topic")}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                    Confidence Score
+                    {getString("persona_col_confidence")}
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                    Watch Loops
+                    {getString("persona_col_watch_loops")}
                   </th>
                 </tr>
               </thead>
@@ -119,7 +120,7 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
                         <div className="flex min-w-0 flex-col">
                           <span className="truncate font-medium">{topicLabel(brain, topic)}</span>
                           <span className="mt-0.5 text-xs text-[var(--color-on-surface-variant)]">
-                            Model weight {formatPercent(weight)}
+                            {getString("persona_model_weight", formatPercent(weight))}
                           </span>
                         </div>
                       </td>

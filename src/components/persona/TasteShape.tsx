@@ -8,6 +8,8 @@ import {
   Tooltip,
 } from "recharts";
 import { interestTopics, type UserBrain } from "../../lib/api/recommendation";
+import { getString } from "../../lib/i18n/index";
+import { timeBucketLabel } from "./TimePatterns";
 
 interface TasteShapeProps {
   brain: UserBrain;
@@ -59,36 +61,36 @@ export function TasteShape({ brain }: TasteShapeProps) {
   const metrics: VectorMetric[] = [
     {
       key: "pacing",
-      label: "Pacing",
-      helper: "Calm to high velocity content",
+      label: getString("persona_metric_pacing"),
+      helper: getString("persona_metric_pacing_desc"),
       global: brain.global_vector.pacing ?? 0.5,
       context: currentVector.pacing ?? 0.5,
     },
     {
       key: "complexity",
-      label: "Complexity",
-      helper: "Casual to technical material",
+      label: getString("persona_metric_complexity"),
+      helper: getString("persona_metric_complexity_desc"),
       global: brain.global_vector.complexity ?? 0.5,
       context: currentVector.complexity ?? 0.5,
     },
     {
       key: "duration",
-      label: "Duration",
-      helper: "Short sessions to long form",
+      label: getString("persona_metric_duration"),
+      helper: getString("persona_metric_duration_desc"),
       global: brain.global_vector.duration ?? 0.5,
       context: currentVector.duration ?? 0.5,
     },
     {
       key: "live",
-      label: "Live Affinity",
-      helper: "Recorded to livestream",
+      label: getString("persona_metric_live"),
+      helper: getString("persona_metric_live_desc"),
       global: brain.global_vector.is_live ?? 0,
       context: currentVector.is_live ?? 0,
     },
     {
       key: "breadth",
-      label: "Topic Breadth",
-      helper: "Narrow focus to broad exploration",
+      label: getString("persona_metric_breadth"),
+      helper: getString("persona_metric_breadth_desc"),
       global: calculateBreadth(interestTopics(brain.global_vector.topics)),
       context: calculateBreadth(interestTopics(currentVector.topics)),
     },
@@ -103,9 +105,9 @@ export function TasteShape({ brain }: TasteShapeProps) {
   return (
     <section className="flex h-full w-full flex-col rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
       <div className="flex flex-col gap-1">
-        <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">Taste Shape Radar</h3>
+        <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">{getString("persona_taste_shape_title")}</h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          Global preference shape compared with the active time context, {currentBucket}.
+          {getString("persona_taste_shape_desc", timeBucketLabel(currentBucket))}
         </p>
       </div>
 
@@ -125,7 +127,7 @@ export function TasteShape({ brain }: TasteShapeProps) {
               tickCount={4}
             />
             <Radar
-              name="Global"
+              name={getString("persona_global")}
               dataKey="Global"
               stroke="var(--color-primary)"
               strokeWidth={1.5}
@@ -134,7 +136,7 @@ export function TasteShape({ brain }: TasteShapeProps) {
               dot={false}
             />
             <Radar
-              name="Current context"
+              name={getString("persona_current_context")}
               dataKey="Context"
               stroke="var(--color-on-surface-variant)"
               strokeWidth={1}
@@ -161,11 +163,11 @@ export function TasteShape({ brain }: TasteShapeProps) {
       <div className="mt-4 flex items-center gap-4 text-xs text-[var(--color-on-surface-variant)]">
         <span className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-          Global
+          {getString("persona_global")}
         </span>
         <span className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-[var(--color-on-surface-variant)]" />
-          Current context
+          {getString("persona_current_context")}
         </span>
       </div>
 
@@ -189,7 +191,7 @@ export function TasteShape({ brain }: TasteShapeProps) {
             </div>
             <div className="w-16 text-right">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
-                Context
+                {getString("persona_context")}
               </p>
               <p className="mt-1 font-mono text-sm text-[var(--color-on-surface)]">
                 {toPercent(metric.context)}%

@@ -10,6 +10,7 @@ import {
   Tv,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { getString } from "../../lib/i18n/index";
 
 interface LearningStatsProps {
   brain: UserBrain;
@@ -28,44 +29,44 @@ function formatStat(value: number) {
 export function LearningStats({ brain }: LearningStatsProps) {
   const stats: StatItem[] = [
     {
-      label: "Global Interactions",
+      label: getString("persona_stat_interactions"),
       value: brain.total_interactions || 0,
       icon: BarChart2,
     },
     {
-      label: "Semantic Topics",
+      label: getString("persona_stat_topics"),
       value: Object.keys(brain.topic_evidence || {}).length,
       icon: BookOpen,
     },
     {
-      label: "Evidence Profiles",
+      label: getString("persona_stat_evidence"),
       value: Object.values(brain.topic_evidence || {}).filter((topic) => topic.positive_score >= 1).length,
       icon: Layers,
     },
     {
-      label: "Channel Memories",
+      label: getString("persona_stat_channels"),
       value: Object.keys(brain.channel_scores || {}).length,
       icon: Tv,
     },
     {
-      label: "Watch Sessions",
+      label: getString("persona_stat_sessions"),
       value: Object.keys(brain.watch_history_map || {}).length,
       icon: History,
     },
     {
-      label: "Feed Impressions",
+      label: getString("persona_stat_impressions"),
       value: Object.keys(brain.feed_history || {}).length,
       icon: FileText,
     },
     {
-      label: "Suppression Locks",
+      label: getString("persona_stat_suppressions"),
       value:
         Object.keys(brain.suppressed_video_ids || {}).length +
         Object.keys(brain.suppressed_channels || {}).length,
       icon: ShieldAlert,
     },
     {
-      label: "Rejection Patterns",
+      label: getString("persona_stat_rejections"),
       value: Object.keys(brain.rejection_patterns || {}).length,
       icon: ThumbsDown,
     },

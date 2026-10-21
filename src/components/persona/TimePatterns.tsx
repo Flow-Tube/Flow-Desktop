@@ -2,6 +2,7 @@ import type { ContentVector, UserBrain } from "../../lib/api/recommendation";
 import { topicLabel } from "../../lib/topicLabel";
 import { Activity, Brain, Clock, Moon, Sun, Sunrise, Sunset } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { getString, type StringKey } from "../../lib/i18n/index";
 
 interface TimePatternsProps {
   brain: UserBrain;
@@ -9,45 +10,61 @@ interface TimePatternsProps {
 
 interface Archetype {
   id: string;
-  label: string;
-  time: string;
+  label: StringKey;
+  time: StringKey;
   buckets: string[];
   icon: LucideIcon;
+}
+
+const TIME_BUCKET_LABELS: Record<string, StringKey> = {
+  WeekdayMorning: "persona_bucket_weekday_morning",
+  WeekdayAfternoon: "persona_bucket_weekday_afternoon",
+  WeekdayEvening: "persona_bucket_weekday_evening",
+  WeekdayNight: "persona_bucket_weekday_night",
+  WeekendMorning: "persona_bucket_weekend_morning",
+  WeekendAfternoon: "persona_bucket_weekend_afternoon",
+  WeekendEvening: "persona_bucket_weekend_evening",
+  WeekendNight: "persona_bucket_weekend_night",
+};
+
+export function timeBucketLabel(bucket: string): string {
+  const key = TIME_BUCKET_LABELS[bucket];
+  return key ? getString(key) : bucket;
 }
 
 const ARCHETYPES: Archetype[] = [
   {
     id: "morning",
-    label: "Morning Focus",
-    time: "5 AM - 12 PM",
+    label: "persona_archetype_morning",
+    time: "persona_archetype_morning_time",
     buckets: ["WeekdayMorning", "WeekendMorning"],
     icon: Sunrise,
   },
   {
     id: "afternoon",
-    label: "Afternoon Baseline",
-    time: "12 PM - 5 PM",
+    label: "persona_archetype_afternoon",
+    time: "persona_archetype_afternoon_time",
     buckets: ["WeekdayAfternoon", "WeekendAfternoon"],
     icon: Sun,
   },
   {
     id: "evening",
-    label: "Evening Lean",
-    time: "5 PM - 10 PM",
+    label: "persona_archetype_evening",
+    time: "persona_archetype_evening_time",
     buckets: ["WeekdayEvening", "WeekendEvening"],
     icon: Sunset,
   },
   {
     id: "night",
-    label: "Night Mode",
-    time: "10 PM - 5 AM",
+    label: "persona_archetype_night",
+    time: "persona_archetype_night_time",
     buckets: ["WeekdayNight", "WeekendNight"],
     icon: Moon,
   },
   {
     id: "weekend",
-    label: "Weekend Drift",
-    time: "Sat - Sun",
+    label: "persona_archetype_weekend",
+    time: "persona_archetype_weekend_time",
     buckets: ["WeekendMorning", "WeekendAfternoon", "WeekendEvening", "WeekendNight"],
     icon: Clock,
   },
@@ -114,10 +131,10 @@ export function TimePatterns({ brain }: TimePatternsProps) {
     <section className="w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
-          Temporal Taste Archetypes
+          {getString("persona_time_title")}
         </h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          Five time-based recommendation states summarized from weekly listening and viewing patterns.
+          {getString("persona_time_desc")}
         </p>
       </div>
 
@@ -144,13 +161,13 @@ export function TimePatterns({ brain }: TimePatternsProps) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-[var(--color-on-surface)]">
                       <Icon className="h-4 w-4 text-[var(--color-on-surface-variant)]" />
-                      <h4 className="truncate text-sm font-semibold">{archetype.label}</h4>
+                      <h4 className="truncate text-sm font-semibold">{getString(archetype.label)}</h4>
                     </div>
-                    <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{archetype.time}</p>
+                    <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{getString(archetype.time)}</p>
                   </div>
                   {isActive && (
                     <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-primary)]">
-                      Active
+                      {getString("persona_active")}
                     </span>
                   )}
                 </div>
@@ -159,28 +176,28 @@ export function TimePatterns({ brain }: TimePatternsProps) {
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
                       <Activity className="h-3.5 w-3.5" />
-                      Pacing
+                      {getString("persona_metric_pacing")}
                     </span>
                     <span className="font-mono text-[var(--color-on-surface)]">{toPercent(vector.pacing)}%</span>
                   </div>
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
                       <Brain className="h-3.5 w-3.5" />
-                      Complexity
+                      {getString("persona_metric_complexity")}
                     </span>
                     <span className="font-mono text-[var(--color-on-surface)]">{toPercent(vector.complexity)}%</span>
                   </div>
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
                       <Clock className="h-3.5 w-3.5" />
-                      Duration
+                      {getString("persona_metric_duration")}
                     </span>
                     <span className="font-mono text-[var(--color-on-surface)]">{toPercent(vector.duration)}%</span>
                   </div>
                 </div>
 
                 <div className="mt-5 min-h-9 text-xs text-[var(--color-on-surface-variant)]">
-                  {topTopics.length > 0 ? topTopics.join(" / ") : "Cold start context"}
+                  {topTopics.length > 0 ? topTopics.join(" / ") : getString("persona_cold_start")}
                 </div>
               </article>
             );

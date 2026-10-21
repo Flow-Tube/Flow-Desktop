@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { UserBrain } from "../../lib/api/recommendation";
 import { getChannelDetails } from "../../lib/api/youtube";
+import { getString } from "../../lib/i18n/index";
 
 interface ChannelMemoryProps {
   brain: UserBrain;
@@ -51,10 +52,10 @@ export function ChannelMemory({ brain }: ChannelMemoryProps) {
     <section className="h-full w-full rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-6">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-[var(--color-on-surface)]">
-          Creator Channel Memory
+          {getString("persona_channels_title")}
         </h3>
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          Channel affinity scores retained by the local recommendation model.
+          {getString("persona_channels_desc")}
         </p>
       </div>
 
@@ -62,13 +63,13 @@ export function ChannelMemory({ brain }: ChannelMemoryProps) {
         {sortedChannels.length === 0 ? (
           <div className="flex h-24 items-center justify-center rounded-xl border border-dashed border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]">
             <span className="text-sm text-[var(--color-on-surface-variant)]">
-              No channel affinities have been logged yet.
+              {getString("persona_channels_empty")}
             </span>
           </div>
         ) : (
           <div className="divide-y divide-[var(--color-outline-variant)]">
             {sortedChannels.map(([id, score]) => {
-              const name = channelNames[id] || (id.startsWith("UC") ? `Channel ${id.slice(0, 8)}` : id);
+              const name = channelNames[id] || (id.startsWith("UC") ? getString("persona_channel_fallback", id.slice(0, 8)) : id);
               const scorePct = Math.round(score * 100);
 
               return (

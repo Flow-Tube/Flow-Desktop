@@ -1,6 +1,14 @@
 use crate::models::channel::ShortVideoSummary;
 use crate::models::video::{RelatedContentItem, VideoSummary};
-use serde_json::Value;
+use serde_json::{Value, json};
+
+/// Body of a video watch-next (`next`) request.
+///
+/// Without the content-check flags, a video behind a content warning comes back
+/// with no `secondaryResults` at all, so its related list and autoplay are empty.
+pub(crate) fn watch_next_body(video_id: &str) -> Value {
+    json!({ "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true })
+}
 
 pub fn detect_video_is_live(video: &Value) -> bool {
     if let Some(badges) = video["badges"].as_array() {

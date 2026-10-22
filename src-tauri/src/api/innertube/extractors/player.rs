@@ -6,6 +6,7 @@ use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFligh
 use crate::api::innertube::core::utils::{
     collect_related_content_items, dedupe_related_content_items,
     extract_channel_id_from_video_renderer, extract_text_from_value, thumbnail_url_from_array,
+    watch_next_body,
 };
 use crate::errors::{AppError, AppResult};
 use crate::models::video::{
@@ -1756,9 +1757,7 @@ impl InnertubeClient {
         let mut view_count_text = None;
         let mut published_text = None;
 
-        let mut next_payload = serde_json::json!({
-            "videoId": &id
-        });
+        let mut next_payload = watch_next_body(&id);
         // Likes, views and the publish date are optional; a deep link waits on
         // this whole call before it can start playback, so it is bounded and
         // kept off the connection the feed fan-out saturates.
@@ -1920,9 +1919,7 @@ impl InnertubeClient {
             return Err(AppError::Validation("Video ID cannot be empty".into()));
         }
 
-        let mut payload = serde_json::json!({
-            "videoId": video_id_trimmed
-        });
+        let mut payload = watch_next_body(video_id_trimmed);
 
         let next_res = self
             .post_innertube("next", &clients::WEB, &mut payload)

@@ -3,6 +3,7 @@ use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
+use crate::api::innertube::core::utils::watch_next_body;
 use crate::errors::AppResult;
 use crate::models::live_chat::{LiveChatMessage, LiveChatResponse, LiveChatSegment};
 
@@ -198,7 +199,7 @@ fn parse_live_chat_page(res: &Value) -> (Vec<LiveChatMessage>, Option<String>, u
 
 impl InnertubeClient {
     async fn get_live_chat_seed(&self, video_id: &str) -> AppResult<(Option<String>, bool)> {
-        let mut payload = serde_json::json!({ "videoId": video_id });
+        let mut payload = watch_next_body(video_id);
         let res = self
             .post_innertube("next", &clients::WEB, &mut payload)
             .await?;

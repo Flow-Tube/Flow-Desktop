@@ -6,7 +6,7 @@ use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     extract_text_from_value, normalize_youtube_image_url, parse_mixed_number_word_to_long,
-    thumbnail_url_from_array,
+    thumbnail_url_from_array, watch_next_body,
 };
 use crate::errors::{AppError, AppResult};
 use crate::models::comment::{Comment, CommentsResponse};
@@ -523,9 +523,7 @@ impl InnertubeClient {
                 "continuation": token
             })
         } else {
-            serde_json::json!({
-                "videoId": video_id_trimmed
-            })
+            watch_next_body(video_id_trimmed)
         };
 
         debug!(video_id = %video_id_trimmed, has_page_token = page_token.is_some(), "[get_comments] Starting comments fetch");

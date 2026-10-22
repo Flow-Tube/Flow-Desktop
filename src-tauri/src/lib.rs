@@ -310,6 +310,18 @@ pub fn run() {
                 ))
             })?;
 
+            let remote_decoder_setting = tauri::async_runtime::block_on(db::settings::get_setting(
+                &pool,
+                api::innertube::core::remote_decoder::SETTING_KEY,
+            ))
+            .ok()
+            .flatten();
+            api::innertube::core::remote_decoder::set_enabled(
+                api::innertube::core::remote_decoder::enabled_from_setting(
+                    remote_decoder_setting.as_deref(),
+                ),
+            );
+
             // Manage database pool
             app.manage(pool.clone());
             app.manage(MusicService::new(extractor, pool.clone()));

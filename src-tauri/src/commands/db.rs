@@ -1,3 +1,4 @@
+use crate::api::innertube::core::remote_decoder;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
 use crate::errors::ErrorResponse;
@@ -86,7 +87,11 @@ pub async fn set_setting(
     note_sync_failure(local_edits::record_blob_write(&pool, &key, &value).await);
     settings::set_setting(&pool, &key, &value)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    if key == remote_decoder::SETTING_KEY {
+        remote_decoder::set_enabled(remote_decoder::enabled_from_setting(Some(&value)));
+    }
+    Ok(())
 }
 
 /// Sync bookkeeping never blocks the user's own change; the worst case is that this one edit

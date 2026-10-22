@@ -77,6 +77,9 @@ pub struct YouTubeClient {
     /// Whether the User-Agent is repeated inside `context.client`. Only MWEB does this;
     /// sending it for any other client is a fingerprint inconsistency.
     pub send_ua_in_context: bool,
+    /// Its formats are all signed, solvable only by the remote decoder, whose
+    /// player's signature timestamp the request must carry.
+    pub remote_signed: bool,
 }
 
 impl YouTubeClient {
@@ -152,6 +155,12 @@ impl YouTubeClient {
         body
     }
 
+    /// A web client served through SABR with an attestation token on its request.
+    #[must_use]
+    pub fn is_web_sabr(&self) -> bool {
+        self.accepts_web_po_token() && self.use_web_po_tokens
+    }
+
     /// Whether a BotGuard-minted token is valid for this client.
     #[must_use]
     pub fn accepts_web_po_token(&self) -> bool {
@@ -205,6 +214,7 @@ pub const VISIONOS: YouTubeClient = YouTubeClient {
     platform: None,
     original_url: None,
     send_ua_in_context: false,
+    remote_signed: false,
 };
 
 pub const ANDROID_VR: YouTubeClient = YouTubeClient {
@@ -224,6 +234,7 @@ pub const ANDROID_VR: YouTubeClient = YouTubeClient {
     platform: None,
     original_url: None,
     send_ua_in_context: false,
+    remote_signed: false,
 };
 
 /// Newest VR build, leading the gated fallbacks the way it does on Android:
@@ -267,6 +278,7 @@ pub const ANDROID: YouTubeClient = YouTubeClient {
     platform: None,
     original_url: None,
     send_ua_in_context: false,
+    remote_signed: false,
 };
 
 pub const ANDROID_CREATOR: YouTubeClient = YouTubeClient {
@@ -286,6 +298,7 @@ pub const ANDROID_CREATOR: YouTubeClient = YouTubeClient {
     platform: None,
     original_url: None,
     send_ua_in_context: false,
+    remote_signed: false,
 };
 
 pub const IOS: YouTubeClient = YouTubeClient {
@@ -305,6 +318,7 @@ pub const IOS: YouTubeClient = YouTubeClient {
     platform: None,
     original_url: None,
     send_ua_in_context: false,
+    remote_signed: false,
 };
 
 pub const IPADOS: YouTubeClient = YouTubeClient {
@@ -334,6 +348,7 @@ pub const WEB: YouTubeClient = YouTubeClient {
     platform: Some("DESKTOP"),
     original_url: Some("https://www.youtube.com"),
     send_ua_in_context: false,
+    remote_signed: false,
 };
 
 /// Mobile web. With a `BotGuard` token on the request it is served the same SABR
@@ -388,6 +403,30 @@ pub const TVHTML5_SIMPLY_EMBEDDED_PLAYER: YouTubeClient = YouTubeClient {
     ..WEB
 };
 
+/// The Samsung Tizen TV app, asked anonymously. Flow for Android measured it
+/// serving visitors the app clients had walled (#921). Its formats are all
+/// signed, so it needs the remote decoder, and the Tizen device fields: without
+/// them `player` answers "The page needs to be reloaded".
+pub const TV_TIZEN: YouTubeClient = YouTubeClient {
+    name: "TVHTML5",
+    version: "5.20260707",
+    client_id: "7",
+    user_agent: "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1",
+    os_name: Some("Tizen"),
+    os_version: Some("2.4.0"),
+    device_make: Some("Samsung"),
+    device_model: Some("SmartTV"),
+    android_sdk_version: None,
+    use_signature_timestamp: true,
+    is_embedded: false,
+    use_web_po_tokens: false,
+    attestation: AttestationPlatform::Web,
+    platform: None,
+    original_url: None,
+    send_ua_in_context: false,
+    remote_signed: true,
+};
+
 /// Every client the registry knows, for reverse lookup by name.
 const ALL: &[YouTubeClient] = &[
     VISIONOS,
@@ -401,6 +440,7 @@ const ALL: &[YouTubeClient] = &[
     WEB_REMIX,
     WEB_MUSIC_ANALYTICS,
     TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+    TV_TIZEN,
 ];
 
 /// Resolve a client by its InnerTube `clientName`.

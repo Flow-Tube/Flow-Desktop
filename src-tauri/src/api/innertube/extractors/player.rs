@@ -7,6 +7,7 @@ use crate::api::innertube::core::playback_session::{
 };
 use crate::api::innertube::core::player_js;
 use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
+use crate::api::innertube::core::remote_decoder;
 use crate::api::innertube::core::utils::{
     collect_related_content_items, dedupe_related_content_items, watch_next_body,
 };
@@ -73,6 +74,9 @@ const PLAYER_CLIENT_LADDER: &[&clients::YouTubeClient] = &[
     &clients::VISIONOS,
     &clients::MWEB,
     &clients::WEB,
+    // Past the walls the gated clients below stop at a minute, and the source
+    // for label and kids videos the app clients refuse (Flow for Android #921, #1292).
+    &clients::TV_TIZEN,
     &clients::ANDROID_VR_1_65_10,
     &clients::ANDROID_VR,
     &clients::ANDROID_VR_NO_AUTH,
@@ -388,7 +392,8 @@ fn validate_stream_url(stream_url: &str, video_id: &str) -> AppResult<String> {
 
     let has_throttling_parameter = parsed_url
         .query_pairs()
-        .any(|(key, value)| key == "n" && !value.is_empty());
+        .any(|(key, value)| key == "n" && !value.is_empty())
+        && !remote_decoder::was_solved(stream_url);
 
     if has_throttling_parameter {
         return Err(AppError::Extractor(format!(
@@ -1296,6 +1301,159 @@ fn has_playable_direct_streams(streaming_data: &Value, video_id: &str) -> bool {
         .any(|variant| variant.is_playable && (variant.has_audio || has_separate_audio))
 }
 
+/// How long googlevideo holds a response's streams behind its pre-roll: an
+/// answer with a start ad is refused on every byte until about 0.8 of the ad's
+/// skip offset has passed, at most 8 seconds (measured by Flow for Android on
+/// `TV_TIZEN`).
+fn preroll_wait(ad_placements: &Value) -> Duration {
+    const MAX_MS: u64 = 8_000;
+    ad_placements
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|placement| &placement["adPlacementRenderer"])
+        .filter(|renderer| {
+            renderer["config"]["adPlacementConfig"]["kind"] == "AD_PLACEMENT_KIND_START"
+        })
+        .map(|renderer| {
+            let offset = &renderer["renderer"]["instreamVideoAdRenderer"]["skipOffsetMilliseconds"];
+            offset
+                .as_u64()
+                .or_else(|| offset.as_str().and_then(|value| value.parse().ok()))
+                .map_or(MAX_MS, |ms| ms * 4 / 5)
+        })
+        .max()
+        .map_or(Duration::ZERO, |ms| Duration::from_millis(ms.min(MAX_MS)))
+}
+
+/// Rewrite every format of `response` into a URL googlevideo serves: signed
+/// formats get their solved signature, and every URL its `n` solved, both by the
+/// remote decoder. A format either step could not solve is left as it was, which
+/// the stream collector then skips.
+async fn solve_formats(response: &mut Value, player: &remote_decoder::DecoderPlayer) {
+    let streaming = &mut response["streamingData"];
+    let formats = || {
+        ["formats", "adaptiveFormats"]
+            .iter()
+            .filter_map(|key| streaming[*key].as_array())
+            .flatten()
+    };
+    let signatures: Vec<String> = formats()
+        .filter_map(signed_format)
+        .map(|cipher| cipher.signature)
+        .collect();
+    let solved_signatures =
+        remote_decoder::decode(player, remote_decoder::Challenge::Signature, &signatures).await;
+    let urls: Vec<Option<String>> = formats()
+        .map(|format| match signed_format(format) {
+            Some(cipher) => solved_signatures
+                .get(&cipher.signature)
+                .and_then(|signature| cipher.signed_url(signature)),
+            None => format["url"].as_str().map(ToOwned::to_owned),
+        })
+        .collect();
+    let challenges: Vec<String> = urls
+        .iter()
+        .flatten()
+        .filter_map(|url| query_param(url, "n"))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let solved_n = remote_decoder::decode(player, remote_decoder::Challenge::N, &challenges).await;
+
+    let mut urls = urls.into_iter();
+    for key in ["formats", "adaptiveFormats"] {
+        let Some(formats) = streaming[key].as_array_mut() else {
+            continue;
+        };
+        for format in formats {
+            let Some(url) = urls.next().flatten() else {
+                continue;
+            };
+            let Some(url) = with_solved_n(&url, &solved_n) else {
+                continue;
+            };
+            format["url"] = Value::String(url);
+            if let Some(object) = format.as_object_mut() {
+                object.remove("signatureCipher");
+                object.remove("cipher");
+            }
+        }
+    }
+}
+
+struct SignedFormat {
+    base_url: String,
+    signature: String,
+    parameter: String,
+}
+
+impl SignedFormat {
+    fn signed_url(&self, signature: &str) -> Option<String> {
+        let mut url = reqwest::Url::parse(&self.base_url).ok()?;
+        url.query_pairs_mut()
+            .append_pair(&self.parameter, signature);
+        Some(url.into())
+    }
+}
+
+fn signed_format(format: &Value) -> Option<SignedFormat> {
+    let cipher = format["signatureCipher"]
+        .as_str()
+        .or_else(|| format["cipher"].as_str())?;
+    let parsed = reqwest::Url::parse(&format!("https://example.invalid/?{cipher}")).ok()?;
+    let mut base_url = None;
+    let mut signature = None;
+    let mut parameter = None;
+    for (key, value) in parsed.query_pairs() {
+        match key.as_ref() {
+            "url" => base_url = Some(value.into_owned()),
+            "s" => signature = Some(value.into_owned()),
+            "sp" => parameter = Some(value.into_owned()),
+            _ => {}
+        }
+    }
+    Some(SignedFormat {
+        base_url: base_url?,
+        signature: signature?,
+        parameter: parameter.unwrap_or_else(|| "signature".to_string()),
+    })
+}
+
+fn query_param(url: &str, key: &str) -> Option<String> {
+    reqwest::Url::parse(url)
+        .ok()?
+        .query_pairs()
+        .find(|(name, _)| name == key)
+        .map(|(_, value)| value.into_owned())
+}
+
+/// `url` with its `n` swapped for the solved one, and remembered as solved. A
+/// URL without `n` is returned as is; None when its `n` was not solved, since
+/// googlevideo throttles it.
+fn with_solved_n(url: &str, solved_n: &HashMap<String, String>) -> Option<String> {
+    let mut parsed = reqwest::Url::parse(url).ok()?;
+    let pairs: Vec<(String, String)> = parsed
+        .query_pairs()
+        .map(|(key, value)| (key.into_owned(), value.into_owned()))
+        .collect();
+    if !pairs.iter().any(|(key, _)| key == "n") {
+        return Some(url.to_string());
+    }
+    let mut query = parsed.query_pairs_mut();
+    query.clear();
+    for (key, value) in pairs {
+        if key == "n" {
+            query.append_pair("n", solved_n.get(&value)?);
+        } else {
+            query.append_pair(&key, &value);
+        }
+    }
+    drop(query);
+    remote_decoder::note_solved_url(parsed.as_str());
+    Some(parsed.into())
+}
+
 /// Whether a response is a live or just-ended stream played from its manifest:
 /// it says it is live or post-live DVR, carries live streamability, or offers a
 /// manifest with no adaptive formats beside it. Clients such as `VISIONOS` also
@@ -1462,7 +1620,7 @@ impl InnertubeClient {
         client: &'static clients::YouTubeClient,
         visitor_data: Option<&str>,
     ) -> ClientOutcome {
-        let web_client = client.accepts_web_po_token();
+        let web_client = client.is_web_sabr();
         // Web clients are only served with a BotGuard token on the request, bound
         // to the video id as Flow for Android binds it. Every other family is
         // attested by a runtime Flow cannot run, and a BotGuard token on those is
@@ -1477,6 +1635,15 @@ impl InnertubeClient {
             None
         };
 
+        let decoder_player = if client.remote_signed {
+            let Some(player) = remote_decoder::latest_player().await else {
+                debug!(video_id = %video_id, client = client.name, "Remote decoder off or unreachable; skipping");
+                return ClientOutcome::Unusable;
+            };
+            Some(player)
+        } else {
+            None
+        };
         let cpn = web_client.then(new_cpn);
         let mut response = match self
             .request_player(
@@ -1538,6 +1705,10 @@ impl InnertubeClient {
             return ClientOutcome::Refused(Refusal::of(&response));
         }
 
+        if let Some(player) = decoder_player.as_ref() {
+            solve_formats(&mut response, player).await;
+        }
+
         let playable = if has_live_manifest(&response) {
             true
         } else if web_client {
@@ -1549,6 +1720,11 @@ impl InnertubeClient {
         if !playable {
             warn!(video_id = %video_id, client = client.name, "Player client answered OK with nothing Flow can fetch");
             return ClientOutcome::Unusable;
+        }
+        let preroll = preroll_wait(&response["adPlacements"]);
+        if !preroll.is_zero() {
+            debug!(video_id = %video_id, client = client.name, ?preroll, "Waiting out the pre-roll before the streams are served");
+            tokio::time::sleep(preroll).await;
         }
 
         ClientOutcome::Won(PlayerAttempt {
@@ -1605,12 +1781,24 @@ impl InnertubeClient {
     ) -> Option<Value> {
         let mut payload = client.player_body(video_id, visitor_data, po_token);
         if client.use_signature_timestamp {
-            let timestamp = player_js::signature_timestamp()
-                .await
-                .unwrap_or(clients::DEFAULT_SIGNATURE_TIMESTAMP);
+            // A remote-signed client's signatures are solved against the
+            // decoder's player, so the request must name that player's timestamp.
+            let remote_timestamp = if client.remote_signed {
+                remote_decoder::latest_player()
+                    .await
+                    .and_then(|player| player.signature_timestamp)
+            } else {
+                None
+            };
+            let timestamp = match remote_timestamp {
+                Some(timestamp) => timestamp,
+                None => player_js::signature_timestamp()
+                    .await
+                    .unwrap_or(clients::DEFAULT_SIGNATURE_TIMESTAMP),
+            };
             let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
             let mut content = serde_json::json!({
-                "referer": referer.unwrap_or(if client.accepts_web_po_token() {
+                "referer": referer.unwrap_or(if client.is_web_sabr() {
                     &watch_url
                 } else {
                     "https://www.youtube.com"
@@ -1619,13 +1807,13 @@ impl InnertubeClient {
                 "html5Preference": "HTML5_PREF_WANTS"
             });
             // The web player's own context, which a SABR session is checked against.
-            if client.accepts_web_po_token() {
+            if client.is_web_sabr() {
                 content["vis"] = serde_json::json!(0);
                 content["splay"] = serde_json::json!(false);
                 content["lactMilliseconds"] = serde_json::json!("-1");
             }
             payload["playbackContext"] = serde_json::json!({ "contentPlaybackContext": content });
-            if client.accepts_web_po_token()
+            if client.is_web_sabr()
                 && let Some(token) = take_reload_token(video_id)
             {
                 payload["playbackContext"]["reloadPlaybackContext"] =
@@ -1636,7 +1824,7 @@ impl InnertubeClient {
             payload["cpn"] = serde_json::json!(cpn);
         }
 
-        let budget = if client.accepts_web_po_token() {
+        let budget = if client.is_web_sabr() || client.remote_signed {
             WEB_PLAYER_TIMEOUT
         } else {
             PER_CLIENT_TIMEOUT
@@ -2744,6 +2932,83 @@ mod watch_metadata {
         assert_eq!(
             like_count_from_button(&json!({ "title": "Like", "accessibilityText": "I like this" })),
             None
+        );
+    }
+}
+
+#[cfg(test)]
+mod remote_signing {
+    use super::*;
+    use serde_json::json;
+
+    fn start_ad(skip_offset: &Value) -> Value {
+        json!({ "adPlacementRenderer": {
+            "config": { "adPlacementConfig": { "kind": "AD_PLACEMENT_KIND_START" } },
+            "renderer": { "instreamVideoAdRenderer": { "skipOffsetMilliseconds": skip_offset } }
+        }})
+    }
+
+    #[test]
+    fn a_start_ad_holds_the_streams_for_most_of_its_skip_offset() {
+        assert_eq!(
+            preroll_wait(&json!([start_ad(&json!(5000))])),
+            Duration::from_millis(4000)
+        );
+        assert_eq!(
+            preroll_wait(&json!([start_ad(&json!("5000"))])),
+            Duration::from_millis(4000)
+        );
+        assert_eq!(
+            preroll_wait(&json!([start_ad(&json!(60000))])),
+            Duration::from_secs(8)
+        );
+        // An unskippable ad says no offset, so the full cap applies.
+        assert_eq!(
+            preroll_wait(&json!([start_ad(&Value::Null)])),
+            Duration::from_secs(8)
+        );
+    }
+
+    #[test]
+    fn only_start_ads_hold_the_streams() {
+        let mid_roll = json!({ "adPlacementRenderer": {
+            "config": { "adPlacementConfig": { "kind": "AD_PLACEMENT_KIND_MILLISECONDS" } }
+        }});
+        assert_eq!(preroll_wait(&json!([mid_roll])), Duration::ZERO);
+        assert_eq!(preroll_wait(&Value::Null), Duration::ZERO);
+    }
+
+    #[test]
+    fn a_signed_format_becomes_a_url_with_its_signature_and_solved_n() {
+        let format = json!({
+            "signatureCipher": "s=SIGNED&sp=sig&url=https%3A%2F%2Frr1.googlevideo.com%2Fvideoplayback%3Fitag%3D251%26n%3Draw%26expire%3D9"
+        });
+        let cipher = signed_format(&format).expect("cipher parses");
+        assert_eq!(cipher.signature, "SIGNED");
+        assert_eq!(cipher.parameter, "sig");
+        let signed = cipher.signed_url("plain").expect("base URL parses");
+        let solved_n = HashMap::from([("raw".to_string(), "solved".to_string())]);
+        let url = with_solved_n(&signed, &solved_n).expect("n was solved");
+        assert_eq!(
+            url,
+            "https://rr1.googlevideo.com/videoplayback?itag=251&n=solved&expire=9&sig=plain"
+        );
+        assert!(remote_decoder::was_solved(&url));
+    }
+
+    #[test]
+    fn a_url_whose_n_was_not_solved_is_left_alone() {
+        let url = "https://rr1.googlevideo.com/videoplayback?n=raw";
+        assert!(with_solved_n(url, &HashMap::new()).is_none());
+        let plain = "https://rr1.googlevideo.com/videoplayback?itag=18";
+        assert_eq!(
+            with_solved_n(plain, &HashMap::new()).as_deref(),
+            Some(plain)
+        );
+        let format = json!({ "signatureCipher": "s=SIGNED&url=https%3A%2F%2Frr1.googlevideo.com%2Fvideoplayback" });
+        assert_eq!(
+            signed_format(&format).expect("cipher parses").parameter,
+            "signature"
         );
     }
 }

@@ -7,6 +7,7 @@ pub mod http;
 pub(crate) mod playback_session;
 pub(crate) mod player_js;
 pub(crate) mod player_requests;
+pub mod remote_decoder;
 pub mod utils;
 pub mod webview_nsig;
 pub mod webview_pot;

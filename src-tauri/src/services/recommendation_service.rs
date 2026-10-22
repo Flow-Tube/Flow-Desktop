@@ -28,7 +28,7 @@ use crate::flow_neuro::search_learning::learn_search;
 use crate::flow_neuro::side_stores::SideStores;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{WatchReport, WatchSession};
-use crate::models::video::{MusicHomeChip, MusicHomeSection, RelatedContentItem, VideoSummary};
+use crate::models::video::{RelatedContentItem, VideoSummary};
 use crate::services::youtube_service::YoutubeService;
 
 /// A channel above its starting score is one the viewer has watched.
@@ -750,118 +750,6 @@ impl RecommendationService {
             self.brain_store.write().await.has_completed_onboarding = true;
         }
         Ok(completed)
-    }
-
-    pub async fn get_cached_music_home(
-        &self,
-    ) -> AppResult<Option<(Vec<MusicHomeSection>, Vec<MusicHomeChip>)>> {
-        let sections_rows = sqlx::query(
-            "SELECT section_id, title, subtitle, tracks_json, order_by FROM music_home_sections ORDER BY order_by ASC"
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(crate::errors::AppError::from)?;
-
-        let chips_rows = sqlx::query(
-            "SELECT title, browse_id, params, order_by FROM music_home_chips ORDER BY order_by ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(crate::errors::AppError::from)?;
-
-        if sections_rows.is_empty() && chips_rows.is_empty() {
-            return Ok(None);
-        }
-
-        let mut sections = Vec::new();
-        for r in sections_rows {
-            let section_id: String = sqlx::Row::get(&r, 0);
-            let title: String = sqlx::Row::get(&r, 1);
-            let subtitle: Option<String> = sqlx::Row::get(&r, 2);
-            let tracks_json: String = sqlx::Row::get(&r, 3);
-            let order_by: i32 = sqlx::Row::get(&r, 4);
-
-            let tracks = serde_json::from_str(&tracks_json).unwrap_or_else(|_| Vec::new());
-
-            sections.push(MusicHomeSection {
-                section_id,
-                title,
-                subtitle,
-                tracks,
-                order_by,
-            });
-        }
-
-        let mut chips = Vec::new();
-        for r in chips_rows {
-            let title: String = sqlx::Row::get(&r, 0);
-            let browse_id: Option<String> = sqlx::Row::get(&r, 1);
-            let params: Option<String> = sqlx::Row::get(&r, 2);
-            let order_by: i32 = sqlx::Row::get(&r, 3);
-
-            chips.push(MusicHomeChip {
-                title,
-                browse_id,
-                params,
-                order_by,
-            });
-        }
-
-        Ok(Some((sections, chips)))
-    }
-
-    pub async fn cache_music_home(
-        &self,
-        sections: &[MusicHomeSection],
-        chips: &[MusicHomeChip],
-    ) -> AppResult<()> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(crate::errors::AppError::from)?;
-
-        sqlx::query("DELETE FROM music_home_sections")
-            .execute(&mut *tx)
-            .await
-            .map_err(crate::errors::AppError::from)?;
-
-        sqlx::query("DELETE FROM music_home_chips")
-            .execute(&mut *tx)
-            .await
-            .map_err(crate::errors::AppError::from)?;
-
-        for section in sections {
-            let tracks_json =
-                serde_json::to_string(&section.tracks).map_err(crate::errors::AppError::from)?;
-            sqlx::query(
-                "INSERT INTO music_home_sections (section_id, title, subtitle, tracks_json, order_by) VALUES (?, ?, ?, ?, ?)"
-            )
-            .bind(&section.section_id)
-            .bind(&section.title)
-            .bind(&section.subtitle)
-            .bind(tracks_json)
-            .bind(section.order_by)
-            .execute(&mut *tx)
-            .await
-            .map_err(crate::errors::AppError::from)?;
-        }
-
-        for chip in chips {
-            sqlx::query(
-                "INSERT INTO music_home_chips (title, browse_id, params, order_by) VALUES (?, ?, ?, ?)"
-            )
-            .bind(&chip.title)
-            .bind(&chip.browse_id)
-            .bind(&chip.params)
-            .bind(chip.order_by)
-            .execute(&mut *tx)
-            .await
-            .map_err(crate::errors::AppError::from)?;
-        }
-
-        tx.commit().await.map_err(crate::errors::AppError::from)?;
-        Ok(())
     }
 
     pub async fn get_subscription_rotation_feed(

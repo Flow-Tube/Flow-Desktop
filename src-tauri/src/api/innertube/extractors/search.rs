@@ -5,7 +5,6 @@ use crate::api::innertube::core::utils::{
     detect_video_is_live, extract_channel_id_from_video_renderer, extract_continuation_token,
     normalize_youtube_image_url, parse_duration_seconds,
 };
-use crate::api::innertube::parsers::parse_music_search_json;
 use crate::errors::{AppError, AppResult};
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::VideoSummary;
@@ -380,31 +379,6 @@ impl InnertubeClient {
             }
         }
         Ok(suggestions)
-    }
-
-    pub async fn search_music(&self, query: &str, filter: &str) -> AppResult<Vec<VideoSummary>> {
-        let params = match filter {
-            "songs" => Some("Eg-KAQwIARAAGAAgACgAMABqChAEEAUQAxAKEAk%3D"),
-            "videos" => Some("Eg-KAQwIABABGAAgACgAMABqChAEEAUQAxAKEAk%3D"),
-            "albums" => Some("Eg-KAQwIABAAGAEgACgAMABqChAEEAUQAxAKEAk%3D"),
-            "playlists" => Some("Eg-KAQwIABAAGAAgACgBMABqChAEEAUQAxAKEAk%3D"),
-            "artists" => Some("Eg-KAQwIABAAGAAgASgAMABqChAEEAUQAxAKEAk%3D"),
-            _ => None,
-        };
-
-        let mut payload = serde_json::json!({
-            "query": query,
-        });
-        if let Some(p) = params {
-            payload["params"] = serde_json::Value::String(p.to_string());
-        }
-
-        let res = self
-            .post_innertube("search", &clients::WEB_REMIX, &mut payload)
-            .await?;
-        let items = parse_music_search_json(&res);
-
-        Ok(items)
     }
 }
 

@@ -1,25 +1,24 @@
 use std::sync::Arc;
 
-use crate::api::extractor::YoutubeExtractor;
+use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
 use crate::models::channel::{ChannelDetails, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
 use crate::models::live_chat::LiveChatResponse;
-use crate::models::music::{ArtistPage, ChartsPage, ExplorePage};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::shorts::ShortsFeed;
-use crate::models::video::{MusicHomeChip, MusicHomeSection, VideoSummary};
+use crate::models::video::VideoSummary;
 use crate::models::video::{RelatedContentItem, StreamInfo, VideoBasics, VideoDetails};
 
 #[derive(Clone)]
 pub struct YoutubeService {
-    extractor: Arc<dyn YoutubeExtractor>,
+    extractor: Arc<InnertubeClient>,
 }
 
 impl YoutubeService {
     #[must_use]
-    pub fn new(extractor: Arc<dyn YoutubeExtractor>) -> Self {
+    pub fn new(extractor: Arc<InnertubeClient>) -> Self {
         Self { extractor }
     }
 
@@ -121,39 +120,7 @@ impl YoutubeService {
             .await
     }
 
-    pub async fn search_music(&self, query: &str, filter: &str) -> AppResult<Vec<VideoSummary>> {
-        self.extractor.search_music(query, filter).await
-    }
-
     pub fn parse_subscription_export(&self, data: &str) -> AppResult<Vec<(String, String)>> {
         self.extractor.parse_subscription_export(data)
-    }
-
-    pub async fn get_music_lyrics(&self, video_id: &str) -> AppResult<Option<String>> {
-        self.extractor.get_music_lyrics(video_id).await
-    }
-
-    pub async fn get_music_related(&self, video_id: &str) -> AppResult<Vec<VideoSummary>> {
-        self.extractor.get_music_related(video_id).await
-    }
-
-    pub async fn get_music_album(&self, album_browse_id: &str) -> AppResult<Vec<VideoSummary>> {
-        self.extractor.get_music_album(album_browse_id).await
-    }
-
-    pub async fn get_music_home(&self) -> AppResult<(Vec<MusicHomeSection>, Vec<MusicHomeChip>)> {
-        self.extractor.get_music_home().await
-    }
-
-    pub async fn get_music_artist(&self, artist_browse_id: &str) -> AppResult<ArtistPage> {
-        self.extractor.get_music_artist(artist_browse_id).await
-    }
-
-    pub async fn get_music_explore(&self) -> AppResult<ExplorePage> {
-        self.extractor.get_music_explore().await
-    }
-
-    pub async fn get_music_charts(&self, continuation: Option<String>) -> AppResult<ChartsPage> {
-        self.extractor.get_music_charts(continuation).await
     }
 }

@@ -11,7 +11,6 @@ import type {
   LiveChatResponse,
   VideoSummary,
   RelatedContentItem,
-  PlaylistSummary,
 } from "../../types/video";
 import { isTauriEnv } from "./env";
 import {
@@ -430,39 +429,6 @@ export async function getSearchSuggestions(query: string): Promise<string[]> {
   return invokeBackend<string[]>("get_search_suggestions", { query });
 }
 
-export async function searchMusic(
-  query: string,
-  filter: string,
-): Promise<Array<VideoSummary | PlaylistSummary>> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock music search results.");
-    if (filter === "playlists") {
-      return [
-        {
-          type: "playlist",
-          id: "mock-search-playlist-1",
-          title: `${query} Playlist`,
-          thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-          videoCountText: "18 videos",
-        },
-      ];
-    }
-
-    return [
-      {
-        id: "dQw4w9WgXcQ",
-        title: `${query} (Lofi Remix)`,
-        channelName: "Mock Artist",
-        thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-        durationSeconds: 240,
-        publishedText: "Released 2026",
-        viewCountText: "Song",
-      },
-    ];
-  }
-  return invokeBackend<VideoSummary[]>("search_music", { query, filter });
-}
-
 export async function parseSubscriptionExport(
   data: string,
 ): Promise<[string, string][]> {
@@ -475,86 +441,6 @@ export async function parseSubscriptionExport(
   }
   return invokeBackend<[string, string][]>("parse_subscription_export", { data });
 }
-
-export async function getMusicLyrics(videoId: string): Promise<string | null> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock lyrics.");
-    return "[00:10.00] This is a mock lyrics line\n[00:20.00] Singing natively in Flow Desktop!";
-  }
-  return invokeBackend<string | null>("get_music_lyrics", { videoId });
-}
-
-export async function getMusicRelated(videoId: string): Promise<VideoSummary[]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock related songs.");
-    return [
-      {
-        id: "dQw4w9WgXcQ",
-        title: "Mock Related Hit",
-        channelName: "Mock Artist",
-        thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-        durationSeconds: 180,
-        publishedText: "3 months ago",
-        viewCountText: "2M views",
-      },
-    ];
-  }
-  return invokeBackend<VideoSummary[]>("get_music_related", { videoId });
-}
-
-export async function getMusicAlbum(albumBrowseId: string): Promise<VideoSummary[]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock album tracks.");
-    return [
-      {
-        id: "dQw4w9WgXcQ",
-        title: "Mock Album Track 1",
-        channelName: "Mock Artist",
-        thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-        durationSeconds: 200,
-        publishedText: "Track 1",
-        viewCountText: "Album Track",
-      },
-    ];
-  }
-  return invokeBackend<VideoSummary[]>("get_music_album", { albumBrowseId });
-}
-
-
-
-export interface MusicHomeSection {
-  sectionId: string;
-  title: string;
-  subtitle: string | null;
-  tracks: VideoSummary[];
-  orderBy: number;
-}
-
-export interface MusicHomeChip {
-  title: string;
-  browseId: string | null;
-  params: string | null;
-  orderBy: number;
-}
-
-/** @deprecated Legacy cached Music Home. Unused — the Music tab uses `getMusicHomePage`. */
-export async function getMusicHome(): Promise<[MusicHomeSection[], MusicHomeChip[]]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock Music Home.");
-    return [[], []];
-  }
-  return invokeBackend<[MusicHomeSection[], MusicHomeChip[]]>("get_music_home");
-}
-
-/** @deprecated Legacy cached Music Home. Unused — the Music tab uses `getMusicHomePage`. */
-export async function refreshMusicHome(): Promise<[MusicHomeSection[], MusicHomeChip[]]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock Music Home.");
-    return [[], []];
-  }
-  return invokeBackend<[MusicHomeSection[], MusicHomeChip[]]>("refresh_music_home");
-}
-
 
 export async function getSubscriptionRotationFeed(): Promise<VideoSummary[]> {
   if (!(await isTauriEnv())) {

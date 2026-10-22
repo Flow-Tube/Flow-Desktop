@@ -1,7 +1,6 @@
-//! Thin service over the concrete [`InnertubeClient`] exposing the additive
-//! YouTube Music surface. Kept separate from [`crate::services::youtube_service`]
-//! (which is a `dyn YoutubeExtractor` and drives the video path) so the music
-//! feature is independently wired and the video path is untouched.
+//! Thin service over [`InnertubeClient`] exposing the YouTube Music surface,
+//! kept apart from [`crate::services::youtube_service`], which drives the video
+//! path.
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;

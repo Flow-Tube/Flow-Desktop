@@ -1,7 +1,6 @@
 pub mod channel;
 pub mod comments;
 pub mod live_chat;
-pub mod music;
 pub mod player;
 pub mod playlist;
 pub mod search;

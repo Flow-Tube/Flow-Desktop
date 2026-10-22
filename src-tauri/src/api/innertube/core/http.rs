@@ -1,6 +1,5 @@
 use crate::api::innertube::InnertubeClient;
-use crate::api::innertube::core::clients::{self, YouTubeClient};
-use crate::api::innertube::music::parse::endpoint::{WatchNextTab, watch_next_tab};
+use crate::api::innertube::core::clients::YouTubeClient;
 use crate::api::innertube::transport::error::{TransportError, to_app_error};
 use crate::api::innertube::transport::request::{
     Host, RequestSpec, body_visitor, ensure_context, strip_visitor,
@@ -136,41 +135,5 @@ impl InnertubeClient {
             }
             result => result.map_err(|error| to_app_error(endpoint, &error)),
         }
-    }
-
-    // Helper to fetch watch-next details (lyrics & related browse pointers) from WEB_REMIX
-    pub async fn fetch_watch_next_metadata(
-        &self,
-        video_id: &str,
-    ) -> AppResult<(
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-    )> {
-        let mut payload = serde_json::json!({
-            "videoId": video_id
-        });
-
-        let res = self
-            .post_innertube("next", &clients::WEB_REMIX, &mut payload)
-            .await?;
-
-        let tabs = &res["contents"]["singleColumnMusicWatchNextResultsRenderer"]["tabbedRenderer"]
-            ["watchNextTabbedResultsRenderer"]["tabs"];
-        let lyrics = &watch_next_tab(tabs, WatchNextTab::Lyrics)["browseEndpoint"];
-        let related = &watch_next_tab(tabs, WatchNextTab::Related)["browseEndpoint"];
-        let text = |value: &Value| value.as_str().map(ToOwned::to_owned);
-        let lyrics_browse_id = text(&lyrics["browseId"]);
-        let lyrics_params = text(&lyrics["params"]);
-        let related_browse_id = text(&related["browseId"]);
-        let related_params = text(&related["params"]);
-
-        Ok((
-            lyrics_browse_id,
-            lyrics_params,
-            related_browse_id,
-            related_params,
-        ))
     }
 }

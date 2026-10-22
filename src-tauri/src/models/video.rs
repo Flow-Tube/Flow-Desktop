@@ -187,16 +187,6 @@ pub struct AudioTrack {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MusicHomeSection {
-    pub section_id: String,
-    pub title: String,
-    pub subtitle: Option<String>,
-    pub tracks: Vec<VideoSummary>,
-    pub order_by: i32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct MusicHomeChip {
     pub title: String,
     pub browse_id: Option<String>,

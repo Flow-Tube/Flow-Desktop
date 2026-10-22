@@ -1,12 +1,8 @@
 use crate::api::http::shared_client;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::{
-    detect_video_is_live, extract_channel_id_from_video_renderer,
-};
 use crate::api::innertube::json::continuation::continuation_token;
-use crate::api::innertube::json::duration::parse_duration;
-use crate::api::innertube::json::thumbnail::normalize_youtube_image_url;
+use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::VideoSummary;
@@ -132,76 +128,8 @@ fn process_search_items(
                 process_search_items(inner, items, next_page_token);
                 continue;
             }
-            if let Some(video) = item.get("videoRenderer") {
-                let video_id = video["videoId"].as_str().unwrap_or_default().to_string();
-                if video_id.is_empty() {
-                    continue;
-                }
-
-                let title = video["title"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| video["title"]["simpleText"].as_str())
-                    .unwrap_or_default()
-                    .to_string();
-
-                let channel_name = video["longBylineText"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| video["ownerText"]["runs"][0]["text"].as_str())
-                    .or_else(|| video["shortBylineText"]["runs"][0]["text"].as_str())
-                    .or_else(|| video["longBylineText"]["simpleText"].as_str())
-                    .unwrap_or_default()
-                    .to_string();
-
-                let thumbnail_url = video["thumbnail"]["thumbnails"][0]["url"]
-                    .as_str()
-                    .or_else(|| video["thumbnail"]["url"].as_str())
-                    .map(|s| s.to_string());
-
-                let duration_text = video["lengthText"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| video["lengthText"]["simpleText"].as_str())
-                    .unwrap_or_default();
-
-                let duration_seconds = if duration_text.is_empty() {
-                    None
-                } else {
-                    parse_duration(duration_text)
-                };
-
-                let published_text = video["publishedTimeText"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| video["publishedTimeText"]["simpleText"].as_str())
-                    .map(|s| s.to_string());
-
-                let view_count_text = video["viewCountText"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| video["viewCountText"]["simpleText"].as_str())
-                    .or_else(|| video["shortViewCountText"]["runs"][0]["text"].as_str())
-                    .or_else(|| video["shortViewCountText"]["simpleText"].as_str())
-                    .map(|s| s.to_string());
-
-                let channel_id = extract_channel_id_from_video_renderer(video);
-
-                let channel_avatar_url =
-                    video["channelThumbnailSupportedRenderers"]["channelThumbnailWithLinkRenderer"]
-                        ["thumbnail"]["thumbnails"]
-                        .as_array()
-                        .and_then(|arr| arr.first())
-                        .and_then(|t| t["url"].as_str())
-                        .map(normalize_youtube_image_url);
-
-                items.push(VideoSummary {
-                    id: video_id,
-                    title,
-                    channel_name,
-                    channel_id,
-                    thumbnail_url,
-                    duration_seconds,
-                    published_text,
-                    view_count_text,
-                    channel_avatar_url,
-                    is_live: detect_video_is_live(video),
-                });
+            if let Some(video) = item.get("videoRenderer").and_then(video_from_renderer) {
+                items.push(video);
             } else if let Some(channel) = item.get("channelRenderer") {
                 let channel_id = channel["channelId"]
                     .as_str()
@@ -234,6 +162,7 @@ fn process_search_items(
                         view_count_text: Some("Channel".to_string()),
                         channel_avatar_url: thumbnail_url,
                         is_live: false,
+                        ..Default::default()
                     });
                 }
             } else if next_page_token.is_none() {

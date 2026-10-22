@@ -4,6 +4,7 @@ pub mod extractors;
 pub mod identity;
 pub mod json;
 pub mod music;
+pub mod renderers;
 pub mod transport;
 
 fn build_http_client() -> reqwest::Client {

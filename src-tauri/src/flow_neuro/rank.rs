@@ -432,6 +432,7 @@ mod tests {
             view_count_text: Some("12K views".into()),
             channel_avatar_url: None,
             is_live: false,
+            ..Default::default()
         }
     }
 

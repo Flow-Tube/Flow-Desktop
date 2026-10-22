@@ -11,6 +11,7 @@ use flow_desktop_lib::api::innertube::json::age::relative_age;
 use flow_desktop_lib::api::innertube::json::continuation::{
     continuation_item_lists, continuation_token,
 };
+use flow_desktop_lib::api::innertube::renderers::lockup::lockup_item;
 use serde_json::Value;
 
 fn fixture(name: &str) -> Option<Value> {
@@ -130,5 +131,38 @@ fn channel_search_later_pages_wrap_results_in_item_sections() {
     assert!(
         wrapped > 0,
         "page 2 wraps its results in itemSectionRenderer"
+    );
+}
+
+#[test]
+fn related_lockups_parse_with_counts_dates_and_channels() {
+    let Some(next) = fixture("next_related") else {
+        return;
+    };
+    let mut lockups = Vec::new();
+    find_all(
+        &next["contents"]["twoColumnWatchNextResults"]["secondaryResults"],
+        "lockupViewModel",
+        &mut lockups,
+    );
+    let items: Vec<_> = lockups
+        .into_iter()
+        .filter(|lockup| lockup["contentType"] == "LOCKUP_CONTENT_TYPE_VIDEO")
+        .filter_map(lockup_item)
+        .collect();
+    assert!(!items.is_empty());
+    let complete = items
+        .iter()
+        .filter(|item| {
+            !item.channel_name.is_empty()
+                && item.channel_id.is_some()
+                && (item.is_live
+                    || (item.view_count_text.is_some() && item.published_text.is_some()))
+        })
+        .count();
+    assert!(
+        complete * 10 >= items.len() * 9,
+        "only {complete} of {} related lockups had a channel, count and date",
+        items.len()
     );
 }

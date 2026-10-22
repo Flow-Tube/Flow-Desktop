@@ -162,6 +162,7 @@ pub(super) mod tests {
                 view_count_text: None,
                 channel_avatar_url: None,
                 is_live: false,
+                ..Default::default()
             },
             published_at_ms: 0,
         }

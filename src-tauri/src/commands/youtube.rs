@@ -138,6 +138,7 @@ pub(crate) fn parse_rss_feed(
                     view_count_text: None,
                     channel_avatar_url: None,
                     is_live: false,
+                    ..Default::default()
                 },
             ))
         })
@@ -1170,6 +1171,7 @@ pub(crate) async fn populate_video_durations(
                         view_count_text: None,
                         channel_avatar_url: None,
                         is_live: false,
+                        ..Default::default()
                     };
                     // Cache it for 7 days
                     let _ = crate::db::cache::cache_video_summary(&pool, &summary, 604800).await;

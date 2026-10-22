@@ -50,6 +50,7 @@ impl ShortItem {
             view_count_text: self.view_count_text.clone(),
             channel_avatar_url: self.channel_avatar_url.clone(),
             is_live: false,
+            ..Default::default()
         }
     }
 

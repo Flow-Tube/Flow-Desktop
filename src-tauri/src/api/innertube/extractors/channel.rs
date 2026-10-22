@@ -1,14 +1,13 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::{
-    detect_lockup_is_live, detect_video_is_live, extract_channel_id_from_video_renderer,
-    short_video_summary_from_item,
-};
+use crate::api::innertube::core::utils::short_video_summary_from_item;
 use crate::api::innertube::json::continuation::{continuation_item_lists, continuation_token};
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
+use crate::api::innertube::renderers::lockup::is_live as lockup_is_live;
+use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::{
     ChannelDetails, ChannelItem, ChannelTabResponse, PlaylistSummary, PostSummary,
@@ -117,133 +116,18 @@ fn extract_videos_from_browse(
                 target = content;
             }
 
-            if let Some(video) = target
+            if let Some(mut video) = target
                 .get("gridVideoRenderer")
                 .or_else(|| target.get("videoRenderer"))
+                .and_then(video_from_renderer)
             {
-                if let Some(video_id) = video.get("videoId").and_then(|v| v.as_str()) {
-                    let title = video
-                        .get("title")
-                        .and_then(|t| {
-                            t.get("runs")
-                                .and_then(|r| r.as_array())
-                                .and_then(|arr| arr.first())
-                                .and_then(|f| f.get("text"))
-                                .and_then(|s| s.as_str())
-                                .or_else(|| t.get("simpleText").and_then(|s| s.as_str()))
-                        })
-                        .unwrap_or_default()
-                        .to_string();
-
-                    let channel_name = video
-                        .get("shortBylineText")
-                        .and_then(|b| {
-                            b.get("runs")
-                                .and_then(|r| r.as_array())
-                                .and_then(|arr| arr.first())
-                                .and_then(|f| f.get("text"))
-                                .and_then(|s| s.as_str())
-                        })
-                        .or_else(|| {
-                            video.get("longBylineText").and_then(|b| {
-                                b.get("runs")
-                                    .and_then(|r| r.as_array())
-                                    .and_then(|arr| arr.first())
-                                    .and_then(|f| f.get("text"))
-                                    .and_then(|s| s.as_str())
-                            })
-                        })
-                        .unwrap_or_default()
-                        .to_string();
-
-                    let thumbnail_url = video
-                        .get("thumbnail")
-                        .and_then(|th| {
-                            th.get("thumbnails")
-                                .and_then(|t| t.as_array())
-                                .and_then(|arr| arr.last())
-                                .and_then(|f| f.get("url"))
-                                .and_then(|s| s.as_str())
-                        })
-                        .map(|s| s.to_string());
-
-                    let duration_text = video
-                        .get("thumbnailOverlays")
-                        .and_then(|o| o.as_array())
-                        .and_then(|arr| arr.first())
-                        .and_then(|first| first.get("thumbnailOverlayTimeStatusRenderer"))
-                        .and_then(|t| t.get("text"))
-                        .and_then(|txt| {
-                            txt.get("runs")
-                                .and_then(|r| r.as_array())
-                                .and_then(|arr| arr.first())
-                                .and_then(|f| f.get("text"))
-                                .and_then(|s| s.as_str())
-                                .or_else(|| txt.get("simpleText").and_then(|s| s.as_str()))
-                        })
-                        .or_else(|| {
-                            video.get("lengthText").and_then(|l| {
-                                l.get("runs")
-                                    .and_then(|r| r.as_array())
-                                    .and_then(|arr| arr.first())
-                                    .and_then(|f| f.get("text"))
-                                    .and_then(|s| s.as_str())
-                                    .or_else(|| l.get("simpleText").and_then(|s| s.as_str()))
-                            })
-                        })
-                        .unwrap_or_default();
-
-                    let duration_seconds = if duration_text.is_empty() {
-                        None
-                    } else {
-                        parse_duration(duration_text)
-                    };
-
-                    let published_text = video
-                        .get("publishedTimeText")
-                        .and_then(|p| {
-                            p.get("simpleText").and_then(|s| s.as_str()).or_else(|| {
-                                p.get("runs")
-                                    .and_then(|r| r.as_array())
-                                    .and_then(|arr| arr.first())
-                                    .and_then(|f| f.get("text"))
-                                    .and_then(|s| s.as_str())
-                            })
-                        })
-                        .map(|s| s.to_string());
-
-                    let view_count_text = video
-                        .get("viewCountText")
-                        .and_then(|v| {
-                            v.get("simpleText").and_then(|s| s.as_str()).or_else(|| {
-                                v.get("runs")
-                                    .and_then(|r| r.as_array())
-                                    .and_then(|arr| arr.first())
-                                    .and_then(|f| f.get("text"))
-                                    .and_then(|s| s.as_str())
-                            })
-                        })
-                        .map(|s| s.to_string());
-
-                    let channel_id = extract_channel_id_from_video_renderer(video);
-
-                    items.push(ChannelItem::Video(VideoSummary {
-                        id: video_id.to_string(),
-                        title,
-                        channel_name: if channel_name.is_empty() {
-                            top_channel_name.clone()
-                        } else {
-                            channel_name
-                        },
-                        channel_id: channel_id.or_else(|| top_channel_id.clone()),
-                        thumbnail_url,
-                        duration_seconds,
-                        published_text,
-                        view_count_text,
-                        channel_avatar_url: None,
-                        is_live: detect_video_is_live(video),
-                    }));
+                if video.channel_name.is_empty() {
+                    video.channel_name.clone_from(&top_channel_name);
                 }
+                if video.channel_id.is_none() {
+                    video.channel_id.clone_from(&top_channel_id);
+                }
+                items.push(ChannelItem::Video(video));
             } else if let Some(short) = short_video_summary_from_item(target) {
                 items.push(ChannelItem::Short(short));
             } else if let Some(playlist) = target
@@ -495,7 +379,8 @@ fn extract_videos_from_browse(
                             published_text,
                             view_count_text,
                             channel_avatar_url: None,
-                            is_live: detect_lockup_is_live(lockup),
+                            is_live: lockup_is_live(lockup),
+                            ..Default::default()
                         }));
                     }
                 }

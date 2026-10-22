@@ -4,11 +4,11 @@ use crate::api::innertube::core::clients;
 use crate::api::innertube::core::player_js;
 use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
 use crate::api::innertube::core::utils::{
-    collect_related_content_items, dedupe_related_content_items,
-    extract_channel_id_from_video_renderer, watch_next_body,
+    collect_related_content_items, dedupe_related_content_items, watch_next_body,
 };
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::thumbnail_url_from_array;
+use crate::api::innertube::renderers::video::channel_id_of;
 use crate::errors::{AppError, AppResult};
 use crate::models::video::{
     AudioTrack, CaptionTrack, RelatedContentItem, SabrStreamInfo, StreamInfo, StreamVariant,
@@ -1807,7 +1807,7 @@ impl InnertubeClient {
                     channel_id = owner["navigationEndpoint"]["browseEndpoint"]["browseId"]
                         .as_str()
                         .map(ToOwned::to_owned)
-                        .or_else(|| extract_channel_id_from_video_renderer(owner));
+                        .or_else(|| channel_id_of(owner));
                 }
             }
 

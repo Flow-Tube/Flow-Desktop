@@ -75,6 +75,7 @@ pub async fn get_cached_video_summary(
             view_count_text: None,
             channel_avatar_url: None,
             is_live: false,
+            ..Default::default()
         }))
     } else {
         Ok(None)

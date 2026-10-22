@@ -1,90 +1,29 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::{
-    build_related_content_from_lockup, extract_channel_id_from_video_renderer,
-    map_related_content_to_video_summary, short_video_summary_from_item,
-};
+use crate::api::innertube::core::utils::short_video_summary_from_item;
 use crate::api::innertube::json::continuation::{continuation_item_lists, last_continuation_token};
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::best_video_thumbnail_url;
+use crate::api::innertube::renderers::lockup::{lockup_item, related_to_video};
+use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::ShortVideoSummary;
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::video::VideoSummary;
 use serde_json::Value;
 
-/// Pull the view-count and relative published texts out of a
-/// `playlistVideoRenderer`'s `videoInfo` runs (e.g. "1.2M views · 3 years ago").
-fn extract_playlist_video_info(video: &Value) -> (Option<String>, Option<String>) {
-    let Some(runs) = video["videoInfo"]["runs"].as_array() else {
-        return (None, None);
-    };
-
-    let mut view_count_text = None;
-    let mut published_text = None;
-    for run in runs {
-        let Some(text) = run["text"].as_str().map(str::trim) else {
-            continue;
-        };
-        let lower = text.to_lowercase();
-        if view_count_text.is_none() && lower.contains("view") {
-            view_count_text = Some(text.to_string());
-        } else if published_text.is_none() && lower.contains("ago") {
-            published_text = Some(text.to_string());
-        }
-    }
-
-    (view_count_text, published_text)
-}
-
-/// One `playlistVideoRenderer` as a video card.
-fn video_from_playlist_renderer(video: &Value) -> Option<VideoSummary> {
-    let video_id = video["videoId"].as_str()?;
-    let title = video["title"]["runs"][0]["text"]
-        .as_str()
-        .or_else(|| video["title"]["simpleText"].as_str())
-        .unwrap_or_default()
-        .to_string();
-    let channel_name = video["shortBylineText"]["runs"][0]["text"]
-        .as_str()
-        .or_else(|| video["longBylineText"]["runs"][0]["text"].as_str())
-        .unwrap_or_default()
-        .to_string();
-    let thumbnail_url = best_video_thumbnail_url(
-        video_id,
-        video.get("thumbnail").and_then(|t| t.get("thumbnails")),
-    );
-    let duration_seconds = video["lengthSeconds"]
-        .as_str()
-        .and_then(|s| s.parse::<u64>().ok())
-        .or_else(|| video["lengthSeconds"].as_u64());
-    let (view_count_text, published_text) = extract_playlist_video_info(video);
-    Some(VideoSummary {
-        id: video_id.to_string(),
-        title,
-        channel_name,
-        channel_id: extract_channel_id_from_video_renderer(video),
-        thumbnail_url,
-        duration_seconds,
-        published_text,
-        view_count_text,
-        channel_avatar_url: None,
-        is_live: false,
-    })
-}
-
 /// One playlist entry as a video card: a classic row, a video lockup, or a Short.
 /// Non-video lockups (channels, mixes) are skipped.
 fn video_from_playlist_item(item: &Value) -> Option<VideoSummary> {
     let item = item.get("richItemRenderer").map_or(item, |r| &r["content"]);
     if let Some(video) = item.get("playlistVideoRenderer") {
-        return video_from_playlist_renderer(video);
+        return video_from_renderer(video);
     }
     if let Some(lockup) = item.get("lockupViewModel") {
-        return build_related_content_from_lockup(lockup)
+        return lockup_item(lockup)
             .filter(|related| related.item_type == "video")
-            .map(map_related_content_to_video_summary);
+            .map(related_to_video);
     }
     if item.get("shortsLockupViewModel").is_some() || item.get("reelItemRenderer").is_some() {
         return short_video_summary_from_item(item).map(video_summary_from_short);
@@ -170,6 +109,7 @@ fn video_summary_from_short(short: ShortVideoSummary) -> VideoSummary {
         view_count_text: short.view_count_text,
         channel_avatar_url: None,
         is_live: false,
+        ..Default::default()
     }
 }
 

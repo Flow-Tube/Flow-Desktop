@@ -12,6 +12,7 @@ use tokio::time::timeout;
 
 use super::cache;
 use super::card::Card;
+use crate::api::innertube::renderers::lockup::related_to_video;
 use crate::commands::youtube::{fetch_rss_channel_batch, populate_video_durations};
 use crate::models::channel::ChannelItem;
 use crate::models::search::SearchVideosRequest;
@@ -245,24 +246,7 @@ impl RelatedLists {
             Ok(Ok(items)) => items
                 .into_iter()
                 .filter(|item| item.item_type == "video" && !item.is_mix)
-                .map(|item| {
-                    let id = item.video_id.clone().unwrap_or_else(|| item.id.clone());
-                    Card::from_summary(
-                        crate::models::video::VideoSummary {
-                            id,
-                            title: item.title,
-                            channel_name: item.channel_name,
-                            channel_id: item.channel_id,
-                            thumbnail_url: item.thumbnail_url,
-                            duration_seconds: item.duration_seconds,
-                            published_text: item.published_text,
-                            view_count_text: item.view_count_text,
-                            channel_avatar_url: None,
-                            is_live: item.is_live,
-                        },
-                        now_ms,
-                    )
-                })
+                .map(|item| Card::from_summary(related_to_video(item), now_ms))
                 .collect(),
             _ => Vec::new(),
         };

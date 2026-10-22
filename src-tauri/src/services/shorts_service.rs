@@ -660,6 +660,7 @@ async fn gather_subscription_shorts(
                     view_count_text: short.view_count_text,
                     channel_avatar_url: None,
                     is_live: false,
+                    ..Default::default()
                 });
             }
         }
@@ -721,6 +722,7 @@ mod tests {
             view_count_text: None,
             channel_avatar_url: None,
             is_live: false,
+            ..Default::default()
         }
     }
 

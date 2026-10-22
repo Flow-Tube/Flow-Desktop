@@ -49,7 +49,7 @@ impl Card {
     }
 
     pub fn is_short(&self) -> bool {
-        is_known_short(self.video.duration_seconds)
+        self.video.is_short || is_known_short(self.video.duration_seconds)
     }
 
     /// Not a Short, and of known length unless live (Android `filterValid`).

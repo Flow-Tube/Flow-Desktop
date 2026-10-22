@@ -70,6 +70,45 @@ export interface VideoChapter {
   thumbnailUrl?: string | null;
 }
 
+/** What a link in a description or comment points at. */
+export type RichTarget =
+  | { kind: "timestamp"; seconds: number }
+  | { kind: "video"; videoId: string; startSeconds?: number | null }
+  | { kind: "playlist"; playlistId: string }
+  | { kind: "channel"; channelId: string }
+  | { kind: "hashtag"; tag: string }
+  | { kind: "url"; url: string };
+
+export interface RichSpan {
+  /** Offsets count UTF-16 code units, as JavaScript strings do. */
+  start: number;
+  length: number;
+  target: RichTarget;
+}
+
+export interface RichEmoji {
+  start: number;
+  length: number;
+  imageUrl: string;
+  label: string;
+}
+
+/** Text with its links and the custom emoji drawn over it. */
+export interface RichText {
+  text: string;
+  spans: RichSpan[];
+  emojis: RichEmoji[];
+}
+
+export interface DescriptionExtras {
+  /** Headline numbers: "19M" "Likes". */
+  factoids: { value: string; label: string }[];
+  /** Songs credited in the video. */
+  music: { title: string; artist?: string | null; album?: string | null; thumbnailUrl?: string | null }[];
+  /** The creator's own links. */
+  links: { title: string; url: string }[];
+}
+
 /** One slice of the "most replayed" graph, with how often it is replayed from 0 to 1. */
 export interface HeatmapMarker {
   startMs: number;
@@ -114,6 +153,9 @@ export interface VideoDetails {
   autoplayVideoId?: string | null;
   /** A finished stream whose chat can be replayed alongside it. */
   hasChatReplay?: boolean;
+  /** The description with its links, when it could be read with them. */
+  descriptionRich?: RichText | null;
+  descriptionExtras?: DescriptionExtras;
 }
 
 export interface StreamInfo {

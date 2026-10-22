@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { CommentsSection } from "../watch/CommentsSection";
 import { useShortDetails } from "../../lib/useShortDetails";
-import { linkifyText } from "../../lib/linkify";
+import { LinkedText } from "../watch/LinkedText";
 import { getString } from "../../lib/i18n/index";
 import { formatCount } from "../../lib/utils";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
@@ -95,7 +95,7 @@ function ShortDescription({
       </div>
       <p className="px-4 text-base font-medium text-chrome-neutral-100">{title}</p>
       <p className="whitespace-pre-wrap p-4 text-sm text-chrome-neutral-300">
-        {description ? linkifyText(description) : loading ? "..." : getString("shorts_no_description")}
+        {description ? <LinkedText text={description} /> : loading ? "..." : getString("shorts_no_description")}
       </p>
     </div>
   );

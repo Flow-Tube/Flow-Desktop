@@ -91,6 +91,26 @@ export function parseYoutubeUrl(raw: string): ParsedYoutubeUrl | null {
   return null;
 }
 
+/** The in-app route for a parsed link, or null for a handle that needs resolving first. */
+export function routeForYoutubeUrl(parsed: ParsedYoutubeUrl): string | null {
+  switch (parsed.kind) {
+    case "video":
+      return `/watch/${parsed.videoId}`;
+    case "playlist":
+      return `/playlist/${parsed.playlistId}`;
+    case "musicPlaylist":
+      return `/music/playlist/${parsed.playlistId}`;
+    case "musicAlbum":
+      return `/music/album/${parsed.browseId}`;
+    case "channel":
+      return `/channel/${parsed.channelId}`;
+    case "musicArtist":
+      return `/music/artist/${parsed.channelId}`;
+    case "resolveChannel":
+      return null;
+  }
+}
+
 // Top-level YouTube paths that are NOT channel vanity URLs.
 const RESERVED = new Set([
   "watch", "playlist", "shorts", "embed", "live", "results", "feed", "gaming",

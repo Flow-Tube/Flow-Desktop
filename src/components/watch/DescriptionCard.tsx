@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { formatCount } from "../../lib/utils";
 import { getString } from "../../lib/i18n/index";
-import { linkifyText } from "../../lib/linkify";
+import { LinkedText } from "./LinkedText";
+import { DescriptionExtras } from "./DescriptionExtras";
 import type { DescriptionCardProps } from "./types";
 
 // A live stream's count is YouTube's own "197 watching now", shown as sent.
@@ -32,8 +33,14 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
       </div>
 
       <div className={`mt-2 whitespace-pre-wrap text-chrome-neutral-300 ${expanded ? "" : "line-clamp-3"}`}>
-        {description ? linkifyText(description) : <span className="text-chrome-neutral-500">{getString("watch_no_description")}</span>}
+        {description ? (
+          <LinkedText text={description} rich={videoData?.descriptionRich} />
+        ) : (
+          <span className="text-chrome-neutral-500">{getString("watch_no_description")}</span>
+        )}
       </div>
+
+      {expanded && videoData?.descriptionExtras && <DescriptionExtras extras={videoData.descriptionExtras} />}
 
       {description && (
         <span className="mt-2 inline-block font-medium text-chrome-neutral-400">

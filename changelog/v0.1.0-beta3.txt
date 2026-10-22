@@ -76,6 +76,9 @@ PLAYER
 - Chapters come from YouTube with their thumbnails, including the ones YouTube generates, and a description with stray timestamps no longer turns into fake chapters.
 - Collaborations show every channel, each with its own subscribe button, and the watch page shows hashtags, badges like Unlisted, the artist badge and more related videos on request.
 - Finished live streams replay their chat in step with the video, live chat can switch between Top and All messages, and autoplay starts with the video YouTube itself would play next.
+- Links in descriptions and comments open in the app when they point at YouTube: videos, playlists and channels open directly, hashtags search, timestamps seek, and other links open in the browser.
+- Expanding a description shows its headline numbers, the songs used in the video, which play in the music player, and the creator's own links.
+- Comments show who pinned or hearted them, mark the creator and verified channels, can be sorted by Top or Newest, show the exact count, and say when the creator turned comments off.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

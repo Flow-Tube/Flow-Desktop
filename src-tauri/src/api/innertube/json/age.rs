@@ -76,8 +76,8 @@ impl RelativeAge {
 
 /// The age `text` names, or none when it names no age ("Premieres 10/12/26", "1.2M views").
 ///
-/// A compact age only counts when "ago" follows it or it ends the text, so "4K" or "2m views"
-/// never read as ages.
+/// A compact age only counts when "ago" follows it, so "4K", "21M" or "2m views" never read as
+/// ages.
 #[must_use]
 pub fn relative_age(text: &str) -> Option<RelativeAge> {
     let lower = text.to_lowercase();
@@ -105,7 +105,7 @@ pub fn relative_age(text: &str) -> Option<RelativeAge> {
         let suffix = &word[digits_end..];
         let unit = if suffix.is_empty() {
             next.and_then(AgeUnit::from_word)
-        } else if matches!(next, None | Some("ago")) {
+        } else if next == Some("ago") {
             AgeUnit::from_compact(suffix)
         } else {
             None
@@ -166,6 +166,11 @@ mod tests {
         assert_eq!(relative_age("1.2M views"), None);
         assert_eq!(relative_age("2m views"), None);
         assert_eq!(relative_age("4K"), None);
+        assert_eq!(
+            relative_age("21M"),
+            None,
+            "a bare compact view count is not 21 minutes"
+        );
         assert_eq!(relative_age("Premieres 10/12/26"), None);
         assert_eq!(relative_age("Scheduled for 10/12/26, 7:00 PM"), None);
         assert_eq!(relative_age("12 waiting"), None);

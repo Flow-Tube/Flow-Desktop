@@ -70,6 +70,7 @@ PLAYER
 - The audio picker takes the normal copy over its volume-compressed twin, subtitles translate from the authored track under one Auto-translate menu, and live playlists download compressed.
 - Music skips a removed or region-locked song instead of stopping, at most three in a row.
 - Videos YouTube serves only to web players play in installed builds without Node, because the player script now runs in a hidden window.
+- A video the app clients only offer below 720p now plays in HD from the web clients when YouTube has it there.
 - A new Remote signature fallback setting in Network, off by default, lets Flow ask PipePipe's public decoder to unlock the TV app's streams when the usual sources stop working.
 
 SYNC

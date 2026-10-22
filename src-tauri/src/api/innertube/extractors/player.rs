@@ -1283,13 +1283,29 @@ fn has_playable_direct_streams(streaming_data: &Value, video_id: &str) -> bool {
         .any(|variant| variant.is_playable && (variant.has_audio || has_separate_audio))
 }
 
+/// Whether a response is a live or just-ended stream played from its manifest:
+/// it says it is live or post-live DVR, carries live streamability, or offers a
+/// manifest with no adaptive formats beside it. Clients such as `VISIONOS` also
+/// send an HLS manifest for plain videos, which keep their adaptive formats.
 fn has_live_manifest(response: &Value) -> bool {
     let streaming_data = &response["streamingData"];
-    response["videoDetails"]["isLive"]
-        .as_bool()
-        .unwrap_or(false)
-        && (streaming_data["hlsManifestUrl"].is_string()
-            || streaming_data["dashManifestUrl"].is_string())
+    let has_manifest = streaming_data["hlsManifestUrl"].is_string()
+        || streaming_data["dashManifestUrl"].is_string();
+    let details = &response["videoDetails"];
+    let says_live = details["isLive"].as_bool().unwrap_or(false)
+        || details["isPostLiveDvr"].as_bool().unwrap_or(false)
+        || response["playabilityStatus"]["liveStreamability"].is_object();
+    let no_adaptive = streaming_data["adaptiveFormats"]
+        .as_array()
+        .is_none_or(Vec::is_empty);
+    has_manifest && (says_live || no_adaptive)
+}
+
+/// A live broadcast or a just-ended one still served as live.
+fn is_live_response(response: &Value) -> bool {
+    let details = &response["videoDetails"];
+    details["isLive"].as_bool().unwrap_or(false)
+        || details["isPostLiveDvr"].as_bool().unwrap_or(false)
 }
 
 impl InnertubeClient {
@@ -1923,7 +1939,7 @@ impl InnertubeClient {
             )));
         }
 
-        let is_live = res["videoDetails"]["isLive"].as_bool().unwrap_or(false);
+        let is_live = is_live_response(&res);
         let mut hls_manifest_url = streaming_data["hlsManifestUrl"]
             .as_str()
             .map(ToOwned::to_owned);
@@ -2548,12 +2564,23 @@ mod ladder_decisions {
     }
 
     #[test]
-    fn a_live_manifest_needs_the_live_flag() {
-        let manifest = json!({ "streamingData": { "hlsManifestUrl": "https://manifest" } });
-        assert!(!has_live_manifest(&manifest));
-        let mut live = manifest.clone();
+    fn a_manifest_beside_adaptive_formats_needs_a_live_signal() {
+        let vod = json!({ "streamingData": {
+            "hlsManifestUrl": "https://manifest",
+            "adaptiveFormats": [adaptive("video/mp4; codecs=\"avc1\"", None)]
+        } });
+        assert!(
+            !has_live_manifest(&vod),
+            "VISIONOS sends HLS for plain videos too"
+        );
+        let mut live = vod.clone();
         live["videoDetails"] = json!({ "isLive": true });
         assert!(has_live_manifest(&live));
+        let mut dvr = vod.clone();
+        dvr["videoDetails"] = json!({ "isPostLiveDvr": true });
+        assert!(has_live_manifest(&dvr));
+        let manifest_only = json!({ "streamingData": { "hlsManifestUrl": "https://manifest" } });
+        assert!(has_live_manifest(&manifest_only));
     }
 }
 

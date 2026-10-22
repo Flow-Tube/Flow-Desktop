@@ -15,139 +15,10 @@ use crate::security::validation::{
     validate_video_id,
 };
 use crate::services::recommendation_service::RecommendationService;
+use crate::services::subscription_feed::{self, SubscriptionRssFeed};
 use crate::services::youtube_service::YoutubeService;
 
 use crate::streaming::proxy::StreamingManager;
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubscriptionRssChannel {
-    pub id: String,
-    pub name: Option<String>,
-    pub avatar_url: Option<String>,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubscriptionRssFeed {
-    pub videos: Vec<VideoSummary>,
-    pub channels: Vec<SubscriptionRssChannel>,
-    /// Channels scanned so far (streaming progress). Equals `total` when done.
-    pub processed: usize,
-    /// Total channels to scan.
-    pub total: usize,
-}
-
-fn xml_text(source: &str, tag: &str) -> Option<String> {
-    let start_tag = format!("<{tag}>");
-    let end_tag = format!("</{tag}>");
-    let start = source.find(&start_tag)? + start_tag.len();
-    let end = source[start..].find(&end_tag)? + start;
-    Some(decode_xml_entities(source[start..end].trim()))
-}
-
-fn xml_attr(source: &str, tag_prefix: &str, attr: &str) -> Option<String> {
-    let tag_start = source.find(tag_prefix)?;
-    let tag_end = source[tag_start..].find('>')? + tag_start;
-    let tag = &source[tag_start..tag_end];
-    let attr_prefix = format!("{attr}=\"");
-    let value_start = tag.find(&attr_prefix)? + attr_prefix.len();
-    let value_end = tag[value_start..].find('"')? + value_start;
-    Some(decode_xml_entities(tag[value_start..value_end].trim()))
-}
-
-fn decode_xml_entities(value: &str) -> String {
-    value
-        .replace("&amp;", "&")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&apos;", "'")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-}
-
-fn format_relative_published(published: &str) -> Option<String> {
-    let parsed = chrono::DateTime::parse_from_rfc3339(published).ok()?;
-    let now = chrono::Utc::now();
-    let elapsed = now.signed_duration_since(parsed.with_timezone(&chrono::Utc));
-
-    let text = if elapsed.num_days() >= 365 {
-        let years = elapsed.num_days() / 365;
-        format!("{years} {} ago", if years == 1 { "year" } else { "years" })
-    } else if elapsed.num_days() >= 30 {
-        let months = elapsed.num_days() / 30;
-        format!(
-            "{months} {} ago",
-            if months == 1 { "month" } else { "months" }
-        )
-    } else if elapsed.num_days() >= 7 {
-        let weeks = elapsed.num_days() / 7;
-        format!("{weeks} {} ago", if weeks == 1 { "week" } else { "weeks" })
-    } else if elapsed.num_days() >= 1 {
-        let days = elapsed.num_days();
-        format!("{days} {} ago", if days == 1 { "day" } else { "days" })
-    } else if elapsed.num_hours() >= 1 {
-        let hours = elapsed.num_hours();
-        format!("{hours} {} ago", if hours == 1 { "hour" } else { "hours" })
-    } else if elapsed.num_minutes() >= 1 {
-        let minutes = elapsed.num_minutes();
-        format!(
-            "{minutes} {} ago",
-            if minutes == 1 { "minute" } else { "minutes" }
-        )
-    } else {
-        "Just now".to_string()
-    };
-
-    Some(text)
-}
-
-pub(crate) fn parse_rss_feed(
-    channel_id: &str,
-    xml: &str,
-) -> (Option<String>, Vec<(i64, VideoSummary)>) {
-    let channel_name = xml_text(xml, "name");
-    let videos = xml
-        .split("<entry>")
-        .skip(1)
-        .filter_map(|entry| {
-            let entry = entry.split("</entry>").next().unwrap_or(entry);
-            let video_id = xml_text(entry, "yt:videoId")?;
-            let title = xml_text(entry, "title").unwrap_or_else(|| "Untitled video".to_string());
-            let published = xml_text(entry, "published");
-            let sort_key = published
-                .as_deref()
-                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-                .map_or(0, |date| date.timestamp());
-            let published_text = published.as_deref().and_then(format_relative_published);
-            let thumbnail_url = xml_attr(entry, "<media:thumbnail", "url")
-                .or_else(|| Some(format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg")));
-            let duration_seconds = xml_attr(entry, "<media:content", "duration")
-                .and_then(|value| value.parse::<u64>().ok());
-
-            Some((
-                sort_key,
-                VideoSummary {
-                    id: video_id,
-                    title,
-                    channel_name: channel_name
-                        .clone()
-                        .unwrap_or_else(|| "Subscribed channel".to_string()),
-                    channel_id: Some(channel_id.to_string()),
-                    thumbnail_url,
-                    duration_seconds,
-                    published_text,
-                    view_count_text: None,
-                    channel_avatar_url: None,
-                    is_live: false,
-                    ..Default::default()
-                },
-            ))
-        })
-        .collect();
-
-    (channel_name, videos)
-}
 
 /// The channel a handle, `/c/` or `/user/` link names, through the site's own
 /// router.
@@ -1251,63 +1122,6 @@ fn dedupe_channel_ids(channel_ids: Vec<String>) -> Result<Vec<String>, ErrorResp
 
 const SUBSCRIPTION_RSS_BATCH_SIZE: usize = 50;
 
-const SUBSCRIPTION_RSS_CONCURRENCY: usize = 16;
-pub(crate) async fn fetch_rss_channel_batch(
-    client: &'static reqwest::Client,
-    channel_ids: &[String],
-) -> Vec<(SubscriptionRssChannel, Vec<(i64, VideoSummary)>)> {
-    let results = crate::api::http::bounded_join(
-        channel_ids.iter().cloned(),
-        SUBSCRIPTION_RSS_CONCURRENCY,
-        move |channel_id| async move {
-            let rss_url =
-                format!("https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}");
-            let xml = client
-                .get(rss_url)
-                .send()
-                .await
-                .map_err(|error| {
-                    crate::errors::AppError::Extractor(format!(
-                        "RSS fetch failed for {channel_id}: {error}"
-                    ))
-                })?
-                .text()
-                .await
-                .map_err(|error| {
-                    crate::errors::AppError::Extractor(format!(
-                        "RSS read failed for {channel_id}: {error}"
-                    ))
-                })?;
-
-            let (name, videos) = parse_rss_feed(&channel_id, &xml);
-
-            Ok::<_, crate::errors::AppError>((
-                SubscriptionRssChannel {
-                    id: channel_id,
-                    name,
-                    avatar_url: None,
-                },
-                videos,
-            ))
-        },
-    )
-    .await;
-
-    let mut out = Vec::new();
-    for result in results {
-        match result {
-            Ok(entry) => out.push(entry),
-            Err(error) => tracing::warn!("Subscription RSS channel fetch failed: {error}"),
-        }
-    }
-    out
-}
-
-fn sort_and_dedupe_feed(videos: &mut Vec<(i64, VideoSummary)>) {
-    videos.sort_by(|(left, _), (right, _)| right.cmp(left));
-    videos.dedup_by(|(_, left), (_, right)| left.id == right.id);
-}
-
 #[tauri::command]
 pub async fn get_subscription_rss_feed(
     channel_ids: Vec<String>,
@@ -1317,44 +1131,23 @@ pub async fn get_subscription_rss_feed(
 ) -> Result<SubscriptionRssFeed, ErrorResponse> {
     let unique_channel_ids = dedupe_channel_ids(channel_ids)?;
     let limit = limit.unwrap_or(1500).clamp(1, 1500);
-    let client = crate::api::http::shared_client();
-
-    let mut channels = Vec::new();
-    let mut videos = Vec::new();
-    for (channel, channel_videos) in fetch_rss_channel_batch(client, &unique_channel_ids).await {
-        channels.push(channel);
-        videos.extend(channel_videos);
-    }
-
-    sort_and_dedupe_feed(&mut videos);
-    let published: std::collections::HashMap<String, i64> = videos
-        .iter()
-        .map(|(seconds, video)| (video.id.clone(), *seconds))
-        .collect();
-
-    let mut feed_videos: Vec<VideoSummary> = videos
-        .into_iter()
-        .map(|(_, video)| video)
-        .take(limit)
-        .collect();
-
-    // Populate video durations for the top videos (up to 100)
-    let num_to_populate = feed_videos.len().min(100);
-    if num_to_populate > 0 {
-        populate_video_durations(&mut feed_videos[..num_to_populate], &youtube_service, &pool)
-            .await;
-    }
-    crate::services::home_feed::remember_subscription_feed(&pool, &feed_videos, &published).await;
-
+    let mut uploads =
+        subscription_feed::fetch_channels(&youtube_service, &unique_channel_ids).await;
+    subscription_feed::sort_and_dedupe(&mut uploads.videos);
+    let videos =
+        subscription_feed::finish_feed(&youtube_service, &pool, uploads.videos, limit).await;
     let total = unique_channel_ids.len();
     Ok(SubscriptionRssFeed {
-        videos: feed_videos,
-        channels,
+        videos,
+        channels: uploads.channels,
+        failed_channel_ids: uploads.failed_channel_ids,
         processed: total,
         total,
     })
 }
 
+/// The feed in batches of channels, each sent as it lands, then the finished
+/// feed with Shorts and lengths filled in.
 #[tauri::command]
 pub async fn stream_subscription_rss_feed(
     channel_ids: Vec<String>,
@@ -1366,51 +1159,31 @@ pub async fn stream_subscription_rss_feed(
     let unique_channel_ids = dedupe_channel_ids(channel_ids)?;
     let limit = limit.unwrap_or(1500).clamp(1, 1500);
     let total = unique_channel_ids.len();
-    let client = crate::api::http::shared_client();
-
-    let mut channels: Vec<SubscriptionRssChannel> = Vec::new();
-    let mut videos: Vec<(i64, VideoSummary)> = Vec::new();
+    let mut uploads = subscription_feed::ChannelUploads::default();
     let mut processed = 0usize;
 
     for batch in unique_channel_ids.chunks(SUBSCRIPTION_RSS_BATCH_SIZE) {
-        for (channel, channel_videos) in fetch_rss_channel_batch(client, batch).await {
-            channels.push(channel);
-            videos.extend(channel_videos);
-        }
+        let found = subscription_feed::fetch_channels(&youtube_service, batch).await;
+        uploads.channels.extend(found.channels);
+        uploads.videos.extend(found.videos);
+        uploads.failed_channel_ids.extend(found.failed_channel_ids);
         processed = (processed + batch.len()).min(total);
-        sort_and_dedupe_feed(&mut videos);
-
-        let feed_videos: Vec<VideoSummary> = videos
-            .iter()
-            .take(limit)
-            .map(|(_, video)| video.clone())
-            .collect();
+        subscription_feed::sort_and_dedupe(&mut uploads.videos);
         let _ = on_event.send(SubscriptionRssFeed {
-            videos: feed_videos,
-            channels: channels.clone(),
+            videos: subscription_feed::partial_feed(&uploads.videos, limit),
+            channels: uploads.channels.clone(),
+            failed_channel_ids: uploads.failed_channel_ids.clone(),
             processed,
             total,
         });
     }
 
-    let published: std::collections::HashMap<String, i64> = videos
-        .iter()
-        .map(|(seconds, video)| (video.id.clone(), *seconds))
-        .collect();
-    let mut feed_videos: Vec<VideoSummary> = videos
-        .into_iter()
-        .map(|(_, video)| video)
-        .take(limit)
-        .collect();
-    let num_to_populate = feed_videos.len().min(100);
-    if num_to_populate > 0 {
-        populate_video_durations(&mut feed_videos[..num_to_populate], &youtube_service, &pool)
-            .await;
-    }
-    crate::services::home_feed::remember_subscription_feed(&pool, &feed_videos, &published).await;
+    let videos =
+        subscription_feed::finish_feed(&youtube_service, &pool, uploads.videos, limit).await;
     let _ = on_event.send(SubscriptionRssFeed {
-        videos: feed_videos,
-        channels,
+        videos,
+        channels: uploads.channels,
+        failed_channel_ids: uploads.failed_channel_ids,
         processed: total,
         total,
     });

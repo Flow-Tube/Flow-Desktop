@@ -7,6 +7,7 @@ pub mod notification_service;
 pub mod recommendation_service;
 pub mod shorts_engine;
 pub mod shorts_service;
+pub mod subscription_feed;
 pub mod taste_service;
 #[cfg(windows)]
 pub mod win_notify;

@@ -5,9 +5,9 @@ use tauri::{AppHandle, Emitter};
 #[cfg(not(windows))]
 use tauri_plugin_notification::NotificationExt;
 
-use crate::commands::youtube::parse_rss_feed;
 use crate::db;
 use crate::errors::AppResult;
+use crate::services::subscription_feed::rss::{fetch_rss, parse_rss_feed};
 
 pub const NEW_NOTIFICATIONS_EVENT: &str = "notifications://new";
 pub const ACTIVATE_NOTIFICATION_EVENT: &str = "notifications://activate";
@@ -80,18 +80,17 @@ async fn check_channel(
     pool: &sqlx::SqlitePool,
     sub: &StoredSubscription,
 ) -> AppResult<Option<PendingNotification>> {
-    let rss_url = format!(
-        "https://www.youtube.com/feeds/videos.xml?channel_id={}",
-        sub.id
-    );
-    let xml = client.get(rss_url).send().await.ok();
-    let Some(response) = xml else { return Ok(None) };
-    let Some(xml) = response.text().await.ok() else {
+    let Ok(xml) = fetch_rss(client, &sub.id).await else {
         return Ok(None);
     };
 
     let (feed_name, videos) = parse_rss_feed(&sub.id, &xml);
-    let Some((_, latest)) = videos.into_iter().max_by_key(|(sort_key, _)| *sort_key) else {
+    // A premiere is announced when it airs, and members-only uploads cannot be played.
+    let Some((_, latest)) = videos
+        .into_iter()
+        .filter(|(_, video)| !video.is_members_only && !video.is_upcoming)
+        .max_by_key(|(sort_key, _)| *sort_key)
+    else {
         return Ok(None);
     };
 

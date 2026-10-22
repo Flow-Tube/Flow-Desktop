@@ -10,9 +10,9 @@ use std::time::Duration;
 use sqlx::SqlitePool;
 
 use crate::api::http::{bounded_join, shared_client};
-use crate::commands::youtube::parse_rss_feed;
 use crate::db::settings::{get_setting, set_setting};
 use crate::errors::AppResult;
+use crate::services::subscription_feed::rss::{fetch_rss, parse_rss_feed};
 
 /// Device-local: not in the settings sync allowlist.
 const STORE_KEY: &str = "blocked_channel_names";
@@ -65,17 +65,10 @@ pub async fn forget(pool: &SqlitePool, channel_id: &str) -> AppResult<()> {
 }
 
 async fn rss_name(channel_id: String) -> String {
-    let url = format!("https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}");
-    let fetched = tokio::time::timeout(FETCH_TIMEOUT, async {
-        let response = shared_client().get(url).send().await.ok()?;
-        if !response.status().is_success() {
-            return None;
-        }
-        response.text().await.ok()
-    })
-    .await
-    .ok()
-    .flatten();
+    let fetched = tokio::time::timeout(FETCH_TIMEOUT, fetch_rss(shared_client(), &channel_id))
+        .await
+        .ok()
+        .and_then(Result::ok);
     fetched
         .and_then(|xml| parse_rss_feed(&channel_id, &xml).0)
         .map(|name| name.trim().to_string())

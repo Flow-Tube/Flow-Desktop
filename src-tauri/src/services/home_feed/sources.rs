@@ -14,9 +14,10 @@ use super::cache;
 use super::card::Card;
 use crate::api::innertube::extractors::channel::VIDEOS_TAB_PARAMS;
 use crate::api::innertube::renderers::lockup::related_to_video;
-use crate::commands::youtube::{fetch_rss_channel_batch, populate_video_durations};
+use crate::commands::youtube::populate_video_durations;
 use crate::models::channel::ChannelItem;
 use crate::models::search::SearchVideosRequest;
+use crate::services::subscription_feed;
 use crate::services::youtube_service::YoutubeService;
 
 const SEARCH_TIMEOUT: Duration = Duration::from_secs(6);
@@ -304,12 +305,9 @@ pub async fn refresh_subscription_store(
     channel_ids: &[String],
     now_ms: u64,
 ) {
-    let mut videos = Vec::new();
-    for (_, channel_videos) in
-        fetch_rss_channel_batch(crate::api::http::shared_client(), channel_ids).await
-    {
-        videos.extend(channel_videos);
-    }
+    let videos = subscription_feed::fetch_channels(yt, channel_ids)
+        .await
+        .videos;
     store_rss_uploads(yt, pool, videos, now_ms).await;
 }
 

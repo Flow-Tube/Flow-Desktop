@@ -790,7 +790,7 @@ export function ShortVideoSurface({
                   setSettingsPane("root");
                 }}
               />
-              {captions.map((caption) => (
+              {captions.filter((caption) => !caption.isTranslation).map((caption) => (
                 <MenuChoice
                   key={caption.id}
                   checked={selectedCaptionId === caption.id}

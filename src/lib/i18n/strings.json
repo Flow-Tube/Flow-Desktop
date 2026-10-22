@@ -1134,6 +1134,8 @@
   "card_upcoming": "Upcoming",
   "card_members_only": "Members only",
   "card_verified_channel": "Verified channel",
+  "player_captions_auto_translate": "Auto-translate",
+  "player_captions_translated_label": "%s (auto-translated)",
   "watch_view_count": "%s views",
   "watch_show_more": "Show more",
   "watch_show_less": "Show less",

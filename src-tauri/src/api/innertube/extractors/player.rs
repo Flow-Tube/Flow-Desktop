@@ -676,12 +676,24 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
             language_code,
             url,
             is_auto_generated,
+            is_translation: false,
         });
     }
 
-    let translatable_track = tracks.iter().find(|track| {
-        track["isTranslatable"].as_bool().unwrap_or(false) && track["baseUrl"].as_str().is_some()
-    });
+    // Translate from an authored track when there is one: a translation of the
+    // speech-recognition track carries every recognition error into the target.
+    let translatable_track = tracks
+        .iter()
+        .filter(|track| {
+            track["isTranslatable"].as_bool().unwrap_or(false)
+                && track["baseUrl"].as_str().is_some()
+        })
+        .min_by_key(|track| {
+            track["kind"].as_str() == Some("asr")
+                || track["vssId"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("a."))
+        });
 
     if let Some(track) = translatable_track {
         let base_url = track["baseUrl"].as_str().unwrap_or_default();
@@ -704,10 +716,11 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
 
                 captions.push(CaptionTrack {
                     id: format!("caption-translated-{language_code}"),
-                    label: format!("{label} (auto-translated)"),
+                    label,
                     language_code: language_code.to_string(),
                     url,
                     is_auto_generated: true,
+                    is_translation: true,
                 });
             }
         }

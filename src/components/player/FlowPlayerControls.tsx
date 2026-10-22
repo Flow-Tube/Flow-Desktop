@@ -98,7 +98,15 @@ export interface FlowPlayerControlsProps {
   activeQualityLabel?: string;
 }
 
-type SettingsPane = "root" | "speed" | "quality" | "captions" | "captions-customize" | "audio" | "sleep";
+type SettingsPane =
+  | "root"
+  | "speed"
+  | "quality"
+  | "captions"
+  | "captions-translate"
+  | "captions-customize"
+  | "audio"
+  | "sleep";
 
 const defaultSpeedOptions: PlaybackRate[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const sleepOptions = [
@@ -323,6 +331,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
   const selectedCaption =
     captions.find((caption) => caption.id === selectedCaptionId) || null;
+  const nativeCaptions = captions.filter((caption) => !caption.isTranslation);
+  const translatedCaptions = captions.filter((caption) => caption.isTranslation);
+  const captionLabel = (caption: CaptionTrack) =>
+    caption.isTranslation ? getString("player_captions_translated_label", caption.label) : caption.label;
   const selectedAudioTrack =
     audioTracks.find((track) => track.id === selectedAudioTrackId) ||
     audioTracks.find((track) => track.isDefault) ||
@@ -829,7 +841,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             <button
               type="button"
               onClick={() => {
-                if (settingsPane === "captions-customize") {
+                if (settingsPane === "captions-customize" || settingsPane === "captions-translate") {
                   setSettingsPane("captions");
                 } else {
                   setSettingsPane("root");
@@ -844,6 +856,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 ? "Quality"
                 : settingsPane === "captions"
                 ? "Subtitles/CC"
+                : settingsPane === "captions-translate"
+                ? getString("player_captions_auto_translate")
                 : settingsPane === "captions-customize"
                 ? "Subtitle Style"
                 : settingsPane === "audio"
@@ -881,7 +895,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             )}
             {renderSettingRow(
               "Subtitles/CC",
-              selectedCaption ? selectedCaption.label : "Off",
+              selectedCaption ? captionLabel(selectedCaption) : "Off",
               <Captions size={18} />,
               () => setSettingsPane("captions")
             )}
@@ -1018,7 +1032,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               <span>Off</span>
               {selectedCaptionId === "off" && <Check size={17} />}
             </button>
-            {captions.map((caption) => (
+            {nativeCaptions.map((caption) => (
               <button
                 key={caption.id}
                 type="button"
@@ -1034,6 +1048,38 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     <span className="ml-1 text-xs text-chrome-zinc-400">auto</span>
                   )}
                 </span>
+                {selectedCaptionId === caption.id && <Check size={17} />}
+              </button>
+            ))}
+            {translatedCaptions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSettingsPane("captions-translate")}
+                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-chrome-white/10"
+              >
+                <span className="text-left">{getString("player_captions_auto_translate")}</span>
+                <span className="flex items-center gap-1 text-xs text-chrome-zinc-400">
+                  {selectedCaption?.isTranslation ? selectedCaption.label : null}
+                  <ChevronRight size={16} />
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {settingsPane === "captions-translate" && (
+          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
+            {translatedCaptions.map((caption) => (
+              <button
+                key={caption.id}
+                type="button"
+                onClick={() => {
+                  setSelectedCaptionId(caption.id);
+                  setSettingsPane("root");
+                }}
+                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-chrome-white/10"
+              >
+                <span className="text-left">{caption.label}</span>
                 {selectedCaptionId === caption.id && <Check size={17} />}
               </button>
             ))}

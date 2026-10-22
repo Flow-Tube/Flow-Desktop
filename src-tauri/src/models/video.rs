@@ -214,6 +214,9 @@ pub struct CaptionTrack {
     pub language_code: String,
     pub url: String,
     pub is_auto_generated: bool,
+    /// A machine translation of another track, offered under Auto-translate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_translation: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

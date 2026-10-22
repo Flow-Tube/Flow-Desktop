@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
-use crate::models::channel::{ChannelDetails, ChannelTabResponse};
+use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::live_chat::LiveChatResponse;
@@ -55,6 +55,14 @@ impl YoutubeService {
 
     pub async fn get_stream_info(&self, video_id: &str, refresh: bool) -> AppResult<StreamInfo> {
         self.extractor.get_stream_info(video_id, refresh).await
+    }
+
+    pub async fn get_channel_page(&self, channel_id: &str) -> AppResult<ChannelPage> {
+        self.extractor.get_channel_page(channel_id).await
+    }
+
+    pub async fn get_channel_about(&self, token: &str) -> AppResult<ChannelAbout> {
+        self.extractor.get_channel_about(token).await
     }
 
     pub async fn get_channel_details(&self, channel_id: &str) -> AppResult<ChannelDetails> {

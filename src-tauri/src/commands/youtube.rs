@@ -3,7 +3,7 @@ use tracing::{debug, info};
 
 use crate::api::innertube::core::clients;
 use crate::errors::ErrorResponse;
-use crate::models::channel::{ChannelDetails, ChannelTabResponse};
+use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
@@ -769,6 +769,31 @@ pub async fn get_sabr_debug_state(
         Some(handle) => Ok(Some(handle.engine.debug_state().await)),
         None => Ok(None),
     }
+}
+
+/// A channel's landing page: header, tabs and Home in one request.
+#[tauri::command]
+pub async fn get_channel_page(
+    channel_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<ChannelPage, ErrorResponse> {
+    validate_channel_id(&channel_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_channel_page(&channel_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// A channel's About panel, by the token its header carries.
+#[tauri::command]
+pub async fn get_channel_about(
+    token: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<ChannelAbout, ErrorResponse> {
+    youtube_service
+        .get_channel_about(&token)
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]

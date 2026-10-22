@@ -48,6 +48,8 @@ INTERFACE
 - The home feed keeps loading new videos as you scroll instead of stopping after a few pages. Each search now continues to its next page of results instead of repeating the first one.
 - New search topics are only picked once the current ones run out of results, so the feed no longer reruns the same searches every few seconds at the bottom.
 - When there is nothing new left, the home feed says so and offers a Refresh button instead of retrying forever.
+- Video cards show a verified tick next to channels, YouTube's own badges such as 4K, CC and New, a Members only label, and an Upcoming badge on premieres instead of a waiting count read as views.
+- A Short found in search or a channel opens in the Shorts player, and collaboration videos open the lead channel instead of none. Related cards show channel avatars.
 
 PLAYER
 - Fewer "Sign in to confirm you're not a bot" errors: when YouTube asks, the player gets a fresh visitor session and tries again before moving on.

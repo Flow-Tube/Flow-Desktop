@@ -61,6 +61,8 @@ PLAYER
 - The player follows the page while you scroll without re-laying out the window, and scrolling a menu or side panel no longer moves it.
 - The seek bar and time stop redrawing every frame while the video is paused or the controls are hidden.
 - Web playback clients send their playback token where YouTube reads it, videos behind a content warning get their related videos and autoplay back, live streams show how many are watching, and hidden like counts no longer read "I like this".
+- Flow keeps one anonymous YouTube identity for up to a week instead of a new one every launch, and gets a new one at most twice in six hours after a bot check. Diagnostics can reset it.
+- YouTube requests give up after 20 seconds instead of hanging, retry briefly after a dropped connection, and say when the connection failed or YouTube asked Flow to slow down.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

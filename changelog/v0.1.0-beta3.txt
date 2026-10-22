@@ -72,6 +72,10 @@ PLAYER
 - Videos YouTube serves only to web players play in installed builds without Node, because the player script now runs in a hidden window.
 - A video the app clients only offer below 720p now plays in HD from the web clients when YouTube has it there.
 - A new Remote signature fallback setting in Network, off by default, lets Flow ask PipePipe's public decoder to unlock the TV app's streams when the usual sources stop working.
+- The watch page loads its details, related videos, first comments and chat from one YouTube request instead of four, and no longer loads the whole channel page just for its avatar and subscriber count.
+- Chapters come from YouTube with their thumbnails, including the ones YouTube generates, and a description with stray timestamps no longer turns into fake chapters.
+- Collaborations show every channel, each with its own subscribe button, and the watch page shows hashtags, badges like Unlisted, the artist badge and more related videos on request.
+- Finished live streams replay their chat in step with the video, live chat can switch between Top and All messages, and autoplay starts with the video YouTube itself would play next.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

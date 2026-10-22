@@ -145,6 +145,24 @@ async fn capture_innertube_fixtures() {
         .expect("comments");
     save("comments_page1", comments);
 
+    for (name, query, params) in [
+        ("search_plain", "linus tech tips", None),
+        ("search_shorts", "cat", Some("EgIQCQ==")),
+        ("search_playlists", "lofi", Some("EgIQAw==")),
+        ("search_channels", "cooking", Some("EgIQAg==")),
+        ("search_corrected", "linus tehc tips", None),
+    ] {
+        let mut search = json!({ "query": query });
+        if let Some(params) = params {
+            search["params"] = json!(params);
+        }
+        let search = client
+            .post_innertube("search", &clients::WEB, &mut search)
+            .await
+            .expect(name);
+        save(name, search);
+    }
+
     for (name, video_id) in [
         ("next_auto_chapters", AUTO_CHAPTERS_VIDEO),
         ("next_collab", COLLAB_VIDEO),

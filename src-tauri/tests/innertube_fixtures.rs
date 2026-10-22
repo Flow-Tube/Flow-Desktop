@@ -8,6 +8,7 @@
 use std::path::PathBuf;
 
 use flow_desktop_lib::api::innertube::extractors::comments::parse_comments_json;
+use flow_desktop_lib::api::innertube::extractors::search::parse_innertube_search;
 use flow_desktop_lib::api::innertube::extractors::watch_next;
 use flow_desktop_lib::api::innertube::json::age::relative_age;
 use flow_desktop_lib::api::innertube::json::continuation::{
@@ -268,4 +269,64 @@ fn turned_off_comments_are_detected() {
         return;
     };
     assert!(parse_comments_json(&next, Some("XqZsoesa55w")).comments_disabled);
+}
+
+#[test]
+fn a_mixed_search_keeps_its_channel_shelves_and_shorts() {
+    let Some(page) = fixture("search_plain") else {
+        return;
+    };
+    let page = parse_innertube_search(&page);
+    assert!(page.items.len() >= 10, "{} videos", page.items.len());
+    let channel = page.channels.first().expect("channel card");
+    assert!(
+        channel
+            .handle
+            .as_deref()
+            .is_some_and(|handle| handle.starts_with('@'))
+    );
+    assert!(
+        channel
+            .subscriber_count_text
+            .as_deref()
+            .is_some_and(|text| text.contains("subscriber"))
+    );
+    assert!(!page.shelves.is_empty());
+    assert!(page.shorts.len() >= 10, "{} shorts", page.shorts.len());
+    assert!(page.next_page_token.is_some());
+}
+
+#[test]
+fn typed_searches_return_their_type() {
+    if let Some(page) = fixture("search_shorts") {
+        assert!(parse_innertube_search(&page).shorts.len() >= 20);
+    }
+    if let Some(page) = fixture("search_playlists") {
+        let page = parse_innertube_search(&page);
+        assert!(
+            page.playlists.len() >= 10,
+            "{} playlists",
+            page.playlists.len()
+        );
+        assert!(
+            page.playlists
+                .iter()
+                .all(|playlist| !playlist.title.is_empty())
+        );
+    }
+    if let Some(page) = fixture("search_channels") {
+        assert!(parse_innertube_search(&page).channels.len() >= 15);
+    }
+}
+
+#[test]
+fn a_misspelt_search_says_what_it_searched_for() {
+    let Some(page) = fixture("search_corrected") else {
+        return;
+    };
+    let correction = parse_innertube_search(&page)
+        .correction
+        .expect("correction");
+    assert!(correction.applied);
+    assert_eq!(correction.original.as_deref(), Some("linus tehc tips"));
 }

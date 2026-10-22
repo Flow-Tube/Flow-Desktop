@@ -1,6 +1,7 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
 use crate::api::innertube::core::clients;
+use crate::api::innertube::core::gate_tracker::gated_last;
 use crate::api::innertube::core::player_js;
 use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
 use crate::api::innertube::core::utils::{
@@ -12,6 +13,7 @@ use crate::api::innertube::extractors::playability::{
 };
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::thumbnail_url_from_array;
+use crate::api::innertube::json::xtags::decode_xtags;
 use crate::api::innertube::renderers::video::channel_id_of;
 use crate::errors::{AppError, AppResult};
 use crate::models::video::{
@@ -725,22 +727,37 @@ struct AudioCandidate {
     /// `audioIsDefault` as the response stated it, if it stated anything at all.
     declared_default: Option<bool>,
     is_auto_dubbed: bool,
+    /// The dynamic-range compressed copy (`xtags` `drc=1` or `isDrc`).
+    is_drc: bool,
     has_xtags: bool,
 }
 
 impl AudioCandidate {
     /// Preference order between two formats that share an identity key, best last.
     ///
-    /// The plain twin outranks the `xtags` one regardless of bitrate: googlevideo
-    /// refuses sustained playback on the tagged variants, so a higher bitrate there
-    /// buys a stream that dies partway in.
-    fn rank(&self) -> (bool, bool, bool, u64) {
+    /// The normal copy outranks its DRC twin, whose bitrate differs by a few
+    /// bytes a second, so bitrate alone picked the loudness-flattened one. A
+    /// plain twin then outranks a tagged one: googlevideo refused sustained
+    /// playback on some tagged variants, so a higher bitrate there bought a
+    /// stream that died partway in.
+    fn rank(&self) -> (bool, bool, bool, bool, u64) {
         (
-            !self.has_xtags,
+            !self.is_drc,
             self.declared_default.unwrap_or(false),
             !self.is_auto_dubbed,
+            !self.has_xtags,
             self.track.bitrate.unwrap_or(0),
         )
+    }
+}
+
+/// The `audio_track_type` an `xtags` `acont` names, when it names one.
+fn track_type_from_acont(acont: &str) -> Option<&'static str> {
+    match acont {
+        "original" => Some("original"),
+        "dubbed" => Some("dubbed"),
+        "dubbed-auto" => Some("dubbed-auto"),
+        _ => None,
     }
 }
 
@@ -793,9 +810,14 @@ pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<Aud
             // it positionally meant the flag could be silently dropped when a later
             // duplicate replaced the entry holding it, leaving no default at all.
             let declared_default = audio_track["audioIsDefault"].as_bool();
-            let has_xtags = format["xtags"]
-                .as_str()
-                .is_some_and(|value| !value.is_empty());
+            let raw_xtags = format["xtags"].as_str().filter(|value| !value.is_empty());
+            let has_xtags = raw_xtags.is_some();
+            let xtags = raw_xtags.map(decode_xtags).unwrap_or_default();
+            let is_drc = format["isDrc"].as_bool().unwrap_or(false)
+                || xtags.get("drc").is_some_and(|value| value == "1");
+            let tagged_type = xtags
+                .get("acont")
+                .and_then(|acont| track_type_from_acont(acont));
             let is_default = declared_default.unwrap_or(false);
             let mime_type = format["mimeType"].as_str().map(ToOwned::to_owned);
             let track_key = audio_track_identity_key(
@@ -810,7 +832,9 @@ pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<Aud
                     label,
                     language_code,
                     audio_track_type: Some(
-                        if is_default { "original" } else { "alternate" }.to_string(),
+                        tagged_type
+                            .unwrap_or(if is_default { "original" } else { "alternate" })
+                            .to_string(),
                     ),
                     local_url,
                     mime_type,
@@ -827,6 +851,7 @@ pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<Aud
                 },
                 declared_default,
                 is_auto_dubbed,
+                is_drc,
                 has_xtags,
             };
 
@@ -1343,7 +1368,7 @@ impl InnertubeClient {
         let mut visitor_data = visitor_data;
         let mut identity_refreshed = false;
         let mut fresh_identity_walled = false;
-        for client in ladder {
+        for client in gated_last(ladder.iter().copied(), |client| client.name) {
             let mut outcome = self
                 .attempt_client(video_id, client, visitor_data.as_deref())
                 .await;

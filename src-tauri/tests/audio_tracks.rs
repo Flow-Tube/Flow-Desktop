@@ -333,3 +333,48 @@ fn a_single_language_response_still_yields_one_track() {
     assert!(selected[0].available);
     assert!(selected[0].init_range_start.is_some());
 }
+
+/// `{1: key, 2: value}` pairs, base64url, as `xtags` carries them.
+fn xtags(pairs: &[(&str, &str)]) -> String {
+    use base64::Engine;
+    let mut bytes = Vec::new();
+    for (key, value) in pairs {
+        let mut pair = vec![0x0a, key.len() as u8];
+        pair.extend_from_slice(key.as_bytes());
+        pair.extend_from_slice(&[0x12, value.len() as u8]);
+        pair.extend_from_slice(value.as_bytes());
+        bytes.push(0x0a);
+        bytes.push(pair.len() as u8);
+        bytes.extend_from_slice(&pair);
+    }
+    base64::engine::general_purpose::URL_SAFE.encode(bytes)
+}
+
+/// A dubbed video where every copy is tagged: the DRC twin of the original is a
+/// few bytes a second above the normal copy, and bitrate alone picked it.
+#[test]
+fn the_normal_copy_beats_its_drc_twin_when_every_copy_is_tagged() {
+    let original = |bitrate, extra: &[(&str, &str)]| {
+        let mut pairs = vec![("acont", "original"), ("lang", "en")];
+        pairs.extend_from_slice(extra);
+        with_xtags(
+            with_audio_track(
+                audio_format(140, "audio/mp4; codecs=\"mp4a.40.2\"", bitrate),
+                "en.4",
+                "English original",
+                true,
+                false,
+            ),
+            &xtags(&pairs),
+        )
+    };
+    let data = streaming_data(vec![
+        original(130_000, &[]),
+        original(130_006, &[("drc", "1")]),
+    ]);
+    let tracks = collect_audio_tracks(&data, UA);
+    assert_eq!(tracks.len(), 1);
+    assert_eq!(tracks[0].bitrate, Some(130_000), "the DRC copy must lose");
+    assert!(tracks[0].is_default);
+    assert_eq!(tracks[0].audio_track_type.as_deref(), Some("original"));
+}

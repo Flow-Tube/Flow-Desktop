@@ -1,6 +1,7 @@
 pub mod botguard;
 pub mod clients;
 pub mod context;
+pub mod gate_tracker;
 pub mod http;
 pub(crate) mod player_js;
 pub(crate) mod player_requests;

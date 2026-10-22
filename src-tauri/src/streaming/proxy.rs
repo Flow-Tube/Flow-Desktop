@@ -103,6 +103,18 @@ fn user_agent_for_media_url(url: &str, session_user_agent: &str) -> String {
         )
 }
 
+/// How long a session lives when its URL names no expiry, as a generated manifest
+/// or an image does: as long as a googlevideo URL's own six hours.
+const UNDATED_SESSION_SECS: u64 = 6 * 3600;
+
+/// A remote session lives as long as its URL does. A fixed hour cut every video
+/// still playing an hour after it resolved off mid-stream.
+fn remote_session_expiry(remote_url: &str, now: u64) -> u64 {
+    crate::api::innertube::core::gate_tracker::url_expiry_secs(remote_url)
+        .filter(|expire| *expire > now)
+        .unwrap_or(now + UNDATED_SESSION_SECS)
+}
+
 impl StreamingManager {
     pub fn new() -> (Self, ProxyListeners) {
         let bind =
@@ -160,9 +172,9 @@ impl StreamingManager {
             .unwrap()
             .as_secs();
         let session = StreamSession {
+            expires_at: remote_session_expiry(&remote_url, now),
             kind: StreamSessionKind::Remote { remote_url },
             content_type,
-            expires_at: now + 3600,
             user_agent,
         };
         let mut lock = self.sessions.lock().unwrap();
@@ -178,7 +190,7 @@ impl StreamingManager {
         let session = StreamSession {
             kind: StreamSessionKind::Inline { body },
             content_type,
-            expires_at: now + 3600,
+            expires_at: now + UNDATED_SESSION_SECS,
             user_agent: String::new(),
         };
         let mut lock = self.sessions.lock().unwrap();
@@ -770,6 +782,19 @@ async fn relay_local_file(
     Ok(())
 }
 
+/// For testing recovery: with `FLOW_DEBUG_REFUSE_AFTER_BYTES=N` set, media past
+/// byte N is refused as googlevideo refuses a walled client.
+fn debug_refusal_due(offset: u64) -> bool {
+    static AFTER: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+    AFTER
+        .get_or_init(|| {
+            std::env::var("FLOW_DEBUG_REFUSE_AFTER_BYTES")
+                .ok()
+                .and_then(|value| value.parse().ok())
+        })
+        .is_some_and(|after| offset >= after)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn relay_remote(
     socket: &mut TcpStream,
@@ -856,6 +881,15 @@ async fn relay_remote(
             None
         };
 
+        if stall_guarded && debug_refusal_due(effective_start) {
+            warn!(
+                effective_start,
+                "FLOW_DEBUG_REFUSE_AFTER_BYTES: refusing the relay"
+            );
+            crate::api::innertube::core::gate_tracker::record_refused_url(target_url);
+            return write_status_only(socket, 403, "Forbidden", "Refused for testing").await;
+        }
+
         let response = match req.send().await {
             Ok(res) => res,
             Err(e) => {
@@ -917,6 +951,9 @@ async fn relay_remote(
                     ua = %upstream_user_agent,
                     "Upstream rejected stream relay"
                 );
+                if stall_guarded && matches!(status.as_u16(), 401 | 403) {
+                    crate::api::innertube::core::gate_tracker::record_refused_url(target_url);
+                }
             }
             let headers = response.headers();
             content_type_value = headers

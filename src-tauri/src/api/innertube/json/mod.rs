@@ -6,3 +6,4 @@ pub mod count;
 pub mod duration;
 pub mod text;
 pub mod thumbnail;
+pub mod xtags;

@@ -19,10 +19,12 @@ use tracing::{debug, info, warn};
 use super::clients;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
+use crate::api::innertube::core::gate_tracker::gated_last;
 use crate::api::innertube::extractors::playability::{
     Refusal, ends_the_ladder, is_better_report, is_bot_wall, map_playability_error,
 };
 use crate::api::innertube::extractors::player::playback_priority;
+use crate::api::innertube::json::xtags::decode_xtags;
 use crate::errors::{AppError, AppResult};
 use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 
@@ -62,7 +64,7 @@ impl InnertubeClient {
         let mut identity_refreshed = false;
         let mut reported: Option<Refusal> = None;
 
-        for client in clients::DIRECT_AUDIO_CLIENTS {
+        for client in gated_last(clients::DIRECT_AUDIO_CLIENTS, |client| client.name) {
             let mut answer = self
                 .ask_music_client(client, video_id, audio_quality, visitor.as_deref())
                 .await;
@@ -232,6 +234,25 @@ struct AudioCandidate {
     bitrate: u64,
     score: i64,
     is_original: bool,
+    /// A dynamic-range compressed copy or an auto-dubbed track: only played
+    /// when nothing else is on offer.
+    is_fallback_copy: bool,
+}
+
+/// The dynamic-range compressed copy of a track, or an auto-dubbed one.
+fn is_fallback_copy(format: &Value) -> bool {
+    let xtags = format["xtags"]
+        .as_str()
+        .map(decode_xtags)
+        .unwrap_or_default();
+    format["isDrc"].as_bool().unwrap_or(false)
+        || xtags.get("drc").is_some_and(|value| value == "1")
+        || xtags
+            .get("acont")
+            .is_some_and(|value| value == "dubbed-auto")
+        || format["audioTrack"]["isAutoDubbed"]
+            .as_bool()
+            .unwrap_or(false)
 }
 
 fn format_bitrate(format: &Value) -> u64 {
@@ -355,7 +376,16 @@ fn pick_audio_format(
             bitrate: format_bitrate(format),
             score: audio_score(format),
             is_original: format_is_original_audio(format),
+            is_fallback_copy: is_fallback_copy(format),
         });
+    }
+    // The DRC twin differs from the normal copy by a few bytes a second, so
+    // ranking by bitrate alone could pick the loudness-flattened one.
+    if candidates
+        .iter()
+        .any(|candidate| !candidate.is_fallback_copy)
+    {
+        candidates.retain(|candidate| !candidate.is_fallback_copy);
     }
 
     let selected = match audio_quality {
@@ -407,6 +437,25 @@ mod tests {
         assert!((perceptual - 3.41).abs() < 1e-9);
 
         assert_eq!(loudness_db(&json!({}), &json!({})), None);
+    }
+
+    #[test]
+    fn the_drc_copy_is_never_picked_over_the_normal_one() {
+        let format = |bitrate: u64, drc: bool| {
+            json!({
+                "itag": 251,
+                "mimeType": "audio/webm; codecs=\"opus\"",
+                "bitrate": bitrate,
+                "isDrc": drc,
+                "url": format!("https://rr1.googlevideo.com/videoplayback?itag=251&b={bitrate}"),
+            })
+        };
+        let streaming =
+            json!({ "adaptiveFormats": [format(140_000, false), format(140_005, true)] });
+        let (picked, _) = pick_audio_format(&streaming, MusicAudioQuality::High).unwrap();
+        assert_eq!(picked["isDrc"], false);
+        let only_drc = json!({ "adaptiveFormats": [format(140_005, true)] });
+        assert!(pick_audio_format(&only_drc, MusicAudioQuality::High).is_some());
     }
 
     #[test]

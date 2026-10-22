@@ -193,6 +193,9 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const [sourceMode, setSourceMode] = useState<SourceMode>("unavailable");
   const [selectedQualityId, setSelectedQualityId] = useState<string>("auto");
   const [resumeTime, setResumeTime] = useState(0);
+  // The video whose links were already re-resolved once without asking.
+  const autoRecoveredRef = useRef<string | null>(null);
+  const hardRetryRef = useRef<() => void>(() => undefined);
   const [loadingStream, setLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamErrorKind, setStreamErrorKind] = useState<string | null>(null);
@@ -423,6 +426,16 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       recordPlayerEvent(`video source fallback: ${reason} from=${sourceMode} next=${next ?? "none"}`);
 
       if (!next) {
+        // Every source failing usually means the resolved links were refused or
+        // expired; one fresh ladder walk, resuming here, fixes that before the
+        // user sees an error.
+        const videoId = usePlayerStore.getState().currentVideo?.id;
+        if (videoId && autoRecoveredRef.current !== videoId) {
+          autoRecoveredRef.current = videoId;
+          recordPlayerEvent(`video auto re-resolve after ${reason}`);
+          hardRetryRef.current();
+          return;
+        }
         if (!reason.startsWith("buffering-stall")) {
           setStreamError("Playback failed on all available sources for this video.");
           setStreamErrorKind("streaming");
@@ -468,6 +481,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
   const onHardRetry = useCallback(() => {
     if (!currentVideo) return;
+    const resumeAt = streamInfoRef.current?.isLive ? 0 : usePlayerStore.getState().currentTime || 0;
     setStreamUrl(null);
     setStreamVariants([]);
     publishCaptions([]);
@@ -499,6 +513,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         setSelectedQualityId(initialQualityId);
         setStreamError(null);
         setStreamErrorKind(null);
+        setResumeTime(resumeAt);
 
         const mode = computeAvailableSourceModes(info)[0] || "unavailable";
         attemptedModesRef.current.add(mode);
@@ -528,6 +543,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         recordPlayerEvent(`video hard retry failed: ${info.kind} (${info.rawMessage})`);
       });
   }, [currentVideo, preferredCodec, preferredQuality, publishCaptions]);
+  hardRetryRef.current = onHardRetry;
 
   return {
     streamUrl,

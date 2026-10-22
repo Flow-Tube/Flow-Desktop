@@ -79,6 +79,9 @@ PLAYER
 - Links in descriptions and comments open in the app when they point at YouTube: videos, playlists and channels open directly, hashtags search, timestamps seek, and other links open in the browser.
 - Expanding a description shows its headline numbers, the songs used in the video, which play in the music player, and the creator's own links.
 - Comments show who pinned or hearted them, mark the creator and verified channels, can be sorted by Top or Newest, show the exact count, and say when the creator turned comments off.
+- Search shows the Shorts, the "Latest from" shelves, YouTube playlists and channel subscriber counts it used to drop, and Shorts discovery finds many more real Shorts.
+- Search filters work as YouTube applies them: relevance or view count, the right length buckets, a type filter, several features at once, and suggestions for your region.
+- A misspelt search says what it searched for instead and can search the original, collaborations show every channel on their cards, and onboarding finds about 20 channels per search.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

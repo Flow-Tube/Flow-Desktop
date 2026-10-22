@@ -93,6 +93,8 @@ fn channel_search_token(page: &Value) -> Option<String> {
         })
 }
 
+/// A channel whose posts include quizzes and polls.
+const QUIZ_CHANNEL: &str = "UCHnyfMqiRRG1u-2MsSQLbXA";
 /// A video with YouTube-generated chapters and a heatmap.
 const AUTO_CHAPTERS_VIDEO: &str = "0e3GPea1Tyg";
 /// A collaboration between two channels.
@@ -187,6 +189,57 @@ async fn capture_innertube_fixtures() {
             .expect(name);
         save(name, page);
     }
+
+    let mut landing = json!({ "browseId": LTT });
+    let landing = client
+        .post_innertube("browse", &clients::WEB, &mut landing)
+        .await
+        .expect("channel landing");
+    let landing = save("channel_home", landing);
+    let details =
+        flow_desktop_lib::api::innertube::extractors::channel::parse_header(&landing, LTT);
+    for tab in &details.tabs {
+        let Some(params) = &tab.params else { continue };
+        if !["videos", "shorts", "live", "playlists", "posts"].contains(&tab.kind.as_str()) {
+            continue;
+        }
+        let mut browse = json!({ "browseId": LTT, "params": params });
+        let page = client
+            .post_innertube("browse", &clients::WEB, &mut browse)
+            .await
+            .expect("channel tab");
+        let page = save(&format!("channel_{}", tab.kind), page);
+        if tab.kind != "videos" {
+            continue;
+        }
+        let tab = flow_desktop_lib::api::innertube::extractors::channel::parse_tab(&page, LTT);
+        let popular = tab
+            .filters
+            .iter()
+            .flat_map(|group| &group.options)
+            .find(|option| !option.selected && option.continuation.is_some())
+            .and_then(|option| option.continuation.clone())
+            .expect("a second sort");
+        let mut sorted = json!({ "continuation": popular });
+        let sorted = client
+            .post_innertube("browse", &clients::WEB, &mut sorted)
+            .await
+            .expect("sorted videos");
+        save("channel_videos_sorted", sorted);
+    }
+    let token = details.about_token.expect("about token");
+    let mut about = json!({ "continuation": token });
+    let about = client
+        .post_innertube("browse", &clients::WEB, &mut about)
+        .await
+        .expect("channel about");
+    save("channel_about", about);
+    let mut quiz_posts = json!({ "browseId": QUIZ_CHANNEL, "params": "EgVwb3N0c_IGBAoCSgA%3D" });
+    let quiz_posts = client
+        .post_innertube("browse", &clients::WEB, &mut quiz_posts)
+        .await
+        .expect("quiz posts");
+    save("channel_posts_quiz", quiz_posts);
 
     for (name, video_id) in [
         ("next_auto_chapters", AUTO_CHAPTERS_VIDEO),

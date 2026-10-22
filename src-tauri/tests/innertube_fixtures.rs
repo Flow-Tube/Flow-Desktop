@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use flow_desktop_lib::api::innertube::extractors::channel::{parse_about, parse_header, parse_tab};
 use flow_desktop_lib::api::innertube::extractors::comments::parse_comments_json;
 use flow_desktop_lib::api::innertube::extractors::explore::{
     parse_explore_grid, parse_explore_page,
@@ -18,6 +19,7 @@ use flow_desktop_lib::api::innertube::json::continuation::{
     continuation_item_lists, continuation_token,
 };
 use flow_desktop_lib::api::innertube::renderers::lockup::lockup_item;
+use flow_desktop_lib::models::channel::{ChannelItem, PostAttachment};
 use serde_json::Value;
 
 fn fixture(name: &str) -> Option<Value> {
@@ -369,4 +371,132 @@ fn a_see_all_grid_has_a_next_page() {
     let grid = parse_explore_grid(&page);
     assert!(grid.videos.len() >= 10, "{} videos", grid.videos.len());
     assert!(grid.continuation.is_some());
+}
+
+#[test]
+fn a_channel_landing_page_has_its_header_tabs_and_shelves() {
+    let Some(page) = fixture("channel_home") else {
+        return;
+    };
+    let details = parse_header(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw");
+    assert!(
+        details
+            .handle
+            .as_deref()
+            .is_some_and(|handle| handle.starts_with('@'))
+    );
+    assert!(details.subscriber_count.is_some() && details.video_count_text.is_some());
+    assert!(details.verified && details.about_token.is_some());
+    let kinds: Vec<&str> = details.tabs.iter().map(|tab| tab.kind.as_str()).collect();
+    for kind in ["home", "videos", "shorts", "live", "playlists", "posts"] {
+        assert!(kinds.contains(&kind), "{kind} in {kinds:?}");
+    }
+    let home = parse_tab(&page, &details.id);
+    assert!(home.sections.len() >= 5, "{} sections", home.sections.len());
+    assert!(home.sections.iter().any(|section| section.is_trailer));
+    assert!(home.sections.iter().any(|section| {
+        section
+            .items
+            .iter()
+            .all(|item| matches!(item, ChannelItem::Short(_)))
+    }));
+    assert!(home.sections.iter().any(|section| {
+        section
+            .items
+            .iter()
+            .any(|item| matches!(item, ChannelItem::Channel(_)))
+    }));
+}
+
+#[test]
+fn channel_tabs_read_their_items_and_filters() {
+    if let Some(page) = fixture("channel_videos") {
+        let tab = parse_tab(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw");
+        assert!(tab.items.len() >= 20 && tab.next_page_token.is_some());
+        assert!(
+            tab.items
+                .iter()
+                .all(|item| matches!(item, ChannelItem::Video(_)))
+        );
+        assert!(
+            tab.filters
+                .iter()
+                .any(|group| group.is_dropdown && group.options.len() >= 3)
+        );
+    }
+    if let Some(page) = fixture("channel_videos_sorted") {
+        let tab = parse_tab(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw");
+        assert!(tab.items.len() >= 20 && tab.next_page_token.is_some());
+        let sort = tab
+            .filters
+            .iter()
+            .find(|group| group.is_dropdown)
+            .expect("sort row");
+        assert!(!sort.options[0].selected && sort.options.iter().any(|option| option.selected));
+    }
+    if let Some(page) = fixture("channel_shorts") {
+        let tab = parse_tab(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw");
+        assert!(
+            tab.items.len() >= 20
+                && tab
+                    .items
+                    .iter()
+                    .all(|item| matches!(item, ChannelItem::Short(_)))
+        );
+    }
+    if let Some(page) = fixture("channel_playlists") {
+        let tab = parse_tab(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw");
+        assert!(
+            tab.items.len() >= 10
+                && tab
+                    .items
+                    .iter()
+                    .all(|item| matches!(item, ChannelItem::Playlist(_)))
+        );
+        assert!(
+            tab.filters
+                .iter()
+                .any(|group| group.options.iter().any(|option| option.params.is_some()))
+        );
+    }
+    if let Some(page) = fixture("channel_posts") {
+        let tab = parse_tab(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw");
+        let galleries = tab
+            .items
+            .iter()
+            .filter(|item| matches!(item, ChannelItem::Post(post) if matches!(&post.attachment, Some(PostAttachment::Images { urls }) if urls.len() > 1)))
+            .count();
+        assert!(galleries >= 1, "{galleries} galleries");
+    }
+}
+
+#[test]
+fn posts_carry_polls_and_quizzes() {
+    let Some(page) = fixture("channel_posts_quiz") else {
+        return;
+    };
+    let tab = parse_tab(&page, "UCHnyfMqiRRG1u-2MsSQLbXA");
+    let attachment = |kind: fn(&PostAttachment) -> bool| {
+        tab.items.iter().any(|item| matches!(item, ChannelItem::Post(post) if post.attachment.as_ref().is_some_and(kind)))
+    };
+    assert!(attachment(
+        |a| matches!(a, PostAttachment::Quiz { choices, .. } if choices.iter().any(|c| c.is_correct))
+    ));
+    assert!(attachment(|a| matches!(a, PostAttachment::Poll { .. })));
+}
+
+#[test]
+fn the_about_panel_has_its_links() {
+    let Some(page) = fixture("channel_about") else {
+        return;
+    };
+    let about = parse_about(&page).expect("about");
+    assert!(about.joined_date_text.is_some() && about.country_text.is_some());
+    assert!(
+        !about.links.is_empty()
+            && about
+                .links
+                .iter()
+                .all(|link| !link.url.contains("/redirect?"))
+    );
 }

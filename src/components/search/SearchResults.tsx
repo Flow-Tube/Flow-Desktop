@@ -6,6 +6,8 @@ import { MusicShelf } from '../music/MusicShelf';
 import { ArtistCard } from '../music/ArtistCard';
 import { ChannelCard } from '../channel/ChannelCard';
 import { PlaylistCard } from '../video/PlaylistCard';
+import { ShortsShelf } from '../shelf/ShortsShelf';
+import { SearchCorrectionLine } from './SearchCorrectionLine';
 import { Button } from '../ui/Button';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
@@ -20,7 +22,7 @@ import type {
   UseCombinedSearchReturn,
 } from '../../lib/useCombinedSearch';
 import type { AlbumItem, ArtistItem, PlaylistItem, SongItem } from '../../types/music';
-import type { PlaylistSummary, VideoSummary } from '../../types/video';
+import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
 
 interface SearchResultsProps {
   search: UseCombinedSearchReturn;
@@ -50,7 +52,7 @@ function toPlaylistSummary(p: PlaylistItem): PlaylistSummary {
 // Column count and card floor come from the user's grid preference (useGridStyle).
 const RESULT_GRID = 'flow-grid gap-y-8';
 
-type ArtistOrChannel = { kind: 'artist'; item: ArtistItem } | { kind: 'channel'; item: VideoSummary };
+type ArtistOrChannel = { kind: 'artist'; item: ArtistItem } | { kind: 'channel'; item: SearchChannel };
 
 export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResultsProps) {
   const navigate = useNavigate();
@@ -89,8 +91,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   const openAlbum = (a: AlbumItem) => navigate(`/music/album/${a.browseId}`);
   const openArtist = (a: ArtistItem) => navigate(`/music/artist/${a.id}`);
   const openPlaylist = (p: PlaylistItem) => navigate(`/music/playlist/${p.id}`);
-  const openChannel = (v: VideoSummary) =>
-    navigate(`/channel/${(v.channelId ?? v.id).replace('channel:', '')}`);
+  const openChannel = (c: SearchChannel) => navigate(`/channel/${c.channelId}`);
 
   const hasAny = Boolean(
     r.topResult ||
@@ -98,6 +99,9 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
       r.videos.length ||
       r.live.length ||
       r.channels.length ||
+      r.shorts.length ||
+      r.shelves.length ||
+      r.videoPlaylists.length ||
       r.albums.length ||
       r.playlists.length ||
       r.artists.length ||
@@ -155,6 +159,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
     return (
       <div className="flex flex-col gap-10 pb-12">
+        <SearchCorrectionLine correction={r.correction} exact={search.exact} onSearchExactly={search.searchExactly} />
         {r.topResult && (
           <TopResultHero
             top={r.topResult}
@@ -196,6 +201,10 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
             <VideoGrid videos={r.videos.slice(0, 8)} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
           </section>
         )}
+
+        <ShortsShelf title={getString('search_section_shorts')} shorts={r.shorts} onPlay={onPlayVideo} />
+
+        <VideoShelves shelves={r.shelves} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
 
         {r.live.length > 0 && (
           <section className="flex flex-col">
@@ -241,12 +250,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
               it.kind === 'artist' ? (
                 <ArtistCard artist={it.item} onOpen={() => openArtist(it.item)} />
               ) : (
-                <ChannelCard
-                  channelId={it.item.channelId ?? it.item.id}
-                  name={it.item.title}
-                  avatarUrl={it.item.channelAvatarUrl ?? it.item.thumbnailUrl}
-                  subtitle={it.item.publishedText}
-                />
+                <SearchChannelCard channel={it.item} />
               )
             }
           />
@@ -278,11 +282,25 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   // ========================================================================
   return (
     <div className="pb-12">
+      {(filterType === 'videos' || filterType === 'live') && (
+        <SearchCorrectionLine correction={r.correction} exact={search.exact} onSearchExactly={search.searchExactly} />
+      )}
+
       {filterType === 'videos' && (
-        <>
+        <div className="flex flex-col gap-8">
+          {r.channels.length > 0 && (
+            <MusicShelf<SearchChannel>
+              title={getString('search_section_channels')}
+              skeletonShape="circle"
+              items={r.channels}
+              renderItem={(c) => <SearchChannelCard channel={c} />}
+            />
+          )}
+          <ShortsShelf title={getString('search_section_shorts')} shorts={r.shorts} onPlay={onPlayVideo} />
           <VideoGrid videos={r.videos} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
+          <VideoShelves shelves={r.shelves} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />
           {sentinel}
-        </>
+        </div>
       )}
 
       {filterType === 'live' && (
@@ -320,14 +338,29 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
       )}
 
       {filterType === 'playlists' && (
-        <>
-          <div className={RESULT_GRID} style={wideGridStyle}>
-            {r.playlists.map((p) => (
-              <PlaylistCard key={p.id} playlist={toPlaylistSummary(p)} onClick={() => openPlaylist(p)} />
-            ))}
-          </div>
+        <div className="flex flex-col gap-8">
+          {r.videoPlaylists.length > 0 && (
+            <section className="flex flex-col">
+              <ShelfHeader title={getString('search_section_youtube_playlists')} />
+              <div className={RESULT_GRID} style={wideGridStyle}>
+                {r.videoPlaylists.map((p) => (
+                  <PlaylistCard key={p.id} playlist={p} onClick={() => navigate(`/playlist/${p.id}`)} />
+                ))}
+              </div>
+            </section>
+          )}
+          {r.playlists.length > 0 && (
+            <section className="flex flex-col">
+              {r.videoPlaylists.length > 0 && <ShelfHeader title={getString('search_section_music_playlists')} />}
+              <div className={RESULT_GRID} style={wideGridStyle}>
+                {r.playlists.map((p) => (
+                  <PlaylistCard key={p.id} playlist={toPlaylistSummary(p)} onClick={() => openPlaylist(p)} />
+                ))}
+              </div>
+            </section>
+          )}
           {sentinel}
-        </>
+        </div>
       )}
 
       {filterType === 'podcasts' && (
@@ -359,14 +392,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
               <ArtistCard key={a.id} artist={a} fill onOpen={() => openArtist(a)} />
             ))}
             {r.channels.map((c) => (
-              <ChannelCard
-                key={c.id}
-                fill
-                channelId={c.channelId ?? c.id}
-                name={c.title}
-                avatarUrl={c.channelAvatarUrl ?? c.thumbnailUrl}
-                subtitle={c.publishedText}
-              />
+              <SearchChannelCard key={c.channelId} channel={c} fill />
             ))}
           </div>
           {sentinel}
@@ -377,6 +403,40 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 }
 
 // --- sub-components --------------------------------------------------------
+
+function SearchChannelCard({ channel, fill }: { channel: SearchChannel; fill?: boolean }) {
+  return (
+    <ChannelCard
+      fill={fill}
+      channelId={channel.channelId}
+      name={channel.name}
+      avatarUrl={channel.avatarUrl}
+      subtitle={channel.subscriberCountText ?? channel.handle}
+    />
+  );
+}
+
+/** "Latest from …" and the other titled runs of videos a search answers with. */
+function VideoShelves({
+  shelves,
+  onPlay,
+  onAddToQueue,
+}: {
+  shelves: SearchShelf[];
+  onPlay: (v: VideoSummary) => void;
+  onAddToQueue: (v: VideoSummary) => void;
+}) {
+  return (
+    <>
+      {shelves.map((shelf) => (
+        <section key={shelf.title} className="flex flex-col">
+          <ShelfHeader title={shelf.title} />
+          <VideoGrid videos={shelf.videos.slice(0, 8)} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </section>
+      ))}
+    </>
+  );
+}
 
 function ShelfHeader({
   title,
@@ -416,7 +476,7 @@ function TopResultHero({
   onPlayVideo: (v: VideoSummary) => void;
   onOpenAlbum: (a: AlbumItem) => void;
   onOpenArtist: (a: ArtistItem) => void;
-  onOpenChannel: (v: VideoSummary) => void;
+  onOpenChannel: (c: SearchChannel) => void;
 }) {
   const circle = top.kind === 'artist' || top.kind === 'channel';
 
@@ -457,9 +517,9 @@ function TopResultHero({
       action = () => onOpenArtist(top.item);
       break;
     case 'channel':
-      thumb = top.item.channelAvatarUrl ?? top.item.thumbnailUrl;
-      title = top.item.title;
-      subtitle = top.item.publishedText || getString('search_role_channel');
+      thumb = top.item.avatarUrl;
+      title = top.item.name;
+      subtitle = [top.item.handle, top.item.subscriberCountText].filter(Boolean).join(' • ') || getString('search_role_channel');
       actionLabel = getString('search_action_view_channel');
       action = () => onOpenChannel(top.item);
       break;

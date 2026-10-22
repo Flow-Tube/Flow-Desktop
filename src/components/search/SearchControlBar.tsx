@@ -1,10 +1,12 @@
 import { CategoryChips } from '../layout/CategoryChips';
+import { Chip } from '../ui/Chip';
 import { FilterSelect } from '../ui/FilterSelect';
 import { getString } from '../../lib/i18n/index';
 import type { StringKey } from '../../lib/i18n/index';
 import type {
   AdvancedFilters,
   SearchCategory,
+  SearchFeatureFilter,
   SearchSortBy,
 } from '../../lib/useCombinedSearch';
 
@@ -41,11 +43,16 @@ export function SearchControlBar({
   const labels = categories.map((c) => c.label);
   const activeLabel = categories.find((c) => c.key === filterType)?.label ?? labels[0];
 
+  // YouTube reorders by these two only; newest-first is the "Uploaded" filter.
   const sortOptions: { value: SearchSortBy; label: string }[] = [
     { value: 'relevance', label: getString('search_sort_relevance') },
-    { value: 'date', label: getString('search_sort_date') },
     { value: 'views', label: getString('search_sort_views') },
-    { value: 'rating', label: getString('search_sort_rating') },
+  ];
+  const typeOptions: { value: AdvancedFilters['contentType']; label: string }[] = [
+    { value: 'any', label: getString('search_type_any') },
+    { value: 'video', label: getString('search_type_video') },
+    { value: 'shorts', label: getString('search_type_shorts') },
+    { value: 'movie', label: getString('search_type_movie') },
   ];
   const uploadOptions: { value: AdvancedFilters['uploadDate']; label: string }[] = [
     { value: 'any', label: getString('search_uploaded_any') },
@@ -61,8 +68,7 @@ export function SearchControlBar({
     { value: 'medium', label: getString('search_length_medium') },
     { value: 'long', label: getString('search_length_long') },
   ];
-  const featureOptions: { value: AdvancedFilters['feature']; label: string }[] = [
-    { value: 'any', label: getString('search_feature_any') },
+  const featureOptions: { value: SearchFeatureFilter; label: string }[] = [
     { value: 'hd', label: getString('search_feature_hd') },
     { value: '4k', label: getString('search_feature_4k') },
     { value: 'subtitles', label: getString('search_feature_subtitles') },
@@ -71,52 +77,74 @@ export function SearchControlBar({
   ];
 
   const showAdvanced = filterType === 'videos' || filterType === 'live';
-  // The Live category already consumes Innertube's single feature slot.
-  const showFeatureFilter = filterType === 'videos';
+  const toggleFeature = (feature: SearchFeatureFilter) =>
+    onFiltersChange({
+      ...filters,
+      features: filters.features.includes(feature)
+        ? filters.features.filter((f) => f !== feature)
+        : [...filters.features, feature],
+    });
 
   return (
-    <div className="sticky top-0 z-10 mb-6 flex items-center justify-between gap-4 py-3">
-      {/* Category filter (left) */}
-      <CategoryChips
-        sticky={false}
-        className="min-w-0 flex-1 !py-0"
-        categories={labels}
-        activeCategory={activeLabel}
-        onCategoryChange={(label) => {
-          const next = categories.find((c) => c.label === label);
-          if (next) onFilterChange(next.key);
-        }}
-      />
+    <div className="sticky top-0 z-10 mb-6 flex flex-col gap-3 py-3">
+      <div className="flex items-center justify-between gap-4">
+        {/* Category filter (left) */}
+        <CategoryChips
+          sticky={false}
+          className="min-w-0 flex-1 !py-0"
+          categories={labels}
+          activeCategory={activeLabel}
+          onCategoryChange={(label) => {
+            const next = categories.find((c) => c.label === label);
+            if (next) onFilterChange(next.key);
+          }}
+        />
 
-      {/* Advanced filters (right) */}
-      {showAdvanced && (
-        <div className="flex shrink-0 items-center gap-2">
-          <FilterSelect
-            label={getString('search_sort_label')}
-            value={sortBy}
-            options={sortOptions}
-            onChange={onSortChange}
-          />
-          <FilterSelect
-            label={getString('search_uploaded_label')}
-            value={filters.uploadDate}
-            options={uploadOptions}
-            onChange={(uploadDate) => onFiltersChange({ ...filters, uploadDate })}
-          />
-          <FilterSelect
-            label={getString('search_length_label')}
-            value={filters.duration}
-            options={durationOptions}
-            onChange={(duration) => onFiltersChange({ ...filters, duration })}
-          />
-          {showFeatureFilter && (
+        {/* Advanced filters (right) */}
+        {showAdvanced && (
+          <div className="flex shrink-0 items-center gap-2">
             <FilterSelect
-              label={getString('search_feature_label')}
-              value={filters.feature}
-              options={featureOptions}
-              onChange={(feature) => onFiltersChange({ ...filters, feature })}
+              label={getString('search_sort_label')}
+              value={sortBy}
+              options={sortOptions}
+              onChange={onSortChange}
             />
-          )}
+            <FilterSelect
+              label={getString('search_uploaded_label')}
+              value={filters.uploadDate}
+              options={uploadOptions}
+              onChange={(uploadDate) => onFiltersChange({ ...filters, uploadDate })}
+            />
+            <FilterSelect
+              label={getString('search_length_label')}
+              value={filters.duration}
+              options={durationOptions}
+              onChange={(duration) => onFiltersChange({ ...filters, duration })}
+            />
+            {filterType === 'videos' && (
+              <FilterSelect
+                label={getString('search_type_label')}
+                value={filters.contentType}
+                options={typeOptions}
+                onChange={(contentType) => onFiltersChange({ ...filters, contentType })}
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      {showAdvanced && (
+        <div className="flex flex-wrap items-center gap-2" aria-label={getString('search_feature_label')}>
+          {featureOptions.map((option) => (
+            <Chip
+              key={option.value}
+              active={filters.features.includes(option.value)}
+              aria-pressed={filters.features.includes(option.value)}
+              onClick={() => toggleFeature(option.value)}
+            >
+              {option.label}
+            </Chip>
+          ))}
         </div>
       )}
     </div>

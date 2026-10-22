@@ -68,7 +68,7 @@ export function Topbar() {
 
     const delay = setTimeout(async () => {
       try {
-        const results = await getSearchSuggestions(query);
+        const results = await getSearchSuggestions(query, useAppSettingsStore.getState().values[SETTINGS.TRENDING_REGION]);
         if (!current) return;
         setSuggestions(results.slice(0, 8));
       } catch (error) {

@@ -425,7 +425,8 @@ export async function getTrendingByCategory(
   return invokeBackend<VideoSummary[]>("get_trending_videos", { category, region });
 }
 
-export async function getSearchSuggestions(query: string): Promise<string[]> {
+/** Suggestions for `query`; `region` is the viewer's two-letter country code. */
+export async function getSearchSuggestions(query: string, region?: string | null): Promise<string[]> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock suggestions.");
     return [
@@ -435,7 +436,7 @@ export async function getSearchSuggestions(query: string): Promise<string[]> {
       `${query} tips & tricks`,
     ];
   }
-  return invokeBackend<string[]>("get_search_suggestions", { query });
+  return invokeBackend<string[]>("get_search_suggestions", { query, region: region ?? null });
 }
 
 export async function parseSubscriptionExport(

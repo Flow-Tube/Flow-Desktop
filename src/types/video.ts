@@ -275,33 +275,69 @@ export interface AudioTrack {
   approxDurationMs?: number | null;
 }
 
+export type SearchFeature =
+  | "live"
+  | "4k"
+  | "hd"
+  | "subtitles"
+  | "creative_commons"
+  | "360"
+  | "hdr"
+  | "vr180"
+  | "3d"
+  | "location";
+
 export interface SearchVideosRequest {
   query: string;
   pageToken?: string | null;
-  /** Server-side Innertube sort order. Omit/`relevance` for default. */
-  sortBy?: "relevance" | "date" | "views" | "rating" | null;
+  /** Relevance (the default) or view count; YouTube reorders by nothing else. */
+  sortBy?: "relevance" | "views" | null;
   /** Server-side upload-date window. Omit/`any` for no filter. */
   uploadDate?: "any" | "hour" | "today" | "week" | "month" | "year" | null;
-  /** Server-side duration bucket. Omit/`any` for no filter. */
+  /** Under 3 minutes, 3 to 20, or over 20. Omit/`any` for no filter. */
   duration?: "any" | "short" | "medium" | "long" | null;
-  /** Server-side boolean feature filter (e.g. `live`, `4k`, `hd`). */
-  feature?:
-    | "live"
-    | "4k"
-    | "hd"
-    | "subtitles"
-    | "creative_commons"
-    | "360"
-    | "hdr"
-    | "vr180"
-    | "location"
-    | null;
+  contentType?: "video" | "shorts" | "channel" | "playlist" | "movie" | null;
+  /** Features that must all hold. */
+  features?: SearchFeature[];
+  /** Search for the query as typed, without YouTube's spelling correction. */
+  exact?: boolean;
+}
+
+/** A channel among the search results. */
+export interface SearchChannel {
+  channelId: string;
+  name: string;
+  handle?: string | null;
+  avatarUrl?: string | null;
+  subscriberCountText?: string | null;
+  videoCountText?: string | null;
+  description?: string | null;
+  isVerified: boolean;
+}
+
+/** A titled run of videos in the results ("Latest from Linus Tech Tips"). */
+export interface SearchShelf {
+  title: string;
+  videos: VideoSummary[];
+}
+
+/** YouTube's spelling correction: results already shown for `query`, or only suggested. */
+export interface SearchCorrection {
+  query: string;
+  original?: string | null;
+  applied: boolean;
 }
 
 export interface SearchVideosResponse {
+  /** The video results, in order, without Shorts. */
   items: VideoSummary[];
   nextPageToken?: string | null;
   source: string;
+  channels?: SearchChannel[];
+  playlists?: Omit<PlaylistSummary, "type">[];
+  shorts?: Omit<ShortVideoSummary, "type">[];
+  shelves?: SearchShelf[];
+  correction?: SearchCorrection | null;
 }
 
 export interface ChannelDetails {

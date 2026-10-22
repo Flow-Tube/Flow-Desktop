@@ -11,6 +11,10 @@ import type {
   LiveChatResponse,
   VideoSummary,
   RelatedPage,
+  ExploreDestinationId,
+  ExploreGrid,
+  ExplorePage,
+  ExploreTarget,
 } from "../../types/video";
 import { isTauriEnv } from "./env";
 import {
@@ -20,8 +24,6 @@ import {
 } from "./errors";
 
 export { BackendApiError as YoutubeApiError };
-
-export type TrendingCategory = "all" | "trending" | "gaming" | "music" | "movies" | "live";
 
 export function getYoutubeErrorMessage(error: unknown): string {
   return getBackendErrorMessage(error);
@@ -404,25 +406,26 @@ export async function getLiveChat(
   });
 }
 
-export async function getTrendingByCategory(
-  category: TrendingCategory,
+/** One of Explore's destinations in `region`. */
+export async function getExploreDestination(destination: ExploreDestinationId, region: string): Promise<ExplorePage> {
+  if (!(await isTauriEnv())) return { title: null, tabs: [], shelves: [] };
+  return invokeBackend<ExplorePage>("get_explore_destination", { destination, region });
+}
+
+/** A destination's tab, by the target its page named. */
+export async function getExplorePage(target: ExploreTarget, region: string): Promise<ExplorePage> {
+  if (!(await isTauriEnv())) return { title: null, tabs: [], shelves: [] };
+  return invokeBackend<ExplorePage>("get_explore_page", { target, region });
+}
+
+/** A shelf's full grid: the first page from its target, later pages from the token. */
+export async function getExploreGrid(
+  target: ExploreTarget | null,
+  continuation: string | null,
   region: string,
-): Promise<VideoSummary[]> {
-  if (!(await isTauriEnv())) {
-    console.warn("Tauri not detected. Returning mock category videos.");
-    return [
-      {
-        id: "dQw4w9WgXcQ",
-        title: `${category === "all" ? "All" : category} category offline preview`,
-        channelName: "Flow Preview",
-        thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-        durationSeconds: 156,
-        publishedText: "1 day ago",
-        viewCountText: "500K views",
-      },
-    ];
-  }
-  return invokeBackend<VideoSummary[]>("get_trending_videos", { category, region });
+): Promise<ExploreGrid> {
+  if (!(await isTauriEnv())) return { videos: [], continuation: null };
+  return invokeBackend<ExploreGrid>("get_explore_grid", { target, continuation, region });
 }
 
 /** Suggestions for `query`; `region` is the viewer's two-letter country code. */

@@ -454,3 +454,36 @@ export interface CommentsResponse {
   /** The creator turned comments off. */
   commentsDisabled?: boolean;
 }
+
+/** Explore's destinations, as Flow for Android lists them. */
+export type ExploreDestinationId = "live" | "gaming" | "music" | "news" | "sports" | "learning" | "fashion";
+
+/** A page to browse: a destination, one of its tabs, or a shelf's full grid. */
+export interface ExploreTarget {
+  browseId: string;
+  params?: string | null;
+}
+
+export interface ExploreShelf {
+  title: string;
+  videos: VideoSummary[];
+  /** The grid "See all" opens. */
+  more?: ExploreTarget | null;
+}
+
+export interface ExploreTab {
+  title: string;
+  target: ExploreTarget;
+  selected: boolean;
+}
+
+export interface ExplorePage {
+  title?: string | null;
+  tabs: ExploreTab[];
+  shelves: ExploreShelf[];
+}
+
+export interface ExploreGrid {
+  videos: VideoSummary[];
+  continuation?: string | null;
+}

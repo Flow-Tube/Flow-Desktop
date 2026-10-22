@@ -5,14 +5,19 @@ use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::json::continuation::continuation_token;
+use crate::api::innertube::json::continuation::{continuation_item_lists, continuation_token};
 use crate::api::innertube::json::count::parse_count;
+use crate::api::innertube::json::rich_text::rich_text;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::{
     normalize_youtube_image_url, thumbnail_url_from_array,
 };
 use crate::errors::{AppError, AppResult};
-use crate::models::comment::{Comment, CommentsResponse};
+use crate::models::comment::{Comment, CommentSort, CommentsResponse};
+
+/// What a thread renders with when its comment is pinned to the top.
+const PINNED_PRIORITY: &str = "RENDERING_PRIORITY_PINNED_COMMENT";
+const HEARTED: &str = "TOOLBAR_HEART_STATE_HEARTED";
 
 fn find_comment_count_text(val: &Value) -> Option<String> {
     if let Some(panels) = val["engagementPanels"].as_array() {
@@ -69,7 +74,54 @@ fn find_comment_count_text(val: &Value) -> Option<String> {
     None
 }
 
-fn parse_comments_json(val: &Value) -> CommentsResponse {
+/// The comments page's header: the sort options and the exact count.
+fn comments_header(val: &Value) -> Option<&Value> {
+    continuation_item_lists(val)
+        .into_iter()
+        .flatten()
+        .find_map(|item| item.get("commentsHeaderRenderer"))
+}
+
+fn sort_options(header: &Value) -> Vec<CommentSort> {
+    header["sortMenu"]["sortFilterSubMenuRenderer"]["subMenuItems"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            Some(CommentSort {
+                title: text_of(&item["title"])?,
+                token: item["serviceEndpoint"]["continuationCommand"]["token"]
+                    .as_str()?
+                    .to_string(),
+                selected: item["selected"].as_bool().unwrap_or(false),
+            })
+        })
+        .collect()
+}
+
+/// Whether the watch answer's comment section says comments are off: it holds
+/// a message where the token for the first page would be.
+fn comments_disabled(val: &Value) -> bool {
+    val["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|content| &content["itemSectionRenderer"])
+        .find(|section| section["sectionIdentifier"] == "comment-item-section")
+        .and_then(|section| section["contents"].as_array())
+        .is_some_and(|contents| {
+            contents
+                .iter()
+                .any(|item| item.get("messageRenderer").is_some())
+                && !contents
+                    .iter()
+                    .any(|item| item.get("continuationItemRenderer").is_some())
+        })
+}
+
+/// A page of comments: the watch answer's first section, or a continuation.
+#[must_use]
+pub fn parse_comments_json(val: &Value, own_video_id: Option<&str>) -> CommentsResponse {
     let mut comments = Vec::new();
     let mut next_page_token = None;
     let mutation_payloads = build_comment_mutation_map(val);
@@ -79,38 +131,59 @@ fn parse_comments_json(val: &Value) -> CommentsResponse {
         &mut comments,
         &mut next_page_token,
         &mutation_payloads,
+        own_video_id,
     );
     collect_comments_from_value(
         &val["onResponseReceivedActions"],
         &mut comments,
         &mut next_page_token,
         &mutation_payloads,
+        own_video_id,
     );
     collect_comments_from_value(
         &val["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"],
         &mut comments,
         &mut next_page_token,
         &mutation_payloads,
+        own_video_id,
     );
     collect_comments_from_value(
         &val["engagementPanels"],
         &mut comments,
         &mut next_page_token,
         &mutation_payloads,
+        own_video_id,
     );
 
     if comments.is_empty() || next_page_token.is_none() {
-        collect_comments_from_value(val, &mut comments, &mut next_page_token, &mutation_payloads);
+        collect_comments_from_value(
+            val,
+            &mut comments,
+            &mut next_page_token,
+            &mutation_payloads,
+            own_video_id,
+        );
     }
 
     comments = dedupe_comments(comments);
 
-    let comment_count_text = find_comment_count_text(val);
+    let header = comments_header(val);
+    let header_count = header.and_then(|header| text_of(&header["countText"]));
 
     CommentsResponse {
         comments,
         next_page_token,
-        comment_count_text,
+        total_count: header_count
+            .as_deref()
+            .map(|text| {
+                text.chars()
+                    .filter(char::is_ascii_digit)
+                    .collect::<String>()
+            })
+            .and_then(|digits| digits.parse().ok()),
+        comment_count_text: find_comment_count_text(val),
+        sort_options: header.map(sort_options).unwrap_or_default(),
+        comments_disabled: comments_disabled(val),
     }
 }
 
@@ -223,147 +296,44 @@ fn collect_comments_from_value(
     comments: &mut Vec<Comment>,
     next_page_token: &mut Option<String>,
     mutation_payloads: &HashMap<String, Value>,
+    own_video_id: Option<&str>,
 ) {
     if let Some(thread) = value.get("commentThreadRenderer") {
-        if let Some(view_model) = thread["commentViewModel"]["commentViewModel"]
+        let pinned = thread["renderingPriority"] == PINNED_PRIORITY;
+        let replies = thread
+            .get("replies")
+            .and_then(|replies| replies.get("commentRepliesRenderer"));
+        let view_model = thread["commentViewModel"]["commentViewModel"]
             .as_object()
             .map(|_| &thread["commentViewModel"]["commentViewModel"])
-            .or_else(|| thread.get("commentViewModel"))
-        {
-            if let Some(comment) = build_comment_from_view_model(
+            .or_else(|| thread.get("commentViewModel"));
+        let comment = match view_model {
+            Some(view_model) => build_comment_from_view_model(
                 view_model,
-                thread
-                    .get("replies")
-                    .and_then(|r| r.get("commentRepliesRenderer")),
+                replies,
                 mutation_payloads,
-            ) {
-                comments.push(comment);
-            }
-            return;
-        }
-
-        let renderer = &thread["comment"]["commentRenderer"];
-        if !renderer.is_null() {
-            let id = renderer["commentId"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            if !id.is_empty() {
-                let author = renderer["authorText"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| renderer["authorText"]["simpleText"].as_str())
-                    .unwrap_or("Anonymous")
-                    .to_string();
-
-                let author_thumbnail =
-                    thumbnail_url_from_array(&renderer["authorThumbnail"]["thumbnails"]);
-
-                let mut text = String::new();
-                if let Some(runs) = renderer["contentText"]["runs"].as_array() {
-                    for run in runs {
-                        if let Some(run_text) = run["text"].as_str() {
-                            text.push_str(run_text);
-                        }
-                    }
-                } else if let Some(simple) = renderer["contentText"]["simpleText"].as_str() {
-                    text = simple.to_string();
-                }
-
-                let published_text = renderer["publishedTimeText"]["runs"][0]["text"]
-                    .as_str()
-                    .or_else(|| renderer["publishedTimeText"]["simpleText"].as_str())
-                    .map(|s| s.to_string());
-
-                let like_count = renderer["voteCount"]["simpleText"]
-                    .as_str()
-                    .and_then(parse_count);
-
-                let reply_count = renderer["replyCount"].as_u64();
-
-                let reply_token = thread["replies"]["commentRepliesRenderer"]["contents"][0]
-                    ["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]
-                    ["token"]
-                    .as_str()
-                    .map(|s| s.to_string());
-
-                let author_channel_id = renderer["authorEndpoint"]["browseEndpoint"]["browseId"]
-                    .as_str()
-                    .map(|s| s.to_string());
-
-                comments.push(Comment {
-                    id,
-                    author,
-                    author_thumbnail,
-                    author_channel_id,
-                    text,
-                    published_text,
-                    like_count,
-                    reply_count,
-                    continuation_token: reply_token,
-                });
-            }
-        }
+                own_video_id,
+                pinned,
+            ),
+            None => legacy_comment(&thread["comment"]["commentRenderer"], replies),
+        };
+        comments.extend(comment);
         return;
     }
 
     if let Some(view_model) = value.get("commentViewModel") {
-        if let Some(comment) = build_comment_from_view_model(view_model, None, mutation_payloads) {
-            comments.push(comment);
-        }
+        comments.extend(build_comment_from_view_model(
+            view_model,
+            None,
+            mutation_payloads,
+            own_video_id,
+            false,
+        ));
         return;
     }
 
     if let Some(renderer) = value.get("commentRenderer") {
-        let id = renderer["commentId"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        if !id.is_empty() {
-            let author = renderer["authorText"]["runs"][0]["text"]
-                .as_str()
-                .or_else(|| renderer["authorText"]["simpleText"].as_str())
-                .unwrap_or("Anonymous")
-                .to_string();
-
-            let author_thumbnail =
-                thumbnail_url_from_array(&renderer["authorThumbnail"]["thumbnails"]);
-
-            let mut text = String::new();
-            if let Some(runs) = renderer["contentText"]["runs"].as_array() {
-                for run in runs {
-                    if let Some(run_text) = run["text"].as_str() {
-                        text.push_str(run_text);
-                    }
-                }
-            } else if let Some(simple) = renderer["contentText"]["simpleText"].as_str() {
-                text = simple.to_string();
-            }
-
-            let published_text = renderer["publishedTimeText"]["runs"][0]["text"]
-                .as_str()
-                .or_else(|| renderer["publishedTimeText"]["simpleText"].as_str())
-                .map(|s| s.to_string());
-
-            let like_count = renderer["voteCount"]["simpleText"]
-                .as_str()
-                .and_then(parse_count);
-
-            let author_channel_id = renderer["authorEndpoint"]["browseEndpoint"]["browseId"]
-                .as_str()
-                .map(|s| s.to_string());
-
-            comments.push(Comment {
-                id,
-                author,
-                author_thumbnail,
-                author_channel_id,
-                text,
-                published_text,
-                like_count,
-                reply_count: None,
-                continuation_token: None,
-            });
-        }
+        comments.extend(legacy_comment(renderer, None));
         return;
     }
 
@@ -374,16 +344,52 @@ fn collect_comments_from_value(
 
     if let Some(array) = value.as_array() {
         for item in array {
-            collect_comments_from_value(item, comments, next_page_token, mutation_payloads);
+            collect_comments_from_value(
+                item,
+                comments,
+                next_page_token,
+                mutation_payloads,
+                own_video_id,
+            );
         }
         return;
     }
 
     if let Some(object) = value.as_object() {
         for child in object.values() {
-            collect_comments_from_value(child, comments, next_page_token, mutation_payloads);
+            collect_comments_from_value(
+                child,
+                comments,
+                next_page_token,
+                mutation_payloads,
+                own_video_id,
+            );
         }
     }
+}
+
+/// A comment in the older `commentRenderer` shape.
+fn legacy_comment(renderer: &Value, replies_renderer: Option<&Value>) -> Option<Comment> {
+    let id = renderer["commentId"].as_str().filter(|id| !id.is_empty())?;
+    Some(Comment {
+        id: id.to_string(),
+        author: text_of(&renderer["authorText"]).unwrap_or_else(|| "Anonymous".to_string()),
+        author_thumbnail: thumbnail_url_from_array(&renderer["authorThumbnail"]["thumbnails"]),
+        author_channel_id: renderer["authorEndpoint"]["browseEndpoint"]["browseId"]
+            .as_str()
+            .map(ToOwned::to_owned),
+        text: text_of(&renderer["contentText"]).unwrap_or_default(),
+        published_text: text_of(&renderer["publishedTimeText"]),
+        like_count: renderer["voteCount"]["simpleText"]
+            .as_str()
+            .and_then(parse_count),
+        like_count_text: text_of(&renderer["voteCount"]),
+        reply_count: renderer["replyCount"].as_u64(),
+        continuation_token: comment_reply_token(replies_renderer),
+        is_pinned: renderer.get("pinnedCommentBadge").is_some(),
+        is_verified: renderer.get("authorCommentBadge").is_some(),
+        ..Default::default()
+    })
 }
 
 fn build_comment_mutation_map(value: &Value) -> HashMap<String, Value> {
@@ -417,6 +423,8 @@ fn build_comment_from_view_model(
     view_model: &Value,
     replies_renderer: Option<&Value>,
     mutation_payloads: &HashMap<String, Value>,
+    own_video_id: Option<&str>,
+    pinned: bool,
 ) -> Option<Comment> {
     let comment_key = view_model["commentKey"].as_str().unwrap_or_default();
     let toolbar_key = view_model["toolbarStateKey"].as_str().unwrap_or_default();
@@ -425,7 +433,7 @@ fn build_comment_from_view_model(
         .get(comment_key)
         .and_then(|payload| payload.get("commentEntityPayload"))?;
 
-    let _toolbar_state = mutation_payloads
+    let toolbar_state = mutation_payloads
         .get(toolbar_key)
         .and_then(|payload| payload.get("engagementToolbarStateEntityPayload"));
 
@@ -465,6 +473,10 @@ fn build_comment_from_view_model(
         .or_else(|| author["navigationEndpoint"]["browseEndpoint"]["browseId"].as_str())
         .map(|s| s.to_string());
 
+    let pinned_text =
+        text_of(&view_model["pinnedText"]).or_else(|| text_of(&properties["pinnedText"]));
+    let flag = |key: &str| author[key].as_bool().unwrap_or(false);
+
     Some(Comment {
         id,
         author: author["displayName"]
@@ -476,8 +488,23 @@ fn build_comment_from_view_model(
         text,
         published_text: properties["publishedTime"].as_str().map(ToOwned::to_owned),
         like_count,
+        like_count_text: toolbar["likeCountNotliked"]
+            .as_str()
+            .filter(|count| !count.trim().is_empty())
+            .map(ToOwned::to_owned),
         reply_count,
         continuation_token,
+        rich_text: rich_text(&properties["content"], own_video_id)
+            .filter(|rich| !rich.spans.is_empty() || !rich.emojis.is_empty()),
+        is_pinned: pinned || pinned_text.is_some(),
+        pinned_text,
+        is_hearted: toolbar_state.is_some_and(|state| state["heartState"] == HEARTED),
+        hearted_by_text: toolbar["heartActiveTooltip"]
+            .as_str()
+            .map(ToOwned::to_owned),
+        is_verified: flag("isVerified"),
+        is_creator: flag("isCreator"),
+        is_artist: flag("isArtist"),
     })
 }
 
@@ -506,6 +533,7 @@ impl InnertubeClient {
         }
 
         debug!(video_id = %video_id_trimmed, has_page_token = page_token.is_some(), "[get_comments] Starting comments fetch");
+        let own_video_id = Some(video_id_trimmed).filter(|id| !id.is_empty());
 
         // The first page's token is in the watch answer the details already
         // fetched; only later pages need a request of their own.
@@ -518,7 +546,7 @@ impl InnertubeClient {
         } else {
             self.watch_next(video_id_trimmed).await?
         };
-        let mut comments_res = parse_comments_json(&res);
+        let mut comments_res = parse_comments_json(&res, own_video_id);
 
         debug!(
             video_id = %video_id_trimmed,
@@ -527,7 +555,10 @@ impl InnertubeClient {
             "[get_comments] Initial parse result"
         );
 
-        if page_token.is_none() && comments_res.comments.is_empty() {
+        if page_token.is_none()
+            && comments_res.comments.is_empty()
+            && !comments_res.comments_disabled
+        {
             let initial_count_text = comments_res.comment_count_text.clone();
             let continuation_token =
                 find_initial_comments_token(&res).or_else(|| comments_res.next_page_token.clone());
@@ -545,7 +576,7 @@ impl InnertubeClient {
                 let next_res = self
                     .post_innertube("next", &clients::WEB, &mut next_payload)
                     .await?;
-                comments_res = parse_comments_json(&next_res);
+                comments_res = parse_comments_json(&next_res, own_video_id);
                 if comments_res.comment_count_text.is_none() {
                     comments_res.comment_count_text = initial_count_text;
                 }
@@ -590,7 +621,7 @@ impl InnertubeClient {
                 .await?
         };
 
-        let mut comments_res = parse_comments_json(&res);
+        let mut comments_res = parse_comments_json(&res, None);
 
         if page_token.is_none() && comments_res.comments.is_empty() {
             let initial_count_text = comments_res.comment_count_text.clone();
@@ -604,7 +635,7 @@ impl InnertubeClient {
                 let next_res = self
                     .post_innertube("browse", &clients::WEB, &mut next_payload)
                     .await?;
-                comments_res = parse_comments_json(&next_res);
+                comments_res = parse_comments_json(&next_res, None);
                 if comments_res.comment_count_text.is_none() {
                     comments_res.comment_count_text = initial_count_text;
                 }
@@ -644,6 +675,8 @@ mod tests {
                     "avatarThumbnailUrl": "https://yt3.ggpht.com/abc=s88-c-k-c0x00ffffff-no-rj"
                 }
             })),
+            None,
+            false,
         )
         .expect("comment");
 
@@ -663,6 +696,8 @@ mod tests {
                 "author": { "displayName": "Someone" },
                 "avatar": { "image": { "sources": [{ "url": "https://yt3.ggpht.com/legacy=s48" }] } }
             })),
+            None,
+            false,
         )
         .expect("comment");
 
@@ -688,12 +723,75 @@ mod tests {
             ]}}}}
         });
 
-        let parsed = parse_comments_json(&response);
+        let parsed = parse_comments_json(&response, None);
         assert_eq!(parsed.comments.len(), 1);
         assert_eq!(
             parsed.comments[0].author_thumbnail.as_deref(),
             Some("https://yt3.ggpht.com/large=s512")
         );
+    }
+
+    #[test]
+    fn a_pinned_hearted_creator_comment_keeps_its_flags_and_links() {
+        let mut mutations = payloads(serde_json::json!({
+            "properties": {
+                "commentId": "c3",
+                "content": { "content": "see 1:05", "commandRuns": [{
+                    "startIndex": 4, "length": 4,
+                    "onTap": { "innertubeCommand": { "watchEndpoint": { "videoId": "own00000000", "startTimeSeconds": 65 } } }
+                }] }
+            },
+            "author": { "displayName": "@Creator", "isCreator": true, "isVerified": true },
+            "toolbar": { "likeCountNotliked": "26K", "heartActiveTooltip": "❤ by @Creator" }
+        }));
+        mutations.insert(
+            "toolbar-1".to_string(),
+            serde_json::json!({ "engagementToolbarStateEntityPayload": { "heartState": "TOOLBAR_HEART_STATE_HEARTED" } }),
+        );
+        let comment = build_comment_from_view_model(
+            &view_model(),
+            None,
+            &mutations,
+            Some("own00000000"),
+            true,
+        )
+        .expect("comment");
+        assert!(
+            comment.is_pinned && comment.is_hearted && comment.is_creator && comment.is_verified
+        );
+        assert_eq!(comment.hearted_by_text.as_deref(), Some("❤ by @Creator"));
+        assert_eq!(comment.like_count_text.as_deref(), Some("26K"));
+        let rich = comment.rich_text.expect("rich text");
+        assert_eq!(rich.spans.len(), 1);
+    }
+
+    #[test]
+    fn the_header_gives_the_sort_options_and_exact_count() {
+        let response = serde_json::json!({ "onResponseReceivedEndpoints": [{
+            "reloadContinuationItemsCommand": { "continuationItems": [{ "commentsHeaderRenderer": {
+                "countText": { "runs": [{ "text": "2,460,273" }, { "text": " Comments" }] },
+                "sortMenu": { "sortFilterSubMenuRenderer": { "subMenuItems": [
+                    { "title": "Top", "selected": true, "serviceEndpoint": { "continuationCommand": { "token": "TOP" } } },
+                    { "title": "Newest", "selected": false, "serviceEndpoint": { "continuationCommand": { "token": "NEW" } } }
+                ] } }
+            } }] }
+        }] });
+        let parsed = parse_comments_json(&response, None);
+        assert_eq!(parsed.total_count, Some(2_460_273));
+        assert_eq!(parsed.sort_options.len(), 2);
+        assert_eq!(parsed.sort_options[1].token, "NEW");
+        assert!(parsed.sort_options[0].selected);
+    }
+
+    #[test]
+    fn turned_off_comments_are_reported() {
+        let response = serde_json::json!({ "contents": { "twoColumnWatchNextResults": { "results": { "results": {
+            "contents": [{ "itemSectionRenderer": {
+                "sectionIdentifier": "comment-item-section",
+                "contents": [{ "messageRenderer": { "text": { "runs": [{ "text": "Comments are turned off. " }] } } }]
+            } }]
+        } } } } });
+        assert!(parse_comments_json(&response, None).comments_disabled);
     }
 
     #[test]
@@ -705,7 +803,7 @@ mod tests {
                 } } } }
             ] }
         }] });
-        let parsed = parse_comments_json(&response);
+        let parsed = parse_comments_json(&response, None);
         assert_eq!(parsed.next_page_token.as_deref(), Some("MORE_REPLIES"));
     }
 }

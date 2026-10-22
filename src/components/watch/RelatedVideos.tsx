@@ -1,10 +1,19 @@
 import { Loader2 } from "lucide-react";
 import { VideoCard } from "../video/VideoCard";
+import { Button } from "../ui/Button";
 import { getString } from "../../lib/i18n/index";
-import type { VideoSummary } from "../../types/video";
+import { relatedItemToVideoSummary } from "../../lib/relatedLane";
 import type { RelatedVideosProps } from "./types";
 
-export function RelatedVideos({ items, loading, onSelect, onAddToQueue }: RelatedVideosProps) {
+export function RelatedVideos({
+  items,
+  loading,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+  onSelect,
+  onAddToQueue,
+}: RelatedVideosProps) {
   if (loading) {
     return <Loader2 className="mx-auto mt-10 animate-spin text-chrome-neutral-500" size={24} />;
   }
@@ -15,28 +24,21 @@ export function RelatedVideos({ items, loading, onSelect, onAddToQueue }: Relate
 
   return (
     <div className="flex flex-col gap-3">
-      {items.map((item) => {
-        const video: VideoSummary = {
-          id: item.videoId || item.id,
-          title: item.title,
-          channelName: item.channelName,
-          channelId: item.channelId,
-          thumbnailUrl: item.thumbnailUrl,
-          durationSeconds: item.durationSeconds,
-          publishedText: item.publishedText,
-          viewCountText: item.viewCountText,
-          isLive: item.isLive,
-        };
-        return (
-          <VideoCard
-            key={`${item.itemType}-${item.id}`}
-            video={video}
-            variant="compact"
-            onPlay={() => onSelect(item)}
-            onAddToQueue={onAddToQueue}
-          />
-        );
-      })}
+      {items.map((item) => (
+        <VideoCard
+          key={`${item.itemType}-${item.id}`}
+          video={relatedItemToVideoSummary(item)}
+          variant="compact"
+          onPlay={() => onSelect(item)}
+          onAddToQueue={onAddToQueue}
+        />
+      ))}
+      {hasMore && (
+        <Button variant="tonal" onClick={onLoadMore} disabled={loadingMore} className="self-center">
+          {loadingMore && <Loader2 className="animate-spin" size={16} />}
+          {getString("watch_show_more_related")}
+        </Button>
+      )}
     </div>
   );
 }

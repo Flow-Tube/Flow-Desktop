@@ -5,15 +5,13 @@ import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import {
-  getChannelDetails,
-  getPlaylistDetails,
-  getRelatedVideos,
-} from "../lib/api/youtube";
+import { getPlaylistDetails } from "../lib/api/youtube";
 import { getSponsorBlockSegments, getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
 import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
 import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
 import { usePlaybackSettled } from "../lib/usePlaybackSettled";
+import { useRelatedLane } from "../lib/useRelatedLane";
+import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { setSetting } from "../lib/api/db";
 import { seekToTime } from "../lib/linkify";
 import { Chapters } from "../components/player/chapters";
@@ -32,20 +30,6 @@ import type { RelatedContentItem, VideoSummary } from "../types/video";
 import { SETTINGS } from "../lib/settings/schema";
 
 const CommentsSection = lazy(() => import("../components/watch/CommentsSection"));
-
-function mapRelatedItemToVideoSummary(item: RelatedContentItem): VideoSummary {
-  return {
-    id: item.videoId || item.id,
-    title: item.title,
-    channelName: item.channelName,
-    channelId: item.channelId,
-    thumbnailUrl: item.thumbnailUrl,
-    durationSeconds: item.durationSeconds,
-    publishedText: item.publishedText,
-    viewCountText: item.viewCountText,
-    isLive: item.isLive,
-  };
-}
 
 export function Watch() {
   const { videoId } = useParams<{ videoId: string }>();
@@ -68,22 +52,24 @@ export function Watch() {
   const setAutoplayCandidates = usePlayerStore((s) => s.setAutoplayCandidates);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const captions = usePlayerStore((s) => s.captions);
-  const setWatchPageCache = usePlayerStore((s) => s.setWatchPageCache);
 
   const { loadSubscriptions } = useSubscriptionStore();
   const commentsEnabled = useAppSettingsStore((state) => state.values[SETTINGS.COMMENTS_ENABLED] !== "false");
   const relatedVideosEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_RELATED_VIDEOS] !== "false");
   const liveChatEnabled = useAppSettingsStore((state) => state.values[SETTINGS.LIVE_CHAT_ENABLED] !== "false");
 
-  const [channelDetails, setChannelDetails] = useState<any>(null);
-  const [relatedVideos, setRelatedVideos] = useState<RelatedContentItem[]>([]);
-  const [relatedLoading, setRelatedLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
 
   const offlineRecord = useDownloadedVideoRecord(videoId);
   const playbackSettled = usePlaybackSettled(videoId);
   const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord, retryNonce);
+  const relatedLane = useRelatedLane(
+    videoId,
+    relatedVideosEnabled && !offlineRecord,
+    playbackSettled,
+    retryNonce,
+  );
   useEffect(() => {
     loadSubscriptions();
   }, [loadSubscriptions]);
@@ -137,23 +123,7 @@ export function Watch() {
   }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
 
   useEffect(() => {
-    if (!videoId) return;
-    const currentCache = usePlayerStore.getState().watchPageCache;
-    const cachedWatchPage = currentCache?.videoId === videoId ? currentCache : null;
-
-    setChannelDetails(cachedWatchPage?.channelDetails ?? null);
-    setRelatedVideos(cachedWatchPage?.relatedVideos ?? []);
-    // Related content is fetched only after playback starts, so hold its
-    // skeleton up meanwhile rather than showing an empty rail.
-    setRelatedLoading(
-      relatedVideosEnabled && !offlineRecord && !cachedWatchPage?.relatedVideos?.length,
-    );
-
-    if (offlineRecord) {
-      setAutoplayCandidates([]);
-      setRelatedLoading(false);
-      return;
-    }
+    if (!videoId || offlineRecord) return;
 
     const loadSponsorBlock = async () => {
       try {
@@ -172,32 +142,12 @@ export function Watch() {
     };
 
     void loadSponsorBlock();
-  }, [
-    videoId,
-    retryNonce,
-    setSponsorBlockSegments,
-    setAutoplayCandidates,
-    setWatchPageCache,
-    loadSettings,
-    relatedVideosEnabled,
-    offlineRecord,
-  ]);
+  }, [videoId, retryNonce, setSponsorBlockSegments, loadSettings, offlineRecord]);
 
-  // Everything below is page furniture, not playback. Each item costs its own
-  // request, and opening them all while the player is still resolving puts them
-  // in direct competition with the first media buffer — so they wait until
-  // playback has actually started.
+  // Page furniture, not playback: it waits until playback has actually started
+  // rather than compete with the first media buffer.
   useEffect(() => {
-    if (!videoId || !playbackSettled) return;
-    const currentCache = usePlayerStore.getState().watchPageCache;
-    const cachedWatchPage = currentCache?.videoId === videoId ? currentCache : null;
-
-    if (offlineRecord) {
-      setAutoplayCandidates([]);
-      setRelatedLoading(false);
-      return;
-    }
-
+    if (!videoId || !playbackSettled || offlineRecord) return;
     let cancelled = false;
 
     const loadReactionMetadata = async () => {
@@ -216,93 +166,27 @@ export function Watch() {
       }
     };
 
-    const loadRelated = async () => {
-      if (!relatedVideosEnabled) {
-        setRelatedVideos([]);
-        setAutoplayCandidates([]);
-        setRelatedLoading(false);
-        return;
-      }
-
-      if (cachedWatchPage?.relatedVideos && cachedWatchPage.relatedVideos.length > 0) {
-        setRelatedVideos(cachedWatchPage.relatedVideos);
-        setRelatedLoading(false);
-        return;
-      }
-
-      setRelatedLoading(true);
-      try {
-        const related = await getRelatedVideos(videoId);
-        if (cancelled) return;
-        setRelatedVideos(related);
-        setWatchPageCache(videoId, { relatedVideos: related });
-      } catch (err) {
-        console.warn("Failed to load related content", err);
-        if (cancelled) return;
-        setRelatedVideos([]);
-        setAutoplayCandidates([]);
-      } finally {
-        if (!cancelled) setRelatedLoading(false);
-      }
-    };
-
     void loadReactionMetadata();
-    void loadRelated();
-
     return () => {
       cancelled = true;
     };
-  }, [
-    videoId,
-    playbackSettled,
-    retryNonce,
-    setDearrowData,
-    setRydData,
-    setAutoplayCandidates,
-    setWatchPageCache,
-    loadSettings,
-    relatedVideosEnabled,
-    offlineRecord,
-  ]);
-
-  // Keyed on the channel id rather than run with the block above, because that
-  // id only exists once the details request has answered.
-  const channelIdForDetails = videoDetails?.channelId ?? currentVideo?.channelId ?? null;
-  useEffect(() => {
-    if (!videoId || !playbackSettled || offlineRecord || !channelIdForDetails) return;
-    if (channelDetails) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const channel = await getChannelDetails(channelIdForDetails);
-        if (cancelled) return;
-        setChannelDetails(channel);
-        setWatchPageCache(videoId, { channelDetails: channel });
-      } catch (err) {
-        console.warn("Failed to load channel details", err);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [videoId, playbackSettled, offlineRecord, channelIdForDetails, channelDetails, setWatchPageCache]);
+  }, [videoId, playbackSettled, retryNonce, setDearrowData, setRydData, loadSettings, offlineRecord]);
 
   const isHidden = useFeedHiddenFilter();
   // The watch page bypassed the feed block filter, so blocked/suppressed channels resurfaced
   // in related content and autoplay. Filter them here (reactively, so a mid-watch block applies).
   const visibleRelated = useMemo(
     () =>
-      relatedVideos.filter((item) => {
+      relatedLane.items.filter((item) => {
         if (item.itemType && item.itemType !== "video") return true; // keep playlists / mixes
         return !isHidden({ id: item.videoId || item.id, channelId: item.channelId } as VideoSummary);
       }),
-    [relatedVideos, isHidden],
+    [relatedLane.items, isHidden],
   );
+  const autoplayVideoId = offlineRecord ? null : videoDetails?.autoplayVideoId;
   useEffect(() => {
-    setAutoplayCandidates(visibleRelated.map(mapRelatedItemToVideoSummary));
-  }, [visibleRelated, setAutoplayCandidates]);
+    setAutoplayCandidates(autoplayCandidates(visibleRelated, autoplayVideoId));
+  }, [visibleRelated, autoplayVideoId, setAutoplayCandidates]);
 
   const handleRelatedClick = useCallback(
     async (item: RelatedContentItem) => {
@@ -328,14 +212,14 @@ export function Watch() {
           }
         }
         if (item.videoId) {
-          setQueue([mapRelatedItemToVideoSummary(item)], 0);
+          setQueue([relatedItemToVideoSummary(item)], 0);
           navigate(`/watch/${item.videoId}`);
         }
         return;
       }
 
       const targetVideoId = item.videoId || item.id;
-      setQueue([mapRelatedItemToVideoSummary(item)], 0);
+      setQueue([relatedItemToVideoSummary(item)], 0);
       navigate(`/watch/${targetVideoId}`);
     },
     [navigate, setQueue],
@@ -363,7 +247,6 @@ export function Watch() {
         <WatchMetadata
           currentVideo={currentVideo}
           videoData={videoDetails}
-          channelDetails={channelDetails}
           dearrowData={dearrowData}
           rydData={rydData}
         />
@@ -388,6 +271,7 @@ export function Watch() {
             <div className="h-[min(720px,calc(100vh-140px))] min-h-[450px] w-full shrink-0">
               <Chapters
                 chapters={videoDetails?.chapters || []}
+                autoChapters={videoDetails?.autoChapters ?? false}
                 captions={captions}
                 videoId={videoId}
                 onClose={() => setIsChaptersPanelOpen(false)}
@@ -400,7 +284,10 @@ export function Watch() {
           {relatedVideosEnabled && (
             <RelatedVideos
               items={visibleRelated}
-              loading={relatedLoading}
+              loading={relatedLane.loading}
+              hasMore={relatedLane.hasMore}
+              loadingMore={relatedLane.loadingMore}
+              onLoadMore={relatedLane.loadMore}
               onSelect={handleRelatedClick}
               onAddToQueue={addToQueue}
             />

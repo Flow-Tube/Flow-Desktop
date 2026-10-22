@@ -20,8 +20,9 @@ export type VideoPipIntent = "auto" | "manual";
 export interface WatchPageCache {
   videoId: string;
   videoDetails: VideoDetails | null;
-  channelDetails: unknown | null;
   relatedVideos: RelatedContentItem[];
+  /** The token for the related lane's next page. */
+  relatedContinuation: string | null;
   updatedAt: number;
 }
 
@@ -560,8 +561,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       watchPageCache: {
         videoId,
         videoDetails: cache.videoDetails ?? (previous?.videoId === videoId ? previous.videoDetails : null),
-        channelDetails: cache.channelDetails ?? (previous?.videoId === videoId ? previous.channelDetails : null),
         relatedVideos: cache.relatedVideos ?? (previous?.videoId === videoId ? previous.relatedVideos : []),
+        relatedContinuation:
+          cache.relatedContinuation !== undefined
+            ? cache.relatedContinuation
+            : previous?.videoId === videoId
+              ? previous.relatedContinuation
+              : null,
         updatedAt: Date.now(),
       },
     });

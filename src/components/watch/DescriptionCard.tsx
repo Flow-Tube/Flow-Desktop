@@ -24,7 +24,11 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
     >
       <div className="flex items-center gap-2 font-medium text-chrome-neutral-200">
         <span>{formatViews(viewCount, Boolean(videoData?.isLive))}</span>
-        {published && <span className="text-chrome-neutral-400">{published}</span>}
+        {published && (
+          <span className="text-chrome-neutral-400" title={videoData?.relativePublishedText ?? undefined}>
+            {published}
+          </span>
+        )}
       </div>
 
       <div className={`mt-2 whitespace-pre-wrap text-chrome-neutral-300 ${expanded ? "" : "line-clamp-3"}`}>

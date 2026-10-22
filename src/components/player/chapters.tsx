@@ -17,6 +17,8 @@ interface ChaptersProps {
   videoId?: string;
   onClose: () => void;
   videoThumbnail?: string;
+  /** YouTube generated the chapters rather than the creator. */
+  autoChapters?: boolean;
   seekTo: (time: number) => void;
 }
 
@@ -41,6 +43,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
   videoId,
   onClose,
   videoThumbnail,
+  autoChapters = false,
   seekTo,
 }) => {
   const currentTime = usePlayerStore((state) => state.currentTime);
@@ -232,7 +235,11 @@ export const Chapters: React.FC<ChaptersProps> = ({
         >
           {activeTab === "chapters" ? (
             <div className="space-y-2.5">
+              {autoChapters && chapters.length > 0 && (
+                <p className="px-2 text-xs text-chrome-neutral-500">{getString("chapters_auto_generated")}</p>
+              )}
               {chapters.map((chapter, idx) => {
+                const thumbnail = chapter.thumbnailUrl || videoThumbnail;
                 const isActive = activeChapter
                   ? activeChapter.startSeconds === chapter.startSeconds
                   : false;
@@ -250,9 +257,9 @@ export const Chapters: React.FC<ChaptersProps> = ({
                   >
                     {/* Thumbnail card */}
                     <div className="relative w-28 aspect-video rounded-md overflow-hidden bg-chrome-zinc-900 border border-chrome-white/5 shadow shrink-0">
-                      {videoThumbnail ? (
+                      {thumbnail ? (
                         <img
-                          src={toSrc(videoThumbnail)}
+                          src={toSrc(thumbnail)}
                           alt={chapter.title}
                           className="w-full h-full object-cover"
                         />

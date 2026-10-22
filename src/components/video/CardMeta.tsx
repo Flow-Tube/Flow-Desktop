@@ -1,18 +1,32 @@
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, Music2 } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import type { VideoSummary } from "../../types/video";
 
-/** A channel name with the verified tick YouTube shows next to it. */
-export function ChannelLabel({ name, verified }: { name: string; verified?: boolean }) {
+/** A channel name with the verified tick, or the official artist note, YouTube shows next to it. */
+export function ChannelLabel({
+  name,
+  verified,
+  artist,
+  iconSize = 13,
+}: {
+  name: string;
+  verified?: boolean;
+  artist?: boolean;
+  iconSize?: number;
+}) {
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1">
       <span className="truncate">{name}</span>
-      {verified && (
-        <BadgeCheck
-          size={13}
-          className="shrink-0 text-chrome-neutral-400"
-          aria-label={getString("card_verified_channel")}
-        />
+      {artist ? (
+        <Music2 size={iconSize} className="shrink-0 text-chrome-neutral-400" aria-label={getString("card_verified_artist")} />
+      ) : (
+        verified && (
+          <BadgeCheck
+            size={iconSize}
+            className="shrink-0 text-chrome-neutral-400"
+            aria-label={getString("card_verified_channel")}
+          />
+        )
       )}
     </span>
   );

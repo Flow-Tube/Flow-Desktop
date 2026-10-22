@@ -7,7 +7,6 @@ export { LiveChat } from "./LiveChat";
 export { WatchPageSkeleton } from "./WatchPageSkeleton";
 export { WatchErrorState } from "./WatchErrorState";
 export type {
-  ChannelLike,
   WatchLayoutProps,
   FlowPlayerCoreProps,
   WatchMetadataProps,

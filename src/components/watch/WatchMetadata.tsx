@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ThumbsUp, ThumbsDown, Share2, Bookmark, Download, Check, WandSparkles } from "lucide-react";
 import { Button } from "../ui/Button";
-import { SubscribeButton } from "../ui/SubscribeButton";
+import { WatchOwner } from "./WatchOwner";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { usePlaylistModalStore } from "../../store/usePlaylistModalStore";
 import { useDownloadStore } from "../../store/useDownloadStore";
@@ -12,15 +12,12 @@ import { formatCount } from "../../lib/utils";
 import { shareLink } from "../../lib/clipboard";
 import { useUiStore } from "../../store/useUiStore";
 import { getString } from "../../lib/i18n/index";
-import { upgradeAvatarUrl } from "../../lib/thumbnails";
-import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import type { WatchMetadataProps } from "./types";
 
 export function WatchMetadata({
   currentVideo,
   videoData,
-  channelDetails,
   dearrowData,
   rydData,
 }: WatchMetadataProps) {
@@ -34,25 +31,17 @@ export function WatchMetadata({
   const reactions = useVideoReactions(currentVideo, videoData);
   const [showingOriginal, setShowingOriginal] = useState(false);
 
-  const channelId = videoData?.channelId || currentVideo.channelId || channelDetails?.id || "";
-  const channelName =
-    videoData?.channelName || currentVideo.channelName || channelDetails?.name || getString("watch_unknown_channel");
-  // The channel request now runs after playback has started, so prefer whatever
-  // avatar the feed card already carried until it answers.
-  const avatarUrl =
-    useProxiedImageUrl(
-      upgradeAvatarUrl(channelDetails?.avatarUrl || currentVideo.channelAvatarUrl || null),
-    ) || null;
-  const subscriberText = channelDetails?.subscriberCountText || "";
+  const channelId = videoData?.channelId || currentVideo.channelId || "";
+  const channelName = videoData?.channelName || currentVideo.channelName || getString("watch_unknown_channel");
+  // Details arrive after playback has started, so the feed card's avatar stands in until then.
+  const avatarUrl = videoData?.channelAvatarUrl || currentVideo.channelAvatarUrl || null;
+  const hashtags = videoData?.hashtags ?? [];
+  const badges = videoData?.badges ?? [];
 
   const dearrowTitle = dearrowEnabled ? dearrowData?.title ?? null : null;
   const primaryTitle = dearrowTitle ?? currentVideo.title;
   const canCrossfade = !!dearrowTitle && dearrowTitle !== currentVideo.title;
   const showBadge = !!dearrowTitle && dearrowBadgeEnabled;
-
-  const goToChannel = () => {
-    if (channelId) navigate(`/channel/${channelId}`);
-  };
 
   const shareVideo = async () => {
     const result = await shareLink(currentVideo.title, youtubeWatchUrl(currentVideo.id));
@@ -81,6 +70,19 @@ export function WatchMetadata({
 
   return (
     <div className="flex flex-col gap-3">
+      {hashtags.length > 0 && (
+        <div className="-mb-2 flex flex-wrap gap-x-2 text-sm font-medium">
+          {hashtags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => navigate(`/search?q=${encodeURIComponent(tag)}`)}
+              className="text-primary transition-opacity hover:opacity-80"
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-start gap-2">
         {canCrossfade ? (
           <h1
@@ -118,28 +120,28 @@ export function WatchMetadata({
         )}
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex shrink-0 items-center gap-3">
-          <button
-            onClick={goToChannel}
-            className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-high font-bold text-chrome-neutral-400 transition-opacity hover:opacity-80"
-          >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={channelName} className="h-full w-full object-cover" />
-            ) : (
-              channelName.charAt(0).toUpperCase()
-            )}
-          </button>
-          <button onClick={goToChannel} className="min-w-0 pr-2 text-left">
-            <span className="block truncate text-[15px] font-medium leading-tight text-chrome-neutral-100 transition-colors hover:text-primary">
-              {channelName}
+      {badges.length > 0 && (
+        <div className="-mt-1 flex flex-wrap gap-1.5">
+          {badges.map((badge) => (
+            <span
+              key={badge}
+              className="rounded-full border border-chrome-neutral-800 px-2 py-0.5 text-xs font-medium text-chrome-neutral-400"
+            >
+              {badge}
             </span>
-            {subscriberText && <span className="block text-sm text-chrome-neutral-400">{subscriberText}</span>}
-          </button>
-          {channelId && (
-            <SubscribeButton channelId={channelId} channelName={channelName} avatarUrl={avatarUrl || undefined} />
-          )}
+          ))}
         </div>
+      )}
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <WatchOwner
+          channelId={channelId}
+          channelName={channelName}
+          avatarUrl={avatarUrl}
+          subscriberText={videoData?.subscriberCountText ?? null}
+          badge={videoData?.channelBadge ?? null}
+          collaborators={videoData?.collaborators ?? []}
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-10 items-center divide-x divide-chrome-neutral-800 overflow-hidden rounded-full bg-surface-container-low">

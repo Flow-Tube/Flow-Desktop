@@ -10,7 +10,7 @@ import type {
   CommentsResponse,
   LiveChatResponse,
   VideoSummary,
-  RelatedContentItem,
+  RelatedPage,
 } from "../../types/video";
 import { isTauriEnv } from "./env";
 import {
@@ -93,37 +93,40 @@ export async function getVideoDetails(videoId: string): Promise<VideoDetails> {
   return invokeBackend<VideoDetails>("get_video_details", { videoId });
 }
 
-export async function getRelatedVideos(videoId: string): Promise<RelatedContentItem[]> {
+export async function getRelatedVideos(videoId: string): Promise<RelatedPage> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock related content.");
-    return [
-      {
-        id: "dQw4w9WgXcQ",
-        itemType: "video",
-        title: "Mock Related Video",
-        channelName: "Mock Creator",
-        thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
-        durationSeconds: 180,
-        publishedText: "3 months ago",
-        viewCountText: "2M views",
-        videoId: "dQw4w9WgXcQ",
-        playlistId: null,
-        isMix: false,
-      },
-      {
-        id: "RDAMVMdQw4w9WgXcQ",
-        itemType: "mix",
-        title: "Mock Coding Mix",
-        channelName: "YouTube Mix",
-        thumbnailUrl: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=300",
-        viewCountText: "Mix",
-        videoId: "dQw4w9WgXcQ",
-        playlistId: "RDAMVMdQw4w9WgXcQ",
-        isMix: true,
-      },
-    ];
+    return {
+      items: [
+        {
+          id: "dQw4w9WgXcQ",
+          itemType: "video",
+          title: "Mock Related Video",
+          channelName: "Mock Creator",
+          thumbnailUrl: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=300",
+          durationSeconds: 180,
+          publishedText: "3 months ago",
+          viewCountText: "2M views",
+          videoId: "dQw4w9WgXcQ",
+          playlistId: null,
+          isMix: false,
+        },
+      ],
+      continuation: null,
+    };
   }
-  return invokeBackend<RelatedContentItem[]>("get_related_videos", { videoId });
+  return invokeBackend<RelatedPage>("get_related_videos", { videoId });
+}
+
+export async function getMoreRelatedVideos(continuation: string): Promise<RelatedPage> {
+  if (!(await isTauriEnv())) return { items: [], continuation: null };
+  return invokeBackend<RelatedPage>("get_more_related_videos", { continuation });
+}
+
+/** The video's category, from a small request of its own. */
+export async function getVideoCategory(videoId: string): Promise<string | null> {
+  if (!(await isTauriEnv())) return null;
+  return invokeBackend<string | null>("get_video_category", { videoId });
 }
 
 export async function getStreamInfo(videoId: string, refresh = false): Promise<StreamInfo> {

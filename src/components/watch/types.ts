@@ -6,13 +6,6 @@ import type {
 } from "../../types/video";
 import type { DeArrowOverride, RydData } from "../../lib/api/foss";
 
-export interface ChannelLike {
-  id?: string | null;
-  name?: string | null;
-  avatarUrl?: string | null;
-  subscriberCountText?: string | null;
-}
-
 export interface WatchLayoutSlots {
   player: ReactNode;
   metadata: ReactNode;
@@ -32,7 +25,6 @@ export interface FlowPlayerCoreProps {
 export interface WatchMetadataProps {
   currentVideo: VideoSummary;
   videoData: VideoDetails | null;
-  channelDetails: ChannelLike | null;
   dearrowData: DeArrowOverride | null;
   rydData: RydData | null;
 }
@@ -46,6 +38,9 @@ export interface DescriptionCardProps {
 export interface RelatedVideosProps {
   items: RelatedContentItem[];
   loading: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   onSelect: (item: RelatedContentItem) => void;
   onAddToQueue?: (video: VideoSummary) => void;
 }

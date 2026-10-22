@@ -9,6 +9,8 @@ import {
 } from "../../lib/useVideoStream";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { useWatchSession } from "../../lib/useWatchSession";
+import { usePlaybackSettled } from "../../lib/usePlaybackSettled";
+import { useVideoCategory } from "../../lib/useVideoCategory";
 import { addWatchRecord } from "../../lib/api/db";
 import { isMusicVideo } from "../../lib/utils";
 import { SETTINGS } from "../../lib/settings/schema";
@@ -72,6 +74,8 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   }, [currentVideo?.id]);
 
   const resolvedChannelId = videoDetails?.channelId || currentVideo?.channelId || "";
+  const playbackSettled = usePlaybackSettled(currentVideo?.id);
+  const category = useVideoCategory(currentVideo?.id, videoDetails?.category, playbackSettled);
   const watchSubject = useMemo(
     () =>
       currentVideo
@@ -84,7 +88,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
             description: videoDetails?.description || null,
             isLive: stream.isLive,
             isMusic: isMusicVideo(currentVideo),
-            category: videoDetails?.category ?? null,
+            category,
           }
         : null,
     [
@@ -93,7 +97,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       videoDetails?.title,
       videoDetails?.channelName,
       videoDetails?.description,
-      videoDetails?.category,
+      category,
       stream.isLive,
     ],
   );

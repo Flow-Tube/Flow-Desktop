@@ -4,8 +4,11 @@ import { getString } from "../../lib/i18n/index";
 import { linkifyText } from "../../lib/linkify";
 import type { DescriptionCardProps } from "./types";
 
-const formatViews = (views: string | number | null | undefined) =>
-  views ? `${formatCount(views)} views` : "0 views";
+// A live stream's count is YouTube's own "197 watching now", shown as sent.
+const formatViews = (views: string | number | null | undefined, isLive: boolean) => {
+  if (isLive && typeof views === "string" && views) return views;
+  return getString("watch_view_count", views ? formatCount(views) : "0");
+};
 
 export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -20,7 +23,7 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
       className="cursor-pointer rounded-xl bg-surface-container-low p-4 text-sm transition-colors hover:bg-surface-container"
     >
       <div className="flex items-center gap-2 font-medium text-chrome-neutral-200">
-        <span>{formatViews(viewCount)}</span>
+        <span>{formatViews(viewCount, Boolean(videoData?.isLive))}</span>
         {published && <span className="text-chrome-neutral-400">{published}</span>}
       </div>
 

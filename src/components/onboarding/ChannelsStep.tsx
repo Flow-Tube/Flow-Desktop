@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useSubscriptionStore } from "../../store/useSubscriptionStore";
 import { CuratedChannel } from "./constants";
-import { searchVideos } from "../../lib/api/youtube";
+import { useChannelSearch } from "../../lib/useChannelSearch";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
 
 interface ChannelsStepProps {
@@ -11,8 +11,6 @@ interface ChannelsStepProps {
 export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _selectedTopics }) => {
   const toSrc = useProxyImageSrc();
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<CuratedChannel[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
   const { subscriptions, subscribe, unsubscribe, isSubscribed, loadSubscriptions } = useSubscriptionStore();
 
@@ -30,57 +28,15 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
     }
   };
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const delayDebounce = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const res = await searchVideos({ query: searchQuery });
-        if (res && res.items) {
-          const seen = new Set<string>();
-          const channels: CuratedChannel[] = [];
-          
-          res.items.forEach((item) => {
-            if (item.id.startsWith("channel:")) {
-              const realChannelId = item.id.replace("channel:", "");
-              if (!seen.has(realChannelId)) {
-                seen.add(realChannelId);
-                channels.push({
-                  id: realChannelId,
-                  name: item.title,
-                  avatar: item.thumbnailUrl || "",
-                  subscribers: item.publishedText || "Verified Creator",
-                  category: "Search Results",
-                });
-              }
-            } else if (item.channelName && !seen.has(item.channelName)) {
-              seen.add(item.channelName);
-              channels.push({
-                id: `channel:${item.channelName}`,
-                name: item.channelName,
-                avatar: "",
-                subscribers: "Verified Creator",
-                category: "Search Results",
-              });
-            }
-          });
-          setSearchResults(channels);
-        }
-      } catch (err) {
-        console.error("Search channels failed", err);
-      } finally {
-        setIsSearching(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(delayDebounce);
-  }, [searchQuery]);
-
-
+  const channelSearch = useChannelSearch(searchQuery);
+  const isSearching = channelSearch.loading;
+  const searchResults: CuratedChannel[] = channelSearch.channels.map((channel) => ({
+    id: channel.channelId,
+    name: channel.name,
+    avatar: channel.avatarUrl ?? "",
+    subscribers: channel.subscriberCountText ?? channel.handle ?? "",
+    category: "Search Results",
+  }));
 
   const getInitials = (name: string) => {
     return name

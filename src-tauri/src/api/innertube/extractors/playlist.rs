@@ -243,13 +243,32 @@ fn extract_owner_from_page_header(res: &Value) -> Option<String> {
         ["contentMetadataViewModel"]["metadataRows"]
         .as_array()?;
 
+    let parts = || {
+        rows.iter()
+            .filter_map(|row| row["metadataParts"].as_array())
+            .flatten()
+    };
+    // The owner sits in the avatar stack ("by Linus Tech Tips"), a part with no text of its own.
+    if let Some(name) = parts()
+        .filter_map(|part| part["avatarStack"]["avatarStackViewModel"]["text"]["content"].as_str())
+        .map(|text| text.trim().trim_start_matches("by ").trim())
+        .find(|name| !is_unknown_owner(name))
+    {
+        return Some(name.to_string());
+    }
+
     for row in rows {
-        let parts = row["metadataParts"].as_array()?;
+        let Some(parts) = row["metadataParts"].as_array() else {
+            continue;
+        };
         for part in parts {
-            let text = part["text"]["content"]
+            let Some(text) = part["text"]["content"]
                 .as_str()
                 .map(str::trim)
-                .filter(|value| !value.is_empty())?;
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
             let lower = text.to_lowercase();
             if lower.contains("view") || lower.contains("subscriber") {
                 continue;
@@ -264,6 +283,14 @@ fn extract_owner_from_page_header(res: &Value) -> Option<String> {
     }
 
     None
+}
+
+/// `VL` plus the playlist id, removing only a `VL` the id already starts with.
+fn playlist_browse_id(playlist_id: &str) -> String {
+    format!(
+        "VL{}",
+        playlist_id.strip_prefix("VL").unwrap_or(playlist_id)
+    )
 }
 
 fn extract_owner_from_sidebar(res: &Value) -> Option<String> {
@@ -386,7 +413,7 @@ impl InnertubeClient {
             })
         } else {
             serde_json::json!({
-                "browseId": format!("VL{}", playlist_id_trimmed.replace("VL", ""))
+                "browseId": playlist_browse_id(playlist_id_trimmed)
             })
         };
 
@@ -418,7 +445,9 @@ impl InnertubeClient {
 
 #[cfg(test)]
 mod tests {
-    use super::extract_videos_from_playlist_browse;
+    use super::{
+        extract_owner_from_page_header, extract_videos_from_playlist_browse, playlist_browse_id,
+    };
     use serde_json::{Value, json};
 
     fn browse_page(section_contents: Vec<Value>) -> Value {
@@ -491,5 +520,28 @@ mod tests {
         assert_eq!(videos[0].view_count_text.as_deref(), Some("1.2M views"));
         assert_eq!(videos[0].published_text.as_deref(), Some("3 years ago"));
         assert_eq!(token, None);
+    }
+
+    #[test]
+    fn browse_id_only_strips_a_leading_vl() {
+        assert_eq!(playlist_browse_id("PLabc"), "VLPLabc");
+        assert_eq!(playlist_browse_id("VLPLabc"), "VLPLabc");
+        assert_eq!(playlist_browse_id("PLxVLy"), "VLPLxVLy");
+    }
+
+    #[test]
+    fn page_header_owner_is_read_from_the_avatar_stack() {
+        let res = json!({ "header": { "pageHeaderRenderer": { "content": { "pageHeaderViewModel": {
+            "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                { "metadataParts": [
+                    { "avatarStack": { "avatarStackViewModel": { "text": { "content": "by Linus Tech Tips" } } } }
+                ] },
+                { "metadataParts": [ { "text": { "content": "1,234 videos" } } ] }
+            ] } }
+        } } } } });
+        assert_eq!(
+            extract_owner_from_page_header(&res).as_deref(),
+            Some("Linus Tech Tips")
+        );
     }
 }

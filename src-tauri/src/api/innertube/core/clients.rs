@@ -14,13 +14,14 @@
 
 use serde_json::{Value, json};
 
-/// Signature timestamp sent in `playbackContext.contentPlaybackContext`.
+/// Signature timestamp sent in `playbackContext.contentPlaybackContext` when the
+/// live value cannot be read.
 ///
-/// Clients with `use_signature_timestamp` need one, and YouTube rotates the value
-/// with `player_ias` releases. Flow has no JS solver to read the live value out of
-/// `base.js`, so this is pinned; when signed clients start failing wholesale this
-/// is the first thing to re-check.
-pub const DEFAULT_SIGNATURE_TIMESTAMP: i64 = 19550;
+/// Clients with `use_signature_timestamp` need one, and the value rotates with
+/// each player release. `player_js::signature_timestamp` reads the live one from
+/// the current player script; this is only the fallback when that fetch fails,
+/// kept at the value of player 55de7e60 (2026-10-22).
+pub const DEFAULT_SIGNATURE_TIMESTAMP: i64 = 20745;
 
 /// Which attestation runtime mints a PO token a given client's requests will be
 /// accepted with.

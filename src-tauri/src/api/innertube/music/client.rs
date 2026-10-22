@@ -169,21 +169,9 @@ impl InnertubeClient {
         po_token: Option<&str>,
         visitor_data: Option<&str>,
     ) -> AppResult<Value> {
-        // `player_context` drops the token unless this client's attestation platform
+        // `player_body` drops the token unless this client's attestation platform
         // is the one Flow can actually mint for.
-        let mut context = client.player_context(visitor_data, po_token, None);
-        if client.is_embedded {
-            context["thirdParty"] = json!({
-                "embedUrl": format!("https://www.youtube.com/watch?v={video_id}")
-            });
-        }
-
-        let mut payload = json!({
-            "context": context,
-            "videoId": video_id,
-            "contentCheckOk": true,
-            "racyCheckOk": true,
-        });
+        let mut payload = client.player_body(video_id, visitor_data, po_token);
         if let Some(ts) = signature_timestamp {
             payload["playbackContext"] = json!({
                 "contentPlaybackContext": {

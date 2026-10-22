@@ -103,26 +103,39 @@ impl YouTubeClient {
         json!({ "client": client })
     }
 
-    /// The context for a player request, with the PO token attached only when this
-    /// client can actually be attested by the runtime Flow owns.
+    /// The body of a `player` request: context, video id, content-check flags,
+    /// the embed URL for embedded clients, and the PO token only when this client
+    /// can actually be attested by the runtime Flow owns.
     ///
-    /// Callers pass whatever token they hold and let this decide; that keeps the
-    /// attestation rule in one place instead of at every call site.
+    /// The token goes in a top-level `serviceIntegrityDimensions`, next to
+    /// `context`. The server silently ignores it inside `context`, which left every
+    /// "attested" web request unattested. Callers pass whatever token they hold
+    /// and let this decide; that keeps the attestation rule in one place.
     #[must_use]
-    pub fn player_context(
+    pub fn player_body(
         &self,
+        video_id: &str,
         visitor_data: Option<&str>,
         po_token: Option<&str>,
-        gl: Option<&str>,
     ) -> Value {
-        let mut context = self.context(visitor_data, gl);
-        if !self.accepts_web_po_token() {
-            return context;
+        let mut context = self.context(visitor_data, None);
+        if self.is_embedded {
+            context["thirdParty"] = json!({
+                "embedUrl": format!("https://www.youtube.com/watch?v={video_id}")
+            });
         }
-        if let Some(token) = po_token.filter(|token| !token.is_empty()) {
-            context["serviceIntegrityDimensions"] = json!({ "poToken": token });
+        let mut body = json!({
+            "context": context,
+            "videoId": video_id,
+            "contentCheckOk": true,
+            "racyCheckOk": true,
+        });
+        if self.accepts_web_po_token()
+            && let Some(token) = po_token.filter(|token| !token.is_empty())
+        {
+            body["serviceIntegrityDimensions"] = json!({ "poToken": token });
         }
-        context
+        body
     }
 
     /// Whether a BotGuard-minted token is valid for this client.

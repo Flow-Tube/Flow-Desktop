@@ -15,9 +15,10 @@ use flow_desktop_lib::api::innertube::music::clients::DIRECT_AUDIO_CLIENTS;
 #[test]
 fn non_web_clients_never_carry_a_botguard_token() {
     for client in [VISIONOS, IOS, IPADOS, ANDROID, ANDROID_VR, ANDROID_CREATOR] {
-        let context = client.player_context(Some("visitor"), Some("a-botguard-token"), None);
+        let body = client.player_body("vid", Some("visitor"), Some("a-botguard-token"));
         assert!(
-            context.get("serviceIntegrityDimensions").is_none(),
+            body.get("serviceIntegrityDimensions").is_none()
+                && body["context"].get("serviceIntegrityDimensions").is_none(),
             "{} is attested by {:?}, so a BotGuard token must not be attached",
             client.name,
             client.attestation
@@ -28,18 +29,39 @@ fn non_web_clients_never_carry_a_botguard_token() {
 
 #[test]
 fn web_family_does_carry_a_botguard_token() {
-    let context = WEB.player_context(Some("visitor"), Some("a-botguard-token"), None);
+    let body = WEB.player_body("vid", Some("visitor"), Some("a-botguard-token"));
     assert_eq!(
-        context["serviceIntegrityDimensions"]["poToken"], "a-botguard-token",
+        body["serviceIntegrityDimensions"]["poToken"], "a-botguard-token",
         "WEB is the one family Flow can attest, so it must send the token"
+    );
+    assert!(
+        body["context"].get("serviceIntegrityDimensions").is_none(),
+        "YouTube ignores the token inside context; it belongs at the top level"
     );
     assert_eq!(WEB.attestation, AttestationPlatform::Web);
 }
 
 #[test]
 fn an_empty_token_is_never_attached() {
-    let context = WEB.player_context(Some("visitor"), Some(""), None);
-    assert!(context.get("serviceIntegrityDimensions").is_none());
+    let body = WEB.player_body("vid", Some("visitor"), Some(""));
+    assert!(body.get("serviceIntegrityDimensions").is_none());
+}
+
+#[test]
+fn player_body_carries_the_content_flags_and_embed_url() {
+    let body = TVHTML5_SIMPLY_EMBEDDED_PLAYER.player_body("abc", None, None);
+    assert_eq!(body["videoId"], "abc");
+    assert_eq!(body["contentCheckOk"], true);
+    assert_eq!(body["racyCheckOk"], true);
+    assert_eq!(
+        body["context"]["thirdParty"]["embedUrl"],
+        "https://www.youtube.com/watch?v=abc"
+    );
+    assert!(
+        VISIONOS.player_body("abc", None, None)["context"]
+            .get("thirdParty")
+            .is_none()
+    );
 }
 
 #[test]

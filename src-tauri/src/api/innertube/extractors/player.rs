@@ -1625,19 +1625,7 @@ impl InnertubeClient {
         po_token: Option<&str>,
         referer: Option<&str>,
     ) -> Option<Value> {
-        let mut context = client.player_context(visitor_data, po_token, None);
-        if client.is_embedded {
-            context["thirdParty"] = serde_json::json!({
-                "embedUrl": format!("https://www.youtube.com/watch?v={video_id}")
-            });
-        }
-
-        let mut payload = serde_json::json!({
-            "context": context,
-            "videoId": video_id,
-            "contentCheckOk": true,
-            "racyCheckOk": true,
-        });
+        let mut payload = client.player_body(video_id, visitor_data, po_token);
         if client.use_signature_timestamp {
             let timestamp = player_js::signature_timestamp()
                 .await
@@ -2217,17 +2205,10 @@ mod sabr_live_smoke {
             po_token.is_some()
         );
 
-        let mut payload = serde_json::json!({
-            "context": clients::IPADOS.player_context(
-                visitor_data.as_deref(),
-                po_token.as_deref(),
-                None,
-            ),
-            "videoId": video_id,
-            "contentCheckOk": true,
-            "racyCheckOk": true,
-            "playbackContext": { "contentPlaybackContext": { "signatureTimestamp": 19550 } }
-        });
+        let mut payload =
+            clients::IPADOS.player_body(&video_id, visitor_data.as_deref(), po_token.as_deref());
+        payload["playbackContext"] =
+            serde_json::json!({ "contentPlaybackContext": { "signatureTimestamp": 19550 } });
         let res = client
             .post_innertube("player", &clients::IPADOS, &mut payload)
             .await
@@ -2385,31 +2366,29 @@ mod sabr_client_probe {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    /// Builds the context straight from the registry, so the probe measures the
+    /// Builds the body straight from the registry, so the probe measures the
     /// same identity the app actually sends rather than a copy of it.
     ///
-    /// `pot` is passed through `player_context`, which drops it for any client
-    /// whose attestation platform a BotGuard token is not valid for — so a run
+    /// `pot` is passed through `player_body`, which drops it for any client
+    /// whose attestation platform a web PO token is not valid for, so a run
     /// with `send_pot = true` on an iOS/Android client is the control case
     /// showing that omitting the token changes nothing for them.
-    fn context_for(
+    fn body_for(
+        video_id: &str,
         client: &clients::YouTubeClient,
         visitor: Option<String>,
         pot: Option<String>,
     ) -> Value {
-        let mut ctx = client.player_context(visitor.as_deref(), pot.as_deref(), None);
+        let mut body = client.player_body(video_id, visitor.as_deref(), pot.as_deref());
         if let Some(timestamp) = client.signature_timestamp() {
-            ctx["playbackContext"] = serde_json::json!({
+            body["playbackContext"] = serde_json::json!({
                 "contentPlaybackContext": { "signatureTimestamp": timestamp }
             });
         }
-        ctx
+        body
     }
 
-    async fn raw_player(video_id: &str, c: &clients::YouTubeClient, ctx: Value) -> Option<Value> {
-        let payload = serde_json::json!({
-            "context": ctx, "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true,
-        });
+    async fn raw_player(c: &clients::YouTubeClient, payload: Value) -> Option<Value> {
         let r = reqwest::Client::new()
             .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
             .header(reqwest::header::USER_AGENT, c.user_agent)
@@ -2487,13 +2466,10 @@ mod sabr_client_probe {
                 send_pot,
                 send_pot && c.accepts_web_po_token()
             );
-            let ctx = context_for(c, visitor_data.clone(), use_pot.clone());
-            let res = match raw_player(&video_id, c, ctx).await {
-                Some(v) => v,
-                None => {
-                    println!("  player request FAILED\n");
-                    continue;
-                }
+            let body = body_for(&video_id, c, visitor_data.clone(), use_pot.clone());
+            let Some(res) = raw_player(c, body).await else {
+                println!("  player request FAILED\n");
+                continue;
             };
             let status = res["playabilityStatus"]["status"].as_str().unwrap_or("?");
             if !status.eq_ignore_ascii_case("OK") {

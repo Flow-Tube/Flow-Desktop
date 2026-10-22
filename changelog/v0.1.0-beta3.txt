@@ -18,6 +18,7 @@ MUSIC
 - A song that stops loading recovers on its own and carries on from where it stopped, and Retry no longer restarts the song.
 - Listening time is saved while Flow is in the background, so history and recommendations count those plays.
 - Open lyrics stop redrawing once the song is paused and the lines have settled, and the song clock no longer runs a frame loop the whole time music plays. On Linux, lyrics fade instead of blurring.
+- Normalize volume now works on every song, the Episodes search filter shows episodes instead of profiles, albums show their release year, and explicit badges show on album and playlist cards.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
@@ -59,6 +60,7 @@ PLAYER
 - Theater mode is lighter: the color glow around the video is drawn without a blur filter, samples the video less often, and can be turned off with the new Ambient mode setting. It is off on Linux, where it cost the most.
 - The player follows the page while you scroll without re-laying out the window, and scrolling a menu or side panel no longer moves it.
 - The seek bar and time stop redrawing every frame while the video is paused or the controls are hidden.
+- Web playback clients send their playback token where YouTube reads it, videos behind a content warning get their related videos and autoplay back, live streams show how many are watching, and hidden like counts no longer read "I like this".
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.
@@ -101,11 +103,13 @@ RECOMMENDATIONS
 - Home says it could not load when no search could be reached, instead of showing an empty feed.
 - "Not interested" or a thumbs-down on a video stops Home showing uploads from that channel until you watch it again. Your taste lists the channels Home picks uploads from, and you can forget one or all of them.
 - A sync no longer brings back entries this device already trimmed from its recommendation profile, and the profile is not saved over a merge while it runs.
+- Home's related videos lane works again: dates on related cards such as "2d ago" are now understood, so those videos are no longer dropped as undated.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.
 - Each playlist remembers its sort, and while sorted by date added, rows show when each video was added.
 - Add times are kept from Android backups and travel with sync. Date added is only offered for playlists in your library.
+- Playlists whose id contains "VL" open correctly, playlist headers show their owner again, and changing the 4K, HD or subtitles search filter now runs the search again.
 
 UNDER THE HOOD
 - Updated Tauri to 2.12 and its plugins (updater, deep links, dialogs, notifications and others), with the app and its web side kept on matching versions.

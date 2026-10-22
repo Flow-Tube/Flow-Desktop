@@ -1,4 +1,4 @@
-//! Relative upload ages as YouTube writes them: "3 days ago", "Streamed 5 hours ago", and the
+//! Relative upload ages as feeds write them: "3 days ago", "Streamed 5 hours ago", and the
 //! compact "2d ago" that related-video and lockup cards use.
 
 const SECOND_MS: u64 = 1_000;
@@ -92,10 +92,10 @@ pub fn relative_age(text: &str) -> Option<RelativeAge> {
             .find(|c: char| !c.is_ascii_digit())
             .unwrap_or(word.len());
         if digits_end == 0 {
-            if matches!(*word, "a" | "an") {
-                if let Some(unit) = next.and_then(AgeUnit::from_word) {
-                    return Some(RelativeAge { value: 1, unit });
-                }
+            if matches!(*word, "a" | "an")
+                && let Some(unit) = next.and_then(AgeUnit::from_word)
+            {
+                return Some(RelativeAge { value: 1, unit });
             }
             continue;
         }
@@ -103,14 +103,15 @@ pub fn relative_age(text: &str) -> Option<RelativeAge> {
             continue;
         };
         let suffix = &word[digits_end..];
-        if suffix.is_empty() {
-            if let Some(unit) = next.and_then(AgeUnit::from_word) {
-                return Some(RelativeAge { value, unit });
-            }
+        let unit = if suffix.is_empty() {
+            next.and_then(AgeUnit::from_word)
         } else if matches!(next, None | Some("ago")) {
-            if let Some(unit) = AgeUnit::from_compact(suffix) {
-                return Some(RelativeAge { value, unit });
-            }
+            AgeUnit::from_compact(suffix)
+        } else {
+            None
+        };
+        if let Some(unit) = unit {
+            return Some(RelativeAge { value, unit });
         }
     }
     None

@@ -1303,6 +1303,8 @@
   "player_error_extractor_hint": "Flow couldn't parse the playback data — YouTube may have changed its format. Try again, and update Flow if it keeps failing.",
   "player_error_streaming_title": "Playback failed",
   "player_error_streaming_hint": "The media stream couldn't be read. This is often a temporary YouTube issue — try again.",
+  "player_error_rate_limited_title": "YouTube asked Flow to slow down",
+  "player_error_rate_limited_hint": "Too many requests went out in a short time. Wait a minute, then try again.",
   "player_error_network_title": "No connection",
   "player_error_network_hint": "Flow couldn't reach YouTube. Check your internet connection and try again.",
   "player_error_validation_title": "Invalid request",

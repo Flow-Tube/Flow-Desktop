@@ -24,6 +24,18 @@ describe("classifyPlayerError", () => {
     expect(info.canOpenInBrowser).toBe(true);
   });
 
+  it("gives backend network and rate-limit failures their own retryable states", () => {
+    const network = classifyPlayerError(new BackendApiError("browse: the request timed out", "network", null));
+    expect(network.kind).toBe("network");
+    expect(network.retryable).toBe(true);
+    expect(network.title).toBe("No connection");
+
+    const limited = classifyPlayerError(new BackendApiError("browse: rate limited", "rateLimited", null));
+    expect(limited.kind).toBe("rateLimited");
+    expect(limited.retryable).toBe(true);
+    expect(limited.title).toBe("YouTube asked Flow to slow down");
+  });
+
   it("accepts a raw { message, kind } error-response object", () => {
     const info = classifyPlayerError({ message: "premium only", kind: "musicPremium" });
     expect(info.kind).toBe("musicPremium");

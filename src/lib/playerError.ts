@@ -97,6 +97,12 @@ const SPECS: Record<string, KindSpec> = {
     retryable: true,
     openable: true,
   },
+  rateLimited: {
+    titleKey: "player_error_rate_limited_title",
+    hintKey: "player_error_rate_limited_hint",
+    retryable: true,
+    openable: true,
+  },
   validation: {
     titleKey: "player_error_validation_title",
     hintKey: "player_error_validation_hint",

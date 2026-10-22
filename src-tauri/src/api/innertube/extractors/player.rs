@@ -1920,9 +1920,13 @@ impl InnertubeClient {
             .as_str()
             .unwrap_or(video_id_trimmed)
             .to_string();
-        let title = details["title"].as_str().unwrap_or_default().to_string();
+        // The TV client's details carry neither title, author nor description;
+        // the watch-next answer below fills them in.
+        let mut title = details["title"].as_str().unwrap_or_default().to_string();
         let mut channel_name = details["author"].as_str().unwrap_or_default().to_string();
-        let description = details["shortDescription"].as_str().map(|s| s.to_string());
+        let mut description = details["shortDescription"]
+            .as_str()
+            .map(ToString::to_string);
 
         let thumbnail_url = thumbnail_url_from_array(&details["thumbnail"]["thumbnails"]);
 
@@ -1959,7 +1963,17 @@ impl InnertubeClient {
                 }
             }
 
+            if title.is_empty()
+                && let Some(primary_title) = text_of(&primary_info["title"])
+            {
+                title = primary_title;
+            }
             if !secondary_info.is_null() {
+                if description.is_none() {
+                    description = secondary_info["attributedDescription"]["content"]
+                        .as_str()
+                        .map(ToOwned::to_owned);
+                }
                 let owner = &secondary_info["owner"]["videoOwnerRenderer"];
                 if channel_name.is_empty() {
                     if let Some(owner_name) = text_of(&owner["title"]) {

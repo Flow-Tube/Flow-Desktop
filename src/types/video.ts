@@ -385,10 +385,36 @@ export interface Comment {
   likeCount?: number | null;
   replyCount?: number | null;
   continuationToken?: string | null;
+  /** The text with its links, timestamps and custom emoji. */
+  richText?: RichText | null;
+  likeCountText?: string | null;
+  isPinned?: boolean;
+  /** "Pinned by @Creator". */
+  pinnedText?: string | null;
+  isHearted?: boolean;
+  /** "❤ by @Creator". */
+  heartedByText?: string | null;
+  isVerified?: boolean;
+  /** The comment is by the video's own channel. */
+  isCreator?: boolean;
+  isArtist?: boolean;
+}
+
+/** One way to order the comments, and the token that loads them that way. */
+export interface CommentSort {
+  title: string;
+  token: string;
+  selected: boolean;
 }
 
 export interface CommentsResponse {
   comments: Comment[];
   nextPageToken?: string | null;
   commentCountText?: string | null;
+  /** Top and Newest, from the first page's header. */
+  sortOptions?: CommentSort[];
+  /** The exact count from that header. */
+  totalCount?: number | null;
+  /** The creator turned comments off. */
+  commentsDisabled?: boolean;
 }

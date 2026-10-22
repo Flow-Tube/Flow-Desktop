@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getComments, getPostComments } from "./api/youtube";
-import type { Comment } from "../types/video";
+import type { Comment, CommentSort } from "../types/video";
 
 interface UseVideoCommentsOptions {
   postId?: string | null;
@@ -16,6 +16,12 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
   const [loading, setLoading] = useState(false);
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [countText, setCountText] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [disabled, setDisabled] = useState(false);
+  const [sortOptions, setSortOptions] = useState<CommentSort[]>([]);
+  // The sort chosen for this source; any other source starts on YouTube's default first page.
+  const [chosenSort, setChosenSort] = useState<{ key: string; token: string } | null>(null);
+  const sortToken = chosenSort?.key === sourceKey ? chosenSort.token : null;
   const [loadingMore, setLoadingMore] = useState(false);
   const [replies, setReplies] = useState<Record<string, Comment[]>>({});
   const [repliesLoading, setRepliesLoading] = useState<Record<string, boolean>>({});
@@ -31,9 +37,15 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
   );
 
   useEffect(() => {
+    setSortOptions([]);
+    setTotalCount(null);
+    setDisabled(false);
+  }, [sourceKey]);
+
+  useEffect(() => {
     setComments([]);
     setNextPageToken(null);
-    setCountText(null);
+    if (!sortToken) setCountText(null);
     setReplies({});
     setRepliesLoading({});
     setRepliesNextToken({});
@@ -42,12 +54,15 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
 
     let cancelled = false;
     setLoading(true);
-    fetchComments()
+    fetchComments(sortToken)
       .then((res) => {
         if (cancelled) return;
         setComments(res.comments || []);
         setNextPageToken(res.nextPageToken || null);
-        setCountText(res.commentCountText || null);
+        if (res.commentCountText) setCountText(res.commentCountText);
+        if (res.totalCount != null) setTotalCount(res.totalCount);
+        if (res.sortOptions?.length) setSortOptions(res.sortOptions);
+        setDisabled(Boolean(res.commentsDisabled));
       })
       .catch((err) => {
         if (cancelled) return;
@@ -63,7 +78,16 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
     return () => {
       cancelled = true;
     };
-  }, [fetchComments, sourceId, sourceKey]);
+  }, [fetchComments, sourceId, sourceKey, sortToken]);
+
+  /** Reloads the list in the order `token` names (Top or Newest). */
+  const selectSort = useCallback(
+    (token: string) => {
+      setSortOptions((options) => options.map((option) => ({ ...option, selected: option.token === token })));
+      setChosenSort({ key: sourceKey, token });
+    },
+    [sourceKey],
+  );
 
   const loadMore = useCallback(async () => {
     if (!sourceId || !nextPageToken || loadingMore) return;
@@ -113,6 +137,10 @@ export function useVideoComments(videoId: string | undefined, options: UseVideoC
     comments,
     loading,
     countText,
+    totalCount,
+    disabled,
+    sortOptions,
+    selectSort,
     nextPageToken,
     loadingMore,
     replies,

@@ -69,6 +69,13 @@ pub struct YouTubeClient {
     pub use_web_po_tokens: bool,
     /// The runtime whose tokens this client's requests and URLs accept.
     pub attestation: AttestationPlatform,
+    /// `context.client.platform` ("DESKTOP", "MOBILE"), sent only by the web clients.
+    pub platform: Option<&'static str>,
+    /// `context.client.originalUrl`, sent only by WEB.
+    pub original_url: Option<&'static str>,
+    /// Whether the User-Agent is repeated inside `context.client`. Only MWEB does this;
+    /// sending it for any other client is a fingerprint inconsistency.
+    pub send_ua_in_context: bool,
 }
 
 impl YouTubeClient {
@@ -92,6 +99,12 @@ impl YouTubeClient {
             ("deviceMake", self.device_make),
             ("deviceModel", self.device_model),
             ("androidSdkVersion", self.android_sdk_version),
+            ("platform", self.platform),
+            ("originalUrl", self.original_url),
+            (
+                "userAgent",
+                self.send_ua_in_context.then_some(self.user_agent),
+            ),
         ] {
             if let Some(value) = value {
                 client[key] = json!(value);
@@ -161,7 +174,8 @@ impl YouTubeClient {
 // Client definitions
 // ---------------------------------------------------------------------------
 
-const USER_AGENT_WEB: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const USER_AGENT_WEB: &str =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
 /// The primary direct-URL client for both video and music.
 ///
@@ -187,6 +201,9 @@ pub const VISIONOS: YouTubeClient = YouTubeClient {
     is_embedded: false,
     use_web_po_tokens: false,
     attestation: AttestationPlatform::IosGuard,
+    platform: None,
+    original_url: None,
+    send_ua_in_context: false,
 };
 
 pub const ANDROID_VR: YouTubeClient = YouTubeClient {
@@ -203,6 +220,9 @@ pub const ANDROID_VR: YouTubeClient = YouTubeClient {
     is_embedded: false,
     use_web_po_tokens: false,
     attestation: AttestationPlatform::DroidGuard,
+    platform: None,
+    original_url: None,
+    send_ua_in_context: false,
 };
 
 /// Newest VR build, leading the gated fallbacks the way it does on Android:
@@ -243,6 +263,9 @@ pub const ANDROID: YouTubeClient = YouTubeClient {
     is_embedded: false,
     use_web_po_tokens: false,
     attestation: AttestationPlatform::DroidGuard,
+    platform: None,
+    original_url: None,
+    send_ua_in_context: false,
 };
 
 pub const ANDROID_CREATOR: YouTubeClient = YouTubeClient {
@@ -259,22 +282,28 @@ pub const ANDROID_CREATOR: YouTubeClient = YouTubeClient {
     is_embedded: false,
     use_web_po_tokens: false,
     attestation: AttestationPlatform::DroidGuard,
+    platform: None,
+    original_url: None,
+    send_ua_in_context: false,
 };
 
 pub const IOS: YouTubeClient = YouTubeClient {
     name: "IOS",
-    version: "19.29.1",
+    version: "21.03.1",
     client_id: "5",
-    user_agent: "com.google.ios.youtube/19.29.1 (iPhone14,5; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
-    os_name: Some("iOS"),
-    os_version: Some("17.5.1"),
-    device_make: Some("Apple"),
-    device_model: Some("iPhone14,5"),
+    user_agent: "com.google.ios.youtube/21.03.1 (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)",
+    os_name: None,
+    os_version: Some("18.2.22C152"),
+    device_make: None,
+    device_model: None,
     android_sdk_version: None,
-    use_signature_timestamp: true,
+    use_signature_timestamp: false,
     is_embedded: false,
     use_web_po_tokens: false,
     attestation: AttestationPlatform::IosGuard,
+    platform: None,
+    original_url: None,
+    send_ua_in_context: false,
 };
 
 pub const IPADOS: YouTubeClient = YouTubeClient {
@@ -282,17 +311,18 @@ pub const IPADOS: YouTubeClient = YouTubeClient {
     user_agent: "com.google.ios.youtube/21.03.3 (iPad7,6; U; CPU iPadOS 17_7_10 like Mac OS X; en-US)",
     os_name: Some("iPadOS"),
     os_version: Some("17.7.10.21H450"),
+    device_make: Some("Apple"),
     device_model: Some("iPad7,6"),
     ..IOS
 };
 
 pub const WEB: YouTubeClient = YouTubeClient {
     name: "WEB",
-    version: "2.20260120.01.00",
+    version: "2.20260710.06.00",
     client_id: "1",
     user_agent: USER_AGENT_WEB,
-    os_name: Some("Windows"),
-    os_version: Some("10.0"),
+    os_name: None,
+    os_version: None,
     device_make: None,
     device_model: None,
     android_sdk_version: None,
@@ -300,6 +330,9 @@ pub const WEB: YouTubeClient = YouTubeClient {
     is_embedded: false,
     use_web_po_tokens: true,
     attestation: AttestationPlatform::Web,
+    platform: Some("DESKTOP"),
+    original_url: Some("https://www.youtube.com"),
+    send_ua_in_context: false,
 };
 
 /// Mobile web. With a `BotGuard` token on the request it is served the same SABR
@@ -312,6 +345,9 @@ pub const MWEB: YouTubeClient = YouTubeClient {
     user_agent: "Mozilla/5.0 (iPad; CPU OS 16_7_10 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1,gzip(gfe)",
     os_name: None,
     os_version: None,
+    platform: Some("MOBILE"),
+    original_url: None,
+    send_ua_in_context: true,
     ..WEB
 };
 
@@ -321,6 +357,8 @@ pub const WEB_REMIX: YouTubeClient = YouTubeClient {
     client_id: "67",
     os_name: None,
     os_version: None,
+    platform: None,
+    original_url: None,
     ..WEB
 };
 
@@ -344,6 +382,8 @@ pub const TVHTML5_SIMPLY_EMBEDDED_PLAYER: YouTubeClient = YouTubeClient {
     os_version: None,
     is_embedded: true,
     use_web_po_tokens: false,
+    platform: None,
+    original_url: None,
     ..WEB
 };
 

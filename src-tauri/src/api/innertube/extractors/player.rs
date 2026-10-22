@@ -1476,7 +1476,7 @@ impl InnertubeClient {
                 && matches!(&outcome, ClientOutcome::Refused(playability) if is_bot_wall(playability))
             {
                 identity_refreshed = true;
-                if let Some(fresh) = self.refresh_visitor_data().await {
+                if let Some(fresh) = self.refresh_visitor_data(visitor_data.as_deref()).await {
                     info!(video_id = %video_id, client = client.name, "Bot wall; retrying under a fresh visitor identity");
                     visitor_data = Some(fresh);
                     outcome = self
@@ -1659,21 +1659,13 @@ impl InnertubeClient {
                 }
             });
         }
-        if let Some(referer) = referer {
-            payload["custom_referer"] = serde_json::json!(referer);
-        }
 
         let budget = if client.accepts_web_po_token() {
             WEB_PLAYER_TIMEOUT
         } else {
             PER_CLIENT_TIMEOUT
         };
-        match tokio::time::timeout(
-            budget,
-            self.post_innertube_for_playback("player", client, &mut payload),
-        )
-        .await
-        {
+        match tokio::time::timeout(budget, self.post_player(client, &mut payload, referer)).await {
             Ok(Ok(value)) => Some(value),
             Ok(Err(error)) => {
                 warn!(video_id = %video_id, client = client.name, %error, "Player request failed");
@@ -2176,11 +2168,7 @@ mod sabr_live_smoke {
             .try_init();
         let video_id =
             std::env::var("FLOW_SABR_VIDEO").unwrap_or_else(|_| "3RmOvxilbPM".to_string());
-        let client = InnertubeClient {
-            client: reqwest::Client::new(),
-            playback_client: reqwest::Client::new(),
-            visitor_data: std::sync::RwLock::new(None),
-        };
+        let client = InnertubeClient::new();
 
         let visitor_data = client.fetch_visitor_data().await;
         let po_token = match visitor_data.as_deref() {
@@ -2403,11 +2391,7 @@ mod sabr_client_probe {
             .try_init();
         let video_id =
             std::env::var("FLOW_SABR_VIDEO").unwrap_or_else(|_| "3RmOvxilbPM".to_string());
-        let client = InnertubeClient {
-            client: reqwest::Client::new(),
-            playback_client: reqwest::Client::new(),
-            visitor_data: std::sync::RwLock::new(None),
-        };
+        let client = InnertubeClient::new();
         // Allow injecting an externally-minted pot+visitor (e.g. from bgutils-js)
         // to test whether a *fresh, valid* pot sustains where the stale sidecar's
         // does not: FLOW_VISITOR=… FLOW_POT=… cargo test … sabr_client_probe …
@@ -2811,11 +2795,7 @@ mod ladder_live {
     }
 
     fn fresh_client() -> InnertubeClient {
-        InnertubeClient {
-            client: reqwest::Client::new(),
-            playback_client: reqwest::Client::new(),
-            visitor_data: std::sync::RwLock::new(None),
-        }
+        InnertubeClient::new()
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

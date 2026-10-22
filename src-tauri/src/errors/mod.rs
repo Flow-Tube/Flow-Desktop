@@ -34,6 +34,14 @@ pub enum AppError {
     #[error("Content not available: {0}")]
     ContentNotAvailable(String),
 
+    /// The request timed out, the connection failed, or the server had an error.
+    #[error("Network error: {0}")]
+    Network(String),
+
+    /// The server asked Flow to slow down (HTTP 429).
+    #[error("Rate limited: {0}")]
+    RateLimited(String),
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
@@ -98,6 +106,8 @@ impl From<AppError> for ErrorResponse {
             AppError::BotCheckRequired(_) => "botCheckRequired",
             AppError::AccountTerminated(_) => "accountTerminated",
             AppError::ContentNotAvailable(_) => "contentNotAvailable",
+            AppError::Network(_) => "network",
+            AppError::RateLimited(_) => "rateLimited",
             AppError::Database(_) => "database",
             AppError::Streaming(_) => "streaming",
             AppError::Internal(_) => "internal",
@@ -115,7 +125,8 @@ impl From<AppError> for ErrorResponse {
             "internal" | "database" => {
                 tracing::error!(kind, error = %message, cause = %cause, "backend_error")
             }
-            "extractor" | "streaming" | "validation" | "botCheckRequired" => {
+            "extractor" | "streaming" | "validation" | "botCheckRequired" | "network"
+            | "rateLimited" => {
                 tracing::warn!(kind, error = %message, cause = %cause, "backend_error")
             }
             _ => tracing::debug!(kind, error = %message, "backend_error"),
@@ -139,6 +150,8 @@ mod tests {
             (AppError::Extractor("e".into()), "extractor"),
             (AppError::AgeRestricted("a".into()), "ageRestricted"),
             (AppError::BotCheckRequired("b".into()), "botCheckRequired"),
+            (AppError::Network("n".into()), "network"),
+            (AppError::RateLimited("r".into()), "rateLimited"),
             (AppError::Database(sqlx::Error::RowNotFound), "database"),
             (AppError::Internal("i".into()), "internal"),
         ];

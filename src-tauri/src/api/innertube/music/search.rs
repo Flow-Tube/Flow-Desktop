@@ -23,19 +23,12 @@ impl InnertubeClient {
         query: &str,
         filter: &str,
     ) -> AppResult<MusicSearchResponse> {
-        let visitor = self.music_visitor_data().await;
         let mut payload = json!({ "query": query });
         if let Some(p) = endpoints::search_filter_params(filter) {
             payload["params"] = json!(p);
         }
         let res = self
-            .post_music(
-                "search",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                None,
-            )
+            .post_music("search", &clients::WEB_REMIX, &mut payload, None)
             .await?;
         let (sections, continuation) = parse_search_sections(&res);
         Ok(MusicSearchResponse {
@@ -49,18 +42,11 @@ impl InnertubeClient {
         &self,
         token: &str,
     ) -> AppResult<MusicSearchResponse> {
-        let visitor = self.music_visitor_data().await;
         let enc = custom_url_encode(token);
         let extra = format!("&ctoken={enc}&continuation={enc}&type=next");
         let mut payload = json!({});
         let res = self
-            .post_music(
-                "search",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                Some(&extra),
-            )
+            .post_music("search", &clients::WEB_REMIX, &mut payload, Some(&extra))
             .await?;
         let shelf = &res["continuationContents"]["musicShelfContinuation"];
         let items = shelves::collect_items(&shelf["contents"]);
@@ -76,16 +62,9 @@ impl InnertubeClient {
 
     /// No-filter "summary" search — top-result card + per-category previews.
     pub(crate) async fn music_search_summary(&self, query: &str) -> AppResult<SearchSummaryPage> {
-        let visitor = self.music_visitor_data().await;
         let mut payload = json!({ "query": query });
         let res = self
-            .post_music(
-                "search",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                None,
-            )
+            .post_music("search", &clients::WEB_REMIX, &mut payload, None)
             .await?;
         let (summaries, _) = parse_search_sections(&res);
         Ok(SearchSummaryPage { summaries })
@@ -96,14 +75,12 @@ impl InnertubeClient {
         &self,
         query: &str,
     ) -> AppResult<MusicSearchSuggestions> {
-        let visitor = self.music_visitor_data().await;
         let mut payload = json!({ "input": query });
         let res = self
             .post_music(
                 "music/get_search_suggestions",
                 &clients::WEB_REMIX,
                 &mut payload,
-                visitor.as_deref(),
                 None,
             )
             .await?;

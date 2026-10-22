@@ -16,9 +16,11 @@ use async_trait::async_trait;
 pub mod core;
 pub mod download;
 pub mod extractors;
+pub mod identity;
 pub mod json;
 pub mod music;
 pub mod parsers;
+pub mod transport;
 
 fn build_http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -45,18 +47,28 @@ pub struct InnertubeClient {
     /// minutes; a 20 KB player response queued behind it misses every
     /// per-client timeout while a fresh connection fetches it in about 2 s.
     pub(crate) playback_client: reqwest::Client,
-    #[allow(dead_code)]
-    pub(crate) visitor_data: std::sync::RwLock<Option<String>>,
+    pub(crate) identity: identity::visitor::VisitorIdentity,
+}
+
+impl Default for InnertubeClient {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InnertubeClient {
     #[must_use]
-    pub fn new(_app: &tauri::AppHandle) -> Self {
+    pub fn new() -> Self {
         Self {
             client: build_http_client(),
             playback_client: build_http_client(),
-            visitor_data: std::sync::RwLock::new(None),
+            identity: identity::visitor::VisitorIdentity::default(),
         }
+    }
+
+    /// Keep the visitor identity in `path` so it survives restarts.
+    pub fn keep_identity_in(&self, path: std::path::PathBuf) {
+        self.identity.set_file(path);
     }
 }
 

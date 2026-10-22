@@ -286,9 +286,11 @@ pub fn run() {
 
             // Initialize native Innertube extractor (shared by the video path and
             // the additive YouTube Music subsystem).
-            let extractor = Arc::new(InnertubeClient::new(app.handle()));
+            let extractor = Arc::new(InnertubeClient::new());
+            extractor.keep_identity_in(app_data_dir.join("visitor_identity.json"));
             let youtube_service = YoutubeService::new(extractor.clone());
             app.manage(youtube_service);
+            app.manage(extractor.clone());
 
             // The first video otherwise waits on both: the visitor identity every
             // player request carries, and the player script web clients need.

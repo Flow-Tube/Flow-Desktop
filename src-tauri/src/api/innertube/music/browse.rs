@@ -23,12 +23,10 @@ impl InnertubeClient {
         &self,
         continuation_token: Option<&str>,
     ) -> AppResult<MusicHomePage> {
-        let visitor = self.music_visitor_data().await;
         let res = if let Some(c) = continuation_token {
-            self.music_browse(None, None, Some(c), visitor.as_deref())
-                .await?
+            self.music_browse(None, None, Some(c)).await?
         } else {
-            self.music_browse(Some(endpoints::BROWSE_HOME), None, None, visitor.as_deref())
+            self.music_browse(Some(endpoints::BROWSE_HOME), None, None)
                 .await?
         };
 
@@ -95,14 +93,8 @@ impl InnertubeClient {
 
     /// New-release albums grid.
     pub(crate) async fn music_new_releases(&self) -> AppResult<Vec<AlbumItem>> {
-        let visitor = self.music_visitor_data().await;
         let res = self
-            .music_browse(
-                Some(endpoints::BROWSE_NEW_RELEASES),
-                None,
-                None,
-                visitor.as_deref(),
-            )
+            .music_browse(Some(endpoints::BROWSE_NEW_RELEASES), None, None)
             .await?;
         let mut albums = Vec::new();
         for section in shelves::section_list_contents(&res) {
@@ -128,14 +120,8 @@ impl InnertubeClient {
     }
 
     pub(crate) async fn music_mood_groups(&self) -> AppResult<Vec<MoodAndGenreGroup>> {
-        let visitor = self.music_visitor_data().await;
         let res = self
-            .music_browse(
-                Some(endpoints::BROWSE_MOODS),
-                None,
-                None,
-                visitor.as_deref(),
-            )
+            .music_browse(Some(endpoints::BROWSE_MOODS), None, None)
             .await?;
         Ok(parse_mood_groups(&res))
     }
@@ -147,13 +133,10 @@ impl InnertubeClient {
         params: Option<&str>,
         continuation_token: Option<&str>,
     ) -> AppResult<MoodGenrePage> {
-        let visitor = self.music_visitor_data().await;
         let res = if let Some(c) = continuation_token {
-            self.music_browse(None, None, Some(c), visitor.as_deref())
-                .await?
+            self.music_browse(None, None, Some(c)).await?
         } else {
-            self.music_browse(Some(browse_id_str), params, None, visitor.as_deref())
-                .await?
+            self.music_browse(Some(browse_id_str), params, None).await?
         };
 
         let title = runs_text(&res["header"]["musicHeaderRenderer"]["title"]).unwrap_or_default();
@@ -212,10 +195,8 @@ impl InnertubeClient {
         continuation_token: Option<&str>,
         country: Option<&str>,
     ) -> AppResult<ChartsPage> {
-        let visitor = self.music_visitor_data().await;
         let res = if let Some(c) = continuation_token {
-            self.music_browse(None, None, Some(c), visitor.as_deref())
-                .await?
+            self.music_browse(None, None, Some(c)).await?
         } else {
             let mut payload = json!({
                 "browseId": endpoints::BROWSE_CHARTS,
@@ -226,14 +207,8 @@ impl InnertubeClient {
             }) {
                 payload["formData"] = json!({ "selectedValues": [code] });
             }
-            self.post_music(
-                "browse",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                None,
-            )
-            .await?
+            self.post_music("browse", &clients::WEB_REMIX, &mut payload, None)
+                .await?
         };
 
         let mut sections: Vec<ChartSection> = Vec::new();

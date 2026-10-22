@@ -1,7 +1,12 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients::{self, YouTubeClient};
 use crate::api::innertube::music::parse::endpoint::{WatchNextTab, watch_next_tab};
-use crate::errors::{AppError, AppResult};
+use crate::api::innertube::transport::error::{TransportError, to_app_error};
+use crate::api::innertube::transport::request::{
+    Host, RequestSpec, body_visitor, ensure_context, strip_visitor,
+};
+use crate::api::innertube::transport::send::send;
+use crate::errors::AppResult;
 use serde_json::Value;
 
 /// Percent-encode for InnerTube query strings, which want `+` for spaces rather
@@ -32,8 +37,16 @@ impl InnertubeClient {
         client: &YouTubeClient,
         payload: &mut Value,
     ) -> AppResult<Value> {
-        self.post_innertube_via(&self.client, endpoint, client, payload)
-            .await
+        self.post_via(
+            &self.client,
+            Host::Www,
+            endpoint,
+            client,
+            payload,
+            None,
+            None,
+        )
+        .await
     }
 
     /// [`Self::post_innertube`] on the dedicated playback connection pool, for
@@ -44,72 +57,85 @@ impl InnertubeClient {
         client: &YouTubeClient,
         payload: &mut Value,
     ) -> AppResult<Value> {
-        self.post_innertube_via(&self.playback_client, endpoint, client, payload)
-            .await
+        self.post_via(
+            &self.playback_client,
+            Host::Www,
+            endpoint,
+            client,
+            payload,
+            None,
+            None,
+        )
+        .await
     }
 
-    async fn post_innertube_via(
+    /// A `player` request on the playback pool, with an optional referer.
+    pub async fn post_player(
+        &self,
+        client: &YouTubeClient,
+        payload: &mut Value,
+        referer: Option<&str>,
+    ) -> AppResult<Value> {
+        self.post_via(
+            &self.playback_client,
+            Host::Www,
+            "player",
+            client,
+            payload,
+            referer,
+            None,
+        )
+        .await
+    }
+
+    /// Send one request through the shared transport.
+    ///
+    /// A body without a context gets this client's, carrying the visitor
+    /// identity; a body with one is sent as the caller built it. When the server
+    /// answers 400 to an identity added here, the request is repeated once
+    /// without it and that identity is dropped, as Flow for Android does.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn post_via(
         &self,
         http: &reqwest::Client,
+        host: Host,
         endpoint: &str,
         client: &YouTubeClient,
         payload: &mut Value,
+        referer: Option<&str>,
+        extra_query: Option<&str>,
     ) -> AppResult<Value> {
-        if let Some(obj) = payload.as_object_mut() {
-            obj.entry("context")
-                .or_insert_with(|| client.context(None, None));
-        }
-
-        let mut custom_referer = None;
-        if let Some(obj) = payload.as_object_mut() {
-            if let Some(val) = obj.remove("custom_referer") {
-                if let Some(s) = val.as_str() {
-                    custom_referer = Some(s.to_string());
-                }
-            }
-        }
-
-        let url = format!(
-            "https://www.youtube.com/youtubei/v1/{}?prettyPrint=false",
-            endpoint
-        );
-        let mut req = http
-            .post(&url)
-            .header(reqwest::header::USER_AGENT, client.user_agent)
-            .header("X-YouTube-Client-Name", client.client_id)
-            .header("X-YouTube-Client-Version", client.version)
-            .header("Origin", "https://www.youtube.com")
-            .header("Cookie", "SOCS=CAE=") // Bypasses cookie consent blocks!
-            .json(payload);
-
-        if let Some(ref ref_url) = custom_referer {
-            req = req.header("Referer", ref_url);
+        let spec = RequestSpec {
+            host,
+            endpoint,
+            client,
+            referer,
+            extra_query,
+        };
+        let added = if payload.get("context").is_some() {
+            false
         } else {
-            req = req.header("Referer", "https://www.youtube.com");
+            let visitor = self.fetch_visitor_data().await;
+            ensure_context(payload, client, visitor.as_deref())
+        };
+        let visitor = body_visitor(payload).map(ToOwned::to_owned);
+        match send(http, &spec, payload, visitor.as_deref()).await {
+            Err(TransportError::Status { code: 400, .. }) if added && visitor.is_some() => {
+                strip_visitor(payload);
+                let retried = send(http, &spec, payload, None).await;
+                if retried.is_ok() {
+                    if let Some(rejected) = visitor.as_deref() {
+                        self.identity.forget_if(rejected);
+                    }
+                    tracing::warn!(
+                        endpoint,
+                        "visitor identity rejected; request succeeded without it"
+                    );
+                }
+                retried.map_err(|error| to_app_error(endpoint, &error))
+            }
+            result => result.map_err(|error| to_app_error(endpoint, &error)),
         }
-
-        let res = req
-            .send()
-            .await
-            .map_err(|e| AppError::Extractor(format!("Network error: {}", e)))?;
-
-        let status = res.status();
-        let res_json = res
-            .json::<Value>()
-            .await
-            .map_err(|e| AppError::Extractor(format!("JSON parse error: {}", e)))?;
-
-        if !status.is_success() {
-            return Err(AppError::Extractor(format!(
-                "Innertube returned status {}: {}",
-                status,
-                res_json["error"]["message"]
-                    .as_str()
-                    .unwrap_or("Unknown error")
-            )));
-        }
-
-        Ok(res_json)
     }
 
     // Helper to fetch watch-next details (lyrics & related browse pointers) from WEB_REMIX

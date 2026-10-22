@@ -22,7 +22,6 @@ impl InnertubeClient {
         playlist_id: Option<&str>,
         params: Option<&str>,
     ) -> AppResult<QueuePage> {
-        let visitor = self.music_visitor_data().await;
         let mut payload = json!({ "isAudioOnly": true });
         if let Some(v) = video_id {
             payload["videoId"] = json!(v);
@@ -34,29 +33,16 @@ impl InnertubeClient {
             payload["params"] = json!(p);
         }
         let res = self
-            .post_music(
-                "next",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                None,
-            )
+            .post_music("next", &clients::WEB_REMIX, &mut payload, None)
             .await?;
         Ok(parse_next_queue(&res))
     }
 
     /// Continue a watch queue.
     pub(crate) async fn music_queue_continuation(&self, token: &str) -> AppResult<QueuePage> {
-        let visitor = self.music_visitor_data().await;
         let mut payload = json!({ "continuation": token });
         let res = self
-            .post_music(
-                "next",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                None,
-            )
+            .post_music("next", &clients::WEB_REMIX, &mut payload, None)
             .await?;
         let panel = &res["continuationContents"]["playlistPanelContinuation"];
         let items = collect_panel_items(panel);
@@ -77,7 +63,6 @@ impl InnertubeClient {
         video_ids: &[String],
         playlist_id: Option<&str>,
     ) -> AppResult<QueuePage> {
-        let visitor = self.music_visitor_data().await;
         let mut payload = json!({});
         if !video_ids.is_empty() {
             payload["videoIds"] = json!(video_ids);
@@ -86,13 +71,7 @@ impl InnertubeClient {
             payload["playlistId"] = json!(p);
         }
         let res = self
-            .post_music(
-                "music/get_queue",
-                &clients::WEB_REMIX,
-                &mut payload,
-                visitor.as_deref(),
-                None,
-            )
+            .post_music("music/get_queue", &clients::WEB_REMIX, &mut payload, None)
             .await?;
         let mut items = Vec::new();
         if let Some(arr) = res["queueDatas"].as_array() {
@@ -120,10 +99,7 @@ impl InnertubeClient {
             return Ok(related_from_sections(Vec::new()));
         };
 
-        let visitor = self.music_visitor_data().await;
-        let res = self
-            .music_browse(Some(&related_browse), None, None, visitor.as_deref())
-            .await?;
+        let res = self.music_browse(Some(&related_browse), None, None).await?;
 
         let sections = shelves::section_list_contents(&res)
             .into_iter()
@@ -145,14 +121,8 @@ impl InnertubeClient {
         let Some(browse) = queue.lyrics_browse_id else {
             return Ok(None);
         };
-        let visitor = self.music_visitor_data().await;
         let res = self
-            .music_browse(
-                Some(&browse),
-                queue.lyrics_params.as_deref(),
-                None,
-                visitor.as_deref(),
-            )
+            .music_browse(Some(&browse), queue.lyrics_params.as_deref(), None)
             .await?;
 
         let mut text = String::new();

@@ -20,11 +20,8 @@ impl InnertubeClient {
         &self,
         playlist_id: &str,
     ) -> AppResult<MusicPlaylistPage> {
-        let visitor = self.music_visitor_data().await;
         let browse = endpoints::vl(playlist_id);
-        let res = self
-            .music_browse(Some(&browse), None, None, visitor.as_deref())
-            .await?;
+        let res = self.music_browse(Some(&browse), None, None).await?;
 
         let header = find_playlist_header(&res);
         let title = runs_text(&header["title"]).unwrap_or_default();
@@ -64,10 +61,7 @@ impl InnertubeClient {
         &self,
         token: &str,
     ) -> AppResult<(Vec<SongItem>, Option<String>)> {
-        let visitor = self.music_visitor_data().await;
-        let res = self
-            .music_browse(None, None, Some(token), visitor.as_deref())
-            .await?;
+        let res = self.music_browse(None, None, Some(token)).await?;
 
         let mut songs = Vec::new();
         let mut seen = HashSet::new();

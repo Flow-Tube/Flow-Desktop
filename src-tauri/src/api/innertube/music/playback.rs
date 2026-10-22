@@ -57,7 +57,7 @@ impl InnertubeClient {
 
         // Bulk metadata lookups wait while a track is being resolved.
         let _priority = playback_priority().start_stream();
-        let mut visitor = self.music_visitor_data().await;
+        let mut visitor = self.fetch_visitor_data().await;
         let mut identity_refreshed = false;
         let mut last_error: Option<AppError> = None;
 
@@ -69,7 +69,7 @@ impl InnertubeClient {
                 && matches!(&answer, ClientAnswer::Refused(playability) if is_bot_wall(playability))
             {
                 identity_refreshed = true;
-                if let Some(fresh) = self.refresh_visitor_data().await {
+                if let Some(fresh) = self.refresh_visitor_data(visitor.as_deref()).await {
                     info!(
                         client = client.name,
                         "Music bot wall; retrying under a fresh visitor identity"

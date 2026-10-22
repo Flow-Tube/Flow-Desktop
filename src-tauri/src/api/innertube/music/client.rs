@@ -1,23 +1,17 @@
-//! Music-specific HTTP layer.
-//!
-//! This is deliberately separate from `core::http::post_innertube` (the video
-//! path): it targets the `music.youtube.com` origin, uses the music client
-//! profiles in [`super::clients`], and sets per-client User-Agents that
-//! `post_innertube` does not know about. It reuses the shared `reqwest::Client`
-//! on [`InnertubeClient`] so connection pooling (and any future outbound proxy)
-//! is shared — but it never modifies the video request path.
+//! Music requests: the `music.youtube.com` host, the music client
+//! profiles in [`super::clients`], and request counters for Diagnostics. They go
+//! through the same transport as every other `InnerTube` request.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-use reqwest::header::USER_AGENT;
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::clients::MusicClient;
-use super::endpoints;
 use crate::api::innertube::InnertubeClient;
-use crate::errors::{AppError, AppResult};
+use crate::api::innertube::transport::request::Host;
+use crate::errors::AppResult;
 
 static MUSIC_REQUESTS: AtomicU64 = AtomicU64::new(0);
 static MUSIC_REQUEST_MILLIS: AtomicU64 = AtomicU64::new(0);
@@ -44,87 +38,36 @@ pub fn record_public_cache_hit() {
 }
 
 impl InnertubeClient {
-    /// Visitor data, fetched once and cached on the shared client.
-    pub(crate) async fn music_visitor_data(&self) -> Option<String> {
-        if let Ok(guard) = self.visitor_data.read() {
-            if let Some(v) = guard.as_ref() {
-                return Some(v.clone());
-            }
-        }
-        let fetched = self.fetch_visitor_data().await;
-        if let Some(ref v) = fetched {
-            if let Ok(mut guard) = self.visitor_data.write() {
-                *guard = Some(v.clone());
-            }
-        }
-        fetched
-    }
-
     /// POST a request to the YouTube Music API (`music.youtube.com`).
     ///
     /// `payload` must already contain any `browseId`/`query`/`continuation`/
-    /// `params` body fields. The `context` is injected from `client` when absent.
-    /// `extra_query` lets the `search` endpoint append `&ctoken=…&continuation=…`.
+    /// `params` body fields. The `context`, with the visitor identity, is added
+    /// from `client` when absent. `extra_query` lets the `search` endpoint append
+    /// `&ctoken=…&continuation=…`.
     pub(crate) async fn post_music(
         &self,
         endpoint: &str,
         client: &MusicClient,
         payload: &mut Value,
-        visitor_data: Option<&str>,
         extra_query: Option<&str>,
     ) -> AppResult<Value> {
-        if let Some(obj) = payload.as_object_mut() {
-            obj.entry("context")
-                .or_insert_with(|| client.context(visitor_data, None));
-        }
-
-        let mut url = format!("{}{}?prettyPrint=false", endpoints::MUSIC_BASE, endpoint);
-        if let Some(extra) = extra_query {
-            url.push_str(extra);
-        }
-
-        let mut req = self
-            .client
-            .post(&url)
-            .header(USER_AGENT, client.user_agent)
-            .header("X-YouTube-Client-Name", client.client_id)
-            .header("X-YouTube-Client-Version", client.version)
-            .header("Origin", endpoints::ORIGIN)
-            .header("Referer", endpoints::REFERER)
-            .header("X-Origin", endpoints::ORIGIN)
-            .header("X-Goog-Api-Format-Version", "1")
-            .header("Cookie", "SOCS=CAE=")
-            .json(payload);
-
-        if let Some(vd) = visitor_data {
-            req = req.header("X-Goog-Visitor-Id", vd);
-        }
-
         MUSIC_REQUESTS.fetch_add(1, Ordering::Relaxed);
         let started = Instant::now();
-        let res = req
-            .send()
-            .await
-            .map_err(|e| AppError::Extractor(format!("Music network error ({endpoint}): {e}")))?;
-        let status = res.status();
-        let body = res
-            .json::<Value>()
-            .await
-            .map_err(|e| AppError::Extractor(format!("Music JSON error ({endpoint}): {e}")))?;
+        let result = self
+            .post_via(
+                &self.client,
+                Host::Music,
+                endpoint,
+                client,
+                payload,
+                None,
+                extra_query,
+            )
+            .await;
         let elapsed = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         MUSIC_REQUEST_MILLIS.fetch_add(elapsed, Ordering::Relaxed);
         tracing::debug!(endpoint, elapsed_ms = elapsed, "Music request completed");
-
-        if !status.is_success() {
-            return Err(AppError::Extractor(format!(
-                "YouTube Music returned status {} for {}: {}",
-                status,
-                endpoint,
-                body["error"]["message"].as_str().unwrap_or("unknown error")
-            )));
-        }
-
-        Ok(body)
+        result
     }
 
     /// Convenience: a `browse` against the music API with an optional browse id /
@@ -134,7 +77,6 @@ impl InnertubeClient {
         browse_id: Option<&str>,
         params: Option<&str>,
         continuation: Option<&str>,
-        visitor_data: Option<&str>,
     ) -> AppResult<Value> {
         let mut payload = json!({});
         if let Some(id) = browse_id {
@@ -146,14 +88,8 @@ impl InnertubeClient {
         if let Some(c) = continuation {
             payload["continuation"] = json!(c);
         }
-        self.post_music(
-            "browse",
-            &super::clients::WEB_REMIX,
-            &mut payload,
-            visitor_data,
-            None,
-        )
-        .await
+        self.post_music("browse", &super::clients::WEB_REMIX, &mut payload, None)
+            .await
     }
 
     /// A `player` request for one client, against the main API (mobile clients
@@ -181,38 +117,8 @@ impl InnertubeClient {
             });
         }
 
-        let url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
         // The playback pool: a track waiting behind the music home's browse
         // traffic on the shared connection was most of a slow start.
-        let mut req = self
-            .playback_client
-            .post(url)
-            .header(USER_AGENT, client.user_agent)
-            .header("X-YouTube-Client-Name", client.client_id)
-            .header("X-YouTube-Client-Version", client.version)
-            .header("Origin", "https://www.youtube.com")
-            .header("Referer", "https://www.youtube.com")
-            .header("Cookie", "SOCS=CAE=")
-            .json(&payload);
-        if let Some(vd) = visitor_data {
-            req = req.header("X-Goog-Visitor-Id", vd);
-        }
-
-        let res = req
-            .send()
-            .await
-            .map_err(|e| AppError::Extractor(format!("Music player network error: {e}")))?;
-        let status = res.status();
-        let body = res
-            .json::<Value>()
-            .await
-            .map_err(|e| AppError::Extractor(format!("Music player JSON error: {e}")))?;
-        if !status.is_success() {
-            return Err(AppError::Extractor(format!(
-                "Music player returned status {status} for client {}",
-                client.name
-            )));
-        }
-        Ok(body)
+        self.post_player(client, &mut payload, None).await
     }
 }

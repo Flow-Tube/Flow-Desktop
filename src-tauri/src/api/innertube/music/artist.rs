@@ -12,10 +12,7 @@ use crate::models::music::{ArtistItem, ArtistPage, ArtistSection};
 impl InnertubeClient {
     /// Fetch an artist page by channel/browse id (`UC…`).
     pub(crate) async fn music_artist_page(&self, browse_id: &str) -> AppResult<ArtistPage> {
-        let visitor = self.music_visitor_data().await;
-        let res = self
-            .music_browse(Some(browse_id), None, None, visitor.as_deref())
-            .await?;
+        let res = self.music_browse(Some(browse_id), None, None).await?;
 
         let header = find_artist_header(&res);
         let title = runs_text(&header["title"]).unwrap_or_default();

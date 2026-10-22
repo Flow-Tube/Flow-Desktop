@@ -1550,5 +1550,9 @@
   "post_gallery_next": "Next image",
   "post_quiz_correct": "Correct",
   "post_quiz_wrong": "Not quite",
-  "post_close_comments": "Close comments"
+  "post_close_comments": "Close comments",
+  "subscriptions_failed_title": "Some channels could not be read",
+  "subscriptions_failed_body": "Their newest uploads are missing from this feed: %s.",
+  "subscriptions_failed_more": "%s and %s more",
+  "subscriptions_failed_retry": "Try again"
 }

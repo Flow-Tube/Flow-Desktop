@@ -497,6 +497,8 @@ export interface SubscriptionRssChannel {
 export interface SubscriptionRssFeed {
   videos: VideoSummary[];
   channels: SubscriptionRssChannel[];
+  /** Channels whose uploads could be read neither from their feed nor their Videos tab. */
+  failedChannelIds: string[];
   processed: number;
   total: number;
 }
@@ -523,6 +525,7 @@ export async function getSubscriptionRssFeed(
         name: `Subscribed Channel ${index + 1}`,
         avatarUrl: null,
       })),
+      failedChannelIds: [],
       processed: channelIds.length,
       total: channelIds.length,
     };

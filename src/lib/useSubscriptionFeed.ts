@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getChannelDetails,
   getSubscriptionRotationFeed,
@@ -20,6 +20,7 @@ export interface ScanProgress {
 interface CachedFeed {
   videos: VideoSummary[];
   channels: SubscriptionRssChannel[];
+  failedChannelIds: string[];
   cachedAt: number;
 }
 
@@ -28,7 +29,8 @@ interface PersistedFeed extends CachedFeed {
 }
 
 const FEED_TTL_MS = 15 * 60 * 1000;
-const FEED_CACHE_KEY = 'subscription_feed_cache_v1';
+// v2: Shorts are marked by the backend (`isShort`), which v1 feeds never carry.
+const FEED_CACHE_KEY = 'subscription_feed_cache_v2';
 const MAX_CACHED_VIDEOS = 500;
 
 const feedCache = new Map<string, CachedFeed>();
@@ -52,6 +54,7 @@ async function persistFeed(key: string, feed: SubscriptionRssFeed): Promise<void
       key,
       videos: feed.videos.slice(0, MAX_CACHED_VIDEOS),
       channels: feed.channels,
+      failedChannelIds: feed.failedChannelIds,
       cachedAt: Date.now(),
     };
     await setSetting(FEED_CACHE_KEY, JSON.stringify(payload));
@@ -80,6 +83,8 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
+  const [failedChannelIds, setFailedChannelIds] = useState<string[]>([]);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const channelIds = useMemo(
     () => channels.map((channel) => channel.id).sort().join('|'),
     [channels],
@@ -92,16 +97,20 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
     if (ids.length === 0) {
       setVideos([]);
       setRssChannels([]);
+      setFailedChannelIds([]);
       setError(null);
       setLoading(false);
       setScanProgress(null);
       return;
     }
 
+    // A refresh asks again however fresh the cached feed is.
+    if (refreshNonce > 0) feedCache.delete(channelIds);
     const mem = feedCache.get(channelIds);
     if (mem) {
       setVideos(mem.videos);
       setRssChannels(mem.channels);
+      setFailedChannelIds(mem.failedChannelIds);
       setLoading(false);
     } else {
       setLoading(true);
@@ -113,17 +122,20 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
       let cachedAt = mem?.cachedAt ?? null;
       let haveVideos = mem != null && mem.videos.length > 0;
 
-      if (!mem) {
+      if (!mem && refreshNonce === 0) {
         const persisted = await loadPersistedFeed();
         if (!active) return;
         if (persisted && persisted.key === channelIds && persisted.videos.length > 0) {
+          const failed = persisted.failedChannelIds ?? [];
           feedCache.set(channelIds, {
             videos: persisted.videos,
             channels: persisted.channels,
+            failedChannelIds: failed,
             cachedAt: persisted.cachedAt,
           });
           setVideos(persisted.videos);
           setRssChannels(persisted.channels);
+          setFailedChannelIds(failed);
           setLoading(false);
           cachedAt = persisted.cachedAt;
           haveVideos = true;
@@ -142,6 +154,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
           if (!active) return;
           setVideos(feed.videos);
           setRssChannels(feed.channels);
+          setFailedChannelIds(feed.failedChannelIds);
           if (feed.videos.length > 0) sawVideos = true;
           setLoading(false);
 
@@ -151,6 +164,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
             feedCache.set(channelIds, {
               videos: feed.videos,
               channels: feed.channels,
+              failedChannelIds: feed.failedChannelIds,
               cachedAt: Date.now(),
             });
             void persistFeed(channelIds, feed);
@@ -196,9 +210,10 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
     return () => {
       active = false;
     };
-  }, [channelIds]);
+  }, [channelIds, refreshNonce]);
 
-  return { videos, rssChannels, loading, error, scanProgress };
+  const refresh = useCallback(() => setRefreshNonce((value) => value + 1), []);
+  return { videos, rssChannels, loading, error, scanProgress, failedChannelIds, refresh };
 }
 
 const channelDetailsCache = new Map<string, ChannelDetails>();

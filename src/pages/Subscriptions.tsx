@@ -14,12 +14,12 @@ import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { ChannelSwiper } from "../components/subscriptions/ChannelSwiper";
 import { ScanProgressBar } from "../components/subscriptions/ScanProgressBar";
+import { FeedFailedNotice } from "../components/subscriptions/FeedFailedNotice";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { ShortsShelf } from "../components/shelf/ShortsShelf";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
 import { upgradeAvatarUrl } from "../lib/thumbnails";
 import { useProxiedImageUrl } from "../lib/useProxiedImageUrl";
-import { isKnownShort } from "../lib/videoKind";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { ShortVideoSummary, VideoSummary } from "../types/video";
 
@@ -69,7 +69,22 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const channelPrefsLoaded = useNotificationStore((state) => state.channelPrefsLoaded);
   const loadChannelPreferences = useNotificationStore((state) => state.loadChannelPreferences);
   const setChannelNotification = useNotificationStore((state) => state.setChannelNotification);
-  const { videos, rssChannels, loading: feedLoading, error: feedError, scanProgress } = useSubscriptionFeed(subscriptions);
+  const {
+    videos,
+    rssChannels,
+    loading: feedLoading,
+    error: feedError,
+    scanProgress,
+    failedChannelIds,
+    refresh: refreshFeed,
+  } = useSubscriptionFeed(subscriptions);
+  const failedChannelNames = useMemo(
+    () =>
+      failedChannelIds.map(
+        (channelId) => subscriptions.find((channel) => channel.id === channelId)?.name ?? channelId,
+      ),
+    [failedChannelIds, subscriptions],
+  );
   const channelDetails = useSubscriptionChannelDetails(subscriptions);
   const showSubscriptionVideos = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_VIDEOS] !== "false");
   const showSubscriptionShorts = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_SHORTS] !== "false");
@@ -230,7 +245,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     const shorts: ShortVideoSummary[] = [];
     const regular: VideoSummary[] = [];
     for (const video of filteredVideos) {
-      if (isKnownShort(video.durationSeconds)) {
+      if (video.isShort) {
         if (showSubscriptionShorts) {
           shorts.push({
             type: "short",
@@ -343,6 +358,9 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                 </div>
 
                 {scanProgress ? <ScanProgressBar progress={scanProgress} /> : null}
+                {!feedLoading && (
+                  <FeedFailedNotice names={failedChannelNames} onRetry={refreshFeed} retrying={scanProgress != null} />
+                )}
 
                 <section className="pt-2">
                   <h2 className="mb-4 text-xl font-semibold text-chrome-neutral-100">

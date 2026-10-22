@@ -259,7 +259,9 @@ export function Watch() {
       ) : null}
       sidebar={
         <>
-          {videoDetails?.isLive && liveChatEnabled && <LiveChat videoId={videoId} />}
+          {(videoDetails?.isLive || videoDetails?.hasChatReplay) && liveChatEnabled && (
+            <LiveChat videoId={videoId} isReplay={!videoDetails.isLive} />
+          )}
 
           {isQueuePanelOpen && (
             <div className="h-[min(720px,calc(100vh-140px))] min-h-[450px] w-full shrink-0">

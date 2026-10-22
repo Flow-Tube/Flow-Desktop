@@ -387,15 +387,21 @@ export async function getPostComments(
   });
 }
 
+/** A page of the video's chat. `replayOffsetMs` reads a replay at that point of the stream. */
 export async function getLiveChat(
   videoId: string,
   continuation?: string | null,
+  replayOffsetMs?: number | null,
 ): Promise<LiveChatResponse> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock live chat.");
     return { messages: [], continuation: null, pollingIntervalMs: 0, isReplay: false };
   }
-  return invokeBackend<LiveChatResponse>("get_live_chat", { videoId, continuation });
+  return invokeBackend<LiveChatResponse>("get_live_chat", {
+    videoId,
+    continuation,
+    replayOffsetMs: replayOffsetMs == null ? null : Math.max(0, Math.round(replayOffsetMs)),
+  });
 }
 
 export async function getTrendingByCategory(

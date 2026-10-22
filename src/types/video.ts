@@ -152,6 +152,8 @@ export interface LiveChatMessage {
   superChatAmount?: string | null;
   superChatArgb?: number | null;
   superChatHeaderArgb?: number | null;
+  /** Where in a replayed stream the message was sent. */
+  videoOffsetMs?: number | null;
 }
 
 export interface LiveChatResponse {
@@ -159,6 +161,11 @@ export interface LiveChatResponse {
   continuation?: string | null;
   pollingIntervalMs: number;
   isReplay: boolean;
+  /** Tokens that restart the chat as "Top chat" or as every message. */
+  topChatContinuation?: string | null;
+  allChatContinuation?: string | null;
+  /** A replay token that jumps to another playback position. */
+  seekContinuation?: string | null;
 }
 
 /** SABR (Server Adaptive Bit Rate) availability + local manifest endpoint. */

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown, RotateCw } from "lucide-react";
-import { useLiveChat } from "../../lib/useLiveChat";
+import { useLiveChat, type ChatView, type LiveChatState } from "../../lib/useLiveChat";
+import { useChatReplay } from "../../lib/useChatReplay";
 import { getString } from "../../lib/i18n/index";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
 import type { LiveChatMessage, LiveChatSegment } from "../../types/video";
@@ -128,8 +129,66 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
   );
 }
 
-export function LiveChat({ videoId }: LiveChatProps) {
-  const { messages, loading, ended, reconnect } = useLiveChat(videoId, true);
+function StreamChat({ videoId, view, onViewChange }: ChatPanelSource) {
+  const chat = useLiveChat(videoId, true, view);
+  return <ChatPanel chat={chat} isReplay={false} view={view} onViewChange={onViewChange} />;
+}
+
+function ReplayChat({ videoId, view, onViewChange }: ChatPanelSource) {
+  const chat = useChatReplay(videoId, true, view);
+  return <ChatPanel chat={chat} isReplay view={view} onViewChange={onViewChange} />;
+}
+
+interface ChatPanelSource {
+  videoId: string;
+  view: ChatView;
+  onViewChange: (view: ChatView) => void;
+}
+
+/** A live stream's chat, or a finished stream's chat replayed in step with the player. */
+export function LiveChat({ videoId, isReplay }: LiveChatProps) {
+  const [view, setView] = useState<ChatView>("top");
+  return isReplay ? (
+    <ReplayChat videoId={videoId} view={view} onViewChange={setView} />
+  ) : (
+    <StreamChat videoId={videoId} view={view} onViewChange={setView} />
+  );
+}
+
+function ViewToggle({ view, onViewChange }: { view: ChatView; onViewChange: (view: ChatView) => void }) {
+  return (
+    <div className="flex items-center rounded-full bg-surface-container p-0.5">
+      {(["top", "all"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onViewChange(option)}
+          aria-pressed={view === option}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+            view === option
+              ? "bg-surface-container-highest text-chrome-neutral-100"
+              : "text-chrome-neutral-400 hover:text-chrome-neutral-200"
+          }`}
+        >
+          {getString(option === "top" ? "live_chat_view_top" : "live_chat_view_all")}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ChatPanel({
+  chat,
+  isReplay,
+  view,
+  onViewChange,
+}: {
+  chat: LiveChatState;
+  isReplay: boolean;
+  view: ChatView;
+  onViewChange: (view: ChatView) => void;
+}) {
+  const { messages, loading, ended, canSwitchView, reconnect } = chat;
 
   const listRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
@@ -156,22 +215,29 @@ export function LiveChat({ videoId }: LiveChatProps) {
     <div className="flex h-[min(560px,70vh)] w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
       <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800 px-4 py-3">
         <Radio size={16} className="text-primary" />
-        <h3 className="text-base font-medium text-chrome-neutral-200">{getString("live_chat_title")}</h3>
-        {ended ? (
-          <button
-            type="button"
-            onClick={reconnect}
-            className="ml-auto flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold text-chrome-neutral-300 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
-          >
-            <RotateCw size={12} />
-            {getString("live_chat_reconnect")}
-          </button>
-        ) : (
-          <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-            {getString("live_badge")}
-          </span>
-        )}
+        <h3 className="text-base font-medium text-chrome-neutral-200">
+          {getString(isReplay ? "live_chat_replay_title" : "live_chat_title")}
+        </h3>
+        <div className="ml-auto flex items-center gap-2">
+          {canSwitchView && <ViewToggle view={view} onViewChange={onViewChange} />}
+          {ended ? (
+            <button
+              type="button"
+              onClick={reconnect}
+              className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-semibold text-chrome-neutral-300 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
+            >
+              <RotateCw size={12} />
+              {getString("live_chat_reconnect")}
+            </button>
+          ) : (
+            !isReplay && (
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-primary">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                {getString("live_badge")}
+              </span>
+            )
+          )}
+        </div>
       </div>
 
       <div className="relative min-h-0 flex-1">

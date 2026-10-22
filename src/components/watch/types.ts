@@ -54,6 +54,8 @@ export interface CommentsSectionProps {
 
 export interface LiveChatProps {
   videoId: string;
+  /** A finished stream: its chat is replayed in step with the player. */
+  isReplay?: boolean;
 }
 
 export interface WatchErrorStateProps {

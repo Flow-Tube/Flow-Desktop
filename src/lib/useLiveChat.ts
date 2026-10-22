@@ -10,11 +10,21 @@ const MAX_FAILURES = 6;
 const MAX_RESEEDS = 3;
 const MIN_POLL_MS = 800;
 
+/** "Top chat", YouTube's filtered default, or every message. */
+export type ChatView = "top" | "all";
+
+export interface ChatViewTokens {
+  top: string | null;
+  all: string | null;
+}
+
 export interface LiveChatState {
   messages: LiveChatMessage[];
   loading: boolean;
   // Chat is unavailable for this video, or its stream has closed.
   ended: boolean;
+  /** The chat offered both views, so `view` can switch between them. */
+  canSwitchView: boolean;
   reconnect: () => void;
 }
 
@@ -27,21 +37,31 @@ export interface LiveChatState {
  * YouTube drops the chain on its own often enough that giving up on the first gap leaves a live
  * stream with a dead panel. Only a chain that will not re-seed is reported as ended.
  */
-export function useLiveChat(videoId: string | undefined, enabled: boolean): LiveChatState {
+export function useLiveChat(videoId: string | undefined, enabled: boolean, view: ChatView = "top"): LiveChatState {
   const [messages, setMessages] = useState<LiveChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [ended, setEnded] = useState(false);
+  const [canSwitchView, setCanSwitchView] = useState(false);
   const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const seenRef = useRef<Set<string>>(new Set());
   const backlogKeyRef = useRef<string | null>(null);
+  const viewTokensRef = useRef<ChatViewTokens>({ top: null, all: null });
+  const tokensVideoRef = useRef<string | undefined>(undefined);
 
   const reconnect = useCallback(() => setReconnectNonce((value) => value + 1), []);
 
   useEffect(() => {
-    // A reconnect resumes the same conversation, so only a different video clears the backlog.
-    if (backlogKeyRef.current !== videoId) {
-      backlogKeyRef.current = videoId ?? null;
+    // A reconnect resumes the same conversation, so only a different video or view clears the
+    // backlog: the two views are different streams of messages.
+    const backlogKey = videoId ? `${videoId}:${view}` : null;
+    if (tokensVideoRef.current !== videoId) {
+      tokensVideoRef.current = videoId;
+      viewTokensRef.current = { top: null, all: null };
+      setCanSwitchView(false);
+    }
+    if (backlogKeyRef.current !== backlogKey) {
+      backlogKeyRef.current = backlogKey;
       seenRef.current = new Set();
       setMessages([]);
     }
@@ -54,7 +74,9 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let continuation: string | null = null;
+    // The seed is Top chat; the all-messages view restarts from the token the first page offered.
+    const restartToken = () => (view === "all" ? viewTokensRef.current.all : null);
+    let continuation: string | null = restartToken();
     let failures = 0;
     let reseeds = 0;
     setLoading(true);
@@ -70,6 +92,13 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
         const page = await getLiveChat(videoId, continuation);
         if (cancelled) return;
         setLoading(false);
+        if (page.topChatContinuation || page.allChatContinuation) {
+          viewTokensRef.current = {
+            top: page.topChatContinuation ?? viewTokensRef.current.top,
+            all: page.allChatContinuation ?? viewTokensRef.current.all,
+          };
+          setCanSwitchView(Boolean(viewTokensRef.current.all));
+        }
 
         const fresh = page.messages.filter((m) => !seenRef.current.has(m.id));
         if (fresh.length > 0) {
@@ -89,7 +118,7 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
             return;
           }
           reseeds += 1;
-          continuation = null;
+          continuation = restartToken();
           schedule(RETRY_MS);
           return;
         }
@@ -119,7 +148,7 @@ export function useLiveChat(videoId: string | undefined, enabled: boolean): Live
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [videoId, enabled, reconnectNonce]);
+  }, [videoId, enabled, view, reconnectNonce]);
 
-  return { messages, loading, ended, reconnect };
+  return { messages, loading, ended, canSwitchView, reconnect };
 }

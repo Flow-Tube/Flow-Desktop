@@ -543,6 +543,20 @@ pub async fn get_related_videos(
     Ok(related)
 }
 
+/// The video's category, for the recommendation engine. A small request of
+/// its own, so the watch page asks only once playback has settled.
+#[tauri::command]
+pub async fn get_video_category(
+    video_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<Option<String>, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_video_category(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 #[tauri::command]
 pub async fn get_more_related_videos(
     continuation: String,

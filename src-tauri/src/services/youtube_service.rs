@@ -41,6 +41,10 @@ impl YoutubeService {
         self.extractor.get_related_videos(video_id).await
     }
 
+    pub async fn get_video_category(&self, video_id: &str) -> AppResult<Option<String>> {
+        self.extractor.get_video_category(video_id).await
+    }
+
     pub async fn get_feed_related_videos(&self, video_id: &str) -> AppResult<RelatedPage> {
         self.extractor.get_feed_related_videos(video_id).await
     }

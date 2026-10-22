@@ -99,7 +99,7 @@ use commands::youtube::{
     get_live_chat, get_more_related_videos, get_playlist_details, get_post_comments,
     get_related_videos, get_return_youtube_dislike, get_sabr_debug_state, get_search_suggestions,
     get_sponsorblock_segments, get_stream_info, get_subscription_rotation_feed,
-    get_subscription_rss_feed, get_trending_videos, get_video_details,
+    get_subscription_rss_feed, get_trending_videos, get_video_category, get_video_details,
     parse_subscription_export, resolve_channel_id, search_videos, stream_subscription_rss_feed,
     submit_sponsorblock_segment,
 };
@@ -465,6 +465,7 @@ pub fn run() {
             get_video_details,
             get_related_videos,
             get_more_related_videos,
+            get_video_category,
             get_stream_info,
             get_channel_details,
             get_channel_tab,

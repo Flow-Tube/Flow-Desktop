@@ -569,6 +569,14 @@ impl SabrEngine {
                 }
             }
             ump::RELOAD_PLAYER_RESPONSE => {
+                // ReloadPlayerResponse { 1: ReloadPlaybackParams { 1: token } }: the
+                // next player request sends it back to keep this session's state.
+                if let Some(token) = reload_token(data) {
+                    crate::api::innertube::core::playback_session::store_reload_token(
+                        &self.descriptor.video_id,
+                        token,
+                    );
+                }
                 return Ok(Some(CycleAction::Reload));
             }
             ump::END_OF_TRACK => {
@@ -952,5 +960,40 @@ mod tests {
         tb.end_seq = 3;
         tb.max_seq = 3;
         assert!(tb.done());
+    }
+}
+
+/// The token inside a `RELOAD_PLAYER_RESPONSE` part.
+fn reload_token(data: &[u8]) -> Option<String> {
+    let mut reader = super::pb::PbReader::new(data);
+    while let Some(field) = reader.next_field() {
+        if field.number == 1 && field.wire_type == 2 {
+            let mut params = super::pb::PbReader::new(field.bytes);
+            while let Some(param) = params.next_field() {
+                if param.number == 1 {
+                    return param.as_str().map(ToOwned::to_owned);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod reload_tests {
+    use super::*;
+    use crate::streaming::sabr::pb::PbWriter;
+
+    #[test]
+    fn reads_the_reload_token() {
+        let mut params = PbWriter::new();
+        params.write_string(1, "reload-token");
+        let mut message = PbWriter::new();
+        message.write_message(1, params.as_slice());
+        assert_eq!(
+            reload_token(message.as_slice()).as_deref(),
+            Some("reload-token")
+        );
+        assert_eq!(reload_token(&[]), None);
     }
 }

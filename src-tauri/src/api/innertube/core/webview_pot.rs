@@ -51,7 +51,7 @@ pub fn set_app_handle(handle: tauri::AppHandle) {
     let _ = APP_HANDLE.set(handle);
 }
 
-/// The app handle, if the GUI is running. Shared with `webview_player`.
+/// The app handle, if the GUI is running.
 pub fn app_handle() -> Option<tauri::AppHandle> {
     APP_HANDLE.get().cloned()
 }

@@ -520,39 +520,6 @@ async fn handle_connection(
         }
         return write_full_body(&mut socket, "text/plain", "no-store", b"ok", head_only).await;
     }
-    // In-page WebView player-response exfil (see webview_player). The youtube.com
-    // page POSTs its ytInitialPlayerResponse here (its CSP has no connect-src, so
-    // a cross-origin fetch to the loopback proxy is allowed).
-    if path == "/ytresult" {
-        let id = request_url
-            .query_pairs()
-            .find(|(key, _)| key == "id")
-            .map(|(_, value)| value.into_owned());
-        let want = head.content_length.unwrap_or(0);
-        let mut body = body_prefix;
-        while body.len() < want {
-            let mut tmp = [0u8; 16384];
-            let n = socket.read(&mut tmp).await.unwrap_or(0);
-            if n == 0 {
-                break;
-            }
-            body.extend_from_slice(&tmp[..n]);
-        }
-        if let Some(id) = id {
-            crate::api::innertube::core::webview_player::resolve(
-                &id,
-                &String::from_utf8_lossy(&body),
-            );
-        }
-        return write_full_body(&mut socket, "text/plain", "no-store", b"ok", head_only).await;
-    }
-    if path == "/ytdiag" {
-        if let Some((_, msg)) = request_url.query_pairs().find(|(key, _)| key == "msg") {
-            info!(msg = %msg, "yt extract diag");
-        }
-        return write_full_body(&mut socket, "text/plain", "no-store", b"ok", head_only).await;
-    }
-
     if path.starts_with("/sabr/") {
         return handle_sabr_route(&mut socket, &manager, &path, head_only).await;
     }

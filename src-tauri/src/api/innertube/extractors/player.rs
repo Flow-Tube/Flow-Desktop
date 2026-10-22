@@ -2,6 +2,9 @@ use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::gate_tracker::gated_last;
+use crate::api::innertube::core::playback_session::{
+    new_cpn, take_reload_token, with_session_params,
+};
 use crate::api::innertube::core::player_js;
 use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
 use crate::api::innertube::core::utils::{
@@ -1445,8 +1448,16 @@ impl InnertubeClient {
             None
         };
 
+        let cpn = web_client.then(new_cpn);
         let mut response = match self
-            .request_player(video_id, client, visitor_data, po_token.as_deref(), None)
+            .request_player(
+                video_id,
+                client,
+                visitor_data,
+                po_token.as_deref(),
+                None,
+                cpn.as_deref(),
+            )
             .await
         {
             Some(value) => value,
@@ -1454,7 +1465,14 @@ impl InnertubeClient {
             // the whole first budget.
             None if std::ptr::eq(client, PLAYER_CLIENT_LADDER[0]) => {
                 match self
-                    .request_player(video_id, client, visitor_data, po_token.as_deref(), None)
+                    .request_player(
+                        video_id,
+                        client,
+                        visitor_data,
+                        po_token.as_deref(),
+                        None,
+                        cpn.as_deref(),
+                    )
                     .await
                 {
                     Some(value) => value,
@@ -1475,6 +1493,7 @@ impl InnertubeClient {
                     visitor_data,
                     po_token.as_deref(),
                     Some(&referer),
+                    cpn.as_deref(),
                 )
                 .await
             {
@@ -1493,7 +1512,7 @@ impl InnertubeClient {
         let playable = if has_live_manifest(&response) {
             true
         } else if web_client {
-            self.prepare_sabr_endpoint(video_id, client, &mut response)
+            self.prepare_sabr_endpoint(video_id, client, &mut response, cpn.as_deref())
                 .await
         } else {
             has_playable_direct_streams(&response["streamingData"], video_id)
@@ -1519,6 +1538,7 @@ impl InnertubeClient {
         video_id: &str,
         client: &clients::YouTubeClient,
         response: &mut Value,
+        cpn: Option<&str>,
     ) -> bool {
         let streaming_data = &response["streamingData"];
         let Some(server_url) = extract_server_abr_url(streaming_data) else {
@@ -1538,6 +1558,7 @@ impl InnertubeClient {
             warn!(video_id = %video_id, client = client.name, "Could not solve n for the SABR endpoint");
             return false;
         };
+        let solved = cpn.map_or_else(|| solved.clone(), |cpn| with_session_params(&solved, cpn));
         response["streamingData"]["serverAbrStreamingUrl"] = Value::String(solved);
         true
     }
@@ -1551,19 +1572,39 @@ impl InnertubeClient {
         visitor_data: Option<&str>,
         po_token: Option<&str>,
         referer: Option<&str>,
+        cpn: Option<&str>,
     ) -> Option<Value> {
         let mut payload = client.player_body(video_id, visitor_data, po_token);
         if client.use_signature_timestamp {
             let timestamp = player_js::signature_timestamp()
                 .await
                 .unwrap_or(clients::DEFAULT_SIGNATURE_TIMESTAMP);
-            payload["playbackContext"] = serde_json::json!({
-                "contentPlaybackContext": {
-                    "referer": referer.unwrap_or("https://www.youtube.com"),
-                    "signatureTimestamp": timestamp,
-                    "html5Preference": "HTML5_PREF_WANTS"
-                }
+            let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
+            let mut content = serde_json::json!({
+                "referer": referer.unwrap_or(if client.accepts_web_po_token() {
+                    &watch_url
+                } else {
+                    "https://www.youtube.com"
+                }),
+                "signatureTimestamp": timestamp,
+                "html5Preference": "HTML5_PREF_WANTS"
             });
+            // The web player's own context, which a SABR session is checked against.
+            if client.accepts_web_po_token() {
+                content["vis"] = serde_json::json!(0);
+                content["splay"] = serde_json::json!(false);
+                content["lactMilliseconds"] = serde_json::json!("-1");
+            }
+            payload["playbackContext"] = serde_json::json!({ "contentPlaybackContext": content });
+            if client.accepts_web_po_token()
+                && let Some(token) = take_reload_token(video_id)
+            {
+                payload["playbackContext"]["reloadPlaybackContext"] =
+                    serde_json::json!({ "reloadPlaybackParams": { "token": token } });
+            }
+        }
+        if let Some(cpn) = cpn {
+            payload["cpn"] = serde_json::json!(cpn);
         }
 
         let budget = if client.accepts_web_po_token() {
@@ -1844,17 +1885,17 @@ impl InnertubeClient {
         let attempt = self
             .resolve_player_attempt(video_id_trimmed, &mut deferred_restriction, refresh)
             .await;
-        let mut visitor_data_for_sabr = attempt
+        let visitor_data_for_sabr = attempt
             .as_ref()
             .and_then(|attempt| attempt.visitor_data.clone());
 
-        let mut winning_client = attempt
+        let winning_client = attempt
             .as_ref()
             .map_or(&clients::VISIONOS, |attempt| attempt.client);
-        let mut po_token_used = attempt
+        let po_token_used = attempt
             .as_ref()
             .and_then(|attempt| attempt.po_token.clone());
-        let mut res = match attempt {
+        let res = match attempt {
             Some(attempt) => Ok(attempt.response),
             None => Err(deferred_restriction.take().unwrap_or_else(|| {
                 AppError::Extractor(format!(
@@ -1862,41 +1903,6 @@ impl InnertubeClient {
                 ))
             })),
         };
-
-        let res_is_ok = matches!(&res, Ok(value)
-            if value["playabilityStatus"]["status"]
-                .as_str()
-                .map(|status| status.eq_ignore_ascii_case("OK"))
-                .unwrap_or(false));
-        if !res_is_ok && std::env::var("FLOW_INPAGE_RECOVERY").is_ok() {
-            if let Some(mut web_res) =
-                crate::api::innertube::core::webview_player::fetch_player_response_in_page(
-                    video_id_trimmed,
-                )
-                .await
-            {
-                let web_ok = web_res["playabilityStatus"]["status"]
-                    .as_str()
-                    .is_some_and(|status| status.eq_ignore_ascii_case("OK"));
-                if web_ok
-                    && self
-                        .prepare_sabr_endpoint(video_id_trimmed, &clients::WEB, &mut web_res)
-                        .await
-                {
-                    info!(video_id = %video_id_trimmed, "Recovered bot-walled video via in-page WebView (WEB/SABR)");
-                    // The SABR session presents the WEB response's own visitor data.
-                    if let Some(web_visitor) = web_res["responseContext"]["visitorData"]
-                        .as_str()
-                        .filter(|value| !value.is_empty())
-                    {
-                        visitor_data_for_sabr = Some(web_visitor.to_string());
-                    }
-                    po_token_used = generate_po_token(video_id_trimmed).await;
-                    winning_client = &clients::WEB;
-                    res = Ok(web_res);
-                }
-            }
-        }
 
         let res = res?;
         let playability = &res["playabilityStatus"];

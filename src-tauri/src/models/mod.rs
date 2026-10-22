@@ -5,6 +5,7 @@ pub mod music;
 pub mod music_pages;
 pub mod music_stream;
 pub mod playlist;
+pub mod rich_text;
 pub mod search;
 pub mod shorts;
 pub mod video;

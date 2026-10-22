@@ -1771,6 +1771,7 @@ impl InnertubeClient {
             chapters = watch_next::description_chapters(description, duration_seconds.unwrap_or(0));
         }
 
+        let description_rich = watch_next::description_rich(next, description.as_deref(), &id);
         Ok(VideoDetails {
             title: details["title"]
                 .as_str()
@@ -1812,6 +1813,8 @@ impl InnertubeClient {
             badges: primary.badges,
             autoplay_video_id: watch_next::autoplay_video_id(next),
             has_chat_replay: watch_next::chat_seed(next).is_some_and(|(_, replay)| replay),
+            description_rich,
+            description_extras: watch_next::description_extras(next),
             id,
         })
     }

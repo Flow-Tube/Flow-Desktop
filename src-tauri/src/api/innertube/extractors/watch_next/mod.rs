@@ -5,6 +5,7 @@
 //! four half-megabyte requests per watch.
 
 mod chapters;
+mod description;
 mod owner;
 mod primary;
 
@@ -25,6 +26,7 @@ use crate::errors::{AppError, AppResult};
 use crate::models::video::RelatedPage;
 
 pub use chapters::{chapters, description_chapters, heatmap};
+pub use description::{description_extras, description_rich};
 pub use owner::{WatchOwner, owner};
 pub use primary::{WatchPrimary, primary};
 

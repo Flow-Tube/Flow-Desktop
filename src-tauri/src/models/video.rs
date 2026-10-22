@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::rich_text::RichText;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoSummary {
@@ -109,6 +111,43 @@ pub struct HeatmapMarker {
     pub intensity: f64,
 }
 
+/// The structured part of a description: the headline numbers, the songs in
+/// the video, and the creator's own links.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DescriptionExtras {
+    pub factoids: Vec<Factoid>,
+    pub music: Vec<MusicCard>,
+    pub links: Vec<CreatorLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Factoid {
+    /// "19M".
+    pub value: String,
+    /// "Likes".
+    pub label: String,
+}
+
+/// A song credited in the video. The card names it but carries no id, so the
+/// music player finds it by title and artist.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicCard {
+    pub title: String,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub thumbnail_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatorLink {
+    pub title: String,
+    pub url: String,
+}
+
 /// One page of the watch page's related lane, and the token for the next.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -174,6 +213,12 @@ pub struct VideoDetails {
     /// A finished stream whose chat can be replayed alongside it.
     #[serde(default)]
     pub has_chat_replay: bool,
+    /// The description with its links, when the watch answer's text is the
+    /// same as `description`.
+    #[serde(default)]
+    pub description_rich: Option<RichText>,
+    #[serde(default)]
+    pub description_extras: DescriptionExtras,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

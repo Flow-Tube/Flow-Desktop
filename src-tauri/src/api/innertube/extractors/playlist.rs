@@ -145,10 +145,10 @@ fn extract_videos_from_playlist_browse(val: &Value) -> (Vec<VideoSummary>, Optio
     for list in lists {
         let before = items.len();
         items.extend(list.iter().filter_map(video_from_playlist_item));
-        if items.len() > before {
-            if let Some(token) = last_continuation_token(list) {
-                next_page_token = Some(token);
-            }
+        if items.len() > before
+            && let Some(token) = last_continuation_token(list)
+        {
+            next_page_token = Some(token);
         }
     }
     (items, next_page_token)

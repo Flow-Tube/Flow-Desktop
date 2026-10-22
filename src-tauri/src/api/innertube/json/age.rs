@@ -127,32 +127,38 @@ pub fn relative_age_ms(text: &str) -> Option<u64> {
 mod tests {
     use super::*;
 
-    fn age(value: u64, unit: AgeUnit) -> Option<RelativeAge> {
-        Some(RelativeAge { value, unit })
+    fn age(value: u64, unit: AgeUnit) -> RelativeAge {
+        RelativeAge { value, unit }
     }
 
     #[test]
     fn long_forms() {
-        assert_eq!(relative_age("3 days ago"), age(3, AgeUnit::Day));
-        assert_eq!(relative_age("1 year ago"), age(1, AgeUnit::Year));
-        assert_eq!(relative_age("Streamed 2 hours ago"), age(2, AgeUnit::Hour));
+        assert_eq!(relative_age("3 days ago"), Some(age(3, AgeUnit::Day)));
+        assert_eq!(relative_age("1 year ago"), Some(age(1, AgeUnit::Year)));
+        assert_eq!(
+            relative_age("Streamed 2 hours ago"),
+            Some(age(2, AgeUnit::Hour))
+        );
         assert_eq!(
             relative_age("Premiered 13 min ago"),
-            age(13, AgeUnit::Minute)
+            Some(age(13, AgeUnit::Minute))
         );
-        assert_eq!(relative_age("an hour ago"), age(1, AgeUnit::Hour));
-        assert_eq!(relative_age("5\u{a0}months ago"), age(5, AgeUnit::Month));
+        assert_eq!(relative_age("an hour ago"), Some(age(1, AgeUnit::Hour)));
+        assert_eq!(
+            relative_age("5\u{a0}months ago"),
+            Some(age(5, AgeUnit::Month))
+        );
     }
 
     #[test]
     fn compact_forms_from_related_cards() {
-        assert_eq!(relative_age("2d ago"), age(2, AgeUnit::Day));
-        assert_eq!(relative_age("5h ago"), age(5, AgeUnit::Hour));
-        assert_eq!(relative_age("3mo ago"), age(3, AgeUnit::Month));
-        assert_eq!(relative_age("1y ago"), age(1, AgeUnit::Year));
-        assert_eq!(relative_age("4w ago"), age(4, AgeUnit::Week));
-        assert_eq!(relative_age("10m ago"), age(10, AgeUnit::Minute));
-        assert_eq!(relative_age("Streamed 6d ago"), age(6, AgeUnit::Day));
+        assert_eq!(relative_age("2d ago"), Some(age(2, AgeUnit::Day)));
+        assert_eq!(relative_age("5h ago"), Some(age(5, AgeUnit::Hour)));
+        assert_eq!(relative_age("3mo ago"), Some(age(3, AgeUnit::Month)));
+        assert_eq!(relative_age("1y ago"), Some(age(1, AgeUnit::Year)));
+        assert_eq!(relative_age("4w ago"), Some(age(4, AgeUnit::Week)));
+        assert_eq!(relative_age("10m ago"), Some(age(10, AgeUnit::Minute)));
+        assert_eq!(relative_age("Streamed 6d ago"), Some(age(6, AgeUnit::Day)));
     }
 
     #[test]

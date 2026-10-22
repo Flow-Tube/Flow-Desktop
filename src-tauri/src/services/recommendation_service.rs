@@ -787,7 +787,7 @@ impl RecommendationService {
         for cid in &batch_channels {
             futures.push(youtube_service.get_channel_tab(
                 cid,
-                Some("EgZ2aWRlb3PyBgQKAjoA".to_string()),
+                Some(crate::api::innertube::extractors::channel::VIDEOS_TAB_PARAMS.to_string()),
                 None,
                 None,
             ));

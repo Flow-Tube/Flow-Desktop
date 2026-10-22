@@ -1,3 +1,4 @@
+use crate::api::innertube::extractors::channel::SHORTS_TAB_PARAMS;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -14,9 +15,6 @@ use crate::models::video::VideoSummary;
 use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
 
-/// Channel "Shorts" tab browse params — the videos-tab token with `videos`
-/// swapped for `shorts` (`EgZ2aWRlb3PyBgQKAjoA` → `EgZzaG9ydHPyBgQKAjoA`).
-const SHORTS_TAB_PARAMS: &str = "EgZzaG9ydHPyBgQKAjoA";
 const FLOW_DISCOVERY_CONTINUATION: &str = "flow:shorts:discovery";
 
 /// Shorts handed back per page.

@@ -12,6 +12,7 @@ use tokio::time::timeout;
 
 use super::cache;
 use super::card::Card;
+use crate::api::innertube::extractors::channel::VIDEOS_TAB_PARAMS;
 use crate::api::innertube::renderers::lockup::related_to_video;
 use crate::commands::youtube::{fetch_rss_channel_batch, populate_video_durations};
 use crate::models::channel::ChannelItem;
@@ -27,7 +28,6 @@ const RELATED_MEMORY_TTL_MS: u64 = 45 * 60_000;
 const RELATED_TIMEOUT: Duration = Duration::from_secs(4);
 const RELATED_CONCURRENCY: usize = 3;
 const CHANNEL_TAB_TIMEOUT: Duration = Duration::from_secs(15);
-const VIDEOS_TAB: &str = "EgZ2aWRlb3PyBgQKAjoA";
 const DURATION_FILL_MAX: usize = 100;
 
 /// A search for `query` from its first page or a kept continuation; errors when the request failed.
@@ -275,7 +275,7 @@ pub async fn channel_uploads(
 ) -> Option<Vec<Card>> {
     let response = timeout(
         CHANNEL_TAB_TIMEOUT,
-        yt.get_channel_tab(channel_id, Some(VIDEOS_TAB.to_string()), None, None),
+        yt.get_channel_tab(channel_id, Some(VIDEOS_TAB_PARAMS.to_string()), None, None),
     )
     .await
     .ok()?

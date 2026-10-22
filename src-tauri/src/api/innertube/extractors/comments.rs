@@ -1,10 +1,10 @@
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::watch_next_body;
 use crate::api::innertube::json::continuation::continuation_token;
 use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::text::text_of;
@@ -505,19 +505,19 @@ impl InnertubeClient {
             return Err(AppError::Validation("Video ID cannot be empty".into()));
         }
 
-        let mut payload = if let Some(ref token) = page_token {
-            serde_json::json!({
-                "continuation": token
-            })
-        } else {
-            watch_next_body(video_id_trimmed)
-        };
-
         debug!(video_id = %video_id_trimmed, has_page_token = page_token.is_some(), "[get_comments] Starting comments fetch");
 
-        let res = self
-            .post_innertube("next", &clients::WEB, &mut payload)
-            .await?;
+        // The first page's token is in the watch answer the details already
+        // fetched; only later pages need a request of their own.
+        let res = if let Some(ref token) = page_token {
+            let mut payload = serde_json::json!({ "continuation": token });
+            Arc::new(
+                self.post_innertube("next", &clients::WEB, &mut payload)
+                    .await?,
+            )
+        } else {
+            self.watch_next(video_id_trimmed).await?
+        };
         let mut comments_res = parse_comments_json(&res);
 
         debug!(

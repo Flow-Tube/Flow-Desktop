@@ -8,3 +8,4 @@ pub mod search;
 pub mod shorts;
 pub mod subscription;
 pub mod trending;
+pub mod watch_next;

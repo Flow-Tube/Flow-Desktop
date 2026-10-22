@@ -96,11 +96,12 @@ use commands::sync::{
 use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_details, get_channel_tab, get_comments, get_dearrow_override,
-    get_live_chat, get_playlist_details, get_post_comments, get_related_videos,
-    get_return_youtube_dislike, get_sabr_debug_state, get_search_suggestions,
+    get_live_chat, get_more_related_videos, get_playlist_details, get_post_comments,
+    get_related_videos, get_return_youtube_dislike, get_sabr_debug_state, get_search_suggestions,
     get_sponsorblock_segments, get_stream_info, get_subscription_rotation_feed,
-    get_subscription_rss_feed, get_trending_videos, get_video_details, parse_subscription_export,
-    resolve_channel_id, search_videos, stream_subscription_rss_feed, submit_sponsorblock_segment,
+    get_subscription_rss_feed, get_trending_videos, get_video_details,
+    parse_subscription_export, resolve_channel_id, search_videos, stream_subscription_rss_feed,
+    submit_sponsorblock_segment,
 };
 use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
@@ -463,6 +464,7 @@ pub fn run() {
             search_videos,
             get_video_details,
             get_related_videos,
+            get_more_related_videos,
             get_stream_info,
             get_channel_details,
             get_channel_tab,

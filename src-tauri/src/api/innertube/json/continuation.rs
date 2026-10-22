@@ -38,22 +38,24 @@ pub fn last_continuation_token(items: &[Value]) -> Option<String> {
 }
 
 /// Every item list a continuation response delivers, from append actions and
-/// reload commands under both `onResponseReceivedActions` and
-/// `onResponseReceivedCommands`.
+/// reload commands under `onResponseReceivedActions`, `onResponseReceivedCommands`
+/// and, for watch-page continuations, `onResponseReceivedEndpoints`.
 #[must_use]
 pub fn continuation_item_lists(response: &Value) -> Vec<&Vec<Value>> {
-    ["onResponseReceivedActions", "onResponseReceivedCommands"]
-        .into_iter()
-        .filter_map(|key| response[key].as_array())
-        .flatten()
-        .filter_map(|action| {
-            action["appendContinuationItemsAction"]["continuationItems"]
-                .as_array()
-                .or_else(|| {
-                    action["reloadContinuationItemsCommand"]["continuationItems"].as_array()
-                })
-        })
-        .collect()
+    [
+        "onResponseReceivedActions",
+        "onResponseReceivedCommands",
+        "onResponseReceivedEndpoints",
+    ]
+    .into_iter()
+    .filter_map(|key| response[key].as_array())
+    .flatten()
+    .filter_map(|action| {
+        action["appendContinuationItemsAction"]["continuationItems"]
+            .as_array()
+            .or_else(|| action["reloadContinuationItemsCommand"]["continuationItems"].as_array())
+    })
+    .collect()
 }
 
 #[cfg(test)]

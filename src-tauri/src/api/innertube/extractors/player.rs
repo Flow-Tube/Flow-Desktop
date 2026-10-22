@@ -8,21 +8,19 @@ use crate::api::innertube::core::playback_session::{
 use crate::api::innertube::core::player_js;
 use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
 use crate::api::innertube::core::remote_decoder;
-use crate::api::innertube::core::utils::{
-    collect_related_content_items, dedupe_related_content_items, watch_next_body,
-};
+use crate::api::innertube::core::utils::watch_next_body;
 use crate::api::innertube::extractors::playability::{
     LadderReport, Refusal, check_playability_status, ends_the_ladder, is_better_report,
     is_bot_wall, map_playability_error,
 };
+use crate::api::innertube::extractors::watch_next;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::thumbnail_url_from_array;
 use crate::api::innertube::json::xtags::decode_xtags;
-use crate::api::innertube::renderers::video::channel_id_of;
 use crate::errors::{AppError, AppResult};
 use crate::models::video::{
-    AudioTrack, CaptionTrack, RelatedContentItem, SabrStreamInfo, StreamInfo, StreamVariant,
-    VideoBasics, VideoChapter, VideoDetails,
+    AudioTrack, CaptionTrack, RelatedPage, SabrStreamInfo, StreamInfo, StreamVariant, VideoBasics,
+    VideoDetails,
 };
 use crate::streaming::sabr::engine::decode_b64_loose;
 use crate::streaming::sabr::selector::{CodecSupport, SabrFormat, select_formats};
@@ -52,7 +50,6 @@ const PLAYER_RESPONSE_CACHE_CAPACITY: usize = 12;
 
 /// How long video details wait for the `next` response (likes, views, publish
 /// date) before returning without them.
-const WATCH_NEXT_TIMEOUT: Duration = Duration::from_secs(6);
 
 /// Web clients mint a PO token and solve `n` before their SABR session can
 /// start, so they get the longer budget Flow for Android gives them.
@@ -165,211 +162,6 @@ fn invalidate_player_response(video_id: &str) {
     if let Ok(mut cache) = player_response_cache().lock() {
         cache.remove(video_id);
     }
-}
-
-fn parse_timestamp(s: &str) -> Option<u64> {
-    let cleaned: String = s
-        .chars()
-        .filter(|&c| c.is_ascii_digit() || c == ':')
-        .collect();
-
-    let parts: Vec<&str> = cleaned.split(':').collect();
-    if parts.len() < 2 || parts.len() > 3 {
-        return None;
-    }
-
-    for part in &parts {
-        if part.is_empty() || !part.chars().all(|c| c.is_ascii_digit()) {
-            return None;
-        }
-    }
-
-    if parts.len() == 2 {
-        let minutes = parts[0].parse::<u64>().ok()?;
-        let seconds = parts[1].parse::<u64>().ok()?;
-        if seconds < 60 {
-            return Some(minutes * 60 + seconds);
-        }
-    } else if parts.len() == 3 {
-        let hours = parts[0].parse::<u64>().ok()?;
-        let minutes = parts[1].parse::<u64>().ok()?;
-        let seconds = parts[2].parse::<u64>().ok()?;
-        if minutes < 60 && seconds < 60 {
-            return Some(hours * 3600 + minutes * 60 + seconds);
-        }
-    }
-    None
-}
-
-fn parse_chapters_from_description(description: &str, duration_seconds: u64) -> Vec<VideoChapter> {
-    let mut temp_chapters = Vec::new();
-
-    for line in description.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let words: Vec<&str> = line.split_whitespace().collect();
-        if words.is_empty() {
-            continue;
-        }
-
-        let mut found_ts = None;
-        let mut ts_index = 0;
-        for (idx, word) in words.iter().enumerate() {
-            let cleaned: String = word
-                .chars()
-                .filter(|&c| c.is_ascii_digit() || c == ':')
-                .collect();
-
-            if !cleaned.is_empty() && cleaned.contains(':') {
-                if let Some(secs) = parse_timestamp(&cleaned) {
-                    found_ts = Some(secs);
-                    ts_index = idx;
-                    break;
-                }
-            }
-        }
-
-        if let Some(start_seconds) = found_ts {
-            let mut title_words = Vec::new();
-            for (idx, &word) in words.iter().enumerate() {
-                if idx == ts_index {
-                    continue;
-                }
-                if word == "-" || word == "–" || word == "|" || word == ":" || word == "—" {
-                    continue;
-                }
-                title_words.push(word);
-            }
-
-            let mut title = title_words.join(" ");
-            title = title
-                .trim_matches(|c: char| {
-                    c == '('
-                        || c == ')'
-                        || c == '['
-                        || c == ']'
-                        || c == '-'
-                        || c == '–'
-                        || c == ':'
-                        || c == ' '
-                })
-                .to_string();
-
-            if !title.is_empty() {
-                temp_chapters.push((start_seconds, title));
-            } else {
-                temp_chapters.push((
-                    start_seconds,
-                    format!("Chapter {}", temp_chapters.len() + 1),
-                ));
-            }
-        }
-    }
-
-    if temp_chapters.is_empty() {
-        return Vec::new();
-    }
-
-    temp_chapters.sort_by_key(|c| c.0);
-    temp_chapters.dedup_by_key(|c| c.0);
-
-    if temp_chapters[0].0 > 10 {
-        temp_chapters.insert(0, (0, "Intro".to_string()));
-    } else {
-        temp_chapters[0].0 = 0;
-    }
-
-    let mut chapters = Vec::new();
-    let num_chapters = temp_chapters.len();
-    for i in 0..num_chapters {
-        let start_seconds = temp_chapters[i].0;
-        let title = temp_chapters[i].1.clone();
-
-        let end_seconds = if i < num_chapters - 1 {
-            temp_chapters[i + 1].0
-        } else {
-            duration_seconds
-        };
-
-        if end_seconds > start_seconds {
-            chapters.push(VideoChapter {
-                title,
-                start_seconds,
-                end_seconds,
-            });
-        }
-    }
-
-    chapters
-}
-
-fn parse_chapters_from_marker_map(
-    res: &serde_json::Value,
-    duration_seconds: u64,
-) -> Option<Vec<VideoChapter>> {
-    let chapters_arr = res["markerMap"]["chapters"]["chapters"].as_array()?;
-    if chapters_arr.is_empty() {
-        return None;
-    }
-
-    let mut temp_chapters = Vec::new();
-    for chap in chapters_arr {
-        let chapter_renderer = &chap["chapterRenderer"];
-        if chapter_renderer.is_null() {
-            continue;
-        }
-
-        let title = if let Some(t) = text_of(&chapter_renderer["title"]) {
-            t
-        } else if let Some(t) = chapter_renderer["title"]["simpleText"].as_str() {
-            t.to_string()
-        } else {
-            continue;
-        };
-
-        let start_millis = chapter_renderer["timeRangeStartMillis"].as_u64()?;
-        let start_seconds = start_millis / 1000;
-
-        temp_chapters.push((start_seconds, title));
-    }
-
-    if temp_chapters.is_empty() {
-        return None;
-    }
-
-    temp_chapters.sort_by_key(|c| c.0);
-    temp_chapters.dedup_by_key(|c| c.0);
-
-    if temp_chapters[0].0 > 10 {
-        temp_chapters.insert(0, (0, "Intro".to_string()));
-    } else {
-        temp_chapters[0].0 = 0;
-    }
-
-    let mut chapters = Vec::new();
-    let num_chapters = temp_chapters.len();
-    for i in 0..num_chapters {
-        let start_seconds = temp_chapters[i].0;
-        let title = temp_chapters[i].1.clone();
-        let end_seconds = if i < num_chapters - 1 {
-            temp_chapters[i + 1].0
-        } else {
-            duration_seconds
-        };
-
-        if end_seconds > start_seconds {
-            chapters.push(VideoChapter {
-                title,
-                start_seconds,
-                end_seconds,
-            });
-        }
-    }
-
-    Some(chapters)
 }
 
 fn check_needs_reload(val: &Value) -> bool {
@@ -1087,37 +879,6 @@ fn extract_duration_seconds_from_player_response(response: &Value) -> Option<u64
                 .and_then(|value| value.parse::<u64>().ok())
                 .map(|duration_ms| duration_ms / 1000)
         })
-}
-
-/// The first word of `text` holding a digit ("26K" from "like this video along with 26K
-/// other people"), or none when likes are hidden and the label is just "I like this".
-fn clean_like_count_from_accessibility(text: &str) -> Option<String> {
-    text.split_whitespace()
-        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric() && c != ',' && c != '.'))
-        .find(|w| w.chars().any(|c| c.is_ascii_digit()))
-        .map(ToOwned::to_owned)
-}
-
-/// The like count on the watch page's like button: its `title` ("26K"), else the number in its
-/// accessibility label. A title without a digit is the hidden-likes "Like".
-fn like_count_from_button(button_vm: &Value) -> Option<String> {
-    text_of(&button_vm["title"])
-        .filter(|title| title.chars().any(|c| c.is_ascii_digit()))
-        .or_else(|| {
-            button_vm["accessibilityText"]
-                .as_str()
-                .and_then(clean_like_count_from_accessibility)
-        })
-}
-
-/// The watch page's view count with every run kept, so a live stream reads "197 watching now"
-/// instead of "197".
-fn watch_view_count_text(primary_info: &Value) -> Option<String> {
-    let renderer = &primary_info["viewCount"]["videoViewCountRenderer"];
-    text_of(&renderer["viewCount"])
-        .or_else(|| text_of(&renderer["shortViewCount"]))
-        .map(|text| text.trim().to_string())
-        .filter(|text| !text.is_empty())
 }
 
 // ---------------------------------------------------------------------------
@@ -1987,187 +1748,105 @@ impl InnertubeClient {
             .as_str()
             .unwrap_or(video_id_trimmed)
             .to_string();
-        // The TV client's details carry neither title, author nor description;
-        // the watch-next answer below fills them in.
-        let mut title = details["title"].as_str().unwrap_or_default().to_string();
-        let mut channel_name = details["author"].as_str().unwrap_or_default().to_string();
-        let mut description = details["shortDescription"]
-            .as_str()
-            .map(ToString::to_string);
-
-        let thumbnail_url = thumbnail_url_from_array(&details["thumbnail"]["thumbnails"]);
-
         let duration_seconds = extract_duration_seconds_from_player_response(&res);
-        let mut channel_id = details["channelId"].as_str().map(|s| s.to_string());
+        // Views, likes, dates and the owner block are optional: a deep link waits
+        // on this call before it starts playback, so a slow or failed watch answer
+        // leaves them out instead of failing the details.
+        let next = self.watch_next(&id).await.ok();
+        let next = next.as_deref().unwrap_or(&Value::Null);
+        let primary = watch_next::primary(next);
+        let owner = watch_next::owner(next);
 
-        let mut like_count_text = None;
-        let mut view_count_text = None;
-        let mut published_text = None;
-
-        let mut next_payload = watch_next_body(&id);
-        // Likes, views and the publish date are optional; a deep link waits on
-        // this whole call before it can start playback, so it is bounded and
-        // kept off the connection the feed fan-out saturates.
-        if let Ok(Ok(next_res)) = tokio::time::timeout(
-            WATCH_NEXT_TIMEOUT,
-            self.post_innertube_for_playback("next", &clients::WEB, &mut next_payload),
-        )
-        .await
+        // The TV client's details carry neither title, author nor description;
+        // the watch answer fills them in.
+        let description = details["shortDescription"]
+            .as_str()
+            .map(ToString::to_string)
+            .or_else(|| watch_next::description(next));
+        let (mut chapters, auto_chapters) =
+            watch_next::chapters(next, duration_seconds.unwrap_or(0));
+        if chapters.is_empty()
+            && let Some(description) = description.as_deref()
         {
-            let mut primary_info = &serde_json::Value::Null;
-            let mut secondary_info = &serde_json::Value::Null;
-            if let Some(contents) =
-                next_res["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"]
-                    .as_array()
-            {
-                for c in contents {
-                    if c.get("videoPrimaryInfoRenderer").is_some() {
-                        primary_info = &c["videoPrimaryInfoRenderer"];
-                    }
-                    if c.get("videoSecondaryInfoRenderer").is_some() {
-                        secondary_info = &c["videoSecondaryInfoRenderer"];
-                    }
-                }
-            }
-
-            if title.is_empty()
-                && let Some(primary_title) = text_of(&primary_info["title"])
-            {
-                title = primary_title;
-            }
-            if !secondary_info.is_null() {
-                if description.is_none() {
-                    description = secondary_info["attributedDescription"]["content"]
-                        .as_str()
-                        .map(ToOwned::to_owned);
-                }
-                let owner = &secondary_info["owner"]["videoOwnerRenderer"];
-                if channel_name.is_empty() {
-                    if let Some(owner_name) = text_of(&owner["title"]) {
-                        channel_name = owner_name;
-                    }
-                }
-
-                if channel_id.is_none() {
-                    channel_id = owner["navigationEndpoint"]["browseEndpoint"]["browseId"]
-                        .as_str()
-                        .map(ToOwned::to_owned)
-                        .or_else(|| channel_id_of(owner));
-                }
-            }
-
-            if !primary_info.is_null() {
-                if let Some(views) = watch_view_count_text(primary_info) {
-                    view_count_text = Some(views);
-                }
-
-                // Extract published text
-                if let Some(pub_date) = primary_info["dateText"]["simpleText"]
-                    .as_str()
-                    .or_else(|| primary_info["dateText"]["runs"][0]["text"].as_str())
-                    .or_else(|| primary_info["relativeDateText"]["simpleText"].as_str())
-                    .or_else(|| primary_info["relativeDateText"]["runs"][0]["text"].as_str())
-                {
-                    published_text = Some(pub_date.to_string());
-                }
-
-                // Extract like count
-                if let Some(top_level_buttons) =
-                    primary_info["videoActions"]["menuRenderer"]["topLevelButtons"].as_array()
-                {
-                    for btn in top_level_buttons {
-                        if let Some(view_model) = btn.get("segmentedLikeDislikeButtonViewModel") {
-                            let button_vm = &view_model["likeButtonViewModel"]["likeButtonViewModel"]
-                                ["toggleButtonViewModel"]["toggleButtonViewModel"]["defaultButtonViewModel"]
-                                ["buttonViewModel"];
-                            like_count_text = like_count_from_button(button_vm);
-                        }
-                        if like_count_text.is_none() {
-                            if let Some(renderer) = btn.get("segmentedLikeDislikeButtonRenderer") {
-                                let toggle_btn = &renderer["likeButton"]["toggleButtonRenderer"];
-                                if !toggle_btn.is_null() {
-                                    if let Some(label) = toggle_btn["accessibilityData"]
-                                        ["accessibilityData"]["label"]
-                                        .as_str()
-                                        .or_else(|| toggle_btn["accessibility"]["label"].as_str())
-                                        .or_else(|| {
-                                            toggle_btn["defaultText"]["accessibility"]
-                                                ["accessibilityData"]["label"]
-                                                .as_str()
-                                        })
-                                    {
-                                        like_count_text =
-                                            clean_like_count_from_accessibility(label);
-                                    } else if let Some(text) = toggle_btn["defaultText"]["runs"][0]
-                                        ["text"]
-                                        .as_str()
-                                        .or_else(|| {
-                                            toggle_btn["defaultText"]["simpleText"].as_str()
-                                        })
-                                    {
-                                        like_count_text = Some(text.to_string());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            chapters = watch_next::description_chapters(description, duration_seconds.unwrap_or(0));
         }
 
-        let duration_secs = duration_seconds.unwrap_or(0);
-        let chapters = parse_chapters_from_marker_map(&res, duration_secs).unwrap_or_else(|| {
-            if let Some(ref desc) = description {
-                parse_chapters_from_description(desc, duration_secs)
-            } else {
-                Vec::new()
-            }
-        });
-
         Ok(VideoDetails {
-            id,
-            title,
-            channel_name,
-            channel_id,
+            title: details["title"]
+                .as_str()
+                .filter(|title| !title.is_empty())
+                .map(ToOwned::to_owned)
+                .or(primary.title)
+                .unwrap_or_default(),
+            channel_name: details["author"]
+                .as_str()
+                .filter(|author| !author.is_empty())
+                .map(ToOwned::to_owned)
+                .or(owner.name)
+                .unwrap_or_default(),
+            channel_id: details["channelId"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .or(owner.channel_id),
             description,
-            thumbnail_url,
+            thumbnail_url: thumbnail_url_from_array(&details["thumbnail"]["thumbnails"]),
             duration_seconds,
-            like_count_text,
-            view_count_text,
-            published_text,
+            like_count_text: primary.like_count_text,
+            view_count_text: primary.view_count_text,
+            published_text: primary
+                .published_text
+                .or_else(|| primary.relative_published_text.clone()),
+            relative_published_text: primary.relative_published_text,
             chapters,
-            is_live: res["videoDetails"]["isLive"].as_bool().unwrap_or(false),
+            auto_chapters,
+            heatmap: watch_next::heatmap(next),
+            is_live: details["isLive"].as_bool().unwrap_or(false),
             category: res["microformat"]["playerMicroformatRenderer"]["category"]
                 .as_str()
                 .map(str::to_string),
+            channel_avatar_url: owner.avatar_url,
+            subscriber_count_text: owner.subscriber_count_text,
+            channel_badge: owner.badge.map(ToOwned::to_owned),
+            collaborators: owner.collaborators,
+            hashtags: primary.hashtags,
+            badges: primary.badges,
+            autoplay_video_id: watch_next::autoplay_video_id(next),
+            has_chat_replay: watch_next::chat_seed(next).is_some_and(|(_, replay)| replay),
+            id,
         })
     }
 
-    pub async fn get_related_videos(&self, video_id: &str) -> AppResult<Vec<RelatedContentItem>> {
+    pub async fn get_related_videos(&self, video_id: &str) -> AppResult<RelatedPage> {
         let video_id_trimmed = video_id.trim();
         if video_id_trimmed.is_empty() {
             return Err(AppError::Validation("Video ID cannot be empty".into()));
         }
+        let next = self.watch_next(video_id_trimmed).await?;
+        Ok(watch_next::related_page(&next))
+    }
 
-        let mut payload = watch_next_body(video_id_trimmed);
-
-        let next_res = self
+    /// The related lane of a video that is not being watched, for the home
+    /// feed. A cached watch answer is used when there is one, but this never
+    /// fills the cache or takes a playback connection: feeds ask for many
+    /// videos, and would push out the one on screen.
+    pub async fn get_feed_related_videos(&self, video_id: &str) -> AppResult<RelatedPage> {
+        if let Some(next) = watch_next::cached(video_id) {
+            return Ok(watch_next::related_page(&next));
+        }
+        let mut payload = watch_next_body(video_id);
+        let next = self
             .post_innertube("next", &clients::WEB, &mut payload)
             .await?;
-        let mut related = Vec::new();
-        collect_related_content_items(
-            &next_res["contents"]["twoColumnWatchNextResults"]["secondaryResults"],
-            &mut related,
-        );
+        Ok(watch_next::related_page(&next))
+    }
 
-        if related.is_empty() {
-            collect_related_content_items(
-                &next_res["contents"]["twoColumnWatchNextResults"]["autoplay"],
-                &mut related,
-            );
-        }
-
-        Ok(dedupe_related_content_items(related))
+    /// The related lane's next page.
+    pub async fn get_more_related_videos(&self, continuation: &str) -> AppResult<RelatedPage> {
+        let mut payload = serde_json::json!({ "continuation": continuation });
+        let next = self
+            .post_innertube("next", &clients::WEB, &mut payload)
+            .await?;
+        Ok(watch_next::related_page(&next))
     }
 
     pub async fn get_stream_info(&self, video_id: &str, refresh: bool) -> AppResult<StreamInfo> {
@@ -2968,52 +2647,6 @@ mod ladder_live {
             engine.cancel();
             assert!(first.is_ok(), "{} SABR must deliver media", candidate.name);
         }
-    }
-}
-
-#[cfg(test)]
-mod watch_metadata {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn live_view_count_keeps_every_run() {
-        let primary = json!({ "viewCount": { "videoViewCountRenderer": {
-            "viewCount": { "runs": [{ "text": "197" }, { "text": " watching now" }] },
-            "isLive": true
-        } } });
-        assert_eq!(
-            watch_view_count_text(&primary).as_deref(),
-            Some("197 watching now")
-        );
-
-        let vod = json!({ "viewCount": { "videoViewCountRenderer": {
-            "viewCount": { "simpleText": "1,234,567 views" }
-        } } });
-        assert_eq!(
-            watch_view_count_text(&vod).as_deref(),
-            Some("1,234,567 views")
-        );
-    }
-
-    #[test]
-    fn like_count_reads_the_title_string_and_needs_a_digit() {
-        assert_eq!(
-            like_count_from_button(&json!({ "title": "26K" })).as_deref(),
-            Some("26K")
-        );
-        assert_eq!(
-            like_count_from_button(&json!({
-                "title": "Like",
-                "accessibilityText": "like this video along with 26,104 other people"
-            }))
-            .as_deref(),
-            Some("26,104")
-        );
-        assert_eq!(
-            like_count_from_button(&json!({ "title": "Like", "accessibilityText": "I like this" })),
-            None
-        );
     }
 }
 

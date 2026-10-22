@@ -242,8 +242,9 @@ impl RelatedLists {
         let Ok(_permit) = self.permits.acquire().await else {
             return Vec::new();
         };
-        let fetched = match timeout(RELATED_TIMEOUT, yt.get_related_videos(seed_id)).await {
-            Ok(Ok(items)) => items
+        let fetched = match timeout(RELATED_TIMEOUT, yt.get_feed_related_videos(seed_id)).await {
+            Ok(Ok(page)) => page
+                .items
                 .into_iter()
                 .filter(|item| item.item_type == "video" && !item.is_mix)
                 .map(|item| Card::from_summary(related_to_video(item), now_ms))

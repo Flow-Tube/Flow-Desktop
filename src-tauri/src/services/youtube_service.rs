@@ -9,7 +9,7 @@ use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::shorts::ShortsFeed;
 use crate::models::video::VideoSummary;
-use crate::models::video::{RelatedContentItem, StreamInfo, VideoBasics, VideoDetails};
+use crate::models::video::{RelatedPage, StreamInfo, VideoBasics, VideoDetails};
 
 #[derive(Clone)]
 pub struct YoutubeService {
@@ -37,8 +37,16 @@ impl YoutubeService {
         self.extractor.get_video_basics(video_id).await
     }
 
-    pub async fn get_related_videos(&self, video_id: &str) -> AppResult<Vec<RelatedContentItem>> {
+    pub async fn get_related_videos(&self, video_id: &str) -> AppResult<RelatedPage> {
         self.extractor.get_related_videos(video_id).await
+    }
+
+    pub async fn get_feed_related_videos(&self, video_id: &str) -> AppResult<RelatedPage> {
+        self.extractor.get_feed_related_videos(video_id).await
+    }
+
+    pub async fn get_more_related_videos(&self, continuation: &str) -> AppResult<RelatedPage> {
+        self.extractor.get_more_related_videos(continuation).await
     }
 
     pub async fn get_stream_info(&self, video_id: &str, refresh: bool) -> AppResult<StreamInfo> {

@@ -95,6 +95,26 @@ pub struct VideoChapter {
     pub title: String,
     pub start_seconds: u64,
     pub end_seconds: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumbnail_url: Option<String>,
+}
+
+/// One slice of the "most replayed" graph above the seek bar: how often
+/// `start_ms..start_ms + duration_ms` is replayed, from 0 to 1.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeatmapMarker {
+    pub start_ms: u64,
+    pub duration_ms: u64,
+    pub intensity: f64,
+}
+
+/// One page of the watch page's related lane, and the token for the next.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedPage {
+    pub items: Vec<RelatedContentItem>,
+    pub continuation: Option<String>,
 }
 
 /// The two facts a feed needs to fill in for a listed video, without the full
@@ -105,7 +125,7 @@ pub struct VideoBasics {
     pub duration_seconds: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoDetails {
     pub id: String,
@@ -124,6 +144,36 @@ pub struct VideoDetails {
     /// YouTube's category ("Gaming", "Education") from the player's microformat.
     #[serde(default)]
     pub category: Option<String>,
+    /// "16 years ago", next to the absolute `published_text`.
+    #[serde(default)]
+    pub relative_published_text: Option<String>,
+    #[serde(default)]
+    pub channel_avatar_url: Option<String>,
+    #[serde(default)]
+    pub subscriber_count_text: Option<String>,
+    /// "verified" or "artist".
+    #[serde(default)]
+    pub channel_badge: Option<String>,
+    /// The channels of a collaboration, the uploader first; empty otherwise.
+    #[serde(default)]
+    pub collaborators: Vec<Collaborator>,
+    /// The hashtags shown above the title.
+    #[serde(default)]
+    pub hashtags: Vec<String>,
+    /// Labels such as "Unlisted" or "Members only" under the title.
+    #[serde(default)]
+    pub badges: Vec<String>,
+    /// Whether the chapters were generated rather than written by the creator.
+    #[serde(default)]
+    pub auto_chapters: bool,
+    #[serde(default)]
+    pub heatmap: Vec<HeatmapMarker>,
+    /// The video the site would autoplay next.
+    #[serde(default)]
+    pub autoplay_video_id: Option<String>,
+    /// A finished stream whose chat can be replayed alongside it.
+    #[serde(default)]
+    pub has_chat_replay: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,7 +7,7 @@ use crate::models::channel::{ChannelDetails, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedContentItem, StreamInfo, VideoDetails, VideoSummary};
+use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoSummary};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -532,15 +532,26 @@ pub async fn get_related_videos(
     video_id: String,
     youtube_service: State<'_, YoutubeService>,
     recommendation_service: State<'_, RecommendationService>,
-) -> Result<Vec<RelatedContentItem>, ErrorResponse> {
+) -> Result<RelatedPage, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
     let related = youtube_service
         .get_related_videos(&video_id)
         .await
         .map_err(ErrorResponse::from)?;
-    recommendation_service.note_related(&video_id, &related);
+    recommendation_service.note_related(&video_id, &related.items);
     Ok(related)
+}
+
+#[tauri::command]
+pub async fn get_more_related_videos(
+    continuation: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<RelatedPage, ErrorResponse> {
+    youtube_service
+        .get_more_related_videos(&continuation)
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]

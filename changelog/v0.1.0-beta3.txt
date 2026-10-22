@@ -83,6 +83,7 @@ PLAYER
 - Search filters work as YouTube applies them: relevance or view count, the right length buckets, a type filter, several features at once, and suggestions for your region.
 - A misspelt search says what it searched for instead and can search the original, collaborations show every channel on their cards, and onboarding finds about 20 channels per search.
 - Explore works again: YouTube retired the Trending page Flow used, so Explore now shows YouTube's Live, Gaming, Music, News, Sports, Learning and Fashion & Beauty pages for your region, with News categories and a See all grid that keeps loading as you scroll.
+- The Shorts feed loads its reels in pages about a hundred times smaller, drops the ads mixed into them, and gives them their real titles and channels so your interests and blocked channels apply to them.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

@@ -14,6 +14,31 @@ export interface VideoSummary {
   channelAvatarUrl?: string | null;
   watchProgressPercent?: number | null;
   isLive?: boolean | null;
+  /** The view count as a number, read from `viewCountText`. */
+  viewCount?: number | null;
+  /** A premiere or scheduled stream that has not started. */
+  isUpcoming?: boolean;
+  /** When an upcoming video starts, in epoch milliseconds. */
+  upcomingStartMs?: number | null;
+  /** A Short, known from the card itself rather than guessed from its length. */
+  isShort?: boolean;
+  isVerified?: boolean;
+  isMembersOnly?: boolean;
+  /** The card's own badges as YouTube labels them ("4K", "CC", "New"). */
+  badges?: string[];
+  /** The channels behind a collaboration, the lead first; empty for one channel. */
+  collaborators?: Collaborator[];
+  /** The description excerpt search results show. */
+  snippet?: string | null;
+}
+
+/** One channel of a collaboration. */
+export interface Collaborator {
+  channelId: string;
+  name: string;
+  avatarUrl?: string | null;
+  handle?: string | null;
+  subscriberCountText?: string | null;
 }
 
 export interface RelatedContentItem {
@@ -30,6 +55,12 @@ export interface RelatedContentItem {
   playlistId?: string | null;
   isMix: boolean;
   isLive?: boolean | null;
+  channelAvatarUrl?: string | null;
+  isUpcoming?: boolean;
+  isVerified?: boolean;
+  isMembersOnly?: boolean;
+  badges?: string[];
+  collaborators?: Collaborator[];
 }
 
 export interface VideoChapter {

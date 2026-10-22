@@ -30,6 +30,7 @@ import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
 import { extractDominantColorFromImage, type Rgb } from '../../lib/useDominantColor';
 import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publishedDate';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
+import { CardPills, ChannelLabel, UpcomingBadge } from "./CardMeta";
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -133,6 +134,11 @@ function VideoCardComponent({
   const liveFromStore = useLiveStore((s) => s.liveIds.has(video.id));
   const isLiveVideo = !!video.isLive || liveFromStore;
   const publishedText = formatPublishedText(video);
+  // A Short known from its card opens in the Shorts player, whatever the list.
+  const play = useCallback(() => {
+    if (video.isShort && !isChannel) navigate(`/shorts/${video.id}`);
+    else onPlay(video);
+  }, [video, isChannel, navigate, onPlay]);
 
   useEffect(() => {
     if (video.isLive) markLive(video.id);
@@ -523,7 +529,7 @@ function VideoCardComponent({
         <ColorWash active={isHovered} color={dominantColor} alpha={0.2} spread="row" />
         <div
           className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container"
-          onClick={() => onPlay(video)}
+          onClick={play}
         >
           {displayThumbnail ? (
             <img
@@ -542,6 +548,8 @@ function VideoCardComponent({
           )}
           {isLiveVideo ? (
             <LiveBadge className="absolute bottom-1 right-1" />
+          ) : video.isUpcoming ? (
+            <UpcomingBadge className="absolute bottom-1 right-1" />
           ) : video.durationSeconds ? (
             <div className="absolute bottom-1 right-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[11px] font-medium leading-tight text-chrome-white">
               {formatDuration(video.durationSeconds)}
@@ -551,7 +559,7 @@ function VideoCardComponent({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <h3
-            onClick={() => onPlay(video)}
+            onClick={play}
             style={titleClampStyle}
             className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary"
           >
@@ -562,13 +570,14 @@ function VideoCardComponent({
             onClick={(e) => { void handleChannelNavigate(e); }}
             className="mt-1 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
-            {video.channelName}
+            <ChannelLabel name={video.channelName} verified={video.isVerified} />
           </button>
           <div className="text-[13px] text-chrome-neutral-500">
             {video.viewCountText && <span>{video.viewCountText}</span>}
             {video.viewCountText && publishedText && <span className="mx-1">•</span>}
             {publishedText && <span>{publishedText}</span>}
           </div>
+          <CardPills video={video} />
         </div>
 
         <div className="relative shrink-0">
@@ -623,7 +632,7 @@ function VideoCardComponent({
 
         <div
           className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-chrome-zinc-900 sm:w-48"
-          onClick={() => onPlay(video)}
+          onClick={play}
         >
           {displayThumbnail ? (
             <img
@@ -643,6 +652,8 @@ function VideoCardComponent({
 
           {isLiveVideo ? (
             <LiveBadge className="absolute bottom-1 right-1" />
+          ) : video.isUpcoming ? (
+            <UpcomingBadge className="absolute bottom-1 right-1" />
           ) : video.durationSeconds ? (
             <div className="absolute bottom-1 right-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[12px] font-medium leading-tight tracking-wide text-chrome-white">
               {formatDuration(video.durationSeconds)}
@@ -652,7 +663,7 @@ function VideoCardComponent({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <h3
-            onClick={() => onPlay(video)}
+            onClick={play}
             style={titleClampStyle}
             className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
           >
@@ -663,7 +674,7 @@ function VideoCardComponent({
             onClick={(e) => { void handleChannelNavigate(e); }}
             className="mt-0.5 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
-            {video.channelName}
+            <ChannelLabel name={video.channelName} verified={video.isVerified} />
           </button>
           <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
             {showAddedDate && video.addedAtInPlaylist ? (
@@ -678,6 +689,7 @@ function VideoCardComponent({
               </>
             )}
           </div>
+          <CardPills video={video} />
         </div>
 
         <div className="relative shrink-0">
@@ -708,7 +720,7 @@ function VideoCardComponent({
       <ColorWash active={isHovered} color={dominantColor} alpha={0.2} />
       <div
         className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer"
-        onClick={() => onPlay(video)}
+        onClick={play}
       >
         {displayThumbnail ? (
           <img
@@ -728,6 +740,8 @@ function VideoCardComponent({
 
         {isLiveVideo ? (
           <LiveBadge className={`absolute right-1 ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`} />
+        ) : video.isUpcoming ? (
+          <UpcomingBadge className="absolute bottom-1 right-1" />
         ) : video.durationSeconds ? (
           <div className={`absolute right-1 z-10 bg-chrome-black/80 px-1 py-px rounded text-[12px] font-medium text-chrome-white leading-tight tracking-wide ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`}>
             {formatDuration(video.durationSeconds)}
@@ -781,7 +795,7 @@ function VideoCardComponent({
 
         <div className="flex flex-col flex-1 min-w-0">
           <h3
-            onClick={() => onPlay(video)}
+            onClick={play}
             style={titleClampStyle}
             className="text-chrome-zinc-100 text-sm font-medium leading-snug cursor-pointer hover:text-[var(--color-primary)] transition-colors"
           >
@@ -791,7 +805,7 @@ function VideoCardComponent({
             onClick={(e) => { void handleChannelNavigate(e); }}
             className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors"
           >
-            {video.channelName}
+            <ChannelLabel name={video.channelName} verified={video.isVerified} />
           </div>
 
           {/* View Count + Published */}
@@ -800,6 +814,7 @@ function VideoCardComponent({
             {video.viewCountText && publishedText && <span className="mx-1">•</span>}
             {publishedText && <span>{publishedText}</span>}
           </div>
+          <CardPills video={video} />
         </div>
 
         {/* Three-dot menu button */}

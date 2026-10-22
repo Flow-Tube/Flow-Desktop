@@ -1,0 +1,134 @@
+//! Checks the shared `InnerTube` readers against real captured responses.
+//!
+//! The captures are not committed. Regenerate them with
+//! `cargo test --test innertube_capture -- --ignored`; until then each test
+//! notes the missing file and passes, so CI does not cover these. Set
+//! `FLOW_REQUIRE_FIXTURES=1` to make a missing capture fail instead.
+
+use std::path::PathBuf;
+
+use flow_desktop_lib::api::innertube::json::age::relative_age;
+use flow_desktop_lib::api::innertube::json::continuation::{
+    continuation_item_lists, continuation_token,
+};
+use serde_json::Value;
+
+fn fixture(name: &str) -> Option<Value> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/innertube")
+        .join(format!("{name}.json"));
+    match std::fs::read(&path) {
+        Ok(bytes) => Some(serde_json::from_slice(&bytes).expect("capture is JSON")),
+        Err(_) if std::env::var_os("FLOW_REQUIRE_FIXTURES").is_some() => {
+            panic!("missing capture {}", path.display())
+        }
+        Err(_) => {
+            eprintln!(
+                "skipped: {} is missing; regenerate with `cargo test --test innertube_capture -- --ignored`",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+fn find_all<'a>(value: &'a Value, key: &str, out: &mut Vec<&'a Value>) {
+    match value {
+        Value::Object(map) => {
+            for (k, v) in map {
+                if k == key {
+                    out.push(v);
+                }
+                find_all(v, key, out);
+            }
+        }
+        Value::Array(items) => items.iter().for_each(|v| find_all(v, key, out)),
+        _ => {}
+    }
+}
+
+#[test]
+fn related_cards_carry_dates_the_age_reader_understands() {
+    let Some(next) = fixture("next_related") else {
+        return;
+    };
+    let mut lockups = Vec::new();
+    find_all(
+        &next["contents"]["twoColumnWatchNextResults"]["secondaryResults"],
+        "lockupViewModel",
+        &mut lockups,
+    );
+    let videos: Vec<&Value> = lockups
+        .into_iter()
+        .filter(|lockup| lockup["contentType"] == "LOCKUP_CONTENT_TYPE_VIDEO")
+        .collect();
+    assert!(!videos.is_empty(), "related lane has video lockups");
+    let dated = videos
+        .iter()
+        .filter(|lockup| {
+            let mut parts = Vec::new();
+            find_all(&lockup["metadata"], "metadataParts", &mut parts);
+            parts
+                .iter()
+                .filter_map(|list| list.as_array())
+                .flatten()
+                .filter_map(|part| part["text"]["content"].as_str())
+                .any(|text| relative_age(text).is_some())
+        })
+        .count();
+    assert!(
+        dated * 10 >= videos.len() * 8,
+        "only {dated} of {} related videos had a readable age",
+        videos.len()
+    );
+}
+
+#[test]
+fn playlist_first_page_hands_out_a_view_model_token() {
+    let Some(page) = fixture("playlist_page1") else {
+        return;
+    };
+    let mut view_models = Vec::new();
+    find_all(&page, "continuationItemViewModel", &mut view_models);
+    let wrapped: Vec<Value> = view_models
+        .into_iter()
+        .map(|vm| serde_json::json!({ "continuationItemViewModel": vm }))
+        .collect();
+    assert!(
+        wrapped
+            .iter()
+            .any(|item| continuation_token(item).is_some()),
+        "page 1 of a long playlist carries a continuationItemViewModel token"
+    );
+}
+
+#[test]
+fn playlist_later_pages_arrive_in_an_append_action() {
+    let Some(page) = fixture("playlist_page2") else {
+        return;
+    };
+    let lists = continuation_item_lists(&page);
+    let lockups = lists
+        .iter()
+        .flat_map(|list| list.iter())
+        .filter(|item| item.get("lockupViewModel").is_some())
+        .count();
+    assert!(lockups >= 50, "page 2 delivered {lockups} lockups");
+}
+
+#[test]
+fn channel_search_later_pages_wrap_results_in_item_sections() {
+    let Some(page) = fixture("channel_search_page2") else {
+        return;
+    };
+    let lists = continuation_item_lists(&page);
+    let wrapped = lists
+        .iter()
+        .flat_map(|list| list.iter())
+        .filter(|item| item["itemSectionRenderer"]["contents"].is_array())
+        .count();
+    assert!(
+        wrapped > 0,
+        "page 2 wraps its results in itemSectionRenderer"
+    );
+}

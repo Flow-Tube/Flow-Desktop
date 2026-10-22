@@ -31,6 +31,26 @@ describe("video fullscreen", () => {
   });
 });
 
+describe("enrichCurrentVideo", () => {
+  it("keeps the same video object when the patch changes nothing", () => {
+    usePlayerStore.getState().setQueue([{ id: "stub", title: "", channelName: "" }], 0);
+    const before = usePlayerStore.getState().currentVideo;
+
+    usePlayerStore.getState().enrichCurrentVideo("stub", { title: "", channelName: "" });
+
+    expect(usePlayerStore.getState().currentVideo).toBe(before);
+  });
+
+  it("fills in the fields that arrived", () => {
+    usePlayerStore.getState().setQueue([{ id: "stub", title: "", channelName: "" }], 0);
+
+    usePlayerStore.getState().enrichCurrentVideo("stub", { title: "Me at the zoo" });
+
+    expect(usePlayerStore.getState().currentVideo?.title).toBe("Me at the zoo");
+    expect(usePlayerStore.getState().queue[0]?.title).toBe("Me at the zoo");
+  });
+});
+
 describe("video queue", () => {
   it("keeps the current video when the first upcoming item is added", () => {
     const current = video("current");

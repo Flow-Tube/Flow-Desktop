@@ -222,6 +222,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   enrichCurrentVideo: (videoId, patch) => {
     const { currentVideo, queue } = get();
     if (!currentVideo || currentVideo.id !== videoId) return;
+    // A patch that changes nothing must not hand subscribers a new object: the
+    // watch page re-enriches whenever the title is still empty.
+    const changes = (Object.keys(patch) as (keyof VideoSummary)[]).some(
+      (key) => currentVideo[key] !== patch[key],
+    );
+    if (!changes) return;
     set({
       currentVideo: { ...currentVideo, ...patch },
       queue: queue.map((item) => (item.id === videoId ? { ...item, ...patch } : item)),

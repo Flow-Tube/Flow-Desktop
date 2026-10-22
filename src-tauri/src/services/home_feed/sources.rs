@@ -258,7 +258,7 @@ impl RelatedLists {
                             published_text: item.published_text,
                             view_count_text: item.view_count_text,
                             channel_avatar_url: None,
-                            is_live: false,
+                            is_live: item.is_live,
                         },
                         now_ms,
                     )

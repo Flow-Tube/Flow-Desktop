@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use super::card::{Card, number_in};
+use super::card::{Card, age_of};
 
 pub const FRESH_SUB_WINDOW_MS: u64 = 72 * 3_600_000;
 const HOME_MAX_SUGGESTION_AGE_MS: u64 = 365 * 86_400_000;
@@ -66,11 +66,7 @@ pub fn is_fresh_subscribed(card: &Card, now_ms: u64) -> bool {
     {
         return true;
     }
-    let text = card.upload_text();
-    if text.contains("second") || text.contains("minute") || text.contains("hour") {
-        return true;
-    }
-    text.contains("day") && number_in(&text).unwrap_or(1) <= 3
+    age_of(&card.upload_text()).is_some_and(|age| age <= FRESH_SUB_WINDOW_MS)
 }
 
 /// Not older than a year; a card that names no age only counts when it is live.
@@ -86,20 +82,7 @@ pub fn is_recent_suggestion(card: &Card, now_ms: u64) -> bool {
     {
         return true;
     }
-    let value = number_in(&text).unwrap_or(1);
-    if text.contains("second") || text.contains("minute") || text.contains("hour") {
-        true
-    } else if text.contains("day") {
-        value <= 365
-    } else if text.contains("week") {
-        value <= 52
-    } else if text.contains("month") {
-        value <= 12
-    } else if text.contains("year") {
-        value <= 1
-    } else {
-        false
-    }
+    age_of(&text).is_some_and(|age| age <= HOME_MAX_SUGGESTION_AGE_MS)
 }
 
 /// `feed` with `late` cards placed below `last_visible`, one after every `spacing` cards already

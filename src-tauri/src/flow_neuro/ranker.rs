@@ -5,6 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::api::innertube::json::age::{AgeUnit, RelativeAge, relative_age};
+
 use crate::flow_neuro::categories::{ChannelCategory, factor as category_factor, id_of};
 use crate::flow_neuro::formats;
 use crate::flow_neuro::keyed_lists::keyed_lists;
@@ -249,38 +251,30 @@ fn ranked_topics(vector: &ContentVector) -> Vec<&String> {
     ranked.into_iter().map(|(key, _)| key).collect()
 }
 
-/// Leading digits of `text`, as Kotlin's `filter { it.isDigit() }.toIntOrNull()` reads them.
-fn number_in(text: &str) -> Option<u32> {
-    let digits: String = text.chars().filter(char::is_ascii_digit).collect();
-    digits.parse().ok()
-}
-
 /// How a card's age lifts or lowers it: new uploads up, years-old ones down.
 fn time_decay(date_text: &str, is_live: bool) -> f64 {
-    let text = date_text.to_lowercase();
     if is_live {
         return 1.15;
     }
-    if text.contains("second") || text.contains("minute") || text.contains("hour") {
-        1.15
-    } else if text.contains("day") {
-        1.12
-    } else if text.contains("week") {
-        1.08
-    } else if text.contains("month") {
-        let months = f64::from(number_in(&text).unwrap_or(1));
-        (1.0 / (1.0 + 0.08 * months)).max(0.75)
-    } else if text.contains("year") {
-        let years = f64::from(number_in(&text).unwrap_or(1));
-        1.0 / (1.0 + 0.35 * years)
-    } else {
-        0.85
+    let Some(age) = relative_age(date_text) else {
+        return 0.85;
+    };
+    #[allow(clippy::cast_precision_loss)]
+    let value = age.value as f64;
+    match age.unit {
+        AgeUnit::Second | AgeUnit::Minute | AgeUnit::Hour => 1.15,
+        AgeUnit::Day => 1.12,
+        AgeUnit::Week => 1.08,
+        AgeUnit::Month => (1.0 / (1.0 + 0.08 * value)).max(0.75),
+        AgeUnit::Year => 1.0 / (1.0 + 0.35 * value),
     }
 }
 
 fn is_older_than_24_hours(date_text: &str) -> bool {
-    let text = date_text.to_lowercase();
-    !(text.contains("second") || text.contains("minute") || text.contains("hour"))
+    !matches!(
+        relative_age(date_text).map(|age| age.unit),
+        Some(AgeUnit::Second | AgeUnit::Minute | AgeUnit::Hour)
+    )
 }
 
 /// A subscription's lift, larger for a fresh upload, and how the channel's past videos were
@@ -293,15 +287,20 @@ fn channel_signal(c: &Candidate, brain: &UserBrain, user_subs: &HashSet<String>)
         } else {
             SUBSCRIPTION_BOOST
         };
-        let text = c.upload_date.to_lowercase();
-        let freshness = if !is_older_than_24_hours(&text) {
-            2.0
-        } else if text.contains("day") && number_in(&text).unwrap_or(99) <= 2 {
-            1.5
-        } else if text.contains("week") && number_in(&text).unwrap_or(99) <= 1 {
-            1.2
-        } else {
-            1.0
+        let freshness = match relative_age(c.upload_date) {
+            Some(RelativeAge {
+                unit: AgeUnit::Second | AgeUnit::Minute | AgeUnit::Hour,
+                ..
+            }) => 2.0,
+            Some(RelativeAge {
+                value,
+                unit: AgeUnit::Day,
+            }) if value <= 2 => 1.5,
+            Some(RelativeAge {
+                value,
+                unit: AgeUnit::Week,
+            }) if value <= 1 => 1.2,
+            _ => 1.0,
         };
         signal += (boost * freshness).min(SUBSCRIPTION_BOOST_MAX);
     }

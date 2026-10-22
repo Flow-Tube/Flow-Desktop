@@ -737,22 +737,6 @@ pub fn get_topic_categories() -> &'static Vec<TopicCategory> {
     })
 }
 
-// --- Time Decay Calculator ---
-
-pub struct TimeDecay;
-
-impl TimeDecay {
-    #[allow(dead_code)]
-    pub fn is_older_than_24_hours(date_text: &str) -> bool {
-        let text = date_text.to_lowercase();
-        if text.contains("second") || text.contains("minute") || text.contains("hour") {
-            false
-        } else {
-            true
-        }
-    }
-}
-
 /// A key without its ":domain" tag ("metal:music" reads "metal").
 pub fn strip_domain_tag(topic: &str) -> String {
     match topic.find(':') {

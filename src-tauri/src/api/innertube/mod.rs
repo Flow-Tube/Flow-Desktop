@@ -16,6 +16,7 @@ use async_trait::async_trait;
 pub mod core;
 pub mod download;
 pub mod extractors;
+pub mod json;
 pub mod music;
 pub mod parsers;
 

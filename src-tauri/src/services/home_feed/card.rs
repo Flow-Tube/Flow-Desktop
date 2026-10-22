@@ -2,12 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::api::innertube::json::age::relative_age_ms;
 use crate::flow_neuro::scoring::is_known_short;
 use crate::models::video::VideoSummary;
-
-const MINUTE_MS: u64 = 60_000;
-const HOUR_MS: u64 = 60 * MINUTE_MS;
-const DAY_MS: u64 = 24 * HOUR_MS;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,47 +64,25 @@ impl Card {
     }
 }
 
-/// The leading number of `text` as Kotlin's `filter { it.isDigit() }.toIntOrNull()` reads it.
-#[must_use]
-pub fn number_in(text: &str) -> Option<u64> {
-    let digits: String = text.chars().filter(char::is_ascii_digit).collect();
-    digits.parse().ok()
-}
-
-/// "3 days ago" as milliseconds; none for text that names no age.
+/// "3 days ago" or "2d ago" as milliseconds; none for text that names no age.
 #[must_use]
 pub fn age_of(text: &str) -> Option<u64> {
-    let text = text.to_lowercase();
-    let value = number_in(&text).unwrap_or(1);
-    let unit = if text.contains("second") {
-        1_000
-    } else if text.contains("minute") {
-        MINUTE_MS
-    } else if text.contains("hour") {
-        HOUR_MS
-    } else if text.contains("day") {
-        DAY_MS
-    } else if text.contains("week") {
-        7 * DAY_MS
-    } else if text.contains("month") {
-        30 * DAY_MS
-    } else if text.contains("year") {
-        365 * DAY_MS
-    } else {
-        return None;
-    };
-    Some(value.saturating_mul(unit))
+    relative_age_ms(text)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const HOUR_MS: u64 = 3_600_000;
+    const DAY_MS: u64 = 24 * HOUR_MS;
+
     #[test]
     fn ages_are_read_from_feed_text() {
         assert_eq!(age_of("3 days ago"), Some(3 * DAY_MS));
         assert_eq!(age_of("Streamed 2 hours ago"), Some(2 * HOUR_MS));
         assert_eq!(age_of("1 year ago"), Some(365 * DAY_MS));
+        assert_eq!(age_of("2d ago"), Some(2 * DAY_MS));
         assert_eq!(age_of("Premieres soon"), None);
     }
 }

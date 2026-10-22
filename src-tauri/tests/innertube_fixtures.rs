@@ -7,7 +7,9 @@
 
 use std::path::PathBuf;
 
-use flow_desktop_lib::api::innertube::extractors::channel::{parse_about, parse_header, parse_tab};
+use flow_desktop_lib::api::innertube::extractors::channel::{
+    SHORTS_TAB_PARAMS, VIDEOS_TAB_PARAMS, parse_about, parse_header, parse_tab,
+};
 use flow_desktop_lib::api::innertube::extractors::comments::parse_comments_json;
 use flow_desktop_lib::api::innertube::extractors::explore::{
     parse_explore_grid, parse_explore_page,
@@ -499,4 +501,20 @@ fn the_about_panel_has_its_links() {
                 .iter()
                 .all(|link| !link.url.contains("/redirect?"))
     );
+}
+
+#[test]
+fn the_shared_tab_params_are_the_ones_the_channel_page_sends() {
+    let Some(page) = fixture("channel_home") else {
+        return;
+    };
+    let tabs = parse_header(&page, "UCXuqSBlHAE6Xw-yeJA0Tunw").tabs;
+    let params = |kind: &str| {
+        tabs.iter()
+            .find(|tab| tab.kind == kind)
+            .and_then(|tab| tab.params.as_deref())
+            .map(|params| params.replace("%3D", "="))
+    };
+    assert_eq!(params("videos").as_deref(), Some(VIDEOS_TAB_PARAMS));
+    assert_eq!(params("shorts").as_deref(), Some(SHORTS_TAB_PARAMS));
 }

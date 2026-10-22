@@ -190,6 +190,18 @@ async fn capture_innertube_fixtures() {
         save(name, page);
     }
 
+    let rss = flow_desktop_lib::api::http::shared_client()
+        .get(format!(
+            "https://www.youtube.com/feeds/videos.xml?channel_id={LTT}"
+        ))
+        .send()
+        .await
+        .expect("rss")
+        .text()
+        .await
+        .expect("rss body");
+    std::fs::write(fixture_dir().join("rss_ltt.xml"), rss).expect("write rss");
+
     let mut landing = json!({ "browseId": LTT });
     let landing = client
         .post_innertube("browse", &clients::WEB, &mut landing)

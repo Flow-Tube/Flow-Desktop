@@ -5,6 +5,7 @@ use crate::api::innertube::core::utils::{
     normalize_youtube_image_url, parse_duration_seconds, parse_mixed_number_word_to_long,
     short_video_summary_from_item,
 };
+use crate::api::innertube::json::continuation::{continuation_item_lists, continuation_token};
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::{
     ChannelDetails, ChannelItem, ChannelTabResponse, PlaylistSummary, PostSummary,
@@ -605,42 +606,26 @@ fn extract_videos_from_browse(
                     comment_endpoint_params,
                     published_time_text,
                 }));
-            } else if let Some(cont) = target.get("continuationItemRenderer") {
-                if let Some(token) = cont
-                    .get("continuationEndpoint")
-                    .and_then(|e| e.get("continuationCommand"))
-                    .and_then(|c| c.get("token"))
-                    .and_then(|t| t.as_str())
-                {
-                    token_found = Some(token.to_string());
-                }
+            } else if let Some(token) = continuation_token(target) {
+                token_found = Some(token);
             }
         }
         token_found
     };
 
-    if let Some(actions) = val
-        .get("onResponseReceivedActions")
-        .and_then(|v| v.as_array())
-    {
-        for action in actions {
-            if let Some(items_arr) = action
-                .get("appendContinuationItemsAction")
-                .and_then(|a| a.get("continuationItems"))
-                .and_then(|c| c.as_array())
-            {
-                if let Some(tok) = process_array(items_arr) {
-                    next_page_token = Some(tok);
-                }
-            } else if let Some(items_arr) = action
-                .get("reloadContinuationItemsCommand")
-                .and_then(|r| r.get("continuationItems"))
-                .and_then(|c| c.as_array())
-            {
-                if let Some(tok) = process_array(items_arr) {
-                    next_page_token = Some(tok);
-                }
-            }
+    // Later channel-search pages wrap each result in its own `itemSectionRenderer`.
+    for list in continuation_item_lists(val) {
+        let items_arr: Vec<Value> = list
+            .iter()
+            .flat_map(
+                |item| match item["itemSectionRenderer"]["contents"].as_array() {
+                    Some(contents) => contents.clone(),
+                    None => vec![item.clone()],
+                },
+            )
+            .collect();
+        if let Some(tok) = process_array(&items_arr) {
+            next_page_token = Some(tok);
         }
     }
 
@@ -1280,5 +1265,30 @@ impl InnertubeClient {
             sort_popular_token,
             sort_oldest_token,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn later_search_pages_unwrap_each_item_section() {
+        let page = json!({ "onResponseReceivedActions": [{ "appendContinuationItemsAction": {
+            "continuationItems": [
+                { "itemSectionRenderer": { "contents": [{ "videoRenderer": {
+                    "videoId": "vid00000031",
+                    "title": { "runs": [{ "text": "Page two" }] }
+                } }] } },
+                { "continuationItemRenderer": { "continuationEndpoint": {
+                    "continuationCommand": { "token": "PAGE3" } } } }
+            ]
+        } }] });
+        let (items, token, ..) = extract_videos_from_browse(&page);
+        assert!(
+            matches!(items.as_slice(), [ChannelItem::Video(video)] if video.id == "vid00000031")
+        );
+        assert_eq!(token.as_deref(), Some("PAGE3"));
     }
 }

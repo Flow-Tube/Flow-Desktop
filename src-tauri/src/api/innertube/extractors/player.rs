@@ -6,6 +6,10 @@ use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFligh
 use crate::api::innertube::core::utils::{
     collect_related_content_items, dedupe_related_content_items, watch_next_body,
 };
+use crate::api::innertube::extractors::playability::{
+    LadderReport, Refusal, check_playability_status, ends_the_ladder, is_better_report,
+    is_bot_wall, map_playability_error,
+};
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::thumbnail_url_from_array;
 use crate::api::innertube::renderers::video::channel_id_of;
@@ -368,118 +372,6 @@ fn check_needs_reload(val: &Value) -> bool {
         }
     }
     false
-}
-
-/// Collects the human-readable reason from a playability status, combining the
-/// top-level `reason` with the `errorScreen` subreason — YouTube puts the
-/// specific detail there (e.g. "This video may be inappropriate for some users.")
-/// while `reason` stays terse ("Sign in to confirm your age").
-fn combined_playability_reason(playability: &Value) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if let Some(reason) = playability["reason"].as_str() {
-        if !reason.is_empty() {
-            parts.push(reason.to_string());
-        }
-    }
-    let subreason = &playability["errorScreen"]["playerErrorMessageRenderer"]["subreason"];
-    if let Some(text) = subreason["simpleText"].as_str() {
-        parts.push(text.to_string());
-    }
-    if let Some(runs) = subreason["runs"].as_array() {
-        for run in runs {
-            if let Some(text) = run["text"].as_str() {
-                parts.push(text.to_string());
-            }
-        }
-    }
-    if parts.is_empty() {
-        "Unknown content availability error".to_string()
-    } else {
-        parts.join(" — ")
-    }
-}
-
-pub(crate) fn map_playability_error(playability: &Value) -> AppError {
-    let status = playability["status"].as_str().unwrap_or("UNKNOWN");
-    let reason_text = combined_playability_reason(playability);
-    let normalized_reason = reason_text.to_ascii_lowercase();
-
-    if normalized_reason.contains("inappropriate for some users")
-        || normalized_reason.contains("confirm your age")
-        || normalized_reason.contains("verify your age")
-        || normalized_reason.contains("age-restricted")
-        || normalized_reason.contains("age restricted")
-    {
-        return AppError::AgeRestricted(
-            "This age-restricted video cannot be watched anonymously".into(),
-        );
-    }
-
-    if status.eq_ignore_ascii_case("login_required") {
-        if normalized_reason.contains("private") {
-            return AppError::PrivateContent("This video is private".into());
-        }
-
-        if normalized_reason.contains("bot") {
-            return AppError::BotCheckRequired(format!(
-                "YouTube blocked anonymous watch access: {}: \"{}\"",
-                status, reason_text
-            ));
-        }
-    }
-
-    if status.eq_ignore_ascii_case("unplayable") || status.eq_ignore_ascii_case("error") {
-        if normalized_reason.contains("music premium") {
-            return AppError::MusicPremium("This video is a YouTube Music Premium video".into());
-        }
-
-        if normalized_reason.contains("payment") {
-            return AppError::PaidContent("This video is a paid video".into());
-        }
-
-        if normalized_reason.contains("members") {
-            return AppError::PaidContent(
-                "This video is only available for channel members".into(),
-            );
-        }
-
-        if normalized_reason.contains("country") {
-            return AppError::GeographicRestriction(
-                "This video is not available in the current region".into(),
-            );
-        }
-
-        if normalized_reason.contains("closed") || normalized_reason.contains("terminated") {
-            return AppError::AccountTerminated(reason_text.clone());
-        }
-    }
-
-    AppError::ContentNotAvailable(format!("Got error {}: \"{}\"", status, reason_text))
-}
-
-fn is_definitive_restriction(error: &AppError) -> bool {
-    matches!(
-        error,
-        AppError::AgeRestricted(_)
-            | AppError::PrivateContent(_)
-            | AppError::PaidContent(_)
-            | AppError::GeographicRestriction(_)
-            | AppError::MusicPremium(_)
-            | AppError::AccountTerminated(_)
-            | AppError::BotCheckRequired(_)
-    )
-}
-
-fn check_playability_status(playability_status: &Value) -> AppResult<()> {
-    let Some(status) = playability_status["status"].as_str() else {
-        return Ok(());
-    };
-
-    if status.eq_ignore_ascii_case("ok") {
-        return Ok(());
-    }
-
-    Err(map_playability_error(playability_status))
 }
 
 fn validate_stream_url(stream_url: &str, video_id: &str) -> AppResult<String> {
@@ -1347,28 +1239,10 @@ enum ClientOutcome {
     Won(PlayerAttempt),
     /// A non-OK playability status, kept so the most specific restriction can be
     /// reported once the ladder is exhausted.
-    Refused(Value),
+    Refused(Refusal),
     /// No answer, or an `OK` with nothing fetchable (ciphered-only formats, an
     /// unsolvable `n`, a missing PO token).
     Unusable,
-}
-
-/// Whether a refusal should be what the user is told once every client has
-/// failed. A definitive restriction always is, and so is `ERROR`, the status
-/// the server gives a video that does not exist: every client agrees on it, and
-/// without it the user would only see a generic extraction failure.
-pub(crate) fn is_reportable_refusal(playability: &Value) -> bool {
-    is_definitive_restriction(&map_playability_error(playability))
-        || playability["status"]
-            .as_str()
-            .is_some_and(|status| status.eq_ignore_ascii_case("ERROR"))
-}
-
-pub(crate) fn is_bot_wall(playability: &Value) -> bool {
-    matches!(
-        map_playability_error(playability),
-        AppError::BotCheckRequired(_)
-    )
 }
 
 /// Whether a direct-URL response carries a stream the proxy can fetch as is:
@@ -1403,7 +1277,7 @@ impl InnertubeClient {
         deferred_restriction: &mut Option<AppError>,
         refresh: bool,
     ) -> Option<PlayerAttempt> {
-        static FLIGHTS: OnceLock<PlayerFlights<(Option<PlayerAttempt>, Option<Value>)>> =
+        static FLIGHTS: OnceLock<PlayerFlights<(Option<PlayerAttempt>, Option<LadderReport>)>> =
             OnceLock::new();
         // A refresh replaces URLs that already failed, so it must never be
         // answered by a normal walk that started before them.
@@ -1443,8 +1317,8 @@ impl InnertubeClient {
                 (attempt, restriction)
             })
             .await;
-        if let Some(playability) = outcome.1.as_ref() {
-            *deferred_restriction = Some(map_playability_error(playability));
+        if let Some(report) = outcome.1.as_ref() {
+            *deferred_restriction = Some(report.to_error());
         }
         outcome.0.clone()
     }
@@ -1464,16 +1338,17 @@ impl InnertubeClient {
         video_id: &str,
         ladder: &[&'static clients::YouTubeClient],
         visitor_data: Option<String>,
-        deferred_restriction: &mut Option<Value>,
+        deferred_restriction: &mut Option<LadderReport>,
     ) -> Option<PlayerAttempt> {
         let mut visitor_data = visitor_data;
         let mut identity_refreshed = false;
+        let mut fresh_identity_walled = false;
         for client in ladder {
             let mut outcome = self
                 .attempt_client(video_id, client, visitor_data.as_deref())
                 .await;
             if !identity_refreshed
-                && matches!(&outcome, ClientOutcome::Refused(playability) if is_bot_wall(playability))
+                && matches!(&outcome, ClientOutcome::Refused(refusal) if is_bot_wall(&refusal.playability))
             {
                 identity_refreshed = true;
                 if let Some(fresh) = self.refresh_visitor_data(visitor_data.as_deref()).await {
@@ -1482,6 +1357,10 @@ impl InnertubeClient {
                     outcome = self
                         .attempt_client(video_id, client, visitor_data.as_deref())
                         .await;
+                    fresh_identity_walled = matches!(
+                        &outcome,
+                        ClientOutcome::Refused(refusal) if is_bot_wall(&refusal.playability)
+                    );
                 }
             }
 
@@ -1490,24 +1369,26 @@ impl InnertubeClient {
                     info!(video_id = %video_id, client = client.name, version = client.version, "Player ladder resolved");
                     return Some(attempt);
                 }
-                ClientOutcome::Refused(playability) => {
-                    let mapped = map_playability_error(&playability);
+                ClientOutcome::Refused(refusal) => {
                     warn!(
                         video_id = %video_id,
                         client = client.name,
                         version = client.version,
-                        reason = %mapped,
+                        reason = %map_playability_error(&refusal.playability),
                         "Player client refused, trying the next one"
                     );
-                    if is_reportable_refusal(&playability) {
-                        // Region, privacy, membership, age and removal are
-                        // properties of the video, so every later client would
-                        // refuse it the same way. A bot wall is per client.
-                        let content_level = !is_bot_wall(&playability);
-                        deferred_restriction.get_or_insert(playability);
-                        if content_level {
-                            return None;
-                        }
+                    let ends = ends_the_ladder(&refusal);
+                    if is_better_report(
+                        deferred_restriction.as_ref().map(|report| &report.refusal),
+                        &refusal,
+                    ) {
+                        *deferred_restriction = Some(LadderReport {
+                            refusal,
+                            fresh_identity_walled,
+                        });
+                    }
+                    if ends {
+                        return None;
                     }
                 }
                 ClientOutcome::Unusable => {}
@@ -1581,7 +1462,7 @@ impl InnertubeClient {
             .as_str()
             .unwrap_or_default();
         if !status.eq_ignore_ascii_case("OK") {
-            return ClientOutcome::Refused(response["playabilityStatus"].clone());
+            return ClientOutcome::Refused(Refusal::of(&response));
         }
 
         let playable = if has_live_manifest(&response) {
@@ -2024,7 +1905,7 @@ impl InnertubeClient {
         // A restriction seen here is discarded: the video already resolved, so a
         // missing manifest is not the reason to fail it.
         if is_live && hls_manifest_url.is_none() {
-            let mut discarded: Option<Value> = None;
+            let mut discarded: Option<LadderReport> = None;
             if let Some(live) = self
                 .try_player_ladder(
                     video_id_trimmed,
@@ -2577,110 +2458,6 @@ mod sabr_client_probe {
 }
 
 #[cfg(test)]
-mod playability_classification {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn age_gate_reason_is_age_restricted() {
-        // The WEB/ANDROID clients report age gating via a terse `reason`.
-        let playability = json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "Sign in to confirm your age",
-        });
-        assert!(matches!(
-            map_playability_error(&playability),
-            AppError::AgeRestricted(_)
-        ));
-    }
-
-    #[test]
-    fn age_gate_subreason_is_age_restricted() {
-        // Some responses keep `reason` generic and put the detail in the
-        // errorScreen subreason — the classifier must read both.
-        let playability = json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "Sign in to confirm you’re not a bot",
-            "errorScreen": {
-                "playerErrorMessageRenderer": {
-                    "subreason": {
-                        "runs": [
-                            { "text": "This video may be inappropriate for some users." }
-                        ]
-                    }
-                }
-            }
-        });
-        assert!(matches!(
-            map_playability_error(&playability),
-            AppError::AgeRestricted(_)
-        ));
-    }
-
-    #[test]
-    fn private_video_is_private_content() {
-        let playability = json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "This video is private.",
-        });
-        assert!(matches!(
-            map_playability_error(&playability),
-            AppError::PrivateContent(_)
-        ));
-    }
-
-    #[test]
-    fn bot_wall_is_bot_check_required() {
-        let playability = json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "Sign in to confirm you’re not a bot",
-        });
-        assert!(matches!(
-            map_playability_error(&playability),
-            AppError::BotCheckRequired(_)
-        ));
-    }
-
-    #[test]
-    fn music_premium_is_classified() {
-        let playability = json!({
-            "status": "UNPLAYABLE",
-            "reason": "This video is only available to Music Premium members",
-        });
-        assert!(matches!(
-            map_playability_error(&playability),
-            AppError::MusicPremium(_)
-        ));
-    }
-
-    #[test]
-    fn unknown_reason_falls_back_to_content_not_available() {
-        let playability = json!({
-            "status": "UNPLAYABLE",
-            "reason": "Video unavailable",
-        });
-        assert!(matches!(
-            map_playability_error(&playability),
-            AppError::ContentNotAvailable(_)
-        ));
-    }
-
-    #[test]
-    fn restrictions_are_definitive_but_extraction_is_not() {
-        assert!(is_definitive_restriction(&AppError::AgeRestricted(
-            "x".into()
-        )));
-        assert!(is_definitive_restriction(&AppError::GeographicRestriction(
-            "x".into()
-        )));
-        assert!(!is_definitive_restriction(&AppError::ContentNotAvailable(
-            "x".into()
-        )));
-        assert!(!is_definitive_restriction(&AppError::Extractor("x".into())));
-    }
-}
-
-#[cfg(test)]
 mod ladder_decisions {
     use super::*;
     use serde_json::json;
@@ -2695,38 +2472,6 @@ mod ladder_decisions {
             format["url"] = json!(url);
         }
         format
-    }
-
-    #[test]
-    fn only_a_bot_check_counts_as_a_bot_wall() {
-        assert!(is_bot_wall(&json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "Sign in to confirm you’re not a bot",
-        })));
-        assert!(!is_bot_wall(&json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "This video is private.",
-        })));
-        assert!(!is_bot_wall(&json!({
-            "status": "UNPLAYABLE",
-            "reason": "The page needs to be reloaded.",
-        })));
-    }
-
-    #[test]
-    fn a_missing_video_is_reported_but_a_generic_refusal_is_not() {
-        assert!(is_reportable_refusal(&json!({
-            "status": "ERROR",
-            "reason": "This video is unavailable",
-        })));
-        assert!(is_reportable_refusal(&json!({
-            "status": "LOGIN_REQUIRED",
-            "reason": "This video is private.",
-        })));
-        assert!(!is_reportable_refusal(&json!({
-            "status": "UNPLAYABLE",
-            "reason": "The page needs to be reloaded.",
-        })));
     }
 
     #[test]
@@ -2834,8 +2579,8 @@ mod ladder_live {
                 .await;
             let verdict = match &outcome {
                 ClientOutcome::Won(_) => "playable".to_string(),
-                ClientOutcome::Refused(playability) => {
-                    format!("refused: {}", map_playability_error(playability))
+                ClientOutcome::Refused(refusal) => {
+                    format!("refused: {}", map_playability_error(&refusal.playability))
                 }
                 ClientOutcome::Unusable => "unusable".to_string(),
             };

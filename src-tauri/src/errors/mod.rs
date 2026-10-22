@@ -19,6 +19,14 @@ pub enum AppError {
     #[error("Paid content: {0}")]
     PaidContent(String),
 
+    #[error("Members-only content: {0}")]
+    MembersOnly(String),
+
+    /// A premiere or scheduled stream that has not started, with its start in
+    /// epoch milliseconds when known.
+    #[error("Upcoming: {0}")]
+    LiveUpcoming(String, Option<u64>),
+
     #[error("Geographic restriction: {0}")]
     GeographicRestriction(String),
 
@@ -27,6 +35,10 @@ pub enum AppError {
 
     #[error("Bot check required: {0}")]
     BotCheckRequired(String),
+
+    /// A bot check that also held for a fresh visitor identity.
+    #[error("Network blocked: {0}")]
+    NetworkWall(String),
 
     #[error("Account terminated: {0}")]
     AccountTerminated(String),
@@ -74,6 +86,9 @@ impl From<serde_json::Error> for AppError {
 pub struct ErrorResponse {
     pub message: String,
     pub kind: String,
+    /// When an upcoming premiere or stream starts, in epoch milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub starts_at_ms: Option<u64>,
 }
 
 /// Walks `source()` and joins the chain into `caused by -> ... -> ...`. Empty
@@ -101,9 +116,12 @@ impl From<AppError> for ErrorResponse {
             AppError::AgeRestricted(_) => "ageRestricted",
             AppError::PrivateContent(_) => "privateContent",
             AppError::PaidContent(_) => "paidContent",
+            AppError::MembersOnly(_) => "membersOnly",
+            AppError::LiveUpcoming(..) => "liveUpcoming",
             AppError::GeographicRestriction(_) => "geographicRestriction",
             AppError::MusicPremium(_) => "musicPremium",
             AppError::BotCheckRequired(_) => "botCheckRequired",
+            AppError::NetworkWall(_) => "networkWall",
             AppError::AccountTerminated(_) => "accountTerminated",
             AppError::ContentNotAvailable(_) => "contentNotAvailable",
             AppError::Network(_) => "network",
@@ -115,6 +133,10 @@ impl From<AppError> for ErrorResponse {
 
         let message = error.to_string();
         let cause = cause_chain(&error);
+        let starts_at_ms = match &error {
+            AppError::LiveUpcoming(_, start) => *start,
+            _ => None,
+        };
 
         // Log every failure that crosses the backend->frontend boundary so a
         // user-visible error always leaves a diagnosable trail in the log file.
@@ -125,8 +147,8 @@ impl From<AppError> for ErrorResponse {
             "internal" | "database" => {
                 tracing::error!(kind, error = %message, cause = %cause, "backend_error")
             }
-            "extractor" | "streaming" | "validation" | "botCheckRequired" | "network"
-            | "rateLimited" => {
+            "extractor" | "streaming" | "validation" | "botCheckRequired" | "networkWall"
+            | "network" | "rateLimited" => {
                 tracing::warn!(kind, error = %message, cause = %cause, "backend_error")
             }
             _ => tracing::debug!(kind, error = %message, "backend_error"),
@@ -135,6 +157,7 @@ impl From<AppError> for ErrorResponse {
         Self {
             message,
             kind: kind.to_string(),
+            starts_at_ms,
         }
     }
 }
@@ -151,6 +174,9 @@ mod tests {
             (AppError::AgeRestricted("a".into()), "ageRestricted"),
             (AppError::BotCheckRequired("b".into()), "botCheckRequired"),
             (AppError::Network("n".into()), "network"),
+            (AppError::MembersOnly("m".into()), "membersOnly"),
+            (AppError::NetworkWall("w".into()), "networkWall"),
+            (AppError::LiveUpcoming("u".into(), Some(5)), "liveUpcoming"),
             (AppError::RateLimited("r".into()), "rateLimited"),
             (AppError::Database(sqlx::Error::RowNotFound), "database"),
             (AppError::Internal("i".into()), "internal"),

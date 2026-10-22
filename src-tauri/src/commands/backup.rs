@@ -61,6 +61,7 @@ fn sync_err(e: SyncError) -> ErrorResponse {
     ErrorResponse {
         message: e.to_string(),
         kind: "sync".to_string(),
+        starts_at_ms: None,
     }
 }
 

@@ -21,6 +21,7 @@ fn err(e: SyncError) -> ErrorResponse {
     ErrorResponse {
         message: e.to_string(),
         kind: e.kind().to_string(),
+        starts_at_ms: None,
     }
 }
 

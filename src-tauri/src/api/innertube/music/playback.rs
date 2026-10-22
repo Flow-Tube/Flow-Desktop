@@ -19,9 +19,10 @@ use tracing::{debug, info, warn};
 use super::clients;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::botguard::generate_po_token;
-use crate::api::innertube::extractors::player::{
-    is_bot_wall, is_reportable_refusal, map_playability_error, playback_priority,
+use crate::api::innertube::extractors::playability::{
+    Refusal, ends_the_ladder, is_better_report, is_bot_wall, map_playability_error,
 };
+use crate::api::innertube::extractors::player::playback_priority;
 use crate::errors::{AppError, AppResult};
 use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 
@@ -32,7 +33,7 @@ const MUSIC_CLIENT_TIMEOUT: Duration = Duration::from_secs(6);
 /// What one client answered for a track.
 enum ClientAnswer {
     Playable(Box<MusicStreamInfo>),
-    Refused(Value),
+    Refused(Refusal),
     Unusable,
 }
 
@@ -59,14 +60,14 @@ impl InnertubeClient {
         let _priority = playback_priority().start_stream();
         let mut visitor = self.fetch_visitor_data().await;
         let mut identity_refreshed = false;
-        let mut last_error: Option<AppError> = None;
+        let mut reported: Option<Refusal> = None;
 
         for client in clients::DIRECT_AUDIO_CLIENTS {
             let mut answer = self
                 .ask_music_client(client, video_id, audio_quality, visitor.as_deref())
                 .await;
             if !identity_refreshed
-                && matches!(&answer, ClientAnswer::Refused(playability) if is_bot_wall(playability))
+                && matches!(&answer, ClientAnswer::Refused(refusal) if is_bot_wall(&refusal.playability))
             {
                 identity_refreshed = true;
                 if let Some(fresh) = self.refresh_visitor_data(visitor.as_deref()).await {
@@ -83,13 +84,17 @@ impl InnertubeClient {
 
             match answer {
                 ClientAnswer::Playable(info) => return Ok(*info),
-                ClientAnswer::Refused(playability) => {
-                    let error = music_refusal_error(&playability);
-                    warn!(client = client.name, reason = %error, "non-OK music playability");
-                    let track_level =
-                        is_reportable_refusal(&playability) && !is_bot_wall(&playability);
-                    last_error = Some(error);
-                    if track_level {
+                ClientAnswer::Refused(refusal) => {
+                    warn!(
+                        client = client.name,
+                        reason = %music_refusal_error(&refusal.playability),
+                        "non-OK music playability"
+                    );
+                    let ends = ends_the_ladder(&refusal);
+                    if is_better_report(reported.as_ref(), &refusal) {
+                        reported = Some(refusal);
+                    }
+                    if ends {
                         break;
                     }
                 }
@@ -97,11 +102,14 @@ impl InnertubeClient {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            AppError::Extractor(format!(
-                "Failed to resolve music stream for {video_id} after trying all clients"
-            ))
-        }))
+        Err(reported.map_or_else(
+            || {
+                AppError::Extractor(format!(
+                    "Failed to resolve music stream for {video_id} after trying all clients"
+                ))
+            },
+            |refusal| music_refusal_error(&refusal.playability),
+        ))
     }
 
     async fn ask_music_client(
@@ -139,7 +147,7 @@ impl InnertubeClient {
 
         let status = res["playabilityStatus"]["status"].as_str().unwrap_or("");
         if !status.eq_ignore_ascii_case("OK") {
-            return ClientAnswer::Refused(res["playabilityStatus"].clone());
+            return ClientAnswer::Refused(Refusal::of(&res));
         }
 
         let streaming = &res["streamingData"];
@@ -428,7 +436,10 @@ mod tests {
             music_refusal_error(&removed),
             AppError::ContentNotAvailable(_)
         ));
-        assert!(is_reportable_refusal(&removed));
+        assert!(ends_the_ladder(&Refusal {
+            playability: removed,
+            has_video_details: false,
+        }));
     }
 
     #[test]

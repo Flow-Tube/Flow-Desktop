@@ -65,6 +65,10 @@ PLAYER
 - Web playback clients send their playback token where YouTube reads it, videos behind a content warning get their related videos and autoplay back, live streams show how many are watching, and hidden like counts no longer read "I like this".
 - Flow keeps one anonymous YouTube identity for up to a week instead of a new one every launch, and gets a new one at most twice in six hours after a bot check. Diagnostics can reset it.
 - YouTube requests give up after 20 seconds instead of hanging, retry briefly after a dropped connection, and say when the connection failed or YouTube asked Flow to slow down.
+- An upcoming premiere or live stream shows a countdown and starts on its own when it goes live, and members-only videos, rate limits and networks YouTube is blocking each get their own message instead of a generic error.
+- A video that stops partway through gets fresh links and resumes where it stopped before switching sources, a client YouTube starts refusing is tried last for half an hour, and streams no longer stop after an hour.
+- The audio picker takes the normal copy over its volume-compressed twin, subtitles translate from the authored track under one Auto-translate menu, and live playlists download compressed.
+- Music skips a removed or region-locked song instead of stopping, at most three in a row.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

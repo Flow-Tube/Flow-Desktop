@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use flow_desktop_lib::api::innertube::extractors::watch_next;
 use flow_desktop_lib::api::innertube::json::age::relative_age;
 use flow_desktop_lib::api::innertube::json::continuation::{
     continuation_item_lists, continuation_token,
@@ -165,4 +166,62 @@ fn related_lockups_parse_with_counts_dates_and_channels() {
         "only {complete} of {} related lockups had a channel, count and date",
         items.len()
     );
+}
+
+#[test]
+fn the_watch_answer_gives_the_owner_block_hashtags_and_autoplay() {
+    let Some(next) = fixture("next_related") else {
+        return;
+    };
+    let owner = watch_next::owner(&next);
+    assert_eq!(
+        owner.channel_id.as_deref(),
+        Some("UCuAXFkgsw1L7xaCfnd5JJOw")
+    );
+    assert!(owner.avatar_url.is_some());
+    assert!(owner.subscriber_count_text.is_some());
+    assert_eq!(owner.badge, Some("artist"));
+    let primary = watch_next::primary(&next);
+    assert!(primary.published_text.is_some() && primary.relative_published_text.is_some());
+    assert!(primary.hashtags.iter().all(|tag| tag.starts_with('#')));
+    assert!(watch_next::autoplay_video_id(&next).is_some());
+    let page = watch_next::related_page(&next);
+    assert!(page.items.len() >= 10, "{} related items", page.items.len());
+    assert!(page.continuation.is_some());
+}
+
+#[test]
+fn the_related_lane_continues() {
+    let Some(page2) = fixture("next_related_page2") else {
+        return;
+    };
+    let page = watch_next::related_page(&page2);
+    assert!(page.items.len() >= 10, "{} related items", page.items.len());
+}
+
+#[test]
+fn auto_chapters_and_the_heatmap_are_read_from_the_watch_answer() {
+    let Some(next) = fixture("next_auto_chapters") else {
+        return;
+    };
+    let (chapters, auto) = watch_next::chapters(&next, 3600);
+    assert!(auto);
+    assert!(chapters.len() >= 3, "{} chapters", chapters.len());
+    assert_eq!(chapters[0].start_seconds, 0);
+    assert!(
+        chapters
+            .iter()
+            .all(|chapter| chapter.thumbnail_url.is_some())
+    );
+    assert!(!watch_next::heatmap(&next).is_empty());
+}
+
+#[test]
+fn a_collaboration_names_every_channel() {
+    let Some(next) = fixture("next_collab") else {
+        return;
+    };
+    let owner = watch_next::owner(&next);
+    assert!(owner.collaborators.len() >= 2, "{:?}", owner.collaborators);
+    assert!(owner.name.is_some() && owner.channel_id.is_some());
 }

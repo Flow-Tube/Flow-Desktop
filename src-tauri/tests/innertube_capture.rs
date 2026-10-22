@@ -93,6 +93,11 @@ fn channel_search_token(page: &Value) -> Option<String> {
         })
 }
 
+/// A video with YouTube-generated chapters and a heatmap.
+const AUTO_CHAPTERS_VIDEO: &str = "0e3GPea1Tyg";
+/// A collaboration between two channels.
+const COLLAB_VIDEO: &str = "a-iReT6fwVI";
+
 #[tokio::test]
 #[ignore = "network: regenerates the InnerTube captures"]
 async fn capture_innertube_fixtures() {
@@ -103,7 +108,28 @@ async fn capture_innertube_fixtures() {
         .post_innertube("next", &clients::WEB, &mut next)
         .await
         .expect("next");
-    save("next_related", next);
+    let next = save("next_related", next);
+    let token = flow_desktop_lib::api::innertube::extractors::watch_next::related_page(&next)
+        .continuation
+        .expect("related page 2 token");
+    let mut page2 = json!({ "continuation": token });
+    let page2 = client
+        .post_innertube("next", &clients::WEB, &mut page2)
+        .await
+        .expect("related page 2");
+    save("next_related_page2", page2);
+
+    for (name, video_id) in [
+        ("next_auto_chapters", AUTO_CHAPTERS_VIDEO),
+        ("next_collab", COLLAB_VIDEO),
+    ] {
+        let mut next = json!({ "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true });
+        let next = client
+            .post_innertube("next", &clients::WEB, &mut next)
+            .await
+            .expect(name);
+        save(name, next);
+    }
 
     let mut playlist = json!({ "browseId": WAN_SHOW });
     let first = client

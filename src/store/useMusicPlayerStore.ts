@@ -30,6 +30,7 @@ import {
   type EqPresetName,
 } from "../lib/audio/eqBands";
 import { getSettingValue } from "./useAppSettingsStore";
+import { shouldSkipUnplayable } from "../lib/musicSkip";
 
 export type MusicViewState = "dock" | "full" | "queue" | "lyrics";
 export type MusicRepeatMode = QueueRepeatMode;
@@ -107,6 +108,8 @@ const PLAYBACK_ERROR_FALLBACK = "Playback failed";
 // The track a media-element failure was already recovered for; a second failure
 // on it is shown to the user instead of looping.
 let recoveredVideoId: string | null = null;
+// Unplayable tracks skipped since the last one that started.
+let unplayableSkips = 0;
 
 // When the current load began, for the start-up timing in the diagnostics log.
 let loadStartedAt: { videoId: string; at: number } | null = null;
@@ -386,6 +389,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     // Radio top-up and next-track warming wait until this track is audible, so
     // they never compete with it for a slow connection.
     const afterStart = () => {
+      unplayableSkips = 0;
       void get()._ensureRadio();
       get()._prefetchUpcoming();
     };
@@ -466,6 +470,16 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       if (get().loadingStreamId !== videoId) return;
       const normalized = normalizeBackendError(e);
       recordPlayerEvent(`music resolve failed: ${normalized.kind} (${normalized.message})`);
+      const { queue, currentIndex, repeatMode } = get();
+      const hasNext = repeatMode !== "one" && currentIndex + 1 < queue.length;
+      if (shouldSkipUnplayable(normalized.kind, unplayableSkips, hasNext)) {
+        unplayableSkips += 1;
+        recordPlayerEvent(`music skipped an unplayable track (${unplayableSkips} in a row)`);
+        set({ loadingStreamId: null });
+        get().next();
+        return;
+      }
+      unplayableSkips = 0;
       set({
         streamError: normalized.message,
         streamErrorKind: normalized.kind,

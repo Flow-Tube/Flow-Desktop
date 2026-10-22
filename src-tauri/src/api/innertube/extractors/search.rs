@@ -1,11 +1,17 @@
 use crate::api::http::shared_client;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
+use crate::api::innertube::core::utils::short_video_summary_from_item;
 use crate::api::innertube::json::continuation::continuation_token;
+use crate::api::innertube::json::text::text_of;
+use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
+use crate::api::innertube::renderers::lockup::{lockup_item, related_to_video};
 use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
-use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::VideoSummary;
+use crate::models::channel::PlaylistSummary;
+use crate::models::search::{
+    SearchChannel, SearchCorrection, SearchShelf, SearchVideosRequest, SearchVideosResponse,
+};
 use base64::Engine;
 use serde_json::Value;
 
@@ -46,179 +52,244 @@ fn put_varint_field(buf: &mut Vec<u8>, field: u64, value: u64) {
     put_varint(buf, value);
 }
 
-fn build_search_params(
-    sort_by: Option<&str>,
-    upload_date: Option<&str>,
-    duration: Option<&str>,
-    feature: Option<&str>,
-) -> Option<String> {
-    let sort = match sort_by.map(str::trim) {
-        Some("rating") => Some(1u64),
-        Some("date") | Some("upload_date") => Some(2u64),
-        Some("views") | Some("view_count") => Some(3u64),
-        _ => None, // relevance / unset
-    };
+fn put_message_field(buf: &mut Vec<u8>, field: u64, message: &[u8]) {
+    put_varint(buf, (field << 3) | 2);
+    put_varint(buf, message.len() as u64);
+    buf.extend_from_slice(message);
+}
 
-    let upload = match upload_date.map(str::trim) {
+/// The boolean field each feature filter sets.
+fn feature_field(feature: &str) -> Option<u64> {
+    Some(match feature.trim() {
+        "hd" => 4,
+        "subtitles" | "cc" => 5,
+        "creative_commons" => 6,
+        "3d" => 7,
+        "live" => 8,
+        "4k" => 14,
+        "360" => 15,
+        "location" => 23,
+        "hdr" => 25,
+        "vr180" => 26,
+        _ => return None,
+    })
+}
+
+/// The `params` token search filters with. The field numbers and values are the
+/// ones the site's own filter dialog ships (decoded by Flow for Android), so any
+/// combination encodes the way a single filter does. None for an unfiltered
+/// relevance search.
+fn build_search_params(request: &SearchVideosRequest) -> Option<String> {
+    // Only relevance and view count reorder anything; recency is an upload-date filter.
+    let sort = matches!(
+        request.sort_by.as_deref().map(str::trim),
+        Some("views" | "view_count")
+    )
+    .then_some(3u64);
+    let upload = match request.upload_date.as_deref().map(str::trim) {
         Some("hour") => Some(1u64),
-        Some("today") => Some(2u64),
-        Some("week") => Some(3u64),
-        Some("month") => Some(4u64),
-        Some("year") => Some(5u64),
+        Some("today") => Some(2),
+        Some("week") => Some(3),
+        Some("month") => Some(4),
+        Some("year") => Some(5),
         _ => None,
     };
-
-    let dur = match duration.map(str::trim) {
-        Some("short") => Some(1u64),
-        Some("long") => Some(2u64),
-        Some("medium") => Some(3u64),
+    let content_type = match request.content_type.as_deref().map(str::trim) {
+        Some("video") => Some(1u64),
+        Some("channel") => Some(2),
+        Some("playlist") => Some(3),
+        Some("movie") => Some(4),
+        Some("shorts") => Some(9),
         _ => None,
     };
-
-    let feature_field = match feature.map(str::trim) {
-        Some("live") => Some(8u64),
-        Some("hd") => Some(4u64),
-        Some("subtitles") | Some("cc") => Some(5u64),
-        Some("creative_commons") => Some(6u64),
-        Some("4k") => Some(14u64),
-        Some("360") => Some(15u64),
-        Some("location") => Some(23u64),
-        Some("hdr") => Some(25u64),
-        Some("vr180") => Some(26u64),
+    let duration = match request.duration.as_deref().map(str::trim) {
+        Some("short") => Some(4u64),
+        Some("medium") => Some(5),
+        Some("long") => Some(2),
         _ => None,
     };
+    let mut features: Vec<u64> = request
+        .features
+        .iter()
+        .filter_map(|f| feature_field(f))
+        .collect();
+    features.sort_unstable();
+    features.dedup();
 
     let mut filters = Vec::new();
-    if let Some(u) = upload {
-        put_varint_field(&mut filters, 1, u);
+    if let Some(upload) = upload {
+        put_varint_field(&mut filters, 1, upload);
     }
-    if let Some(d) = dur {
-        put_varint_field(&mut filters, 3, d);
+    if let Some(content_type) = content_type {
+        put_varint_field(&mut filters, 2, content_type);
     }
-    if let Some(f) = feature_field {
-        put_varint_field(&mut filters, f, 1);
+    if let Some(duration) = duration {
+        put_varint_field(&mut filters, 3, duration);
     }
-
-    if sort.is_none() && filters.is_empty() {
-        return None;
+    for field in features {
+        put_varint_field(&mut filters, field, 1);
     }
 
     let mut buf = Vec::new();
-    if let Some(s) = sort {
-        put_varint_field(&mut buf, 1, s);
+    if let Some(sort) = sort {
+        put_varint_field(&mut buf, 1, sort);
     }
     if !filters.is_empty() {
-        put_varint(&mut buf, (2 << 3) | 2); // field 2, wire type 2 (length-delimited)
-        put_varint(&mut buf, filters.len() as u64);
-        buf.extend_from_slice(&filters);
+        put_message_field(&mut buf, 2, &filters);
     }
-
-    let b64 = base64::engine::general_purpose::URL_SAFE.encode(&buf);
+    if request.exact {
+        // `{ 1: 1 }` under field 8 turns spelling correction off.
+        put_message_field(&mut buf, 8, &[0x08, 0x01]);
+    }
+    if buf.is_empty() {
+        return None;
+    }
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
     Some(custom_url_encode(&b64))
 }
 
-fn process_search_items(
-    items_arr: &[Value],
-    items: &mut Vec<VideoSummary>,
-    next_page_token: &mut Option<String>,
-) {
-    for item in items_arr {
-        {
-            if let Some(inner) = item["itemSectionRenderer"]["contents"].as_array() {
-                process_search_items(inner, items, next_page_token);
-                continue;
-            }
-            if let Some(video) = item.get("videoRenderer").and_then(video_from_renderer) {
-                items.push(video);
-            } else if let Some(channel) = item.get("channelRenderer") {
-                let channel_id = channel["channelId"]
+/// A channel card. Its two count labels are not reliably in the field their
+/// name implies (a live response puts the handle under `subscriberCountText`
+/// and the subscribers under `videoCountText`), so each is sorted by what it says.
+fn search_channel(channel: &Value) -> Option<SearchChannel> {
+    let channel_id = channel["channelId"].as_str().filter(|id| !id.is_empty())?;
+    let labels: Vec<String> = [&channel["subscriberCountText"], &channel["videoCountText"]]
+        .into_iter()
+        .filter_map(text_of)
+        .collect();
+    let is_video_count = |label: &&String| label.to_lowercase().contains("video");
+    Some(SearchChannel {
+        channel_id: channel_id.to_string(),
+        name: text_of(&channel["title"])?,
+        handle: labels
+            .iter()
+            .find(|label| label.starts_with('@'))
+            .cloned()
+            .or_else(|| {
+                channel["navigationEndpoint"]["browseEndpoint"]["canonicalBaseUrl"]
                     .as_str()
-                    .unwrap_or_default()
-                    .to_string();
-                if !channel_id.is_empty() {
-                    let title = channel["title"]["simpleText"]
-                        .as_str()
-                        .or_else(|| channel["title"]["runs"][0]["text"].as_str())
-                        .unwrap_or_default()
-                        .to_string();
+                    .and_then(|url| url.strip_prefix('/'))
+                    .filter(|handle| handle.starts_with('@'))
+                    .map(ToOwned::to_owned)
+            }),
+        avatar_url: largest_url(&channel["thumbnail"]["thumbnails"])
+            .map(|url| normalize_youtube_image_url(&url)),
+        subscriber_count_text: labels
+            .iter()
+            .find(|label| !label.starts_with('@') && !is_video_count(label))
+            .cloned(),
+        video_count_text: labels.iter().find(is_video_count).cloned(),
+        description: text_of(&channel["descriptionSnippet"]),
+        is_verified: channel["ownerBadges"].as_array().is_some_and(|badges| {
+            badges.iter().any(|badge| {
+                badge["metadataBadgeRenderer"]["style"]
+                    .as_str()
+                    .is_some_and(|style| style.starts_with("BADGE_STYLE_TYPE_VERIFIED"))
+            })
+        }),
+    })
+}
 
-                    let thumbnail_url = channel["thumbnail"]["thumbnails"][0]["url"]
-                        .as_str()
-                        .map(|s| s.to_string());
+fn correction(renderer: &Value, applied: bool) -> Option<SearchCorrection> {
+    let query = renderer["correctedQueryEndpoint"]["searchEndpoint"]["query"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .or_else(|| text_of(&renderer["correctedQuery"]))?;
+    Some(SearchCorrection {
+        query,
+        original: text_of(&renderer["originalQuery"]),
+        applied,
+    })
+}
 
-                    let subscriber_count_text = channel["subscriberCountText"]["simpleText"]
-                        .as_str()
-                        .or_else(|| channel["subscriberCountText"]["runs"][0]["text"].as_str())
-                        .map(|s| s.to_string());
-
-                    items.push(VideoSummary {
-                        id: format!("channel:{}", channel_id),
-                        title,
-                        channel_name: "Channel".to_string(),
-                        channel_id: Some(channel_id),
-                        thumbnail_url: thumbnail_url.clone(),
-                        duration_seconds: None,
-                        published_text: subscriber_count_text,
-                        view_count_text: Some("Channel".to_string()),
-                        channel_avatar_url: thumbnail_url,
-                        is_live: false,
-                        ..Default::default()
-                    });
-                }
-            } else if next_page_token.is_none() {
-                *next_page_token = continuation_token(item);
+fn read_items(items: &[Value], page: &mut SearchVideosResponse) {
+    for item in items {
+        if let Some(inner) = item["itemSectionRenderer"]["contents"].as_array() {
+            read_items(inner, page);
+        } else if let Some(video) = item.get("videoRenderer").and_then(video_from_renderer) {
+            page.items.push(video);
+        } else if let Some(channel) = item.get("channelRenderer").and_then(search_channel) {
+            page.channels.push(channel);
+        } else if let Some(lockup) = item.get("lockupViewModel").and_then(lockup_item) {
+            if lockup.item_type == "video" {
+                page.items.push(related_to_video(lockup));
+            } else if let Some(playlist_id) = lockup.playlist_id.clone() {
+                page.playlists.push(PlaylistSummary {
+                    id: playlist_id,
+                    title: lockup.title,
+                    thumbnail_url: lockup.thumbnail_url,
+                    video_count_text: lockup.view_count_text,
+                });
             }
+        } else if let Some(shelf) = item.get("shelfRenderer") {
+            let content = &shelf["content"];
+            let videos: Vec<_> = content["verticalListRenderer"]["items"]
+                .as_array()
+                .or_else(|| content["horizontalListRenderer"]["items"].as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|entry| entry.get("videoRenderer").and_then(video_from_renderer))
+                .collect();
+            if let Some(title) = text_of(&shelf["title"]).filter(|_| !videos.is_empty()) {
+                page.shelves.push(SearchShelf { title, videos });
+            }
+        } else if let Some(grid) = item.get("gridShelfViewModel") {
+            page.shorts.extend(
+                grid["contents"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(short_video_summary_from_item),
+            );
+        } else if let Some(shelf) = item.get("reelShelfRenderer") {
+            page.shorts.extend(
+                shelf["items"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(short_video_summary_from_item),
+            );
+        } else if let Some(renderer) = item.get("showingResultsForRenderer") {
+            page.correction = correction(renderer, true).or(page.correction.take());
+        } else if let Some(renderer) = item.get("didYouMeanRenderer") {
+            page.correction = correction(renderer, false).or(page.correction.take());
+        } else if page.next_page_token.is_none() {
+            page.next_page_token = continuation_token(item);
         }
     }
 }
 
-fn parse_innertube_search(val: Value) -> (Vec<VideoSummary>, Option<String>) {
-    let mut items = Vec::new();
-    let mut next_page_token = None;
-
-    if let Some(contents_arr) = val["contents"]["twoColumnSearchResultsRenderer"]["primaryContents"]
-        ["sectionListRenderer"]["contents"]
-        .as_array()
+/// A page of search results: the first, or a continuation.
+#[must_use]
+pub fn parse_innertube_search(val: &Value) -> SearchVideosResponse {
+    let mut page = SearchVideosResponse {
+        source: "innertube".to_string(),
+        ..SearchVideosResponse::default()
+    };
+    if let Some(sections) =
+        val["contents"]["twoColumnSearchResultsRenderer"]["primaryContents"]["sectionListRenderer"]
+            ["contents"]
+            .as_array()
     {
-        for section in contents_arr {
-            if let Some(items_arr) = section["itemSectionRenderer"]["contents"].as_array() {
-                process_search_items(items_arr, &mut items, &mut next_page_token);
-            }
-            if next_page_token.is_none() {
-                next_page_token = continuation_token(section);
+        read_items(sections, &mut page);
+    }
+    for key in ["onResponseReceivedCommands", "onResponseReceivedActions"] {
+        for command in val[key].as_array().into_iter().flatten() {
+            let items = command["appendContinuationItemsAction"]["continuationItems"]
+                .as_array()
+                .or_else(|| {
+                    command["reloadContinuationItemsCommand"]["continuationItems"].as_array()
+                });
+            if let Some(items) = items {
+                read_items(items, &mut page);
             }
         }
     }
-
-    if let Some(commands) = val["onResponseReceivedCommands"].as_array() {
-        for command in commands {
-            if let Some(items_arr) =
-                command["appendContinuationItemsAction"]["continuationItems"].as_array()
-            {
-                process_search_items(items_arr, &mut items, &mut next_page_token);
-            } else if let Some(items_arr) =
-                command["reloadContinuationItemsCommand"]["continuationItems"].as_array()
-            {
-                process_search_items(items_arr, &mut items, &mut next_page_token);
-            }
-        }
-    }
-
-    if let Some(actions) = val["onResponseReceivedActions"].as_array() {
-        for action in actions {
-            if let Some(items_arr) =
-                action["appendContinuationItemsAction"]["continuationItems"].as_array()
-            {
-                process_search_items(items_arr, &mut items, &mut next_page_token);
-            } else if let Some(items_arr) =
-                action["reloadContinuationItemsCommand"]["continuationItems"].as_array()
-            {
-                process_search_items(items_arr, &mut items, &mut next_page_token);
-            }
-        }
-    }
-
-    (items, next_page_token)
+    let mut seen = std::collections::HashSet::new();
+    page.items.retain(|video| seen.insert(video.id.clone()));
+    let mut seen = std::collections::HashSet::new();
+    page.shorts.retain(|short| seen.insert(short.id.clone()));
+    page
 }
 
 impl InnertubeClient {
@@ -239,12 +310,7 @@ impl InnertubeClient {
             let mut payload = serde_json::json!({
                 "query": query
             });
-            if let Some(params) = build_search_params(
-                request.sort_by.as_deref(),
-                request.upload_date.as_deref(),
-                request.duration.as_deref(),
-                request.feature.as_deref(),
-            ) {
+            if let Some(params) = build_search_params(&request) {
                 payload["params"] = Value::String(params);
             }
             payload
@@ -253,23 +319,26 @@ impl InnertubeClient {
         let res = self
             .post_innertube("search", &clients::WEB, &mut payload)
             .await?;
-        let (items, next_page_token) = parse_innertube_search(res);
-
-        Ok(SearchVideosResponse {
-            items,
-            next_page_token,
-            source: "innertube".to_string(),
-        })
+        Ok(parse_innertube_search(&res))
     }
 
-    pub async fn get_search_suggestions(&self, query: &str) -> AppResult<Vec<String>> {
+    /// Suggestions for `query`, for the viewer's region (`gl`) when one is set.
+    pub async fn get_search_suggestions(
+        &self,
+        query: &str,
+        region: Option<&str>,
+    ) -> AppResult<Vec<String>> {
         let encoded_query = custom_url_encode(query);
+        let region = region
+            .map(str::trim)
+            .filter(|region| region.len() == 2 && region.chars().all(|c| c.is_ascii_alphabetic()))
+            .map(|region| format!("&gl={}", region.to_ascii_uppercase()))
+            .unwrap_or_default();
         // `oe=utf-8` is load-bearing: without it this endpoint answers in
         // ISO-8859-1, and every suggestion carrying an accent, a curly quote or
         // any non-Latin script comes back as mojibake.
         let url = format!(
-            "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&xhr=t&ie=utf-8&oe=utf-8&q={}",
-            encoded_query
+            "https://suggestqueries-clients6.youtube.com/complete/search?client=youtube&ds=yt&xhr=t&ie=utf-8&oe=utf-8&hl=en{region}&q={encoded_query}"
         );
 
         let res = shared_client()
@@ -316,6 +385,17 @@ impl InnertubeClient {
 #[cfg(test)]
 mod tests {
     use super::{build_search_params, parse_innertube_search};
+    use crate::models::search::SearchVideosRequest;
+
+    fn params(request: &SearchVideosRequest) -> Option<String> {
+        build_search_params(request)
+    }
+
+    fn with(build: impl FnOnce(&mut SearchVideosRequest)) -> Option<String> {
+        let mut request = SearchVideosRequest::default();
+        build(&mut request);
+        params(&request)
+    }
 
     #[test]
     fn continuation_unwraps_item_section_renderer() {
@@ -333,85 +413,166 @@ mod tests {
                 }
             }]
         });
-        let (items, token) = parse_innertube_search(val);
+        let page = parse_innertube_search(&val);
         assert_eq!(
-            items.len(),
+            page.items.len(),
             1,
             "video inside itemSectionRenderer must be parsed"
         );
-        assert_eq!(items[0].id, "abc12345678");
-        assert_eq!(token.as_deref(), Some("NEXT_TOKEN"));
+        assert_eq!(page.items[0].id, "abc12345678");
+        assert_eq!(page.next_page_token.as_deref(), Some("NEXT_TOKEN"));
     }
 
     #[test]
-    fn first_page_extracts_sibling_continuation() {
+    fn shelves_shorts_channels_and_corrections_are_kept() {
         let val = serde_json::json!({
             "contents": { "twoColumnSearchResultsRenderer": { "primaryContents": {
-                "sectionListRenderer": { "contents": [
-                    { "itemSectionRenderer": { "contents": [
-                        { "videoRenderer": { "videoId": "vid00000001",
-                            "title": { "runs": [{ "text": "X" }] } } }
-                    ]}},
-                    { "continuationItemRenderer": { "continuationEndpoint": {
-                        "continuationCommand": { "token": "PAGE2" } } } }
-                ]}
-            }}}
+                "sectionListRenderer": { "contents": [{ "itemSectionRenderer": { "contents": [
+                    { "showingResultsForRenderer": {
+                        "correctedQueryEndpoint": { "searchEndpoint": { "query": "linus tech tips" } },
+                        "originalQuery": { "simpleText": "linus tehc tips" }
+                    } },
+                    { "channelRenderer": {
+                        "channelId": "UCXuqSBlHAE6Xw-yeJA0Tunw",
+                        "title": { "simpleText": "Linus Tech Tips" },
+                        "subscriberCountText": { "simpleText": "@LinusTechTips" },
+                        "videoCountText": { "simpleText": "16.9M subscribers" },
+                        "ownerBadges": [{ "metadataBadgeRenderer": { "style": "BADGE_STYLE_TYPE_VERIFIED" } }]
+                    } },
+                    { "shelfRenderer": {
+                        "title": { "simpleText": "Latest from Linus Tech Tips" },
+                        "content": { "verticalListRenderer": { "items": [
+                            { "videoRenderer": { "videoId": "shelf000001", "title": { "runs": [{ "text": "A" }] } } }
+                        ] } }
+                    } },
+                    { "gridShelfViewModel": { "contents": [
+                        { "shortsLockupViewModel": {
+                            "onTap": { "innertubeCommand": { "reelWatchEndpoint": { "videoId": "short000001" } } },
+                            "overlayMetadata": { "primaryText": { "content": "A Short" } }
+                        } }
+                    ] } }
+                ] } }] }
+            } } }
         });
-        let (items, token) = parse_innertube_search(val);
-        assert_eq!(items.len(), 1);
-        assert_eq!(token.as_deref(), Some("PAGE2"));
+        let page = parse_innertube_search(&val);
+        let correction = page.correction.expect("correction");
+        assert!(correction.applied);
+        assert_eq!(correction.query, "linus tech tips");
+        assert_eq!(correction.original.as_deref(), Some("linus tehc tips"));
+        let channel = &page.channels[0];
+        assert_eq!(channel.handle.as_deref(), Some("@LinusTechTips"));
+        assert_eq!(
+            channel.subscriber_count_text.as_deref(),
+            Some("16.9M subscribers")
+        );
+        assert!(channel.is_verified);
+        assert_eq!(page.shelves[0].title, "Latest from Linus Tech Tips");
+        assert_eq!(page.shelves[0].videos.len(), 1);
+        assert_eq!(page.shorts[0].id, "short000001");
+        assert!(
+            page.items.is_empty(),
+            "shelf videos and Shorts stay out of the video list"
+        );
     }
 
     #[test]
-    fn no_filters_returns_none() {
-        assert_eq!(build_search_params(None, None, None, None), None);
-        // "relevance"/"any" are the defaults and must also produce a bare query.
+    fn an_unfiltered_relevance_search_sends_no_params() {
+        assert_eq!(params(&SearchVideosRequest::default()), None);
         assert_eq!(
-            build_search_params(Some("relevance"), Some("any"), Some("any"), None),
+            with(|r| {
+                r.sort_by = Some("relevance".into());
+                r.upload_date = Some("any".into());
+                r.duration = Some("any".into());
+            }),
             None
         );
+        // Recency is not a sort YouTube honours.
+        assert_eq!(with(|r| r.sort_by = Some("date".into())), None);
     }
 
-    // The expected strings below are YouTube's own documented filter params
-    // (URL-safe base64 + percent-encoded `=`), so these tests double as a spec.
+    // Every expected token is one YouTube's filter dialog ships (Flow for
+    // Android's YouTubeSearchParamsTest), so these double as a spec.
     #[test]
-    fn duration_short_matches_youtube() {
+    fn builds_the_type_tokens() {
+        for (kind, token) in [
+            ("video", "EgIQAQ%3D%3D"),
+            ("shorts", "EgIQCQ%3D%3D"),
+            ("channel", "EgIQAg%3D%3D"),
+            ("playlist", "EgIQAw%3D%3D"),
+            ("movie", "EgIQBA%3D%3D"),
+        ] {
+            assert_eq!(
+                with(|r| r.content_type = Some(kind.into())).as_deref(),
+                Some(token)
+            );
+        }
+    }
+
+    #[test]
+    fn builds_the_duration_tokens_youtube_now_ships() {
         assert_eq!(
-            build_search_params(None, None, Some("short"), None).as_deref(),
-            Some("EgIYAQ%3D%3D")
+            with(|r| r.duration = Some("short".into())).as_deref(),
+            Some("EgIYBA%3D%3D")
+        );
+        assert_eq!(
+            with(|r| r.duration = Some("medium".into())).as_deref(),
+            Some("EgIYBQ%3D%3D")
+        );
+        assert_eq!(
+            with(|r| r.duration = Some("long".into())).as_deref(),
+            Some("EgIYAg%3D%3D")
         );
     }
 
     #[test]
-    fn upload_today_matches_youtube() {
+    fn builds_the_upload_date_and_feature_tokens() {
         assert_eq!(
-            build_search_params(None, Some("today"), None, None).as_deref(),
+            with(|r| r.upload_date = Some("today".into())).as_deref(),
             Some("EgIIAg%3D%3D")
         );
+        for (feature, token) in [
+            ("live", "EgJAAQ%3D%3D"),
+            ("4k", "EgJwAQ%3D%3D"),
+            ("hd", "EgIgAQ%3D%3D"),
+            ("subtitles", "EgIoAQ%3D%3D"),
+            ("creative_commons", "EgIwAQ%3D%3D"),
+            ("360", "EgJ4AQ%3D%3D"),
+            ("vr180", "EgPQAQE%3D"),
+            ("3d", "EgI4AQ%3D%3D"),
+            ("hdr", "EgPIAQE%3D"),
+            ("location", "EgO4AQE%3D"),
+        ] {
+            assert_eq!(
+                with(|r| r.features = vec![feature.into()]).as_deref(),
+                Some(token),
+                "{feature}"
+            );
+        }
     }
 
     #[test]
-    fn sort_by_date_matches_youtube() {
+    fn combines_a_sort_with_filters_and_orders_features() {
         assert_eq!(
-            build_search_params(Some("date"), None, None, None).as_deref(),
-            Some("CAI%3D")
+            with(|r| r.sort_by = Some("views".into())).as_deref(),
+            Some("CAM%3D")
         );
+        assert_eq!(
+            with(|r| {
+                r.sort_by = Some("views".into());
+                r.content_type = Some("video".into());
+                r.duration = Some("long".into());
+                r.upload_date = Some("year".into());
+            })
+            .as_deref(),
+            Some("CAMSBggFEAEYAg%3D%3D")
+        );
+        let ordered = with(|r| r.features = vec!["4k".into(), "hd".into(), "subtitles".into()]);
+        let reversed = with(|r| r.features = vec!["subtitles".into(), "hd".into(), "4k".into()]);
+        assert_eq!(ordered, reversed);
     }
 
     #[test]
-    fn feature_live_matches_youtube() {
-        assert_eq!(
-            build_search_params(None, None, None, Some("live")).as_deref(),
-            Some("EgJAAQ%3D%3D")
-        );
-    }
-
-    #[test]
-    fn combined_sort_and_filters() {
-        // sort=view count, upload=this month, duration=long.
-        assert_eq!(
-            build_search_params(Some("views"), Some("month"), Some("long"), None).as_deref(),
-            Some("CAMSBAgEGAI%3D")
-        );
+    fn exact_searches_turn_correction_off() {
+        assert_eq!(with(|r| r.exact = true).as_deref(), Some("QgIIAQ%3D%3D"));
     }
 }

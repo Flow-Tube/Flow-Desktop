@@ -895,10 +895,11 @@ pub async fn get_trending_videos(
 #[tauri::command]
 pub async fn get_search_suggestions(
     query: String,
+    region: Option<String>,
     youtube_service: State<'_, YoutubeService>,
 ) -> Result<Vec<String>, ErrorResponse> {
     youtube_service
-        .get_search_suggestions(&query)
+        .get_search_suggestions(&query, region.as_deref())
         .await
         .map_err(ErrorResponse::from)
 }

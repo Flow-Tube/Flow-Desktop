@@ -121,8 +121,12 @@ impl YoutubeService {
         self.extractor.get_trending_videos(category, region).await
     }
 
-    pub async fn get_search_suggestions(&self, query: &str) -> AppResult<Vec<String>> {
-        self.extractor.get_search_suggestions(query).await
+    pub async fn get_search_suggestions(
+        &self,
+        query: &str,
+        region: Option<&str>,
+    ) -> AppResult<Vec<String>> {
+        self.extractor.get_search_suggestions(query, region).await
     }
 
     pub async fn get_shorts_sequence(

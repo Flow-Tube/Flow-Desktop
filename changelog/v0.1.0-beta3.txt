@@ -110,6 +110,8 @@ PLAYLISTS
 - Each playlist remembers its sort, and while sorted by date added, rows show when each video was added.
 - Add times are kept from Android backups and travel with sync. Date added is only offered for playlists in your library.
 - Playlists whose id contains "VL" open correctly, playlist headers show their owner again, and changing the 4K, HD or subtitles search filter now runs the search again.
+- Long YouTube playlists load past their first 100 videos as you scroll, show their real title and video count, and download or save in full. Sorting a playlist by date or popularity reads the whole playlist first.
+- Searching inside a channel keeps returning results past the first page, and long comment threads keep their Show more replies button.
 
 UNDER THE HOOD
 - Updated Tauri to 2.12 and its plugins (updater, deep links, dialogs, notifications and others), with the app and its web side kept on matching versions.

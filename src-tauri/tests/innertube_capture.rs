@@ -97,6 +97,24 @@ fn channel_search_token(page: &Value) -> Option<String> {
 const AUTO_CHAPTERS_VIDEO: &str = "0e3GPea1Tyg";
 /// A collaboration between two channels.
 const COLLAB_VIDEO: &str = "a-iReT6fwVI";
+/// A video made for kids, whose comments are turned off.
+const COMMENTS_OFF_VIDEO: &str = "XqZsoesa55w";
+
+/// The token for the first comments page, in the watch answer's comment section.
+fn comments_token(next: &Value) -> Option<String> {
+    next["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"]
+        .as_array()?
+        .iter()
+        .map(|content| &content["itemSectionRenderer"])
+        .find(|section| section["sectionIdentifier"] == "comment-item-section")?["contents"]
+        .as_array()?
+        .iter()
+        .find_map(|item| {
+            item["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"]
+                .as_str()
+        })
+        .map(ToOwned::to_owned)
+}
 
 #[tokio::test]
 #[ignore = "network: regenerates the InnerTube captures"]
@@ -119,9 +137,18 @@ async fn capture_innertube_fixtures() {
         .expect("related page 2");
     save("next_related_page2", page2);
 
+    let token = comments_token(&next).expect("comments token");
+    let mut comments = json!({ "continuation": token });
+    let comments = client
+        .post_innertube("next", &clients::WEB, &mut comments)
+        .await
+        .expect("comments");
+    save("comments_page1", comments);
+
     for (name, video_id) in [
         ("next_auto_chapters", AUTO_CHAPTERS_VIDEO),
         ("next_collab", COLLAB_VIDEO),
+        ("next_comments_off", COMMENTS_OFF_VIDEO),
     ] {
         let mut next = json!({ "videoId": video_id, "contentCheckOk": true, "racyCheckOk": true });
         let next = client

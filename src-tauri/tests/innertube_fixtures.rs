@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use flow_desktop_lib::api::innertube::extractors::comments::parse_comments_json;
 use flow_desktop_lib::api::innertube::extractors::watch_next;
 use flow_desktop_lib::api::innertube::json::age::relative_age;
 use flow_desktop_lib::api::innertube::json::continuation::{
@@ -224,4 +225,47 @@ fn a_collaboration_names_every_channel() {
     let owner = watch_next::owner(&next);
     assert!(owner.collaborators.len() >= 2, "{:?}", owner.collaborators);
     assert!(owner.name.is_some() && owner.channel_id.is_some());
+}
+
+#[test]
+fn the_description_carries_its_links_songs_and_numbers() {
+    let Some(next) = fixture("next_related") else {
+        return;
+    };
+    let rich =
+        watch_next::description_rich(&next, None, "dQw4w9WgXcQ").expect("linked description");
+    assert!(!rich.spans.is_empty());
+    let extras = watch_next::description_extras(&next);
+    assert!(!extras.factoids.is_empty());
+    assert!(!extras.music.is_empty());
+    assert!(
+        extras
+            .links
+            .iter()
+            .all(|link| !link.url.contains("/redirect?"))
+    );
+}
+
+#[test]
+fn a_comments_page_has_its_sort_options_and_exact_count() {
+    let Some(page) = fixture("comments_page1") else {
+        return;
+    };
+    let parsed = parse_comments_json(&page, Some("dQw4w9WgXcQ"));
+    assert!(
+        parsed.comments.len() >= 10,
+        "{} comments",
+        parsed.comments.len()
+    );
+    assert_eq!(parsed.sort_options.len(), 2);
+    assert!(parsed.total_count.is_some_and(|count| count > 1_000_000));
+    assert!(parsed.next_page_token.is_some());
+}
+
+#[test]
+fn turned_off_comments_are_detected() {
+    let Some(next) = fixture("next_comments_off") else {
+        return;
+    };
+    assert!(parse_comments_json(&next, Some("XqZsoesa55w")).comments_disabled);
 }

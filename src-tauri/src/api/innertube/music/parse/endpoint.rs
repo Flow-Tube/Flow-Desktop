@@ -75,13 +75,16 @@ pub fn album_from_menu(r: &Value) -> Option<Album> {
     })
 }
 
-/// `MUSIC_EXPLICIT_BADGE` presence on a renderer's `badges`.
+/// `MUSIC_EXPLICIT_BADGE` presence on a renderer's `badges`, or on `subtitleBadges`, which
+/// two-row cards and the top-result card use instead.
 #[must_use]
 pub fn has_explicit(r: &Value) -> bool {
-    r["badges"].as_array().is_some_and(|badges| {
-        badges.iter().any(|b| {
-            b["musicInlineBadgeRenderer"]["icon"]["iconType"].as_str()
-                == Some("MUSIC_EXPLICIT_BADGE")
+    ["badges", "subtitleBadges"].iter().any(|key| {
+        r[*key].as_array().is_some_and(|badges| {
+            badges.iter().any(|b| {
+                b["musicInlineBadgeRenderer"]["icon"]["iconType"].as_str()
+                    == Some("MUSIC_EXPLICIT_BADGE")
+            })
         })
     })
 }
@@ -113,4 +116,18 @@ pub fn watch_next_tab(tabs: &Value, tab: WatchNextTab) -> &Value {
                     .is_some_and(|id| id.starts_with(prefix))
         })
         .unwrap_or(&Value::Null)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn explicit_is_read_from_badges_and_subtitle_badges() {
+        let badge = json!([{ "musicInlineBadgeRenderer": { "icon": { "iconType": "MUSIC_EXPLICIT_BADGE" } } }]);
+        assert!(has_explicit(&json!({ "badges": badge })));
+        assert!(has_explicit(&json!({ "subtitleBadges": badge })));
+        assert!(!has_explicit(&json!({ "badges": [] })));
+    }
 }

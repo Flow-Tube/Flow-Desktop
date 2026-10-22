@@ -8,6 +8,7 @@ use crate::api::innertube::core::utils::{
     extract_text_from_value, normalize_youtube_image_url, parse_mixed_number_word_to_long,
     thumbnail_url_from_array, watch_next_body,
 };
+use crate::api::innertube::json::continuation::continuation_token;
 use crate::errors::{AppError, AppResult};
 use crate::models::comment::{Comment, CommentsResponse};
 
@@ -112,17 +113,8 @@ fn parse_comments_json(val: &Value) -> CommentsResponse {
 }
 
 fn find_first_comments_continuation(value: &Value) -> Option<String> {
-    if let Some(renderer) = value.get("continuationItemRenderer") {
-        if let Some(token) =
-            renderer["continuationEndpoint"]["continuationCommand"]["token"].as_str()
-        {
-            return Some(token.to_string());
-        }
-        if let Some(token) =
-            renderer["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].as_str()
-        {
-            return Some(token.to_string());
-        }
+    if let Some(token) = continuation_token(value) {
+        return Some(token);
     }
 
     if let Some(token) = value["continuationCommand"]["token"].as_str() {
@@ -373,14 +365,9 @@ fn collect_comments_from_value(
         return;
     }
 
+    // "Show more replies" carries its token on a button, not a continuation endpoint.
     if next_page_token.is_none() {
-        if let Some(renderer) = value.get("continuationItemRenderer") {
-            if let Some(token) =
-                renderer["continuationEndpoint"]["continuationCommand"]["token"].as_str()
-            {
-                *next_page_token = Some(token.to_string());
-            }
-        }
+        *next_page_token = continuation_token(value);
     }
 
     if let Some(array) = value.as_array() {
@@ -707,5 +694,18 @@ mod tests {
             parsed.comments[0].author_thumbnail.as_deref(),
             Some("https://yt3.ggpht.com/large=s512")
         );
+    }
+
+    #[test]
+    fn show_more_replies_button_hands_out_the_next_token() {
+        let response = serde_json::json!({ "onResponseReceivedEndpoints": [{
+            "appendContinuationItemsAction": { "continuationItems": [
+                { "continuationItemRenderer": { "button": { "buttonRenderer": {
+                    "command": { "continuationCommand": { "token": "MORE_REPLIES" } }
+                } } } }
+            ] }
+        }] });
+        let parsed = parse_comments_json(&response);
+        assert_eq!(parsed.next_page_token.as_deref(), Some("MORE_REPLIES"));
     }
 }

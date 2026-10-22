@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PlaylistAmbientHeader } from "../components/playlist/PlaylistAmbientHeader";
+import { PlaylistLoadMore } from "../components/playlist/PlaylistLoadMore";
 import { PlaylistSortableList } from "../components/playlist/PlaylistSortableList";
 import {
   availablePlaylistSortOrders,
@@ -49,6 +50,11 @@ export function PlaylistDetailsPage({
     storedPlaylist,
     meta,
     videos,
+    hasMore,
+    loadingMore,
+    loadMoreFailed,
+    loadMore,
+    loadAllVideos,
   } = usePlaylistDetails(playlistId);
   usePublishTitle(meta?.title);
 
@@ -82,6 +88,11 @@ export function PlaylistDetailsPage({
   const isLocalPlaylist = savedInLibrary || isProtected;
   const sortOrder = resolvePlaylistSortOrder(storedSortOrder, isLocalPlaylist);
 
+  // Sorting by date or popularity is only right over the whole playlist.
+  useEffect(() => {
+    if (sortOrder !== "manual" && hasMore) void loadAllVideos().catch(() => undefined);
+  }, [sortOrder, hasMore, loadAllVideos]);
+
   const displayVideos = useMemo(
     () => sortPlaylistVideos(manualVideos, sortOrder, isProtected),
     [manualVideos, sortOrder, isProtected],
@@ -93,8 +104,9 @@ export function PlaylistDetailsPage({
   const startPlaylistDownload = useCollectionDownloadStore((state) => state.startPlaylist);
   const downloadState = useCollectionDownloadState(meta?.id, "playlist");
 
-  const handleDownloadPlaylist = () => {
+  const handleDownloadPlaylist = async () => {
     if (!meta || videos.length === 0) return;
+    const allVideos = hasMore ? await loadAllVideos().catch(() => videos) : videos;
     void startPlaylistDownload(
       {
         collectionId: meta.id,
@@ -102,7 +114,7 @@ export function PlaylistDetailsPage({
         author: meta.channelName || undefined,
         thumbnailUrl: heroThumbnailUrl ?? meta.thumbnailUrl ?? undefined,
       },
-      videos,
+      allVideos,
     );
   };
 
@@ -236,7 +248,7 @@ export function PlaylistDetailsPage({
           canPlay={displayVideos.length > 0}
           onPlayAll={() => playQueue(false)}
           onShuffle={() => playQueue(true)}
-          onDownload={handleDownloadPlaylist}
+          onDownload={() => void handleDownloadPlaylist()}
           downloadActive={downloadState.active}
           downloadComplete={downloadState.isComplete}
           onAddToQueue={handleAddAllToQueue}
@@ -257,6 +269,14 @@ export function PlaylistDetailsPage({
           onReorder={handleReorder}
           onPlay={playFromPlaylist}
           onAddToQueue={onAddToQueue}
+          footer={
+            <PlaylistLoadMore
+              hasMore={hasMore}
+              loading={loadingMore}
+              failed={loadMoreFailed}
+              onLoadMore={() => void loadMore()}
+            />
+          }
         />
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getPlaylistDetails } from "./api/youtube";
 import {
   formatVideoCountText,
@@ -8,6 +8,7 @@ import {
   resolvePlaylistTitle,
   type StoredPlaylist,
 } from "./playlistLibrary";
+import { appendUniqueVideos, loadRemainingPlaylistVideos } from "./playlistPages";
 import type { VideoSummary } from "../types/video";
 
 export interface PlaylistDetailsMeta {
@@ -28,6 +29,11 @@ export function usePlaylistDetails(playlistId: string | undefined) {
   const [storedPlaylist, setStoredPlaylist] = useState<StoredPlaylist | null>(null);
   const [meta, setMeta] = useState<PlaylistDetailsMeta | null>(null);
   const [videos, setVideos] = useState<VideoSummary[]>([]);
+  // The next page of a playlist read from YouTube; a saved playlist shows its own tracks.
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
+  const pagingRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!playlistId) {
@@ -38,6 +44,8 @@ export function usePlaylistDetails(playlistId: string | undefined) {
 
     setLoading(true);
     setError(null);
+    setNextPageToken(null);
+    setLoadMoreFailed(false);
 
     try {
       const stored = await getStoredPlaylistById(playlistId);
@@ -50,6 +58,7 @@ export function usePlaylistDetails(playlistId: string | undefined) {
       let remoteDescription: string | null = null;
       let remoteCount: number | null = null;
       let remoteViewCountText: string | null = null;
+      let remoteNextPageToken: string | null = null;
 
       if (!isProtectedPlaylistId(playlistId)) {
         try {
@@ -60,6 +69,7 @@ export function usePlaylistDetails(playlistId: string | undefined) {
           remoteDescription = details.description ?? null;
           remoteCount = details.videoCount ?? remoteVideos.length;
           remoteViewCountText = details.viewCountText ?? null;
+          remoteNextPageToken = details.nextPageToken ?? null;
         } catch (fetchError) {
           console.warn("Failed to fetch remote playlist details", fetchError);
           if (!normalizedStored) {
@@ -72,10 +82,10 @@ export function usePlaylistDetails(playlistId: string | undefined) {
         ? normalizedStored.tracks
         : remoteVideos;
 
-      const videoCount = resolvedVideos.length
-        || remoteCount
-        || normalizedStored?.videoCount
-        || 0;
+      const usesRemote = !normalizedStored?.tracks.length;
+      const videoCount = usesRemote && remoteCount
+        ? Math.max(remoteCount, resolvedVideos.length)
+        : resolvedVideos.length || remoteCount || normalizedStored?.videoCount || 0;
 
       const thumbnailUrl = normalizedStored?.thumbnailUrl
         ?? resolvedVideos[0]?.thumbnailUrl
@@ -96,6 +106,7 @@ export function usePlaylistDetails(playlistId: string | undefined) {
         : "Updated recently";
 
       setVideos(resolvedVideos);
+      setNextPageToken(usesRemote ? remoteNextPageToken : null);
       const resolvedOwner = !isUnknownOwner(remoteChannel)
         ? remoteChannel
         : resolvedVideos[0]?.channelName ?? remoteChannel;
@@ -127,6 +138,40 @@ export function usePlaylistDetails(playlistId: string | undefined) {
     void load();
   }, [load]);
 
+  const loadMore = useCallback(async () => {
+    if (!playlistId || !nextPageToken || pagingRef.current) return;
+    pagingRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const page = await getPlaylistDetails(playlistId, nextPageToken);
+      setVideos((current) => appendUniqueVideos(current, page.videos ?? []));
+      setNextPageToken(page.nextPageToken ?? null);
+    } catch (pageError) {
+      console.warn("Failed to load the next playlist page", pageError);
+      setLoadMoreFailed(true);
+    } finally {
+      pagingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [playlistId, nextPageToken]);
+
+  /** Every video of the playlist, reading the pages not loaded yet. */
+  const loadAllVideos = useCallback(async (): Promise<VideoSummary[]> => {
+    if (!playlistId || !nextPageToken || pagingRef.current) return videos;
+    pagingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const all = await loadRemainingPlaylistVideos(playlistId, videos, nextPageToken);
+      setVideos(all);
+      setNextPageToken(null);
+      return all;
+    } finally {
+      pagingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [playlistId, nextPageToken, videos]);
+
   return {
     loading,
     error,
@@ -135,6 +180,11 @@ export function usePlaylistDetails(playlistId: string | undefined) {
     videos,
     setVideos,
     reload: load,
+    hasMore: nextPageToken !== null,
+    loadingMore,
+    loadMoreFailed,
+    loadMore,
+    loadAllVideos,
   };
 }
 

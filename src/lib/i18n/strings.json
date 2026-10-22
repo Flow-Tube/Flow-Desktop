@@ -381,6 +381,8 @@
   "playlist_add_modal_create": "Create new playlist",
   "playlist_name_placeholder": "e.g. Weekend queue",
   "playlist_create": "Create",
+  "playlist_loading_more": "Loading more videos",
+  "playlist_load_more_failed": "Couldn't load more videos.",
   "playlist_sort_manual": "Manual",
   "playlist_sort_date_added_newest": "Date added (newest)",
   "playlist_sort_date_added_oldest": "Date added (oldest)",

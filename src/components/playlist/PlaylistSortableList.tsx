@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   DndContext,
   closestCenter,
@@ -29,6 +29,8 @@ interface PlaylistSortableListProps {
   onReorder: (videos: VideoSummary[]) => void;
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
+  /** Shown after the last row, such as the next-page loader. */
+  footer?: ReactNode;
 }
 
 interface SortablePlaylistRowProps {
@@ -144,6 +146,7 @@ export function PlaylistSortableList({
   onReorder,
   onPlay,
   onAddToQueue,
+  footer,
 }: PlaylistSortableListProps) {
   const sortEnabled = sortOrder === "manual";
 
@@ -209,6 +212,7 @@ export function PlaylistSortableList({
         ) : (
           listBody
         )}
+        {footer}
       </div>
     </section>
   );

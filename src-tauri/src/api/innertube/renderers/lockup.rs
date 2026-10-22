@@ -290,7 +290,7 @@ mod tests {
     use crate::api::innertube::renderers::collaborators::tests::dialog;
     use serde_json::json;
 
-    fn video_lockup(rows: Value) -> Value {
+    fn video_lockup(rows: &Value) -> Value {
         json!({
             "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
             "contentId": "vid00000001",
@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn fields_are_read_by_what_they_are() {
-        let lockup = video_lockup(json!([
+        let lockup = video_lockup(&json!([
             { "metadataParts": [{ "text": { "content": "Channel", "attachmentRuns": [{ "element": { "type": {
                 "imageType": { "image": { "sources": [{ "clientResource": { "imageName": "CHECK_CIRCLE_FILLED" } }] } }
             } } }] } }] },
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn a_badge_row_before_the_counts_does_not_shift_them() {
-        let lockup = video_lockup(json!([
+        let lockup = video_lockup(&json!([
             { "metadataParts": [{ "text": { "content": "Channel" } }] },
             { "badges": [{ "badgeViewModel": { "badgeText": "Members only", "badgeStyle": "BADGE_MEMBERS_ONLY" } }] },
             { "metadataParts": [{ "text": { "content": "3 days ago" } }] }
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn premieres_are_upcoming_and_not_views() {
-        let lockup = video_lockup(json!([
+        let lockup = video_lockup(&json!([
             { "metadataParts": [{ "text": { "content": "Channel" } }] },
             { "metadataParts": [{ "text": { "content": "Premieres 10/12/26, 7:00 PM" } }] }
         ]));

@@ -199,22 +199,22 @@ fn collect_videos_from_value(value: &Value, videos: &mut Vec<VideoSummary>) {
     }
 
     if let Some(lockup) = value.get("lockupViewModel") {
-        if let Some(item) = lockup_item(lockup) {
-            if item.item_type == "video" {
-                videos.push(VideoSummary {
-                    id: item.video_id.unwrap_or(item.id),
-                    title: item.title,
-                    channel_name: item.channel_name,
-                    channel_id: item.channel_id,
-                    thumbnail_url: item.thumbnail_url,
-                    duration_seconds: item.duration_seconds,
-                    published_text: item.published_text,
-                    view_count_text: item.view_count_text,
-                    channel_avatar_url: None,
-                    is_live: item.is_live,
-                    ..Default::default()
-                });
-            }
+        if let Some(item) = lockup_item(lockup)
+            && item.item_type == "video"
+        {
+            videos.push(VideoSummary {
+                id: item.video_id.unwrap_or(item.id),
+                title: item.title,
+                channel_name: item.channel_name,
+                channel_id: item.channel_id,
+                thumbnail_url: item.thumbnail_url,
+                duration_seconds: item.duration_seconds,
+                published_text: item.published_text,
+                view_count_text: item.view_count_text,
+                channel_avatar_url: None,
+                is_live: item.is_live,
+                ..Default::default()
+            });
         }
         return;
     }

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const GATE_TTL: Duration = Duration::from_secs(30 * 60);
+const GATE_TTL: Duration = Duration::from_mins(30);
 
 /// Why googlevideo refused a URL.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

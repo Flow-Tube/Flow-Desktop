@@ -1,4 +1,4 @@
-//! Thin service over [`InnertubeClient`] exposing the YouTube Music surface,
+//! Thin service over [`InnertubeClient`] exposing the music surface,
 //! kept apart from [`crate::services::youtube_service`], which drives the video
 //! path.
 

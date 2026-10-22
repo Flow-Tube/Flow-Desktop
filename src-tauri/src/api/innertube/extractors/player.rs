@@ -84,6 +84,15 @@ const PLAYER_CLIENT_LADDER: &[&clients::YouTubeClient] = &[
     &clients::ANDROID,
 ];
 
+/// A direct ladder that tops out below this height likely has its higher rungs
+/// served only over SABR, so the web clients are asked too (Flow for Android's
+/// `SabrRoutingPolicy`).
+const SABR_UPGRADE_FLOOR: u64 = 720;
+/// How long a playable direct answer waits on that upgrade before it is used
+/// as it is: the upgrade mints a token and may fetch the player script first.
+const SABR_UPGRADE_BUDGET: Duration = Duration::from_secs(3);
+const SABR_UPGRADE_CLIENTS: &[&clients::YouTubeClient] = &[&clients::MWEB, &clients::WEB];
+
 /// Clients asked for a live broadcast's HLS/DASH manifest when the winning
 /// client returned none. A live stream plays from its manifest, so this only
 /// needs a client that exposes one, not one with a usable direct ladder.
@@ -466,6 +475,23 @@ fn extract_stream_url_from_format(format: &Value, video_id: &str) -> AppResult<O
     }
 
     validate_stream_url(&base_url, video_id).map(Some)
+}
+
+/// The tallest video format a response lists, URL or not: a SABR answer lists
+/// its formats without URLs.
+fn max_video_height(streaming_data: &Value) -> u64 {
+    ["formats", "adaptiveFormats"]
+        .iter()
+        .filter_map(|key| streaming_data[*key].as_array())
+        .flatten()
+        .filter(|format| {
+            format["mimeType"]
+                .as_str()
+                .is_some_and(|mime| mime.starts_with("video/"))
+        })
+        .filter_map(quality_height)
+        .max()
+        .unwrap_or(0)
 }
 
 fn quality_height(format: &Value) -> Option<u64> {
@@ -1526,6 +1552,10 @@ impl InnertubeClient {
                         &mut restriction,
                     )
                     .await;
+                let attempt = match attempt {
+                    Some(direct) => Some(self.upgrade_to_sabr(video_id, direct).await),
+                    None => None,
+                };
                 if let Some(attempt) = attempt.as_ref() {
                     store_player_attempt(video_id, attempt);
                 }
@@ -1536,6 +1566,43 @@ impl InnertubeClient {
             *deferred_restriction = Some(report.to_error());
         }
         outcome.0.clone()
+    }
+
+    /// `direct`, or a web SABR answer for the same video when `direct` tops out
+    /// below [`SABR_UPGRADE_FLOOR`] and the SABR answer is taller. The web
+    /// clients are asked within [`SABR_UPGRADE_BUDGET`] and under the same
+    /// visitor, never a fresh one: a video that already plays is not worth a new
+    /// identity.
+    async fn upgrade_to_sabr(&self, video_id: &str, direct: PlayerAttempt) -> PlayerAttempt {
+        if direct.client.is_web_sabr() || is_live_response(&direct.response) {
+            return direct;
+        }
+        let direct_height = max_video_height(&direct.response["streamingData"]);
+        if direct_height >= SABR_UPGRADE_FLOOR {
+            return direct;
+        }
+        let visitor_data = direct.visitor_data.clone();
+        let upgrade = tokio::time::timeout(SABR_UPGRADE_BUDGET, async {
+            for client in gated_last(SABR_UPGRADE_CLIENTS.iter().copied(), |client| client.name) {
+                if let ClientOutcome::Won(attempt) = self
+                    .attempt_client(video_id, client, visitor_data.as_deref())
+                    .await
+                {
+                    return Some(attempt);
+                }
+            }
+            None
+        })
+        .await
+        .ok()
+        .flatten();
+        match upgrade {
+            Some(sabr) if max_video_height(&sabr.response["streamingData"]) > direct_height => {
+                info!(video_id = %video_id, direct = direct.client.name, sabr = sabr.client.name, direct_height, "Direct ladder capped; using SABR");
+                sabr
+            }
+            _ => direct,
+        }
     }
 
     /// Walk `ladder` in order, returning the first client that answers with
@@ -2981,6 +3048,19 @@ mod remote_signing {
             preroll_wait(&json!([start_ad(&Value::Null)])),
             Duration::from_secs(8)
         );
+    }
+
+    #[test]
+    fn the_tallest_video_format_counts_with_or_without_a_url() {
+        let streaming = json!({
+            "formats": [{ "mimeType": "video/mp4", "height": 360, "url": "https://a" }],
+            "adaptiveFormats": [
+                { "mimeType": "video/webm", "height": 1080 },
+                { "mimeType": "audio/webm", "height": 4320 }
+            ]
+        });
+        assert_eq!(max_video_height(&streaming), 1080);
+        assert_eq!(max_video_height(&Value::Null), 0);
     }
 
     #[test]

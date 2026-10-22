@@ -35,7 +35,7 @@ pub fn search_filter_params(filter: &str) -> Option<&'static str> {
         "featured_playlists" | "featured" => Some("EgeKAQQoADgBagwQDhAKEAMQBRAJEAQ%3D"),
         "community_playlists" | "playlists" | "playlist" => Some("EgeKAQQoAEABagoQAxAEEAoQCRAF"),
         "podcasts" | "podcast" => Some("EgWKAQJQAWoKEAkQChAFEAMQBA%3D%3D"),
-        "episodes" | "episode" => Some("EgWKAQJYAWoKEAkQChAFEAMQBA%3D%3D"),
+        "episodes" | "episode" => Some("EgWKAQJIAWoKEAkQChAFEAMQBA%3D%3D"),
         _ => None,
     }
 }

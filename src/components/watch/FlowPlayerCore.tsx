@@ -196,9 +196,10 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
         ? classifyPlayerError({
             message: stream.streamError,
             kind: stream.streamErrorKind ?? "unknown",
+            startsAtMs: stream.streamStartsAtMs ?? undefined,
           })
         : null,
-    [stream.streamError, stream.streamErrorKind],
+    [stream.streamError, stream.streamErrorKind, stream.streamStartsAtMs],
   );
 
   const watchUrl = videoId ? youtubeWatchUrl(videoId) : null;

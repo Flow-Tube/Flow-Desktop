@@ -388,14 +388,17 @@ impl ShortsService {
         let mut candidates: Vec<VideoSummary> = Vec::new();
         let mut continuation = None;
 
+        let mut reels = Vec::new();
         if let Ok(feed) = reel_res {
             continuation = feed.continuation;
-            for item in feed.items {
-                candidates.push(item.to_video_summary());
-                rich.insert(item.id.clone(), item);
-            }
+            reels = feed.items;
         }
-        for item in seeded {
+        reels.extend(seeded);
+        // Reel sequences name no title or channel, which ranking and block rules
+        // need. Looked up after the lanes, on a budget of its own, so a slow
+        // lookup costs titles and never the reels themselves.
+        yt.fill_short_details(&mut reels).await;
+        for item in reels {
             candidates.push(item.to_video_summary());
             rich.entry(item.id.clone()).or_insert(item);
         }

@@ -8,7 +8,7 @@ use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::live_chat::LiveChatResponse;
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
-use crate::models::shorts::ShortsFeed;
+use crate::models::shorts::{ShortItem, ShortsFeed};
 use crate::models::video::{RelatedPage, StreamInfo, VideoBasics, VideoDetails};
 
 #[derive(Clone)]
@@ -143,6 +143,11 @@ impl YoutubeService {
         self.extractor
             .get_explore_grid(target, continuation, region)
             .await
+    }
+
+    /// Title, channel and counts for the first reels in `items` that came without them.
+    pub async fn fill_short_details(&self, items: &mut [ShortItem]) {
+        self.extractor.fill_reel_overlays(items).await;
     }
 
     pub async fn get_search_suggestions(

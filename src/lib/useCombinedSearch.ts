@@ -476,6 +476,7 @@ export function useCombinedSearch(
     sortBy,
     filters.uploadDate,
     filters.duration,
+    filters.feature,
     execute,
   ]);
 

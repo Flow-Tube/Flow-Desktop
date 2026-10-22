@@ -35,6 +35,7 @@ pub fn thumbnail_url_from_array(value: &Value) -> Option<String> {
     largest_url(value).map(|url| normalize_youtube_image_url(&url))
 }
 
+#[must_use]
 pub fn youtube_video_thumbnail_url(video_id: &str, quality: &str) -> String {
     format!("https://i.ytimg.com/vi/{video_id}/{quality}.jpg")
 }
@@ -80,6 +81,7 @@ fn upgrade_youtube_thumbnail_url(url: String) -> String {
     url
 }
 
+#[must_use]
 pub fn normalize_youtube_image_url(url: &str) -> String {
     let mut normalized = if url.starts_with("//") {
         format!("https:{url}")

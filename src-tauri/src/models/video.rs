@@ -33,7 +33,7 @@ pub struct VideoSummary {
     /// Only the channel's members can watch it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_members_only: bool,
-    /// The card's own badges as YouTube labels them ("4K", "CC", "New").
+    /// The card's own badges as the server labels them ("4K", "CC", "New").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub badges: Vec<String>,
     /// The channels behind a collaboration, the lead first; empty for one channel.

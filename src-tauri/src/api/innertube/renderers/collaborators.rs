@@ -1,5 +1,5 @@
 //! The channels behind a collaboration, read from the "Collaborators" dialog
-//! YouTube inlines under a collaboration's byline, avatar stack and subscribe
+//! that is inlined under a collaboration's byline, avatar stack and subscribe
 //! button. A collaboration's byline opens that dialog instead of linking a
 //! channel, so it is the only place the card names its channels at all.
 

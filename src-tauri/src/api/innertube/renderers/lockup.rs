@@ -1,4 +1,4 @@
-//! `lockupViewModel`, the card YouTube now uses for related videos, playlist
+//! `lockupViewModel`, the card now used for related videos, playlist
 //! rows, channel tabs and search playlists. Each part of its metadata is read
 //! by what it is (the view count carries an icon, the date reads as an age),
 //! not by where it sits, so an extra badge row no longer shifts the fields.
@@ -117,24 +117,16 @@ fn command(lockup: &Value) -> &Value {
     &lockup["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"]
 }
 
-/// One lockup as a related item: a video, a playlist (podcasts, albums and
-/// courses are playlists here) or a mix. Channel lockups and anything else are
-/// skipped.
-#[must_use]
-pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
-    let is_playlist = matches!(
-        lockup["contentType"].as_str(),
-        Some(
-            "LOCKUP_CONTENT_TYPE_PLAYLIST"
-                | "LOCKUP_CONTENT_TYPE_PODCAST"
-                | "LOCKUP_CONTENT_TYPE_ALBUM"
-                | "LOCKUP_CONTENT_TYPE_COURSE"
-        )
-    );
-    let is_video = lockup["contentType"] == "LOCKUP_CONTENT_TYPE_VIDEO";
-    if !is_video && !is_playlist {
-        return None;
-    }
+/// What a lockup points at.
+struct Ids {
+    item_type: &'static str,
+    id: String,
+    is_mix: bool,
+    video_id: Option<String>,
+    playlist_id: Option<String>,
+}
+
+fn ids(lockup: &Value, is_video: bool, is_playlist: bool) -> Option<Ids> {
     let command = command(lockup);
     let video_id = lockup["contentId"]
         .as_str()
@@ -164,6 +156,41 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
     } else {
         ("video", video_id.clone()?, false)
     };
+
+    Some(Ids {
+        item_type,
+        id,
+        is_mix,
+        video_id,
+        playlist_id,
+    })
+}
+
+/// One lockup as a related item: a video, a playlist (podcasts, albums and
+/// courses are playlists here) or a mix. Channel lockups and anything else are
+/// skipped.
+#[must_use]
+pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
+    let is_playlist = matches!(
+        lockup["contentType"].as_str(),
+        Some(
+            "LOCKUP_CONTENT_TYPE_PLAYLIST"
+                | "LOCKUP_CONTENT_TYPE_PODCAST"
+                | "LOCKUP_CONTENT_TYPE_ALBUM"
+                | "LOCKUP_CONTENT_TYPE_COURSE"
+        )
+    );
+    let is_video = lockup["contentType"] == "LOCKUP_CONTENT_TYPE_VIDEO";
+    if !is_video && !is_playlist {
+        return None;
+    }
+    let Ids {
+        item_type,
+        id,
+        is_mix,
+        video_id,
+        playlist_id,
+    } = ids(lockup, is_video, is_playlist)?;
 
     let all_rows: Vec<Vec<Part<'_>>> = rows(lockup).iter().map(parts).collect();
     let all_parts = || all_rows.iter().flatten();

@@ -16,7 +16,7 @@ import { isMusicVideo } from "../../lib/utils";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { shouldRecordWatchHistory } from "../../lib/deepFlow";
-import { seekToTime } from "../../lib/linkify";
+import { seekToTime } from "../../lib/playerSeek";
 import { classifyPlayerError } from "../../lib/playerError";
 import { copyPlayerReport } from "../../lib/playerDiagnostics";
 import { openExternal } from "../../lib/openExternal";

@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAppSettingsStore, setSettingValue } from "../store/useAppSettingsStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { seekToTime } from "./linkify";
+import { seekToTime } from "./playerSeek";
 import { SETTINGS } from "./settings/schema";
 import { PIP_RETURN_REQUEST_EVENT } from "./pipHandoff";
 import { primeStreamInfo } from "./streamResolution";

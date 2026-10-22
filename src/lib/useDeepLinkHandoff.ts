@@ -7,7 +7,7 @@ import { getVideoDetails } from "./api/youtube";
 import { getMusicQueue } from "./api/music";
 import { addWatchRecord } from "./api/db";
 import { shouldRecordWatchHistory } from "./deepFlow";
-import { seekToTime } from "./linkify";
+import { seekToTime } from "./playerSeek";
 import { prefetchStreamInfo } from "./streamResolution";
 import { getString } from "./i18n/index";
 import { useDownloadStore } from "../store/useDownloadStore";

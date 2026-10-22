@@ -13,7 +13,7 @@ import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { useRelatedLane } from "../lib/useRelatedLane";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { setSetting } from "../lib/api/db";
-import { seekToTime } from "../lib/linkify";
+import { seekToTime } from "../lib/playerSeek";
 import { Chapters } from "../components/player/chapters";
 import { QueuePanel } from "../components/player/QueuePanel";
 import {

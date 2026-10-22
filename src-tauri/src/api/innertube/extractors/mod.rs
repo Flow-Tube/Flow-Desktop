@@ -6,6 +6,7 @@ pub mod live_chat;
 pub mod playability;
 pub mod player;
 pub mod playlist;
+pub mod resolve;
 pub mod search;
 pub mod shorts;
 pub mod subscription;

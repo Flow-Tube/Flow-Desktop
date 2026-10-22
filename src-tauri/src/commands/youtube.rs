@@ -2,6 +2,7 @@ use tauri::State;
 use tracing::{debug, info};
 
 use crate::api::innertube::core::clients;
+use crate::api::innertube::extractors::resolve::ResolvedEndpoint;
 use crate::errors::ErrorResponse;
 use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
@@ -148,72 +149,23 @@ pub(crate) fn parse_rss_feed(
     (channel_name, videos)
 }
 
-fn extract_channel_id_from_html(html: &str) -> Option<String> {
-    const MARKERS: [&str; 4] = [
-        "\"externalId\":\"",
-        "\"channelId\":\"",
-        "browse.youtube.com/channel/",
-        "/channel/",
-    ];
-    for marker in MARKERS {
-        let mut from = 0;
-        while let Some(rel) = html[from..].find(marker) {
-            let start = from + rel + marker.len();
-            let candidate: String = html[start..].chars().take(24).collect();
-            if candidate.len() == 24
-                && candidate.starts_with("UC")
-                && candidate
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-            {
-                return Some(candidate);
-            }
-            from = start;
-        }
-    }
-    None
-}
-
+/// The channel a handle, `/c/` or `/user/` link names, through the site's own
+/// router.
 #[tauri::command]
-pub async fn resolve_channel_id(url: String) -> Result<String, ErrorResponse> {
-    let parsed = reqwest::Url::parse(url.trim()).map_err(|_| {
-        ErrorResponse::from(crate::errors::AppError::Validation("Invalid URL".into()))
-    })?;
-    let host = parsed.host_str().unwrap_or("").to_lowercase();
-    let host = host.strip_prefix("www.").unwrap_or(&host);
-    let allowed = matches!(
-        host,
-        "youtube.com" | "m.youtube.com" | "music.youtube.com" | "gaming.youtube.com"
-    );
-    if !allowed {
-        return Err(ErrorResponse::from(crate::errors::AppError::Validation(
-            "Not a YouTube URL".into(),
-        )));
+pub async fn resolve_channel_id(
+    url: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<String, ErrorResponse> {
+    match youtube_service
+        .resolve_url(&url)
+        .await
+        .map_err(ErrorResponse::from)?
+    {
+        ResolvedEndpoint::Channel(channel_id) => Ok(channel_id),
+        _ => Err(ErrorResponse::from(crate::errors::AppError::Validation(
+            "That link is not a channel".into(),
+        ))),
     }
-
-    let client = crate::api::http::shared_client();
-    let html = client
-        .get(parsed)
-        .send()
-        .await
-        .map_err(|e| {
-            ErrorResponse::from(crate::errors::AppError::Extractor(format!(
-                "Channel resolve failed: {e}"
-            )))
-        })?
-        .text()
-        .await
-        .map_err(|e| {
-            ErrorResponse::from(crate::errors::AppError::Extractor(format!(
-                "Channel resolve read failed: {e}"
-            )))
-        })?;
-
-    extract_channel_id_from_html(&html).ok_or_else(|| {
-        ErrorResponse::from(crate::errors::AppError::Extractor(
-            "Could not find a channel id at that URL".into(),
-        ))
-    })
 }
 
 fn extract_codecs(mime_type: Option<&str>) -> Option<String> {

@@ -581,7 +581,7 @@ async fn run_discovery_searches(
     let searches = queries.into_iter().map(|query| {
         let request = SearchVideosRequest {
             query,
-            duration: Some("short".to_string()),
+            content_type: Some("shorts".to_string()),
             ..SearchVideosRequest::default()
         };
         async move {
@@ -595,11 +595,20 @@ async fn run_discovery_searches(
     let mut returned = 0usize;
     let mut kept: Vec<VideoSummary> = Vec::new();
     for response in join_all(searches).await.into_iter().flatten() {
-        returned += response.items.len();
+        // A Shorts search answers with Shorts grids, not video results.
+        returned += response.shorts.len();
         kept.extend(
             response
-                .items
+                .shorts
                 .into_iter()
+                .map(|short| VideoSummary {
+                    id: short.id,
+                    title: short.title,
+                    thumbnail_url: short.thumbnail_url,
+                    view_count_text: short.view_count_text,
+                    is_short: true,
+                    ..VideoSummary::default()
+                })
                 .filter(is_short_candidate)
                 .take(SHORTS_PER_SEARCH),
         );

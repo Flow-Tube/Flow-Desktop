@@ -39,7 +39,8 @@ use commands::db::{
 };
 use commands::diagnostics::{
     clear_logs, get_graphics_mode, log_frontend_event, logs_dir_path, read_logs,
-    reveal_logs_folder, set_graphics_mode, startup_render_ok, updates_supported,
+    reset_visitor_identity, reveal_logs_folder, set_graphics_mode, startup_render_ok,
+    updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
@@ -545,6 +546,7 @@ pub fn run() {
             clear_logs,
             logs_dir_path,
             reveal_logs_folder,
+            reset_visitor_identity,
             startup_render_ok,
             get_graphics_mode,
             set_graphics_mode,

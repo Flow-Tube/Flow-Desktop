@@ -19,3 +19,8 @@ export function getLogsDir(): Promise<string> {
 export function revealLogsFolder(): Promise<void> {
   return invokeBackend<void>("reveal_logs_folder");
 }
+
+/** Forgets the anonymous visitor identity sent to YouTube; the next request gets a new one. */
+export function resetVisitorIdentity(): Promise<void> {
+  return invokeBackend<void>("reset_visitor_identity");
+}

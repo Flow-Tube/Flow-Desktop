@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { Copy, Trash2, Bug, RefreshCw, FolderOpen, Save } from "lucide-react";
+import { Copy, Trash2, Bug, RefreshCw, FolderOpen, Save, UserRoundX } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { useDiagnostics } from "../lib/useDiagnostics";
-import { revealLogsFolder } from "../lib/api/diagnostics";
+import { resetVisitorIdentity, revealLogsFolder } from "../lib/api/diagnostics";
 import { writeBackupFile } from "../lib/api/files";
 import { openExternal } from "../lib/openExternal";
 import { confirmAction, pickSaveFile } from "../lib/dialogs";
@@ -65,6 +65,23 @@ export const Diagnostics: React.FC = () => {
     }
   };
 
+  const handleResetIdentity = async () => {
+    if (
+      !(await confirmAction(
+        getString("diagnostics_identity_reset_confirm"),
+        getString("diagnostics_identity_reset"),
+      ))
+    ) {
+      return;
+    }
+    try {
+      await resetVisitorIdentity();
+      showToast({ message: getString("diagnostics_identity_reset_done"), variant: "success" });
+    } catch {
+      showToast({ message: getString("diagnostics_identity_reset_failed"), variant: "error" });
+    }
+  };
+
   const handleClear = async () => {
     if (!(await confirmAction(getString("diagnostics_clear_confirm"), getString("diagnostics_clear")))) {
       return;
@@ -121,6 +138,17 @@ export const Diagnostics: React.FC = () => {
         <Button variant="destructive" size="sm" onClick={handleClear} disabled={busy || !hasLogs}>
           <Trash2 size={14} />
           {getString("diagnostics_clear")}
+        </Button>
+      </div>
+
+      <div className="max-w-2xl space-y-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
+          {getString("diagnostics_identity_heading")}
+        </h3>
+        <p className="text-sm text-chrome-neutral-400">{getString("diagnostics_identity_description")}</p>
+        <Button variant="secondary" size="sm" onClick={() => void handleResetIdentity()}>
+          <UserRoundX size={14} />
+          {getString("diagnostics_identity_reset")}
         </Button>
       </div>
 

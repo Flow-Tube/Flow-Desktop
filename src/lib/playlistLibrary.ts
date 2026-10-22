@@ -1,5 +1,6 @@
 import { getSetting, setSetting } from "./api/db";
 import { getPlaylistDetails } from "./api/youtube";
+import { loadRemainingPlaylistVideos } from "./playlistPages";
 import { withPublishedAt } from "./publishedDate";
 import type { PlaylistSummary, VideoSummary } from "../types/video";
 
@@ -247,7 +248,15 @@ export const savePlaylistToLibrary = async (playlist: PlaylistSummary) => {
   const existingAddedAt = new Map(
     (existingPlaylist?.tracks ?? []).map((track) => [track.id, track.addedAtInPlaylist]),
   );
-  const fetchedTracks = (details?.videos ?? []).map((track) => ({
+  let fetchedVideos = details?.videos ?? [];
+  if (details?.nextPageToken) {
+    try {
+      fetchedVideos = await loadRemainingPlaylistVideos(playlist.id, fetchedVideos, details.nextPageToken);
+    } catch (error) {
+      console.warn("Failed to fetch every playlist page while saving", error);
+    }
+  }
+  const fetchedTracks = fetchedVideos.map((track) => ({
     ...track,
     addedAtInPlaylist: existingAddedAt.get(track.id) ?? addedAt,
   }));

@@ -6,12 +6,12 @@ import { useDownloadCollectionsLibraryStore } from "../store/useDownloadCollecti
 import { getMusicAlbumContinuation, getMusicAlbumPage } from "./api/music";
 import { getPlaylistDetails } from "./api/youtube";
 import { getStoredPlaylistById, isProtectedPlaylistId, normalizePlaylist } from "./playlistLibrary";
+import { loadRemainingPlaylistVideos } from "./playlistPages";
 import type { DownloadCollectionKind, DownloadCollectionRecord } from "./api/downloads";
 import type { AlbumItem, SongItem } from "../types/music";
 import type { PlaylistSummary, VideoSummary } from "../types/video";
 
 const ALBUM_PAGE_GUARD = 30;
-const PLAYLIST_PAGE_GUARD = 30;
 
 export interface CollectionDownloadState {
   /** Total items in the playlist/album. */
@@ -85,17 +85,13 @@ export async function downloadPlaylist(playlist: PlaylistSummary): Promise<void>
   let thumbnailUrl = playlist.thumbnailUrl ?? normalized?.thumbnailUrl ?? undefined;
 
   if (videos.length === 0 && !isProtectedPlaylistId(playlist.id)) {
-    let pageToken: string | null | undefined;
-    let guard = 0;
-    do {
-      const details = await getPlaylistDetails(playlist.id, pageToken);
-      videos.push(...(details.videos ?? []));
-      title = details.title || title;
-      author = details.channelName || author;
-      thumbnailUrl = thumbnailUrl ?? details.videos?.[0]?.thumbnailUrl ?? undefined;
-      pageToken = details.nextPageToken;
-      guard += 1;
-    } while (pageToken && guard < PLAYLIST_PAGE_GUARD);
+    const first = await getPlaylistDetails(playlist.id);
+    title = first.title || title;
+    author = first.channelName || author;
+    thumbnailUrl = thumbnailUrl ?? first.videos?.[0]?.thumbnailUrl ?? undefined;
+    videos.push(
+      ...(await loadRemainingPlaylistVideos(playlist.id, first.videos ?? [], first.nextPageToken)),
+    );
   }
 
   if (videos.length === 0) return;

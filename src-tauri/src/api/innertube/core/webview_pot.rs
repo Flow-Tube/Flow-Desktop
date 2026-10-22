@@ -1,32 +1,18 @@
-//! Real-browser BotGuard poToken minter via a hidden Tauri WebView.
+//! Real-browser poToken minter via a hidden Tauri web view.
 //!
 //! The headless Node sidecar ([`super::botguard`]) mints a valid token, but its
 //! attestation is synthetic (a `vm` sandbox + DOM mock). The mobile app mints in
-//! a real WebView, and that real-Chromium attestation is the variable we have not
-//! yet tried. This module runs the *same* bgutils flow inside a hidden WebView:
-//!
-//!   1. `mint()` registers a one-shot keyed by a request id and opens a hidden
-//!      window at `http://127.0.0.1:<proxy>/potmint?id=…&binding=<visitorData>`.
-//!   2. The local proxy serves [`MINT_PAGE_HTML`]; the page runs the full mint in
-//!      real Chromium — `Waa/Create` + descramble + VM snapshot + `GenerateIT` +
-//!      mint (the WAA endpoints are CORS-permissive, so no Rust round-trip).
-//!   3. The page GETs `/potresult?id=…&poToken=…&ttl=…`; the proxy calls
-//!      [`resolve_from_query`], which fulfils the one-shot.
-//!
-//! Using the existing local proxy as both page host and result sink avoids Tauri
-//! custom-scheme / remote-IPC plumbing entirely. When no AppHandle is set (unit
-//! tests, headless), `mint()` returns `None` and the caller falls back to the
-//! Node sidecar — so this is purely additive.
+//! a real web view, so this runs the *same* bgutils flow inside a hidden web view
+//! ([`super::hidden_webview`]): the proxy serves [`MINT_PAGE_HTML`] at `/potmint`,
+//! and the page runs `Waa/Create` + descramble + VM snapshot + `GenerateIT` + mint
+//! in the real engine (the WAA endpoints are CORS-permissive, so no Rust round
+//! trip) and reports the token back. Without a GUI `mint()` returns `None` and
+//! the caller falls back to the Node sidecar.
 
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use tauri::Manager;
-use tokio::sync::oneshot;
-use tracing::{debug, warn};
+use tracing::debug;
 
-const WINDOW_LABEL: &str = "flow-pot-minter";
 // A successful in-browser mint takes ~1-2s; cap failures so a broken WebView path
 // can't stall a stream resolve for long before the Node-sidecar fallback.
 const MINT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -38,114 +24,31 @@ pub struct PotResult {
     pub ttl: u64,
 }
 
-static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
-
-fn pending() -> &'static Mutex<HashMap<String, oneshot::Sender<PotResult>>> {
-    static PENDING: OnceLock<Mutex<HashMap<String, oneshot::Sender<PotResult>>>> = OnceLock::new();
-    PENDING.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// Record the app handle so the minter can open a hidden WebView. Called once at
-/// startup; until then `mint()` is a no-op and callers use the Node sidecar.
-pub fn set_app_handle(handle: tauri::AppHandle) {
-    let _ = APP_HANDLE.set(handle);
-}
-
-/// The app handle, if the GUI is running.
-pub fn app_handle() -> Option<tauri::AppHandle> {
-    APP_HANDLE.get().cloned()
-}
-
-/// Resolve a pending mint from the proxy's `/potresult` query parameters.
-pub fn resolve_from_query(id: &str, po_token: Option<&str>, ttl: Option<u64>, error: Option<&str>) {
-    let Some(sender) = pending().lock().unwrap().remove(id) else {
-        return;
-    };
-    match po_token {
-        Some(token) if !token.is_empty() => {
-            let _ = sender.send(PotResult {
-                po_token: token.to_string(),
-                integrity_token: String::new(),
-                ttl: ttl.unwrap_or(43200),
-            });
-        }
-        _ => warn!(
-            error = error.unwrap_or("unknown"),
-            "WebView pot mint failed"
-        ),
-        // Dropping `sender` makes the awaiting `recv` resolve to `Err` → `None`.
-    }
-}
-
 /// Mint a poToken bound to `content_binding` (visitor data) in a hidden WebView.
 /// Returns `None` if there is no GUI app handle, the proxy isn't up, or the mint
 /// times out — the caller then falls back to the headless sidecar.
 pub async fn mint(content_binding: &str) -> Option<PotResult> {
-    let app = APP_HANDLE.get()?.clone();
-
-    let port = {
-        let manager = app.try_state::<crate::streaming::proxy::StreamingManager>()?;
-        manager.get_port()
-    };
-
-    let id = uuid::Uuid::new_v4().to_string();
-    let mut url = tauri::Url::parse(&format!("http://127.0.0.1:{port}/potmint")).ok()?;
-    url.query_pairs_mut()
-        .append_pair("id", &id)
-        .append_pair("binding", content_binding);
-    let url_str = url.to_string();
-
-    let (sender, receiver) = oneshot::channel();
-    pending().lock().unwrap().insert(id.clone(), sender);
-
-    // Open the hidden minter window on the main thread.
-    let app_for_build = app.clone();
-    let build = app.run_on_main_thread(move || {
-        if let Some(existing) = app_for_build.get_webview_window(WINDOW_LABEL) {
-            let _ = existing.close();
-        }
-        if let Ok(parsed) = tauri::Url::parse(&url_str) {
-            let builder = tauri::WebviewWindowBuilder::new(
-                &app_for_build,
-                WINDOW_LABEL,
-                tauri::WebviewUrl::External(parsed),
-            )
-            .visible(false)
-            .skip_taskbar(true)
-            .focused(false);
-            // WebView2 won't open a second webview on the main window's data
-            // directory with different arguments (see `webview2`).
-            #[cfg(windows)]
-            let builder = builder.additional_browser_args(crate::webview2::BROWSER_ARGS);
-            match builder.build() {
-                Ok(_) => debug!("Opened hidden WebView pot minter"),
-                Err(error) => warn!(%error, "Failed to open WebView pot minter"),
-            }
-        }
-    });
-    if build.is_err() {
-        pending().lock().unwrap().remove(&id);
-        return None;
-    }
-
-    let outcome = tokio::time::timeout(MINT_TIMEOUT, receiver).await;
-    pending().lock().unwrap().remove(&id);
-
-    // Tear the hidden window down regardless of outcome.
-    let app_for_close = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(window) = app_for_close.get_webview_window(WINDOW_LABEL) {
-            let _ = window.close();
-        }
-    });
-
-    match outcome {
-        Ok(Ok(result)) => {
-            debug!(ttl = result.ttl, "Minted PO token via WebView");
-            Some(result)
-        }
-        _ => None,
-    }
+    let result = super::hidden_webview::run(
+        "flow-pot-minter",
+        "/potmint",
+        &[("binding", content_binding)],
+        MINT_TIMEOUT,
+    )
+    .await?;
+    let po_token = result
+        .get("poToken")
+        .filter(|token| !token.is_empty())?
+        .clone();
+    let ttl = result
+        .get("ttl")
+        .and_then(|ttl| ttl.parse().ok())
+        .unwrap_or(43200);
+    debug!(ttl, "Minted PO token via WebView");
+    Some(PotResult {
+        po_token,
+        integrity_token: String::new(),
+        ttl,
+    })
 }
 
 /// The mint page served by the proxy at `/potmint`. Runs the full bgutils flow in
@@ -166,7 +69,7 @@ pub const MINT_PAGE_HTML: &str = r#"<!doctype html>
   var id = params.get('id');
   var visitorData = params.get('binding');
 
-  function report(query) { try { fetch('/potresult?' + query); } catch (e) {} }
+  function report(query) { try { fetch('/webviewresult?' + query); } catch (e) {} }
   function ok(po, ttl) { report('id=' + encodeURIComponent(id) + '&poToken=' + encodeURIComponent(po) + '&ttl=' + ttl); }
   function fail(msg) { report('id=' + encodeURIComponent(id) + '&error=' + encodeURIComponent(msg || 'error')); }
 

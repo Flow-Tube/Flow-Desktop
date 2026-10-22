@@ -4,8 +4,9 @@
 //! their SABR endpoint outright while `n` is unsolved.
 //!
 //! Mirrors Flow for Android's `PlayerJsFetcher` + `CipherDeobfuscator`: the
-//! script is cached on disk per player version, and `sidecar/nsig.cjs` runs the
-//! script itself rather than re-implementing its transform.
+//! script is cached on disk per player version and run as is rather than
+//! re-implementing its transform, in a hidden web view ([`super::webview_nsig`])
+//! or, without a GUI, by `sidecar/nsig.cjs` under Node.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -127,9 +128,7 @@ async fn fetch_player_script() -> Option<PlayerScript> {
         return None;
     };
 
-    let path = std::env::temp_dir()
-        .join("flow-desktop-player")
-        .join(format!("{id}.js"));
+    let path = player_path(&id);
     let cached = tokio::fs::read_to_string(&path)
         .await
         .ok()
@@ -168,6 +167,22 @@ async fn fetch_player_script() -> Option<PlayerScript> {
     })
 }
 
+fn player_path(id: &str) -> PathBuf {
+    std::env::temp_dir()
+        .join("flow-desktop-player")
+        .join(format!("{id}.js"))
+}
+
+/// The cached script of player `id`, for the web view solver page to load. Only
+/// a player version id resolves, so no other file can be named.
+#[must_use]
+pub fn script_path(id: &str) -> Option<PathBuf> {
+    let is_player_id = id.len() == 8 && id.chars().all(|c| c.is_ascii_hexdigit());
+    is_player_id
+        .then(|| player_path(id))
+        .filter(|path| path.is_file())
+}
+
 /// Old player versions are never loaded again once the site rotates past them.
 async fn remove_other_players(current: &std::path::Path) {
     let Some(dir) = current.parent() else { return };
@@ -181,7 +196,16 @@ async fn remove_other_players(current: &std::path::Path) {
     }
 }
 
+/// The solved `n`, from the player run in a hidden web view, or with Node when
+/// there is no GUI (tests, the headless harness) or the web view failed.
 async fn run_solver(player: &PlayerScript, n: &str) -> Option<String> {
+    if let Some(solved) = super::webview_nsig::solve(&player.id, n).await {
+        return Some(solved);
+    }
+    run_node_solver(player, n).await
+}
+
+async fn run_node_solver(player: &PlayerScript, n: &str) -> Option<String> {
     let Some(solver) = sidecar_script_path("nsig.cjs", "FLOW_NSIG_SCRIPT") else {
         warn!("nsig.cjs sidecar not found; cannot solve n");
         return None;
@@ -280,6 +304,13 @@ fn replace_query_value(url: &str, key: &str, old: &str, new: &str) -> Option<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_player_version_names_a_script() {
+        assert!(script_path("../../etc/passwd").is_none());
+        assert!(script_path("8ab5c32").is_none());
+        assert!(script_path("zzzzzzzz").is_none());
+    }
 
     #[test]
     fn reads_the_escaped_player_id_from_iframe_api() {

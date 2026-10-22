@@ -282,7 +282,6 @@ struct RequestHead {
     // Path + query as received.
     target: String,
     range: Option<String>,
-    content_length: Option<usize>,
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
@@ -291,22 +290,19 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
 
 // Returns the parsed head plus any body bytes already read past the header
 // terminator (so a POST body can be drained by the caller).
-async fn read_request_head(
-    socket: &mut TcpStream,
-) -> std::io::Result<Option<(RequestHead, Vec<u8>)>> {
+async fn read_request_head(socket: &mut TcpStream) -> std::io::Result<Option<RequestHead>> {
     let mut buf = Vec::with_capacity(2048);
     let mut tmp = [0u8; 4096];
     loop {
         if let Some(end) = find_header_end(&buf) {
-            let leftover = buf[end + 4..].to_vec();
-            return Ok(parse_head(&buf[..end]).map(|head| (head, leftover)));
+            return Ok(parse_head(&buf[..end]));
         }
         if buf.len() > MAX_HEADER_BYTES {
             return Ok(None);
         }
         let n = socket.read(&mut tmp).await?;
         if n == 0 {
-            return Ok(parse_head(&buf).map(|head| (head, Vec::new())));
+            return Ok(parse_head(&buf));
         }
         buf.extend_from_slice(&tmp[..n]);
     }
@@ -321,22 +317,17 @@ fn parse_head(bytes: &[u8]) -> Option<RequestHead> {
     let target = parts.next()?.to_string();
 
     let mut range = None;
-    let mut content_length = None;
     for line in lines {
-        if let Some((name, value)) = line.split_once(':') {
-            let name = name.trim();
-            if name.eq_ignore_ascii_case("range") {
-                range = Some(value.trim().to_string());
-            } else if name.eq_ignore_ascii_case("content-length") {
-                content_length = value.trim().parse::<usize>().ok();
-            }
+        if let Some((name, value)) = line.split_once(':')
+            && name.trim().eq_ignore_ascii_case("range")
+        {
+            range = Some(value.trim().to_string());
         }
     }
     Some(RequestHead {
         method,
         target,
         range,
-        content_length,
     })
 }
 
@@ -464,12 +455,9 @@ async fn handle_connection(
     manager: StreamingManager,
     client: reqwest::Client,
 ) -> std::io::Result<()> {
-    let (head, body_prefix) = match read_request_head(&mut socket).await? {
-        Some(value) => value,
-        None => {
-            write_status_only(&mut socket, 400, "Bad Request", "Malformed request").await?;
-            return Ok(());
-        }
+    let Some(head) = read_request_head(&mut socket).await? else {
+        write_status_only(&mut socket, 400, "Bad Request", "Malformed request").await?;
+        return Ok(());
     };
 
     let method = head.method.to_ascii_uppercase();
@@ -493,31 +481,53 @@ async fn handle_connection(
     };
     let path = request_url.path().to_string();
 
-    // WebView poToken minter (see api::innertube::core::webview_pot). `/potmint`
-    // serves the in-browser mint page; `/potresult` receives the minted token.
-    if path == "/potmint" {
+    // Hidden WebView jobs (see api::innertube::core::hidden_webview): the pages
+    // they open, the player script the n solver runs, and the result sink.
+    if path == "/potmint" || path == "/nsolve" {
+        let page = if path == "/potmint" {
+            crate::api::innertube::core::webview_pot::MINT_PAGE_HTML
+        } else {
+            crate::api::innertube::core::webview_nsig::SOLVE_PAGE_HTML
+        };
         return write_full_body(
             &mut socket,
             "text/html; charset=utf-8",
             "no-store",
-            crate::api::innertube::core::webview_pot::MINT_PAGE_HTML.as_bytes(),
+            page.as_bytes(),
             head_only,
         )
         .await;
     }
-    if path == "/potresult" {
-        let query: HashMap<String, String> = request_url
+    if path == "/nsolve/player.js" {
+        let script = request_url
             .query_pairs()
-            .map(|(key, value)| (key.into_owned(), value.into_owned()))
-            .collect();
-        if let Some(id) = query.get("id") {
-            crate::api::innertube::core::webview_pot::resolve_from_query(
-                id,
-                query.get("poToken").map(String::as_str),
-                query.get("ttl").and_then(|value| value.parse::<u64>().ok()),
-                query.get("error").map(String::as_str),
-            );
-        }
+            .find_map(|(key, value)| (key == "player").then(|| value.into_owned()))
+            .and_then(|id| crate::api::innertube::core::player_js::script_path(&id));
+        let body = match script {
+            Some(path) => tokio::fs::read(path).await.ok(),
+            None => None,
+        };
+        return match body {
+            Some(body) => {
+                write_full_body(
+                    &mut socket,
+                    "text/javascript; charset=utf-8",
+                    "no-store",
+                    &body,
+                    head_only,
+                )
+                .await
+            }
+            None => write_status_only(&mut socket, 404, "Not Found", "No such player").await,
+        };
+    }
+    if path == crate::api::innertube::core::hidden_webview::RESULT_PATH {
+        crate::api::innertube::core::hidden_webview::resolve(
+            request_url
+                .query_pairs()
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect(),
+        );
         return write_full_body(&mut socket, "text/plain", "no-store", b"ok", head_only).await;
     }
     if path.starts_with("/sabr/") {

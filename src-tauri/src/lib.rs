@@ -269,7 +269,7 @@ pub fn run() {
 
             // Let the BotGuard minter open a hidden WebView for a real-browser
             // poToken (falls back to the headless Node sidecar without this).
-            api::innertube::core::webview_pot::set_app_handle(app.handle().clone());
+            api::innertube::core::hidden_webview::set_app_handle(app.handle().clone());
 
             // Linux bundles keep the Node sidecar scripts in the resource dir.
             if let Ok(dir) = app.path().resource_dir() {

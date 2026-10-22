@@ -1,3 +1,4 @@
-//! Readers for the values feeds write as display text.
+//! Readers for values inside `InnerTube` responses.
 
 pub mod age;
+pub mod continuation;

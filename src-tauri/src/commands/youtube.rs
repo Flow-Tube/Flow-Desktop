@@ -5,6 +5,7 @@ use crate::api::innertube::core::clients;
 use crate::errors::ErrorResponse;
 use crate::models::channel::{ChannelDetails, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
+use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoSummary};
@@ -880,14 +881,47 @@ pub async fn get_live_chat(
         .map_err(ErrorResponse::from)
 }
 
+/// One of Explore's destinations (`live`, `gaming`, `music`, `news`, `sports`,
+/// `learning`, `fashion`) in `region`.
 #[tauri::command]
-pub async fn get_trending_videos(
-    category: Option<String>,
+pub async fn get_explore_destination(
+    destination: String,
     region: Option<String>,
     youtube_service: State<'_, YoutubeService>,
-) -> Result<Vec<VideoSummary>, ErrorResponse> {
+) -> Result<ExplorePage, ErrorResponse> {
     youtube_service
-        .get_trending_videos(category.as_deref(), region.as_deref())
+        .get_explore_destination(&destination, region.as_deref())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// A destination's tab, by the target its page named.
+#[tauri::command]
+pub async fn get_explore_page(
+    target: ExploreTarget,
+    region: Option<String>,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<ExplorePage, ErrorResponse> {
+    youtube_service
+        .get_explore_page(
+            &target.browse_id,
+            target.params.as_deref(),
+            region.as_deref(),
+        )
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// A shelf's full grid: the first page from its target, later ones from a token.
+#[tauri::command]
+pub async fn get_explore_grid(
+    target: Option<ExploreTarget>,
+    continuation: Option<String>,
+    region: Option<String>,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<ExploreGrid, ErrorResponse> {
+    youtube_service
+        .get_explore_grid(target.as_ref(), continuation.as_deref(), region.as_deref())
         .await
         .map_err(ErrorResponse::from)
 }

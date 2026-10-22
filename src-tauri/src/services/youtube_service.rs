@@ -4,11 +4,11 @@ use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
 use crate::models::channel::{ChannelDetails, ChannelTabResponse};
 use crate::models::comment::CommentsResponse;
+use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::live_chat::LiveChatResponse;
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::shorts::ShortsFeed;
-use crate::models::video::VideoSummary;
 use crate::models::video::{RelatedPage, StreamInfo, VideoBasics, VideoDetails};
 
 #[derive(Clone)]
@@ -113,12 +113,36 @@ impl YoutubeService {
             .await
     }
 
-    pub async fn get_trending_videos(
+    pub async fn get_explore_destination(
         &self,
-        category: Option<&str>,
+        destination: &str,
         region: Option<&str>,
-    ) -> AppResult<Vec<VideoSummary>> {
-        self.extractor.get_trending_videos(category, region).await
+    ) -> AppResult<ExplorePage> {
+        self.extractor
+            .get_explore_destination(destination, region)
+            .await
+    }
+
+    pub async fn get_explore_page(
+        &self,
+        browse_id: &str,
+        params: Option<&str>,
+        region: Option<&str>,
+    ) -> AppResult<ExplorePage> {
+        self.extractor
+            .get_explore_page(browse_id, params, region)
+            .await
+    }
+
+    pub async fn get_explore_grid(
+        &self,
+        target: Option<&ExploreTarget>,
+        continuation: Option<&str>,
+        region: Option<&str>,
+    ) -> AppResult<ExploreGrid> {
+        self.extractor
+            .get_explore_grid(target, continuation, region)
+            .await
     }
 
     pub async fn get_search_suggestions(

@@ -1,5 +1,6 @@
 pub mod channel;
 pub mod comment;
+pub mod explore;
 pub mod live_chat;
 pub mod music;
 pub mod music_pages;

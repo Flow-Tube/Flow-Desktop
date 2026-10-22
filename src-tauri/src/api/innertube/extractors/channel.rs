@@ -2,10 +2,13 @@ use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
     detect_lockup_is_live, detect_video_is_live, extract_channel_id_from_video_renderer,
-    normalize_youtube_image_url, parse_duration_seconds, parse_mixed_number_word_to_long,
     short_video_summary_from_item,
 };
 use crate::api::innertube::json::continuation::{continuation_item_lists, continuation_token};
+use crate::api::innertube::json::count::parse_count;
+use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::text::text_of;
+use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::{
     ChannelDetails, ChannelItem, ChannelTabResponse, PlaylistSummary, PostSummary,
@@ -15,55 +18,12 @@ use crate::models::video::VideoSummary;
 use serde_json::Value;
 use tracing::debug;
 
-fn normalize_large_google_image_url(url: &str) -> String {
-    if url.starts_with("//") {
-        format!("https:{url}")
-    } else {
-        url.to_string()
-    }
-}
-
-fn thumbnail_area(thumbnail: &Value) -> u64 {
-    let width = thumbnail.get("width").and_then(Value::as_u64).unwrap_or(0);
-    let height = thumbnail.get("height").and_then(Value::as_u64).unwrap_or(0);
-    width.saturating_mul(height)
-}
-
-fn best_thumbnail_url(thumbnails: &Value) -> Option<String> {
-    thumbnails.as_array().and_then(|arr| {
-        arr.iter()
-            .max_by_key(|thumb| thumbnail_area(thumb))
-            .and_then(|thumb| thumb.get("url").or_else(|| thumb.get("uri")))
-            .and_then(Value::as_str)
-            .map(normalize_large_google_image_url)
-    })
-}
-
-fn text_from_text_runs(value: &Value) -> Option<String> {
-    value
-        .get("runs")
-        .and_then(Value::as_array)
-        .map(|runs| {
-            runs.iter()
-                .filter_map(|run| run.get("text").and_then(Value::as_str))
-                .collect::<Vec<_>>()
-                .join("")
-        })
-        .filter(|text| !text.is_empty())
-        .or_else(|| {
-            value
-                .get("simpleText")
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned)
-        })
-}
-
 fn post_comment_count_text(post: &Value) -> Option<String> {
     let reply_button =
         &post["actionButtons"]["commentActionButtonsRenderer"]["replyButton"]["buttonRenderer"];
     reply_button
         .get("text")
-        .and_then(text_from_text_runs)
+        .and_then(text_of)
         .or_else(|| {
             reply_button
                 .get("accessibility")
@@ -97,7 +57,7 @@ fn post_image_attachment_url(post: &Value) -> Option<String> {
         .get("backstageImageRenderer")
         .and_then(|renderer| renderer.get("image"))
         .and_then(|image| image.get("thumbnails"))
-        .and_then(best_thumbnail_url)
+        .and_then(largest_url)
         .or_else(|| {
             attachment
                 .get("postMultiImageRenderer")
@@ -107,7 +67,7 @@ fn post_image_attachment_url(post: &Value) -> Option<String> {
                 .and_then(|image| image.get("backstageImageRenderer"))
                 .and_then(|renderer| renderer.get("image"))
                 .and_then(|image| image.get("thumbnails"))
-                .and_then(best_thumbnail_url)
+                .and_then(largest_url)
         })
 }
 
@@ -236,7 +196,7 @@ fn extract_videos_from_browse(
                     let duration_seconds = if duration_text.is_empty() {
                         None
                     } else {
-                        Some(parse_duration_seconds(duration_text))
+                        parse_duration(duration_text)
                     };
 
                     let published_text = video
@@ -476,7 +436,7 @@ fn extract_videos_from_browse(
                         }
 
                         if !duration_text.is_empty() {
-                            duration_seconds = Some(parse_duration_seconds(duration_text));
+                            duration_seconds = parse_duration(duration_text);
                         }
 
                         let mut view_count_text = None;
@@ -572,7 +532,7 @@ fn extract_videos_from_browse(
                     })
                     .map(normalize_youtube_image_url)
                     .map(|s| s.to_string());
-                let text_content = post.get("contentText").and_then(text_from_text_runs);
+                let text_content = post.get("contentText").and_then(text_of);
                 let published_time_text = post
                     .get("publishedTimeText")
                     .and_then(|p| {
@@ -1070,7 +1030,7 @@ impl InnertubeClient {
             .get("c4TabbedHeaderRenderer")
             .and_then(|c4| c4.get("banner"))
             .and_then(|b| b.get("thumbnails"))
-            .and_then(best_thumbnail_url)
+            .and_then(largest_url)
             .or_else(|| {
                 header
                     .get("pageHeaderRenderer")
@@ -1080,9 +1040,8 @@ impl InnertubeClient {
                     .and_then(|b| b.get("imageBannerViewModel"))
                     .and_then(|ib| ib.get("image"))
                     .and_then(|img| img.get("sources"))
-                    .and_then(best_thumbnail_url)
-            })
-            .map(|s| normalize_large_google_image_url(&s));
+                    .and_then(largest_url)
+            });
 
         let mut subscriber_count = None;
         let mut subscriber_count_text = None;
@@ -1094,7 +1053,7 @@ impl InnertubeClient {
             .and_then(|v| v.as_str())
         {
             subscriber_count_text = Some(text.to_string());
-            subscriber_count = Some(parse_mixed_number_word_to_long(text));
+            subscriber_count = parse_count(text);
         } else if let Some(runs) = header
             .get("c4TabbedHeaderRenderer")
             .and_then(|c4| c4.get("subscriberCountText"))
@@ -1107,7 +1066,7 @@ impl InnertubeClient {
                 .and_then(|v| v.as_str())
             {
                 subscriber_count_text = Some(text.to_string());
-                subscriber_count = Some(parse_mixed_number_word_to_long(text));
+                subscriber_count = parse_count(text);
             }
         } else if let Some(rows) = header
             .get("pageHeaderRenderer")
@@ -1128,7 +1087,7 @@ impl InnertubeClient {
                         {
                             if text.contains("subscriber") {
                                 subscriber_count_text = Some(text.to_string());
-                                subscriber_count = Some(parse_mixed_number_word_to_long(text));
+                                subscriber_count = parse_count(text);
                                 break;
                             }
                         }

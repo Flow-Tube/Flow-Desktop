@@ -4,6 +4,7 @@ use tracing::debug;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::watch_next_body;
+use crate::api::innertube::json::thumbnail::largest_url;
 use crate::errors::AppResult;
 use crate::models::live_chat::{LiveChatMessage, LiveChatResponse, LiveChatSegment};
 
@@ -22,14 +23,6 @@ fn extract_is_replay(res: &Value) -> bool {
     res["contents"]["twoColumnWatchNextResults"]["conversationBar"]["liveChatRenderer"]["isReplay"]
         .as_bool()
         .unwrap_or(false)
-}
-
-fn thumbnail_best_url(image: &Value) -> Option<String> {
-    image["thumbnails"]
-        .as_array()
-        .and_then(|thumbs| thumbs.last())
-        .and_then(|thumb| thumb["url"].as_str())
-        .map(ToOwned::to_owned)
 }
 
 fn parse_message_runs(message: &Value) -> (String, Vec<LiveChatSegment>) {
@@ -62,7 +55,7 @@ fn parse_message_runs(message: &Value) -> (String, Vec<LiveChatSegment>) {
                 text.push_str(shortcut);
                 segments.push(LiveChatSegment {
                     text: shortcut.to_string(),
-                    emoji_image_url: thumbnail_best_url(&emoji["image"]),
+                    emoji_image_url: largest_url(&emoji["image"]["thumbnails"]),
                 });
             }
         }
@@ -102,7 +95,7 @@ fn parse_renderer(renderer: &Value, message_type: &str) -> Option<LiveChatMessag
                 "VERIFIED" => is_verified = true,
                 _ => {}
             }
-            if let Some(url) = thumbnail_best_url(&badge_renderer["customThumbnail"]) {
+            if let Some(url) = largest_url(&badge_renderer["customThumbnail"]["thumbnails"]) {
                 is_member = true;
                 member_badge_url = Some(url);
             }
@@ -118,7 +111,7 @@ fn parse_renderer(renderer: &Value, message_type: &str) -> Option<LiveChatMessag
     Some(LiveChatMessage {
         id,
         author,
-        author_photo_url: thumbnail_best_url(&renderer["authorPhoto"]),
+        author_photo_url: largest_url(&renderer["authorPhoto"]["thumbnails"]),
         message,
         segments,
         timestamp: renderer["timestampText"]["simpleText"]

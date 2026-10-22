@@ -2,9 +2,11 @@ use crate::api::http::shared_client;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
-    detect_video_is_live, extract_channel_id_from_video_renderer, extract_continuation_token,
-    normalize_youtube_image_url, parse_duration_seconds,
+    detect_video_is_live, extract_channel_id_from_video_renderer,
 };
+use crate::api::innertube::json::continuation::continuation_token;
+use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::thumbnail::normalize_youtube_image_url;
 use crate::errors::{AppError, AppResult};
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::VideoSummary;
@@ -163,7 +165,7 @@ fn process_search_items(
                 let duration_seconds = if duration_text.is_empty() {
                     None
                 } else {
-                    Some(parse_duration_seconds(duration_text))
+                    parse_duration(duration_text)
                 };
 
                 let published_text = video["publishedTimeText"]["runs"][0]["text"]
@@ -235,7 +237,7 @@ fn process_search_items(
                     });
                 }
             } else if next_page_token.is_none() {
-                *next_page_token = extract_continuation_token(item);
+                *next_page_token = continuation_token(item);
             }
         }
     }
@@ -254,7 +256,7 @@ fn parse_innertube_search(val: Value) -> (Vec<VideoSummary>, Option<String>) {
                 process_search_items(items_arr, &mut items, &mut next_page_token);
             }
             if next_page_token.is_none() {
-                next_page_token = extract_continuation_token(section);
+                next_page_token = continuation_token(section);
             }
         }
     }

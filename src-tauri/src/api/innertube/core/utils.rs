@@ -1,3 +1,8 @@
+use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::text::{browse_id_in_runs, text_of};
+use crate::api::innertube::json::thumbnail::{
+    normalize_youtube_image_url, thumbnail_url_from_array,
+};
 use crate::models::channel::ShortVideoSummary;
 use crate::models::video::{RelatedContentItem, VideoSummary};
 use serde_json::{Value, json};
@@ -70,185 +75,10 @@ pub fn detect_lockup_is_live(lockup: &Value) -> bool {
     false
 }
 
-pub fn parse_duration_seconds(simple_text: &str) -> u64 {
-    let parts: Vec<&str> = simple_text.split(':').collect();
-    let mut total = 0u64;
-    let mut multiplier = 1u64;
-    for part in parts.iter().rev() {
-        if let Ok(num) = part.parse::<u64>() {
-            total += num * multiplier;
-            multiplier *= 60;
-        }
-    }
-    total
-}
-
-pub fn parse_mixed_number_word_to_long(text: &str) -> u64 {
-    let cleaned = text
-        .to_lowercase()
-        .replace("subscribers", "")
-        .replace("subscriber", "")
-        .replace("views", "")
-        .replace("view", "")
-        .replace(",", "")
-        .trim()
-        .to_string();
-
-    let mut multiplier = 1.0f64;
-    let mut number_part = cleaned.clone();
-
-    if cleaned.ends_with('k') {
-        multiplier = 1_000.0;
-        number_part = cleaned[..cleaned.len() - 1].trim().to_string();
-    } else if cleaned.ends_with('m') {
-        multiplier = 1_000_000.0;
-        number_part = cleaned[..cleaned.len() - 1].trim().to_string();
-    } else if cleaned.ends_with('b') {
-        multiplier = 1_000_000_000.0;
-        number_part = cleaned[..cleaned.len() - 1].trim().to_string();
-    }
-
-    if let Ok(num) = number_part.parse::<f64>() {
-        (num * multiplier) as u64
-    } else {
-        0
-    }
-}
-
-pub fn extract_continuation_token(item: &Value) -> Option<String> {
-    item.get("continuationItemRenderer")
-        .and_then(|renderer| {
-            renderer["continuationEndpoint"]["continuationCommand"]["token"].as_str()
-        })
-        .map(ToOwned::to_owned)
-}
-
-pub fn extract_browse_id_from_text_runs(container: &Value, field: &str) -> Option<String> {
-    container[field]["runs"].as_array().and_then(|runs| {
-        runs.iter().find_map(|run| {
-            run["navigationEndpoint"]["browseEndpoint"]["browseId"]
-                .as_str()
-                .map(ToOwned::to_owned)
-        })
-    })
-}
-
 pub fn extract_channel_id_from_video_renderer(video: &Value) -> Option<String> {
-    extract_browse_id_from_text_runs(video, "ownerText")
-        .or_else(|| extract_browse_id_from_text_runs(video, "longBylineText"))
-        .or_else(|| extract_browse_id_from_text_runs(video, "shortBylineText"))
-}
-
-pub fn extract_text_from_value(value: &Value) -> Option<String> {
-    if let Some(text) = value.as_str() {
-        return Some(text.to_string());
-    }
-
-    if let Some(text) = value["simpleText"].as_str() {
-        return Some(text.to_string());
-    }
-
-    if let Some(text) = value["content"].as_str() {
-        return Some(text.to_string());
-    }
-
-    if let Some(runs) = value["runs"].as_array() {
-        let text = runs
-            .iter()
-            .filter_map(|run| run["text"].as_str().or_else(|| run["content"].as_str()))
-            .collect::<String>();
-        if !text.is_empty() {
-            return Some(text);
-        }
-    }
-
-    None
-}
-
-pub fn thumbnail_url_from_array(value: &Value) -> Option<String> {
-    value
-        .as_array()
-        .and_then(|thumbnails| thumbnails.last())
-        .and_then(|thumb| thumb["url"].as_str().or_else(|| thumb["uri"].as_str()))
-        .map(normalize_youtube_image_url)
-}
-
-pub fn youtube_video_thumbnail_url(video_id: &str, quality: &str) -> String {
-    format!("https://i.ytimg.com/vi/{video_id}/{quality}.jpg")
-}
-
-pub fn best_video_thumbnail_url(video_id: &str, thumbnails: Option<&Value>) -> Option<String> {
-    thumbnails
-        .and_then(thumbnail_url_from_array)
-        .or_else(|| Some(youtube_video_thumbnail_url(video_id, "hq720")))
-}
-
-fn upgrade_youtube_thumbnail_url(url: String) -> String {
-    let (base, query) = url
-        .split_once('?')
-        .map_or((url.as_str(), ""), |(base, query)| (base, query));
-
-    if base.ends_with("maxresdefault.jpg")
-        || base.ends_with("maxresdefault.webp")
-        || base.ends_with("hq720.jpg")
-        || base.ends_with("hq720.webp")
-    {
-        return url;
-    }
-
-    for suffix in [
-        "mqdefault.jpg",
-        "hqdefault.jpg",
-        "sddefault.jpg",
-        "default.jpg",
-        "mqdefault.webp",
-        "hqdefault.webp",
-        "sddefault.webp",
-        "default.webp",
-    ] {
-        if let Some(prefix) = base.strip_suffix(suffix) {
-            return if query.is_empty() {
-                format!("{prefix}hq720.jpg")
-            } else {
-                format!("{prefix}hq720.jpg?{query}")
-            };
-        }
-    }
-
-    url
-}
-
-pub fn normalize_youtube_image_url(url: &str) -> String {
-    let mut normalized = if url.starts_with("//") {
-        format!("https:{url}")
-    } else {
-        url.to_string()
-    };
-
-    if normalized.contains("i.ytimg.com") || normalized.contains("img.youtube.com") {
-        normalized = upgrade_youtube_thumbnail_url(normalized);
-    } else if normalized.contains("googleusercontent.com") || normalized.contains("ggpht.com") {
-        let is_yt3_avatar = normalized.contains("://yt3.")
-            || normalized.contains("//yt3.")
-            || normalized.contains("yt3.googleusercontent.com")
-            || normalized.contains("yt3.ggpht.com");
-        if let Some(eq_pos) = normalized.find('=') {
-            let base = &normalized[..eq_pos];
-            normalized = if is_yt3_avatar {
-                format!("{base}=s512")
-            } else {
-                format!("{base}=w1080-h1080-p-l90-rj")
-            };
-        } else {
-            normalized.push_str(if is_yt3_avatar {
-                "=s512"
-            } else {
-                "=w1080-h1080-p-l90-rj"
-            });
-        }
-    }
-
-    normalized
+    browse_id_in_runs(video, "ownerText")
+        .or_else(|| browse_id_in_runs(video, "longBylineText"))
+        .or_else(|| browse_id_in_runs(video, "shortBylineText"))
 }
 
 pub fn build_video_summary_from_compact_video(video: &Value) -> Option<VideoSummary> {
@@ -275,7 +105,7 @@ pub fn build_video_summary_from_compact_video(video: &Value) -> Option<VideoSumm
     let duration_seconds = video["lengthText"]["simpleText"]
         .as_str()
         .or_else(|| video["lengthText"]["runs"][0]["text"].as_str())
-        .map(parse_duration_seconds);
+        .and_then(parse_duration);
 
     let published_text = video["publishedTimeText"]["simpleText"]
         .as_str()
@@ -430,7 +260,7 @@ pub fn duration_from_lockup(lockup: &Value) -> Option<u64> {
                         badges.iter().find_map(|badge| {
                             let text = badge["thumbnailBadgeViewModel"]["text"].as_str()?;
                             if text.chars().any(|c| c.is_ascii_digit()) {
-                                Some(parse_duration_seconds(text))
+                                parse_duration(text)
                             } else {
                                 None
                             }
@@ -640,13 +470,13 @@ pub fn short_video_summary_from_item(item: &Value) -> Option<ShortVideoSummary> 
 
     Some(ShortVideoSummary {
         id: id.as_str().filter(|id| !id.is_empty())?.to_string(),
-        title: extract_text_from_value(title).unwrap_or_default(),
+        title: text_of(title).unwrap_or_default(),
         thumbnail_url: thumbnails
             .as_array()
             .and_then(|sources| sources.last())
             .and_then(|source| source["url"].as_str())
             .map(ToOwned::to_owned),
-        view_count_text: extract_text_from_value(view_count_text),
+        view_count_text: text_of(view_count_text),
     })
 }
 

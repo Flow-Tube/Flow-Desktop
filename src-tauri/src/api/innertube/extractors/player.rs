@@ -5,9 +5,10 @@ use crate::api::innertube::core::player_js;
 use crate::api::innertube::core::player_requests::{PlaybackPriority, PlayerFlights};
 use crate::api::innertube::core::utils::{
     collect_related_content_items, dedupe_related_content_items,
-    extract_channel_id_from_video_renderer, extract_text_from_value, thumbnail_url_from_array,
-    watch_next_body,
+    extract_channel_id_from_video_renderer, watch_next_body,
 };
+use crate::api::innertube::json::text::text_of;
+use crate::api::innertube::json::thumbnail::thumbnail_url_from_array;
 use crate::errors::{AppError, AppResult};
 use crate::models::video::{
     AudioTrack, CaptionTrack, RelatedContentItem, SabrStreamInfo, StreamInfo, StreamVariant,
@@ -299,7 +300,7 @@ fn parse_chapters_from_marker_map(
             continue;
         }
 
-        let title = if let Some(t) = extract_text_from_value(&chapter_renderer["title"]) {
+        let title = if let Some(t) = text_of(&chapter_renderer["title"]) {
             t
         } else if let Some(t) = chapter_renderer["title"]["simpleText"].as_str() {
             t.to_string()
@@ -761,8 +762,7 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
         };
         let language_code = track["languageCode"].as_str().unwrap_or("und").to_string();
         native_language_codes.insert(language_code.clone());
-        let label =
-            extract_text_from_value(&track["name"]).unwrap_or_else(|| language_code.clone());
+        let label = text_of(&track["name"]).unwrap_or_else(|| language_code.clone());
         let vss_id = track["vssId"].as_str().unwrap_or_default();
         let is_auto_generated = vss_id.starts_with("a.")
             || track["kind"]
@@ -802,8 +802,8 @@ fn collect_caption_tracks(response: &Value) -> Vec<CaptionTrack> {
                 let Some(url) = caption_url(base_url, Some(language_code)) else {
                     continue;
                 };
-                let label = extract_text_from_value(&language["languageName"])
-                    .unwrap_or_else(|| language_code.to_string());
+                let label =
+                    text_of(&language["languageName"]).unwrap_or_else(|| language_code.to_string());
 
                 captions.push(CaptionTrack {
                     id: format!("caption-translated-{language_code}"),
@@ -1137,7 +1137,7 @@ fn clean_like_count_from_accessibility(text: &str) -> Option<String> {
 /// The like count on the watch page's like button: its `title` ("26K"), else the number in its
 /// accessibility label. A title without a digit is the hidden-likes "Like".
 fn like_count_from_button(button_vm: &Value) -> Option<String> {
-    extract_text_from_value(&button_vm["title"])
+    text_of(&button_vm["title"])
         .filter(|title| title.chars().any(|c| c.is_ascii_digit()))
         .or_else(|| {
             button_vm["accessibilityText"]
@@ -1150,8 +1150,8 @@ fn like_count_from_button(button_vm: &Value) -> Option<String> {
 /// instead of "197".
 fn watch_view_count_text(primary_info: &Value) -> Option<String> {
     let renderer = &primary_info["viewCount"]["videoViewCountRenderer"];
-    extract_text_from_value(&renderer["viewCount"])
-        .or_else(|| extract_text_from_value(&renderer["shortViewCount"]))
+    text_of(&renderer["viewCount"])
+        .or_else(|| text_of(&renderer["shortViewCount"]))
         .map(|text| text.trim().to_string())
         .filter(|text| !text.is_empty())
 }
@@ -1798,7 +1798,7 @@ impl InnertubeClient {
             if !secondary_info.is_null() {
                 let owner = &secondary_info["owner"]["videoOwnerRenderer"];
                 if channel_name.is_empty() {
-                    if let Some(owner_name) = extract_text_from_value(&owner["title"]) {
+                    if let Some(owner_name) = text_of(&owner["title"]) {
                         channel_name = owner_name;
                     }
                 }

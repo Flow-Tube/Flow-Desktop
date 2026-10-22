@@ -143,30 +143,6 @@ impl RecommendationService {
             .as_millis() as u64
     }
 
-    pub fn parse_view_count(text: Option<&str>) -> u64 {
-        let t = match text {
-            Some(val) => val.to_lowercase(),
-            None => return 0,
-        };
-        let clean: String = t
-            .chars()
-            .filter(|c| c.is_ascii_digit() || *c == '.')
-            .collect();
-        if clean.is_empty() {
-            return 0;
-        }
-        let num: f64 = clean.parse().unwrap_or(0.0);
-        if t.contains('m') {
-            (num * 1_000_000.0) as u64
-        } else if t.contains('k') {
-            (num * 1_000.0) as u64
-        } else if t.contains('b') {
-            (num * 1_000_000_000.0) as u64
-        } else {
-            num as u64
-        }
-    }
-
     /// The searches a surface runs next; `reset_depth` starts a refresh, otherwise each call digs
     /// one level deeper into every served interest.
     pub async fn generate_discovery_queries(

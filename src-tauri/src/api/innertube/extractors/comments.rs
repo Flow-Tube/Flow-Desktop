@@ -4,11 +4,13 @@ use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::{
-    extract_text_from_value, normalize_youtube_image_url, parse_mixed_number_word_to_long,
-    thumbnail_url_from_array, watch_next_body,
-};
+use crate::api::innertube::core::utils::watch_next_body;
 use crate::api::innertube::json::continuation::continuation_token;
+use crate::api::innertube::json::count::parse_count;
+use crate::api::innertube::json::text::text_of;
+use crate::api::innertube::json::thumbnail::{
+    normalize_youtube_image_url, thumbnail_url_from_array,
+};
 use crate::errors::{AppError, AppResult};
 use crate::models::comment::{Comment, CommentsResponse};
 
@@ -274,7 +276,7 @@ fn collect_comments_from_value(
 
                 let like_count = renderer["voteCount"]["simpleText"]
                     .as_str()
-                    .map(parse_mixed_number_word_to_long);
+                    .and_then(parse_count);
 
                 let reply_count = renderer["replyCount"].as_u64();
 
@@ -344,7 +346,7 @@ fn collect_comments_from_value(
 
             let like_count = renderer["voteCount"]["simpleText"]
                 .as_str()
-                .map(parse_mixed_number_word_to_long);
+                .and_then(parse_count);
 
             let author_channel_id = renderer["authorEndpoint"]["browseEndpoint"]["browseId"]
                 .as_str()
@@ -440,7 +442,7 @@ fn build_comment_from_view_model(
         return None;
     }
 
-    let text = extract_text_from_value(&properties["content"]).unwrap_or_default();
+    let text = text_of(&properties["content"]).unwrap_or_default();
     // The avatar moved: current responses carry it as a plain string on the
     // author and drop the `avatar` object entirely. Both shapes are read so a
     // response of either vintage still renders a picture.
@@ -451,12 +453,10 @@ fn build_comment_from_view_model(
 
     let reply_count = toolbar["replyCount"]
         .as_str()
-        .map(parse_mixed_number_word_to_long)
+        .and_then(parse_count)
         .or_else(|| toolbar["replyCount"].as_u64());
 
-    let like_count = toolbar["likeCountNotliked"]
-        .as_str()
-        .map(parse_mixed_number_word_to_long);
+    let like_count = toolbar["likeCountNotliked"].as_str().and_then(parse_count);
 
     let continuation_token = comment_reply_token(replies_renderer);
 

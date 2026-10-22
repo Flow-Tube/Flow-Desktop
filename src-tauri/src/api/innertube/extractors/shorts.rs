@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::normalize_youtube_image_url;
+use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
 use crate::errors::AppResult;
 use crate::models::shorts::{ShortItem, ShortsFeed};
 use crate::streaming::sabr::pb::PbWriter;
@@ -121,8 +121,8 @@ fn parse_reel_entry(video_id: &str, endpoint: &Value) -> ShortItem {
         .or_else(|| endpoint["navigationEndpoint"]["browseEndpoint"]["browseId"].as_str())
         .map(ToOwned::to_owned);
 
-    let channel_avatar_url = last_thumbnail_url(&header["channelThumbnail"]["thumbnails"])
-        .or_else(|| last_thumbnail_url(&metadata["channelThumbnail"]["thumbnails"]))
+    let channel_avatar_url = largest_url(&header["channelThumbnail"]["thumbnails"])
+        .or_else(|| largest_url(&metadata["channelThumbnail"]["thumbnails"]))
         .map(|url| normalize_youtube_image_url(&url));
 
     let view_count_text =
@@ -202,14 +202,6 @@ fn reel_accessibility_count(label: &Value) -> Option<String> {
         n if n >= 1_000 => format!("{:.1}K", n as f64 / 1_000.0),
         n => n.to_string(),
     })
-}
-
-fn last_thumbnail_url(thumbnails: &Value) -> Option<String> {
-    thumbnails
-        .as_array()
-        .and_then(|arr| arr.last())
-        .and_then(|thumb| thumb["url"].as_str())
-        .map(ToOwned::to_owned)
 }
 
 #[cfg(test)]

@@ -4,6 +4,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::api::innertube::json::count::parse_count;
+
 use crate::flow_neuro::categories::ChannelCategory;
 use crate::flow_neuro::clusters::{ClusterInputs, TopicCluster, build_clusters};
 use crate::flow_neuro::diversity::apply_smart_diversity;
@@ -65,26 +67,7 @@ pub struct RankContext<'a> {
 /// "1.2M views" as a number; 0 when unknown.
 #[must_use]
 pub fn view_count_of(text: Option<&str>) -> u64 {
-    let Some(text) = text.map(str::to_lowercase) else {
-        return 0;
-    };
-    let digits: String = text
-        .chars()
-        .filter(|c| c.is_ascii_digit() || *c == '.')
-        .collect();
-    let number: f64 = digits.parse().unwrap_or(0.0);
-    let scale = if text.contains('m') {
-        1_000_000.0
-    } else if text.contains('k') {
-        1_000.0
-    } else if text.contains('b') {
-        1_000_000_000.0
-    } else {
-        1.0
-    };
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let count = (number * scale) as u64;
-    count
+    text.and_then(parse_count).unwrap_or(0)
 }
 
 fn channel_of(video: &VideoSummary) -> &str {

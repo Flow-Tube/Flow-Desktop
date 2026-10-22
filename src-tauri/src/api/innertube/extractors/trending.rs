@@ -3,9 +3,12 @@ use std::collections::HashSet;
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
-    best_video_thumbnail_url, build_related_content_from_lockup, detect_video_is_live,
-    extract_channel_id_from_video_renderer, extract_text_from_value, normalize_youtube_image_url,
-    parse_duration_seconds, thumbnail_url_from_array,
+    build_related_content_from_lockup, detect_video_is_live, extract_channel_id_from_video_renderer,
+};
+use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::text::text_of;
+use crate::api::innertube::json::thumbnail::{
+    best_video_thumbnail_url, normalize_youtube_image_url, thumbnail_url_from_array,
 };
 use crate::errors::{AppError, AppResult};
 use crate::models::video::VideoSummary;
@@ -240,7 +243,7 @@ fn parse_video_renderer(video: &Value) -> Option<VideoSummary> {
         .or_else(|| video["videoId"]["runs"][0]["text"].as_str())?
         .to_string();
 
-    let title = extract_text_from_value(&video["title"])
+    let title = text_of(&video["title"])
         .or_else(|| {
             video["title"]["runs"][0]["text"]
                 .as_str()
@@ -252,16 +255,16 @@ fn parse_video_renderer(video: &Value) -> Option<VideoSummary> {
         return None;
     }
 
-    let channel_name = extract_text_from_value(&video["ownerText"])
-        .or_else(|| extract_text_from_value(&video["longBylineText"]))
-        .or_else(|| extract_text_from_value(&video["shortBylineText"]))
+    let channel_name = text_of(&video["ownerText"])
+        .or_else(|| text_of(&video["longBylineText"]))
+        .or_else(|| text_of(&video["shortBylineText"]))
         .unwrap_or_default();
 
-    let duration_text = extract_text_from_value(&video["lengthText"]);
+    let duration_text = text_of(&video["lengthText"]);
     let duration_seconds = duration_text
         .as_deref()
         .filter(|text| !text.is_empty())
-        .map(parse_duration_seconds);
+        .and_then(parse_duration);
 
     let thumbnail_url = best_video_thumbnail_url(&id, Some(&video["thumbnail"]["thumbnails"]));
 
@@ -279,9 +282,9 @@ fn parse_video_renderer(video: &Value) -> Option<VideoSummary> {
         channel_id: extract_channel_id_from_video_renderer(video),
         thumbnail_url,
         duration_seconds,
-        published_text: extract_text_from_value(&video["publishedTimeText"]),
-        view_count_text: extract_text_from_value(&video["viewCountText"])
-            .or_else(|| extract_text_from_value(&video["shortViewCountText"])),
+        published_text: text_of(&video["publishedTimeText"]),
+        view_count_text: text_of(&video["viewCountText"])
+            .or_else(|| text_of(&video["shortViewCountText"])),
         channel_avatar_url,
         is_live: detect_video_is_live(video),
     })

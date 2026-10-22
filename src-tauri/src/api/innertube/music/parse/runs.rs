@@ -1,5 +1,6 @@
 //! Text / `runs` helpers and byline (artist/album/duration) splitting.
 
+pub use crate::api::innertube::json::duration::parse_duration;
 use serde_json::Value;
 
 use super::endpoint::{browse_id, page_type};
@@ -34,19 +35,6 @@ pub fn flex_text(r: &Value, col: usize) -> Option<String> {
 
 /// Parse a `m:ss` / `h:mm:ss` duration string into seconds.
 #[must_use]
-pub fn parse_duration(text: &str) -> Option<u64> {
-    let parts: Vec<&str> = text.trim().split(':').collect();
-    if parts.len() < 2 || parts.len() > 3 {
-        return None;
-    }
-    let mut total = 0u64;
-    for part in &parts {
-        let n = part.trim().parse::<u64>().ok()?;
-        total = total * 60 + n;
-    }
-    Some(total)
-}
-
 /// A run that is a `•`/separator/whitespace and should be skipped.
 fn is_separator(text: &str) -> bool {
     let t = text.trim();

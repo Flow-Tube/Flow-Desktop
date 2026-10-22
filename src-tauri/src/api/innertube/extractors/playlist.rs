@@ -1,12 +1,13 @@
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
 use crate::api::innertube::core::utils::{
-    best_video_thumbnail_url, build_related_content_from_lockup,
-    extract_channel_id_from_video_renderer, extract_text_from_value,
-    map_related_content_to_video_summary, parse_mixed_number_word_to_long,
-    short_video_summary_from_item,
+    build_related_content_from_lockup, extract_channel_id_from_video_renderer,
+    map_related_content_to_video_summary, short_video_summary_from_item,
 };
 use crate::api::innertube::json::continuation::{continuation_item_lists, last_continuation_token};
+use crate::api::innertube::json::count::parse_count;
+use crate::api::innertube::json::text::text_of;
+use crate::api::innertube::json::thumbnail::best_video_thumbnail_url;
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::ShortVideoSummary;
 use crate::models::playlist::PlaylistDetailsResponse;
@@ -384,7 +385,7 @@ fn extract_playlist_video_count(header: &Value) -> Option<u64> {
         .or_else(|| {
             header["numVideosText"]["simpleText"]
                 .as_str()
-                .map(|s| parse_mixed_number_word_to_long(s))
+                .and_then(parse_count)
         })
 }
 
@@ -395,7 +396,7 @@ fn extract_video_count_from_sidebar(res: &Value) -> Option<u64> {
     let stat = items
         .iter()
         .find_map(|item| item["playlistSidebarPrimaryInfoRenderer"]["stats"].get(0))?;
-    let digits: String = extract_text_from_value(stat)?
+    let digits: String = text_of(stat)?
         .chars()
         .filter(char::is_ascii_digit)
         .collect();

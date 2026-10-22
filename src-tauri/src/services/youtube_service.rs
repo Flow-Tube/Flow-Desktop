@@ -102,8 +102,11 @@ impl YoutubeService {
         &self,
         video_id: &str,
         continuation: Option<String>,
+        replay_offset_ms: Option<u64>,
     ) -> AppResult<LiveChatResponse> {
-        self.extractor.get_live_chat(video_id, continuation).await
+        self.extractor
+            .get_live_chat(video_id, continuation, replay_offset_ms)
+            .await
     }
 
     pub async fn get_trending_videos(

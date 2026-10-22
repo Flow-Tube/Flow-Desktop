@@ -29,6 +29,9 @@ pub struct LiveChatMessage {
     pub super_chat_amount: Option<String>,
     pub super_chat_argb: Option<i64>,
     pub super_chat_header_argb: Option<i64>,
+    /// Where in a replayed stream the message was sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video_offset_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,4 +42,13 @@ pub struct LiveChatResponse {
     // Server-recommended delay before the next poll, clamped to a safe range.
     pub polling_interval_ms: u64,
     pub is_replay: bool,
+    /// Tokens that restart the chat as "Top chat" or as every message, from the
+    /// first page's view selector.
+    #[serde(default)]
+    pub top_chat_continuation: Option<String>,
+    #[serde(default)]
+    pub all_chat_continuation: Option<String>,
+    /// A replay token that jumps to another playback position.
+    #[serde(default)]
+    pub seek_continuation: Option<String>,
 }

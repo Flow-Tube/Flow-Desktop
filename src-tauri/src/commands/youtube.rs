@@ -855,12 +855,13 @@ pub async fn get_post_comments(
 pub async fn get_live_chat(
     video_id: String,
     continuation: Option<String>,
+    replay_offset_ms: Option<u64>,
     youtube_service: State<'_, YoutubeService>,
 ) -> Result<crate::models::live_chat::LiveChatResponse, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
     youtube_service
-        .get_live_chat(&video_id, continuation)
+        .get_live_chat(&video_id, continuation, replay_offset_ms)
         .await
         .map_err(ErrorResponse::from)
 }

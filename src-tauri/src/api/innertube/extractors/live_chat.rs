@@ -3,7 +3,7 @@ use tracing::debug;
 
 use crate::api::innertube::InnertubeClient;
 use crate::api::innertube::core::clients;
-use crate::api::innertube::core::utils::watch_next_body;
+use crate::api::innertube::extractors::watch_next;
 use crate::api::innertube::json::thumbnail::largest_url;
 use crate::errors::AppResult;
 use crate::models::live_chat::{LiveChatMessage, LiveChatResponse, LiveChatSegment};
@@ -11,19 +11,6 @@ use crate::models::live_chat::{LiveChatMessage, LiveChatResponse, LiveChatSegmen
 const DEFAULT_POLL_MS: u64 = 2000;
 const MIN_POLL_MS: u64 = 1000;
 const MAX_POLL_MS: u64 = 15000;
-
-fn extract_seed_continuation(res: &Value) -> Option<String> {
-    res["contents"]["twoColumnWatchNextResults"]["conversationBar"]["liveChatRenderer"]
-        ["continuations"][0]["reloadContinuationData"]["continuation"]
-        .as_str()
-        .map(ToOwned::to_owned)
-}
-
-fn extract_is_replay(res: &Value) -> bool {
-    res["contents"]["twoColumnWatchNextResults"]["conversationBar"]["liveChatRenderer"]["isReplay"]
-        .as_bool()
-        .unwrap_or(false)
-}
 
 fn parse_message_runs(message: &Value) -> (String, Vec<LiveChatSegment>) {
     let mut text = String::new();
@@ -128,6 +115,7 @@ fn parse_renderer(renderer: &Value, message_type: &str) -> Option<LiveChatMessag
             .map(ToOwned::to_owned),
         super_chat_argb: renderer["bodyBackgroundColor"].as_i64(),
         super_chat_header_argb: renderer["headerBackgroundColor"].as_i64(),
+        video_offset_ms: None,
     })
 }
 
@@ -144,98 +132,197 @@ fn parse_chat_item(item: &Value) -> Option<LiveChatMessage> {
     None
 }
 
-fn parse_live_chat_page(res: &Value) -> (Vec<LiveChatMessage>, Option<String>, u64) {
-    let continuation = &res["continuationContents"]["liveChatContinuation"];
+/// One page of chat: its messages (a replay's with their offset into the
+/// stream), the tokens that continue it, and when to ask again.
+struct ChatPage {
+    messages: Vec<LiveChatMessage>,
+    next: Option<String>,
+    seek: Option<String>,
+    polling_interval_ms: u64,
+    /// The view selector's "Top chat" and all-messages tokens, in that order.
+    views: (Option<String>, Option<String>),
+}
 
-    let cont_obj = continuation["continuations"]
-        .as_array()
-        .and_then(|arr| arr.first());
-    let next = cont_obj.and_then(|obj| {
-        obj["timedContinuationData"]["continuation"]
-            .as_str()
-            .or_else(|| obj["invalidationContinuationData"]["continuation"].as_str())
-            .or_else(|| obj["reloadContinuationData"]["continuation"].as_str())
-            .or_else(|| obj["liveChatReplayContinuationData"]["continuation"].as_str())
+fn parse_live_chat_page(res: &Value) -> ChatPage {
+    let continuation = &res["continuationContents"]["liveChatContinuation"];
+    let continuations = continuation["continuations"].as_array();
+    let token = |kind: &str| {
+        continuations
+            .into_iter()
+            .flatten()
+            .find_map(|entry| entry[kind]["continuation"].as_str())
             .map(ToOwned::to_owned)
-    });
-    let timeout = cont_obj
-        .and_then(|obj| {
-            obj["timedContinuationData"]["timeoutMs"]
+    };
+    let next = token("timedContinuationData")
+        .or_else(|| token("invalidationContinuationData"))
+        .or_else(|| token("reloadContinuationData"))
+        .or_else(|| token("liveChatReplayContinuationData"));
+    let polling_interval_ms = continuations
+        .into_iter()
+        .flatten()
+        .find_map(|entry| {
+            entry["timedContinuationData"]["timeoutMs"]
                 .as_u64()
-                .or_else(|| obj["invalidationContinuationData"]["timeoutMs"].as_u64())
+                .or_else(|| entry["invalidationContinuationData"]["timeoutMs"].as_u64())
         })
         .unwrap_or(DEFAULT_POLL_MS)
         .clamp(MIN_POLL_MS, MAX_POLL_MS);
 
     let mut messages = Vec::new();
-    if let Some(actions) = continuation["actions"].as_array() {
-        for action in actions {
-            let item = &action["addChatItemAction"]["item"];
-            if !item.is_null() {
-                if let Some(msg) = parse_chat_item(item) {
-                    messages.push(msg);
-                }
-            } else if let Some(replay_actions) =
-                action["replayChatItemAction"]["actions"].as_array()
-            {
-                for replay in replay_actions {
-                    if let Some(msg) = parse_chat_item(&replay["addChatItemAction"]["item"]) {
-                        messages.push(msg);
-                    }
-                }
+    for action in continuation["actions"].as_array().into_iter().flatten() {
+        if let Some(message) = parse_chat_item(&action["addChatItemAction"]["item"]) {
+            messages.push(message);
+            continue;
+        }
+        let replay = &action["replayChatItemAction"];
+        let offset = replay["videoOffsetTimeMsec"]
+            .as_str()
+            .and_then(|offset| offset.parse().ok());
+        for replayed in replay["actions"].as_array().into_iter().flatten() {
+            if let Some(mut message) = parse_chat_item(&replayed["addChatItemAction"]["item"]) {
+                message.video_offset_ms = offset;
+                messages.push(message);
             }
         }
     }
 
-    (messages, next, timeout)
+    let views: Vec<Option<String>> = continuation["header"]["liveChatHeaderRenderer"]
+        ["viewSelector"]["sortFilterSubMenuRenderer"]["subMenuItems"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|item| {
+            item["continuation"]["reloadContinuationData"]["continuation"]
+                .as_str()
+                .map(ToOwned::to_owned)
+        })
+        .collect();
+
+    ChatPage {
+        messages,
+        next,
+        seek: token("playerSeekContinuationData"),
+        polling_interval_ms,
+        views: (
+            views.first().cloned().flatten(),
+            views.get(1).cloned().flatten(),
+        ),
+    }
 }
 
 impl InnertubeClient {
-    async fn get_live_chat_seed(&self, video_id: &str) -> AppResult<(Option<String>, bool)> {
-        let mut payload = watch_next_body(video_id);
-        let res = self
-            .post_innertube("next", &clients::WEB, &mut payload)
-            .await?;
-        Ok((extract_seed_continuation(&res), extract_is_replay(&res)))
-    }
-
+    /// A page of a video's chat. Without `continuation` the chat is seeded from
+    /// the watch answer, which also says whether it is a replay. A replay is
+    /// read at `replay_offset_ms` into the stream; a continuation passed with an
+    /// offset is a replay's.
     pub async fn get_live_chat(
         &self,
         video_id: &str,
         continuation: Option<String>,
+        replay_offset_ms: Option<u64>,
     ) -> AppResult<LiveChatResponse> {
         let video_id_trimmed = video_id.trim();
-
-        let (token, is_replay) = match continuation {
-            Some(token) if !token.is_empty() => (token, false),
-            _ => {
-                let (seed, is_replay) = self.get_live_chat_seed(video_id_trimmed).await?;
-                match seed {
-                    Some(token) => (token, is_replay),
-                    None => {
-                        debug!(video_id = %video_id_trimmed, "[get_live_chat] No live chat available");
-                        return Ok(LiveChatResponse {
-                            messages: Vec::new(),
-                            continuation: None,
-                            polling_interval_ms: 0,
-                            is_replay,
-                        });
-                    }
-                }
-            }
+        let (token, is_replay) = if let Some(token) = continuation.filter(|token| !token.is_empty())
+        {
+            (token, replay_offset_ms.is_some())
+        } else {
+            let next = self.watch_next(video_id_trimmed).await?;
+            let Some((seed, is_replay)) = watch_next::chat_seed(&next) else {
+                debug!(video_id = %video_id_trimmed, "No live chat available");
+                return Ok(LiveChatResponse {
+                    messages: Vec::new(),
+                    continuation: None,
+                    polling_interval_ms: 0,
+                    is_replay: false,
+                    top_chat_continuation: None,
+                    all_chat_continuation: None,
+                    seek_continuation: None,
+                });
+            };
+            (seed, is_replay)
         };
 
-        let mut payload = serde_json::json!({ "continuation": token });
-        let res = self
-            .post_innertube("live_chat/get_live_chat", &clients::WEB, &mut payload)
-            .await?;
-        let (messages, next, polling_interval_ms) = parse_live_chat_page(&res);
+        let res = if is_replay {
+            let mut payload = serde_json::json!({
+                "continuation": token,
+                "currentPlayerState": { "playerOffsetMs": replay_offset_ms.unwrap_or(0).to_string() },
+            });
+            self.post_innertube(
+                "live_chat/get_live_chat_replay",
+                &clients::WEB,
+                &mut payload,
+            )
+            .await?
+        } else {
+            let mut payload = serde_json::json!({ "continuation": token });
+            self.post_innertube("live_chat/get_live_chat", &clients::WEB, &mut payload)
+                .await?
+        };
+        let page = parse_live_chat_page(&res);
 
         Ok(LiveChatResponse {
-            messages,
-            continuation: next,
-            polling_interval_ms,
+            messages: page.messages,
+            continuation: page.next,
+            polling_interval_ms: page.polling_interval_ms,
             is_replay,
+            top_chat_continuation: page.views.0,
+            all_chat_continuation: page.views.1,
+            seek_continuation: page.seek,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn text_message(id: &str) -> Value {
+        json!({ "liveChatTextMessageRenderer": {
+            "id": id,
+            "authorName": { "simpleText": "Viewer" },
+            "message": { "runs": [{ "text": "hello" }] }
+        } })
+    }
+
+    #[test]
+    fn replayed_messages_keep_their_offset_and_the_seek_token() {
+        let res = json!({ "continuationContents": { "liveChatContinuation": {
+            "continuations": [
+                { "liveChatReplayContinuationData": { "continuation": "NEXT", "timeUntilLastMessageMsec": 5000 } },
+                { "playerSeekContinuationData": { "continuation": "SEEK" } }
+            ],
+            "actions": [{ "replayChatItemAction": {
+                "videoOffsetTimeMsec": "341527",
+                "actions": [{ "addChatItemAction": { "item": text_message("a") } }]
+            } }]
+        } } });
+        let page = parse_live_chat_page(&res);
+        assert_eq!(page.next.as_deref(), Some("NEXT"));
+        assert_eq!(page.seek.as_deref(), Some("SEEK"));
+        assert_eq!(page.messages.len(), 1);
+        assert_eq!(page.messages[0].video_offset_ms, Some(341_527));
+    }
+
+    #[test]
+    fn the_view_selector_gives_the_top_and_all_messages_tokens() {
+        let res = json!({ "continuationContents": { "liveChatContinuation": {
+            "continuations": [{ "invalidationContinuationData": { "continuation": "LIVE", "timeoutMs": 5000 } }],
+            "actions": [{ "addChatItemAction": { "item": text_message("b") } }],
+            "header": { "liveChatHeaderRenderer": { "viewSelector": { "sortFilterSubMenuRenderer": {
+                "subMenuItems": [
+                    { "title": "Top chat", "continuation": { "reloadContinuationData": { "continuation": "TOP" } } },
+                    { "title": "Live chat", "continuation": { "reloadContinuationData": { "continuation": "ALL" } } }
+                ]
+            } } } }
+        } } });
+        let page = parse_live_chat_page(&res);
+        assert_eq!(page.next.as_deref(), Some("LIVE"));
+        assert_eq!(page.polling_interval_ms, 5000);
+        assert_eq!(
+            page.views,
+            (Some("TOP".to_string()), Some("ALL".to_string()))
+        );
+        assert_eq!(page.messages[0].video_offset_ms, None);
     }
 }

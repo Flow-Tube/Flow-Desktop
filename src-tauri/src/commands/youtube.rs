@@ -955,13 +955,10 @@ pub(crate) async fn fetch_sponsorblock_segments(
         "{base_url}/api/skipSegments?videoID={video_id}&categories=[\"sponsor\",\"intro\",\"outro\",\"selfpromo\",\"interaction\",\"filler\",\"music_offtopic\",\"preview\",\"exclusive_access\"]"
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("FlowDesktop/1.0")
-        .build()
-        .unwrap_or_default();
-
-    let res = client
+    let res = crate::api::http::shared_client()
         .get(&url)
+        .header(reqwest::header::USER_AGENT, SPONSORBLOCK_USER_AGENT)
+        .timeout(SPONSORBLOCK_TIMEOUT)
         .send()
         .await
         .map_err(|e| crate::errors::AppError::Extractor(format!("Network error: {e}")))?;
@@ -1008,6 +1005,9 @@ fn normalize_sponsorblock_server_url(server_url: Option<&str>) -> crate::errors:
     }
     Ok(origin)
 }
+
+const SPONSORBLOCK_USER_AGENT: &str = "FlowDesktop/1.0";
+const SPONSORBLOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 9] = [
     "sponsor",
@@ -1079,11 +1079,6 @@ async fn submit_sponsorblock_segment_inner(
 
     let base_url = normalize_sponsorblock_server_url(server_url)?;
 
-    let client = reqwest::Client::builder()
-        .user_agent("FlowDesktop/1.0")
-        .build()
-        .unwrap_or_default();
-
     let mut url = reqwest::Url::parse(&format!("{base_url}/api/skipSegments")).map_err(|_| {
         crate::errors::AppError::Validation("Invalid SponsorBlock server URL".into())
     })?;
@@ -1095,8 +1090,10 @@ async fn submit_sponsorblock_segment_inner(
         .append_pair("userID", user_id)
         .append_pair("userAgent", "FlowDesktop/1.0");
 
-    let res = client
+    let res = crate::api::http::shared_client()
         .post(url)
+        .header(reqwest::header::USER_AGENT, SPONSORBLOCK_USER_AGENT)
+        .timeout(SPONSORBLOCK_TIMEOUT)
         .send()
         .await
         .map_err(|e| crate::errors::AppError::Extractor(format!("Network error: {e}")))?;

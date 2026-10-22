@@ -369,11 +369,9 @@ pub async fn lyrics_http_get(
             "Only https URLs are allowed".into(),
         )));
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| ErrorResponse::from(AppError::Extractor(e.to_string())))?;
-    let mut req = client.get(&url);
+    let mut req = crate::api::http::shared_client()
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(15));
     if let Some(h) = headers {
         for (k, v) in h {
             req = req.header(k, v);

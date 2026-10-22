@@ -7,12 +7,15 @@ import { ShortCard } from "../shorts/ShortCard";
 
 interface ShortsShelfProps {
   title: string;
+  /** Shown at the end of the header, such as a "See all" button. */
+  action?: React.ReactNode;
   shorts: ShortVideoSummary[];
   onPlay: (video: VideoSummary) => void;
 }
 
 export const ShortsShelf: React.FC<ShortsShelfProps> = ({
   title,
+  action,
   shorts,
 }) => {
   const shortsShelfEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_SHELF_ENABLED] !== "false");
@@ -28,6 +31,7 @@ export const ShortsShelf: React.FC<ShortsShelfProps> = ({
             {shorts.length}
           </span>
         </h2>
+        {action}
       </div>
 
       <ShelfScroller className="flex gap-4 px-3 -mx-3 pt-3 -mt-2 pb-3">

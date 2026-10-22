@@ -3,7 +3,9 @@ import type {
   SearchVideosResponse,
   VideoDetails,
   StreamInfo,
+  ChannelAbout,
   ChannelDetails,
+  ChannelPage,
   ChannelTabResponse,
   ChannelItem,
   PlaylistDetailsResponse,
@@ -213,9 +215,30 @@ export async function getChannelDetails(channelId: string): Promise<ChannelDetai
       subscriberCount: 154000,
       subscriberCountText: "154K subscribers",
       verified: true,
+      tabs: [
+        { kind: "home", title: "Home", selected: true },
+        { kind: "videos", title: "Videos", params: "videos", selected: false },
+      ],
     };
   }
   return invokeBackend<ChannelDetails>("get_channel_details", { channelId });
+}
+
+/** A channel's header, tabs and Home shelves, from one request. */
+export async function getChannelPage(channelId: string): Promise<ChannelPage> {
+  if (!(await isTauriEnv())) {
+    const [details, home] = await Promise.all([getChannelDetails(channelId), getChannelTab(channelId)]);
+    return { details, home };
+  }
+  return invokeBackend<ChannelPage>("get_channel_page", { channelId });
+}
+
+/** A channel's About panel, by the token its header carries. */
+export async function getChannelAbout(token: string): Promise<ChannelAbout> {
+  if (!(await isTauriEnv())) {
+    throw new Error("The About panel requires the desktop app.");
+  }
+  return invokeBackend<ChannelAbout>("get_channel_about", { token });
 }
 
 /** Resolve a channel URL (handle / custom / user) to its canonical `UC…` id. */
@@ -289,6 +312,8 @@ export async function getChannelTab(
       channelId,
       items: mockItems,
       nextPageToken: null,
+      sections: [],
+      filters: [],
     };
   }
   return invokeBackend<ChannelTabResponse>("get_channel_tab", {

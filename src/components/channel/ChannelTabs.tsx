@@ -1,115 +1,90 @@
-import React, { useState } from "react";
-import { Search, X } from "lucide-react";
-
-export type TabId = "home" | "videos" | "shorts" | "live" | "podcasts" | "playlists" | "posts";
+import React from "react";
+import { X } from "lucide-react";
+import { SearchInput } from "../ui/SearchInput";
+import { getString, type StringKey } from "../../lib/i18n/index";
+import type { ChannelTab } from "../../types/video";
 
 interface ChannelTabsProps {
-  activeTab: TabId;
-  onTabChange: (tab: TabId) => void;
-  availableTabs?: string[];
+  tabs: ChannelTab[];
+  activeKind: string | null;
+  onTabChange: (tab: ChannelTab) => void;
   searchQuery: string;
   onSearchQueryChange: (q: string) => void;
   onSearchSubmit: () => void;
   onSearchClear: () => void;
 }
 
+const LABELS: Record<string, StringKey> = {
+  home: "channel_tab_home",
+  videos: "channel_tab_videos",
+  shorts: "channel_tab_shorts",
+  live: "channel_tab_live",
+  podcasts: "channel_tab_podcasts",
+  playlists: "channel_tab_playlists",
+  releases: "channel_tab_releases",
+  courses: "channel_tab_courses",
+  posts: "channel_tab_posts",
+};
+
+function tabLabel(tab: ChannelTab): string {
+  const key = LABELS[tab.kind];
+  return key ? getString(key) : tab.title;
+}
+
 export const ChannelTabs: React.FC<ChannelTabsProps> = ({
-  activeTab,
+  tabs,
+  activeKind,
   onTabChange,
-  availableTabs,
   searchQuery,
   onSearchQueryChange,
   onSearchSubmit,
   onSearchClear,
-}) => {
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+}) => (
+  <div className="sticky top-0 z-40 w-full border-b border-chrome-neutral-800 bg-background">
+    <div className="mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="hide-scrollbar flex h-14 items-center justify-between gap-4 overflow-x-auto">
+        <div className="flex h-full items-center space-x-8">
+          {tabs.map((tab) => {
+            const isActive = activeKind === tab.kind;
+            return (
+              <button
+                key={tab.kind}
+                type="button"
+                onClick={() => onTabChange(tab)}
+                className={`relative h-full whitespace-nowrap py-6 text-sm font-semibold transition-colors ${
+                  isActive ? "text-[var(--color-primary)]" : "text-chrome-neutral-400 hover:text-chrome-neutral-100"
+                }`}
+              >
+                {tabLabel(tab)}
+                {isActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)]" />}
+              </button>
+            );
+          })}
+        </div>
 
-  let tabs: { id: TabId; label: string }[] = [
-    { id: "home", label: "Home" },
-    { id: "videos", label: "Videos" },
-    { id: "shorts", label: "Shorts" },
-    { id: "live", label: "Live" },
-    { id: "podcasts", label: "Podcasts" },
-    { id: "playlists", label: "Playlists" },
-    { id: "posts", label: "Posts" },
-  ];
-
-  if (availableTabs && availableTabs.length > 0) {
-    const tabLabels = availableTabs.map(t => t.toLowerCase());
-    tabs = tabs.filter(tab => {
-      if (tab.id === "home") return tabLabels.includes("home");
-      if (tab.id === "videos") return tabLabels.includes("videos");
-      if (tab.id === "shorts") return tabLabels.includes("shorts");
-      if (tab.id === "live") return tabLabels.includes("live") || tabLabels.includes("streams");
-      if (tab.id === "podcasts") return tabLabels.includes("podcasts");
-      if (tab.id === "playlists") return tabLabels.includes("playlists");
-      if (tab.id === "posts") return tabLabels.includes("community") || tabLabels.includes("posts");
-      return true;
-    });
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      onSearchSubmit();
-    }
-  };
-
-  return (
-    <div className="sticky top-0 z-40 w-full border-b border-chrome-neutral-800 bg-background/95">
-      <div className=" mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-14 gap-4 overflow-x-auto scrollbar-none hide-scrollbar">
-          <div className="flex space-x-8 h-full items-center">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={`
-                    relative h-full py-6 text-sm font-semibold transition-colors
-                    ${isActive ? "text-[var(--color-primary)]" : "text-chrome-neutral-400 hover:text-chrome-neutral-100"}
-                    whitespace-nowrap
-                  `}
-                >
-                  {tab.label}
-                  {isActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--color-primary)] animate-fade-in" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center flex-shrink-0">
-            <div 
-              className={`
-                flex items-center h-9 px-3 rounded-full bg-surface-container-low border transition-all duration-300
-                ${isSearchFocused ? "border-chrome-neutral-500 w-48 sm:w-64" : "border-chrome-neutral-800 w-36 sm:w-48"}
-              `}
+        <div className="flex shrink-0 items-center gap-1">
+          <SearchInput
+            value={searchQuery}
+            onChange={(e) => onSearchQueryChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSearchSubmit();
+            }}
+            placeholder={getString("channel_search_placeholder")}
+            containerClassName="w-40 sm:w-56"
+            className="h-9 rounded-full"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              aria-label={getString("channel_search_clear")}
+              onClick={onSearchClear}
+              className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-high"
             >
-              <Search className="mr-2 flex-shrink-0 text-chrome-neutral-400" size={16} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchQueryChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                placeholder="Search channel..."
-                className="w-full bg-transparent text-sm text-chrome-neutral-100 outline-none placeholder:text-chrome-neutral-500"
-              />
-              {searchQuery && (
-                <button 
-                  onClick={onSearchClear}
-                  className="flex-shrink-0 rounded-full p-1 transition-colors hover:bg-surface-container-high"
-                >
-                  <X className="text-chrome-neutral-400" size={14} />
-                </button>
-              )}
-            </div>
-          </div>
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
     </div>
-  );
-};
+  </div>
+);

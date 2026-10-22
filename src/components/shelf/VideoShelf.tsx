@@ -5,6 +5,8 @@ import type { VideoSummary } from "../../types/video";
 
 interface VideoShelfProps {
   title?: string;
+  /** Shown at the end of the header, such as a "See all" button. */
+  action?: React.ReactNode;
   videos: VideoSummary[];
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
@@ -17,6 +19,7 @@ interface VideoShelfProps {
 
 export const VideoShelf: React.FC<VideoShelfProps> = ({
   title,
+  action,
   videos,
   onPlay,
   onAddToQueue,
@@ -39,6 +42,7 @@ export const VideoShelf: React.FC<VideoShelfProps> = ({
               {videos.length}
             </span>
           </h2>
+          {action}
         </div>
       ) : null}
 

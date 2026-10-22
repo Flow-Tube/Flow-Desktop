@@ -340,16 +340,45 @@ export interface SearchVideosResponse {
   correction?: SearchCorrection | null;
 }
 
+/** One of a channel's tabs; `kind` comes from its URL, `title` arrives localised. */
+export interface ChannelTab {
+  kind: string;
+  title: string;
+  params?: string | null;
+  selected: boolean;
+}
+
 export interface ChannelDetails {
   id: string;
   name: string;
+  handle?: string | null;
   description?: string | null;
   avatarUrl?: string | null;
   bannerUrl?: string | null;
   subscriberCount?: number | null;
   subscriberCountText?: string | null;
+  videoCountText?: string | null;
   verified: boolean;
-  availableTabs?: string[];
+  tabs: ChannelTab[];
+  /** Loads the About panel. */
+  aboutToken?: string | null;
+}
+
+export interface ChannelLink {
+  title: string;
+  url: string;
+  iconUrl?: string | null;
+}
+
+export interface ChannelAbout {
+  description?: string | null;
+  countryText?: string | null;
+  joinedDateText?: string | null;
+  viewCountText?: string | null;
+  videoCountText?: string | null;
+  subscriberCountText?: string | null;
+  canonicalUrl?: string | null;
+  links: ChannelLink[];
 }
 
 export interface ShortVideoSummary {
@@ -389,15 +418,62 @@ export interface VideoItemSummary extends VideoSummary {
   type: "video";
 }
 
-export type ChannelItem = VideoItemSummary | ShortVideoSummary | PlaylistSummary | PostSummary;
+/** A channel listed on another channel's page ("Featured Channels"). */
+export interface ChannelSummaryItem {
+  type: "channel";
+  channelId: string;
+  name: string;
+  avatarUrl?: string | null;
+  subscriberCountText?: string | null;
+}
+
+export type ChannelItem =
+  | VideoItemSummary
+  | ShortVideoSummary
+  | PlaylistSummary
+  | PostSummary
+  | ChannelSummaryItem;
+
+/** Where a section's "See all" leads: a tab's browse params or a playlist. */
+export interface ChannelSectionMore {
+  params?: string | null;
+  playlistId?: string | null;
+}
+
+/** A titled run on a channel's Home tab, in the channel's own order. */
+export interface ChannelSection {
+  title: string;
+  items: ChannelItem[];
+  more?: ChannelSectionMore | null;
+  isTrailer: boolean;
+}
+
+/** Chips and sort sheets reload by `continuation`; the Playlists sort menu re-browses with `params`. */
+export interface ChannelFilterOption {
+  label: string;
+  selected: boolean;
+  continuation?: string | null;
+  params?: string | null;
+}
+
+export interface ChannelFilterGroup {
+  title?: string | null;
+  isDropdown: boolean;
+  options: ChannelFilterOption[];
+}
 
 export interface ChannelTabResponse {
   channelId: string;
   items: ChannelItem[];
   nextPageToken?: string | null;
-  sortLatestToken?: string | null;
-  sortPopularToken?: string | null;
-  sortOldestToken?: string | null;
+  /** Home's shelves; empty for a grid tab. */
+  sections: ChannelSection[];
+  filters: ChannelFilterGroup[];
+}
+
+export interface ChannelPage {
+  details: ChannelDetails;
+  home: ChannelTabResponse;
 }
 
 export interface PlaylistDetailsResponse {

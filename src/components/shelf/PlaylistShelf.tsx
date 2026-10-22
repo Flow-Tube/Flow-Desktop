@@ -5,12 +5,15 @@ import type { PlaylistSummary } from "../../types/video";
 
 interface PlaylistShelfProps {
   title: string;
+  /** Shown at the end of the header, such as a "See all" button. */
+  action?: React.ReactNode;
   playlists: PlaylistSummary[];
   onPlaylistClick?: (playlist: PlaylistSummary) => void;
 }
 
 export const PlaylistShelf: React.FC<PlaylistShelfProps> = ({
   title,
+  action,
   playlists,
   onPlaylistClick,
 }) => {
@@ -26,6 +29,7 @@ export const PlaylistShelf: React.FC<PlaylistShelfProps> = ({
             {playlists.length}
           </span>
         </h2>
+        {action}
       </div>
 
       <ShelfScroller className="flex gap-6 px-3 -mx-3 pt-3 -mt-1 pb-3">

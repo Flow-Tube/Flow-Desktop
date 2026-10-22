@@ -1151,6 +1151,7 @@
   "watch_collaborators": "Collaborators",
   "watch_collaborators_count": "%s channels",
   "watch_collaborators_and": "%s and %s",
+  "card_collaborators_more": "%s and %s more",
   "player_captions_auto_translate": "Auto-translate",
   "player_captions_translated_label": "%s (auto-translated)",
   "watch_view_count": "%s views",

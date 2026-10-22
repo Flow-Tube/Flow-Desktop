@@ -7,6 +7,7 @@ import { ChannelLabel } from "../video/CardMeta";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { getString } from "../../lib/i18n/index";
+import { collaboratorsByline } from "../../lib/collaborators";
 import type { Collaborator } from "../../types/video";
 
 export interface WatchOwnerProps {
@@ -28,12 +29,6 @@ function Avatar({ url, name, className }: { url: string | null | undefined; name
       {src ? <img src={src} alt={name} className="h-full w-full object-cover" /> : name.charAt(0).toUpperCase()}
     </span>
   );
-}
-
-/** "KSI and MrBeast", "A, B and C". */
-function joinNames(names: string[]): string {
-  if (names.length < 2) return names.join("");
-  return getString("watch_collaborators_and", names.slice(0, -1).join(", "), names[names.length - 1]);
 }
 
 /** The channel block beside the actions: one channel, or every channel of a collaboration. */
@@ -83,7 +78,7 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
         </span>
         <span className="min-w-0">
           <span className="flex items-center gap-1 text-[15px] font-medium leading-tight text-chrome-neutral-100">
-            <span className="truncate">{joinNames(collaborators.map((collaborator) => collaborator.name))}</span>
+            <span className="truncate">{collaboratorsByline(collaborators)}</span>
             <ChevronDown size={14} className="shrink-0 text-chrome-neutral-400" />
           </span>
           <span className="block text-sm text-chrome-neutral-400">

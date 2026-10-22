@@ -30,7 +30,8 @@ import { findDownloadedRecord, useIsDownloaded } from '../../lib/useDownloads';
 import { extractDominantColorFromImage, type Rgb } from '../../lib/useDominantColor';
 import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publishedDate';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
-import { CardPills, ChannelLabel, UpcomingBadge } from "./CardMeta";
+import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
+import { collaboratorsByline } from "../../lib/collaborators";
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -163,6 +164,10 @@ function VideoCardComponent({
     isChannel || video.channelAvatarUrl ? null : channelId || null,
   );
   const resolvedAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.channelAvatarUrl || hookAvatarUrl));
+  // A collaboration names every channel; it opens the first, which is the uploader.
+  const collaborators = video.collaborators ?? [];
+  const isCollab = collaborators.length >= 2;
+  const byline = isCollab ? collaboratorsByline(collaborators) : video.channelName;
   const channelCardAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.thumbnailUrl));
   // Cached and de-duplicated across cards and remounts by the hook; this used to
   // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
@@ -570,7 +575,7 @@ function VideoCardComponent({
             onClick={(e) => { void handleChannelNavigate(e); }}
             className="mt-1 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
-            <ChannelLabel name={video.channelName} verified={video.isVerified} />
+            <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
           <div className="text-[13px] text-chrome-neutral-500">
             {video.viewCountText && <span>{video.viewCountText}</span>}
@@ -674,7 +679,7 @@ function VideoCardComponent({
             onClick={(e) => { void handleChannelNavigate(e); }}
             className="mt-0.5 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
-            <ChannelLabel name={video.channelName} verified={video.isVerified} />
+            <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
           <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
             {showAddedDate && video.addedAtInPlaylist ? (
@@ -778,9 +783,13 @@ function VideoCardComponent({
         {!hideChannelAvatar && (
           <div 
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="w-9 h-9 rounded-full bg-chrome-zinc-800 shrink-0 overflow-hidden flex items-center justify-center cursor-pointer mt-0.5 hover:opacity-80 transition-opacity"
+            className={`w-9 h-9 shrink-0 flex items-center justify-center cursor-pointer mt-0.5 hover:opacity-80 transition-opacity ${
+              isCollab ? "" : "rounded-full bg-chrome-zinc-800 overflow-hidden"
+            }`}
           >
-            {resolvedAvatarUrl ? (
+            {isCollab ? (
+              <CollabAvatars collaborators={collaborators} />
+            ) : resolvedAvatarUrl ? (
               <img
                 src={resolvedAvatarUrl}
                 alt={video.channelName}
@@ -805,7 +814,7 @@ function VideoCardComponent({
             onClick={(e) => { void handleChannelNavigate(e); }}
             className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors"
           >
-            <ChannelLabel name={video.channelName} verified={video.isVerified} />
+            <ChannelLabel name={byline} verified={video.isVerified} />
           </div>
 
           {/* View Count + Published */}

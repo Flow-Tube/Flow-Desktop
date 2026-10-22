@@ -162,9 +162,9 @@ impl InnertubeClient {
         let approx_duration_ms = format["approxDurationMs"]
             .as_str()
             .and_then(|s| s.parse::<u64>().ok());
-        let loudness_db = res["playerConfig"]["audioConfig"]["loudnessDb"].as_f64();
-        let perceptual_loudness_db =
-            res["playerConfig"]["audioConfig"]["perceptualLoudnessDb"].as_f64();
+        let audio_config = &res["playerConfig"]["audioConfig"];
+        let loudness_db = loudness_db(audio_config, &format);
+        let perceptual_loudness_db = audio_config["perceptualLoudnessDb"].as_f64();
         let expires_in_seconds = streaming["expiresInSeconds"]
             .as_str()
             .and_then(|s| s.parse::<u64>().ok())
@@ -192,6 +192,21 @@ impl InnertubeClient {
             user_agent: client.user_agent.to_string(),
         }))
     }
+}
+
+/// How many dB louder than the loudness target the track plays, which the player turns down.
+///
+/// `VISIONOS` sends no top-level `loudnessDb`, only a per-format one and the perceptual
+/// loudness with its target, so each is tried in turn.
+fn loudness_db(audio_config: &Value, format: &Value) -> Option<f64> {
+    audio_config["loudnessDb"]
+        .as_f64()
+        .or_else(|| format["loudnessDb"].as_f64())
+        .or_else(|| {
+            let perceptual = audio_config["perceptualLoudnessDb"].as_f64()?;
+            let target = audio_config["loudnessTargetLkfs"].as_f64()?;
+            Some(perceptual - target)
+        })
 }
 
 /// True when the URL has no unsolved `n` throttling parameter (desktop cannot
@@ -367,6 +382,24 @@ fn music_refusal_error(playability: &Value) -> AppError {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn loudness_falls_back_to_the_format_then_the_perceptual_value() {
+        let top =
+            json!({ "loudnessDb": 1.5, "perceptualLoudnessDb": -9.0, "loudnessTargetLkfs": -14.0 });
+        assert_eq!(loudness_db(&top, &json!({ "loudnessDb": 3.0 })), Some(1.5));
+
+        let visionos = json!({ "perceptualLoudnessDb": -10.59, "loudnessTargetLkfs": -14.0 });
+        assert_eq!(
+            loudness_db(&visionos, &json!({ "loudnessDb": 3.41 })),
+            Some(3.41)
+        );
+
+        let perceptual = loudness_db(&visionos, &json!({})).unwrap();
+        assert!((perceptual - 3.41).abs() < 1e-9);
+
+        assert_eq!(loudness_db(&json!({}), &json!({})), None);
+    }
 
     #[test]
     fn premium_wording_is_reported_as_music_premium() {

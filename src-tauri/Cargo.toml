@@ -51,7 +51,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
 # HTTP Client
-reqwest = { version = "0.13.3", features = ["stream", "json", "brotli", "rustls"] }
+reqwest = { version = "0.13.3", features = ["stream", "json", "brotli", "gzip", "rustls"] }
 mp4 = "0.14"
 webm-iterable = "0.6.2"
 

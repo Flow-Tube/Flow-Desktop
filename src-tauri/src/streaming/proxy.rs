@@ -822,10 +822,20 @@ async fn relay_remote(
         let is_image = session.content_type.starts_with("image/");
         let stall_guarded = session.content_type.starts_with("video/")
             || session.content_type.starts_with("audio/");
+        // Media ranges must arrive byte-exact, but manifests and captions are text
+        // a live stream refetches every few seconds: a live playlist is about
+        // 880 KB as text and 12 KB compressed.
+        let ct_session = session.content_type.to_ascii_lowercase();
+        let compressible = ct_session.contains("mpegurl")
+            || ct_session.contains("dash+xml")
+            || ct_session.contains("text/vtt");
         let mut req = client
             .get(target_url)
             .header("User-Agent", &upstream_user_agent)
-            .header("Accept-Encoding", "identity");
+            .header(
+                "Accept-Encoding",
+                if compressible { "gzip, br" } else { "identity" },
+            );
         if is_image {
             req = req
                 .header(

@@ -1544,5 +1544,11 @@
   "channel_about_more": "...more",
   "channel_about_links": "Links",
   "channel_about_details": "Channel details",
-  "channel_about_error": "The About panel could not be loaded."
+  "channel_about_error": "The About panel could not be loaded.",
+  "post_image_alt": "Image %s of %s",
+  "post_gallery_previous": "Previous image",
+  "post_gallery_next": "Next image",
+  "post_quiz_correct": "Correct",
+  "post_quiz_wrong": "Not quite",
+  "post_close_comments": "Close comments"
 }

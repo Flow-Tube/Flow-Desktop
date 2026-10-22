@@ -401,13 +401,33 @@ export interface PlaylistSummary {
   videoCountText?: string | null;
 }
 
+export interface PollChoice {
+  text: string;
+  /** Share of the votes from 0 to 1, when the post shows results. */
+  voteRatio?: number | null;
+  voteCountText?: string | null;
+}
+
+export interface QuizChoice {
+  text: string;
+  isCorrect: boolean;
+  explanation?: string | null;
+}
+
+/** What a post carries besides its text. A single image is a one-picture gallery. */
+export type PostAttachment =
+  | { kind: "images"; urls: string[] }
+  | { kind: "poll"; choices: PollChoice[]; totalVotesText?: string | null }
+  | { kind: "quiz"; choices: QuizChoice[]; totalVotesText?: string | null }
+  | { kind: "video"; video: VideoSummary };
+
 export interface PostSummary {
   type: "post";
   id: string;
   authorName: string;
   authorAvatar?: string | null;
   textContent?: string | null;
-  imageAttachment?: string | null;
+  attachment?: PostAttachment | null;
   likesCountText?: string | null;
   commentCountText?: string | null;
   commentEndpointParams?: string | null;

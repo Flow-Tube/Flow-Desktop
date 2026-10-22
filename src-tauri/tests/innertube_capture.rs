@@ -163,6 +163,31 @@ async fn capture_innertube_fixtures() {
         save(name, search);
     }
 
+    for (name, browse_id, params) in [
+        ("explore_live", "UC4R8DWoMoI7CAwX8_LjQHig", None),
+        (
+            "explore_gaming",
+            "UCOpNcN46UbXVtpKMrmU4Abg",
+            Some("Egh0cmVuZGluZw%3D%3D"),
+        ),
+        ("explore_news", "FEnews_destination", None),
+        (
+            "explore_live_grid",
+            "UC4R8DWoMoI7CAwX8_LjQHig",
+            Some("EgdsaXZldGFikgEDCKEK"),
+        ),
+    ] {
+        let mut browse = json!({ "browseId": browse_id });
+        if let Some(params) = params {
+            browse["params"] = json!(params);
+        }
+        let page = client
+            .post_innertube("browse", &clients::WEB, &mut browse)
+            .await
+            .expect(name);
+        save(name, page);
+    }
+
     for (name, video_id) in [
         ("next_auto_chapters", AUTO_CHAPTERS_VIDEO),
         ("next_collab", COLLAB_VIDEO),

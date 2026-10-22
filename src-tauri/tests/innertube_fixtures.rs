@@ -8,6 +8,9 @@
 use std::path::PathBuf;
 
 use flow_desktop_lib::api::innertube::extractors::comments::parse_comments_json;
+use flow_desktop_lib::api::innertube::extractors::explore::{
+    parse_explore_grid, parse_explore_page,
+};
 use flow_desktop_lib::api::innertube::extractors::search::parse_innertube_search;
 use flow_desktop_lib::api::innertube::extractors::watch_next;
 use flow_desktop_lib::api::innertube::json::age::relative_age;
@@ -329,4 +332,41 @@ fn a_misspelt_search_says_what_it_searched_for() {
         .expect("correction");
     assert!(correction.applied);
     assert_eq!(correction.original.as_deref(), Some("linus tehc tips"));
+}
+
+#[test]
+fn explore_destinations_read_as_shelves() {
+    if let Some(page) = fixture("explore_live") {
+        let page = parse_explore_page(&page);
+        assert!(page.shelves.len() >= 3, "{} shelves", page.shelves.len());
+        assert!(
+            page.shelves
+                .iter()
+                .all(|shelf| !shelf.title.is_empty() && !shelf.videos.is_empty())
+        );
+        assert!(page.shelves.iter().any(|shelf| shelf.more.is_some()));
+    }
+    if let Some(page) = fixture("explore_gaming") {
+        let page = parse_explore_page(&page);
+        assert!(
+            page.shelves
+                .first()
+                .is_some_and(|shelf| shelf.videos.len() >= 20)
+        );
+    }
+    if let Some(page) = fixture("explore_news") {
+        let page = parse_explore_page(&page);
+        assert!(page.tabs.len() >= 3, "{} tabs", page.tabs.len());
+        assert!(page.shelves.len() >= 5, "{} shelves", page.shelves.len());
+    }
+}
+
+#[test]
+fn a_see_all_grid_has_a_next_page() {
+    let Some(page) = fixture("explore_live_grid") else {
+        return;
+    };
+    let grid = parse_explore_grid(&page);
+    assert!(grid.videos.len() >= 10, "{} videos", grid.videos.len());
+    assert!(grid.continuation.is_some());
 }

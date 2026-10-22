@@ -95,7 +95,9 @@ impl YouTubeClient {
             "clientVersion": self.version,
             "hl": "en",
             "gl": gl.unwrap_or("US"),
-            "utcOffsetMinutes": 0,
+            // Times YouTube writes out ("Scheduled for 7:00 PM") are rendered in
+            // this offset, so it is the device's own.
+            "utcOffsetMinutes": chrono::Local::now().offset().local_minus_utc() / 60,
         });
         for (key, value) in [
             ("osName", self.os_name),

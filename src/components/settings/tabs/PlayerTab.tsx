@@ -16,6 +16,8 @@ import {
 } from '../../../lib/lyrics/registry';
 import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
 import { LyricsProviderList } from '../LyricsProviderList';
+import { Button } from '../../ui/Button';
+import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -54,6 +56,8 @@ export function PlayerTab() {
   const setLyricsProviderEnabled = (providerName: string, enabled: boolean) => {
     setLyricsEnabledRaw(serializeProviderEnabledStates({ ...lyricsEnabledStates, [providerName]: enabled }));
   };
+
+  const lyricsCache = useLyricsCache();
 
   const [miniSkip, setMiniSkip] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS, true);
   const [miniNextPrev, setMiniNextPrev] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, true);
@@ -171,6 +175,25 @@ export function PlayerTab() {
           onReorder={(order) => setLyricsProviderOrder(serializeProviderOrder(order))}
           onToggle={setLyricsProviderEnabled}
         />
+        <SettingItem
+          title={getString('settings_lyrics_cache')}
+          description={
+            lyricsCache.failed
+              ? getString('settings_lyrics_cache_clear_failed')
+              : lyricsCache.sizeBytes === null
+                ? getString('settings_lyrics_cache_desc')
+                : getString('settings_lyrics_cache_size', formatCacheSize(lyricsCache.sizeBytes))
+          }
+        >
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={lyricsCache.clearing || lyricsCache.sizeBytes === 0}
+            onClick={() => void lyricsCache.clear()}
+          >
+            {getString('settings_lyrics_cache_clear')}
+          </Button>
+        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_mini_player')}>

@@ -1,4 +1,5 @@
 import type { LyricsEntry, LyricsProvider, LyricsResult } from "./types";
+import type { SongItem } from "../../types/music";
 import { getEnabledProviders, parseProviderEnabledStates } from "./registry";
 import { filterCreditLines, normalizeEntries, stripWordTimings } from "./lyricsUtils";
 import { cleanArtist, cleanTitle } from "./matching";
@@ -28,6 +29,17 @@ export interface LyricsRequest {
   artist: string;
   durationSec: number;
   album?: string | null;
+}
+
+/** The lookup for a song: catalogues file it under its first credited artist, not the joined list. */
+export function lyricsRequestFor(track: SongItem, durationSec: number): LyricsRequest {
+  return {
+    videoId: track.videoId ?? track.id,
+    title: track.title,
+    artist: track.artists.find((a) => a.name)?.name ?? "",
+    durationSec: Math.round(durationSec),
+    album: track.album?.name ?? null,
+  };
 }
 
 const cooldowns = new Map<string, number>();
@@ -110,7 +122,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   // Disk cache: word sync is final; line or plain lyrics stay a fallback while providers try to
   // upgrade them.
   let cachedFallback: LyricsResult | null = null;
-  const disk = cache.getDisk(videoId);
+  const disk = await cache.getDisk(videoId);
   if (disk && disk.length > 0) {
     const norm = normalizeEntries(sorted(disk));
     if (hasWordSync(norm) && hasReasonableTimestamps(norm, durationSec)) {
@@ -175,7 +187,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   // Last resort: the lyrics saved with the download. Not cached, so a later attempt with a working
   // connection can still find a synced version.
   const offline = getOfflineLyrics(videoId);
-  return offline ? { entries: offline, provider: "Downloaded" } : null;
+  return offline ? { entries: offline.entries, provider: "Downloaded" } : null;
 }
 
 /**

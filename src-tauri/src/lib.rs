@@ -51,6 +51,10 @@ use commands::downloads::{
     start_download,
 };
 use commands::files::{write_backup_file, write_lyrics_file};
+use commands::lyrics::{
+    clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
+    put_cached_lyrics, save_download_lyrics,
+};
 use commands::music::{
     get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
     get_music_artist_items, get_music_artist_page, get_music_charts_page, get_music_deep_cuts,
@@ -504,6 +508,12 @@ pub fn run() {
             set_setting,
             write_backup_file,
             write_lyrics_file,
+            get_cached_lyrics,
+            put_cached_lyrics,
+            evict_cached_lyrics,
+            lyrics_cache_size,
+            clear_lyrics_cache,
+            save_download_lyrics,
             export_backup_data,
             import_backup_data,
             get_download_formats,

@@ -9,7 +9,7 @@ import {
   type LyricsCandidate,
   type LyricsRequest,
 } from "../lib/lyrics/lyricsHelper";
-import { getOfflineLyrics, onOfflineLyrics, parseOfflineLyrics } from "../lib/lyrics/offline";
+import { getOfflineLyrics, onOfflineLyrics, parseOfflineLyrics, type OfflineLyrics } from "../lib/lyrics/offline";
 import { isAbortError } from "../lib/lyrics/inFlight";
 import { entriesAreSynced, lyricsQuality } from "../lib/lyrics/sync";
 import { getString } from "../lib/i18n/index";
@@ -34,6 +34,8 @@ interface LyricsStore extends LyricsView {
   request: LyricsRequest | null;
   /** Positive shows the lines sooner. Reset for every song. */
   syncOffsetMs: number;
+  /** The offset a downloaded song's `.lrc` file asked for, which goes with its lyrics. */
+  fileOffsetMs: number;
   showSyncControls: boolean;
   candidates: LyricsCandidate[];
   isBrowsing: boolean;
@@ -75,7 +77,17 @@ function viewOf(result: LyricsResult): LyricsView {
 let lookup: AbortController | null = null;
 let browse: AbortController | null = null;
 
-const SESSION_RESET = { syncOffsetMs: 0, showSyncControls: false, candidates: [], isBrowsing: false };
+const SESSION_RESET = { syncOffsetMs: 0, fileOffsetMs: 0, showSyncControls: false, candidates: [], isBrowsing: false };
+
+/** Saved lyrics, with their file's offset as the starting nudge unless one was already set. */
+function offlineView(lyrics: OfflineLyrics, current: { syncOffsetMs: number; fileOffsetMs: number }) {
+  const untouched = current.syncOffsetMs === current.fileOffsetMs;
+  return {
+    ...viewOf({ entries: lyrics.entries, provider: OFFLINE_PROVIDER }),
+    fileOffsetMs: lyrics.offsetMs,
+    ...(untouched ? { syncOffsetMs: lyrics.offsetMs } : {}),
+  };
+}
 
 export const useLyricsStore = create<LyricsStore>((set, get) => {
   const run = (request: LyricsRequest) => {
@@ -84,11 +96,13 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     const controller = new AbortController();
     lookup = controller;
     const offline = getOfflineLyrics(request.videoId);
+    const sameSong = get().videoId === request.videoId;
+    const session = sameSong ? get() : SESSION_RESET;
     set({
       videoId: request.videoId,
       request,
-      ...(get().videoId === request.videoId ? {} : SESSION_RESET),
-      ...(offline ? viewOf({ entries: offline, provider: OFFLINE_PROVIDER }) : { ...EMPTY_LYRICS, loading: true }),
+      ...(sameSong ? {} : SESSION_RESET),
+      ...(offline ? offlineView(offline, session) : { ...EMPTY_LYRICS, loading: true }),
     });
 
     getLyrics(request, controller.signal).then(
@@ -100,7 +114,9 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
         if (shown.providerName === OFFLINE_PROVIDER && lyricsQuality(result?.entries ?? []) <= lyricsQuality(shown.entries)) {
           return;
         }
-        set(result ? viewOf(result) : { ...EMPTY_LYRICS });
+        // The file's offset belonged to the saved lyrics, not to the ones replacing them.
+        const offset = shown.syncOffsetMs === shown.fileOffsetMs ? { syncOffsetMs: 0, fileOffsetMs: 0 } : { fileOffsetMs: 0 };
+        set({ ...(result ? viewOf(result) : EMPTY_LYRICS), ...(shown.providerName === OFFLINE_PROVIDER ? offset : {}) });
       },
       (error: unknown) => {
         if (lookup !== controller || isAbortError(error)) return;
@@ -176,8 +192,8 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
   };
 });
 
-onOfflineLyrics((videoId, entries) => {
+onOfflineLyrics((videoId, lyrics) => {
   const state = useLyricsStore.getState();
-  if (state.videoId !== videoId || lyricsQuality(entries) <= lyricsQuality(state.entries)) return;
-  useLyricsStore.setState(viewOf({ entries, provider: OFFLINE_PROVIDER }));
+  if (state.videoId !== videoId || lyricsQuality(lyrics.entries) <= lyricsQuality(state.entries)) return;
+  useLyricsStore.setState(offlineView(lyrics, state));
 });

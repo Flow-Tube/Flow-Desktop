@@ -5,6 +5,7 @@ pub mod discord;
 pub mod downloads;
 pub mod files;
 pub mod home_feed;
+pub mod lyrics;
 pub mod music;
 pub mod music_brain;
 pub mod music_queue;

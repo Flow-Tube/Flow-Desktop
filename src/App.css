@@ -276,6 +276,18 @@
   animation: sidebar-slide-in 0.2s cubic-bezier(0.2, 0, 0, 1) forwards;
 }
 
+/*
+  The full player's colours ease over a second on a song change, as on Android.
+  Registering them as colours is what lets a gradient that reads them animate.
+*/
+@property --player-ground { syntax: "<color>"; inherits: true; initial-value: black; }
+@property --player-base { syntax: "<color>"; inherits: true; initial-value: black; }
+@property --player-accent { syntax: "<color>"; inherits: true; initial-value: black; }
+
+.player-palette-ease {
+  transition: --player-ground 1s linear, --player-base 1s linear, --player-accent 1s linear;
+}
+
 /* The routed page while the full music player covers it (useCoverAppContent). */
 [data-app-content][data-covered] {
   content-visibility: hidden;

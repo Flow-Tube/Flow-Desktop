@@ -76,5 +76,6 @@ export async function startMusicDownload(
     author: track.artists.map((artist) => artist.name).filter(Boolean).join(", ") || undefined,
     durationSeconds: track.duration ?? undefined,
     collectionDbId: overrides.collectionDbId,
+    loudnessDb: stream.loudnessDb ?? undefined,
   });
 }

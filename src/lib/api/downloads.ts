@@ -27,6 +27,8 @@ export interface StartDownloadRequest {
   author?: string;
   durationSeconds?: number;
   collectionDbId?: number;
+  /** The stream's loudness, kept with a song so it is normalized offline too. */
+  loudnessDb?: number;
 }
 
 export interface AdaptiveDownloadRequest {
@@ -141,6 +143,8 @@ export interface OfflineStreamInfo {
   artworkUrl: string | null;
   /** Lyrics saved with the download, when present. */
   lyrics: string | null;
+  /** The loudness recorded when the song was downloaded. */
+  loudnessDb: number | null;
 }
 
 export function getOfflineStream(

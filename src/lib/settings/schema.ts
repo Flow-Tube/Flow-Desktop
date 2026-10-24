@@ -107,6 +107,8 @@ export const SETTINGS = {
   MUSIC_AUDIO_QUALITY: "music_audio_quality",
   PREFERRED_AUDIO_LANGUAGE: "preferred_audio_language",
 
+  MUSIC_LOUDNESS_NORMALIZATION: "music_loudness_normalization",
+
   BUFFER_PROFILE: "buffer_profile",
   MIN_BUFFER_MS: "min_buffer_ms",
   MAX_BUFFER_MS: "max_buffer_ms",
@@ -313,6 +315,8 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.SHORTS_QUALITY_WIFI, "quality", "720p", "wired", QUALITY_VALUES),
   str(SETTINGS.MUSIC_AUDIO_QUALITY, "quality", "Auto", "wired", ["Auto", "High", "Medium", "Low"]),
   str(SETTINGS.PREFERRED_AUDIO_LANGUAGE, "quality", "original", "persisted-only"),
+
+  bool(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION, "player", true, "wired"),
 
   str(SETTINGS.BUFFER_PROFILE, "network", "STABLE", "wired", ["AGGRESSIVE", "STABLE", "DATASAVER", "CUSTOM"]),
   num(SETTINGS.MIN_BUFFER_MS, "network", 30000, "wired", 5000, 120000),

@@ -12,6 +12,8 @@ import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { Chip } from "../ui/Chip";
 import { getString } from "../../lib/i18n/index";
 import { Slider } from "../ui/Slider";
+import { useBoolPref } from "../../lib/usePreference";
+import { SETTINGS } from "../../lib/settings/schema";
 
 const PRESETS: EqPresetName[] = ["flat", "bass", "vocal", "treble", "electronic", "acoustic"];
 
@@ -39,6 +41,7 @@ export function EqPanel({
   const setEqEnabled = useMusicPlayerStore((s) => s.setEqEnabled);
   const setEqBand = useMusicPlayerStore((s) => s.setEqBand);
   const applyEqPreset = useMusicPlayerStore((s) => s.applyEqPreset);
+  const [normalization, setNormalization] = useBoolPref(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION);
 
   const fromY = placement === "top" ? 10 : -10;
 
@@ -109,6 +112,14 @@ export function EqPanel({
                 <span className="text-[10px] text-chrome-neutral-500">{band.label}</span>
               </div>
             ))}
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-chrome-neutral-800 pt-3">
+            <span className="flex min-w-0 flex-col">
+              <span className="text-sm text-chrome-neutral-200">{getString("music_loudness_normalization")}</span>
+              <span className="text-xs text-chrome-neutral-500">{getString("music_loudness_normalization_desc")}</span>
+            </span>
+            <ToggleSwitch checked={normalization} onChange={setNormalization} />
           </div>
         </motion.div>
       )}

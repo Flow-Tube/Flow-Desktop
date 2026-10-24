@@ -2,6 +2,7 @@ import { useEffect, useRef, type SyntheticEvent } from "react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
+import { bindMusicAudioSettings } from "../../lib/audio/musicAudioSettings";
 import { PRELOAD_LEAD_SECONDS } from "../../lib/musicPreload";
 import { recordSongHistory } from "../../lib/musicHistory";
 import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
@@ -45,6 +46,7 @@ export function GlobalMusicAudio() {
     musicAudioEngine.setMuted(s.isMuted);
     musicAudioEngine.setEqEnabled(s.eqEnabled);
     musicAudioEngine.setEqGains(s.eqGains);
+    bindMusicAudioSettings();
   }, []);
 
   useEffect(() => {

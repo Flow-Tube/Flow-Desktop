@@ -40,6 +40,8 @@ fn trim(value: &mut Value) {
     }
 }
 
+/// An artist with albums, singles, videos, featured playlists and related artists.
+const MUSIC_ARTIST: &str = "UClYV6hHlupm_S_ObS1W-DYw";
 /// A podcast whose playlist page lists episodes without a header.
 const PODCAST: &str = "PLYWnygDGxPqWiCM5_kihM28jfWiQTNYDa";
 
@@ -234,6 +236,11 @@ async fn capture_innertube_fixtures() {
             "music_podcast_vl",
             "browse",
             json!({ "browseId": format!("VL{PODCAST}") }),
+        ),
+        (
+            "music_artist",
+            "browse",
+            json!({ "browseId": MUSIC_ARTIST }),
         ),
     ] {
         save(name, music_post(endpoint, body).await);

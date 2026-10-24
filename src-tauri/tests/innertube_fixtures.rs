@@ -20,11 +20,12 @@ use flow_desktop_lib::api::innertube::json::age::relative_age;
 use flow_desktop_lib::api::innertube::json::continuation::{
     continuation_item_lists, continuation_token,
 };
+use flow_desktop_lib::api::innertube::music::artist::parse_artist_page;
 use flow_desktop_lib::api::innertube::music::parse::items::parse_responsive_list_item;
 use flow_desktop_lib::api::innertube::music::search::parse_summary;
 use flow_desktop_lib::api::innertube::renderers::lockup::lockup_item;
 use flow_desktop_lib::models::channel::{ChannelItem, PostAttachment};
-use flow_desktop_lib::models::music::YTItem;
+use flow_desktop_lib::models::music::{ArtistSectionKind, YTItem};
 use serde_json::Value;
 
 fn fixture(name: &str) -> Option<Value> {
@@ -591,4 +592,35 @@ fn a_podcast_playlist_page_lists_episodes() {
         rows.iter()
             .all(|row| matches!(parse_responsive_list_item(row), Some(YTItem::Episode(_))))
     );
+}
+
+#[test]
+fn an_artist_page_is_typed_by_structure_with_its_shuffle_and_radio() {
+    let Some(page) = fixture("music_artist") else {
+        return;
+    };
+    let artist = parse_artist_page("UClYV6hHlupm_S_ObS1W-DYw", &page);
+    let kinds: Vec<ArtistSectionKind> =
+        artist.sections.iter().map(|section| section.kind).collect();
+    for kind in [
+        ArtistSectionKind::TopSongs,
+        ArtistSectionKind::Albums,
+        ArtistSectionKind::Singles,
+        ArtistSectionKind::Videos,
+        ArtistSectionKind::FeaturedOn,
+        ArtistSectionKind::RelatedArtists,
+    ] {
+        assert!(kinds.contains(&kind), "{kind:?} in {kinds:?}");
+    }
+    assert!(
+        artist
+            .shuffle
+            .is_some_and(|target| target.playlist_id.starts_with("RDAO"))
+    );
+    assert!(
+        artist
+            .radio
+            .is_some_and(|target| target.playlist_id.starts_with("RDEM"))
+    );
+    assert!(artist.subscriber_count_text.is_some());
 }

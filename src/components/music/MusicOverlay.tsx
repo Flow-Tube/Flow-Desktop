@@ -38,6 +38,7 @@ import { MusicQueuePane } from "./MusicQueuePane";
 import { MusicLyrics } from "./MusicLyrics";
 import { AmbientBackdrop, isMusicBackgroundStyle } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
+import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { useLyrics } from "../../lib/lyrics/useLyrics";
 import { useDominantColor } from "../../lib/useDominantColor";
 import { accentForeground, accentSurface } from "../../lib/accentColor";
@@ -68,7 +69,7 @@ export function MusicOverlay() {
   const loadingStreamId = useMusicPlayerStore((s) => s.loadingStreamId);
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const isShuffle = useMusicPlayerStore((s) => s.isShuffle);
-  const eqEnabled = useMusicPlayerStore((s) => s.eqEnabled);
+  const eqEnabled = useEqActive();
 
   const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
   const next = useMusicPlayerStore((s) => s.next);

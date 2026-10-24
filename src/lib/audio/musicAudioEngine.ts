@@ -1,23 +1,7 @@
 import { loudnessFactor } from "../loudness";
-import {
-  EQ_BANDS,
-  EQ_PEAKING_Q,
-  eqCurveBands,
-  normalizeEqGains,
-} from "./eqBands";
-import { autoPreampDb } from "./eq/filterMath";
-import { SOFT_CLIP_HEADROOM, softClipCurve } from "./softClip";
-
-type AudioContextCtor = typeof AudioContext;
-
-function getAudioContextCtor(): AudioContextCtor | null {
-  if (typeof window === "undefined") return null;
-  return (
-    window.AudioContext ??
-    (window as unknown as { webkitAudioContext?: AudioContextCtor }).webkitAudioContext ??
-    null
-  );
-}
+import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
+import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
+import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
 
 /**
  * One of the two <audio> elements. While one plays, the other can hold the next
@@ -48,18 +32,18 @@ class MusicAudioEngine {
   private slots: [Slot, Slot] = [emptySlot(), emptySlot()];
   private activeIndex: 0 | 1 = 0;
   private ctx: AudioContext | null = null;
-  private preamp: GainNode | null = null;
-  private filters: BiquadFilterNode[] = [];
+  private chain: EqChain | null = null;
   private volGain: GainNode | null = null;
 
   private graphReady = false;
   private webAudioFailed = false;
+  private availabilityListeners = new Set<(available: boolean) => void>();
 
   private volume = 1;
   private muted = false;
-  private eqEnabled = false;
-  private eqGains: number[] = normalizeEqGains(null);
   private normalizationEnabled = true;
+  private eqSpec: EqGraphSpec = EQ_GRAPH_OFF;
+  private eqEngaged = false;
 
   private get active(): Slot {
     return this.slots[this.activeIndex];
@@ -82,8 +66,8 @@ class MusicAudioEngine {
       el.preload = "auto";
       this.slots[i as 0 | 1].el = el;
     }
-    // Rebuild the graph lazily on the next play()
     this.graphReady = false;
+    if (this.eqEngaged) this.ensureGraph();
     this.applyGain();
   }
 
@@ -92,41 +76,25 @@ class MusicAudioEngine {
     return this.active.el;
   }
 
+  /**
+   * Routes both elements through WebAudio. Done only once the equalizer changes the sound: a
+   * media element taken over by WebAudio can never play on its own again, and loudness
+   * normalization only ever turns down, which the element's own volume does.
+   */
   private ensureGraph(): void {
-    if (this.graphReady || this.webAudioFailed || !this.active.el) return;
+    if (this.graphReady || this.webAudioFailed || !this.slots[0].el || !this.slots[1].el) return;
     try {
-      const Ctor = getAudioContextCtor();
-      if (!Ctor) {
-        this.webAudioFailed = true;
-        return;
+      if (!this.ctx) {
+        const ctx = createAudioContext();
+        if (!ctx) throw new Error("No AudioContext");
+        this.ctx = ctx;
+        keepRunning(ctx, () => !!this.active.el && !this.active.el.paused);
       }
-      if (!this.ctx) this.ctx = new Ctor();
       const ctx = this.ctx;
 
-      // preamp -> filters -> soft clipper -> volume. The preamp takes the curve's peak off
-      // before the boosts, and the clipper bends whatever still goes past full scale.
-      const preamp = ctx.createGain();
-      this.preamp = preamp;
-      this.filters = EQ_BANDS.map((band) => {
-        const f = ctx.createBiquadFilter();
-        f.type = band.type;
-        f.frequency.value = band.frequency;
-        f.Q.value = EQ_PEAKING_Q;
-        f.gain.value = 0;
-        return f;
-      });
-      const clipIn = ctx.createGain();
-      clipIn.gain.value = 1 / SOFT_CLIP_HEADROOM;
-      const clipper = ctx.createWaveShaper();
-      clipper.curve = softClipCurve();
+      this.chain = new EqChain(ctx);
       this.volGain = ctx.createGain();
-      const filtersStart = this.filters.reduceRight<AudioNode>((next, filter) => {
-        filter.connect(next);
-        return filter;
-      }, clipIn);
-      preamp.connect(filtersStart);
-      clipIn.connect(clipper);
-      clipper.connect(this.volGain);
+      this.chain.output.connect(this.volGain);
       this.volGain.connect(ctx.destination);
 
       // Each element keeps its own loudness gain, since the two hold different
@@ -136,18 +104,18 @@ class MusicAudioEngine {
         slot.source = ctx.createMediaElementSource(slot.el);
         slot.normGain = ctx.createGain();
         slot.source.connect(slot.normGain);
-        slot.normGain.connect(preamp);
+        slot.normGain.connect(this.chain.input);
       }
 
       this.graphReady = true;
       this.applyGain();
-      this.applyEq();
+      this.chain.apply(this.eqSpec);
+      // Turned on mid-song: the context has to run for the element to be heard.
+      if (this.active.el && !this.active.el.paused) void resumeWithin(ctx);
     } catch (err) {
-      console.warn(
-        "[musicAudioEngine] WebAudio graph unavailable — degrading to element volume",
-        err,
-      );
+      console.warn("[musicAudioEngine] WebAudio graph unavailable, playing without the equalizer", err);
       this.webAudioFailed = true;
+      this.notifyAvailability();
       this.applyGain();
     }
   }
@@ -254,13 +222,7 @@ class MusicAudioEngine {
   async play(): Promise<void> {
     const el = this.active.el;
     if (!el) return;
-    this.ensureGraph();
-    if (this.ctx && this.ctx.state === "suspended") {
-      try {
-        await this.ctx.resume();
-      } catch {
-      }
-    }
+    if (this.ctx) await resumeWithin(this.ctx);
     try {
       await el.play();
     } catch (err) {
@@ -341,9 +303,9 @@ class MusicAudioEngine {
 
     if (this.graphReady && this.ctx && this.volGain) {
       const t = this.ctx.currentTime;
-      this.volGain.gain.setTargetAtTime(vol, t, 0.012);
+      this.volGain.gain.setTargetAtTime(vol, t, RAMP_TIME_CONSTANT);
       for (const slot of this.slots) {
-        slot.normGain?.gain.setTargetAtTime(this.normalizationFactor(slot.loudnessDb), t, 0.012);
+        slot.normGain?.gain.setTargetAtTime(this.normalizationFactor(slot.loudnessDb), t, RAMP_TIME_CONSTANT);
         if (slot.el) {
           slot.el.volume = 1;
           slot.el.muted = false;
@@ -361,33 +323,29 @@ class MusicAudioEngine {
 
   // --- equalizer ----------------------------------------------------------
 
-  setEqEnabled(enabled: boolean): void {
-    this.eqEnabled = enabled;
-    this.applyEq();
+  /**
+   * The curve to run, and whether it changes the sound. The graph is built the first time it
+   * does; after that every change, including switching off, only glides the filters.
+   */
+  setEq(spec: EqGraphSpec, engaged: boolean): void {
+    this.eqSpec = spec;
+    this.eqEngaged = engaged;
+    if (engaged) this.ensureGraph();
+    this.chain?.apply(spec);
   }
 
-  setEqGains(gains: number[]): void {
-    this.eqGains = normalizeEqGains(gains);
-    this.applyEq();
+  /** False once WebAudio failed here, so the equalizer cannot be heard. */
+  isEqAvailable(): boolean {
+    return !this.webAudioFailed && webAudioSupported();
   }
 
-  setEqBand(index: number, gainDb: number): void {
-    if (index < 0 || index >= this.eqGains.length) return;
-    const next = [...this.eqGains];
-    next[index] = gainDb;
-    this.eqGains = normalizeEqGains(next);
-    this.applyEq();
+  onEqAvailabilityChange(listener: (available: boolean) => void): () => void {
+    this.availabilityListeners.add(listener);
+    return () => this.availabilityListeners.delete(listener);
   }
 
-  private applyEq(): void {
-    if (!this.graphReady || !this.ctx || !this.preamp) return;
-    const t = this.ctx.currentTime;
-    const gains = this.eqEnabled ? this.eqGains : EQ_BANDS.map(() => 0);
-    this.filters.forEach((f, i) => {
-      f.gain.setTargetAtTime(gains[i] ?? 0, t, 0.012);
-    });
-    const preampDb = autoPreampDb(eqCurveBands(gains));
-    this.preamp.gain.setTargetAtTime(Math.pow(10, preampDb / 20), t, 0.012);
+  private notifyAvailability(): void {
+    for (const listener of this.availabilityListeners) listener(this.isEqAvailable());
   }
 }
 

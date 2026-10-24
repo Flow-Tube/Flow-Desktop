@@ -44,8 +44,6 @@ export function GlobalMusicAudio() {
     const s = useMusicPlayerStore.getState();
     musicAudioEngine.setVolume(s.volume);
     musicAudioEngine.setMuted(s.isMuted);
-    musicAudioEngine.setEqEnabled(s.eqEnabled);
-    musicAudioEngine.setEqGains(s.eqGains);
     bindMusicAudioSettings();
   }, []);
 

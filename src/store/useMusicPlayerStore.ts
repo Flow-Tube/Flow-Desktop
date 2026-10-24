@@ -30,12 +30,6 @@ import {
 import { radioSession } from "../lib/musicRadioSession";
 import { POOL_LOW_WATER } from "../lib/musicRadioPlanner";
 import { SETTINGS } from "../lib/settings/schema";
-import {
-  EQ_FLAT,
-  EQ_PRESETS,
-  normalizeEqGains,
-  type EqPresetName,
-} from "../lib/audio/eqBands";
 import { getSettingValue } from "./useAppSettingsStore";
 import { shouldSkipUnplayable } from "../lib/musicSkip";
 import { MEDIA_FAILURE_KIND, RecoveryLedger, classifyMediaFailure } from "../lib/musicRecoveryPolicy";
@@ -54,8 +48,6 @@ const PERSIST_KEY = "flow_music_player";
 interface PersistedMusicConfig {
   volume: number;
   isMuted: boolean;
-  eqEnabled: boolean;
-  eqGains: number[];
   repeatMode: MusicRepeatMode;
   isShuffle: boolean;
   radioEnabled: boolean;
@@ -64,8 +56,6 @@ interface PersistedMusicConfig {
 const DEFAULT_CONFIG: PersistedMusicConfig = {
   volume: 1,
   isMuted: false,
-  eqEnabled: false,
-  eqGains: [...EQ_FLAT],
   repeatMode: "none",
   isShuffle: false,
   radioEnabled: true,
@@ -80,7 +70,6 @@ const loadConfig = (): PersistedMusicConfig => {
       ...DEFAULT_CONFIG,
       ...parsed,
       volume: clamp01(parsed.volume ?? DEFAULT_CONFIG.volume),
-      eqGains: normalizeEqGains(parsed.eqGains),
     };
   } catch (error) {
     console.warn("Failed to load saved music player config", error);
@@ -96,8 +85,6 @@ const saveConfig = (get: () => MusicPlayerState) => {
     const config: PersistedMusicConfig = {
       volume: s.volume,
       isMuted: s.isMuted,
-      eqEnabled: s.eqEnabled,
-      eqGains: s.eqGains,
       repeatMode: s.repeatMode,
       isShuffle: s.isShuffle,
       radioEnabled: s.radioEnabled,
@@ -226,8 +213,6 @@ interface MusicPlayerState {
   isMuted: boolean;
   loudnessDb: number | null;
   normalizationEnabled: boolean;
-  eqEnabled: boolean;
-  eqGains: number[]; // 10 bands, dB
 
   // --- modes (persisted) ---
   repeatMode: MusicRepeatMode;
@@ -292,10 +277,6 @@ interface MusicPlayerState {
   openOverlay: (view?: Exclude<MusicViewState, "dock">) => void;
   closeOverlay: () => void;
 
-  setEqEnabled: (enabled: boolean) => void;
-  setEqBand: (index: number, gainDb: number) => void;
-  setEqGains: (gains: number[]) => void;
-  applyEqPreset: (name: EqPresetName) => void;
   /** Follows the saved music normalization setting (see `bindMusicAudioSettings`). */
   setNormalizationEnabled: (enabled: boolean) => void;
 
@@ -330,8 +311,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   isMuted: initialConfig.isMuted,
   loudnessDb: null,
   normalizationEnabled: getSettingValue(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION) === "true",
-  eqEnabled: initialConfig.eqEnabled,
-  eqGains: initialConfig.eqGains,
 
   repeatMode: initialConfig.repeatMode,
   isShuffle: initialConfig.isShuffle,
@@ -846,32 +825,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   setViewState: (viewState) => set({ viewState }),
   openOverlay: (view = "full") => set({ viewState: view }),
   closeOverlay: () => set({ viewState: "dock" }),
-
-  setEqEnabled: (enabled) => {
-    musicAudioEngine.setEqEnabled(enabled);
-    set({ eqEnabled: enabled });
-    saveConfig(get);
-  },
-
-  setEqBand: (index, gainDb) => {
-    const next = [...get().eqGains];
-    next[index] = gainDb;
-    const gains = normalizeEqGains(next);
-    musicAudioEngine.setEqGains(gains);
-    set({ eqGains: gains });
-    saveConfig(get);
-  },
-
-  setEqGains: (gains) => {
-    const normalized = normalizeEqGains(gains);
-    musicAudioEngine.setEqGains(normalized);
-    set({ eqGains: normalized });
-    saveConfig(get);
-  },
-
-  applyEqPreset: (name) => {
-    get().setEqGains([...(EQ_PRESETS[name] ?? EQ_FLAT)]);
-  },
 
   setNormalizationEnabled: (enabled) => {
     musicAudioEngine.setLoudness(get().loudnessDb, enabled);

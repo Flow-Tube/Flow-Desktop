@@ -14,7 +14,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ListX, Loader2, Radio, X } from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
+import { ArrowDownToLine, GripVertical, ListStart, ListX, Loader2, Radio, X } from "lucide-react";
 
 import { selectRadioOn, useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicHiddenFilter } from "../../store/useMusicActionsStore";
@@ -34,11 +35,31 @@ interface QueueRowProps {
   track: SongItem;
   isRadio: boolean;
   onPlay: () => void;
+  onPlayNext: () => void;
+  onMoveToEnd: () => void;
   onRemove: () => void;
   onNavigate: () => void;
 }
 
-function QueueRow({ track, isRadio, onPlay, onRemove, onNavigate }: QueueRowProps) {
+function RowAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * A queue row. Android's swipe actions (play next, move to end, remove) are
+ * buttons that show on hover or keyboard focus here, and Delete removes the row.
+ */
+function QueueRow({ track, isRadio, onPlay, onPlayNext, onMoveToEnd, onRemove, onNavigate }: QueueRowProps) {
   const {
     attributes,
     listeners,
@@ -49,10 +70,17 @@ function QueueRow({ track, isRadio, onPlay, onRemove, onNavigate }: QueueRowProp
     isDragging,
   } = useSortable({ id: videoIdOf(track) });
 
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Delete" && event.key !== "Backspace") return;
+    event.preventDefault();
+    onRemove();
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
+      onKeyDown={onKeyDown}
       className={cx("group/queue relative flex items-center rounded-lg", isDragging && "z-10 opacity-80")}
     >
       <button
@@ -90,6 +118,17 @@ function QueueRow({ track, isRadio, onPlay, onRemove, onNavigate }: QueueRowProp
           ]}
         />
       </div>
+      <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/queue:opacity-100 focus-within:opacity-100">
+        <RowAction label={getString("music_play_next")} onClick={onPlayNext}>
+          <ListStart className="h-4 w-4" />
+        </RowAction>
+        <RowAction label={getString("music_move_to_end")} onClick={onMoveToEnd}>
+          <ArrowDownToLine className="h-4 w-4" />
+        </RowAction>
+        <RowAction label={getString("music_remove_from_queue")} onClick={onRemove}>
+          <X className="h-4 w-4" />
+        </RowAction>
+      </div>
     </div>
   );
 }
@@ -106,6 +145,7 @@ export function MusicQueuePane() {
   const loadIndex = useMusicPlayerStore((s) => s._loadIndex);
   const removeFromQueue = useMusicPlayerStore((s) => s.removeFromQueue);
   const reorderQueue = useMusicPlayerStore((s) => s.reorderQueue);
+  const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
   const clearQueue = useMusicPlayerStore((s) => s.clearQueue);
   const undoQueueEdit = useMusicPlayerStore((s) => s.undoQueueEdit);
   const showToast = useUiStore((s) => s.showToast);
@@ -187,7 +227,10 @@ export function MusicQueuePane() {
             <MusicItemCard
               variant="track-list"
               item={currentTrack}
-              onPlay={() => void loadIndex(currentIndex)}
+              // The song is already loaded: clicking it resumes rather than starting it over.
+              onPlay={() => {
+                if (!useMusicPlayerStore.getState().isPlaying) togglePlay();
+              }}
               onNavigate={closeOverlay}
             />
           </>
@@ -212,6 +255,8 @@ export function MusicQueuePane() {
                     track={track}
                     isRadio={radioSet.has(videoIdOf(track))}
                     onPlay={() => void loadIndex(i)}
+                    onPlayNext={() => reorderQueue(i, currentIndex + 1)}
+                    onMoveToEnd={() => reorderQueue(i, queue.length - 1)}
                     onRemove={() => handleRemove(i)}
                     onNavigate={closeOverlay}
                   />

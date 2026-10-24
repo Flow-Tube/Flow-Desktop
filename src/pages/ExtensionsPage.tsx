@@ -8,6 +8,7 @@ import {
 } from "../store/useSettingsStore";
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
+import { MusicTraySetting } from "../components/settings/MusicTraySetting";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
@@ -165,6 +166,7 @@ export const ExtensionsPage: React.FC = () => {
                 ]}
               />
             </SettingItem>
+            <MusicTraySetting />
           </SettingsGroup>
         </section>
 

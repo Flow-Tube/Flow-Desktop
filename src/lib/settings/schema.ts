@@ -1,4 +1,5 @@
 import type { StringKey } from "../i18n/index";
+import { IS_LINUX_RUNTIME } from "../platform";
 
 export type SettingValueType = "boolean" | "number" | "string" | "json";
 export type SettingArea =
@@ -150,6 +151,7 @@ export const SETTINGS = {
   DEARROW_BADGE_ENABLED: "dearrow_badge_enabled",
   RYTD_ENABLED: "rytd_enabled",
   DISCORD_RPC_MODE: "discord_rpc_mode",
+  MUSIC_TRAY_ENABLED: "music_tray_enabled",
   SB_SUBMIT_ENABLED: "sb_submit_enabled",
   SPONSORBLOCK_USER_ID: "sponsorblock_user_id",
   SPONSORBLOCK_SERVER: "sponsorblock_server",
@@ -371,6 +373,8 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.DEARROW_BADGE_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.RYTD_ENABLED, "extensions", true, "wired"),
   str(SETTINGS.DISCORD_RPC_MODE, "extensions", "off", "wired", ["off", "music", "videos", "musicAndVideos"]),
+  // Linux trays need an AppIndicator library and a desktop that shows them, so it is opt-in there.
+  bool(SETTINGS.MUSIC_TRAY_ENABLED, "extensions", !IS_LINUX_RUNTIME, "wired"),
   bool(SETTINGS.SB_SUBMIT_ENABLED, "extensions", false, "wired"),
   str(SETTINGS.SPONSORBLOCK_USER_ID, "extensions", "", "persisted-only", undefined, "visible", "private"),
   str(SETTINGS.SPONSORBLOCK_SERVER, "extensions", "https://sponsor.ajay.app", "wired"),

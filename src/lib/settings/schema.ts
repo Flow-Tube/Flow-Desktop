@@ -116,6 +116,8 @@ export const SETTINGS = {
   DEFAULT_VIDEO_CODEC: "default_video_codec",
   SHORTS_QUALITY_WIFI: "shorts_quality_wifi",
   MUSIC_AUDIO_QUALITY: "music_audio_quality",
+  MUSIC_QUEUE_SWIPE_LEFT: "queue_swipe_left_action",
+  MUSIC_QUEUE_SWIPE_RIGHT: "queue_swipe_right_action",
   PREFERRED_AUDIO_LANGUAGE: "preferred_audio_language",
 
   MUSIC_LOUDNESS_NORMALIZATION: "music_loudness_normalization",
@@ -343,6 +345,8 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.DEFAULT_VIDEO_CODEC, "quality", "H.264", "wired", ["Auto", "H.264", "VP9", "AV1"]),
   str(SETTINGS.SHORTS_QUALITY_WIFI, "quality", "720p", "wired", QUALITY_VALUES),
   str(SETTINGS.MUSIC_AUDIO_QUALITY, "quality", "Auto", "wired", ["Auto", "High", "Medium", "Low"]),
+  str(SETTINGS.MUSIC_QUEUE_SWIPE_LEFT, "player", "PLAY_NEXT", "wired", ["PLAY_NEXT", "MOVE_TO_END", "REMOVE"]),
+  str(SETTINGS.MUSIC_QUEUE_SWIPE_RIGHT, "player", "REMOVE", "wired", ["PLAY_NEXT", "MOVE_TO_END", "REMOVE"]),
   str(SETTINGS.PREFERRED_AUDIO_LANGUAGE, "quality", "original", "persisted-only"),
 
   bool(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION, "player", true, "wired"),

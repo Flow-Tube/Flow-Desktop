@@ -41,6 +41,9 @@ MUSIC
 - A song paused while it was still loading stays paused, and a recovery never starts a song you paused.
 - A song whose link expires during long pauses recovers each time, waits for the connection to come back when the network drops, and tries another audio format when one cannot be decoded. Errors now say which of these went wrong.
 - Media keys and the system's Now Playing controls follow whichever player started last, show the song's progress, and seek forward and back. Starting a video pauses the music and starting music pauses the video.
+- Flow reopens the music player on the song you stopped at, paused at the same point, with its queue, shuffle order and radio. "Restore the last queue" in Settings turns this off.
+- History and recommendations count the time a song actually played, so skipping or dragging to the end no longer counts as a full listen, and a short replay no longer replaces a longer one.
+- A new "Resume long tracks" setting, off by default, starts mixes, podcasts and episodes of 10 minutes or more where you left them.
 
 AUDIO
 - Equalizer boosts no longer distort: the music equalizer turns the whole curve down by its highest boost before the filters, and a soft limiter bends any peak that still goes past full scale.

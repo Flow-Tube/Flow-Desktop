@@ -7,6 +7,8 @@ let answer: () => Promise<LyricsResult | null> = async () => null;
 vi.mock("../lib/lyrics/lyricsHelper", () => ({
   getLyrics: () => answer(),
   forceRefresh: () => {},
+  getAllLyrics: async () => {},
+  applyManualLyrics: () => {},
 }));
 
 const { useLyricsStore } = await import("./useLyricsStore");
@@ -64,5 +66,31 @@ describe("lyrics store", () => {
     await flush();
     expect(useLyricsStore.getState().videoId).toBe(second.videoId);
     expect(useLyricsStore.getState().providerName).toBe("");
+  });
+});
+
+describe("lyrics session", () => {
+  it("clamps the sync offset to half a minute either way and resets it for the next song", () => {
+    answer = () => new Promise(() => {});
+    useLyricsStore.getState().load(request());
+    for (let i = 0; i < 80; i++) useLyricsStore.getState().adjustSyncOffset(500);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(30_000);
+    useLyricsStore.getState().adjustSyncOffset(-100);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(29_900);
+    useLyricsStore.getState().load(request());
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+  });
+
+  it("shows a chosen source at once and starts its timing from zero, while an edit keeps it", () => {
+    answer = () => new Promise(() => {});
+    useLyricsStore.getState().load(request());
+    useLyricsStore.getState().adjustSyncOffset(500);
+    useLyricsStore.getState().applyEdited(timed);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(500);
+    expect(useLyricsStore.getState().isSynced).toBe(true);
+    useLyricsStore.getState().applyCandidate({ providerName: "LrcLib", entries: [{ time: 0, text: "Plain" }], synced: false });
+    expect(useLyricsStore.getState().providerName).toBe("LrcLib");
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+    expect(useLyricsStore.getState().plain).toBe("Plain");
   });
 });

@@ -4,11 +4,15 @@ import type { SongItem } from "../../types/music";
 import type { Rgb } from "../../lib/useDominantColor";
 import type { LyricsAlign } from "../../lib/lyrics/display/presentation";
 import { useLyrics } from "../../lib/lyrics/useLyrics";
+import { useLyricsStore } from "../../store/useLyricsStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useBoolPref, usePreference } from "../../lib/usePreference";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useTheme } from "../../lib/useTheme";
 import { LyricsPanel } from "./lyrics/LyricsPanel";
+import { LyricsSyncOffsetRow } from "./lyrics/LyricsSyncOffsetRow";
+
+export { LyricsActionsMenu } from "./lyrics/LyricsActionsMenu";
 
 /**
  * Android's LARGE (44) and PANE (30) lyric sizes, in CSS px: the full-bleed view reads from a
@@ -42,11 +46,14 @@ export interface MusicLyricsProps {
   className?: string;
 }
 
-/** The lyrics of the song playing, for the full-bleed view or a side pane. */
+/** The lyrics of the song playing, with their sync offset controls; the host places the actions menu. */
 export function MusicLyrics({ track, variant, accent, backdrop, active, className = "" }: MusicLyricsProps) {
   const lyrics = useLyrics(track);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const seek = useMusicPlayerStore((s) => s.seek);
+  const syncOffsetMs = useLyricsStore((s) => s.syncOffsetMs);
+  const showSyncControls = useLyricsStore((s) => s.showSyncControls);
+  const { adjustSyncOffset, resetSyncOffset, setShowSyncControls } = useLyricsStore.getState();
   const [alignPref] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
   const [showTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
@@ -54,7 +61,11 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
   const textColor = useMemo(() => hexToRgb(theme.variants[themeVariant].onSurface), [theme, themeVariant]);
   const lyricAccent = backdrop && accent ? accent : textColor;
 
-  const onSeekTo = useCallback((lineTimeMs: number) => seek(lineTimeMs / 1000), [seek]);
+  // Lines carry the offset-adjusted time; the song seeks to where that line really is.
+  const onSeekTo = useCallback(
+    (lineTimeMs: number) => seek(Math.max(0, lineTimeMs - useLyricsStore.getState().syncOffsetMs) / 1000),
+    [seek],
+  );
 
   return (
     <div className={`relative ${className}`}>
@@ -70,7 +81,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
         textAlign={isAlign(alignPref) ? alignPref : "center"}
         showTranslation={showTranslation}
         showRomanization={showRomanization}
-        syncOffsetMs={0}
+        syncOffsetMs={syncOffsetMs}
         active={active}
         isPlaying={isPlaying}
         onSeekTo={onSeekTo}
@@ -80,6 +91,16 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
         <p className="pointer-events-none absolute inset-x-0 top-[58px] z-10 text-center text-xs font-medium text-chrome-neutral-400">
           {lyrics.source}
         </p>
+      )}
+      {showSyncControls && (
+        <div className={`absolute inset-x-0 z-20 mx-auto w-full max-w-md px-5 ${variant === "full" ? "top-24" : "top-2"}`}>
+          <LyricsSyncOffsetRow
+            offsetMs={syncOffsetMs}
+            onAdjust={adjustSyncOffset}
+            onReset={resetSyncOffset}
+            onHide={() => setShowSyncControls(false)}
+          />
+        </div>
       )}
     </div>
   );

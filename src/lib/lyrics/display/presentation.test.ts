@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LyricsEntry } from "../types";
 import { duetSides, lyricsPresentation, lyricsRomanizations, nextMainLineTimes } from "./presentation";
-import { contrastRatio, ensureContrastOn, tone, withTone } from "./tone";
+import { contrastRatio, ensureContrastOn, tone, withTone } from "../../color/tone";
 
 describe("lyrics presentation", () => {
   it("puts duet singers on opposite sides in order of appearance", () => {

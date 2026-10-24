@@ -11,6 +11,7 @@ import {
   selectDefaultFormat,
 } from "./useDownloadDialog";
 import { SETTINGS } from "./settings/schema";
+import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 
@@ -62,7 +63,7 @@ export async function startMusicDownload(
   const configured = values[SETTINGS.MUSIC_AUDIO_QUALITY] ?? "Auto";
   const quality = MUSIC_QUALITY_VALUES.has(configured) ? (configured as MusicAudioQuality) : "Auto";
   const stream = await getMusicStream(id, quality);
-  return startDownload({
+  const started = await startDownload({
     sourceUrl: stream.audioUrl,
     title: track.title,
     mediaKind: "music",
@@ -78,4 +79,6 @@ export async function startMusicDownload(
     collectionDbId: overrides.collectionDbId,
     loudnessDb: stream.loudnessDb ?? undefined,
   });
+  saveLyricsWithDownload(track, started.id);
+  return started;
 }

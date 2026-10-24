@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import type { SongItem } from "../../types/music";
-import type { LyricsRequest } from "./lyricsHelper";
+import { lyricsRequestFor } from "./lyricsHelper";
 import { EMPTY_LYRICS, useLyricsStore, type LyricsView } from "../../store/useLyricsStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 
@@ -9,17 +9,6 @@ import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 const AUDIO_DURATION_WAIT_MS = 3000;
 
 const videoIdOf = (t: SongItem): string => t.videoId ?? t.id;
-
-export function lyricsRequestFor(track: SongItem, durationSec: number): LyricsRequest {
-  return {
-    videoId: videoIdOf(track),
-    title: track.title,
-    // Catalogues file a song under its first credited artist; the joined list matches none of them.
-    artist: track.artists.find((a) => a.name)?.name ?? "",
-    durationSec: Math.round(durationSec),
-    album: track.album?.name ?? null,
-  };
-}
 
 /**
  * Starts the lyrics lookup when a song starts, so lyrics are usually ready by the time they are

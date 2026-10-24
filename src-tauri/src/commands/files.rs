@@ -20,13 +20,14 @@ pub async fn write_backup_file(path: String, contents: String) -> Result<(), Err
     }
 
     let path = PathBuf::from(trimmed_path);
-    let is_json_path = path
+    // Backups are JSON; an equalizer export is EqualizerAPO text.
+    let is_allowed_path = path
         .extension()
         .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
-    if !is_json_path {
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("json") || ext.eq_ignore_ascii_case("txt"));
+    if !is_allowed_path {
         return Err(ErrorResponse::from(AppError::Validation(
-            "Backup path must end in .json".into(),
+            "Export path must end in .json or .txt".into(),
         )));
     }
 

@@ -24,6 +24,7 @@ MUSIC
 - Music search only offers the categories YouTube Music has results for, and its filters use the parameters YouTube Music sends today.
 - An artist's Shuffle plays YouTube Music's shuffle of their whole catalogue and Mix plays their station, instead of both reshuffling the few top songs on the page. Artist pages sort their shelves the same way in every language and link the sources under the bio.
 - Songs added by radio keep their album, explicit badge and song or video type, and radio continues YouTube Music's own mix for the song. Lyrics from YouTube Music show their source.
+- The full player stays dark in light themes, as it does on Android. Its title, controls and lyrics were dark text on a dark backdrop.
 - The full player's seek bar glides with the song instead of stepping, and dragging it seeks once when you let go instead of on every move. The page behind the full player stops drawing while it is covered.
 - Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
 - Shuffle now rearranges the queue, so every song plays once, Previous and Up next follow the shuffled order, and turning shuffle off puts the original order back.

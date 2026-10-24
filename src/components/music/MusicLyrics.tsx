@@ -8,6 +8,7 @@ import { entriesAreSynced } from "../../lib/lyrics/sync";
 import { getString } from "../../lib/i18n/index";
 import { LyricsCanvas } from "./LyricsCanvas";
 import { useTheme } from "../../lib/useTheme";
+import { darkVariantOf } from "../../lib/themes";
 
 const rgba = (c: Rgb, a: number) => `rgba(${c.r},${c.g},${c.b},${a})`;
 
@@ -59,7 +60,8 @@ export function MusicLyrics({
   const { theme, variant } = useTheme();
   const synced = isSynced && entriesAreSynced(entries);
   const lines = buildLines(entries, plain, synced);
-  const expressive = hexToRgb(theme.variants[variant].onSurface);
+  // Lyrics are drawn inside the full player, which is dark in every theme.
+  const expressive = hexToRgb(theme.variants[darkVariantOf(variant)].onSurface);
 
   if (loading) {
     return (

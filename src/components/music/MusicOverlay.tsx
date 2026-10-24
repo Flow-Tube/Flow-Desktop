@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -22,6 +22,8 @@ import {
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
 import { useCoverAppContent } from "../../lib/useCoverAppContent";
+import { useTheme } from "../../lib/useTheme";
+import { darkScopeVariables } from "../../lib/themes";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { useLikesStore } from "../../store/useLikesStore";
 import { useUiStore } from "../../store/useUiStore";
@@ -84,6 +86,13 @@ export function MusicOverlay() {
   const menu = useMusicContextMenu(Boolean(currentTrack));
 
   const musicError = useMusicPlayerError();
+  // The full player stays dark in every theme, as on Android: its backdrop is
+  // artwork under a dark wash, which light-theme text could not be read on.
+  const { theme, variant } = useTheme();
+  const darkScope = useMemo(
+    () => ({ ...darkScopeVariables(theme, variant), colorScheme: "dark" }) as CSSProperties,
+    [theme, variant],
+  );
   const [eqOpen, setEqOpen] = useState(false);
   const overlayOpen = currentTrack !== null && viewState !== "dock";
   const lyrics = useLyrics(overlayOpen ? currentTrack : null);
@@ -164,6 +173,7 @@ export function MusicOverlay() {
             if ((definition as { opacity?: number }).opacity === 1) setEntered(true);
           }}
           className="fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-chrome-neutral-950"
+          style={darkScope}
         >
           <AmbientBackdrop src={currentTrack.thumbnail} accent={accent} style={backgroundStyle} />
 

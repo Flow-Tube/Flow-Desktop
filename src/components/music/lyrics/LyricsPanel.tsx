@@ -66,6 +66,8 @@ export interface LyricsPanelProps {
   isPlaying: boolean;
   /** A tap on a synced line, with the line's own time in ms. */
   onSeekTo: (lineTimeMs: number) => void;
+  /** How far up the resync button sits, clear of any controls the host draws over the lyrics. */
+  resyncBottom: number;
   className?: string;
 }
 
@@ -75,7 +77,7 @@ export interface LyricsPanelProps {
  */
 export function LyricsPanel(props: LyricsPanelProps) {
   const { lyrics, syncedLyrics, isLoading, providerName, accent, backdrop, baseTextSize, maxRowWidth, textAlign } = props;
-  const { showTranslation, showRomanization, syncOffsetMs, active, isPlaying, onSeekTo, className = "" } = props;
+  const { showTranslation, showRomanization, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [family, setFamily] = useState(DEFAULT_FAMILY);
@@ -482,7 +484,12 @@ export function LyricsPanel(props: LyricsPanelProps) {
       {isSynced && active && isPlaying && state.isAutoScrollEnabled && (
         <CurrentLineAnnouncer text={lines[state.deferredCurrentLineIndex]?.text ?? ""} />
       )}
-      <LyricsResyncButton visible={!state.isAutoScrollEnabled && isSynced} accent={expressiveAccent} onClick={resync} />
+      <LyricsResyncButton
+        visible={!state.isAutoScrollEnabled && isSynced}
+        accent={expressiveAccent}
+        bottom={resyncBottom}
+        onClick={resync}
+      />
       <LyricsProviderLabel providerName={providerName} accent={expressiveAccent} />
     </div>
   );

@@ -16,17 +16,27 @@ export function CurrentLineAnnouncer({ text }: { text: string }) {
 }
 
 /** Shown while the user has scrolled away from the sung line; brings the list back to it. */
-export function LyricsResyncButton({ visible, accent, onClick }: { visible: boolean; accent: Rgb; onClick: () => void }) {
+export function LyricsResyncButton({
+  visible,
+  accent,
+  bottom,
+  onClick,
+}: {
+  visible: boolean;
+  accent: Rgb;
+  bottom: number;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={getString("music_resync")}
       tabIndex={visible ? 0 : -1}
-      className={`absolute bottom-6 left-1/2 z-20 grid h-12 w-12 -translate-x-1/2 place-items-center rounded-full bg-chrome-black/40 transition-[opacity,background-color] duration-150 ease-out hover:bg-chrome-black/60 ${
+      className={`absolute left-1/2 z-20 grid h-12 w-12 -translate-x-1/2 place-items-center rounded-full bg-chrome-black/40 transition-[opacity,background-color] duration-150 ease-out hover:bg-chrome-black/60 ${
         visible ? "opacity-100" : "pointer-events-none opacity-0"
       }`}
-      style={{ color: rgba(accent, 1) }}
+      style={{ color: rgba(accent, 1), bottom }}
     >
       <RefreshCw className="h-5 w-5" />
     </button>

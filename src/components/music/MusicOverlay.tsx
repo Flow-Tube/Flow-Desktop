@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ListMusic, Mic2, Minimize2, RefreshCw, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
@@ -13,7 +13,7 @@ import { getString } from "../../lib/i18n/index";
 import { HapticButton } from "./HapticButton";
 import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
-import { MusicLyrics } from "./MusicLyrics";
+import { LyricsActionsMenu, MusicLyrics } from "./MusicLyrics";
 import { AmbientBackdrop } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
@@ -21,7 +21,6 @@ import { VolumePopover } from "./VolumePopover";
 import { LAYOUT_SPRING, NowPlayingColumn } from "./player/NowPlayingColumn";
 import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
 import { PlayerTransport } from "./player/PlayerTransport";
-import { useLyrics } from "../../lib/lyrics/useLyrics";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useFullPlayerColors } from "../../lib/usePlayerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
@@ -45,7 +44,6 @@ export function MusicOverlay() {
   const setVolume = useMusicPlayerStore((s) => s.setVolume);
   const setViewState = useMusicPlayerStore((s) => s.setViewState);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
-  const seek = useMusicPlayerStore((s) => s.seek);
 
   const musicError = useMusicPlayerError();
   const [eqOpen, setEqOpen] = useState(false);
@@ -55,7 +53,6 @@ export function MusicOverlay() {
   const open = currentTrack !== null && viewState !== "dock";
   const isQueue = viewState === "queue";
   const isLyrics = viewState === "lyrics";
-  const lyrics = useLyrics(open ? currentTrack : null);
   /*
     Sample the URL the artwork actually renders, not the raw field: YouTube
     Music hands back protocol-relative and unsized image URLs, and a bare `//`
@@ -100,18 +97,18 @@ export function MusicOverlay() {
   const sideTab: SidePaneTab = isLyrics ? "lyrics" : "queue";
   const muted = isMuted || volume === 0;
 
-  const lyricsView = (className: string) => (
-    <MusicLyrics
-      entries={lyrics.entries}
-      plain={lyrics.plain}
-      isSynced={lyrics.isSynced}
-      loading={lyrics.loading}
-      providerName={lyrics.providerName}
-      source={lyrics.source}
-      accent={playerColors.colors.roles.primary}
-      onSeek={seek}
-      className={className}
-    />
+  // Android draws the lyrics in the player's primary, checked against the surface behind them.
+  const lyricsView = (variant: "full" | "pane", className: string) => (
+    <div className={className}>
+      <MusicLyrics
+        track={currentTrack}
+        variant={variant}
+        accent={playerColors.colors.roles.primary}
+        backdrop={playerColors.colors.roles.surface}
+        active
+        className="h-full w-full"
+      />
+    </div>
   );
 
   return (
@@ -156,11 +153,7 @@ export function MusicOverlay() {
             </p>
 
             <div className="relative flex items-center gap-1 justify-self-end">
-              {isLyrics && (
-                <HapticButton onClick={() => lyrics.refresh()} aria-label={getString("music_refresh_lyrics")} className={TOP_BTN}>
-                  <RefreshCw className="h-5 w-5" />
-                </HapticButton>
-              )}
+              {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
               {wide && lyricsExpanded && (
                 <HapticButton
                   onClick={() => setLyricsExpanded(false)}
@@ -239,7 +232,7 @@ export function MusicOverlay() {
           {/* MAIN */}
           {fullBleedLyrics ? (
             <>
-              {lyricsView("absolute inset-0 z-10")}
+              {lyricsView("full", "absolute inset-0 z-10")}
               <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
                 <div className="w-full max-w-2xl">
                   <MusicScrubber size="lg" showTimes countdown expressive />
@@ -269,7 +262,7 @@ export function MusicOverlay() {
                     onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
                     onExpandLyrics={() => setLyricsExpanded(true)}
                   >
-                    {sideTab === "lyrics" ? lyricsView("absolute inset-0") : <MusicQueuePane />}
+                    {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
                   </PlayerSidePane>
                 </div>
               ) : (

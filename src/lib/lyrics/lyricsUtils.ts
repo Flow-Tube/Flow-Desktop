@@ -54,13 +54,6 @@ export function filterCreditLines(entries: LyricsEntry[]): LyricsEntry[] {
   });
 }
 
-export function findCurrentLineIndex(lines: LyricsEntry[], position: number): number {
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i]!.time >= position + 300) return i - 1;
-  }
-  return lines.length - 1;
-}
-
 export function normalizeEntries(entries: LyricsEntry[]): LyricsEntry[] {
   return entries.map((e) => ({
     ...e,

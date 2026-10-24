@@ -357,33 +357,19 @@ pub struct LyricsHttpResponse {
     pub body: String,
 }
 
-/// Generic HTTPS GET passthrough for the client-side lyrics engine — the lyric
-/// providers are external services that the webview can't reach due to CORS.
+/// HTTPS GET passthrough for the client-side lyrics engine, limited to the lyrics providers.
 #[tauri::command]
 pub async fn lyrics_http_get(
     url: String,
     headers: Option<HashMap<String, String>>,
 ) -> CmdResult<LyricsHttpResponse> {
-    if !url.starts_with("https://") {
-        return Err(ErrorResponse::from(AppError::Validation(
-            "Only https URLs are allowed".into(),
-        )));
-    }
-    let mut req = crate::api::http::shared_client()
-        .get(&url)
-        .timeout(std::time::Duration::from_secs(15));
-    if let Some(h) = headers {
-        for (k, v) in h {
-            req = req.header(k, v);
-        }
-    }
-    let resp = req
-        .send()
+    let response = crate::api::lyrics_http::get(&url, headers.unwrap_or_default())
         .await
-        .map_err(|e| ErrorResponse::from(AppError::Extractor(e.to_string())))?;
-    let status = resp.status().as_u16();
-    let body = resp.text().await.unwrap_or_default();
-    Ok(LyricsHttpResponse { status, body })
+        .map_err(ErrorResponse::from)?;
+    Ok(LyricsHttpResponse {
+        status: response.status,
+        body: response.body,
+    })
 }
 
 // --- Playback (reuses the shared streaming proxy) -------------------------

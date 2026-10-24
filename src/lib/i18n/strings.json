@@ -998,6 +998,8 @@
   "music_no_blocked_artists": "No blocked artists.",
   "music_up_next": "Next up",
   "music_lyrics_full_player": "Show lyrics across the whole player",
+  "music_watch_video": "Watch video",
+  "music_no_official_video": "This song has no official video on YouTube",
   "music_lyrics_back_to_pane": "Back to the side pane",
   "music_autoplay": "Autoplay",
   "music_autoplay_desc": "Keep playing similar music when the queue ends",

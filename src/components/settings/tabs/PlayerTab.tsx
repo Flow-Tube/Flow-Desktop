@@ -20,6 +20,7 @@ export function PlayerTab() {
   const [loop, setLoop] = useBoolPref(SETTINGS.VIDEO_LOOP_ENABLED, false);
   const [skipSilence, setSkipSilence] = useBoolPref(SETTINGS.SKIP_SILENCE_ENABLED, false);
   const [stableVolume, setStableVolume] = useBoolPref(SETTINGS.STABLE_VOLUME_ENABLED, false);
+  const [videoLoudness, setVideoLoudness] = useBoolPref(SETTINGS.VIDEO_LOUDNESS_NORMALIZATION, false);
   const [volumeBoost, setVolumeBoost] = useBoolPref(SETTINGS.ALLOW_VOLUME_BOOST, false);
 
   const [rememberSpeed, setRememberSpeed] = useBoolPref(SETTINGS.REMEMBER_PLAYBACK_SPEED, false);
@@ -70,8 +71,11 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_skip_silence')} description={getString('settings_skip_silence_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED)}>
           <ToggleSwitch checked={skipSilence} onChange={setSkipSilence} disabled={isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED)} />
         </SettingItem>
-        <SettingItem title={getString('settings_stable_volume')} description={getString('settings_stable_volume_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.STABLE_VOLUME_ENABLED)}>
-          <ToggleSwitch checked={stableVolume} onChange={setStableVolume} disabled={isSettingDisabledUntilWired(SETTINGS.STABLE_VOLUME_ENABLED)} />
+        <SettingItem title={getString('settings_stable_volume')} description={getString('settings_stable_volume_desc')}>
+          <ToggleSwitch checked={stableVolume} onChange={setStableVolume} />
+        </SettingItem>
+        <SettingItem title={getString('settings_video_loudness')} description={getString('settings_video_loudness_desc')}>
+          <ToggleSwitch checked={videoLoudness} onChange={setVideoLoudness} />
         </SettingItem>
         <SettingItem title={getString('settings_volume_boost')} description={getString('settings_volume_boost_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ALLOW_VOLUME_BOOST)}>
           <ToggleSwitch checked={volumeBoost} onChange={setVolumeBoost} disabled={isSettingDisabledUntilWired(SETTINGS.ALLOW_VOLUME_BOOST)} />

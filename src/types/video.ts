@@ -171,6 +171,8 @@ export interface StreamInfo {
   sabr?: SabrStreamInfo | null;
   /** Seek-bar preview sheets, one entry per resolution, smallest first. */
   storyboard?: StoryboardLevel[];
+  /** How many dB louder than the site's target the video plays. */
+  loudnessDb?: number | null;
 }
 
 /** One resolution of a video's preview frames: sheets of `columns` × `rows`, one frame every `intervalMs`. */

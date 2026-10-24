@@ -1,3 +1,4 @@
+import { loudnessFactor } from "../loudness";
 import {
   EQ_BANDS,
   EQ_PEAKING_Q,
@@ -312,8 +313,7 @@ class MusicAudioEngine {
   }
 
   private normalizationFactor(loudnessDb: number | null): number {
-    if (!this.normalizationEnabled || loudnessDb == null) return 1;
-    return Math.min(1, Math.pow(10, -loudnessDb / 20));
+    return loudnessFactor(loudnessDb, this.normalizationEnabled);
   }
 
   private applyGain(): void {

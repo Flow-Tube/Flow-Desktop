@@ -165,6 +165,8 @@ export interface VideoStream {
   audioTracks: AudioTrack[];
   /** Seek-bar preview sheets. */
   storyboard: StoryboardLevel[];
+  /** How many dB louder than the site's target the video plays. */
+  loudnessDb: number | null;
   dashManifestUrl: string | null;
   hlsManifestUrl: string | null;
   isLive: boolean;
@@ -199,6 +201,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const [captions, setCaptions] = useState<CaptionTrack[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [storyboard, setStoryboard] = useState<StoryboardLevel[]>([]);
+  const [loudnessDb, setLoudnessDb] = useState<number | null>(null);
   const [dashManifestUrl, setDashManifestUrl] = useState<string | null>(null);
   const [hlsManifestUrl, setHlsManifestUrl] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
@@ -246,6 +249,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       setHlsManifestUrl(null);
       setAudioTracks([]);
       setStoryboard([]);
+      setLoudnessDb(null);
       setStreamVariants([]);
       publishCaptions([]);
       setIsLive(false);
@@ -305,6 +309,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         publishCaptions(info.captions || []);
         setAudioTracks(info.audioTracks || []);
         setStoryboard(info.storyboard ?? []);
+        setLoudnessDb(info.loudnessDb ?? null);
         setIsLive(!!info.isLive);
 
         const canUseAdaptive = (info.audioTracks || []).some((track) => !!track.localUrl);
@@ -380,6 +385,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         publishCaptions([]);
         setAudioTracks([]);
         setStoryboard([]);
+        setLoudnessDb(null);
         setDashManifestUrl(null);
         setHlsManifestUrl(null);
         setIsLive(false);
@@ -505,6 +511,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     publishCaptions([]);
     setAudioTracks([]);
     setStoryboard([]);
+    setLoudnessDb(null);
     setSelectedQualityId("auto");
     setStreamError(null);
     setStreamErrorKind(null);
@@ -521,6 +528,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         publishCaptions(info.captions || []);
         setAudioTracks(info.audioTracks || []);
         setStoryboard(info.storyboard ?? []);
+        setLoudnessDb(info.loudnessDb ?? null);
         setIsLive(!!info.isLive);
         const canUseAdaptive = (info.audioTracks || []).some((track) => !!track.localUrl);
         const preferredVariant = selectPreferredStreamVariant(
@@ -572,6 +580,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     captions,
     audioTracks,
     storyboard,
+    loudnessDb,
     dashManifestUrl,
     hlsManifestUrl,
     isLive,

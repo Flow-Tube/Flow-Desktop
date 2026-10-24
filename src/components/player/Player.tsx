@@ -27,6 +27,7 @@ import {
 } from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
 import { SETTINGS } from "../../lib/settings/schema";
+import { loudnessFactor } from "../../lib/loudness";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
@@ -85,6 +86,8 @@ type PlayerProps = {
   chapters?: VideoChapter[];
   heatmap?: HeatmapMarker[];
   storyboard?: StoryboardLevel[];
+  /** How many dB louder than the site's target the video plays. */
+  loudnessDb?: number | null;
 };
 
 type DashBitrateInfo = {
@@ -345,6 +348,7 @@ export const Player: React.FC<PlayerProps> = ({
   chapters = [],
   heatmap,
   storyboard,
+  loudnessDb,
 }) => {
   const [activeQualityLabel, setActiveQualityLabel] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -425,6 +429,9 @@ export const Player: React.FC<PlayerProps> = ({
   const autoplayEnabled = useAppSettingsStore((state) => state.values[SETTINGS.AUTOPLAY_ENABLED] !== "false");
   const videoLoopEnabled = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOOP_ENABLED] === "true");
   const rememberPlaybackSpeed = useAppSettingsStore((state) => state.values[SETTINGS.REMEMBER_PLAYBACK_SPEED] === "true");
+  const normalizeLoudness = useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_LOUDNESS_NORMALIZATION] === "true");
+  // The slider keeps showing the chosen volume; only what reaches the element is scaled.
+  const outputVolume = volume * loudnessFactor(loudnessDb, normalizeLoudness);
   const playbackSpeedSetting = useAppSettingsStore((state) => state.values[SETTINGS.PLAYBACK_SPEED] ?? "1.0");
   const customSpeedsEnabled = useAppSettingsStore((state) => state.values[SETTINGS.CUSTOM_SPEEDS_ENABLED] === "true");
   const customSpeedPresets = useAppSettingsStore((state) => state.values[SETTINGS.CUSTOM_SPEED_PRESETS] ?? "");
@@ -2057,7 +2064,7 @@ export const Player: React.FC<PlayerProps> = ({
 
     audio.playbackRate = playbackRate;
     audio.preservesPitch = true;
-    audio.volume = muted ? 0 : volume;
+    audio.volume = muted ? 0 : outputVolume;
     audio.muted = muted || volume === 0;
 
     const audioIdentity = `${mediaIdentity}|${selectedAudioTrack?.localUrl ?? ""}`;
@@ -2081,6 +2088,7 @@ export const Player: React.FC<PlayerProps> = ({
     isSourceSwitching,
     mediaIdentity,
     muted,
+    outputVolume,
     playbackRate,
     selectedAudioTrack?.localUrl,
     usesExternalAudio,
@@ -2092,13 +2100,13 @@ export const Player: React.FC<PlayerProps> = ({
     const audio = audioRef.current;
     if (!video) return;
     const effectiveMuted = muted || sbMuted || isHandoffSilent;
-    video.volume = usesExternalAudio ? 0 : (effectiveMuted ? 0 : volume);
+    video.volume = usesExternalAudio ? 0 : (effectiveMuted ? 0 : outputVolume);
     video.muted = usesExternalAudio || effectiveMuted || volume === 0;
     if (audio) {
-      audio.volume = effectiveMuted ? 0 : volume;
+      audio.volume = effectiveMuted ? 0 : outputVolume;
       audio.muted = effectiveMuted || volume === 0;
     }
-  }, [isHandoffSilent, muted, sbMuted, usesExternalAudio, volume]);
+  }, [isHandoffSilent, muted, outputVolume, sbMuted, usesExternalAudio, volume]);
 
   useEffect(() => {
     const video = videoRef.current;

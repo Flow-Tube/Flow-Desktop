@@ -511,7 +511,6 @@
   "settings_backup_scope_brain": "NeuroEngine Only",
   "settings_backup_scope_master": "All Data",
   "settings_note_skip_silence_requires_audio_analysis": "Needs Web Audio silence analysis before release.",
-  "settings_note_stable_volume_requires_audio_pipeline": "Needs shared Web Audio gain/compressor pipeline.",
   "settings_note_volume_boost_requires_audio_gain": "Needs Web Audio gain because native media volume caps at 1.",
   "settings_note_no_video_mini_player": "No current video mini-player target exists.",
   "settings_note_download_modal_required": "Needs download modal.",
@@ -581,7 +580,7 @@
   "settings_skip_silence": "Skip Silence",
   "settings_skip_silence_desc": "Skip silent segments in audio",
   "settings_stable_volume": "Stable Volume",
-  "settings_stable_volume_desc": "Normalize audio volume levels across videos",
+  "settings_stable_volume_desc": "Evens out loud and quiet parts within a video, using YouTube's stable-volume audio where a video has it. Applies to videos you open next.",
   "settings_volume_boost": "Volume Boost",
   "settings_volume_boost_desc": "Allow volume above 100%",
   "settings_group_speed": "Speed",
@@ -1555,5 +1554,7 @@
   "subscriptions_failed_body": "Their newest uploads are missing from this feed: %s.",
   "subscriptions_failed_more": "%s and %s more",
   "subscriptions_failed_retry": "Try again",
-  "search_role_profile": "Profile"
+  "search_role_profile": "Profile",
+  "settings_video_loudness": "Normalize Volume Across Videos",
+  "settings_video_loudness_desc": "Turns down videos mastered louder than YouTube's target, so one video is not much louder than the next."
 }

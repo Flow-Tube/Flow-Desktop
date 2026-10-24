@@ -69,6 +69,8 @@ export const SETTINGS = {
   MUSIC_PLAYER_FOLLOW_LIGHT_THEME: "music_player_follow_light_theme",
   MUSIC_RESTORE_QUEUE: "music_restore_queue",
   MUSIC_RESUME_LONG_TRACKS: "music_resume_long_tracks",
+  MUSIC_SLEEP_TIMER_BUTTON: "music_sleep_timer_button",
+  SLEEP_TIMER_CLOSE_APP_ON_EXPIRY: "sleep_timer_close_app_on_expiry",
   LYRICS_PROVIDER_ORDER: "lyrics_provider_order",
   LYRICS_PROVIDER_ENABLED_STATES: "lyrics_provider_enabled_states",
 
@@ -285,6 +287,8 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME, "player", false, "wired"),
   bool(SETTINGS.MUSIC_RESTORE_QUEUE, "player", true, "wired"),
   bool(SETTINGS.MUSIC_RESUME_LONG_TRACKS, "player", false, "wired"),
+  bool(SETTINGS.MUSIC_SLEEP_TIMER_BUTTON, "player", false, "wired"),
+  bool(SETTINGS.SLEEP_TIMER_CLOSE_APP_ON_EXPIRY, "player", false, "wired"),
   str(SETTINGS.LYRICS_PROVIDER_ORDER, "player", "", "wired"),
   json(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, "player", "{}", "wired"),
 

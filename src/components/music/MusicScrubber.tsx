@@ -1,3 +1,4 @@
+import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { MediaScrubber } from "../ui/MediaScrubber";
 
@@ -21,6 +22,7 @@ export function MusicScrubber({
   const progress = useMusicPlayerStore((s) => s.progress);
   const duration = useMusicPlayerStore((s) => s.duration);
   const seek = useMusicPlayerStore((s) => s.seek);
+  const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
 
   return (
     <MediaScrubber
@@ -33,6 +35,12 @@ export function MusicScrubber({
       countdown={countdown}
       className={className}
       expressive={expressive}
+      // Only the full player's large bar follows the audio frame by frame; the
+      // dock's edge line moves too little per second to need it.
+      clock={size === "lg" ? readAudioClock : undefined}
+      playing={isPlaying}
     />
   );
 }
+
+const readAudioClock = () => musicAudioEngine.getCurrentTime();

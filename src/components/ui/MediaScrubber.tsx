@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type React from "react";
 
 import { getString } from "../../lib/i18n/index";
@@ -17,6 +17,12 @@ interface MediaScrubberProps {
   className?: string;
   /** Opt in to the Material 3 Expressive look; ignored when the user turns it off. */
   expressive?: boolean;
+  /**
+   * The media's own clock. While `playing`, the bar follows it every frame
+   * instead of waiting for `progress`, which only changes about once a second.
+   */
+  clock?: () => number;
+  playing?: boolean;
 }
 
 export function MediaScrubber({
@@ -30,16 +36,50 @@ export function MediaScrubber({
   ariaLabel = getString("music_seek"),
   className = "",
   expressive = false,
+  clock,
+  playing = false,
 }: MediaScrubberProps) {
   const expressiveEnabled = useExpressiveSliders();
   const isExpressive = expressive && expressiveEnabled;
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLSpanElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dragRatio, setDragRatio] = useState(0);
+  const dragRatioRef = useRef(0);
 
-  const liveRatio = duration > 0 ? Math.min(1, Math.max(0, progress / duration)) : 0;
+  const following = Boolean(clock) && playing && !dragging && duration > 0;
+  const toRatio = (seconds: number) => (duration > 0 ? Math.min(1, Math.max(0, seconds / duration)) : 0);
+  // Read the clock while rendering too, so a re-render never pulls the bar back
+  // to the last whole second the store saw.
+  const liveRatio = toRatio(following && clock ? clock() : progress);
   const ratio = dragging ? dragRatio : liveRatio;
   const pct = ratio * 100;
+
+  useEffect(() => {
+    if (!following || !clock) return;
+    let frame: number | null = null;
+    const paint = () => {
+      const value = Math.min(1, Math.max(0, clock() / duration));
+      if (isExpressive) {
+        trackRef.current?.style.setProperty("--m3-fill", String(value));
+      } else {
+        if (fillRef.current) fillRef.current.style.width = `${value * 100}%`;
+        if (thumbRef.current) thumbRef.current.style.left = `${value * 100}%`;
+      }
+      frame = document.visibilityState === "visible" ? requestAnimationFrame(paint) : null;
+    };
+    // A hidden window gets no frames; pick the loop back up when it returns.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && frame === null) frame = requestAnimationFrame(paint);
+    };
+    frame = requestAnimationFrame(paint);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [following, clock, duration, isExpressive]);
 
   const ratioFromClientX = (clientX: number): number => {
     const el = trackRef.current;
@@ -49,20 +89,23 @@ export function MediaScrubber({
     return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   };
 
+  // A drag previews its position and seeks once, on release: every seek makes
+  // the media element drop its buffer and fetch again from the new spot.
+  const moveDrag = (r: number) => {
+    dragRatioRef.current = r;
+    setDragRatio(r);
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (duration <= 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    const r = ratioFromClientX(e.clientX);
     setDragging(true);
-    setDragRatio(r);
-    onSeek(r * duration);
+    moveDrag(ratioFromClientX(e.clientX));
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragging || duration <= 0) return;
-    const r = ratioFromClientX(e.clientX);
-    setDragRatio(r);
-    onSeek(r * duration);
+    moveDrag(ratioFromClientX(e.clientX));
   };
 
   const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -72,7 +115,9 @@ export function MediaScrubber({
     } catch {
       /* pointer already released */
     }
+    if (e.type === "pointerup") moveDrag(ratioFromClientX(e.clientX));
     setDragging(false);
+    onSeek(dragRatioRef.current * duration);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -136,11 +181,13 @@ export function MediaScrubber({
     >
       <div className={`relative ${trackH} w-full overflow-hidden ${trackShape}`}>
         <div
+          ref={fillRef}
           className={`absolute inset-y-0 left-0 bg-[var(--color-primary)] ${fillShape}`}
           style={{ width: `${pct}%` }}
         />
       </div>
       <span
+        ref={thumbRef}
         className={`pointer-events-none absolute ${thumbPosition} ${thumbSize} -translate-x-1/2 rounded-full bg-chrome-white transition-opacity duration-150 ${
           dragging ? "opacity-100" : "opacity-0 group-hover/scrub:opacity-100"
         }`}

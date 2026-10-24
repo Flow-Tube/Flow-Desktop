@@ -208,11 +208,13 @@ export function getMusicLyricsTyped(videoId: string): Promise<MusicLyrics | null
  * — feed it straight to an `<audio>` element. `loudnessDb` is for volume
  * normalization.
  */
+/** `preferAac` asks for AAC over Opus, for a retry after the element could not decode a track. */
 export function getMusicStream(
   videoId: string,
   audioQuality: MusicAudioQuality = "Auto",
+  preferAac = false,
 ): Promise<MusicStreamInfo> {
-  return invokeBackend<MusicStreamInfo>("get_music_stream", { videoId, audioQuality });
+  return invokeBackend<MusicStreamInfo>("get_music_stream", { videoId, audioQuality, preferAac });
 }
 
 // --- Music brain (dedicated, entity-based; separate from the video engine) -----

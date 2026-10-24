@@ -296,6 +296,8 @@ interface MusicPlayerState {
   _loadIndex: (index: number, options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
   _prefetchUpcoming: () => void;
   _preloadUpcoming: () => void;
+  /** Loads the song playing again as AAC once WebAudio is in use, when it cannot hear it. */
+  _reloadForWebAudio: () => void;
   _onPreloadError: () => void;
   _syncTime: (progress: number, duration: number) => void;
   _reflectPlaying: (isPlaying: boolean) => void;
@@ -470,7 +472,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     musicAudioEngine.clearPreload();
 
     const audioQuality = getMusicAudioQualitySetting();
-    const lookup = () => resolveMusicStream(videoId, audioQuality, { preferAac: recovery.prefersAac(videoId) });
+    const lookup = () =>
+      resolveMusicStream(videoId, audioQuality, {
+        preferAac: recovery.prefersAac(videoId) || musicAudioEngine.wantsAac(),
+      });
 
     try {
       // The downloads library is a SQLite read and resolution is a network round
@@ -500,7 +505,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
               : {}),
           });
           musicAudioEngine.setLoudness(offline.loudnessDb, get().normalizationEnabled);
-          await musicAudioEngine.load(offline.url);
+          await musicAudioEngine.load(offline.url, offline.contentType);
           musicAudioEngine.seekWhenReady(resumeAt);
           await start();
           afterStart();
@@ -527,7 +532,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
       set({ loudnessDb: info.loudnessDb, loadingStreamId: null });
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
-      await musicAudioEngine.load(info.audioUrl);
+      await musicAudioEngine.load(info.audioUrl, info.mimeType);
       musicAudioEngine.seekWhenReady(resumeAt);
       await start();
       afterStart();
@@ -620,7 +625,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const upcomingId = videoIdOf(upcoming);
     // A downloaded track plays from disk; resolving it would be a wasted request.
     if (findDownloadedRecord(upcomingId, "audio")) return;
-    prefetchMusicStream(upcomingId, getMusicAudioQualitySetting());
+    prefetchMusicStream(upcomingId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
   },
 
   // Buffers the next track's audio on the standby element near the end of the
@@ -635,6 +640,19 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       const nowTrack = now.queue[upcomingIndex(now)];
       return !!nowTrack && videoIdOf(nowTrack) === videoId;
     });
+  },
+
+  // On macOS WebAudio cannot hear Opus, so a song loaded before the graph existed loads again as
+  // AAC from where it is, and a next song buffered as Opus is dropped to be buffered again.
+  _reloadForWebAudio: () => {
+    if (!musicAudioEngine.wantsAac()) return;
+    musicAudioEngine.clearPreload();
+    const { currentTrack, currentIndex, loadingStreamId, isPlaying } = get();
+    if (!currentTrack || loadingStreamId !== null || !musicAudioEngine.activeBypassesGraph()) return;
+    const videoId = videoIdOf(currentTrack);
+    if (findDownloadedRecord(videoId, "audio")) return;
+    recordPlayerEvent(`music reloading as AAC for the equalizer: ${videoId}`);
+    void get()._loadIndex(currentIndex, { resumeAt: musicAudioEngine.getCurrentTime(), autoplay: isPlaying });
   },
 
   _onPreloadError: () => {
@@ -983,3 +1001,4 @@ useMusicPlayerStore.subscribe((state, previous) => {
     state._prefetchUpcoming();
   }
 });
+

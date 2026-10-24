@@ -28,8 +28,8 @@ beforeEach(() => {
 
 describe("gapless standby element", () => {
   it("buffers the next track on the element that is not playing", async () => {
-    await musicAudioEngine.load("http://127.0.0.1/stream/current");
-    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", -4);
+    await musicAudioEngine.load("http://127.0.0.1/stream/current", null);
+    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", -4, null);
 
     expect(musicAudioEngine.getActiveElement()).toBe(pair[0]);
     expect(pair[1].getAttribute("src")).toBe("http://127.0.0.1/stream/next");
@@ -38,8 +38,8 @@ describe("gapless standby element", () => {
   });
 
   it("swaps only for the track it holds, and empties the one that played", async () => {
-    await musicAudioEngine.load("http://127.0.0.1/stream/current");
-    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", -4);
+    await musicAudioEngine.load("http://127.0.0.1/stream/current", null);
+    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", -4, null);
     bufferedEnough(pair[1]);
 
     expect(musicAudioEngine.activatePreloaded("other")).toBe(false);
@@ -53,15 +53,15 @@ describe("gapless standby element", () => {
   });
 
   it("never swaps in a preload that has no audio to play yet", async () => {
-    await musicAudioEngine.load("http://127.0.0.1/stream/current");
-    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", null);
+    await musicAudioEngine.load("http://127.0.0.1/stream/current", null);
+    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", null, null);
 
     expect(musicAudioEngine.activatePreloaded("next")).toBe(false);
     expect(musicAudioEngine.getActiveElement()).toBe(pair[0]);
   });
 
   it("reports and drops what the standby element held", () => {
-    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", null);
+    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", null, null);
     expect(musicAudioEngine.clearPreload()).toBe("next");
     expect(pair[1].getAttribute("src")).toBeNull();
     expect(musicAudioEngine.clearPreload()).toBeNull();

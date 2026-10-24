@@ -1,10 +1,11 @@
 import { loudnessFactor, MUSIC_MAX_CUT_DB } from "../loudness";
-import { IS_LINUX_RUNTIME } from "../platform";
+import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../platform";
 import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
 import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade } from "./crossfadeRamp";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
 import { volumeGain } from "./volumeCurve";
+import { webAudioHears } from "./webAudioFormats";
 
 /**
  * One of the two <audio> elements. While one plays, the other can hold the next
@@ -20,6 +21,8 @@ interface Slot {
   /** The same share when WebAudio is not in use, applied to the element's volume. */
   fade: number;
   loudnessDb: number | null;
+  /** The loaded file's MIME type, which decides whether WebAudio can hear it. */
+  mime: string | null;
   /** The track a standby slot holds, so a swap only ever plays the right one. */
   key: string | null;
 }
@@ -31,6 +34,7 @@ const emptySlot = (): Slot => ({
   fadeGain: null,
   fade: 1,
   loudnessDb: null,
+  mime: null,
   key: null,
 });
 
@@ -59,6 +63,7 @@ class MusicAudioEngine {
   private graphReady = false;
   private webAudioFailed = false;
   private availabilityListeners = new Set<(available: boolean) => void>();
+  private graphListeners = new Set<() => void>();
 
   private volume = 1;
   private muted = false;
@@ -145,6 +150,7 @@ class MusicAudioEngine {
       this.chain.apply(this.eqSpec);
       // Turned on mid-song: the context has to run for the element to be heard.
       if (this.active.el && !this.active.el.paused) void resumeWithin(ctx);
+      for (const listener of this.graphListeners) listener();
     } catch (err) {
       console.warn("[musicAudioEngine] WebAudio graph unavailable, playing without the equalizer", err);
       this.webAudioFailed = true;
@@ -155,10 +161,12 @@ class MusicAudioEngine {
 
   // --- transport ----------------------------------------------------------
 
-  async load(url: string): Promise<void> {
+  async load(url: string, mime: string | null): Promise<void> {
     const el = this.active.el;
     if (!el) return;
     this.active.key = null;
+    this.active.mime = mime;
+    this.applyGain();
     el.src = url;
     try {
       el.load();
@@ -171,11 +179,12 @@ class MusicAudioEngine {
    * take over the moment the current track ends. A no-op when it already holds
    * that track, or while it is still fading out the last one.
    */
-  preload(key: string, url: string, loudnessDb: number | null): void {
+  preload(key: string, url: string, loudnessDb: number | null, mime: string | null): void {
     const slot = this.standby;
     if (!slot.el || slot.key === key || this.fading) return;
     slot.key = key;
     slot.loudnessDb = loudnessDb;
+    slot.mime = mime;
     slot.el.src = url;
     try {
       slot.el.load();
@@ -235,6 +244,7 @@ class MusicAudioEngine {
     if (slot.el) unload(slot.el);
     slot.key = null;
     slot.loudnessDb = null;
+    slot.mime = null;
   }
 
   // The two elements play together while their gains move in opposite directions; the one
@@ -242,7 +252,7 @@ class MusicAudioEngine {
   private startFade(previous: Slot, seconds: number): void {
     const next = this.active;
     let cancelSteps: (() => void) | null = null;
-    if (this.graphReady && this.ctx && previous.fadeGain && next.fadeGain) {
+    if (this.ctx && this.routes(previous) && this.routes(next) && previous.fadeGain && next.fadeGain) {
       const t = this.ctx.currentTime;
       scheduleFade(previous.fadeGain.gain, "out", t, seconds);
       scheduleFade(next.fadeGain.gain, "in", t, seconds);
@@ -436,24 +446,28 @@ class MusicAudioEngine {
   private applyGain(): void {
     const vol = (this.muted ? 0 : volumeGain(this.volume)) * this.fadeLevel;
 
-    if (this.graphReady && this.ctx && this.volGain) {
-      const t = this.ctx.currentTime;
-      this.volGain.gain.setTargetAtTime(vol, t, RAMP_TIME_CONSTANT);
-      for (const slot of this.slots) {
-        slot.normGain?.gain.setTargetAtTime(this.normalizationFactor(slot.loudnessDb), t, RAMP_TIME_CONSTANT);
-        if (slot.el) {
-          slot.el.volume = 1;
-          slot.el.muted = false;
-        }
-      }
-    } else {
-      for (const slot of this.slots) {
-        if (!slot.el) continue;
-        const norm = this.normalizationFactor(slot.loudnessDb);
+    const t = this.ctx?.currentTime ?? 0;
+    if (this.graphReady && this.volGain) this.volGain.gain.setTargetAtTime(vol, t, RAMP_TIME_CONSTANT);
+    // A scheduled crossfade owns the fade gains until it ends; a stepped one moves `slot.fade`.
+    const scheduledFade = !!this.fading && !this.fading.cancelSteps;
+    for (const slot of this.slots) {
+      if (!slot.el) continue;
+      const norm = this.normalizationFactor(slot.loudnessDb);
+      if (this.routes(slot)) {
+        slot.normGain?.gain.setTargetAtTime(norm, t, RAMP_TIME_CONSTANT);
+        if (!scheduledFade) slot.fadeGain?.gain.setTargetAtTime(slot.fade, t, RAMP_TIME_CONSTANT);
+        slot.el.volume = 1;
+        slot.el.muted = false;
+      } else {
         slot.el.volume = Math.max(0, Math.min(1, vol * norm * slot.fade));
         slot.el.muted = this.muted;
       }
     }
+  }
+
+  /** Whether `slot` plays through the graph, rather than past it on its own volume. */
+  private routes(slot: Slot): boolean {
+    return this.graphReady && !!slot.source && webAudioHears(slot.mime);
   }
 
   // --- crossfade ----------------------------------------------------------
@@ -487,6 +501,25 @@ class MusicAudioEngine {
    */
   private engageWhilePlaying(): void {
     if (this.needsGraph() && this.active.el && !this.active.el.paused) this.ensureGraph();
+  }
+
+  /**
+   * Whether streams should come as AAC: on macOS only MP4 audio reaches the graph, and once the
+   * graph is in use every song plays through it.
+   */
+  wantsAac(): boolean {
+    return IS_MACOS_RUNTIME && (this.graphReady || this.needsGraph());
+  }
+
+  /** Whether the song playing bypasses the graph, so the equalizer cannot be heard on it. */
+  activeBypassesGraph(): boolean {
+    return this.graphReady && !!this.active.el?.getAttribute("src") && !this.routes(this.active);
+  }
+
+  /** Called once the graph is built, when songs loaded before it may need loading again. */
+  onGraphReady(listener: () => void): () => void {
+    this.graphListeners.add(listener);
+    return () => this.graphListeners.delete(listener);
   }
 
   /** False once WebAudio failed here, so the equalizer cannot be heard. */

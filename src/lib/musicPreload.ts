@@ -34,8 +34,8 @@ export async function preloadTrack(
   preloading = videoId;
   recordPlayerEvent(`music preload start: ${videoId}`);
   try {
-    const info = await resolveMusicStream(videoId, quality);
-    if (stillUpcoming(videoId)) musicAudioEngine.preload(videoId, info.audioUrl, info.loudnessDb);
+    const info = await resolveMusicStream(videoId, quality, { preferAac: musicAudioEngine.wantsAac() });
+    if (stillUpcoming(videoId)) musicAudioEngine.preload(videoId, info.audioUrl, info.loudnessDb, info.mimeType);
   } catch {
     // Speculative: if it fails, the track resolves again when it is played.
   } finally {

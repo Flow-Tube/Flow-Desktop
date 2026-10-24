@@ -4,6 +4,14 @@ import { graphSpec, EQ_GRAPH_OFF } from "./eq/graphPlan";
 import { defaultEqState, selectPreset } from "./eq/stateOps";
 import { musicAudioEngine } from "./musicAudioEngine";
 
+const platform = vi.hoisted(() => ({ macos: false }));
+vi.mock("../platform", () => ({
+  IS_LINUX_RUNTIME: false,
+  get IS_MACOS_RUNTIME() {
+    return platform.macos;
+  },
+}));
+
 // A minimal WebAudio stand-in: enough to see which nodes exist and what they were told.
 class FakeParam {
   constructor(public value = 0) {}
@@ -92,6 +100,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  platform.macos = false;
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -124,8 +133,8 @@ describe("music EQ graph", () => {
     expect(ctx.biquads[0]!.gain.value).toBe(rock.bands[0]!.gain);
     expect(ctx.biquads[5]!.gain.value).toBe(0);
 
-    await musicAudioEngine.load("http://127.0.0.1/stream/a");
-    musicAudioEngine.preload("b", "http://127.0.0.1/stream/b", null);
+    await musicAudioEngine.load("http://127.0.0.1/stream/a", null);
+    musicAudioEngine.preload("b", "http://127.0.0.1/stream/b", null, null);
     Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
     expect(musicAudioEngine.activatePreloaded("b")).toBe(true);
 
@@ -136,6 +145,27 @@ describe("music EQ graph", () => {
 
     musicAudioEngine.setEq(EQ_GRAPH_OFF, false);
     expect(ctx.biquads.every((f) => f.gain.value === 0)).toBe(true);
+  });
+
+  it("asks for AAC on macOS, and keeps a WebM song it cannot hear on the element's volume", async () => {
+    platform.macos = true;
+    const pair = elements();
+    musicAudioEngine.attach(pair);
+    musicAudioEngine.setEq(EQ_GRAPH_OFF, false);
+    expect(musicAudioEngine.wantsAac()).toBe(false);
+    musicAudioEngine.setEq(rock, true);
+    expect(musicAudioEngine.wantsAac()).toBe(true);
+
+    await musicAudioEngine.load("http://127.0.0.1/stream/opus", 'audio/webm; codecs="opus"');
+    await musicAudioEngine.play();
+    musicAudioEngine.setLoudness(null, true);
+    musicAudioEngine.setVolume(0.5);
+    expect(musicAudioEngine.activeBypassesGraph()).toBe(true);
+    expect(pair[0].volume).toBeCloseTo(0.25, 2);
+
+    await musicAudioEngine.load("http://127.0.0.1/stream/aac", 'audio/mp4; codecs="mp4a.40.2"');
+    expect(musicAudioEngine.activeBypassesGraph()).toBe(false);
+    expect(pair[0].volume).toBe(1);
   });
 
   it("starts the element even when the context will not resume", async () => {
@@ -175,8 +205,8 @@ describe("music EQ graph", () => {
     Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
     musicAudioEngine.setCrossfadeEnabled(true);
     const ctx = lastContext();
-    await musicAudioEngine.load("http://127.0.0.1/stream/a");
-    musicAudioEngine.preload("b", "http://127.0.0.1/stream/b", null);
+    await musicAudioEngine.load("http://127.0.0.1/stream/a", null);
+    musicAudioEngine.preload("b", "http://127.0.0.1/stream/b", null, null);
     Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
 
     musicAudioEngine.armCrossfade(4);
@@ -205,8 +235,8 @@ describe("crossfade without WebAudio", () => {
     engine.setCrossfadeEnabled(true);
     expect(engine.isEqAvailable()).toBe(false);
 
-    await engine.load("http://127.0.0.1/stream/a");
-    engine.preload("b", "http://127.0.0.1/stream/b", null);
+    await engine.load("http://127.0.0.1/stream/a", null);
+    engine.preload("b", "http://127.0.0.1/stream/b", null, null);
     Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
     Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
     engine.armCrossfade(2);

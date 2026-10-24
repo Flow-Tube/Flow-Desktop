@@ -32,6 +32,9 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     getContextState: vi.fn(() => "running"),
     getBufferedEnd: vi.fn(() => 10),
     getErrorCode: vi.fn((): number | null => null),
+    wantsAac: vi.fn(() => false),
+    activeBypassesGraph: vi.fn(() => false),
+    getCurrentTime: vi.fn(() => 0),
   },
   resolveMusicStream: vi.fn(),
   getMusicWatchQueue: vi.fn(),
@@ -103,6 +106,26 @@ describe("starting a track", () => {
     expect(resolveMusicStream).toHaveBeenCalledTimes(2);
     expect(engine.play).toHaveBeenCalledTimes(1);
     expect(useMusicPlayerStore.getState().streamError).toBeNull();
+  });
+});
+
+describe("the equalizer starting on macOS", () => {
+  it("loads the song playing again as AAC from where it is", async () => {
+    await useMusicPlayerStore.getState().playTrack(song("opus"));
+    engine.wantsAac.mockReturnValue(true);
+    engine.activeBypassesGraph.mockReturnValue(true);
+    engine.getCurrentTime.mockReturnValue(42);
+
+    useMusicPlayerStore.getState()._reloadForWebAudio();
+
+    await vi.waitFor(() =>
+      expect(resolveMusicStream).toHaveBeenLastCalledWith("opus", expect.anything(), { preferAac: true }),
+    );
+    await vi.waitFor(() => expect(engine.seekWhenReady).toHaveBeenLastCalledWith(42));
+    expect(engine.clearPreload).toHaveBeenCalled();
+    engine.wantsAac.mockReturnValue(false);
+    engine.activeBypassesGraph.mockReturnValue(false);
+    engine.getCurrentTime.mockReturnValue(0);
   });
 });
 

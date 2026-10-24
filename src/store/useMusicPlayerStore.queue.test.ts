@@ -23,7 +23,14 @@ const page = (items: SongItem[], continuation: string | null = null) => ({
 });
 
 const { engine, getMusicWatchQueue, getMusicQueueContinuation } = vi.hoisted(() => ({
-  engine: { clearPreload: vi.fn(() => null), pause: vi.fn(), stop: vi.fn(), seek: vi.fn(), play: vi.fn(async () => {}) },
+  engine: {
+    clearPreload: vi.fn(() => null),
+    pause: vi.fn(),
+    stop: vi.fn(),
+    seek: vi.fn(),
+    play: vi.fn(async () => {}),
+    wantsAac: vi.fn(() => false),
+  },
   getMusicWatchQueue: vi.fn(),
   getMusicQueueContinuation: vi.fn(),
 }));

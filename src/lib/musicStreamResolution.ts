@@ -29,7 +29,7 @@ const MUSIC_STREAM_TIMEOUT_MS = 15_000;
 const MAX_CACHED_TRACKS = 8;
 
 export interface MusicStreamOptions {
-  /** Ask for AAC over Opus, after the element could not decode the first answer. */
+  /** Ask for AAC over Opus: after the element could not decode the first answer, or for WebAudio. */
   preferAac?: boolean;
 }
 
@@ -120,11 +120,12 @@ export function resolveMusicStream(
 export function prefetchMusicStream(
   videoId: string | null | undefined,
   quality: MusicAudioQuality,
+  options?: MusicStreamOptions,
 ) {
   if (!videoId) return;
-  const key = keyFor(videoId, quality);
+  const key = keyFor(videoId, quality, options);
   if (readCache(key) || walks.has(key)) return;
-  void request(videoId, quality).catch(() => {
+  void request(videoId, quality, options).catch(() => {
     // A speculative resolve that fails costs nothing — playing the track will
     // resolve it again and surface the real error then.
   });

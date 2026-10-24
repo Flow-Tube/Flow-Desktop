@@ -126,7 +126,7 @@ export function pickTopResult(
   channels: SearchChannel[],
   artists: ArtistItem[],
 ): TopResult | null {
-  const top = summaries.find((s) => /top result/i.test(s.title))?.items[0];
+  const top = summaries.find((s) => s.isTopResult)?.items[0];
   if (top) {
     switch (top.type) {
       case 'artist':
@@ -158,4 +158,37 @@ export function dedupeTopFromBuckets(r: CombinedSearchResults): CombinedSearchRe
     case 'video':
       return { ...r, videos: r.videos.filter((v) => v.id !== t.item.id) };
   }
+}
+
+/** An episode as a track the music player can queue. */
+export function episodeAsSong(episode: EpisodeItem): SongItem {
+  return {
+    id: episode.id,
+    title: episode.title,
+    artists: episode.author ? [episode.author] : [],
+    album: null,
+    duration: null,
+    musicVideoType: 'MUSIC_VIDEO_TYPE_PODCAST_EPISODE',
+    thumbnail: episode.thumbnail,
+    explicit: episode.explicit,
+    videoId: episode.id,
+    playlistId: episode.podcastId ?? null,
+    params: null,
+  };
+}
+
+/** Music categories the site may leave out of a query's chips; the rest always show. */
+const OFFERABLE: Partial<Record<string, string[]>> = {
+  songs: ['songs'],
+  albums: ['albums'],
+  playlists: ['community_playlists', 'featured_playlists'],
+  podcasts: ['podcasts'],
+  episodes: ['episodes'],
+};
+
+/** Whether a category has results for the query, as far as the offered filters say. */
+export function isCategoryOffered(category: string, offered: string[] | null): boolean {
+  const filters = OFFERABLE[category];
+  if (!filters || !offered || offered.length === 0) return true;
+  return filters.some((filter) => offered.includes(filter));
 }

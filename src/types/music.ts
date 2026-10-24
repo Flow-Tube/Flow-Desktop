@@ -49,12 +49,17 @@ export interface ArtistItem {
   title: string;
   thumbnail: string | null;
   channelId: string | null;
+  /** A plain channel ("Profile"): it opens a channel page, not an artist page. */
+  isProfile?: boolean;
 }
 
 export interface EpisodeItem {
   id: string;
   title: string;
+  /** The show, by name. */
   author: Artist | null;
+  /** The show's playlist id. */
+  podcastId?: string | null;
   thumbnail: string;
   explicit: boolean;
   publishDateText: string | null;
@@ -157,15 +162,21 @@ export interface CachedMusicHomePage {
 export interface MusicSearchSection {
   title: string;
   items: YTItem[];
+  /** The top-result card and the rows it holds. */
+  isTopResult?: boolean;
 }
 
 export interface MusicSearchResponse {
   sections: MusicSearchSection[];
   continuation: string | null;
+  /** The filters offered for this query, in the site's order. */
+  filters?: string[];
 }
 
 export interface SearchSummaryPage {
   summaries: MusicSearchSection[];
+  /** The filters offered for this query, in the site's order. */
+  filters?: string[];
 }
 
 export interface MusicSearchSuggestions {

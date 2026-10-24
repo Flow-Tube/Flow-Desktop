@@ -26,6 +26,7 @@ export function Search({ onPlay, onAddToQueue }: SearchProps) {
           onSortChange={search.setSortBy}
           filters={search.filters}
           onFiltersChange={search.setFilters}
+          offeredMusicFilters={search.offeredMusicFilters}
         />
         <SearchResults
           search={search}

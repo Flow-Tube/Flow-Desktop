@@ -59,6 +59,8 @@ export interface UseCombinedSearchOptions {
 
 export interface UseCombinedSearchReturn {
   query: string;
+  /** The music filters YouTube Music offers for this query, once known. */
+  offeredMusicFilters: string[] | null;
   filterType: SearchCategory;
   setFilterType: (c: SearchCategory) => void;
   sortBy: SearchSortBy;
@@ -145,6 +147,8 @@ export function useCombinedSearch(
   const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The music filters YouTube Music offered, and the query it offered them for.
+  const [offered, setOffered] = useState<{ query: string; filters: string[] } | null>(null);
 
   const debouncedQuery = useDebounce(query.trim(), debounceMs);
   // "Search instead for" applies to the query it was offered on; a new query is corrected again.
@@ -216,6 +220,9 @@ export function useCombinedSearch(
 
           const yt = ytRes.status === 'fulfilled' ? videoSections(ytRes.value) : null;
           const summaries = musicRes.status === 'fulfilled' ? musicRes.value.summaries : [];
+          if (musicRes.status === 'fulfilled' && musicRes.value.filters?.length) {
+            setOffered({ query: q, filters: musicRes.value.filters });
+          }
           const bucket = bucketMusicSections(summaries);
           const channels = yt?.channels ?? [];
 
@@ -322,6 +329,7 @@ export function useCombinedSearch(
 
         const res = await searchMusicTyped(q, categoryToMusicFilter(category));
         if (!alive()) return;
+        if (res.filters?.length) setOffered({ query: q, filters: res.filters });
         musicContRef.current = res.continuation;
         setNext(Boolean(res.continuation));
         const b = bucketMusicSections(res.sections);
@@ -365,6 +373,7 @@ export function useCombinedSearch(
 
   return {
     query: debouncedQuery,
+    offeredMusicFilters: offered?.query === debouncedQuery ? offered.filters : null,
     filterType,
     setFilterType,
     sortBy,

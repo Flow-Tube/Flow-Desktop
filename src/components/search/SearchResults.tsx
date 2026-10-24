@@ -21,7 +21,8 @@ import type {
   TopResult,
   UseCombinedSearchReturn,
 } from '../../lib/useCombinedSearch';
-import type { AlbumItem, ArtistItem, PlaylistItem, SongItem } from '../../types/music';
+import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
+import { episodeAsSong } from '../../lib/searchResults';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
 
 interface SearchResultsProps {
@@ -89,7 +90,10 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
     void playQueue(queue, start);
   };
   const openAlbum = (a: AlbumItem) => navigate(`/music/album/${a.browseId}`);
-  const openArtist = (a: ArtistItem) => navigate(`/music/artist/${a.id}`);
+  const openArtist = (a: ArtistItem) => navigate(a.isProfile ? `/channel/${a.id}` : `/music/artist/${a.id}`);
+  const openPodcast = (p: PodcastItem) => navigate(`/music/playlist/${p.id}`);
+  const playEpisode = (episode: EpisodeItem, all: EpisodeItem[]) =>
+    playSong(episodeAsSong(episode), all.map(episodeAsSong));
   const openPlaylist = (p: PlaylistItem) => navigate(`/music/playlist/${p.id}`);
   const openChannel = (c: SearchChannel) => navigate(`/channel/${c.channelId}`);
 
@@ -261,7 +265,9 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
             title={getString('search_section_podcasts')}
             onSeeAll={() => setFilterType('podcasts')}
             items={r.podcasts}
-            renderItem={(p) => <MusicItemCard variant="podcast" item={p} />}
+            renderItem={(p) => (
+              <MusicItemCard variant="podcast" item={p} onOpen={() => openPodcast(p)} onPlay={() => openPodcast(p)} />
+            )}
           />
         )}
 
@@ -270,7 +276,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
             title={getString('search_section_episodes')}
             onSeeAll={() => setFilterType('episodes')}
             items={r.episodes}
-            renderItem={(e) => <MusicItemCard variant="episode" item={e} />}
+            renderItem={(e) => <MusicItemCard variant="episode" item={e} onPlay={() => playEpisode(e, r.episodes)} />}
           />
         )}
       </div>
@@ -367,7 +373,14 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
         <>
           <div className={RESULT_GRID} style={squareGridStyle}>
             {r.podcasts.map((p) => (
-              <MusicItemCard key={p.id} variant="podcast" item={p} fill />
+              <MusicItemCard
+                key={p.id}
+                variant="podcast"
+                item={p}
+                fill
+                onOpen={() => openPodcast(p)}
+                onPlay={() => openPodcast(p)}
+              />
             ))}
           </div>
           {sentinel}
@@ -378,7 +391,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
         <>
           <div className={RESULT_GRID} style={squareGridStyle}>
             {r.episodes.map((e) => (
-              <MusicItemCard key={e.id} variant="episode" item={e} fill />
+              <MusicItemCard key={e.id} variant="episode" item={e} fill onPlay={() => playEpisode(e, r.episodes)} />
             ))}
           </div>
           {sentinel}

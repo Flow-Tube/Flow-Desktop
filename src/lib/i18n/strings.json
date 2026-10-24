@@ -1554,5 +1554,6 @@
   "subscriptions_failed_title": "Some channels could not be read",
   "subscriptions_failed_body": "Their newest uploads are missing from this feed: %s.",
   "subscriptions_failed_more": "%s and %s more",
-  "subscriptions_failed_retry": "Try again"
+  "subscriptions_failed_retry": "Try again",
+  "search_role_profile": "Profile"
 }

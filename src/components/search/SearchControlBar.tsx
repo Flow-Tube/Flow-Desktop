@@ -2,6 +2,7 @@ import { CategoryChips } from '../layout/CategoryChips';
 import { Chip } from '../ui/Chip';
 import { FilterSelect } from '../ui/FilterSelect';
 import { getString } from '../../lib/i18n/index';
+import { isCategoryOffered } from '../../lib/searchResults';
 import type { StringKey } from '../../lib/i18n/index';
 import type {
   AdvancedFilters,
@@ -17,6 +18,8 @@ interface SearchControlBarProps {
   onSortChange: (s: SearchSortBy) => void;
   filters: AdvancedFilters;
   onFiltersChange: (f: AdvancedFilters) => void;
+  /** The music filters offered for this query; categories it leaves out are hidden. */
+  offeredMusicFilters: string[] | null;
 }
 
 const CATEGORY_KEYS: { key: SearchCategory; labelKey: StringKey }[] = [
@@ -38,8 +41,11 @@ export function SearchControlBar({
   onSortChange,
   filters,
   onFiltersChange,
+  offeredMusicFilters,
 }: SearchControlBarProps) {
-  const categories = CATEGORY_KEYS.map((c) => ({ key: c.key, label: getString(c.labelKey) }));
+  const categories = CATEGORY_KEYS.filter(
+    (c) => c.key === filterType || isCategoryOffered(c.key, offeredMusicFilters),
+  ).map((c) => ({ key: c.key, label: getString(c.labelKey) }));
   const labels = categories.map((c) => c.label);
   const activeLabel = categories.find((c) => c.key === filterType)?.label ?? labels[0];
 

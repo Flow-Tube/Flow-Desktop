@@ -1,58 +1,79 @@
 import { useEffect } from "react";
 
 import { usePlayerStore } from "../store/usePlayerStore";
+import { seekToTime } from "./playerSeek";
+import {
+  claimMediaSession,
+  refreshMediaSession,
+  registerMediaSessionClient,
+  reportMediaPosition,
+} from "./mediaSessionArbiter";
 
-const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
-  "play",
-  "pause",
-  "nexttrack",
-  "previoustrack",
-];
+/** How far the OS seek-forward and seek-back keys move when they name no offset. */
+const SEEK_STEP_SECONDS = 10;
 
 /**
- * Publishes the playing video to the OS media controls. Whichever window owns
- * the media element calls this — the main window normally, the pop-out player
- * while it has playback — so the transport keys always reach the video that is
- * actually running.
+ * Publishes the playing video to the OS media controls through the shared
+ * arbiter. Whichever window owns the media element calls this (the main
+ * window normally, the pop-out player while it has playback), so the transport
+ * keys always reach the video that is actually running.
  */
 export function useMediaSessionMetadata(enabled: boolean) {
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const playNext = usePlayerStore((s) => s.playNext);
-  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const active = enabled && currentVideo !== null;
 
   useEffect(() => {
-    if (!enabled || !currentVideo || !("mediaSession" in navigator)) return;
-
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentVideo.title,
-        artist: currentVideo.channelName,
-        artwork: currentVideo.thumbnailUrl ? [{ src: currentVideo.thumbnailUrl }] : undefined,
-      });
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch (error) {
-      console.warn("Failed to update media session metadata", error);
-    }
-
-    try {
-      navigator.mediaSession.setActionHandler("play", () => setIsPlaying(true));
-      navigator.mediaSession.setActionHandler("pause", () => setIsPlaying(false));
-      navigator.mediaSession.setActionHandler("nexttrack", () => playNext(true));
-      navigator.mediaSession.setActionHandler("previoustrack", playPrevious);
-    } catch (error) {
-      console.warn("Failed to configure media session actions", error);
-    }
-
+    if (!active) return;
+    const store = usePlayerStore.getState;
+    const seekBy = (seconds: number) => seekToTime(Math.max(0, store().currentTime + seconds));
+    const unregister = registerMediaSessionClient("video", {
+      metadata: () => {
+        const video = store().currentVideo;
+        if (!video) return null;
+        return {
+          title: video.title,
+          artist: video.channelName,
+          artwork: video.thumbnailUrl ? [{ src: video.thumbnailUrl }] : undefined,
+        };
+      },
+      isPlaying: () => store().isPlaying,
+      position: () => ({
+        position: store().currentTime,
+        duration: store().duration,
+        playbackRate: store().playbackRate,
+      }),
+      actions: {
+        play: () => store().setIsPlaying(true),
+        pause: () => store().setIsPlaying(false),
+        stop: () => store().setIsPlaying(false),
+        nexttrack: () => store().playNext(true),
+        previoustrack: () => store().playPrevious(),
+        seekto: (details) => {
+          if (typeof details.seekTime === "number") seekToTime(details.seekTime);
+        },
+        seekforward: (details) => seekBy(details.seekOffset ?? SEEK_STEP_SECONDS),
+        seekbackward: (details) => seekBy(-(details.seekOffset ?? SEEK_STEP_SECONDS)),
+      },
+      pause: () => store().setIsPlaying(false),
+    });
+    // The player writes its clock into the store; the OS scrubber follows it.
+    const unsubscribe = usePlayerStore.subscribe((state, previous) => {
+      if (state.currentTime !== previous.currentTime) reportMediaPosition("video");
+    });
     return () => {
-      for (const action of MEDIA_SESSION_ACTIONS) {
-        try {
-          navigator.mediaSession.setActionHandler(action, null);
-        } catch {
-          // Some WebViews expose Media Session but not every action.
-        }
-      }
+      unsubscribe();
+      unregister();
     };
-  }, [enabled, currentVideo, isPlaying, playNext, playPrevious, setIsPlaying]);
+  }, [active]);
+
+  useEffect(() => {
+    refreshMediaSession("video");
+  }, [currentVideo]);
+
+  useEffect(() => {
+    if (!active) return;
+    if (isPlaying) claimMediaSession("video");
+    else refreshMediaSession("video");
+  }, [active, isPlaying]);
 }

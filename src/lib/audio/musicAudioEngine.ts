@@ -288,6 +288,11 @@ class MusicAudioEngine {
     return el.buffered.end(el.buffered.length - 1);
   }
 
+  /** The playing element's `MediaError` code, or null while it has none. */
+  getErrorCode(): number | null {
+    return this.active.el?.error?.code ?? null;
+  }
+
   getDuration(): number {
     const d = this.active.el?.duration ?? 0;
     return Number.isFinite(d) ? d : 0;

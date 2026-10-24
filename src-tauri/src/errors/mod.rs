@@ -61,6 +61,19 @@ pub enum AppError {
     #[allow(dead_code)]
     Streaming(String),
 
+    /// The audio element could not decode the stream, even in a second format.
+    /// Raised by the player's media element rather than here; listed so the
+    /// kind has one definition.
+    #[error("Media decode error: {0}")]
+    #[allow(dead_code)]
+    MediaDecode(String),
+
+    /// The stream link was refused or expired, and fresh links failed too.
+    /// Raised by the player's media element, like `MediaDecode`.
+    #[error("Stream link expired: {0}")]
+    #[allow(dead_code)]
+    StreamExpired(String),
+
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -128,6 +141,8 @@ impl From<AppError> for ErrorResponse {
             AppError::RateLimited(_) => "rateLimited",
             AppError::Database(_) => "database",
             AppError::Streaming(_) => "streaming",
+            AppError::MediaDecode(_) => "mediaDecode",
+            AppError::StreamExpired(_) => "streamExpired",
             AppError::Internal(_) => "internal",
         };
 
@@ -148,7 +163,7 @@ impl From<AppError> for ErrorResponse {
                 tracing::error!(kind, error = %message, cause = %cause, "backend_error")
             }
             "extractor" | "streaming" | "validation" | "botCheckRequired" | "networkWall"
-            | "network" | "rateLimited" => {
+            | "network" | "rateLimited" | "mediaDecode" | "streamExpired" => {
                 tracing::warn!(kind, error = %message, cause = %cause, "backend_error")
             }
             _ => tracing::debug!(kind, error = %message, "backend_error"),
@@ -178,6 +193,8 @@ mod tests {
             (AppError::NetworkWall("w".into()), "networkWall"),
             (AppError::LiveUpcoming("u".into(), Some(5)), "liveUpcoming"),
             (AppError::RateLimited("r".into()), "rateLimited"),
+            (AppError::MediaDecode("d".into()), "mediaDecode"),
+            (AppError::StreamExpired("x".into()), "streamExpired"),
             (AppError::Database(sqlx::Error::RowNotFound), "database"),
             (AppError::Internal("i".into()), "internal"),
         ];

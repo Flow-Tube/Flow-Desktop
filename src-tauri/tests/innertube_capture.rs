@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use flow_desktop_lib::api::innertube::InnertubeClient;
-use flow_desktop_lib::api::innertube::core::clients;
+use flow_desktop_lib::api::innertube::core::{clients, locale};
 use flow_desktop_lib::api::innertube::json::continuation::{
     continuation_item_lists, last_continuation_token,
 };
@@ -40,6 +40,8 @@ fn trim(value: &mut Value) {
     }
 }
 
+/// Content languages the locale tests read captures in.
+const LOCALE_LANGUAGES: [&str; 6] = ["de", "fr", "ja", "es", "ru", "pt-BR"];
 /// An artist with albums, singles, videos, featured playlists and related artists.
 const MUSIC_ARTIST: &str = "UClYV6hHlupm_S_ObS1W-DYw";
 /// A podcast whose playlist page lists episodes without a header.
@@ -47,8 +49,9 @@ const PODCAST: &str = "PLYWnygDGxPqWiCM5_kihM28jfWiQTNYDa";
 
 /// A YouTube Music request as the web client sends it, signed out.
 async fn music_post(endpoint: &str, mut body: Value) -> Value {
+    let hl = flow_desktop_lib::api::innertube::core::locale::content_language();
     body["context"] = json!({ "client": {
-        "clientName": "WEB_REMIX", "clientVersion": "1.20260708.01.00", "hl": "en", "gl": "US"
+        "clientName": "WEB_REMIX", "clientVersion": "1.20260708.01.00", "hl": hl, "gl": "US"
     } });
     flow_desktop_lib::api::http::shared_client()
         .post(format!(
@@ -337,4 +340,30 @@ async fn capture_innertube_fixtures() {
         .await
         .expect("channel search page 2");
     save("channel_search_page2", page2);
+
+    // The same surfaces in other content languages, for tests/innertube_locale.rs.
+    for language in LOCALE_LANGUAGES {
+        locale::set_content_language(Some(language));
+        let mut search = json!({ "query": "minecraft" });
+        let page = client
+            .post_innertube("search", &clients::WEB, &mut search)
+            .await
+            .expect("search");
+        save(&format!("locale_search_{language}"), page);
+        let mut next = json!({ "videoId": "dQw4w9WgXcQ" });
+        let page = client
+            .post_innertube("next", &clients::WEB, &mut next)
+            .await
+            .expect("next");
+        save(&format!("locale_next_{language}"), page);
+        let mut channel = json!({ "browseId": LTT });
+        let page = client
+            .post_innertube("browse", &clients::WEB, &mut channel)
+            .await
+            .expect("channel");
+        save(&format!("locale_channel_{language}"), page);
+        let page = music_post("search", json!({ "query": "the weeknd" })).await;
+        save(&format!("locale_music_search_{language}"), page);
+    }
+    locale::set_content_language(None);
 }

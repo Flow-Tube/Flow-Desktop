@@ -20,8 +20,11 @@ use flow_desktop_lib::api::innertube::json::age::relative_age;
 use flow_desktop_lib::api::innertube::json::continuation::{
     continuation_item_lists, continuation_token,
 };
+use flow_desktop_lib::api::innertube::music::parse::items::parse_responsive_list_item;
+use flow_desktop_lib::api::innertube::music::search::parse_summary;
 use flow_desktop_lib::api::innertube::renderers::lockup::lockup_item;
 use flow_desktop_lib::models::channel::{ChannelItem, PostAttachment};
+use flow_desktop_lib::models::music::YTItem;
 use serde_json::Value;
 
 fn fixture(name: &str) -> Option<Value> {
@@ -517,4 +520,75 @@ fn the_shared_tab_params_are_the_ones_the_channel_page_sends() {
     };
     assert_eq!(params("videos").as_deref(), Some(VIDEOS_TAB_PARAMS));
     assert_eq!(params("shorts").as_deref(), Some(SHORTS_TAB_PARAMS));
+}
+
+#[test]
+fn music_search_tells_episodes_podcasts_and_profiles_apart() {
+    let Some(page) = fixture("music_search_weeknd") else {
+        return;
+    };
+    let summary = parse_summary(&page);
+    let top = summary
+        .summaries
+        .iter()
+        .find(|section| section.is_top_result)
+        .expect("top result");
+    assert!(top.items.len() >= 3, "{} top items", top.items.len());
+    let items: Vec<&YTItem> = summary
+        .summaries
+        .iter()
+        .flat_map(|section| &section.items)
+        .collect();
+    let episodes: Vec<_> = items
+        .iter()
+        .filter_map(|item| match item {
+            YTItem::Episode(episode) => Some(episode),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !episodes.is_empty()
+            && episodes.iter().all(|e| e
+                .podcast_id
+                .as_deref()
+                .is_some_and(|id| id.starts_with("PL")))
+    );
+    assert!(items.iter().all(|item| !matches!(item, YTItem::Song(song) if song.artists.iter().any(|a| a.name == "Episode"))));
+    assert!(
+        items
+            .iter()
+            .any(|item| matches!(item, YTItem::Artist(artist) if artist.is_profile))
+    );
+    assert!(
+        items
+            .iter()
+            .any(|item| matches!(item, YTItem::Podcast(podcast) if podcast.id.starts_with("PL")))
+    );
+    for filter in ["songs", "episodes", "podcasts", "profiles"] {
+        assert!(
+            summary.filters.iter().any(|offered| offered == filter),
+            "{filter} in {:?}",
+            summary.filters
+        );
+    }
+}
+
+#[test]
+fn a_podcast_playlist_page_lists_episodes() {
+    let Some(page) = fixture("music_podcast_vl") else {
+        return;
+    };
+    let mut rows = Vec::new();
+    find_all(&page, "musicResponsiveListItemRenderer", &mut rows);
+    assert!(!rows.is_empty());
+    let mut headers = Vec::new();
+    find_all(&page, "musicResponsiveHeaderRenderer", &mut headers);
+    assert!(
+        headers.is_empty(),
+        "the show page, not this one, has the header"
+    );
+    assert!(
+        rows.iter()
+            .all(|row| matches!(parse_responsive_list_item(row), Some(YTItem::Episode(_))))
+    );
 }

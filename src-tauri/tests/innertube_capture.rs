@@ -40,6 +40,28 @@ fn trim(value: &mut Value) {
     }
 }
 
+/// A podcast whose playlist page lists episodes without a header.
+const PODCAST: &str = "PLYWnygDGxPqWiCM5_kihM28jfWiQTNYDa";
+
+/// A YouTube Music request as the web client sends it, signed out.
+async fn music_post(endpoint: &str, mut body: Value) -> Value {
+    body["context"] = json!({ "client": {
+        "clientName": "WEB_REMIX", "clientVersion": "1.20260708.01.00", "hl": "en", "gl": "US"
+    } });
+    flow_desktop_lib::api::http::shared_client()
+        .post(format!(
+            "https://music.youtube.com/youtubei/v1/{endpoint}?prettyPrint=false"
+        ))
+        .header("Origin", "https://music.youtube.com")
+        .json(&body)
+        .send()
+        .await
+        .expect("music request")
+        .json()
+        .await
+        .expect("music json")
+}
+
 fn save(name: &str, mut response: Value) -> Value {
     trim(&mut response);
     std::fs::create_dir_all(fixture_dir()).expect("fixture dir");
@@ -201,6 +223,21 @@ async fn capture_innertube_fixtures() {
         .await
         .expect("rss body");
     std::fs::write(fixture_dir().join("rss_ltt.xml"), rss).expect("write rss");
+
+    for (name, endpoint, body) in [
+        (
+            "music_search_weeknd",
+            "search",
+            json!({ "query": "the weeknd" }),
+        ),
+        (
+            "music_podcast_vl",
+            "browse",
+            json!({ "browseId": format!("VL{PODCAST}") }),
+        ),
+    ] {
+        save(name, music_post(endpoint, body).await);
+    }
 
     let mut landing = json!({ "browseId": LTT });
     let landing = client

@@ -38,18 +38,6 @@ export function decodeHtmlEntities(text: string): string {
   return out;
 }
 
-export function cleanTitle(title: string): string {
-  return title
-    .replace(/\s*[([].*?[)\]]/g, "")
-    .replace(/\b(official video|official audio|lyrics|lyric video|hq|hd|audio|video|clip)\b/gi, "")
-    .trim();
-}
-
-export function cleanArtist(artist: string): string {
-  const head = artist.replace(/\s*-\s*Topic/gi, "").split(/\s+(?:feat\.?|ft\.?|featuring|&|,|vs\.?)\s+/i)[0];
-  return (head ?? artist).trim();
-}
-
 const CREDIT_PREFIXES = [
   "synced by",
   "lyrics by",

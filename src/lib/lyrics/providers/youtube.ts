@@ -1,12 +1,5 @@
-import type { CreditedLyrics, LyricsEntry, LyricsProvider } from "../types";
+import type { CreditedLyrics, LyricsProvider } from "../types";
 import { getMusicLyricsTyped } from "../../api/music";
-
-export const youtubeSubtitleProvider: LyricsProvider = {
-  name: "YouTubeSubtitle",
-  async getLyrics(): Promise<LyricsEntry[]> {
-    return [];
-  },
-};
 
 export const youtubeProvider: LyricsProvider = {
   name: "YouTube",

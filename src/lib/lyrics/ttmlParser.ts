@@ -150,16 +150,36 @@ function findFirstSpanBegin(p: Element): string | null {
   return best;
 }
 
+interface LineExtras {
+  translations: string[];
+  romanizations: string[];
+}
+
+const emptyExtras = (): LineExtras => ({ translations: [], romanizations: [] });
+
+/** Files a translation or romanization span under its own field; false for any other span. */
+function collectExtra(span: Element, extras: LineExtras): boolean {
+  const role = ttmlAttr(span, "role");
+  const list = role === "x-translation" ? extras.translations : role === "x-roman" ? extras.romanizations : null;
+  if (!list) return false;
+  const text = (span.textContent ?? "").trim();
+  if (text) list.push(text);
+  return true;
+}
+
+const joinExtras = (extras: LineExtras): Pick<LyricsEntry, "translation" | "romanization"> => ({
+  translation: extras.translations.length ? extras.translations.join("\n") : null,
+  romanization: extras.romanizations.length ? extras.romanizations.join("\n") : null,
+});
+
 function parseBackgroundSpan(span: Element, parentStartMs: number, offsetMs: number): LyricsEntry | null {
   const begin = timingAttr(span, "begin");
   const startMs = begin ? parseTime(begin) + offsetMs : parentStartMs;
   const wordSpans: DomSpan[] = [];
-  const translations: string[] = [];
+  const extras = emptyExtras();
   for (const child of childElements(span)) {
     if (localName(child) !== "span") continue;
-    const role = ttmlAttr(child, "role");
-    if (role === "x-translation" || role === "x-roman") translations.push(child.textContent ?? "");
-    else parseWordSpan(child, offsetMs, wordSpans);
+    if (!collectExtra(child, extras)) parseWordSpan(child, offsetMs, wordSpans);
   }
   const words = mergeSpansIntoWords(wordSpans);
   const text = words.length ? buildLineText(words) : (span.textContent ?? "").trim();
@@ -170,7 +190,7 @@ function parseBackgroundSpan(span: Element, parentStartMs: number, offsetMs: num
     words: words.length ? words : null,
     agent: "bg",
     isBackground: true,
-    translation: translations.length ? translations.join("\n") : null,
+    ...joinExtras(extras),
   };
 }
 
@@ -181,7 +201,7 @@ function parseParagraph(p: Element, result: LyricsEntry[], offsetMs: number, div
   const isBackground = ttmlAttr(p, "role") === "x-bg";
 
   const spans: DomSpan[] = [];
-  const translations: string[] = [];
+  const extras = emptyExtras();
   const backgroundLines: LyricsEntry[] = [];
 
   for (const child of childElements(p)) {
@@ -193,23 +213,24 @@ function parseParagraph(p: Element, result: LyricsEntry[], offsetMs: number, div
         const bg = parseBackgroundSpan(child, startMs, offsetMs);
         if (bg) backgroundLines.push(bg);
       }
-    } else if (role === "x-translation" || role === "x-roman") {
-      translations.push(child.textContent ?? "");
-    } else {
+    } else if (!collectExtra(child, extras)) {
       parseWordSpan(child, offsetMs, spans);
     }
   }
 
   const words = mergeSpansIntoWords(spans);
   const text = words.length ? buildLineText(words) : directText(p);
-  result.push({
-    time: startMs,
-    text,
-    words: words.length ? words : null,
-    agent,
-    isBackground,
-    translation: translations.length ? translations.join("\n") : null,
-  });
+  // A paragraph holding only a background span would otherwise become an empty timed line.
+  if (text.trim()) {
+    result.push({
+      time: startMs,
+      text,
+      words: words.length ? words : null,
+      agent,
+      isBackground,
+      ...joinExtras(extras),
+    });
+  }
   result.push(...backgroundLines);
 }
 

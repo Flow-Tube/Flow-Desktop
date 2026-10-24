@@ -1,15 +1,10 @@
 import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
-import { lyricsGetText, lyricsGetJson, enc } from "../http";
-import { parseTTMLToLyricsEntries } from "../ttmlParser";
-import { hasWordSync } from "../sync";
-import { UA_CHROME } from "./common";
+import { lyricsGetJson, enc } from "../http";
 
-const SERVERS = [
-  "https://lyricsplus.binimum.org",
-  "https://lyricsplus.prjktla.my.id",
-  "https://lyricsplus-seven.vercel.app",
-];
-const BINIMUM = "https://lyrics-api.binimum.org/";
+// The other public mirrors (atomix.one, prjktla.my.id, lyricsplus-seven.vercel.app) were all down
+// on Android's 2026-10-19 probe: no connection, 502 and DEPLOYMENT_DISABLED.
+const SERVER = "https://lyricsplus.binimum.org";
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 interface LpSyllable {
   time: number;
@@ -24,82 +19,71 @@ interface LpLine {
   syllabus?: LpSyllable[];
   element?: { singer?: string };
 }
-interface LpResponse {
+export interface LpResponse {
   type?: string;
   lyrics?: LpLine[];
 }
 
-function toEntries(res: LpResponse): LyricsEntry[] {
-  const lines = res.lyrics ?? [];
-  return lines.map((line) => {
-    let words: WordTimestamp[] | null = null;
-    if (line.syllabus && line.syllabus.length > 0) {
-      words = line.syllabus
-        .filter((s) => s.text.trim().length > 0)
-        .map((s) => ({
-          text: s.text,
-          startTime: s.time,
-          endTime: s.time + Math.max(1, s.duration),
-        }));
+const buildText = (syllables: LpSyllable[]): string => syllables.map((s) => s.text).join("").trim();
+
+function toWordTimestamps(syllables: LpSyllable[]): WordTimestamp[] | null {
+  const words = syllables
+    .filter((s) => s.text.trim().length > 0)
+    .map((s) => ({ text: s.text.trim(), startTime: s.time, endTime: s.time + Math.max(1, s.duration) }));
+  return words.length > 0 ? words : null;
+}
+
+/** Background syllables become their own line after the main one, as on Android. */
+export function convertLyricsPlus(response: LpResponse): LyricsEntry[] {
+  const lines = response.lyrics ?? [];
+  const isWordSync = response.type?.toLowerCase() === "word";
+  const result: LyricsEntry[] = [];
+
+  for (const line of lines) {
+    const all = line.syllabus ?? [];
+    const main = all.filter((s) => !s.isBackground);
+    const background = all.filter((s) => s.isBackground);
+    const mainText =
+      isWordSync && main.length > 0
+        ? buildText(main)
+        : main.length === 0 && background.length > 0
+          ? ""
+          : line.text.trim();
+
+    if (mainText) {
+      result.push({
+        time: line.time,
+        text: mainText,
+        words: isWordSync ? toWordTimestamps(main) : null,
+        agent: line.element?.singer ?? null,
+        isBackground: false,
+      });
     }
-    const bg = !!line.syllabus?.length && line.syllabus.every((s) => s.isBackground);
-    return {
-      time: line.time,
-      text: line.text,
-      words,
-      agent: line.element?.singer ?? null,
-      isBackground: bg,
-    };
-  });
+    const backgroundText = buildText(background);
+    if (backgroundText) {
+      result.push({
+        time: Math.min(...background.map((s) => s.time)),
+        text: backgroundText,
+        words: isWordSync ? toWordTimestamps(background) : null,
+        agent: "bg",
+        isBackground: true,
+      });
+    }
+  }
+  return result.sort((a, b) => a.time - b.time);
 }
 
 export const lyricsPlusProvider: LyricsProvider = {
   name: "LyricsPlus",
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
-    let query = `/v2/lyrics/get?title=${enc(title)}&artist=${enc(artist)}`;
-    if (durationSec > 0) query += `&duration=${durationSec}`;
-    if (album) query += `&album=${enc(album)}`;
-
-    for (const server of SERVERS) {
-      try {
-        const res = await lyricsGetJson<LpResponse>(server + query, {
-          "User-Agent": UA_CHROME,
-          Accept: "application/json,text/plain,*/*",
-        });
-        const entries = toEntries(res);
-        if (entries.length > 0 && hasWordSync(entries)) return entries;
-        if (entries.length > 0 && res.type !== "Word") {
-        }
-      } catch {
-      }
-    }
-
-    // Binimum search → TTML (word-sync).
-    try {
-      let bq = `${BINIMUM}?track=${enc(title)}&artist=${enc(artist)}`;
-      if (durationSec > 0) bq += `&duration=${durationSec}`;
-      if (album) bq += `&album=${enc(album)}`;
-      const search = await lyricsGetJson<{ results?: { lyricsUrl?: string }[] }>(bq, {
-        "User-Agent": UA_CHROME,
-        Accept: "application/json",
-      });
-      const url = search.results?.find((r) => r.lyricsUrl)?.lyricsUrl;
-      if (url) {
-        const ttml = await lyricsGetText(url, { "User-Agent": UA_CHROME });
-        return parseTTMLToLyricsEntries(ttml);
-      }
-    } catch {
-    }
-
-    // Last resort: first server's line-level result.
-    for (const server of SERVERS) {
-      try {
-        const res = await lyricsGetJson<LpResponse>(server + query, { "User-Agent": UA_CHROME });
-        const entries = toEntries(res);
-        if (entries.length > 0) return entries;
-      } catch {
-      }
-    }
-    return [];
+    if (!title.trim() || !artist.trim()) return [];
+    let url = `${SERVER}/v2/lyrics/get?title=${enc(title)}&artist=${enc(artist)}`;
+    if (durationSec > 0) url += `&duration=${durationSec}`;
+    if (album) url += `&album=${enc(album)}`;
+    const response = await lyricsGetJson<LpResponse>(url, {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json,text/plain,*/*",
+    });
+    return convertLyricsPlus(response);
   },
 };

@@ -1,7 +1,19 @@
 import type { LyricsEntry } from "./types";
+import { parseLyrics } from "./lyricsUtils";
 
 const offlineEntries = new Map<string, LyricsEntry[]>();
 const listeners = new Set<(videoId: string, entries: LyricsEntry[]) => void>();
+
+/** Saved lyrics as entries: an LRC file keeps its timings, anything else becomes plain lines. */
+export function parseOfflineLyrics(text: string): LyricsEntry[] {
+  const parsed = parseLyrics(text).filter((entry) => entry.text.trim());
+  if (parsed.length > 0) return parsed;
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({ time: 0, text: line }));
+}
 
 /**
  * Registers the lyrics saved alongside a download.
@@ -12,11 +24,7 @@ const listeners = new Set<(videoId: string, entries: LyricsEntry[]) => void>();
  */
 export function seedOfflineLyrics(videoId: string, text: string): void {
   if (!videoId || offlineEntries.has(videoId)) return;
-  const entries: LyricsEntry[] = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => ({ time: 0, text: line }));
+  const entries = parseOfflineLyrics(text);
   if (entries.length === 0) return;
   offlineEntries.set(videoId, entries);
   for (const listener of listeners) listener(videoId, entries);

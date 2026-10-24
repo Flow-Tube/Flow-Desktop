@@ -3,12 +3,19 @@ import { create } from "zustand";
 export type ActiveTab = "home" | "search" | "subscriptions" | "history" | "playlists" | "settings";
 export type ToastVariant = "success" | "error" | "info";
 
+/** A button on the toast, such as Undo; pressing it also dismisses the toast. */
+export interface ToastAction {
+  label: string;
+  onSelect: () => void;
+}
+
 export interface ToastState {
   id: number;
   title?: string;
   message: string;
   variant: ToastVariant;
   durationMs: number;
+  action?: ToastAction;
 }
 
 export interface ShowToastOptions {
@@ -16,6 +23,7 @@ export interface ShowToastOptions {
   message: string;
   variant?: ToastVariant;
   durationMs?: number;
+  action?: ToastAction;
 }
 
 const getSavedSidebarExpanded = () => {
@@ -85,13 +93,14 @@ export const useUiStore = create<UiState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setWatchSidebarOpen: (isWatchSidebarOpen) => set({ isWatchSidebarOpen }),
-  showToast: ({ title, message, variant = "info", durationMs = 2400 }) => set({
+  showToast: ({ title, message, variant = "info", durationMs = 2400, action }) => set({
     toast: {
       id: Date.now(),
       title,
       message,
       variant,
       durationMs,
+      action,
     },
   }),
   dismissToast: () => set({ toast: null }),

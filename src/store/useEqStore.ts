@@ -20,6 +20,8 @@ interface EqStoreState {
   /** Held Compare: the players hear the unprocessed sound. Never saved. */
   bypass: boolean;
   editorOpen: boolean;
+  /** Whether this window has the editor; the pop-out player window does not. */
+  editorHosted: boolean;
   /**
    * The unsaved curve each mode had before a preset replaced it, so it stays one click away as
    * Custom. Kept for the session: Android's saved state has no field for it.
@@ -59,6 +61,7 @@ export const useEqStore = create<EqStoreState>((set, get) => ({
   preview: null,
   bypass: false,
   editorOpen: false,
+  editorHosted: false,
   custom: {},
 
   update: (transform) => {

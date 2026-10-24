@@ -18,6 +18,7 @@ mod linux_startup;
 mod macos_window;
 pub mod models;
 mod music_brain;
+mod scrobble;
 mod security;
 mod services;
 mod streaming;
@@ -89,6 +90,10 @@ use commands::recommendation::{
     log_interaction, mark_not_interested, note_subscription, observe_channel_uploads,
     record_feed_impressions, remove_preferred_topic, report_watch_progress, reset_brain,
     resolve_hidden_channel_names, unblock_channel, unblock_topic,
+};
+use commands::scrobble::{
+    scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing, scrobble_set_own_key,
+    scrobble_sign_in, scrobble_sign_out, scrobble_status,
 };
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
@@ -326,6 +331,12 @@ pub fn run() {
 
             // Manage database pool
             app.manage(pool.clone());
+            let scrobbler = Arc::new(scrobble::scrobbler::Scrobbler::new(
+                pool.clone(),
+                Arc::new(scrobble::credentials::Keychain),
+            ));
+            scrobble::worker::spawn(Arc::clone(&scrobbler));
+            app.manage(scrobbler);
             app.manage(MusicService::new(extractor, pool.clone()));
 
             let music_pool = pool.clone();
@@ -649,7 +660,16 @@ pub fn run() {
             // --- Music tray ---
             music_tray_supported,
             music_tray_update,
-            music_tray_hide
+            music_tray_hide,
+            // --- Scrobbling ---
+            scrobble_status,
+            scrobble_sign_in,
+            scrobble_sign_out,
+            scrobble_set_own_key,
+            scrobble_now_playing,
+            scrobble_listened,
+            scrobble_love,
+            scrobble_flush
         ])
         .build(context)
         .expect("error while building Flow Desktop")

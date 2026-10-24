@@ -11,6 +11,7 @@ pub mod music_queue;
 pub mod notifications;
 pub mod pip;
 pub mod recommendation;
+pub mod scrobble;
 pub mod shorts;
 pub mod sync;
 pub mod tray;

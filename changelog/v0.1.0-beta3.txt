@@ -46,6 +46,9 @@ MUSIC
 - A new "Resume long tracks" setting, off by default, starts mixes, podcasts and episodes of 10 minutes or more where you left them.
 - Music controls in the menu bar or system tray: the current song on top, then Play or Pause, Previous, Next and Show Flow. Turn it off under Integrations with Show music controls in the tray.
 - On Linux the tray is off by default and needs the libayatana-appindicator3 library, which the .deb, .rpm and AppImage now bring along. Without it the switch stays off instead of stopping Flow from starting.
+- Scrobbling to Last.fm, Libre.fm and ListenBrainz, under Integrations. A song counts once you have heard half of it or four minutes, and songs of 30 seconds or less never count. Videos are never sent.
+- Listens wait on your computer while you are offline and go out once you are back, up to 2,000 per service. Show now playing, Love liked songs and Scrobble during Deep Flow are options, and you can use your own Last.fm API key.
+- Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
 
 AUDIO
 - Equalizer boosts no longer distort: the music equalizer turns the whole curve down by its highest boost before the filters, and a soft limiter bends any peak that still goes past full scale.

@@ -193,3 +193,48 @@ async fn raw_keys_from_older_desktop_builds_are_still_accepted() {
         Some("true")
     );
 }
+
+#[tokio::test]
+async fn skip_silence_from_android_is_ignored_until_the_desktop_has_it() {
+    let pool = memory_pool().await;
+    let incoming = [entry("skip_silence", json!(true), 1_000)];
+    apply_payload(&pool, OUR, PEER, &[staged(&incoming, "s1")])
+        .await
+        .unwrap();
+    assert_eq!(stored(&pool, "skip_silence_enabled").await, None);
+
+    set_like_the_app(&pool, "skip_silence_enabled", "true").await;
+    let out = export_collections(&pool, OUR, &[Collection::Settings])
+        .await
+        .unwrap();
+    let ndjson = String::from_utf8(out[0].ndjson.clone()).unwrap();
+    assert!(!ndjson.contains("skip_silence"));
+}
+
+#[tokio::test]
+async fn the_music_player_background_syncs_between_desktops() {
+    let source = memory_pool().await;
+    set_like_the_app(&source, "music_player_background", "blur").await;
+    let out = export_collections(&source, OUR, &[Collection::Settings])
+        .await
+        .unwrap();
+    let entries: Vec<SettingEntry> = String::from_utf8(out[0].ndjson.clone())
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let background = entries
+        .iter()
+        .find(|e| e.key == "desktop.music_player_background")
+        .expect("exported under the desktop prefix");
+    assert_eq!(background.value, json!("blur"));
+
+    let target = memory_pool().await;
+    apply_payload(&target, OUR, PEER, &[staged(&entries, "s1")])
+        .await
+        .unwrap();
+    assert_eq!(
+        stored(&target, "music_player_background").await.as_deref(),
+        Some("blur")
+    );
+}

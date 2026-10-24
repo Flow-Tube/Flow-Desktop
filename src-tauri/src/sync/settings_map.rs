@@ -7,7 +7,9 @@
 //! still accepted.
 //!
 //! `default_video_codec` is deliberately not synced: an AV1 or VP9 preference that suits one device
-//! freezes video on a desktop or phone without that hardware decoder.
+//! freezes video on a desktop or phone without that hardware decoder. `skip_silence` stays out
+//! until the desktop implements it: its switch is disabled here, so a value from Android would be
+//! stuck on with no way to turn it off.
 
 use serde_json::Value;
 
@@ -54,7 +56,6 @@ const SHARED: &[Shared] = &[
     shared("comments_enabled", "comments_enabled", Kind::Bool),
     shared("return_youtube_dislikes", "rytd_enabled", Kind::Bool),
     shared("video_loop", "video_loop_enabled", Kind::Bool),
-    shared("skip_silence", "skip_silence_enabled", Kind::Bool),
     shared("stable_volume", "stable_volume_enabled", Kind::Bool),
     shared(
         "subscriptions_show_videos",
@@ -107,6 +108,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "manual_pip_button_enabled",
     "lyrics_provider_order",
     "lyrics_provider_enabled_states",
+    "music_player_background",
     "video_title_max_lines",
     "download_dialog_style",
     "home_feed_enabled",

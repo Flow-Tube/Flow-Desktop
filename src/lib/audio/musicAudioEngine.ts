@@ -2,6 +2,7 @@ import { loudnessFactor, MUSIC_MAX_CUT_DB } from "../loudness";
 import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
+import { volumeGain } from "./volumeCurve";
 
 /**
  * One of the two <audio> elements. While one plays, the other can hold the next
@@ -277,6 +278,7 @@ class MusicAudioEngine {
 
   // --- gain (volume + loudness normalization) -----------------------------
 
+  /** `volume` is the slider position; it plays on a perceptual curve. */
   setVolume(volume: number): void {
     this.volume = Math.max(0, Math.min(1, volume));
     this.applyGain();
@@ -299,7 +301,7 @@ class MusicAudioEngine {
   }
 
   private applyGain(): void {
-    const vol = this.muted ? 0 : this.volume;
+    const vol = this.muted ? 0 : volumeGain(this.volume);
 
     if (this.graphReady && this.ctx && this.volGain) {
       const t = this.ctx.currentTime;

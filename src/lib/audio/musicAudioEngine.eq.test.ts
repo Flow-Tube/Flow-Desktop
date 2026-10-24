@@ -95,8 +95,8 @@ describe("music EQ graph", () => {
     musicAudioEngine.setLoudness(6, true);
 
     expect(contexts).toHaveLength(0);
-    // Normalization turns the element down by itself: 6 dB over the target is about half.
-    expect(pair[0].volume).toBeCloseTo(0.25, 2);
+    // Half way on the slider is a quarter of the gain, and 6 dB over the target halves it again.
+    expect(pair[0].volume).toBeCloseTo(0.125, 2);
     expect(musicAudioEngine.isEqAvailable()).toBe(true);
   });
 

@@ -10,8 +10,8 @@ import type { ThemeColors } from "./themes";
 import type { Rgb } from "./useDominantColor";
 
 /** Android's `MusicPlayerBackgroundStyle`, under the same names. */
-export type PlayerBackgroundStyle = "blur_gradient" | "blur" | "gradient" | "default";
-export const PLAYER_BACKGROUND_STYLES: readonly PlayerBackgroundStyle[] = ["blur_gradient", "blur", "gradient", "default"];
+export type PlayerBackgroundStyle = "blur_gradient" | "blur" | "gradient" | "immersive" | "default";
+export const PLAYER_BACKGROUND_STYLES: readonly PlayerBackgroundStyle[] = ["blur_gradient", "blur", "gradient", "immersive", "default"];
 
 export function isPlayerBackgroundStyle(value: string): value is PlayerBackgroundStyle {
   return (PLAYER_BACKGROUND_STYLES as readonly string[]).includes(value);

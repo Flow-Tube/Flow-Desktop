@@ -1,7 +1,8 @@
 import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
 import { lyricsHttpGet, lyricsGetText, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
-import { parseLyrics, cleanTitle, cleanArtist } from "../lyricsUtils";
+import { parseLyrics } from "../lyricsUtils";
+import { cleanArtist, cleanTitle } from "../matching";
 import { UA_CHROME } from "./common";
 
 const APPLE_BASE = "https://beta.music.apple.com";

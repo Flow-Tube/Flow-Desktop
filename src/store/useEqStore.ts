@@ -104,8 +104,15 @@ function adopt(raw: string): void {
   if (save || edits.length > 0) scheduleSave();
 }
 
-/** Loads the equalizer once settings have loaded, and follows restores and syncs after that. */
+let persistenceBound = false;
+
+/**
+ * Loads the equalizer once settings have loaded, and follows restores and syncs after that.
+ * Music and every video player call it; it binds once per window.
+ */
 export function bindEqPersistence(): void {
+  if (persistenceBound) return;
+  persistenceBound = true;
   const follow = () => {
     const settings = useAppSettingsStore.getState();
     if (!settings.loaded) return;

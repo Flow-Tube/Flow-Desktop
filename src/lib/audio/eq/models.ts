@@ -47,6 +47,49 @@ export const EqLimits = {
 export const defaultQ = (type: EqFilterType): number =>
   type === "PEAK" ? EqLimits.DEFAULT_PEAK_Q : EqLimits.DEFAULT_SHELF_Q;
 
+export interface EqCurve {
+  preamp: number;
+  bands: EqBand[];
+}
+
+export type EqMode = "PARAMETRIC" | "GRAPHIC";
+
+export interface EqPreset {
+  id: string;
+  name: string;
+  curve: EqCurve;
+  mode: EqMode;
+  imported: boolean;
+}
+
+/** The curve a mode is playing, and the preset it started from; null once that preset is gone. */
+export interface EqWorkingCopy {
+  presetId: string | null;
+  curve: EqCurve;
+}
+
+export interface EqState {
+  version: number;
+  enabled: boolean;
+  mode: EqMode;
+  parametric: EqWorkingCopy;
+  graphic: EqWorkingCopy;
+  autoPreamp: boolean;
+  bassBoost: number;
+  userPresets: EqPreset[];
+}
+
+export const EQ_STATE_VERSION = 1;
+
+/** What the audio graph runs: already resolved for bypass, bass boost and auto preamp. */
+export interface EqProcessingSpec {
+  enabled: boolean;
+  preampDb: number;
+  bands: EqBand[];
+}
+
+export const EQ_PROCESSING_OFF: EqProcessingSpec = { enabled: false, preampDb: 0, bands: [] };
+
 /** A band with Android's defaults for whatever is left out. */
 export function band(
   frequency: number,

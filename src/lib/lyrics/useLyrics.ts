@@ -26,7 +26,8 @@ const EMPTY: LyricsState = {
 };
 
 const videoIdOf = (t: SongItem): string => t.videoId ?? t.id;
-const artistsOf = (t: SongItem): string => t.artists.map((a) => a.name).filter(Boolean).join(", ");
+// Catalogues file a song under its first credited artist; the joined list matches none of them.
+const primaryArtistOf = (t: SongItem): string => t.artists.find((a) => a.name)?.name ?? "";
 
 /** Resolves lyrics for the current track via the provider fallback chain. */
 export function useLyrics(track: SongItem | null) {
@@ -42,7 +43,7 @@ export function useLyrics(track: SongItem | null) {
         const result = await getLyrics(
           videoId,
           t.title,
-          artistsOf(t),
+          primaryArtistOf(t),
           t.duration ?? 0,
           t.album?.name ?? null,
         );

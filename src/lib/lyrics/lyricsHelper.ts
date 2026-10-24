@@ -1,12 +1,7 @@
 import type { LyricsEntry, LyricsResult } from "./types";
 import { getEnabledProviders, parseProviderEnabledStates } from "./registry";
-import {
-  cleanTitle,
-  cleanArtist,
-  filterCreditLines,
-  normalizeEntries,
-  stripWordTimings,
-} from "./lyricsUtils";
+import { filterCreditLines, normalizeEntries, stripWordTimings } from "./lyricsUtils";
+import { cleanArtist, cleanTitle } from "./matching";
 import { entriesAreSynced, hasWordSync, hasReasonableTimestamps } from "./sync";
 import * as cache from "./cache";
 import { getOfflineLyrics } from "./offline";

@@ -32,6 +32,9 @@ export function PlayerTab() {
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
   const [musicBackground, setMusicBackground] = usePreference(SETTINGS.MUSIC_PLAYER_BACKGROUND);
+  const [artworkControlColors, setArtworkControlColors] = useBoolPref(SETTINGS.MUSIC_ARTWORK_CONTROL_COLORS);
+  const [plainControlColors, setPlainControlColors] = usePreference(SETTINGS.MUSIC_PLAIN_CONTROL_COLORS);
+  const [followLightTheme, setFollowLightTheme] = useBoolPref(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -216,6 +219,20 @@ export function PlayerTab() {
             { value: 'gradient', label: getString('settings_music_player_background_gradient') },
             { value: 'default', label: getString('settings_music_player_background_default') },
           ]} />
+        </SettingItem>
+        <SettingItem title={getString('settings_music_artwork_control_colors')} description={getString('settings_music_artwork_control_colors_desc')}>
+          <ToggleSwitch checked={artworkControlColors} onChange={setArtworkControlColors} />
+        </SettingItem>
+        {!artworkControlColors && (
+          <SettingItem title={getString('settings_music_plain_control_colors')} description={getString('settings_music_plain_control_colors_desc')}>
+            <Select value={plainControlColors} onChange={setPlainControlColors} options={[
+              { value: 'monochrome', label: getString('settings_music_plain_control_colors_monochrome') },
+              { value: 'app_theme', label: getString('settings_music_plain_control_colors_app_theme') },
+            ]} />
+          </SettingItem>
+        )}
+        <SettingItem title={getString('settings_music_player_follow_light_theme')} description={getString('settings_music_player_follow_light_theme_desc')}>
+          <ToggleSwitch checked={followLightTheme} onChange={setFollowLightTheme} />
         </SettingItem>
       </SettingsGroup>
     </div>

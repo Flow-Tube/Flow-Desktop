@@ -6,16 +6,20 @@ import { kugouProvider } from "./providers/kugou";
 import { paxsenixProvider } from "./providers/paxsenix";
 import { lrclibProvider } from "./providers/lrclib";
 import { youtubeProvider } from "./providers/youtube";
+import { lrcRedProvider } from "./providers/lrcRed";
+import { unisonProvider } from "./providers/unison";
 import { DEFAULT_PROVIDER_ORDER, resolveProviderOrder } from "./providerOrder";
 
 const PROVIDER_MAP = new Map<string, LyricsProvider>(
   [
     betterLyricsProvider,
+    lrcRedProvider,
     lyricsPlusProvider,
     simpMusicProvider,
     kugouProvider,
     paxsenixProvider,
     lrclibProvider,
+    unisonProvider,
     youtubeProvider,
   ].map((provider) => [provider.name, provider]),
 );

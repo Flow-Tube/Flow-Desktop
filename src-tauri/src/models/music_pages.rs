@@ -21,6 +21,10 @@ use crate::models::video::MusicHomeChip;
 pub struct MusicSearchSection {
     pub title: String,
     pub items: Vec<YTItem>,
+    /// The top-result card and the rows under it, known by its renderer and
+    /// not by its (localised) title.
+    #[serde(default)]
+    pub is_top_result: bool,
 }
 
 /// Result of a filtered search (`/search` with a filter param), with paging.
@@ -29,6 +33,9 @@ pub struct MusicSearchSection {
 pub struct MusicSearchResponse {
     pub sections: Vec<MusicSearchSection>,
     pub continuation: Option<String>,
+    /// The filters the site offers for this query, in its order.
+    #[serde(default)]
+    pub filters: Vec<String>,
 }
 
 /// Result of a no-filter "summary" search — the first section is the
@@ -37,6 +44,9 @@ pub struct MusicSearchResponse {
 #[serde(rename_all = "camelCase")]
 pub struct SearchSummaryPage {
     pub summaries: Vec<MusicSearchSection>,
+    /// The filters the site offers for this query, in its order.
+    #[serde(default)]
+    pub filters: Vec<String>,
 }
 
 /// A rich search suggestion: either a query string or a tappable entity.

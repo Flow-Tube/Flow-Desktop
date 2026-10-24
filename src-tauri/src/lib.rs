@@ -50,7 +50,7 @@ use commands::downloads::{
     get_offline_stream, list_download_collections, list_downloads, pause_download, resume_download,
     start_download,
 };
-use commands::files::write_backup_file;
+use commands::files::{write_backup_file, write_lyrics_file};
 use commands::music::{
     get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
     get_music_artist_items, get_music_artist_page, get_music_charts_page, get_music_deep_cuts,
@@ -503,6 +503,7 @@ pub fn run() {
             get_setting,
             set_setting,
             write_backup_file,
+            write_lyrics_file,
             export_backup_data,
             import_backup_data,
             get_download_formats,

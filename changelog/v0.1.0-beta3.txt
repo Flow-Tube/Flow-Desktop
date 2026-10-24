@@ -24,11 +24,13 @@ MUSIC
 - Music search only offers the categories YouTube Music has results for, and its filters use the parameters YouTube Music sends today.
 - An artist's Shuffle plays YouTube Music's shuffle of their whole catalogue and Mix plays their station, instead of both reshuffling the few top songs on the page. Artist pages sort their shelves the same way in every language and link the sources under the bio.
 - Songs added by radio keep their album, explicit badge and song or video type, and radio continues YouTube Music's own mix for the song. Lyrics from YouTube Music show their source.
+- The full player's seek bar glides with the song instead of stepping, and dragging it seeks once when you let go instead of on every move. The page behind the full player stops drawing while it is covered.
 - Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
 - The window background now follows your theme. A Tauri bug was clearing it, which showed a mismatched color around the app while resizing.
+- On 120 Hz ProMotion screens Flow now draws at 120 frames per second. WebKit was holding every animation, scroll and lyric line to 60.
 
 LINUX
 - The AppImage is built on Ubuntu 24.04 with a newer WebKitGTK that no longer crashes on color emoji fonts, the cause of the freeze on Fedora 44 and Bazzite. It needs glibc 2.39 or newer, so on Ubuntu 22.04, Mint 21 or Debian 12 use the .deb instead.

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Check, ChevronRight, Music2, Play, Plus } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, ExternalLink, Music2, Play, Plus } from 'lucide-react';
 
 import { Button, type ButtonProps } from '../../components/ui/Button';
 import { SoftBackdrop } from '../../components/ui/SoftBackdrop';
@@ -14,7 +14,9 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { getString } from '../../lib/i18n/index';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
-import type { SongItem } from '../../types/music';
+import type { MusicWatchTarget, SongItem } from '../../types/music';
+import { artistMixQueue } from '../../lib/artistMix';
+import { openExternal } from '../../lib/openExternal';
 import { shuffled } from '../../lib/musicRecall';
 
 const videoIdOf = (track: SongItem) => track.videoId ?? track.id;
@@ -256,6 +258,9 @@ export default function ArtistPage() {
     videos,
     related,
     about,
+    aboutLinks,
+    shuffle,
+    radio,
   } = data;
   const subtitle = [header.subscriberCountText, header.monthlyListenerCount]
     .filter((part): part is string => Boolean(part?.trim()))
@@ -267,6 +272,22 @@ export default function ArtistPage() {
     if (!topSongs.length) return;
     const queue: SongItem[] = shuffle ? shuffled(topSongs) : topSongs;
     void playQueue(queue, 0, header.title);
+  };
+
+  // The header's own Shuffle and Radio queues; the page's top songs only when there is none.
+  const startMix = async (target: MusicWatchTarget | null) => {
+    if (target) {
+      try {
+        const queue = await artistMixQueue(target);
+        if (queue.length > 0) {
+          void playQueue(queue, 0, header.title);
+          return;
+        }
+      } catch (error) {
+        console.warn('Artist mix failed; shuffling the top songs instead', error);
+      }
+    }
+    startPlayback(true);
   };
 
   const playFrom = (list: SongItem[], track: SongItem) => {
@@ -293,8 +314,8 @@ export default function ArtistPage() {
         hasSongs={topSongs.length > 0}
         following={following}
         onPlay={() => startPlayback(false)}
-        onShuffle={() => startPlayback(true)}
-        onRadio={() => startPlayback(true)}
+        onShuffle={() => void startMix(shuffle)}
+        onRadio={() => void startMix(radio)}
         onToggleFollow={() => setFollowing((value) => !value)}
       />
 
@@ -426,6 +447,16 @@ export default function ArtistPage() {
                 </span>
               ) : null}
             </button>
+            {aboutLinks.length > 0 ? (
+              <div className="-mt-20 mb-24 flex flex-wrap gap-2">
+                {aboutLinks.map((link) => (
+                  <Button key={link.url} variant="tonal" size="sm" onClick={() => void openExternal(link.url)}>
+                    <ExternalLink className="h-4 w-4" />
+                    {link.label}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
           </section>
         ) : null}
       </main>

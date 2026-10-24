@@ -84,17 +84,46 @@ export type YTItem =
 
 // --- Sections / pages -----------------------------------------------------
 
+/** What an artist section holds, read by the backend from its structure. */
+export type ArtistSectionKind =
+  | 'topSongs'
+  | 'albums'
+  | 'singles'
+  | 'videos'
+  | 'featuredOn'
+  | 'relatedArtists'
+  | 'other';
+
 export interface ArtistSection {
   title: string;
   items: YTItem[];
   moreEndpointBrowseId: string | null;
   moreEndpointParams: string | null;
+  kind?: ArtistSectionKind;
+}
+
+/** A queue a header button starts: a playlist id and the params it asks with. */
+export interface MusicWatchTarget {
+  playlistId: string;
+  params: string | null;
+}
+
+/** A linked stretch of a description, in string indices. */
+export interface DescriptionLink {
+  start: number;
+  end: number;
+  url: string;
 }
 
 export interface ArtistPage {
   artist: ArtistItem;
   sections: ArtistSection[];
   description: string | null;
+  descriptionLinks?: DescriptionLink[];
+  /** The site's own Shuffle of the artist's catalogue. */
+  shuffle?: MusicWatchTarget | null;
+  /** The artist's radio station. */
+  radio?: MusicWatchTarget | null;
   subscriberCountText: string | null;
   monthlyListenerCount: string | null;
   isSubscribed: boolean;

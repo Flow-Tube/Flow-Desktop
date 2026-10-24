@@ -6,6 +6,7 @@ import type {
   ArtistItem,
   ArtistPage,
   ArtistSection,
+  MusicWatchTarget,
   PlaylistItem,
   SongItem,
   YTItem,
@@ -25,9 +26,18 @@ export interface ArtistHeader {
   isSubscribed: boolean;
 }
 
+/** A link out of the artist's bio, labelled by the text it covers. */
+export interface ArtistAboutLink {
+  label: string;
+  url: string;
+}
+
 export interface ArtistPageData {
   header: ArtistHeader;
   about: string | null;
+  aboutLinks: ArtistAboutLink[];
+  shuffle: MusicWatchTarget | null;
+  radio: MusicWatchTarget | null;
   topSongs: SongItem[];
   topSongsMore: ArtistMoreEndpoint | null;
   albums: AlbumItem[];
@@ -60,6 +70,11 @@ export function segmentArtistPage(page: ArtistPage): ArtistPageData {
       isSubscribed: page.isSubscribed,
     },
     about: page.description?.trim() || null,
+    aboutLinks: (page.descriptionLinks ?? [])
+      .map((link) => ({ label: (page.description ?? '').slice(link.start, link.end).trim(), url: link.url }))
+      .filter((link) => link.label.length > 0),
+    shuffle: page.shuffle ?? null,
+    radio: page.radio ?? null,
     topSongs: [],
     topSongsMore: null,
     albums: [],
@@ -71,28 +86,34 @@ export function segmentArtistPage(page: ArtistPage): ArtistPageData {
     featuredOn: [],
   };
 
+  // Sections are told apart by the kind the backend read from their structure,
+  // never by their titles, which are localised.
   for (const section of page.sections) {
-    const t = (section.title || '').toLowerCase();
-    const isSingles = t.includes('single') || /\beps?\b/.test(t);
-
-    if (!data.topSongs.length && (t.includes('song') || t.includes('popular'))) {
-      data.topSongs = pick(section.items, 'song');
-      data.topSongsMore = moreOf(section);
-    } else if (!data.albums.length && t.includes('album')) {
-      data.albums = pick(section.items, 'album');
-      data.albumsMore = moreOf(section);
-    } else if (!data.singles.length && isSingles) {
-      data.singles = pick(section.items, 'album');
-      data.singlesMore = moreOf(section);
-    } else if (!data.videos.length && t.includes('video')) {
-      data.videos = pick(section.items, 'song');
-    } else if (
-      !data.related.length &&
-      (t.includes('fans') || t.includes('related') || t.includes('similar'))
-    ) {
-      data.related = pick(section.items, 'artist');
-    } else if (!data.featuredOn.length && (t.includes('featured') || t.includes('playlist'))) {
-      data.featuredOn = pick(section.items, 'playlist');
+    switch (section.kind) {
+      case 'topSongs':
+        if (data.topSongs.length) break;
+        data.topSongs = pick(section.items, 'song');
+        data.topSongsMore = moreOf(section);
+        break;
+      case 'albums':
+        if (data.albums.length) break;
+        data.albums = pick(section.items, 'album');
+        data.albumsMore = moreOf(section);
+        break;
+      case 'singles':
+        if (data.singles.length) break;
+        data.singles = pick(section.items, 'album');
+        data.singlesMore = moreOf(section);
+        break;
+      case 'videos':
+        if (!data.videos.length) data.videos = pick(section.items, 'song');
+        break;
+      case 'relatedArtists':
+        if (!data.related.length) data.related = pick(section.items, 'artist');
+        break;
+      case 'featuredOn':
+        if (!data.featuredOn.length) data.featuredOn = pick(section.items, 'playlist');
+        break;
     }
   }
 

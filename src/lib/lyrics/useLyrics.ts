@@ -11,6 +11,8 @@ interface LyricsState {
   plain: string | null;
   isSynced: boolean;
   providerName: string;
+  /** The credit the lyrics' source asks to be shown, such as "Source: Musixmatch". */
+  source: string | null;
   loading: boolean;
 }
 
@@ -19,6 +21,7 @@ const EMPTY: LyricsState = {
   plain: null,
   isSynced: false,
   providerName: "",
+  source: null,
   loading: false,
 };
 
@@ -54,6 +57,7 @@ export function useLyrics(track: SongItem | null) {
           plain: synced ? null : result.entries.map((e) => e.text).join("\n"),
           isSynced: synced,
           providerName: result.provider,
+          source: result.source ?? null,
           loading: false,
         });
       } catch {
@@ -79,6 +83,7 @@ export function useLyrics(track: SongItem | null) {
         plain: offline.map((entry) => entry.text).join("\n"),
         isSynced: false,
         providerName: "Downloaded",
+        source: null,
         loading: true,
       });
     }

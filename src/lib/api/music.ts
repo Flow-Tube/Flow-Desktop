@@ -16,6 +16,7 @@ import type {
   MoodAndGenreItem,
   MoodAndGenreGroup,
   MoodGenrePage,
+  MusicLyrics,
   MusicHomePage,
   MusicTimeRotation,
   MusicPlaylistPage,
@@ -195,8 +196,8 @@ export function getMusicLinkedArtists(limit = 20): Promise<ArtistItem[]> {
   return invokeBackend<ArtistItem[]>("get_music_linked_artists", { limit });
 }
 
-export function getMusicLyricsTyped(videoId: string): Promise<string | null> {
-  return invokeBackend<string | null>("get_music_lyrics_typed", { videoId });
+export function getMusicLyricsTyped(videoId: string): Promise<MusicLyrics | null> {
+  return invokeBackend<MusicLyrics | null>("get_music_lyrics_typed", { videoId });
 }
 
 // --- Playback -------------------------------------------------------------

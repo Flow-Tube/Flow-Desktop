@@ -13,6 +13,12 @@ export interface LyricsEntry {
   translation?: string | null;
 }
 
+/** Lyrics with the credit their source asks to be shown ("Source: Musixmatch"). */
+export interface CreditedLyrics {
+  entries: LyricsEntry[];
+  source: string | null;
+}
+
 export interface LyricsProvider {
   name: string;
   getLyrics(
@@ -21,10 +27,11 @@ export interface LyricsProvider {
     artist: string,
     durationSec: number,
     album?: string | null,
-  ): Promise<LyricsEntry[]>;
+  ): Promise<LyricsEntry[] | CreditedLyrics>;
 }
 
 export interface LyricsResult {
   entries: LyricsEntry[];
   provider: string;
+  source?: string | null;
 }

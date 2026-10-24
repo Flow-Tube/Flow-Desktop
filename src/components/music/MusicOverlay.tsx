@@ -235,6 +235,7 @@ export function MusicOverlay() {
                 isSynced={lyrics.isSynced}
                 loading={lyrics.loading}
                 providerName={lyrics.providerName}
+                source={lyrics.source}
                 accent={accent}
                 onSeek={seek}
                 className="absolute inset-0 z-10"

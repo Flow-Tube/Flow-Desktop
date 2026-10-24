@@ -8,7 +8,7 @@ import {
 import { getBackendErrorMessage } from './api/errors';
 import { recordDiagnostic } from './diagnostics';
 import { getString } from './i18n/index';
-import type { AlbumItem, MusicHomeChip, MusicHomePage, MusicShelf, YTItem } from '../types/music';
+import type { AlbumItem, MoodGenreSection, MusicHomeChip, MusicHomePage, MusicShelf, YTItem } from '../types/music';
 
 export interface MusicHomeData {
   chips: MusicHomeChip[];
@@ -191,6 +191,8 @@ export function useMusicHome() {
 
 export function useMusicChipFilter(chip: MusicHomeChip | null) {
   const [items, setItems] = useState<YTItem[]>([]);
+  // The first page's titled shelves, when the page has several.
+  const [sections, setSections] = useState<MoodGenreSection[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -206,6 +208,7 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
   useEffect(() => {
     const req = ++reqRef.current;
     contRef.current = null;
+    setSections([]);
     if (!browseId) {
       setItems([]);
       setError(null);
@@ -219,6 +222,7 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
       .then((res) => {
         if (reqRef.current !== req) return;
         setItems(res.items);
+        setSections(res.sections ?? []);
         contRef.current = res.continuation ?? null;
       })
       .catch((e) => {
@@ -247,5 +251,5 @@ export function useMusicChipFilter(chip: MusicHomeChip | null) {
     }
   }, [browseId, params]);
 
-  return { items, loading, error, reload: () => setRetryKey((key) => key + 1), loadMore, hasMore: !!contRef.current, loadingMore };
+  return { items, sections, loading, error, reload: () => setRetryKey((key) => key + 1), loadMore, hasMore: !!contRef.current, loadingMore };
 }

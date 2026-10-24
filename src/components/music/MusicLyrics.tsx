@@ -39,6 +39,8 @@ interface MusicLyricsProps {
   isSynced: boolean;
   loading: boolean;
   providerName: string;
+  /** A credit shown under plain lyrics, as their source requires. */
+  source?: string | null;
   accent: Rgb | null;
   onSeek: (seconds: number) => void;
   className?: string;
@@ -50,6 +52,7 @@ export function MusicLyrics({
   isSynced,
   loading,
   providerName,
+  source,
   onSeek,
   className = "",
 }: MusicLyricsProps) {
@@ -96,6 +99,11 @@ export function MusicLyrics({
                 {line.text}
               </p>
             ))}
+            {source ? (
+              <p className="mt-6 text-sm font-medium" style={{ color: rgba(expressive, 0.55) }}>
+                {source}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

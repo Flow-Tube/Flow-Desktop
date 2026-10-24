@@ -328,10 +328,23 @@ export interface QueuePage {
   radioParams?: string | null;
 }
 
+export interface MoodGenreSection {
+  title: string;
+  items: YTItem[];
+}
+
 export interface MoodGenrePage {
   title: string;
   items: YTItem[];
   continuation: string | null;
+  /** The page's shelves with their titles, when it has more than one. */
+  sections?: MoodGenreSection[];
+}
+
+/** A song's plain lyrics and the credit shown under them. */
+export interface MusicLyrics {
+  text: string;
+  source: string | null;
 }
 
 export interface MusicStreamInfo {

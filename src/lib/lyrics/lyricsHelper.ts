@@ -92,10 +92,12 @@ export async function getLyrics(
     if (cd > Date.now()) continue;
 
     try {
-      const raw = await withTimeout(
+      const answer = await withTimeout(
         provider.getLyrics(videoId, cleanedTitle, cleanedArtist, durationSec, album),
         PROVIDER_TIMEOUT_MS,
       );
+      const raw = Array.isArray(answer) ? answer : answer?.entries;
+      const source = Array.isArray(answer) ? null : answer?.source ?? null;
       if (!raw || raw.length === 0) continue;
 
       const entries = filterCreditLines(normalizeEntries(sorted(raw)));
@@ -104,11 +106,11 @@ export async function getLyrics(
       if (entriesAreSynced(entries)) {
         cache.setMemory(videoId, entries);
         cache.setDisk(videoId, entries);
-        return { entries, provider: provider.name };
+        return { entries, provider: provider.name, source };
       }
       if (!fallback) {
         cache.setDisk(videoId, entries);
-        fallback = { entries, provider: provider.name };
+        fallback = { entries, provider: provider.name, source };
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

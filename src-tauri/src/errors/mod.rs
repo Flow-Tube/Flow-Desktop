@@ -57,6 +57,18 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
+    /// A scrobbling service refused the user name, password or token; the text is its own.
+    #[error("{0}")]
+    ScrobbleSignInRejected(String),
+
+    /// Last.fm sign-in needs an API key this build does not have.
+    #[error("{0}")]
+    ScrobbleKeyMissing(String),
+
+    /// The system keychain that holds scrobbling sessions cannot be used.
+    #[error("Keychain error: {0}")]
+    Keychain(String),
+
     #[error("Streaming error: {0}")]
     #[allow(dead_code)]
     Streaming(String),
@@ -140,6 +152,9 @@ impl From<AppError> for ErrorResponse {
             AppError::Network(_) => "network",
             AppError::RateLimited(_) => "rateLimited",
             AppError::Database(_) => "database",
+            AppError::ScrobbleSignInRejected(_) => "scrobbleSignInRejected",
+            AppError::ScrobbleKeyMissing(_) => "scrobbleKeyMissing",
+            AppError::Keychain(_) => "keychain",
             AppError::Streaming(_) => "streaming",
             AppError::MediaDecode(_) => "mediaDecode",
             AppError::StreamExpired(_) => "streamExpired",
@@ -163,7 +178,7 @@ impl From<AppError> for ErrorResponse {
                 tracing::error!(kind, error = %message, cause = %cause, "backend_error")
             }
             "extractor" | "streaming" | "validation" | "botCheckRequired" | "networkWall"
-            | "network" | "rateLimited" | "mediaDecode" | "streamExpired" => {
+            | "network" | "rateLimited" | "mediaDecode" | "streamExpired" | "keychain" => {
                 tracing::warn!(kind, error = %message, cause = %cause, "backend_error")
             }
             _ => tracing::debug!(kind, error = %message, "backend_error"),
@@ -196,6 +211,15 @@ mod tests {
             (AppError::MediaDecode("d".into()), "mediaDecode"),
             (AppError::StreamExpired("x".into()), "streamExpired"),
             (AppError::Database(sqlx::Error::RowNotFound), "database"),
+            (
+                AppError::ScrobbleSignInRejected("s".into()),
+                "scrobbleSignInRejected",
+            ),
+            (
+                AppError::ScrobbleKeyMissing("k".into()),
+                "scrobbleKeyMissing",
+            ),
+            (AppError::Keychain("c".into()), "keychain"),
             (AppError::Internal("i".into()), "internal"),
         ];
         for (error, expected_kind) in cases {

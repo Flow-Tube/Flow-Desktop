@@ -1479,6 +1479,7 @@ dependencies = [
  "hmac",
  "icu_properties",
  "icu_segmenter",
+ "libloading",
  "local-ip-address",
  "lofty",
  "mp4",

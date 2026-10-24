@@ -97,6 +97,7 @@ use commands::sync::{
     sync_cancel, sync_device_info, sync_host_receive, sync_respond_consent, sync_scan_join,
     sync_start_host, sync_status,
 };
+use commands::tray::{music_tray_hide, music_tray_supported, music_tray_update};
 use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_about, get_channel_details, get_channel_page, get_channel_tab,
@@ -392,6 +393,7 @@ pub fn run() {
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
             app.manage(DiscordPresence::new());
+            app.manage(services::music_tray::MusicTray::default());
 
             // Initialize and manage streaming proxy
             let (streaming_manager, proxy_listeners) = streaming::proxy::StreamingManager::new();
@@ -643,7 +645,11 @@ pub fn run() {
             check_subscriptions_now,
             // --- Discord Rich Presence ---
             set_discord_presence,
-            clear_discord_presence
+            clear_discord_presence,
+            // --- Music tray ---
+            music_tray_supported,
+            music_tray_update,
+            music_tray_hide
         ])
         .build(context)
         .expect("error while building Flow Desktop")

@@ -465,9 +465,10 @@ impl MusicService {
         &self,
         video_id: &str,
         audio_quality: MusicAudioQuality,
+        prefer_aac: bool,
     ) -> AppResult<MusicStreamInfo> {
         self.client
-            .resolve_music_stream(video_id, audio_quality)
+            .resolve_music_stream(video_id, audio_quality, prefer_aac)
             .await
     }
 }

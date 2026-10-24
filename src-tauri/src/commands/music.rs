@@ -393,6 +393,7 @@ pub async fn lyrics_http_get(
 pub async fn get_music_stream(
     video_id: String,
     audio_quality: Option<String>,
+    prefer_aac: Option<bool>,
     music: State<'_, MusicService>,
     streaming_manager: State<'_, StreamingManager>,
 ) -> CmdResult<MusicStreamInfo> {
@@ -405,7 +406,7 @@ pub async fn get_music_stream(
         .unwrap_or_default();
 
     let mut info = music
-        .resolve_stream(&video_id, audio_quality)
+        .resolve_stream(&video_id, audio_quality, prefer_aac.unwrap_or(false))
         .await
         .map_err(ErrorResponse::from)?;
 

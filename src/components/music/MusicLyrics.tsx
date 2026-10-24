@@ -1,130 +1,86 @@
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { useCallback, useMemo } from "react";
 
-import type { LyricsEntry } from "../../lib/lyrics/types";
+import type { SongItem } from "../../types/music";
 import type { Rgb } from "../../lib/useDominantColor";
-import { entriesAreSynced } from "../../lib/lyrics/sync";
-import { getString } from "../../lib/i18n/index";
-import { LyricsCanvas } from "./LyricsCanvas";
+import type { LyricsAlign } from "../../lib/lyrics/display/presentation";
+import { useLyrics } from "../../lib/lyrics/useLyrics";
+import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
+import { useBoolPref, usePreference } from "../../lib/usePreference";
+import { SETTINGS } from "../../lib/settings/schema";
+import { useTheme } from "../../lib/useTheme";
+import { LyricsPanel } from "./lyrics/LyricsPanel";
 
-const rgba = (c: Rgb, a: number) => `rgba(${c.r},${c.g},${c.b},${a})`;
+/**
+ * Android's LARGE (44) and PANE (30) lyric sizes, in CSS px: the full-bleed view reads from a
+ * distance like a tablet's, the side pane is narrower than a phone.
+ */
+const TEXT_SIZE = { full: 44, pane: 30 } as const;
+/** A full-width desktop window would make lines too long to read, so rows stop growing here. */
+const MAX_ROW_WIDTH = { full: 1100, pane: Number.POSITIVE_INFINITY } as const;
 
-function buildLines(entries: LyricsEntry[], plain: string | null, synced: boolean): LyricsEntry[] {
-  if (synced && entries.length > 0) {
-    const sorted = [...entries].sort((a, b) => a.time - b.time);
-    return [{ time: 0, text: "" }, ...sorted];
-  }
-  const src = plain ?? entries.map((e) => e.text).join("\n");
-  return src
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .map((text, i) => ({ time: 1_000_000 + i, text }));
+function hexToRgb(hex: string): Rgb {
+  const value = hex.replace("#", "");
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  };
 }
 
-interface MusicLyricsProps {
-  entries: LyricsEntry[];
-  plain: string | null;
-  isSynced: boolean;
-  loading: boolean;
-  providerName: string;
-  /** A credit shown under plain lyrics, as their source requires. */
-  source?: string | null;
-  /** The player's control colour; lyrics are drawn in it, as on Android. */
-  accent: Rgb;
-  onSeek: (seconds: number) => void;
+const isAlign = (value: string): value is LyricsAlign => value === "left" || value === "center" || value === "right";
+
+export interface MusicLyricsProps {
+  track: SongItem | null;
+  /** The full-bleed lyrics view, or a side pane next to the song. */
+  variant: "full" | "pane";
+  /** The player's accent. It is used once there is a `backdrop` to check its contrast against. */
+  accent: Rgb | null;
+  /** The colour the lyrics are drawn over. Without one the lyrics use the theme's text colour. */
+  backdrop: Rgb | null;
+  /** False while the host keeps the lyrics mounted but out of sight: their loops stop. */
+  active: boolean;
   className?: string;
 }
 
-export function MusicLyrics({
-  entries,
-  plain,
-  isSynced,
-  loading,
-  providerName,
-  source,
-  accent,
-  onSeek,
-  className = "",
-}: MusicLyricsProps) {
-  const synced = isSynced && entriesAreSynced(entries);
-  const lines = buildLines(entries, plain, synced);
-  const expressive = accent;
+/** The lyrics of the song playing, for the full-bleed view or a side pane. */
+export function MusicLyrics({ track, variant, accent, backdrop, active, className = "" }: MusicLyricsProps) {
+  const lyrics = useLyrics(track);
+  const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
+  const seek = useMusicPlayerStore((s) => s.seek);
+  const [alignPref] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
+  const [showTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
+  const [showRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const { theme, variant: themeVariant } = useTheme();
+  const textColor = useMemo(() => hexToRgb(theme.variants[themeVariant].onSurface), [theme, themeVariant]);
+  const lyricAccent = backdrop && accent ? accent : textColor;
 
-  if (loading) {
-    return (
-      <div className={`grid place-items-center ${className}`}>
-        <Loader2 className="h-7 w-7 animate-spin" style={{ color: rgba(expressive, 0.8) }} />
-      </div>
-    );
-  }
-
-  if (lines.length === 0 || (!synced && !plain && entries.length === 0)) {
-    return (
-      <div className={`grid place-items-center ${className}`}>
-        <p className="text-lg text-chrome-neutral-400">{getString("music_lyrics_unavailable")}</p>
-      </div>
-    );
-  }
+  const onSeekTo = useCallback((lineTimeMs: number) => seek(lineTimeMs / 1000), [seek]);
 
   return (
     <div className={`relative ${className}`}>
-      {synced ? (
-        <LyricsCanvas lines={lines} accent={expressive} onSeek={onSeek} className="h-full w-full" />
-      ) : (
-        <div
-          className="hide-scrollbar h-full overflow-y-auto px-6"
-          style={{
-            maskImage: "linear-gradient(to bottom, transparent 0%, #000 15%, #000 80%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, #000 15%, #000 80%, transparent 100%)",
-          }}
-        >
-          <div className="mx-auto flex max-w-3xl flex-col items-center gap-4 py-[28vh] text-center">
-            {lines.map((line, i) => (
-              <p
-                key={i}
-                className="font-extrabold leading-snug tracking-tight"
-                style={{ color: rgba(expressive, 0.82), fontSize: "clamp(1.6rem,2.6vw,2.2rem)" }}
-              >
-                {line.text}
-              </p>
-            ))}
-            {source ? (
-              <p className="mt-6 text-sm font-medium" style={{ color: rgba(expressive, 0.55) }}>
-                {source}
-              </p>
-            ) : null}
-          </div>
-        </div>
+      <LyricsPanel
+        lyrics={lyrics.plain}
+        syncedLyrics={lyrics.isSynced ? lyrics.entries : []}
+        isLoading={lyrics.loading}
+        providerName={lyrics.providerName}
+        accent={lyricAccent}
+        backdrop={backdrop}
+        baseTextSize={TEXT_SIZE[variant]}
+        maxRowWidth={MAX_ROW_WIDTH[variant]}
+        textAlign={isAlign(alignPref) ? alignPref : "center"}
+        showTranslation={showTranslation}
+        showRomanization={showRomanization}
+        syncOffsetMs={0}
+        active={active}
+        isPlaying={isPlaying}
+        onSeekTo={onSeekTo}
+        className="h-full w-full"
+      />
+      {lyrics.source && !lyrics.isSynced && (
+        <p className="pointer-events-none absolute inset-x-0 top-[58px] z-10 text-center text-xs font-medium text-chrome-neutral-400">
+          {lyrics.source}
+        </p>
       )}
-
-      {providerName ? <ProviderTag name={providerName} accent={expressive} /> : null}
     </div>
-  );
-}
-
-function ProviderTag({ name, accent }: { name: string; accent: Rgb }) {
-  const [show, setShow] = useState(true);
-  useEffect(() => {
-    setShow(true);
-    const t = window.setTimeout(() => setShow(false), 3000);
-    return () => window.clearTimeout(t);
-  }, [name]);
-  return (
-    <AnimatePresence>
-      {show && (
-        <motion.span
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.6 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.6 }}
-          className="pointer-events-none absolute left-1/2 top-16 z-10 -translate-x-1/2 text-xs uppercase tracking-widest"
-          style={{ color: rgba(accent, 0.6) }}
-        >
-          {name}
-        </motion.span>
-      )}
-    </AnimatePresence>
   );
 }

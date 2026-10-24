@@ -74,6 +74,9 @@ export const SETTINGS = {
   SLEEP_TIMER_CLOSE_APP_ON_EXPIRY: "sleep_timer_close_app_on_expiry",
   LYRICS_PROVIDER_ORDER: "lyrics_provider_order",
   LYRICS_PROVIDER_ENABLED_STATES: "lyrics_provider_enabled_states",
+  LYRICS_TEXT_ALIGN: "lyrics_text_align",
+  LYRICS_SHOW_TRANSLATION: "lyrics_show_translation",
+  LYRICS_SHOW_ROMANIZATION: "lyrics_show_romanization",
 
   VIDEO_TITLE_MAX_LINES: "video_title_max_lines",
   GRID_COLUMNS: "grid_columns",
@@ -296,6 +299,9 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SLEEP_TIMER_CLOSE_APP_ON_EXPIRY, "player", false, "wired"),
   str(SETTINGS.LYRICS_PROVIDER_ORDER, "player", "", "wired"),
   json(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, "player", "{}", "wired"),
+  str(SETTINGS.LYRICS_TEXT_ALIGN, "player", "center", "wired", ["left", "center", "right"]),
+  bool(SETTINGS.LYRICS_SHOW_TRANSLATION, "player", true, "wired"),
+  bool(SETTINGS.LYRICS_SHOW_ROMANIZATION, "player", true, "wired"),
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
   num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),

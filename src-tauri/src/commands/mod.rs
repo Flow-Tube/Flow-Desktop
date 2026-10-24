@@ -13,5 +13,6 @@ pub mod pip;
 pub mod recommendation;
 pub mod shorts;
 pub mod sync;
+pub mod tray;
 pub mod window;
 pub mod youtube;

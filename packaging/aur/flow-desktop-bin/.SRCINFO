@@ -22,6 +22,7 @@ pkgbase = flow-desktop-bin
 	depends = nodejs
 	depends = webkit2gtk-4.1
 	optdepends = gst-plugins-ugly: more audio and video codecs
+	optdepends = libayatana-appindicator: music controls in the system tray
 	provides = flow-desktop
 	conflicts = flow-desktop
 	options = !strip

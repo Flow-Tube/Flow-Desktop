@@ -94,16 +94,24 @@ pub fn body_visitor(payload: &Value) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
-/// Give `payload` this client's context, carrying `visitor`, unless the caller
-/// built its own. Returns whether the context was added here.
-pub fn ensure_context(payload: &mut Value, client: &YouTubeClient, visitor: Option<&str>) -> bool {
+/// Give `payload` this client's context in `language`, carrying `visitor`,
+/// unless the caller built its own. Returns whether the context was added here.
+pub fn ensure_context(
+    payload: &mut Value,
+    client: &YouTubeClient,
+    visitor: Option<&str>,
+    language: &str,
+) -> bool {
     let Some(object) = payload.as_object_mut() else {
         return false;
     };
     if object.contains_key("context") {
         return false;
     }
-    object.insert("context".to_string(), client.context(visitor, None));
+    object.insert(
+        "context".to_string(),
+        client.context_in(visitor, None, language),
+    );
     true
 }
 
@@ -187,12 +195,12 @@ mod tests {
     #[test]
     fn context_is_added_only_when_missing() {
         let mut body = json!({ "browseId": "FEwhat_to_watch" });
-        assert!(ensure_context(&mut body, &WEB, Some("v1")));
+        assert!(ensure_context(&mut body, &WEB, Some("v1"), "en"));
         assert_eq!(body_visitor(&body), Some("v1"));
         assert_eq!(body["context"]["client"]["platform"], "DESKTOP");
 
         let mut own = json!({ "context": { "client": { "clientName": "X" } } });
-        assert!(!ensure_context(&mut own, &WEB, Some("v1")));
+        assert!(!ensure_context(&mut own, &WEB, Some("v1"), "en"));
         assert_eq!(body_visitor(&own), None);
 
         strip_visitor(&mut body);

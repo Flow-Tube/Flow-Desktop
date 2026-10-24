@@ -4,6 +4,7 @@ pub mod context;
 pub mod gate_tracker;
 pub(crate) mod hidden_webview;
 pub mod http;
+pub mod locale;
 pub(crate) mod playback_session;
 pub(crate) mod player_js;
 pub(crate) mod player_requests;

@@ -115,7 +115,12 @@ impl InnertubeClient {
             false
         } else {
             let visitor = self.fetch_visitor_data().await;
-            ensure_context(payload, client, visitor.as_deref())
+            let language = if endpoint == "player" {
+                "en".to_string()
+            } else {
+                super::locale::content_language()
+            };
+            ensure_context(payload, client, visitor.as_deref(), &language)
         };
         let visitor = body_visitor(payload).map(ToOwned::to_owned);
         match send(http, &spec, payload, visitor.as_deref()).await {

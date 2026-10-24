@@ -90,10 +90,17 @@ impl YouTubeClient {
     /// deterministic regardless of where the user is.
     #[must_use]
     pub fn context(&self, visitor_data: Option<&str>, gl: Option<&str>) -> Value {
+        self.context_in(visitor_data, gl, &super::locale::content_language())
+    }
+
+    /// [`Self::context`] in a given host language. Player requests use English,
+    /// which every playability rule reads.
+    #[must_use]
+    pub fn context_in(&self, visitor_data: Option<&str>, gl: Option<&str>, hl: &str) -> Value {
         let mut client = json!({
             "clientName": self.name,
             "clientVersion": self.version,
-            "hl": "en",
+            "hl": hl,
             "gl": gl.unwrap_or("US"),
             // Times YouTube writes out ("Scheduled for 7:00 PM") are rendered in
             // this offset, so it is the device's own.
@@ -137,7 +144,7 @@ impl YouTubeClient {
         visitor_data: Option<&str>,
         po_token: Option<&str>,
     ) -> Value {
-        let mut context = self.context(visitor_data, None);
+        let mut context = self.context_in(visitor_data, None, "en");
         if self.is_embedded {
             context["thirdParty"] = json!({
                 "embedUrl": format!("https://www.youtube.com/watch?v={video_id}")

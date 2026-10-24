@@ -1,4 +1,4 @@
-use crate::api::innertube::core::remote_decoder;
+use crate::api::innertube::core::{locale, remote_decoder};
 use crate::api::innertube::extractors::audio_preference;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
@@ -94,9 +94,10 @@ pub async fn set_setting(
 }
 
 /// Settings the backend acts on itself, applied at startup and whenever saved.
-pub(crate) const BACKEND_SETTINGS: [&str; 2] = [
+pub(crate) const BACKEND_SETTINGS: [&str; 3] = [
     remote_decoder::SETTING_KEY,
     audio_preference::STABLE_VOLUME_SETTING,
+    locale::CONTENT_LANGUAGE_SETTING,
 ];
 
 pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
@@ -105,6 +106,8 @@ pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
         remote_decoder::set_enabled(enabled);
     } else if key == audio_preference::STABLE_VOLUME_SETTING {
         audio_preference::set_stable_volume(enabled);
+    } else if key == locale::CONTENT_LANGUAGE_SETTING {
+        locale::set_content_language(value);
     }
 }
 

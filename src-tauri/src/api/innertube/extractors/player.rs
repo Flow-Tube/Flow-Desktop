@@ -1723,7 +1723,7 @@ impl InnertubeClient {
         let _priority = playback_priority().start_metadata().await;
         let visitor_data = self.fetch_visitor_data().await;
         let mut payload = serde_json::json!({
-            "context": clients::VISIONOS.context(visitor_data.as_deref(), None),
+            "context": clients::VISIONOS.context_in(visitor_data.as_deref(), None, "en"),
             "videoId": video_id,
             "contentCheckOk": true,
             "racyCheckOk": true,

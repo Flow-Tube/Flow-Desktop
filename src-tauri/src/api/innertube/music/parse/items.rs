@@ -101,6 +101,16 @@ fn plain_byline(r: &Value) -> Vec<String> {
     parts
 }
 
+/// The count part of a playlist's byline ("99 songs", "3K views"), never its
+/// type label or its author.
+fn count_text(parts: Vec<String>) -> Option<String> {
+    parts
+        .into_iter()
+        .rev()
+        .find(|part| part.chars().any(|c| c.is_ascii_digit()))
+        .map(|part| part.trim().to_string())
+}
+
 fn episode_from_row(r: &Value, title: String, thumbnail: Option<String>) -> Option<YTItem> {
     let show = (1..r["flexColumns"].as_array().map_or(0, Vec::len))
         .flat_map(|column| column_runs(r, column))
@@ -180,7 +190,7 @@ pub fn parse_responsive_list_item(r: &Value) -> Option<YTItem> {
                 id,
                 title,
                 author: parse_song_meta(r).0.into_iter().next(),
-                song_count_text: flex_text(r, 1),
+                song_count_text: count_text(plain_byline(r)),
                 thumbnail,
             }))
         }
@@ -263,10 +273,20 @@ pub fn parse_two_row_item(r: &Value) -> Option<YTItem> {
             let (artists, year) = parse_artists_and_year(subtitle);
             Some(YTItem::Album(AlbumItem {
                 browse_id: browse_id(nav).unwrap_or_default(),
-                playlist_id: nav["watchPlaylistEndpoint"]["playlistId"]
-                    .as_str()
-                    .map(ToOwned::to_owned)
-                    .unwrap_or_default(),
+                // The card's play button holds the album's playlist, so Play needs
+                // no browse of the album first.
+                playlist_id:
+                    nav["watchPlaylistEndpoint"]["playlistId"]
+                        .as_str()
+                        .or_else(|| {
+                            let play = &r["thumbnailOverlay"]["musicItemThumbnailOverlayRenderer"]
+                                ["content"]["musicPlayButtonRenderer"]["playNavigationEndpoint"];
+                            play["watchPlaylistEndpoint"]["playlistId"]
+                                .as_str()
+                                .or_else(|| play["watchEndpoint"]["playlistId"].as_str())
+                        })
+                        .map(ToOwned::to_owned)
+                        .unwrap_or_default(),
                 title,
                 artists: (!artists.is_empty()).then_some(artists),
                 year,
@@ -291,7 +311,14 @@ pub fn parse_two_row_item(r: &Value) -> Option<YTItem> {
                 id,
                 title,
                 author: parse_artists_and_year(subtitle).0.into_iter().next(),
-                song_count_text: runs_text(subtitle),
+                song_count_text: count_text(
+                    subtitle["runs"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|run| run["text"].as_str().map(ToOwned::to_owned))
+                        .collect(),
+                ),
                 thumbnail,
             }))
         }
@@ -528,6 +555,42 @@ mod tests {
             panic!("artist")
         };
         assert!(!artist.is_profile);
+    }
+
+    #[test]
+    fn a_playlist_row_counts_its_songs_not_its_type() {
+        let r = row(
+            &[
+                vec![run("Instrumental Pop Covers")],
+                vec![
+                    run("Playlist"),
+                    run(" \u{2022} "),
+                    run("YouTube Music"),
+                    run(" \u{2022} "),
+                    run("99 songs"),
+                ],
+            ],
+            &json!({ "navigationEndpoint": linked("", "VLRDCLAK5uy_k0", "MUSIC_PAGE_TYPE_PLAYLIST")["navigationEndpoint"] }),
+        );
+        let Some(YTItem::Playlist(playlist)) = parse_responsive_list_item(&r) else {
+            panic!("playlist")
+        };
+        assert_eq!(playlist.song_count_text.as_deref(), Some("99 songs"));
+    }
+
+    #[test]
+    fn a_two_row_album_plays_from_its_overlay() {
+        let card = json!({
+            "title": { "runs": [{ "text": "Starboy" }] },
+            "navigationEndpoint": linked("", "MPREb_FWIMEPTHFsY", "MUSIC_PAGE_TYPE_ALBUM")["navigationEndpoint"],
+            "thumbnailOverlay": { "musicItemThumbnailOverlayRenderer": { "content": { "musicPlayButtonRenderer": {
+                "playNavigationEndpoint": { "watchPlaylistEndpoint": { "playlistId": "OLAK5uy_starboy" } }
+            } } } }
+        });
+        let Some(YTItem::Album(album)) = parse_two_row_item(&card) else {
+            panic!("album")
+        };
+        assert_eq!(album.playlist_id, "OLAK5uy_starboy");
     }
 
     #[test]

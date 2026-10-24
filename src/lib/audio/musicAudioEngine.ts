@@ -1,4 +1,4 @@
-import { loudnessFactor } from "../loudness";
+import { loudnessFactor, MUSIC_MAX_CUT_DB } from "../loudness";
 import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
@@ -295,7 +295,7 @@ class MusicAudioEngine {
   }
 
   private normalizationFactor(loudnessDb: number | null): number {
-    return loudnessFactor(loudnessDb, this.normalizationEnabled);
+    return loudnessFactor(loudnessDb, this.normalizationEnabled, MUSIC_MAX_CUT_DB);
   }
 
   private applyGain(): void {

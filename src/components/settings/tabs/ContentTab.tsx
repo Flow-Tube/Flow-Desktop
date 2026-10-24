@@ -14,6 +14,7 @@ import {
 } from '../../../lib/deepFlow';
 import { useAppSettingsStore } from '../../../store/useAppSettingsStore';
 import { REGION_OPTIONS } from '../../../lib/regionOptions';
+import { CONTENT_LANGUAGE_OPTIONS } from '../../../lib/contentLanguages';
 import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridColumns';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 
@@ -46,6 +47,7 @@ export function ContentTab() {
   const [notificationInterval, setNotificationInterval] = usePreference(SETTINGS.NOTIFICATION_CHECK_INTERVAL, '360');
   const [regionPicker, setRegionPicker] = useBoolPref(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, true);
   const [trendingRegion, setTrendingRegion] = usePreference(SETTINGS.TRENDING_REGION, 'US');
+  const [contentLanguage, setContentLanguage] = usePreference(SETTINGS.CONTENT_LANGUAGE, '');
   const [deepFlowExpireHours, setDeepFlowExpireHours] = usePreference(SETTINGS.DEEP_FLOW_EXPIRE_HOURS, '4');
   const [deepFlowSaveHistory, setDeepFlowSaveHistory] = useBoolPref(SETTINGS.DEEP_FLOW_SAVE_HISTORY, false);
 
@@ -191,6 +193,13 @@ export function ContentTab() {
       <SettingsGroup title={getString('settings_group_region')}>
         <SettingItem title={getString('settings_region_picker')} description={getString('settings_region_picker_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)}><ToggleSwitch checked={regionPicker} onChange={setRegionPicker} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)} /></SettingItem>
         <SettingItem title={getString('settings_trending_region')} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)}><Select value={trendingRegion} onChange={setTrendingRegion} options={REGION_OPTIONS} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)} /></SettingItem>
+        <SettingItem title={getString('settings_content_language')} description={getString('settings_content_language_desc')}>
+          <Select
+            value={contentLanguage}
+            onChange={setContentLanguage}
+            options={[{ value: '', label: getString('settings_content_language_default') }, ...CONTENT_LANGUAGE_OPTIONS]}
+          />
+        </SettingItem>
       </SettingsGroup>
     </div>
   );

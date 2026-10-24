@@ -1556,5 +1556,8 @@
   "subscriptions_failed_retry": "Try again",
   "search_role_profile": "Profile",
   "settings_video_loudness": "Normalize Volume Across Videos",
-  "settings_video_loudness_desc": "Turns down videos mastered louder than YouTube's target, so one video is not much louder than the next."
+  "settings_video_loudness_desc": "Turns down videos mastered louder than YouTube's target, so one video is not much louder than the next.",
+  "settings_content_language": "Content Language",
+  "settings_content_language_desc": "The language YouTube writes dates, view counts, labels and its translated titles in. Pages you open next follow it.",
+  "settings_content_language_default": "English (default)"
 }

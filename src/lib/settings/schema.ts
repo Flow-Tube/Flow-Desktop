@@ -95,6 +95,7 @@ export const SETTINGS = {
   NOTIFICATION_CHECK_INTERVAL: "notif_check_interval_minutes",
   SHOW_REGION_PICKER_IN_EXPLORE: "show_region_picker_in_explore",
   TRENDING_REGION: "trending_region",
+  CONTENT_LANGUAGE: "content_language",
   DEEP_FLOW_ACTIVE: "deep_flow_active",
   DEEP_FLOW_ACTIVATED_AT: "deep_flow_activated_at",
   DEEP_FLOW_EXPIRE_HOURS: "deep_flow_expire_hours",
@@ -299,6 +300,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.NOTIFICATION_CHECK_INTERVAL, "content", "360", "wired", ["15", "30", "60", "180", "360", "720", "1440"]),
   bool(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, "content", true, "wired"),
   str(SETTINGS.TRENDING_REGION, "content", "US", "wired"),
+  str(SETTINGS.CONTENT_LANGUAGE, "content", "", "wired"),
   // Session state, not a preference: exporting it can permanently mute history recording
   // on the restoring device (its paired activated_at timestamp is internal too).
   bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired", "internal"),

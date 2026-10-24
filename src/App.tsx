@@ -54,6 +54,7 @@ import { ToastHost } from "./components/ui/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
 import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
 import { MusicOverlay } from "./components/music/MusicOverlay";
+import { EqualizerDialog } from "./components/music/eq/EqualizerDialog";
 import { GlobalVideoPlayer } from "./components/watch/GlobalVideoPlayer";
 import { PipWindowController } from "./components/pip/PipWindowController";
 import { AddToAlbumModal } from "./components/music/AddToAlbumModal";
@@ -262,6 +263,7 @@ function App() {
         <GlobalMusicDock />
         <MusicOverlay />
       </LayoutGroup>
+      <EqualizerDialog />
       <AddToAlbumModal />
       <AddTracksToAlbumModal />
       <AddToPlaylistModal />

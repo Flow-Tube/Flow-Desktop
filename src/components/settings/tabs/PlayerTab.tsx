@@ -37,6 +37,7 @@ export function PlayerTab() {
   const [followLightTheme, setFollowLightTheme] = useBoolPref(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME);
   const [restoreMusicQueue, setRestoreMusicQueue] = useBoolPref(SETTINGS.MUSIC_RESTORE_QUEUE, true);
   const [resumeLongTracks, setResumeLongTracks] = useBoolPref(SETTINGS.MUSIC_RESUME_LONG_TRACKS, false);
+  const [sleepTimerButton, setSleepTimerButton] = useBoolPref(SETTINGS.MUSIC_SLEEP_TIMER_BUTTON, false);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -242,6 +243,9 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_music_resume_long_tracks')} description={getString('settings_music_resume_long_tracks_desc')}>
           <ToggleSwitch checked={resumeLongTracks} onChange={setResumeLongTracks} />
+        </SettingItem>
+        <SettingItem title={getString('settings_music_sleep_timer_button')} description={getString('settings_music_sleep_timer_button_desc')}>
+          <ToggleSwitch checked={sleepTimerButton} onChange={setSleepTimerButton} />
         </SettingItem>
       </SettingsGroup>
     </div>

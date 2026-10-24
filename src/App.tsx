@@ -151,7 +151,7 @@ function App() {
     <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
       <ThemeController />
       <TitleBar />
-      <div className="relative min-h-0 flex-1">
+      <div data-app-content className="relative min-h-0 flex-1">
       <Routes>
         <Route path="/onboarding" element={<Onboarding />} />
         

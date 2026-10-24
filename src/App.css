@@ -276,6 +276,11 @@
   animation: sidebar-slide-in 0.2s cubic-bezier(0.2, 0, 0, 1) forwards;
 }
 
+/* The routed page while the full music player covers it (useCoverAppContent). */
+[data-app-content][data-covered] {
+  content-visibility: hidden;
+}
+
 @keyframes music-wave {
   0%,
   100% {

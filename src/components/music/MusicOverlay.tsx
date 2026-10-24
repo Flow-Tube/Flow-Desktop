@@ -21,6 +21,7 @@ import {
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
+import { useCoverAppContent } from "../../lib/useCoverAppContent";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { useLikesStore } from "../../store/useLikesStore";
 import { useUiStore } from "../../store/useUiStore";
@@ -109,6 +110,12 @@ export function MusicOverlay() {
   );
 
   const open = overlayOpen;
+  // The page only goes away once the fade-in has finished covering it.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (!open) setEntered(false);
+  }, [open]);
+  useCoverAppContent(open && entered);
   const isQueue = viewState === "queue";
   const isLyrics = viewState === "lyrics";
   const loading = isBuffering || loadingStreamId !== null;
@@ -152,6 +159,10 @@ export function MusicOverlay() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          onAnimationComplete={(definition) => {
+            // Also fires when the exit fade ends; only the fade-in counts.
+            if ((definition as { opacity?: number }).opacity === 1) setEntered(true);
+          }}
           className="fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-chrome-neutral-950"
         >
           <AmbientBackdrop src={currentTrack.thumbnail} accent={accent} style={backgroundStyle} />

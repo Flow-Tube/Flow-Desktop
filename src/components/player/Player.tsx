@@ -7,7 +7,14 @@ import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory, type SponsorBlockAction } from "../../store/useSettingsStore";
-import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../../types/video";
+import type {
+  AudioTrack,
+  CaptionTrack,
+  HeatmapMarker,
+  StoryboardLevel,
+  StreamVariant,
+  VideoChapter,
+} from "../../types/video";
 import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
@@ -76,6 +83,8 @@ type PlayerProps = {
   sourceMode?: string;
   className?: string;
   chapters?: VideoChapter[];
+  heatmap?: HeatmapMarker[];
+  storyboard?: StoryboardLevel[];
 };
 
 type DashBitrateInfo = {
@@ -334,6 +343,8 @@ export const Player: React.FC<PlayerProps> = ({
   sourceMode,
   className,
   chapters = [],
+  heatmap,
+  storyboard,
 }) => {
   const [activeQualityLabel, setActiveQualityLabel] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -2795,6 +2806,8 @@ export const Player: React.FC<PlayerProps> = ({
         isScrubbing={isScrubbing}
         setIsScrubbing={setIsScrubbing}
         chapters={chapters}
+        heatmap={heatmap}
+        storyboard={storyboard}
         activeQualityLabel={isDashPlayback ? (activeQualityLabel || undefined) : (qualities.find(q => q.localUrl === src)?.qualityLabel || undefined)}
       />
       )}

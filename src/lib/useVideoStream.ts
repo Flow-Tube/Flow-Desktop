@@ -13,7 +13,14 @@ import { filterByPreferredCodec, selectPreferredStreamVariant } from "./settings
 import { codecRank } from "./codecPreference";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import type { AudioTrack, CaptionTrack, StreamInfo, StreamVariant, VideoSummary } from "../types/video";
+import type {
+  AudioTrack,
+  CaptionTrack,
+  StoryboardLevel,
+  StreamInfo,
+  StreamVariant,
+  VideoSummary,
+} from "../types/video";
 
 export type SourceMode = "hls" | "dash-native" | "sabr-dash" | "direct" | "unavailable";
 
@@ -156,6 +163,8 @@ export interface VideoStream {
   streamVariants: StreamVariant[];
   captions: CaptionTrack[];
   audioTracks: AudioTrack[];
+  /** Seek-bar preview sheets. */
+  storyboard: StoryboardLevel[];
   dashManifestUrl: string | null;
   hlsManifestUrl: string | null;
   isLive: boolean;
@@ -189,6 +198,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const [streamVariants, setStreamVariants] = useState<StreamVariant[]>([]);
   const [captions, setCaptions] = useState<CaptionTrack[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
+  const [storyboard, setStoryboard] = useState<StoryboardLevel[]>([]);
   const [dashManifestUrl, setDashManifestUrl] = useState<string | null>(null);
   const [hlsManifestUrl, setHlsManifestUrl] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
@@ -235,6 +245,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       setDashManifestUrl(null);
       setHlsManifestUrl(null);
       setAudioTracks([]);
+      setStoryboard([]);
       setStreamVariants([]);
       publishCaptions([]);
       setIsLive(false);
@@ -293,6 +304,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         setStreamVariants(info.variants || []);
         publishCaptions(info.captions || []);
         setAudioTracks(info.audioTracks || []);
+        setStoryboard(info.storyboard ?? []);
         setIsLive(!!info.isLive);
 
         const canUseAdaptive = (info.audioTracks || []).some((track) => !!track.localUrl);
@@ -367,6 +379,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         setStreamVariants([]);
         publishCaptions([]);
         setAudioTracks([]);
+        setStoryboard([]);
         setDashManifestUrl(null);
         setHlsManifestUrl(null);
         setIsLive(false);
@@ -491,6 +504,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     setStreamVariants([]);
     publishCaptions([]);
     setAudioTracks([]);
+    setStoryboard([]);
     setSelectedQualityId("auto");
     setStreamError(null);
     setStreamErrorKind(null);
@@ -506,6 +520,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         setStreamVariants(info.variants || []);
         publishCaptions(info.captions || []);
         setAudioTracks(info.audioTracks || []);
+        setStoryboard(info.storyboard ?? []);
         setIsLive(!!info.isLive);
         const canUseAdaptive = (info.audioTracks || []).some((track) => !!track.localUrl);
         const preferredVariant = selectPreferredStreamVariant(
@@ -556,6 +571,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     streamVariants,
     captions,
     audioTracks,
+    storyboard,
     dashManifestUrl,
     hlsManifestUrl,
     isLive,

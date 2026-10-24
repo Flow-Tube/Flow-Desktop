@@ -25,7 +25,18 @@ import {
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
-import type { AudioTrack, CaptionTrack, StreamVariant, VideoChapter } from "../../types/video";
+import type {
+  AudioTrack,
+  CaptionTrack,
+  HeatmapMarker,
+  StoryboardLevel,
+  StreamVariant,
+  VideoChapter,
+} from "../../types/video";
+import { HeatmapStrip } from "./HeatmapStrip";
+import { PREVIEW_WIDTH, pickStoryboardLevel, storyboardFrameAt } from "../../lib/seekPreview";
+import { proxiedImage } from "../../lib/imageProxy";
+import { useImageProxyStore } from "../../store/useImageProxyStore";
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
 import {
@@ -95,6 +106,10 @@ export interface FlowPlayerControlsProps {
   setIsScrubbing: React.Dispatch<React.SetStateAction<boolean>>;
 
   chapters?: VideoChapter[];
+  /** The most-replayed graph drawn above the seek bar. */
+  heatmap?: HeatmapMarker[];
+  /** Preview frames shown while hovering the seek bar. */
+  storyboard?: StoryboardLevel[];
   activeQualityLabel?: string;
 }
 
@@ -179,6 +194,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   isScrubbing,
   setIsScrubbing,
   chapters = [],
+  heatmap,
+  storyboard,
   activeQualityLabel,
 }) => {
   const {
@@ -216,6 +233,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const hoverSegmentRef = useRef<HTMLSpanElement>(null);
   const hoverSegmentDotRef = useRef<HTMLSpanElement>(null);
   const hoverSegmentLabelRef = useRef<HTMLSpanElement>(null);
+  const hoverPreviewRef = useRef<HTMLDivElement>(null);
+  const proxyBase = useImageProxyStore((state) => state.base);
+  const previewLevel = pickStoryboardLevel(storyboard);
+  const previewHeight = previewLevel ? Math.round((previewLevel.height * PREVIEW_WIDTH) / previewLevel.width) : 0;
 
   const segments = React.useMemo(() => {
     if (isLive || !chapters || chapters.length === 0) {
@@ -357,9 +378,24 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     if (rect.width <= 0) return;
     // Clamp so the pill keeps tracking at the track edges during a drag.
     const x = Math.min(rect.width, Math.max(0, clientX - rect.left));
-    pill.style.left = `${x}px`;
+    // A preview frame is wider than the pill's text; keep it inside the player.
+    const half = previewLevel ? PREVIEW_WIDTH / 2 : 0;
+    pill.style.left = `${Math.min(rect.width - half, Math.max(half, x))}px`;
     pill.style.opacity = "1";
     const time = (x / rect.width) * duration;
+    const preview = hoverPreviewRef.current;
+    if (preview && previewLevel) {
+      // Sheets load only here, on hover, and each holds dozens of frames.
+      const frame = storyboardFrameAt(previewLevel, time);
+      const scale = PREVIEW_WIDTH / previewLevel.width;
+      const url = proxiedImage(frame.url, proxyBase);
+      if (preview.dataset.url !== url) {
+        preview.dataset.url = url;
+        preview.style.backgroundImage = `url("${url}")`;
+      }
+      preview.style.backgroundSize = `${frame.sheetWidth * scale}px ${frame.sheetHeight * scale}px`;
+      preview.style.backgroundPosition = `-${frame.x * scale}px -${frame.y * scale}px`;
+    }
     if (hoverTextRef.current) {
       const chapter = segments?.find((c) => time >= c.startSeconds && time <= c.endSeconds);
       hoverTextRef.current.textContent = chapter?.title
@@ -508,6 +544,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             onMouseUp={() => setIsScrubbing(false)}
             onClick={(event) => handlePointerSeek(event.clientX)}
           >
+            {!isLive && <HeatmapStrip markers={heatmap} duration={duration} />}
+
             {/* Split Chapter Seekbar Track — the whole track springs taller on hover/scrub, mirroring the mobile seekbar. */}
             <div className="relative flex h-full w-full select-none items-center gap-[3px] pointer-events-none">
               {segments.map((segment, idx) => {
@@ -596,6 +634,13 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 className="absolute bottom-8 -translate-x-1/2 flex flex-col items-center pointer-events-none z-50 opacity-0 transition-opacity duration-75"
                 style={{ left: 0 }}
               >
+                {previewLevel && (
+                  <div
+                    ref={hoverPreviewRef}
+                    className="mb-1.5 overflow-hidden rounded-lg border border-chrome-white/10 bg-chrome-black bg-no-repeat"
+                    style={{ width: PREVIEW_WIDTH, height: previewHeight }}
+                  />
+                )}
                 <div className="bg-chrome-black/80 border border-chrome-white/10 px-2 py-1 rounded-2xl text-chrome-white min-w-max text-center flex flex-col items-center gap-0.5 leading-tight">
                   <span ref={hoverTextRef} className="text-[12px] font-medium font-sans" />
                   <span

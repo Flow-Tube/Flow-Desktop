@@ -169,6 +169,20 @@ export interface StreamInfo {
   dashManifestUrl?: string | null;
   isLive?: boolean | null;
   sabr?: SabrStreamInfo | null;
+  /** Seek-bar preview sheets, one entry per resolution, smallest first. */
+  storyboard?: StoryboardLevel[];
+}
+
+/** One resolution of a video's preview frames: sheets of `columns` × `rows`, one frame every `intervalMs`. */
+export interface StoryboardLevel {
+  width: number;
+  height: number;
+  count: number;
+  columns: number;
+  rows: number;
+  intervalMs: number;
+  /** `$M` numbers the sheet. */
+  urlTemplate: string;
 }
 
 export interface LiveChatSegment {

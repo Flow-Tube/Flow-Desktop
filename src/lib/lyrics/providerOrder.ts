@@ -1,11 +1,13 @@
 // Word/character-sync providers first, plain text last (Android's default order).
 export const DEFAULT_PROVIDER_ORDER: readonly string[] = [
   "BetterLyrics",
+  "LrcRed",
   "LyricsPlus",
   "SimpMusic",
   "KuGou",
   "Paxsenix",
   "LrcLib",
+  "Unison",
   "YouTube",
 ];
 

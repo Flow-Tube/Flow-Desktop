@@ -36,6 +36,7 @@ import {
 } from "../../lib/externalAudioSync";
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import { openPopoutPlayer } from "../../lib/pipHandoff";
+import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -357,7 +358,6 @@ export const Player: React.FC<PlayerProps> = ({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
   const keyboardFocusInsideRef = useRef(false);
-  const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skippedSegmentsRef = useRef<Set<string>>(new Set());
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
   const mutedSegmentsRecordedRef = useRef<Set<string>>(new Set());
@@ -527,7 +527,6 @@ export const Player: React.FC<PlayerProps> = ({
     setIsBuffering(false);
   }, []);
   const [bufferedPct, setBufferedPct] = useState(0);
-  const [sleepMinutes, setSleepMinutes] = useState(0);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
@@ -2143,16 +2142,6 @@ export const Player: React.FC<PlayerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-    if (sleepMinutes > 0) {
-      sleepTimerRef.current = setTimeout(() => setPlaybackDesired(false), sleepMinutes * 60_000);
-    }
-    return () => {
-      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-    };
-  }, [setPlaybackDesired, sleepMinutes]);
-
-  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
@@ -2567,6 +2556,10 @@ export const Player: React.FC<PlayerProps> = ({
           setIsPlaying(false);
         }}
         onEnded={() => {
+          if (sleepTimerTakesEnd()) {
+            setPlaybackDesired(false);
+            return;
+          }
           if (videoLoopEnabled && !isLive) {
             seekTo(0);
             setPlaybackDesired(true);
@@ -2794,8 +2787,6 @@ export const Player: React.FC<PlayerProps> = ({
         selectedAudioTrackId={selectedAudioTrackId}
         setSelectedAudioTrackId={setSelectedAudioTrackId}
         bufferedPct={bufferedPct}
-        sleepMinutes={sleepMinutes}
-        setSleepMinutes={setSleepMinutes}
         muted={muted}
         setMuted={setMuted}
         isFullscreen={isFullscreen}

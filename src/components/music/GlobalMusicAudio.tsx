@@ -8,6 +8,7 @@ import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
 import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
 import { musicListens, useMusicListenHistory } from "../../lib/useMusicListenHistory";
 import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
+import { sleepTimerTakesEnd, tickSleepTimer, useSleepTimerDriver } from "../../lib/useSleepTimerDriver";
 
 /**
  * Wraps a media-element handler so only the element that is playing drives the
@@ -37,6 +38,7 @@ export function GlobalMusicAudio() {
 
   useMusicListenHistory();
   useMusicQueuePersistence();
+  useSleepTimerDriver();
   useMusicMediaSession();
 
   const store = () => useMusicPlayerStore.getState();
@@ -73,6 +75,7 @@ export function GlobalMusicAudio() {
       */
       store()._syncTime(el.currentTime, el.duration);
       reportMediaPosition("music");
+      tickSleepTimer();
 
       // Listening time is counted from here for the same reason: a frame loop
       // stops in the background, and listening there is the common case.
@@ -87,6 +90,7 @@ export function GlobalMusicAudio() {
     }),
     onEnded: fromActive(() => {
       musicListens.finish(Date.now());
+      if (sleepTimerTakesEnd()) return;
       store().handleEnded();
     }),
     onError: (event: SyntheticEvent<HTMLAudioElement>) => {

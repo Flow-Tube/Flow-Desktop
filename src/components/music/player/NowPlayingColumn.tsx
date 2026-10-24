@@ -14,6 +14,7 @@ import { HapticButton } from "../HapticButton";
 import { MusicArtwork } from "../MusicArtwork";
 import { MusicCardMenu, useMusicContextMenu } from "../MusicCardMenu";
 import { MusicScrubber } from "../MusicScrubber";
+import { MusicSleepTimerButton } from "../MusicSleepTimerButton";
 import { useNowPlayingMenuActions } from "../useNowPlayingMenuActions";
 import { PlayerTransport } from "./PlayerTransport";
 
@@ -116,6 +117,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
             </button>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <MusicSleepTimerButton className={META_BTN} activeClassName={`${META_BTN} text-[var(--color-primary)]`} />
             <HapticButton
               onClick={() => void handleLike()}
               aria-label={getString("music_like")}

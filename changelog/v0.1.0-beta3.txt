@@ -132,6 +132,9 @@ PLAYER
 - Shorts in Subscriptions are taken from each channel's own Shorts tab instead of guessed from length, so long Shorts and short videos land in the right place. Premieres show as upcoming instead of "Just now", members-only uploads are left out, and cards show view counts.
 - The Shorts feed's subscription lane finds your channels' Shorts again; it was asking for their Videos tab.
 - The Shorts feed loads its reels in pages about a hundred times smaller, drops the ads mixed into them, and gives them their real titles and channels so your interests and blocked channels apply to them.
+- One sleep timer now serves both the video and the music player, with Flow for Android's choices: 10 to 90 minutes, a custom time, End of song, and Quit Flow when it ends, which is remembered.
+- Music fades out over the last 20 seconds before the timer stops it, and the fade keeps going while Flow is in the background.
+- A Sleep timer button can be added next to Like in the full music player from Settings, Player.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

@@ -36,6 +36,11 @@ export function EqualizerDialog() {
   const setBypass = useEqStore((s) => s.setBypass);
 
   useEffect(() => {
+    useEqStore.setState({ editorHosted: true });
+    return () => useEqStore.setState({ editorHosted: false });
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);

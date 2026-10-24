@@ -22,6 +22,7 @@ import {
   Volume2,
   VolumeX,
   Sliders,
+  SlidersHorizontal,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
@@ -51,6 +52,9 @@ import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
+import { useEqActive } from "../../lib/audio/eq/useEqualizer";
+import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
+import { useEqStore } from "../../store/useEqStore";
 import { Slider } from "../ui/Slider";
 import { videoCodecLabel } from "../../lib/settings/playerRuntime";
 
@@ -477,6 +481,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const handleProgressMove = (event: React.MouseEvent<HTMLDivElement>) => {
     updateHoverPreview(event.clientX, event.currentTarget);
   };
+
+  const eqActive = useEqActive();
+  const eqEditorHosted = useEqStore((s) => s.editorHosted);
+  const openEqEditor = useEqStore((s) => s.setEditorOpen);
 
   const renderSettingRow = (
     label: string,
@@ -952,6 +960,17 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               <Pause size={18} />,
               () => setSettingsPane("sleep")
             )}
+            {eqEditorHosted &&
+              renderSettingRow(
+                getString("music_equalizer"),
+                // Read when the menu draws: the self-test only settles once the equalizer is used.
+                getString(!videoEqAvailable() ? "eq_state_unavailable" : eqActive ? "eq_state_on" : "eq_state_off"),
+                <SlidersHorizontal size={18} />,
+                () => {
+                  setSettingsOpen(false);
+                  openEqEditor(true);
+                }
+              )}
           </div>
         )}
 

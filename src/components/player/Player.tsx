@@ -28,6 +28,7 @@ import {
 import { SubtitleOverlay } from "./SubtitleOverlay";
 import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
+import { useVideoEq } from "../../lib/audio/useVideoEq";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
@@ -594,6 +595,8 @@ export const Player: React.FC<PlayerProps> = ({
     !isDashPlayback &&
     !isHlsPlayback &&
     (hasSelectedAlternateAudio || (!!selectedQuality && !selectedQuality.hasAudio));
+
+  useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null);
 
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
@@ -2510,6 +2513,8 @@ export const Player: React.FC<PlayerProps> = ({
 
       <video
         ref={videoRef}
+        // Set before src: the equalizer can only read cross-origin audio fetched with CORS.
+        crossOrigin="anonymous"
         src={isDashPlayback || isHlsPlayback ? undefined : src || undefined}
         poster={effectivePoster}
         loop={videoLoopEnabled && !isLive}
@@ -2581,6 +2586,7 @@ export const Player: React.FC<PlayerProps> = ({
       {usesExternalAudio && selectedAudioTrack?.localUrl && (
         <audio
           ref={audioRef}
+          crossOrigin="anonymous"
           src={selectedAudioTrack.localUrl}
           preload="auto"
           onLoadedMetadata={handleAudioLoadedMetadata}

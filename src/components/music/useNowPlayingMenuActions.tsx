@@ -1,4 +1,4 @@
-import { Disc3, Share2 } from 'lucide-react';
+import { Disc3, Share2, SlidersHorizontal } from 'lucide-react';
 
 import { shareLink } from '../../lib/clipboard';
 import { getString } from '../../lib/i18n/index';
@@ -7,7 +7,9 @@ import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import type { SongItem } from '../../types/music';
 import type { MusicMenuAction } from './MusicCardMenu';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
+import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
+import { useTrackRadioAction } from './useTrackRadioAction';
 
 function videoIdOf(track: SongItem): string {
   return track.videoId ?? track.id;
@@ -16,15 +18,19 @@ function videoIdOf(track: SongItem): string {
 /** The playing track's menu, shared by the full player and the music bar. */
 export function useNowPlayingMenuActions(
   track: SongItem | null,
-  options?: { onNavigate?: () => void },
+  options?: { onNavigate?: () => void; onOpenEqualizer?: () => void },
 ): MusicMenuAction[] {
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
+  const radioActions = useTrackRadioAction(track);
   const navActions = useTrackNavActions(track, options);
   const downloadActions = useTrackDownloadAction(track);
+  const blockActions = useTrackBlockActions(track);
 
   if (!track) return [];
 
+  const onOpenEqualizer = options?.onOpenEqualizer;
   return [
+    ...radioActions,
     ...navActions,
     {
       id: 'add-to-album',
@@ -39,5 +45,9 @@ export function useNowPlayingMenuActions(
       icon: <Share2 size={16} />,
       onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
+    ...(onOpenEqualizer
+      ? [{ id: 'equalizer', label: getString('music_equalizer'), icon: <SlidersHorizontal size={16} />, onSelect: onOpenEqualizer }]
+      : []),
+    ...blockActions,
   ];
 }

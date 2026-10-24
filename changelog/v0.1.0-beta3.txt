@@ -29,6 +29,9 @@ MUSIC
 - Shuffle now rearranges the queue, so every song plays once, Previous and Up next follow the shuffled order, and turning shuffle off puts the original order back.
 - Radio keeps going after a shuffled queue ends, holds at most two songs per artist, and starts again from songs near the first one when YouTube's mix runs out. The queue says when the radio has run out.
 - Removing a song or clearing the queue can be undone from the message that appears, and songs that already played can be added to the queue again.
+- A song paused while it was still loading stays paused, and a recovery never starts a song you paused.
+- A song whose link expires during long pauses recovers each time, waits for the connection to come back when the network drops, and tries another audio format when one cannot be decoded. Errors now say which of these went wrong.
+- Media keys and the system's Now Playing controls follow whichever player started last, show the song's progress, and seek forward and back. Starting a video pauses the music and starting music pauses the video.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

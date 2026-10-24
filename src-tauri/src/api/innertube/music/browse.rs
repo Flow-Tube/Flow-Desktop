@@ -15,7 +15,7 @@ use crate::errors::AppResult;
 use crate::models::music::{
     AlbumItem, ChartSection, ChartsPage, ExplorePage, MoodAndGenreGroup, MoodAndGenreItem, YTItem,
 };
-use crate::models::music_pages::{MoodGenrePage, MusicHomePage, MusicShelf};
+use crate::models::music_pages::{MoodGenrePage, MoodGenreSection, MusicHomePage, MusicShelf};
 
 impl InnertubeClient {
     /// Typed music home (carousels + chips), with continuation paging.
@@ -141,11 +141,16 @@ impl InnertubeClient {
 
         let title = runs_text(&res["header"]["musicHeaderRenderer"]["title"]).unwrap_or_default();
         let mut items: Vec<YTItem> = Vec::new();
+        let mut sections: Vec<MoodGenreSection> = Vec::new();
         let mut next: Option<String> = None;
 
         for section in shelves::section_list_contents(&res) {
             if let Some(shelf) = shelves::parse_section(&section) {
-                items.extend(shelf.items);
+                items.extend(shelf.items.iter().cloned());
+                sections.push(MoodGenreSection {
+                    title: shelf.title,
+                    items: shelf.items,
+                });
             }
             if next.is_none() {
                 next = section_shelf_continuation(&section);
@@ -182,10 +187,15 @@ impl InnertubeClient {
                 });
         }
 
+        // One shelf is a plain grid; only several are worth their titles.
+        if sections.len() < 2 {
+            sections.clear();
+        }
         Ok(MoodGenrePage {
             title,
             items,
             continuation: next,
+            sections,
         })
     }
 

@@ -453,7 +453,10 @@ impl MusicService {
         )
         .await
     }
-    pub async fn lyrics(&self, video_id: &str) -> AppResult<Option<String>> {
+    pub async fn lyrics(
+        &self,
+        video_id: &str,
+    ) -> AppResult<Option<crate::models::music_pages::MusicLyrics>> {
         self.client.music_lyrics_text(video_id).await
     }
 

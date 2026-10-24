@@ -190,6 +190,26 @@ pub struct QueuePage {
 #[serde(rename_all = "camelCase")]
 pub struct MoodGenrePage {
     pub title: String,
+    /// Every item of the page in order, shelves flattened.
     pub items: Vec<YTItem>,
     pub continuation: Option<String>,
+    /// The page's shelves with their titles, when it has more than one.
+    #[serde(default)]
+    pub sections: Vec<MoodGenreSection>,
+}
+
+/// A song's plain lyrics and the credit the site shows under them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicLyrics {
+    pub text: String,
+    /// "Source: Musixmatch", shown for attribution.
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoodGenreSection {
+    pub title: String,
+    pub items: Vec<YTItem>,
 }

@@ -259,7 +259,10 @@ async fn write_lyrics(
         .lyrics(video_id)
         .await
         .map_err(|error| error.to_string())?;
-    let Some(text) = lyrics.filter(|text| !text.trim().is_empty()) else {
+    let Some(text) = lyrics
+        .map(|lyrics| lyrics.text)
+        .filter(|text| !text.trim().is_empty())
+    else {
         return Ok(None);
     };
     let path = media_path.with_extension("lrc");

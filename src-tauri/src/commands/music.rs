@@ -345,7 +345,7 @@ pub async fn get_music_linked_artists(
 pub async fn get_music_lyrics_typed(
     video_id: String,
     music: State<'_, MusicService>,
-) -> CmdResult<Option<String>> {
+) -> CmdResult<Option<crate::models::music_pages::MusicLyrics>> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
     music.lyrics(&video_id).await.map_err(ErrorResponse::from)
 }

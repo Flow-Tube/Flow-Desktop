@@ -14,7 +14,9 @@ use super::parse::{continuation, shelves};
 use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
 use crate::models::music::{SongItem, YTItem};
-use crate::models::music_pages::{QueuePage, RelatedPage, RelatedShelf, RelatedShelfType};
+use crate::models::music_pages::{
+    MusicLyrics, QueuePage, RelatedPage, RelatedShelf, RelatedShelfType,
+};
 
 impl InnertubeClient {
     /// Watch queue / radio for a song (the `next` endpoint). Also surfaces the
@@ -120,8 +122,8 @@ impl InnertubeClient {
         Ok(related_from_sections(sections))
     }
 
-    /// Plain lyrics text for a song (via the `next` lyrics tab pointer).
-    pub(crate) async fn music_lyrics_text(&self, video_id: &str) -> AppResult<Option<String>> {
+    /// Plain lyrics for a song (via the `next` lyrics tab pointer), with their credit.
+    pub(crate) async fn music_lyrics_text(&self, video_id: &str) -> AppResult<Option<MusicLyrics>> {
         let queue = self.music_watch_queue(Some(video_id), None, None).await?;
         let Some(browse) = queue.lyrics_browse_id else {
             return Ok(None);
@@ -131,18 +133,22 @@ impl InnertubeClient {
             .await?;
 
         let mut text = String::new();
+        let mut source = None;
         for section in shelves::section_list_contents(&res) {
-            if let Some(runs) =
-                section["musicDescriptionShelfRenderer"]["description"]["runs"].as_array()
-            {
+            let lyrics_shelf = &section["musicDescriptionShelfRenderer"];
+            if let Some(runs) = lyrics_shelf["description"]["runs"].as_array() {
                 for run in runs {
                     if let Some(t) = run["text"].as_str() {
                         text.push_str(t);
                     }
                 }
             }
+            if source.is_none() {
+                source =
+                    runs_text(&lyrics_shelf["footer"]).filter(|footer| !footer.trim().is_empty());
+            }
         }
-        Ok((!text.is_empty()).then_some(text))
+        Ok((!text.is_empty()).then_some(MusicLyrics { text, source }))
     }
 }
 

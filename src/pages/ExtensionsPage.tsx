@@ -78,7 +78,7 @@ export const ExtensionsPage: React.FC = () => {
 
   const handleResetStats = () => {
     if (
-      confirm("Reset SponsorBlock statistics? This clears your saved-time and skipped-segment counts.")
+      confirm(t("extensions.resetStatsConfirm"))
     ) {
       void resetStats();
     }
@@ -103,17 +103,16 @@ export const ExtensionsPage: React.FC = () => {
     <div className="mx-auto w-full max-w-[1600px] px-6 py-8 pb-20 md:px-8">
       <header className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">
-          Extensions &amp; integrations
+          {t("extensions.title")}
         </h1>
         <p className="mt-1 text-sm text-chrome-neutral-400">
-          Crowdsourced enhancements from the FOSS community — SponsorBlock skips, DeArrow titles, and Return
-          YouTube Dislike.
+          {t("extensions.description")}
         </p>
       </header>
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <section className="col-span-12">
-          <SectionLabel>Your SponsorBlock impact</SectionLabel>
+          <SectionLabel>{t("extensions.impact")}</SectionLabel>
           <SponsorBlockStatsDashboard
             savedMinutes={savedMinutes}
             segmentsSkipped={segmentsSkipped}
@@ -124,30 +123,30 @@ export const ExtensionsPage: React.FC = () => {
         </section>
 
         <section className="col-span-12 lg:col-span-6">
-          <SettingsGroup title="Integrations">
+          <SettingsGroup title={t("extensions.integrations")}>
             <SettingItem
-              title="SponsorBlock"
-              description="Automatically skip sponsored and promotional segments."
+              title={t("extensions.sponsorBlock")}
+              description={t("extensions.sponsorBlockDescription")}
             >
               <ToggleSwitch checked={sponsorBlockEnabled} onChange={setSponsorBlockEnabled} />
             </SettingItem>
             <SettingItem
-              title="DeArrow"
-              description="Replace clickbait titles and thumbnails with crowdsourced ones."
+              title={t("extensions.deArrow")}
+              description={t("extensions.deArrowDescription")}
             >
               <ToggleSwitch checked={dearrowEnabled} onChange={setDeArrowEnabled} />
             </SettingItem>
             {dearrowEnabled && (
               <SettingItem
-                title="DeArrow indicators"
-                description="Show a small badge next to titles cleaned by DeArrow."
+                title={t("extensions.deArrowBadge")}
+                description={t("extensions.deArrowBadgeDescription")}
               >
                 <ToggleSwitch checked={dearrowBadgeEnabled} onChange={setDeArrowBadgeEnabled} />
               </SettingItem>
             )}
             <SettingItem
-              title="Return YouTube Dislike"
-              description="Fetch and display estimated public dislike counts."
+              title={t("extensions.returnDislike")}
+              description={t("extensions.returnDislikeDescription")}
             >
               <ToggleSwitch checked={rytdEnabled} onChange={setRytdEnabled} />
             </SettingItem>
@@ -170,13 +169,13 @@ export const ExtensionsPage: React.FC = () => {
         </section>
 
         <section className="col-span-12 lg:col-span-6">
-          <SectionLabel>Server &amp; contributions</SectionLabel>
+          <SectionLabel>{t("extensions.serverSection")}</SectionLabel>
           <div className="overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
             <div className="space-y-2 px-5 py-4">
               <div>
-                <div className="text-sm font-medium text-chrome-neutral-200">API server</div>
+                <div className="text-sm font-medium text-chrome-neutral-200">{t("extensions.apiServer")}</div>
                 <p className="mt-0.5 text-xs text-chrome-neutral-400">
-                  Endpoint used to fetch and submit skip segments.
+                  {t("extensions.apiServerDescription")}
                 </p>
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -189,15 +188,15 @@ export const ExtensionsPage: React.FC = () => {
                   inputMode="url"
                 />
                 <Button variant="secondary" onClick={() => setServerUrl(localServerUrl)}>
-                  Save
+                  {t("extensions.save")}
                 </Button>
               </div>
             </div>
 
             <div className="border-t border-chrome-neutral-800/50">
               <SettingItem
-                title="Submit skipped segments"
-                description="Show a submit button in the player and contribute segments."
+                title={t("extensions.submitSegments")}
+                description={t("extensions.submitSegmentsDescription")}
                 disabled={submissionsDisabled}
               >
                 <ToggleSwitch
@@ -211,13 +210,13 @@ export const ExtensionsPage: React.FC = () => {
             {sbSubmitEnabled && !submissionsDisabled && (
               <div className="space-y-3 border-t border-chrome-neutral-800/50 px-5 py-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-chrome-neutral-200">Your submission ID</div>
+                  <div className="text-sm font-medium text-chrome-neutral-200">{t("extensions.submissionId")}</div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={handleCopyUserId}
                       disabled={!localUserId}
-                      title="Copy ID"
+                      title={t("extensions.copyId")}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:opacity-50"
                     >
                       {copied ? (
@@ -227,7 +226,7 @@ export const ExtensionsPage: React.FC = () => {
                       )}
                     </button>
                     <Button variant="ghost" size="sm" onClick={handleGenerateUserId}>
-                      Generate
+                      {t("extensions.generateId")}
                     </Button>
                   </div>
                 </div>
@@ -235,13 +234,13 @@ export const ExtensionsPage: React.FC = () => {
                   value={localUserId}
                   onChange={(value) => setLocalUserId(value.trim())}
                   onBlur={() => setSbUserId(localUserId)}
-                  placeholder="No ID set — generate or paste one"
+                  placeholder={t("extensions.submissionIdPlaceholder")}
                   className="w-full font-mono text-xs"
                 />
                 <div className="flex items-start gap-2 rounded-lg border border-chrome-neutral-800 bg-surface-container p-3">
                   <Info size={14} className="mt-0.5 shrink-0 text-chrome-neutral-400" />
                   <p className="text-xs leading-relaxed text-chrome-neutral-400">
-                    Your ID is a random string that anonymously credits your submissions. Keep it private.
+                    {t("extensions.submissionIdNote")}
                   </p>
                 </div>
               </div>
@@ -251,7 +250,7 @@ export const ExtensionsPage: React.FC = () => {
 
         {sponsorBlockEnabled && (
           <section className="col-span-12">
-            <SettingsGroup title="Segment categories">
+            <SettingsGroup title={t("extensions.segmentCategories")}>
               {SPONSORBLOCK_CATEGORIES.map((category) => (
                 <SponsorBlockCategoryRow
                   key={category}

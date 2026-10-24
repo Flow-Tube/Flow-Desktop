@@ -10,5 +10,32 @@
     "modeMusicAndVideos": "Music and videos",
     "buttonWatch": "Watch on YouTube",
     "buttonListen": "Listen on YouTube Music"
+  },
+  "extensions": {
+    "title": "Extensions and integrations",
+    "description": "Crowdsourced enhancements from the FOSS community: SponsorBlock skips, DeArrow titles and Return YouTube Dislike.",
+    "resetStatsConfirm": "Reset SponsorBlock statistics? This clears your saved-time and skipped-segment counts.",
+    "impact": "Your SponsorBlock impact",
+    "integrations": "Integrations",
+    "sponsorBlock": "SponsorBlock",
+    "sponsorBlockDescription": "Automatically skip sponsored and promotional segments.",
+    "deArrow": "DeArrow",
+    "deArrowDescription": "Replace clickbait titles and thumbnails with crowdsourced ones.",
+    "deArrowBadge": "DeArrow indicators",
+    "deArrowBadgeDescription": "Show a small badge next to titles cleaned by DeArrow.",
+    "returnDislike": "Return YouTube Dislike",
+    "returnDislikeDescription": "Fetch and display estimated public dislike counts.",
+    "serverSection": "Server and contributions",
+    "apiServer": "API server",
+    "apiServerDescription": "Endpoint used to fetch and submit skip segments.",
+    "save": "Save",
+    "submitSegments": "Submit skipped segments",
+    "submitSegmentsDescription": "Show a submit button in the player and contribute segments.",
+    "submissionId": "Your submission ID",
+    "copyId": "Copy ID",
+    "generateId": "Generate",
+    "submissionIdPlaceholder": "No ID set, generate or paste one",
+    "submissionIdNote": "Your ID is a random string that anonymously credits your submissions. Keep it private.",
+    "segmentCategories": "Segment categories"
   }
 }

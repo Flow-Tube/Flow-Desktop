@@ -186,6 +186,12 @@ RECOMMENDATIONS
 - A sync no longer brings back entries this device already trimmed from its recommendation profile, and the profile is not saved over a merge while it runs.
 - Home's related videos lane works again: dates on related cards such as "2d ago" are now understood, so those videos are no longer dropped as undated.
 
+LYRICS
+- BetterLyrics no longer switches off for 10 minutes after a song it has not seen before, so word-by-word lyrics stop disappearing.
+- Lyrics are looked up by the song's main artist with only credits and "Official Video" style words removed, so songs with several artists, live and remix versions and titles such as "Video Games" find the right lyrics. Providers must match the title and artist, not just the length.
+- Lyrics are looked up once per song as soon as it starts, so they are usually ready when you open them. Word-by-word lyrics win over line-by-line ones found a moment earlier.
+- Lyrics saved with a download show at once, with their timing, instead of behind a spinner.
+
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.
 - Each playlist remembers its sort, and while sorted by date added, rows show when each video was added.

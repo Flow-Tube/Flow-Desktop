@@ -7,6 +7,8 @@ import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
 import { useCoverAppContent } from "../../lib/useCoverAppContent";
 import { useMusicPlayerKeyboard } from "../../lib/useMusicPlayerKeyboard";
 import { useMediaQuery } from "../../lib/useMediaQuery";
+import { useBoolPref } from "../../lib/usePreference";
+import { SETTINGS } from "../../lib/settings/schema";
 import { volumeAfterWheel } from "../../lib/musicPlayerKeys";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { getString } from "../../lib/i18n/index";
@@ -50,6 +52,7 @@ export function MusicOverlay() {
   const [volumeOpen, setVolumeOpen] = useState(false);
   const [lyricsExpanded, setLyricsExpanded] = useState(false);
   const wide = useMediaQuery(WIDE_QUERY);
+  const [paneVisible, setPaneVisible] = useBoolPref(SETTINGS.MUSIC_SIDE_PANE_VISIBLE);
   const open = currentTrack !== null && viewState !== "dock";
   const isQueue = viewState === "queue";
   const isLyrics = viewState === "lyrics";
@@ -95,6 +98,37 @@ export function MusicOverlay() {
 
   const fullBleedLyrics = isLyrics && (!wide || lyricsExpanded);
   const sideTab: SidePaneTab = isLyrics ? "lyrics" : "queue";
+  const showPane = wide && paneVisible;
+
+  // Asking for the queue or the lyrics from elsewhere (a key, the dock) brings a hidden pane back.
+  // It follows the view only, so hiding the pane is never undone by the pane's own state.
+  useEffect(() => {
+    if (wide && (isQueue || isLyrics) && !paneVisible) setPaneVisible(true);
+  }, [wide, viewState]);
+
+  // Hiding leaves the plain player, so the queue and lyrics buttons read as off.
+  const hidePane = () => {
+    setPaneVisible(false);
+    setViewState("full");
+  };
+  const queueShown = wide ? showPane && sideTab === "queue" && !fullBleedLyrics : isQueue;
+  const lyricsShown = wide ? isLyrics && (fullBleedLyrics || showPane) : isLyrics;
+  const onQueueButton = () => {
+    if (!wide) setViewState(isQueue ? "full" : "queue");
+    else if (queueShown) hidePane();
+    else {
+      setPaneVisible(true);
+      setViewState("queue");
+    }
+  };
+  const onLyricsButton = () => {
+    if (!wide || fullBleedLyrics) setViewState(isLyrics ? "full" : "lyrics");
+    else if (lyricsShown) hidePane();
+    else {
+      setPaneVisible(true);
+      setViewState("lyrics");
+    }
+  };
   const muted = isMuted || volume === 0;
 
   // Android draws the lyrics in the player's primary, checked against the surface behind them.
@@ -166,19 +200,19 @@ export function MusicOverlay() {
               )}
 
               <HapticButton
-                onClick={() => setViewState(isQueue ? "full" : "queue")}
+                onClick={onQueueButton}
                 aria-label={getString("music_queue")}
-                aria-pressed={wide ? sideTab === "queue" && !fullBleedLyrics : isQueue}
-                className={(wide ? sideTab === "queue" && !fullBleedLyrics : isQueue) ? TOP_BTN_ACTIVE : TOP_BTN}
+                aria-pressed={queueShown}
+                className={queueShown ? TOP_BTN_ACTIVE : TOP_BTN}
               >
                 <ListMusic className="h-5 w-5" />
               </HapticButton>
 
               <HapticButton
-                onClick={() => setViewState(isLyrics ? "full" : "lyrics")}
+                onClick={onLyricsButton}
                 aria-label={getString("music_lyrics")}
-                aria-pressed={isLyrics}
-                className={isLyrics ? TOP_BTN_ACTIVE : TOP_BTN}
+                aria-pressed={lyricsShown}
+                className={lyricsShown ? TOP_BTN_ACTIVE : TOP_BTN}
               >
                 <Mic2 className="h-5 w-5" />
               </HapticButton>
@@ -246,7 +280,7 @@ export function MusicOverlay() {
               transition={LAYOUT_SPRING}
               className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center gap-8 px-8 pb-10 pt-24"
             >
-              <div className={`flex min-h-0 min-w-0 justify-center ${wide ? "flex-1" : isQueue ? "w-1/2" : "w-full max-w-2xl"}`}>
+              <div className={`flex min-h-0 min-w-0 justify-center ${showPane ? "flex-1" : !wide && isQueue ? "w-1/2" : "w-full max-w-2xl"}`}>
                 <NowPlayingColumn
                   track={currentTrack}
                   compact={!wide && isQueue}
@@ -256,15 +290,27 @@ export function MusicOverlay() {
               </div>
 
               {wide ? (
-                <div className="flex min-h-0 w-[min(460px,40%)] shrink-0">
-                  <PlayerSidePane
-                    tab={sideTab}
-                    onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
-                    onExpandLyrics={() => setLyricsExpanded(true)}
-                  >
-                    {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
-                  </PlayerSidePane>
-                </div>
+                <AnimatePresence mode="popLayout">
+                  {showPane && (
+                    <motion.div
+                      key="side-pane"
+                      initial={{ opacity: 0, x: 48 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 48 }}
+                      transition={LAYOUT_SPRING}
+                      className="flex min-h-0 w-[min(460px,40%)] shrink-0"
+                    >
+                      <PlayerSidePane
+                        tab={sideTab}
+                        onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
+                        onExpandLyrics={() => setLyricsExpanded(true)}
+                        onHide={hidePane}
+                      >
+                        {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
+                      </PlayerSidePane>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               ) : (
                 <AnimatePresence mode="popLayout">
                   {isQueue && (

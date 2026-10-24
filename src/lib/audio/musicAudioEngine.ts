@@ -62,6 +62,8 @@ class MusicAudioEngine {
 
   private volume = 1;
   private muted = false;
+  /** The sleep timer's fade-out, from 1 (none) down to 0. */
+  private fadeLevel = 1;
   private normalizationEnabled = true;
   private eqSpec: EqGraphSpec = EQ_GRAPH_OFF;
   private eqEngaged = false;
@@ -404,8 +406,35 @@ class MusicAudioEngine {
     return loudnessFactor(loudnessDb, this.normalizationEnabled, MUSIC_MAX_CUT_DB);
   }
 
+  /**
+   * Fades the music to silence by the time `remainingSeconds` have passed,
+   * from `level` now. With WebAudio the ramp runs on the audio clock, so it
+   * keeps going while timers are throttled in a hidden window; without it the
+   * element's volume steps down each time this is called again.
+   */
+  fadeOut(level: number, remainingSeconds: number): void {
+    this.fadeLevel = Math.max(0, Math.min(1, level));
+    if (this.graphReady && this.ctx && this.volGain) {
+      const gain = this.volGain.gain;
+      const t = this.ctx.currentTime;
+      gain.cancelScheduledValues(t);
+      gain.setValueAtTime((this.muted ? 0 : volumeGain(this.volume)) * this.fadeLevel, t);
+      gain.linearRampToValueAtTime(0, t + Math.max(0, remainingSeconds));
+      return;
+    }
+    this.applyGain();
+  }
+
+  /** Back to full volume after a fade-out stopped or was cancelled. */
+  resetFade(): void {
+    if (this.fadeLevel === 1) return;
+    this.fadeLevel = 1;
+    if (this.graphReady && this.ctx && this.volGain) this.volGain.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.applyGain();
+  }
+
   private applyGain(): void {
-    const vol = this.muted ? 0 : volumeGain(this.volume);
+    const vol = (this.muted ? 0 : volumeGain(this.volume)) * this.fadeLevel;
 
     if (this.graphReady && this.ctx && this.volGain) {
       const t = this.ctx.currentTime;

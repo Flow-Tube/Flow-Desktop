@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { volumeGain } from "./volumeCurve";
 import { musicAudioEngine } from "./musicAudioEngine";
 
 const elements = (): [HTMLAudioElement, HTMLAudioElement] => {
@@ -99,5 +100,19 @@ describe("music speed", () => {
     musicAudioEngine.setSpeed(9);
     expect(fresh[0].playbackRate).toBe(2);
     musicAudioEngine.setSpeed(1);
+  });
+});
+
+describe("sleep timer fade-out", () => {
+  it("steps the element volume down without WebAudio, and puts it back after", () => {
+    musicAudioEngine.setVolume(0.8);
+    musicAudioEngine.fadeOut(0.5, 10);
+    expect(pair[0].volume).toBeCloseTo(volumeGain(0.8) * 0.5);
+
+    musicAudioEngine.setVolume(1);
+    expect(pair[0].volume).toBeCloseTo(0.5);
+
+    musicAudioEngine.resetFade();
+    expect(pair[0].volume).toBeCloseTo(1);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -22,8 +22,6 @@ import {
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
 import { useCoverAppContent } from "../../lib/useCoverAppContent";
-import { useTheme } from "../../lib/useTheme";
-import { darkScopeVariables } from "../../lib/themes";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { useLikesStore } from "../../store/useLikesStore";
 import { useUiStore } from "../../store/useUiStore";
@@ -36,16 +34,14 @@ import { MusicArtwork } from "./MusicArtwork";
 import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
 import { MusicLyrics } from "./MusicLyrics";
-import { AmbientBackdrop, isMusicBackgroundStyle } from "./AmbientBackdrop";
+import { AmbientBackdrop } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { useLyrics } from "../../lib/lyrics/useLyrics";
-import { useDominantColor } from "../../lib/useDominantColor";
-import { accentForeground, accentSurface } from "../../lib/accentColor";
+import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
+import { useFullPlayerColors } from "../../lib/usePlayerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
-import { usePreference } from "../../lib/usePreference";
-import { SETTINGS } from "../../lib/settings/schema";
 
 const TOP_BTN =
   "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
@@ -87,13 +83,6 @@ export function MusicOverlay() {
   const menu = useMusicContextMenu(Boolean(currentTrack));
 
   const musicError = useMusicPlayerError();
-  // The full player stays dark in every theme, as on Android: its backdrop is
-  // artwork under a dark wash, which light-theme text could not be read on.
-  const { theme, variant } = useTheme();
-  const darkScope = useMemo(
-    () => ({ ...darkScopeVariables(theme, variant), colorScheme: "dark" }) as CSSProperties,
-    [theme, variant],
-  );
   const [eqOpen, setEqOpen] = useState(false);
   const overlayOpen = currentTrack !== null && viewState !== "dock";
   const lyrics = useLyrics(overlayOpen ? currentTrack : null);
@@ -106,12 +95,12 @@ export function MusicOverlay() {
     the URL and reuses its cache entry instead of fetching a second copy.
   */
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
-  const accent = useDominantColor(accentSrc);
-  const [backgroundPref] = usePreference(SETTINGS.MUSIC_PLAYER_BACKGROUND);
-  const backgroundStyle = isMusicBackgroundStyle(backgroundPref) ? backgroundPref : "blur_gradient";
+  const swatches = useArtworkSwatches(accentSrc);
+  const playerColors = useFullPlayerColors(swatches);
+  // A switched-on toggle fills with the control container, as Android's action row does.
   const accentActive = {
-    color: accentForeground(accent),
-    backgroundColor: accentSurface(accent),
+    color: "var(--player-on-primary-container)",
+    backgroundColor: "var(--player-primary-container)",
   };
   const liked = Boolean(
     currentTrack && likedItems.some((item) => (
@@ -173,10 +162,10 @@ export function MusicOverlay() {
             // Also fires when the exit fade ends; only the fade-in counts.
             if ((definition as { opacity?: number }).opacity === 1) setEntered(true);
           }}
-          className="fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-chrome-neutral-950"
-          style={darkScope}
+          className="fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-[var(--player-ground)]"
+          style={playerColors.rootStyle}
         >
-          <AmbientBackdrop src={currentTrack.thumbnail} accent={accent} style={backgroundStyle} />
+          <AmbientBackdrop src={currentTrack.thumbnail} style={playerColors.style} />
 
           {/* TOP BAR */}
           <div className="absolute top-0 z-20 flex w-full items-center justify-between p-6">
@@ -258,11 +247,11 @@ export function MusicOverlay() {
                 loading={lyrics.loading}
                 providerName={lyrics.providerName}
                 source={lyrics.source}
-                accent={accent}
+                accent={playerColors.colors.roles.primary}
                 onSeek={seek}
                 className="absolute inset-0 z-10"
               />
-              <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-chrome-neutral-950/90 via-chrome-neutral-950/50 to-transparent px-6 pb-10 pt-24">
+              <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
                 <div className="w-full max-w-2xl">
                   <MusicScrubber size="lg" showTimes countdown expressive />
                 </div>
@@ -317,7 +306,7 @@ export function MusicOverlay() {
                 alt={currentTrack.title}
                 loading={loading}
                 iconClassName="h-16 w-16"
-                className={`aspect-square shrink-0 rounded-2xl shadow-[0_20px_50px_color-mix(in_srgb,var(--color-chrome-black)_50%,transparent)] ${
+                className={`aspect-square shrink-0 rounded-2xl ${
                   isQueue ? "w-[min(400px,50vh)]" : "w-[min(480px,55vh)]"
                 }`}
               />
@@ -452,7 +441,7 @@ export function MusicOverlay() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 48 }}
                   transition={LAYOUT_SPRING}
-                  className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-chrome-neutral-950/40 p-4"
+                  className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4"
                 >
                   <MusicQueuePane />
                 </motion.div>

@@ -31,8 +31,8 @@ import { MusicScrubber } from "./MusicScrubber";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
-import { useDominantColor } from "../../lib/useDominantColor";
-import { accentForeground, accentSurface } from "../../lib/accentColor";
+import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
+import { useDockToggleColors } from "../../lib/usePlayerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 
@@ -67,11 +67,7 @@ export function GlobalMusicDock() {
 
   // Same artwork URL the overlay samples, so this reads a warm cache entry.
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
-  const accent = useDominantColor(accentSrc);
-  const accentActive = {
-    color: accentForeground(accent),
-    backgroundColor: accentSurface(accent),
-  };
+  const accentActive = useDockToggleColors(useArtworkSwatches(accentSrc));
 
   const loading = isBuffering || loadingStreamId !== null;
   const muted = isMuted || volume === 0;

@@ -64,6 +64,9 @@ export const SETTINGS = {
   PIP_ALWAYS_ON_TOP: "pip_always_on_top",
   PIP_ON_MINIMIZE: "pip_on_minimize",
   MUSIC_PLAYER_BACKGROUND: "music_player_background",
+  MUSIC_ARTWORK_CONTROL_COLORS: "music_artwork_control_colors",
+  MUSIC_PLAIN_CONTROL_COLORS: "music_plain_control_colors",
+  MUSIC_PLAYER_FOLLOW_LIGHT_THEME: "music_player_follow_light_theme",
   LYRICS_PROVIDER_ORDER: "lyrics_provider_order",
   LYRICS_PROVIDER_ENABLED_STATES: "lyrics_provider_enabled_states",
 
@@ -275,6 +278,9 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.PIP_ON_MINIMIZE, "player", true, "wired"),
   str(SETTINGS.MUSIC_PLAYER_BACKGROUND, "player", "blur_gradient", "wired",
     ["blur_gradient", "blur", "gradient", "default"]),
+  bool(SETTINGS.MUSIC_ARTWORK_CONTROL_COLORS, "player", true, "wired"),
+  str(SETTINGS.MUSIC_PLAIN_CONTROL_COLORS, "player", "monochrome", "wired", ["monochrome", "app_theme"]),
+  bool(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME, "player", false, "wired"),
   str(SETTINGS.LYRICS_PROVIDER_ORDER, "player", "", "wired"),
   json(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, "player", "{}", "wired"),
 

@@ -7,19 +7,8 @@ import type { Rgb } from "../../lib/useDominantColor";
 import { entriesAreSynced } from "../../lib/lyrics/sync";
 import { getString } from "../../lib/i18n/index";
 import { LyricsCanvas } from "./LyricsCanvas";
-import { useTheme } from "../../lib/useTheme";
-import { darkVariantOf } from "../../lib/themes";
 
 const rgba = (c: Rgb, a: number) => `rgba(${c.r},${c.g},${c.b},${a})`;
-
-function hexToRgb(hex: string): Rgb {
-  const value = hex.replace("#", "");
-  return {
-    r: Number.parseInt(value.slice(0, 2), 16),
-    g: Number.parseInt(value.slice(2, 4), 16),
-    b: Number.parseInt(value.slice(4, 6), 16),
-  };
-}
 
 function buildLines(entries: LyricsEntry[], plain: string | null, synced: boolean): LyricsEntry[] {
   if (synced && entries.length > 0) {
@@ -42,7 +31,8 @@ interface MusicLyricsProps {
   providerName: string;
   /** A credit shown under plain lyrics, as their source requires. */
   source?: string | null;
-  accent: Rgb | null;
+  /** The player's control colour; lyrics are drawn in it, as on Android. */
+  accent: Rgb;
   onSeek: (seconds: number) => void;
   className?: string;
 }
@@ -54,14 +44,13 @@ export function MusicLyrics({
   loading,
   providerName,
   source,
+  accent,
   onSeek,
   className = "",
 }: MusicLyricsProps) {
-  const { theme, variant } = useTheme();
   const synced = isSynced && entriesAreSynced(entries);
   const lines = buildLines(entries, plain, synced);
-  // Lyrics are drawn inside the full player, which is dark in every theme.
-  const expressive = hexToRgb(theme.variants[darkVariantOf(variant)].onSurface);
+  const expressive = accent;
 
   if (loading) {
     return (

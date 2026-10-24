@@ -2,8 +2,11 @@ import { loudnessFactor } from "../loudness";
 import {
   EQ_BANDS,
   EQ_PEAKING_Q,
+  eqCurveBands,
   normalizeEqGains,
 } from "./eqBands";
+import { autoPreampDb } from "./eq/filterMath";
+import { SOFT_CLIP_HEADROOM, softClipCurve } from "./softClip";
 
 type AudioContextCtor = typeof AudioContext;
 
@@ -45,6 +48,7 @@ class MusicAudioEngine {
   private slots: [Slot, Slot] = [emptySlot(), emptySlot()];
   private activeIndex: 0 | 1 = 0;
   private ctx: AudioContext | null = null;
+  private preamp: GainNode | null = null;
   private filters: BiquadFilterNode[] = [];
   private volGain: GainNode | null = null;
 
@@ -99,6 +103,10 @@ class MusicAudioEngine {
       if (!this.ctx) this.ctx = new Ctor();
       const ctx = this.ctx;
 
+      // preamp -> filters -> soft clipper -> volume. The preamp takes the curve's peak off
+      // before the boosts, and the clipper bends whatever still goes past full scale.
+      const preamp = ctx.createGain();
+      this.preamp = preamp;
       this.filters = EQ_BANDS.map((band) => {
         const f = ctx.createBiquadFilter();
         f.type = band.type;
@@ -107,11 +115,18 @@ class MusicAudioEngine {
         f.gain.value = 0;
         return f;
       });
+      const clipIn = ctx.createGain();
+      clipIn.gain.value = 1 / SOFT_CLIP_HEADROOM;
+      const clipper = ctx.createWaveShaper();
+      clipper.curve = softClipCurve();
       this.volGain = ctx.createGain();
-      const chainStart = this.filters.reduceRight<AudioNode>((next, filter) => {
+      const filtersStart = this.filters.reduceRight<AudioNode>((next, filter) => {
         filter.connect(next);
         return filter;
-      }, this.volGain);
+      }, clipIn);
+      preamp.connect(filtersStart);
+      clipIn.connect(clipper);
+      clipper.connect(this.volGain);
       this.volGain.connect(ctx.destination);
 
       // Each element keeps its own loudness gain, since the two hold different
@@ -121,7 +136,7 @@ class MusicAudioEngine {
         slot.source = ctx.createMediaElementSource(slot.el);
         slot.normGain = ctx.createGain();
         slot.source.connect(slot.normGain);
-        slot.normGain.connect(chainStart);
+        slot.normGain.connect(preamp);
       }
 
       this.graphReady = true;
@@ -365,12 +380,14 @@ class MusicAudioEngine {
   }
 
   private applyEq(): void {
-    if (!this.graphReady || !this.ctx) return;
+    if (!this.graphReady || !this.ctx || !this.preamp) return;
     const t = this.ctx.currentTime;
+    const gains = this.eqEnabled ? this.eqGains : EQ_BANDS.map(() => 0);
     this.filters.forEach((f, i) => {
-      const g = this.eqEnabled ? this.eqGains[i] ?? 0 : 0;
-      f.gain.setTargetAtTime(g, t, 0.012);
+      f.gain.setTargetAtTime(gains[i] ?? 0, t, 0.012);
     });
+    const preampDb = autoPreampDb(eqCurveBands(gains));
+    this.preamp.gain.setTargetAtTime(Math.pow(10, preampDb / 20), t, 0.012);
   }
 }
 

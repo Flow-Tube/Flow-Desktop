@@ -1,3 +1,5 @@
+import { band, EqLimits, type EqBand } from "./eq/models";
+
 export interface EqBandConfig {
   frequency: number;
   type: BiquadFilterType;
@@ -51,4 +53,21 @@ export function normalizeEqGains(gains: number[] | null | undefined): number[] {
   const clampDb = (n: number) =>
     Math.max(-EQ_MAX_GAIN_DB, Math.min(EQ_MAX_GAIN_DB, Number.isFinite(n) ? n : 0));
   return EQ_BANDS.map((_, i) => clampDb(gains?.[i] ?? 0));
+}
+
+/**
+ * The curve `gains` plays, in the shared EQ model. WebAudio's shelves ignore Q and always have the
+ * Butterworth slope, so they are modelled at that Q.
+ */
+export function eqCurveBands(gains: readonly number[]): EqBand[] {
+  return EQ_BANDS.map((config, i) =>
+    config.type === "peaking"
+      ? band(config.frequency, gains[i] ?? 0, EQ_PEAKING_Q, "PEAK")
+      : band(
+          config.frequency,
+          gains[i] ?? 0,
+          EqLimits.DEFAULT_SHELF_Q,
+          config.type === "lowshelf" ? "LOW_SHELF" : "HIGH_SHELF",
+        ),
+  );
 }

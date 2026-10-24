@@ -152,6 +152,9 @@ pub struct StartDownloadRequest {
     pub author: Option<String>,
     pub duration_seconds: Option<u64>,
     pub collection_db_id: Option<i64>,
+    /// How much louder than the site's target the saved stream plays, so the offline copy is
+    /// normalized like the streamed one.
+    pub loudness_db: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -228,6 +231,7 @@ struct DownloadContext {
     author: Option<String>,
     duration_seconds: Option<u64>,
     collection_db_id: Option<i64>,
+    loudness_db: Option<f64>,
     pool: SqlitePool,
 }
 
@@ -360,6 +364,7 @@ pub async fn start_download(
         author,
         duration_seconds,
         collection_db_id,
+        loudness_db,
     } = request;
     let title = title.trim().to_string();
 
@@ -466,6 +471,7 @@ pub async fn start_download(
         author,
         duration_seconds,
         collection_db_id,
+        loudness_db: loudness_db.filter(|db| db.is_finite()),
         pool,
     };
     let _ = app.emit(
@@ -1028,6 +1034,7 @@ fn child_download_context(context: &DownloadContext, temp_path: PathBuf) -> Down
         author: None,
         duration_seconds: None,
         collection_db_id: None,
+        loudness_db: None,
         pool: context.pool.clone(),
     }
 }
@@ -1475,6 +1482,7 @@ async fn ensure_valid_adaptive_source(
         author: None,
         duration_seconds: None,
         collection_db_id: None,
+        loudness_db: None,
         pool: context.pool.clone(),
     };
     cleanup_partial_files(&repair_context).await;
@@ -1658,6 +1666,7 @@ async fn record_completed_download(context: &DownloadContext) {
         quality_label: Some(context.quality_label.clone()),
         file_size_bytes,
         collection_db_id: context.collection_db_id,
+        loudness_db: context.loudness_db,
         created_at: String::new(),
     };
     if let Err(error) = crate::db::downloads::upsert_download(&context.pool, &record).await {
@@ -1785,6 +1794,8 @@ pub struct OfflineStreamInfo {
     pub artwork_url: Option<String>,
     /// Text of the lyrics saved beside the media file, when present.
     pub lyrics: Option<String>,
+    /// The loudness recorded when the file was downloaded.
+    pub loudness_db: Option<f64>,
 }
 
 /// Cover art and lyrics are written next to the media file when a download
@@ -1865,6 +1876,7 @@ pub async fn get_offline_stream(
         content_type,
         artwork_url,
         lyrics: read_lyrics_sidecar(&record.file_path).await,
+        loudness_db: record.loudness_db,
     })
 }
 

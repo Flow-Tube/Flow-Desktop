@@ -215,6 +215,7 @@ export function useMusicDownloadDialog(track: SongItem | null) {
         thumbnailUrl: track.thumbnail || undefined,
         author: track.artists.map((artist) => artist.name).filter(Boolean).join(", ") || undefined,
         durationSeconds: track.duration ?? undefined,
+        loudnessDb: stream.loudnessDb ?? undefined,
       });
     } catch (reason) {
       setError(getBackendErrorMessage(reason));

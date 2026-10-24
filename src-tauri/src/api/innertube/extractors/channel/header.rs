@@ -15,6 +15,42 @@ fn page_header(page: &Value) -> &Value {
     &page["header"]["pageHeaderRenderer"]["content"]["pageHeaderViewModel"]
 }
 
+/// The counts row after the handle, part by part: subscribers, then videos.
+fn counts_row(header: &Value) -> Vec<String> {
+    header["metadata"]["contentMetadataViewModel"]["metadataRows"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|row| {
+            row["metadataParts"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|part| text_of(&part["text"]))
+                .map(|text| text.trim().to_string())
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .find(|parts| parts.first().is_some_and(|first| !first.starts_with('@')))
+        .unwrap_or_default()
+}
+
+/// The subscriber and video counts as written. English names them; other
+/// languages are read by position, subscribers first, and a lone part is
+/// shown as the subscriber count without being read as a number.
+fn counts(rows: &[String], header: &Value) -> (Option<String>, Option<String>) {
+    if crate::api::innertube::core::locale::is_english() {
+        return (
+            rows.iter().find(|row| mentions(row, "subscriber")).cloned(),
+            rows.iter()
+                .find(|row| mentions(row, "video") && !row.starts_with('@'))
+                .cloned(),
+        );
+    }
+    let row = counts_row(header);
+    (row.first().cloned(), row.get(1).cloned())
+}
+
 /// The header's metadata rows: "@handle", "16.9M subscribers", "7.9K videos".
 fn metadata_rows(header: &Value) -> Vec<String> {
     header["metadata"]["contentMetadataViewModel"]["metadataRows"]
@@ -38,11 +74,10 @@ pub fn parse_header(page: &Value, requested_id: &str) -> ChannelDetails {
     let legacy = &page["header"]["c4TabbedHeaderRenderer"];
     let metadata = &page["metadata"]["channelMetadataRenderer"];
     let rows = metadata_rows(header);
-    let subscriber_count_text = rows
-        .iter()
-        .find(|row| mentions(row, "subscriber"))
-        .cloned()
-        .or_else(|| text_of(&legacy["subscriberCountText"]));
+    let (subscribers, videos) = counts(&rows, header);
+    // A lone count outside English may be the video count; it is shown, not read.
+    let read_subscribers = crate::api::innertube::core::locale::is_english() || videos.is_some();
+    let subscriber_count_text = subscribers.or_else(|| text_of(&legacy["subscriberCountText"]));
     let title = &header["title"]["dynamicTextViewModel"]["text"];
     ChannelDetails {
         id: metadata["externalId"]
@@ -87,13 +122,12 @@ pub fn parse_header(page: &Value, requested_id: &str) -> ChannelDetails {
                 url.strip_prefix("//")
                     .map_or(url.clone(), |rest| format!("https://{rest}"))
             }),
-        subscriber_count: subscriber_count_text.as_deref().and_then(parse_count),
+        subscriber_count: subscriber_count_text
+            .as_deref()
+            .filter(|_| read_subscribers)
+            .and_then(parse_count),
         subscriber_count_text,
-        video_count_text: rows
-            .iter()
-            .find(|row| mentions(row, "video") && !row.starts_with('@'))
-            .cloned()
-            .or_else(|| text_of(&legacy["videosCountText"])),
+        video_count_text: videos.or_else(|| text_of(&legacy["videosCountText"])),
         verified: title["attachmentRuns"].to_string().contains("CHECK_CIRCLE")
             || legacy["badges"]
                 .to_string()

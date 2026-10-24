@@ -17,8 +17,30 @@ use crate::models::video::{RelatedContentItem, VideoSummary};
 /// One metadata part of a lockup.
 struct Part<'a> {
     text: &'a str,
+    /// The part spelt out for screen readers. Outside English it is the only
+    /// full form of a compact age ("il y a 2 sem." is "il y a 2 semaines").
+    label: Option<&'a str>,
     has_icon: bool,
     is_verified: bool,
+}
+
+impl Part<'_> {
+    fn is_age(&self) -> bool {
+        relative_age(self.text).is_some()
+            || self
+                .label
+                .is_some_and(|label| relative_age(label).is_some())
+    }
+
+    /// The age as the card shows it: the text when it reads as one, else its full form.
+    fn age_text(&self) -> &str {
+        match self.label {
+            Some(label) if relative_age(self.text).is_none() && relative_age(label).is_some() => {
+                label
+            }
+            _ => self.text,
+        }
+    }
 }
 
 fn metadata(lockup: &Value) -> &Value {
@@ -39,6 +61,7 @@ fn parts(row: &Value) -> Vec<Part<'_>> {
         .filter_map(|part| {
             Some(Part {
                 text: part["text"]["content"].as_str()?,
+                label: part["accessibilityLabel"].as_str(),
                 has_icon: part.get("leadingIcon").is_some(),
                 is_verified: part["text"]["attachmentRuns"]
                     .as_array()
@@ -197,18 +220,20 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
     let channel = all_rows
         .first()
         .and_then(|row| row.first())
-        .filter(|part| !part.has_icon && relative_age(part.text).is_none());
+        .filter(|part| !part.has_icon && !part.is_age());
     let published = all_parts()
-        .find(|part| relative_age(part.text).is_some() || is_upcoming_text(part.text))
-        .map(|part| part.text.to_string());
+        .find(|part| part.is_age() || is_upcoming_text(part.text))
+        .map(|part| part.age_text().to_string());
     // Rows after the first hold the counts; the first row is the byline.
     let views = all_parts()
         .find(|part| part.has_icon)
         .or_else(|| {
+            // An abbreviated count in another language ("23 Mio.") reads as no
+            // number, but is still the count the card shows.
             all_rows.iter().skip(1).flatten().find(|part| {
-                relative_age(part.text).is_none()
+                !part.is_age()
                     && !is_upcoming_text(part.text)
-                    && parse_count(part.text).is_some()
+                    && part.text.chars().any(|c| c.is_ascii_digit())
             })
         })
         .map(|part| part.text.to_string());

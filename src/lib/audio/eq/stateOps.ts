@@ -128,16 +128,17 @@ export function canSaveActive(state: EqState): boolean {
   return isEdited(state) && userPreset(state, activeCopy(state).presetId)?.mode === state.mode;
 }
 
-const withActive = (state: EqState, working: EqWorkingCopy): EqState =>
+/** Puts `working` in the current mode, preset id and all. */
+export const withWorkingCopy = (state: EqState, working: EqWorkingCopy): EqState =>
   state.mode === "PARAMETRIC" ? { ...state, parametric: working } : { ...state, graphic: working };
 
 export const withActiveCurve = (state: EqState, curve: EqCurve): EqState =>
-  withActive(state, { ...activeCopy(state), curve: sanitizedFor(state.mode, curve) });
+  withWorkingCopy(state, { ...activeCopy(state), curve: sanitizedFor(state.mode, curve) });
 
 /** Plays preset `id` in the current mode; the mode itself never changes here. */
 export function selectPreset(state: EqState, id: string): EqState {
   const curve = presetCurveFor(state, state.mode, id);
-  return curve ? withActive(state, { presetId: id, curve }) : state;
+  return curve ? withWorkingCopy(state, { presetId: id, curve }) : state;
 }
 
 export const revert = (state: EqState): EqState =>
@@ -152,7 +153,7 @@ export function saveActive(state: EqState): EqState {
 export function saveActiveAs(state: EqState, id: string, name: string): EqState {
   const curve = activeCopy(state).curve;
   const next = { ...state, userPresets: [...state.userPresets, { id, name, curve, mode: state.mode, imported: false }] };
-  return withActive(next, { presetId: id, curve });
+  return withWorkingCopy(next, { presetId: id, curve });
 }
 
 export const renamePreset = (state: EqState, id: string, name: string): EqState => ({

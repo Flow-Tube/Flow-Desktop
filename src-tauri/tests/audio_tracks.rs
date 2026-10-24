@@ -7,7 +7,9 @@
 //! produce these shapes also serve no muxed format, so playback falls back to a
 //! video-only URL and the video plays silently.
 
-use flow_desktop_lib::api::innertube::extractors::player::collect_audio_tracks;
+use flow_desktop_lib::api::innertube::extractors::player::{
+    collect_audio_tracks, collect_audio_tracks_preferring,
+};
 use serde_json::{Value, json};
 
 const UA: &str = "test-agent";
@@ -377,4 +379,13 @@ fn the_normal_copy_beats_its_drc_twin_when_every_copy_is_tagged() {
     assert_eq!(tracks[0].bitrate, Some(130_000), "the DRC copy must lose");
     assert!(tracks[0].is_default);
     assert_eq!(tracks[0].audio_track_type.as_deref(), Some("original"));
+
+    let stable = collect_audio_tracks_preferring(&data, UA, true);
+    assert_eq!(stable.len(), 1);
+    assert_eq!(
+        stable[0].bitrate,
+        Some(130_006),
+        "Stable volume asks for the DRC copy"
+    );
+    assert!(stable[0].is_default);
 }

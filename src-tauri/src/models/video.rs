@@ -240,6 +240,9 @@ pub struct StreamInfo {
     // `None` when extraction found no SABR metadata at all.
     #[serde(default)]
     pub sabr: Option<SabrStreamInfo>,
+    /// How many dB louder than the site's target the video plays.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loudness_db: Option<f64>,
     /// Seek-bar preview sheets, one entry per resolution, smallest first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub storyboard: Vec<StoryboardLevel>,

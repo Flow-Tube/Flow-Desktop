@@ -1,4 +1,5 @@
 use crate::api::innertube::core::remote_decoder;
+use crate::api::innertube::extractors::audio_preference;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
 use crate::errors::ErrorResponse;
@@ -88,10 +89,23 @@ pub async fn set_setting(
     settings::set_setting(&pool, &key, &value)
         .await
         .map_err(ErrorResponse::from)?;
-    if key == remote_decoder::SETTING_KEY {
-        remote_decoder::set_enabled(remote_decoder::enabled_from_setting(Some(&value)));
-    }
+    apply_backend_setting(&key, Some(&value));
     Ok(())
+}
+
+/// Settings the backend acts on itself, applied at startup and whenever saved.
+pub(crate) const BACKEND_SETTINGS: [&str; 2] = [
+    remote_decoder::SETTING_KEY,
+    audio_preference::STABLE_VOLUME_SETTING,
+];
+
+pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
+    let enabled = value.is_some_and(|value| value.eq_ignore_ascii_case("true"));
+    if key == remote_decoder::SETTING_KEY {
+        remote_decoder::set_enabled(enabled);
+    } else if key == audio_preference::STABLE_VOLUME_SETTING {
+        audio_preference::set_stable_volume(enabled);
+    }
 }
 
 /// Sync bookkeeping never blocks the user's own change; the worst case is that this one edit

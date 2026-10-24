@@ -312,17 +312,12 @@ pub fn run() {
                 ))
             })?;
 
-            let remote_decoder_setting = tauri::async_runtime::block_on(db::settings::get_setting(
-                &pool,
-                api::innertube::core::remote_decoder::SETTING_KEY,
-            ))
-            .ok()
-            .flatten();
-            api::innertube::core::remote_decoder::set_enabled(
-                api::innertube::core::remote_decoder::enabled_from_setting(
-                    remote_decoder_setting.as_deref(),
-                ),
-            );
+            for key in commands::db::BACKEND_SETTINGS {
+                let value = tauri::async_runtime::block_on(db::settings::get_setting(&pool, key))
+                    .ok()
+                    .flatten();
+                commands::db::apply_backend_setting(key, value.as_deref());
+            }
 
             // Manage database pool
             app.manage(pool.clone());

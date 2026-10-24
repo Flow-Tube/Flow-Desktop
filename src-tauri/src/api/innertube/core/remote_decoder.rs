@@ -37,12 +37,6 @@ pub fn is_enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
-/// Whether a saved setting value turns the decoder on.
-#[must_use]
-pub fn enabled_from_setting(value: Option<&str>) -> bool {
-    value.is_some_and(|value| value.eq_ignore_ascii_case("true"))
-}
-
 /// The decoder's current player, whose signature timestamp a request must carry
 /// for its signatures to be solvable.
 #[derive(Clone, Debug)]
@@ -227,13 +221,6 @@ mod tests {
         assert_eq!(decoded.get("AbC").map(String::as_str), Some("solved"));
         assert!(!decoded.contains_key("empty"));
         assert!(parse_decoded(&json!({})).is_empty());
-    }
-
-    #[test]
-    fn only_a_true_setting_turns_it_on() {
-        assert!(enabled_from_setting(Some("true")));
-        assert!(!enabled_from_setting(Some("false")));
-        assert!(!enabled_from_setting(None));
     }
 
     #[test]

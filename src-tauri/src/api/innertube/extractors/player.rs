@@ -14,6 +14,7 @@ use crate::api::innertube::extractors::playability::{
     is_bot_wall, map_playability_error,
 };
 use crate::api::innertube::extractors::watch_next;
+use crate::api::innertube::json::loudness::loudness_db;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::thumbnail_url_from_array;
 use crate::api::innertube::json::xtags::decode_xtags;
@@ -575,19 +576,37 @@ impl AudioCandidate {
     /// Preference order between two formats that share an identity key, best last.
     ///
     /// The normal copy outranks its DRC twin, whose bitrate differs by a few
-    /// bytes a second, so bitrate alone picked the loudness-flattened one. A
+    /// bytes a second, so bitrate alone picked the loudness-flattened one;
+    /// with Stable volume on, the DRC twin is the one asked for. A
     /// plain twin then outranks a tagged one: googlevideo refused sustained
     /// playback on some tagged variants, so a higher bitrate there bought a
     /// stream that died partway in.
-    fn rank(&self) -> (bool, bool, bool, bool, u64) {
+    fn rank(&self, stable_volume: bool) -> (bool, bool, bool, bool, u64) {
         (
-            !self.is_drc,
+            self.is_drc == stable_volume,
             self.declared_default.unwrap_or(false),
             !self.is_auto_dubbed,
             !self.has_xtags,
             self.track.bitrate.unwrap_or(0),
         )
     }
+}
+
+/// How much louder than the site's target the video plays, for normalising
+/// volume across videos.
+fn stream_loudness_db(player: &Value, streaming_data: &Value) -> Option<f64> {
+    let audio_format = streaming_data["adaptiveFormats"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|format| {
+            format["mimeType"]
+                .as_str()
+                .is_some_and(|mime| mime.starts_with("audio/"))
+                && format["loudnessDb"].is_number()
+        })
+        .unwrap_or(&Value::Null);
+    loudness_db(&player["playerConfig"]["audioConfig"], audio_format)
 }
 
 /// The `audio_track_type` an `xtags` `acont` names, when it names one.
@@ -605,6 +624,20 @@ fn track_type_from_acont(acont: &str) -> Option<&'static str> {
 /// Public so `tests/audio_tracks.rs` can exercise the duplicate-resolution rules
 /// against real response shapes; nothing outside extraction calls it.
 pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<AudioTrack> {
+    collect_audio_tracks_preferring(
+        streaming_data,
+        user_agent,
+        super::audio_preference::prefers_stable_volume(),
+    )
+}
+
+/// [`collect_audio_tracks`] with the stable-volume preference given, not read
+/// from the setting.
+pub fn collect_audio_tracks_preferring(
+    streaming_data: &Value,
+    user_agent: &str,
+    stable_volume: bool,
+) -> Vec<AudioTrack> {
     let mut candidates_by_key: HashMap<String, AudioCandidate> = HashMap::new();
 
     if let Some(adaptive_formats) = streaming_data["adaptiveFormats"].as_array() {
@@ -695,7 +728,8 @@ pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<Aud
             };
 
             match candidates_by_key.get(&track_key) {
-                Some(existing) if existing.rank() >= candidate.rank() => {}
+                Some(existing) if existing.rank(stable_volume) >= candidate.rank(stable_volume) => {
+                }
                 _ => {
                     candidates_by_key.insert(track_key, candidate);
                 }
@@ -704,7 +738,7 @@ pub fn collect_audio_tracks(streaming_data: &Value, user_agent: &str) -> Vec<Aud
     }
 
     let mut candidates: Vec<AudioCandidate> = candidates_by_key.into_values().collect();
-    candidates.sort_by(|a, b| b.rank().cmp(&a.rank()));
+    candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.rank(stable_volume)));
 
     // Many responses never flag a default at all — VISIONOS omits `audioTrack`
     // entirely on videos with no dubs. Promote the best candidate rather than
@@ -2030,6 +2064,7 @@ impl InnertubeClient {
             hls_manifest_url,
             dash_manifest_url,
             is_live,
+            loudness_db: stream_loudness_db(&res, streaming_data),
             storyboard: super::storyboard::parse_storyboard(&res, duration_seconds),
             sabr,
             sabr_descriptor,

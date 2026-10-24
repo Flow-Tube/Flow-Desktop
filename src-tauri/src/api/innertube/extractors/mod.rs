@@ -1,3 +1,4 @@
+pub mod audio_preference;
 pub mod category;
 pub mod channel;
 pub mod comments;

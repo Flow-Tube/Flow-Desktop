@@ -7,6 +7,7 @@ pub mod files;
 pub mod home_feed;
 pub mod music;
 pub mod music_brain;
+pub mod music_queue;
 pub mod notifications;
 pub mod pip;
 pub mod recommendation;

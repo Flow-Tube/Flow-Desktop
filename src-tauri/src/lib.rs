@@ -67,6 +67,10 @@ use commands::music_brain::{
     get_music_time_rotation, rank_music_candidates, record_music_interaction, reset_music_brain,
     unblock_music_artist,
 };
+use commands::music_queue::{
+    clear_music_queue_state, get_music_resume_position, load_music_queue_state,
+    save_music_queue_state, save_music_resume_position,
+};
 use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
     get_unread_notification_count, mark_notifications_read,
@@ -617,6 +621,12 @@ pub fn run() {
             get_music_brain_snapshot,
             get_music_taste_profile,
             reset_music_brain,
+            // --- Music queue restore and long-track resume ---
+            save_music_queue_state,
+            load_music_queue_state,
+            clear_music_queue_state,
+            save_music_resume_position,
+            get_music_resume_position,
             // --- Flow Local Sync (P2P LAN) ---
             sync_device_info,
             sync_status,

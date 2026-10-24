@@ -9,6 +9,7 @@ import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
 import { musicListens, useMusicListenHistory } from "../../lib/useMusicListenHistory";
 import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
 import { sleepTimerTakesEnd, tickSleepTimer, useSleepTimerDriver } from "../../lib/useSleepTimerDriver";
+import { useLyricsLookup } from "../../lib/lyrics/useLyrics";
 
 /**
  * Wraps a media-element handler so only the element that is playing drives the
@@ -40,6 +41,7 @@ export function GlobalMusicAudio() {
   useMusicQueuePersistence();
   useSleepTimerDriver();
   useMusicMediaSession();
+  useLyricsLookup();
 
   const store = () => useMusicPlayerStore.getState();
   const audioProps = {

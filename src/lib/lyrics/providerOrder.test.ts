@@ -14,9 +14,17 @@ describe("lyrics provider order", () => {
   });
 
   it("inserts a provider the saved order lacks right after its default predecessor", () => {
-    const saved = ["LyricsPlus", "BetterLyrics", "SimpMusic", "KuGou", "LrcLib", "YouTube"];
+    const saved = ["LyricsPlus", "BetterLyrics", "LrcRed", "SimpMusic", "KuGou", "LrcLib", "Unison", "YouTube"];
     const resolved = resolveProviderOrder(saved.join(","));
     expect(resolved.indexOf("Paxsenix")).toBe(resolved.indexOf("KuGou") + 1);
+    expect(resolved.filter((name) => saved.includes(name))).toEqual(saved);
+  });
+
+  it("puts lrc.red right after BetterLyrics in an order saved before it existed", () => {
+    const saved = ["LyricsPlus", "BetterLyrics", "KuGou", "SimpMusic", "Paxsenix", "LrcLib", "YouTube"];
+    const resolved = resolveProviderOrder(saved.join(","));
+    expect(resolved.indexOf("LrcRed")).toBe(resolved.indexOf("BetterLyrics") + 1);
+    expect(resolved.indexOf("Unison")).toBe(resolved.indexOf("LrcLib") + 1);
     expect(resolved.filter((name) => saved.includes(name))).toEqual(saved);
   });
 

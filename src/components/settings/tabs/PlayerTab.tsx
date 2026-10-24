@@ -14,6 +14,8 @@ import {
   parseProviderEnabledStates,
   serializeProviderEnabledStates,
 } from '../../../lib/lyrics/registry';
+import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
+import { LyricsProviderList } from '../LyricsProviderList';
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -44,7 +46,7 @@ export function PlayerTab() {
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
   const [subtitleScale, setSubtitleScale] = usePreference(SETTINGS.SUBTITLE_FONT_SCALE, '100');
   const [subtitleBold, setSubtitleBold] = useBoolPref(SETTINGS.SUBTITLE_BOLD, true);
-  const [lyricsProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
+  const [lyricsProviderOrder, setLyricsProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
   const [lyricsEnabledRaw, setLyricsEnabledRaw] = usePreference(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, '{}');
   const lyricsProviders = getOrderedProviders(lyricsProviderOrder);
   const lyricsEnabledStates = parseProviderEnabledStates(lyricsEnabledRaw);
@@ -163,18 +165,12 @@ export function PlayerTab() {
             {getString('settings_lyrics_ordered')}
           </span>
         </SettingItem>
-        {lyricsProviders.map((provider, index) => {
-          const enabled = lyricsEnabledStates[provider.name] !== false;
-          return (
-            <SettingItem
-              key={provider.name}
-              title={`${index + 1}. ${provider.name}`}
-              description={enabled ? getString('settings_lyrics_provider_enabled') : getString('settings_lyrics_provider_disabled')}
-            >
-              <ToggleSwitch checked={enabled} onChange={(next) => setLyricsProviderEnabled(provider.name, next)} />
-            </SettingItem>
-          );
-        })}
+        <LyricsProviderList
+          order={lyricsProviders.map((provider) => provider.name)}
+          isEnabled={(name) => lyricsEnabledStates[name] !== false}
+          onReorder={(order) => setLyricsProviderOrder(serializeProviderOrder(order))}
+          onToggle={setLyricsProviderEnabled}
+        />
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_mini_player')}>

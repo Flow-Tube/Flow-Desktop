@@ -21,6 +21,8 @@ export { LyricsActionsMenu } from "./lyrics/LyricsActionsMenu";
 const TEXT_SIZE = { full: 44, pane: 30 } as const;
 /** A full-width desktop window would make lines too long to read, so rows stop growing here. */
 const MAX_ROW_WIDTH = { full: 1100, pane: Number.POSITIVE_INFINITY } as const;
+/** The full view has the player's transport drawn over its bottom; Android's 24 dp sits above it. */
+const RESYNC_BOTTOM = { full: 272, pane: 24 } as const;
 
 function hexToRgb(hex: string): Rgb {
   const value = hex.replace("#", "");
@@ -85,6 +87,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
         active={active}
         isPlaying={isPlaying}
         onSeekTo={onSeekTo}
+        resyncBottom={RESYNC_BOTTOM[variant]}
         className="h-full w-full"
       />
       {lyrics.source && !lyrics.isSynced && (

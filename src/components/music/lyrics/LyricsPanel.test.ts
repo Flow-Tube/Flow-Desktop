@@ -86,6 +86,7 @@ function render(props: Partial<Parameters<typeof LyricsPanel>[0]> = {}) {
         active: true,
         isPlaying: true,
         onSeekTo: (ms: number) => seeks.push(ms),
+        resyncBottom: 24,
         ...props,
       }),
     );

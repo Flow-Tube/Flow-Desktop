@@ -997,6 +997,8 @@
   "music_blocked_artists_desc": "Artists you've blocked are never recommended in music.",
   "music_no_blocked_artists": "No blocked artists.",
   "music_up_next": "Next up",
+  "music_lyrics_full_player": "Show lyrics across the whole player",
+  "music_lyrics_back_to_pane": "Back to the side pane",
   "music_autoplay": "Autoplay",
   "music_autoplay_desc": "Keep playing similar music when the queue ends",
   "music_clear_queue": "Clear",

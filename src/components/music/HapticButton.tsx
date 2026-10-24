@@ -12,7 +12,8 @@ export function HapticButton({
     <motion.button
       type={type}
       whileTap={{ scale: 0.9 }}
-      transition={transition ?? { type: "spring", stiffness: 400, damping: 17 }}
+      // Critically damped: the press settles without bouncing back past its size.
+      transition={transition ?? { type: "spring", stiffness: 400, damping: 40 }}
       {...props}
     >
       {children}

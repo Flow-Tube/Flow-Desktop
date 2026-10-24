@@ -57,7 +57,11 @@ export function AnchoredPortalMenu({
       if (ref.current && !ref.current.contains(event.target as Node)) onClose();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      // Claimed here, so a player underneath doesn't also close on the same Escape.
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
     };
     document.addEventListener("mousedown", onPointerDown);
     if (closeOnScroll) window.addEventListener("scroll", onClose, true);

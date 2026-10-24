@@ -324,6 +324,8 @@ export interface QueuePage {
   lyricsParams: string | null;
   relatedBrowseId: string | null;
   radioPlaylistId: string | null;
+  /** The params the site's own automix continues with. */
+  radioParams?: string | null;
 }
 
 export interface MoodGenrePage {

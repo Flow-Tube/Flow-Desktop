@@ -55,6 +55,18 @@ describe("start radio", () => {
     expect(state.queue.map((t) => t.id)).toEqual(["seed", "r1", "r2", "r3"]);
   });
 
+  it("continues the site's own automix for the seed, with its params", async () => {
+    getMusicWatchQueue
+      .mockResolvedValueOnce({ items: [], continuation: null, radioPlaylistId: "RDAMVMseed", radioParams: "AUTOMIX" })
+      .mockResolvedValue({ items: [song("r1")], continuation: null, radioPlaylistId: "RDAMVMseed", radioParams: "AUTOMIX" });
+    await useMusicPlayerStore.getState().startRadio(song("seed"));
+    await useMusicPlayerStore.getState()._ensureRadio();
+
+    expect(getMusicWatchQueue).toHaveBeenNthCalledWith(1, "seed");
+    expect(getMusicWatchQueue).toHaveBeenNthCalledWith(2, "seed", "RDAMVMseed", "AUTOMIX");
+    expect(useMusicPlayerStore.getState().queue.map((t) => t.id)).toEqual(["seed", "r1"]);
+  });
+
   it("stops extending when the radio switch is turned off", async () => {
     useMusicPlayerStore.setState({ radioEnabled: true });
     await useMusicPlayerStore.getState().startRadio(song("seed"));

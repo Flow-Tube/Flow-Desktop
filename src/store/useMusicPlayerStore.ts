@@ -133,6 +133,8 @@ const RADIO_MAX_PAGES = 4;
 
 let radioContinuation: string | null = null;
 let radioPlaylistId: string | null = null;
+// The params the site's automix continues with, kept with its playlist id.
+let radioParams: string | null = null;
 const radioSessionSeen = new Set<string>();
 let radioInFlight: Promise<void> | null = null;
 
@@ -143,6 +145,7 @@ let hiddenPredicate: (track: SongItem) => boolean = () => false;
 const resetRadioSession = (seedIds: string[] = []) => {
   radioContinuation = null;
   radioPlaylistId = null;
+  radioParams = null;
   radioInFlight = null;
   radioSessionSeen.clear();
   for (const id of seedIds) radioSessionSeen.add(id);
@@ -326,10 +329,26 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
           if (radioContinuation) {
             result = await getMusicQueueContinuation(radioContinuation);
           } else {
-            result = await getMusicWatchQueue(seedId, radioPlaylistId ?? stationIdFor(seedId));
+            // The seed's own queue names the site's automix for it: the same
+            // station, with the params it continues with.
+            if (!radioPlaylistId) {
+              const seedQueue = await getMusicWatchQueue(seedId).catch(() => null);
+              if (seedQueue?.radioPlaylistId) {
+                radioPlaylistId = seedQueue.radioPlaylistId;
+                radioParams = seedQueue.radioParams ?? null;
+              }
+            }
+            result = await getMusicWatchQueue(
+              seedId,
+              radioPlaylistId ?? stationIdFor(seedId),
+              radioParams ?? undefined,
+            );
           }
           radioContinuation = result.continuation;
-          if (result.radioPlaylistId) radioPlaylistId = result.radioPlaylistId;
+          if (result.radioPlaylistId) {
+            radioPlaylistId = result.radioPlaylistId;
+            radioParams = result.radioParams ?? null;
+          }
 
           const seen = new Set([
             ...get().queue.map(videoIdOf),

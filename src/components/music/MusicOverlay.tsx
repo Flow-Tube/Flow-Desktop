@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ListMusic, Mic2, Minimize2, RefreshCw, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
@@ -13,7 +13,7 @@ import { getString } from "../../lib/i18n/index";
 import { HapticButton } from "./HapticButton";
 import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
-import { MusicLyrics } from "./MusicLyrics";
+import { LyricsActionsMenu, MusicLyrics } from "./MusicLyrics";
 import { AmbientBackdrop } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
@@ -21,7 +21,6 @@ import { VolumePopover } from "./VolumePopover";
 import { LAYOUT_SPRING, NowPlayingColumn } from "./player/NowPlayingColumn";
 import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
 import { PlayerTransport } from "./player/PlayerTransport";
-import { useLyricsStore } from "../../store/useLyricsStore";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useFullPlayerColors } from "../../lib/usePlayerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
@@ -152,11 +151,7 @@ export function MusicOverlay() {
             </p>
 
             <div className="relative flex items-center gap-1 justify-self-end">
-              {isLyrics && (
-                <HapticButton onClick={() => useLyricsStore.getState().refresh()} aria-label={getString("music_refresh_lyrics")} className={TOP_BTN}>
-                  <RefreshCw className="h-5 w-5" />
-                </HapticButton>
-              )}
+              {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
               {wide && lyricsExpanded && (
                 <HapticButton
                   onClick={() => setLyricsExpanded(false)}

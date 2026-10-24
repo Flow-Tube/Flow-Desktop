@@ -15,6 +15,12 @@ const COOLDOWN_MS = 10 * 60 * 1000;
 // After a line-synced hit, the providers after it get this long in total to find word sync.
 const WORD_SYNC_GRACE_MS = 4000;
 
+export interface LyricsCandidate {
+  providerName: string;
+  entries: LyricsEntry[];
+  synced: boolean;
+}
+
 export interface LyricsRequest {
   videoId: string;
   title: string;
@@ -170,4 +176,43 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   // connection can still find a synced version.
   const offline = getOfflineLyrics(videoId);
   return offline ? { entries: offline, provider: "Downloaded" } : null;
+}
+
+/**
+ * Streams a result from every enabled provider, in the user's order, so the lyrics menu can offer
+ * alternatives when the automatic pick is wrong. Unlike `getLyrics` it never stops at the first
+ * synced hit and never touches the caches.
+ */
+export async function getAllLyrics(
+  request: LyricsRequest,
+  onCandidate: (candidate: LyricsCandidate) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const title = cleanTitle(request.title);
+  const artist = cleanArtist(request.artist);
+  for (const provider of enabledProviders()) {
+    if (signal.aborted) return;
+    try {
+      const answer = await callProvider(
+        provider.getLyrics(request.videoId, title, artist, request.durationSec, request.album),
+        PROVIDER_TIMEOUT_MS,
+        signal,
+      );
+      const raw = Array.isArray(answer) ? answer : answer?.entries;
+      if (!raw || raw.length === 0) continue;
+      const entries = filterCreditLines(normalizeEntries(sorted(raw)));
+      if (entries.length > 0 && hasReasonableTimestamps(entries, request.durationSec) && !signal.aborted) {
+        onCandidate({ providerName: provider.name, entries, synced: entriesAreSynced(entries) });
+      }
+    } catch {
+      if (signal.aborted) return;
+    }
+  }
+}
+
+/** Makes chosen or edited lyrics the lyrics of record for the song, so they survive a restart. */
+export function applyManualLyrics(videoId: string, entries: LyricsEntry[]): void {
+  if (entries.length === 0) return;
+  cache.setMemory(videoId, entries);
+  cache.setDisk(videoId, entries);
 }

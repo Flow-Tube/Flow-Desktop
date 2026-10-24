@@ -1,12 +1,7 @@
 import { create } from "zustand";
 
 import type { MusicStreamInfo, SongItem } from "../types/music";
-import {
-  getMusicQueueContinuation,
-  getMusicWatchQueue,
-  rankMusicCandidates,
-  type MusicAudioQuality,
-} from "../lib/api/music";
+import type { MusicAudioQuality } from "../lib/api/music";
 import { getOfflineStream } from "../lib/api/downloads";
 import {
   invalidateMusicStream,
@@ -21,7 +16,18 @@ import { recordPlayerEvent } from "../lib/playerDiagnostics";
 import { logToBackend } from "../lib/diagnostics";
 import { musicAudioEngine } from "../lib/audio/musicAudioEngine";
 import { preloadTrack } from "../lib/musicPreload";
-import { resetQueueOrder, upcomingIndex, type QueueRepeatMode } from "../lib/musicQueueOrder";
+import { upcomingIndex, type QueueRepeatMode } from "../lib/musicQueueOrder";
+import { restoreOriginalOrder, shuffleFrom, shuffleUpcoming } from "../lib/musicShuffle";
+import {
+  appendTracks,
+  insertNext,
+  isUpcoming,
+  removeAt,
+  removeWhere,
+  type QueueLists,
+} from "../lib/musicQueueEdits";
+import { radioSession } from "../lib/musicRadioSession";
+import { POOL_LOW_WATER } from "../lib/musicRadioPlanner";
 import { SETTINGS } from "../lib/settings/schema";
 import {
   EQ_FLAT,
@@ -131,11 +137,6 @@ const RADIO_LOW_WATER = 3;
 const RADIO_BATCH = 10;
 const RADIO_MAX_PAGES = 4;
 
-let radioContinuation: string | null = null;
-let radioPlaylistId: string | null = null;
-// The params the site's automix continues with, kept with its playlist id.
-let radioParams: string | null = null;
-const radioSessionSeen = new Set<string>();
 let radioInFlight: Promise<void> | null = null;
 
 // Hide predicate pushed in by `useMusicActionsStore` (block list). Kept as a module-level
@@ -143,23 +144,51 @@ let radioInFlight: Promise<void> | null = null;
 let hiddenPredicate: (track: SongItem) => boolean = () => false;
 
 const resetRadioSession = (seedIds: string[] = []) => {
-  radioContinuation = null;
-  radioPlaylistId = null;
-  radioParams = null;
   radioInFlight = null;
-  radioSessionSeen.clear();
-  for (const id of seedIds) radioSessionSeen.add(id);
+  radioSession.reset(seedIds);
 };
 
-const stationIdFor = (videoId: string): string => `RDAMVM${videoId}`;
+const queueListsOf = (s: QueueLists): QueueLists => ({
+  queue: s.queue,
+  unshuffledQueue: s.unshuffledQueue,
+  currentIndex: s.currentIndex,
+});
 
-const isPlayableAudio = (s: SongItem): boolean => {
-  const vt = s.musicVideoType;
-  const isVideoSong = !!vt && vt !== "MUSIC_VIDEO_TYPE_ATV";
-  const dur = s.duration ?? 0;
-  const okDuration = dur === 0 || (dur >= 30 && dur <= 1200);
-  return !isVideoSong && okDuration && !!(s.videoId ?? s.id);
+/** The station's tracks still waiting to play, which count toward each artist's share. */
+const waitingStationTracks = (s: Pick<MusicPlayerState, "queue" | "currentIndex" | "radioQueuedIds">) => {
+  const station = new Set(s.radioQueuedIds);
+  return s.queue.filter((t, i) => i > s.currentIndex && station.has(videoIdOf(t)));
 };
+
+/**
+ * A queue replacing the last one, with no station tracks and no undo of the
+ * old one. `unshuffled` is the order shuffle restores, or null with shuffle off.
+ */
+const freshQueue = (queue: SongItem[], unshuffled: SongItem[] | null) => {
+  undoSnapshot = null;
+  return {
+    queue,
+    unshuffledQueue: unshuffled,
+    radioQueuedIds: [],
+    radioLoading: false,
+    radioExhausted: false,
+  };
+};
+
+type UndoSnapshot = Pick<
+  MusicPlayerState,
+  "queue" | "unshuffledQueue" | "currentIndex" | "radioQueuedIds" | "queueSource"
+>;
+/** The queue as it stood before the last removal or clear, for its undo toast. */
+let undoSnapshot: UndoSnapshot | null = null;
+
+const undoSnapshotOf = (s: UndoSnapshot): UndoSnapshot => ({
+  queue: s.queue,
+  unshuffledQueue: s.unshuffledQueue,
+  currentIndex: s.currentIndex,
+  radioQueuedIds: s.radioQueuedIds,
+  queueSource: s.queueSource,
+});
 
 const getMusicAudioQualitySetting = (): MusicAudioQuality => {
   const value = getSettingValue(SETTINGS.MUSIC_AUDIO_QUALITY);
@@ -194,10 +223,14 @@ interface MusicPlayerState {
 
   /** Where the current queue was started from ("Playing from …"); null for ad-hoc plays. */
   queueSource: string | null;
+  /** The order shuffle rearranged, restored when it is turned off; null while shuffle is off. */
+  unshuffledQueue: SongItem[] | null;
 
   // --- radio / autoplay ---
   radioLoading: boolean;
   radioQueuedIds: string[];
+  /** The station found nothing more to play, even from its anchor songs. */
+  radioExhausted: boolean;
 
   // --- overlay / surface ---
   viewState: MusicViewState;
@@ -232,6 +265,8 @@ interface MusicPlayerState {
   removeFromQueue: (index: number) => void;
   reorderQueue: (from: number, to: number) => void;
   clearQueue: () => void;
+  /** Puts back the queue as it was before the last removal or clear. */
+  undoQueueEdit: () => void;
 
   // --- block list integration (driven by useMusicActionsStore) ---
   setHiddenPredicate: (predicate: (track: SongItem) => boolean) => void;
@@ -285,8 +320,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   radioEnabled: initialConfig.radioEnabled,
   radioStationActive: false,
   queueSource: null,
+  unshuffledQueue: null,
   radioLoading: false,
   radioQueuedIds: [],
+  radioExhausted: false,
 
   viewState: "dock",
 
@@ -298,87 +335,73 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   playTrack: async (track) => {
     resetRadioSession([videoIdOf(track)]);
-    set({ queue: [track], radioQueuedIds: [], radioStationActive: false, queueSource: null });
+    set({ ...freshQueue([track], get().isShuffle ? [track] : null), radioStationActive: false, queueSource: null });
     await get()._loadIndex(0);
   },
 
   playQueue: async (tracks, startIndex = 0, source = null) => {
     if (tracks.length === 0) return;
     resetRadioSession(tracks.map(videoIdOf));
-    set({ queue: tracks, radioQueuedIds: [], radioStationActive: false, queueSource: source });
-    await get()._loadIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
+    const start = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    const shuffled = get().isShuffle;
+    set({
+      ...freshQueue(shuffled ? shuffleFrom(tracks, start) : tracks, shuffled ? tracks : null),
+      radioStationActive: false,
+      queueSource: source,
+    });
+    await get()._loadIndex(shuffled ? 0 : start);
   },
 
   _ensureRadio: async () => {
     if (radioInFlight) return radioInFlight;
     const { queue, currentIndex, isShuffle } = get();
-    if (!selectRadioOn(get()) || isShuffle) return;
-    if (queue.length - 1 - currentIndex > RADIO_LOW_WATER) return;
+    if (!selectRadioOn(get())) return;
+    const remaining = queue.length - 1 - currentIndex;
+    // Shuffle means "shuffle my queue" while it plays; the station carries on
+    // once every shuffled song has had its turn.
+    if (remaining > (isShuffle ? 0 : RADIO_LOW_WATER)) return;
 
     const seed = queue[queue.length - 1] ?? get().currentTrack;
     if (!seed) return;
+    const generation = radioSession.generation;
 
     radioInFlight = (async () => {
       set({ radioLoading: true });
       try {
-        const seedId = videoIdOf(seed);
-        const collected: SongItem[] = [];
-
-        for (let page = 0; page < RADIO_MAX_PAGES && collected.length < RADIO_BATCH; page++) {
-          let result: Awaited<ReturnType<typeof getMusicWatchQueue>>;
-          if (radioContinuation) {
-            result = await getMusicQueueContinuation(radioContinuation);
-          } else {
-            // The seed's own queue names the site's automix for it: the same
-            // station, with the params it continues with.
-            if (!radioPlaylistId) {
-              const seedQueue = await getMusicWatchQueue(seedId).catch(() => null);
-              if (seedQueue?.radioPlaylistId) {
-                radioPlaylistId = seedQueue.radioPlaylistId;
-                radioParams = seedQueue.radioParams ?? null;
-              }
-            }
-            result = await getMusicWatchQueue(
-              seedId,
-              radioPlaylistId ?? stationIdFor(seedId),
-              radioParams ?? undefined,
-            );
-          }
-          radioContinuation = result.continuation;
-          if (result.radioPlaylistId) {
-            radioPlaylistId = result.radioPlaylistId;
-            radioParams = result.radioParams ?? null;
-          }
-
-          const seen = new Set([
-            ...get().queue.map(videoIdOf),
-            ...collected.map(videoIdOf),
-          ]);
-          for (const t of result.items) {
-            const id = videoIdOf(t);
-            if (isPlayableAudio(t) && !seen.has(id) && !radioSessionSeen.has(id) && !hiddenPredicate(t)) {
-              collected.push(t);
-              seen.add(id);
-            }
-          }
-
-          if (!radioContinuation) break;
-        }
-
-        const ordered = await rankMusicCandidates(collected, "radio").catch(() => collected);
-        const batch = ordered.slice(0, RADIO_BATCH);
-        if (batch.length > 0) {
-          for (const t of batch) radioSessionSeen.add(videoIdOf(t));
+        const queueIds = () => new Set(get().queue.map(videoIdOf));
+        const feedQueue = (): boolean => {
+          if (radioSession.generation !== generation) return false;
+          const batch = radioSession.take(queueIds(), RADIO_BATCH);
+          if (batch.length === 0) return false;
           set({
-            queue: [...get().queue, ...batch],
+            ...appendTracks(queueListsOf(get()), batch),
             radioQueuedIds: [...get().radioQueuedIds, ...batch.map(videoIdOf)],
           });
+          return true;
+        };
+
+        let fed = feedQueue();
+        for (
+          let page = 0;
+          page < RADIO_MAX_PAGES && radioSession.poolSize() < POOL_LOW_WATER && radioSession.canRefill();
+          page++
+        ) {
+          await radioSession.refill({
+            seed,
+            queueIds: queueIds(),
+            stationTracks: waitingStationTracks(get()),
+            isHidden: hiddenPredicate,
+          });
+          if (radioSession.generation !== generation) return;
+          if (!fed) fed = feedQueue();
         }
       } catch (error) {
         console.warn("Radio autoplay fetch failed", error);
       } finally {
-        set({ radioLoading: false });
-        radioInFlight = null;
+        if (radioSession.generation === generation) {
+          set({ radioLoading: false, radioExhausted: radioSession.isExhausted() });
+          radioInFlight = null;
+        }
       }
     })();
     return radioInFlight;
@@ -531,12 +554,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     stopStallWatch();
     musicAudioEngine.stop();
     resetRadioSession();
-    resetQueueOrder();
     set({
+      ...freshQueue([], null),
       currentTrack: null,
-      queue: [],
       queueSource: null,
-      radioQueuedIds: [],
       radioStationActive: false,
       currentIndex: -1,
       isPlaying: false,
@@ -602,34 +623,31 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   clearStreamError: () => set({ streamError: null, streamErrorKind: null }),
 
   next: () => {
-    const { queue, currentIndex, isShuffle, repeatMode } = get();
+    const { queue, currentIndex, repeatMode } = get();
     if (queue.length === 0) return;
 
-    let nextIndex: number;
-    if (isShuffle && queue.length > 1) {
-      nextIndex = upcomingIndex(get());
-    } else {
-      nextIndex = currentIndex + 1;
-      if (nextIndex >= queue.length) {
-        if (repeatMode === "all") {
-          nextIndex = 0;
-        } else if (selectRadioOn(get())) {
-          void (async () => {
-            await get()._ensureRadio();
-            const s = get();
-            if (s.currentIndex + 1 < s.queue.length) {
-              void s._loadIndex(s.currentIndex + 1);
-            } else {
-              musicAudioEngine.pause();
-              set({ isPlaying: false });
-            }
-          })();
-          return;
-        } else {
-          musicAudioEngine.pause();
-          set({ isPlaying: false });
-          return;
-        }
+    // Shuffle has already rearranged the queue, so the next track is always
+    // the following entry, and a shuffled queue ends like any other.
+    let nextIndex = currentIndex + 1;
+    if (nextIndex >= queue.length) {
+      if (repeatMode === "all") {
+        nextIndex = 0;
+      } else if (selectRadioOn(get())) {
+        void (async () => {
+          await get()._ensureRadio();
+          const s = get();
+          if (s.currentIndex + 1 < s.queue.length) {
+            void s._loadIndex(s.currentIndex + 1);
+          } else {
+            musicAudioEngine.pause();
+            set({ isPlaying: false });
+          }
+        })();
+        return;
+      } else {
+        musicAudioEngine.pause();
+        set({ isPlaying: false });
+        return;
       }
     }
     void get()._loadIndex(nextIndex);
@@ -673,8 +691,20 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     saveConfig(get);
   },
 
+  // Shuffle rearranges the queue itself, as Android does, so Next, Previous,
+  // Up next and the preload all follow the list; turning it off puts the
+  // original order back.
   toggleShuffle: () => {
-    set({ isShuffle: !get().isShuffle });
+    const s = get();
+    undoSnapshot = null;
+    if (s.isShuffle) {
+      const restored = s.unshuffledQueue
+        ? restoreOriginalOrder(s.unshuffledQueue, s.queue, s.queue[s.currentIndex] ?? null)
+        : { queue: s.queue, currentIndex: s.currentIndex };
+      set({ isShuffle: false, unshuffledQueue: null, ...restored });
+    } else {
+      set({ isShuffle: true, unshuffledQueue: s.queue, queue: shuffleUpcoming(s.queue, s.currentIndex) });
+    }
     saveConfig(get);
   },
 
@@ -689,45 +719,38 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const base = seed ?? get().currentTrack;
     if (!base) return;
     resetRadioSession([videoIdOf(base)]);
-    set({ queue: [base], radioQueuedIds: [], currentIndex: 0, radioStationActive: true, queueSource: null });
+    set({
+      ...freshQueue([base], get().isShuffle ? [base] : null),
+      currentIndex: 0,
+      radioStationActive: true,
+      queueSource: null,
+    });
     await get()._loadIndex(0);
   },
 
+  // Each queued entry is its own copy, so a song played earlier can be queued
+  // again and shuffle can still tell the two apart.
   addToQueue: (track) => {
-    const { queue } = get();
-    if (queue.some((t) => videoIdOf(t) === videoIdOf(track))) return;
-    set({ queue: [...queue, track] });
+    const lists = queueListsOf(get());
+    if (isUpcoming(lists, track)) return;
+    set(appendTracks(lists, [{ ...track }]));
   },
 
   playNextInQueue: (track) => {
-    const { currentTrack, queue } = get();
+    const { currentTrack } = get();
     if (!currentTrack) {
       get().addToQueue(track);
       return;
     }
-
-    const currentId = videoIdOf(currentTrack);
-    const trackId = videoIdOf(track);
-    if (trackId === currentId) return;
-
-    const next = queue.filter((item) => videoIdOf(item) !== trackId);
-    let currentIndex = next.findIndex((item) => videoIdOf(item) === currentId);
-    if (currentIndex < 0) {
-      next.unshift(currentTrack);
-      currentIndex = 0;
-    }
-
-    next.splice(currentIndex + 1, 0, track);
-    set({ queue: next, currentIndex });
+    if (videoIdOf(track) === videoIdOf(currentTrack)) return;
+    set(insertNext(queueListsOf(get()), { ...track }));
   },
 
   removeFromQueue: (index) => {
-    const { queue, currentIndex } = get();
-    if (index < 0 || index >= queue.length) return;
-    const next = queue.filter((_, i) => i !== index);
-    let nextCurrent = currentIndex;
-    if (index < currentIndex) nextCurrent = currentIndex - 1;
-    set({ queue: next, currentIndex: nextCurrent });
+    const s = get();
+    if (index < 0 || index >= s.queue.length || index === s.currentIndex) return;
+    undoSnapshot = undoSnapshotOf(s);
+    set(removeAt(queueListsOf(s), index));
   },
 
   reorderQueue: (from, to) => {
@@ -742,26 +765,44 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     set({ queue: next });
   },
 
+  // A cleared queue starts its station afresh, and the standby element's
+  // preload belonged to a song that is no longer coming.
   clearQueue: () => {
-    const { currentTrack, currentIndex } = get();
-    if (currentTrack) set({ queue: [currentTrack], currentIndex: 0, queueSource: null });
-    else set({ queue: [], currentIndex: -1, queueSource: null });
-    void currentIndex;
+    const s = get();
+    const playing = s.queue[s.currentIndex];
+    const snapshot = undoSnapshotOf(s);
+    resetRadioSession(playing ? [videoIdOf(playing)] : []);
+    musicAudioEngine.clearPreload();
+    const queue = playing ? [playing] : [];
+    set({
+      ...freshQueue(queue, s.isShuffle ? queue : null),
+      currentIndex: playing ? 0 : -1,
+      queueSource: null,
+    });
+    undoSnapshot = snapshot;
+  },
+
+  undoQueueEdit: () => {
+    const snapshot = undoSnapshot;
+    undoSnapshot = null;
+    const s = get();
+    const playing = s.queue[s.currentIndex];
+    if (!snapshot || !playing) return;
+    // The song playing now may be a later one than at the edit; it carries on.
+    const currentIndex = snapshot.queue.indexOf(playing);
+    if (currentIndex < 0) return;
+    set({ ...snapshot, currentIndex });
   },
 
   setHiddenPredicate: (predicate) => {
     hiddenPredicate = predicate;
   },
 
+  // Never yanks the track that's playing; drops the rest that are now hidden.
   pruneQueue: (shouldRemove) => {
-    const { queue, currentIndex } = get();
-    if (queue.length === 0) return;
-    // Never yank the track that's playing; drop the rest that are now hidden.
-    const current = queue[currentIndex];
-    const kept = queue.filter((track, i) => i === currentIndex || !shouldRemove(track));
-    if (kept.length === queue.length) return;
-    const nextIndex = current ? Math.max(0, kept.indexOf(current)) : Math.min(currentIndex, kept.length - 1);
-    set({ queue: kept, currentIndex: nextIndex });
+    const lists = queueListsOf(get());
+    const pruned = removeWhere(lists, shouldRemove);
+    if (pruned !== lists) set(pruned);
   },
 
   setViewState: (viewState) => set({ viewState }),
@@ -846,7 +887,9 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   },
 
   handleEnded: () => {
-    if (get().repeatMode === "one") {
+    const { repeatMode, queue } = get();
+    // Repeat-all over one song is a replay; reloading it would fetch it again.
+    if (repeatMode === "one" || (repeatMode === "all" && queue.length === 1)) {
       musicAudioEngine.seek(0);
       void musicAudioEngine.play();
       set({ progress: 0, isPlaying: true });

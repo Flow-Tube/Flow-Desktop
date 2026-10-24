@@ -1058,6 +1058,7 @@
   "music_queue_empty": "Nothing up next",
   "music_queue_autoplay_hint": "Turn on Autoplay for nonstop music",
   "music_remove_from_queue": "Remove from queue",
+  "music_move_to_end": "Move to end",
   "music_queue_removed_toast": "Removed from the queue",
   "music_queue_cleared_toast": "Queue cleared",
   "music_radio_ran_out": "Radio ran out of songs",

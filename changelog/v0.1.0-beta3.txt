@@ -62,6 +62,8 @@ AUDIO
 - The music volume slider follows how loud it sounds, so each step changes the level by a similar amount. Your saved volume plays at the same level after the update.
 - Music loudness is measured the way Android does it, from the perceptual loudness first, and loud songs are never turned down by more than 20 dB.
 - An optional crossfade, off by default, fades the next song in over 1 to 12 seconds. Consecutive tracks from the same album and repeat-one keep their gapless joins.
+- The equalizer now also applies to videos, including the pop-out player, and opens from the video settings menu. Shorts are left as they are.
+- Videos only go through audio processing once the equalizer changes the sound, and only after a short silent self-test shows it works. Where it does not, as on some Linux setups, videos keep playing normally and the menu says the equalizer is not available.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

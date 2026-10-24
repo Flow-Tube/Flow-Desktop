@@ -2,7 +2,7 @@ use objc2::runtime::AnyObject;
 use objc2::{class, msg_send, sel};
 use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
 
-/// WebKit's feature key for rendering pages near 60 fps on faster displays.
+/// The `WebKit` feature key for rendering pages near 60 fps on faster displays.
 const NEAR_60_FPS_FEATURE: &std::ffi::CStr = c"PreferPageRenderingUpdatesNear60FPSEnabled";
 
 pub fn install_close_handler(window: &WebviewWindow) {
@@ -30,8 +30,8 @@ pub fn reopen(app: &AppHandle) {
     }
 }
 
-/// Lets the webview render at the display's own rate. WebKit turns on "Prefer
-/// Page Rendering Updates near 60fps" by default, so on a 120 Hz ProMotion
+/// Lets the webview render at the display's own rate. `WebKit` turns on "Prefer
+/// Page Rendering Updates near 60fps" by default, so on a 120 Hz `ProMotion`
 /// screen every animation, scroll and frame loop in the app ran at 60 fps.
 pub fn allow_full_frame_rate<R: tauri::Runtime>(window: &WebviewWindow<R>) {
     let result = window.with_webview(|webview| {
@@ -47,8 +47,9 @@ pub fn allow_full_frame_rate<R: tauri::Runtime>(window: &WebviewWindow<R>) {
     }
 }
 
-/// Turns the feature off through WebKit's feature list, which is SPI: every
-/// step checks the selector first, so a WebKit without it is left untouched.
+/// Turns the feature off through the `WebKit` feature list, which is private
+/// API: every step checks the selector first, so a `WebKit` without it is left
+/// untouched.
 unsafe fn disable_near_60_fps(view: *mut AnyObject) -> bool {
     let Some(view) = (unsafe { view.as_ref() }) else {
         return false;

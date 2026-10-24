@@ -5,15 +5,20 @@ import type { SongItem } from "../types/music";
 
 const videoIdOf = (t: SongItem): string => t.videoId ?? t.id;
 
+/**
+ * Saves a listen of `listenedSeconds` actually played (not the playhead) to the
+ * shared history, as a music row so it never feeds the video brain, and to
+ * MusicBrain.
+ */
 export async function recordSongHistory(
   track: SongItem,
-  progressSeconds: number,
+  listenedSeconds: number,
   totalSeconds: number,
 ): Promise<void> {
   const id = videoIdOf(track);
   const channelName = track.artists.map((a) => a.name).filter(Boolean).join(", ");
   const total = Math.floor(totalSeconds || track.duration || 0);
-  const watched = Math.floor(Math.max(0, progressSeconds));
+  const watched = Math.floor(Math.max(0, listenedSeconds));
 
   if (shouldRecordWatchHistory()) {
     try {
@@ -31,7 +36,7 @@ export async function recordSongHistory(
     }
   }
 
-  const percentWatched = total > 0 ? Math.min(1, Math.max(0, progressSeconds / total)) : 0;
+  const percentWatched = total > 0 ? Math.min(1, Math.max(0, listenedSeconds / total)) : 0;
   try {
     await recordMusicInteraction({
       trackId: id,

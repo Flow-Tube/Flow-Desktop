@@ -127,12 +127,12 @@ export function GlobalMusicAudio() {
       if (duration > 0 && duration - el.currentTime <= PRELOAD_LEAD_SECONDS) store()._preloadUpcoming();
 
       /*
-        The store's clock follows this event (about 4 Hz) instead of a frame
-        loop. A store write notifies every subscriber, so each one costs a
-        selector run across the whole music UI, and MusicItemCard holds six of
-        them per card. The only consumer of `progress` is MusicScrubber, whose
-        bar and second-granularity readout can't show more than this; the
-        lyrics canvas reads the audio engine directly for frame accuracy.
+        The store's clock follows this event instead of a frame loop, and
+        `_syncTime` publishes it only when the whole second changes. A store
+        write notifies every subscriber, so each one costs a selector run
+        across the whole music UI, and MusicItemCard holds six of them per
+        card. Anything that needs the exact position (the full player's seek
+        bar, the lyrics) reads the audio engine directly.
       */
       store()._syncTime(el.currentTime, el.duration);
 

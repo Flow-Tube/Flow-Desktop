@@ -197,6 +197,8 @@ LYRICS
 - The lyrics view is a port of Flow for Android's: lines spring into place one after another, the sung word lifts and fills behind a soft edge, long notes glow, and instrumental breaks show three breathing dots. Only the sung line redraws, and nothing moves while the song is paused or the window is hidden.
 - Lyrics show their translation and romanization under each line, duets put each singer on their own side, background vocals stay with their line, Arabic and Hebrew read right to left, and line-by-line lyrics fill word by word.
 - A new lyrics menu adjusts the timing, picks another source, edits, copies or saves the lyrics as an .lrc file, and sets their alignment.
+- Lyrics found for a song are kept as files in Flow's app data instead of browser storage, which could fill up and stop saving them. Settings shows how much space they take and can clear them. Lyrics saved by earlier versions move over on their own.
+- Downloaded songs get the timed lyrics the lyrics sources found, saved as a real .lrc file, instead of YouTube's plain text. A downloaded .lrc file's offset tag sets the starting timing.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.

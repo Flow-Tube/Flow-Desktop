@@ -56,7 +56,6 @@ interface PersistedMusicConfig {
   isMuted: boolean;
   eqEnabled: boolean;
   eqGains: number[];
-  normalizationEnabled: boolean;
   repeatMode: MusicRepeatMode;
   isShuffle: boolean;
   radioEnabled: boolean;
@@ -67,7 +66,6 @@ const DEFAULT_CONFIG: PersistedMusicConfig = {
   isMuted: false,
   eqEnabled: false,
   eqGains: [...EQ_FLAT],
-  normalizationEnabled: true,
   repeatMode: "none",
   isShuffle: false,
   radioEnabled: true,
@@ -100,7 +98,6 @@ const saveConfig = (get: () => MusicPlayerState) => {
       isMuted: s.isMuted,
       eqEnabled: s.eqEnabled,
       eqGains: s.eqGains,
-      normalizationEnabled: s.normalizationEnabled,
       repeatMode: s.repeatMode,
       isShuffle: s.isShuffle,
       radioEnabled: s.radioEnabled,
@@ -299,6 +296,7 @@ interface MusicPlayerState {
   setEqBand: (index: number, gainDb: number) => void;
   setEqGains: (gains: number[]) => void;
   applyEqPreset: (name: EqPresetName) => void;
+  /** Follows the saved music normalization setting (see `bindMusicAudioSettings`). */
   setNormalizationEnabled: (enabled: boolean) => void;
 
   // --- internal: driven by the root <audio> controller (element → store) ---
@@ -331,7 +329,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   volume: initialConfig.volume,
   isMuted: initialConfig.isMuted,
   loudnessDb: null,
-  normalizationEnabled: initialConfig.normalizationEnabled,
+  normalizationEnabled: getSettingValue(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION) === "true",
   eqEnabled: initialConfig.eqEnabled,
   eqGains: initialConfig.eqGains,
 
@@ -878,7 +876,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   setNormalizationEnabled: (enabled) => {
     musicAudioEngine.setLoudness(get().loudnessDb, enabled);
     set({ normalizationEnabled: enabled });
-    saveConfig(get);
   },
 
   // --- internal (element → store) --------------------------------------

@@ -5,6 +5,7 @@ import type { MusicAudioQuality } from "../lib/api/music";
 import { getOfflineStream } from "../lib/api/downloads";
 import {
   invalidateMusicStream,
+  isResolveTimeout,
   prefetchMusicStream,
   resolveMusicStream,
 } from "../lib/musicStreamResolution";
@@ -37,6 +38,7 @@ import {
 } from "../lib/audio/eqBands";
 import { getSettingValue } from "./useAppSettingsStore";
 import { shouldSkipUnplayable } from "../lib/musicSkip";
+import { MEDIA_FAILURE_KIND, RecoveryLedger, classifyMediaFailure } from "../lib/musicRecoveryPolicy";
 
 export type MusicViewState = "dock" | "full" | "queue" | "lyrics";
 export type MusicRepeatMode = QueueRepeatMode;
@@ -109,11 +111,28 @@ const saveConfig = (get: () => MusicPlayerState) => {
   }
 };
 
-const PLAYBACK_ERROR_FALLBACK = "Playback failed";
+// Recoveries each track has had from a media-element failure.
+const recovery = new RecoveryLedger();
+// The user paused: a stall or a recovery must never start the song again.
+let userPaused = false;
+let stopWaitingForNetwork: (() => void) | null = null;
 
-// The track a media-element failure was already recovered for; a second failure
-// on it is shown to the user instead of looping.
-let recoveredVideoId: string | null = null;
+const cancelNetworkWait = () => {
+  stopWaitingForNetwork?.();
+  stopWaitingForNetwork = null;
+};
+
+/** Runs `onBack` once the browser reports the connection is back. */
+const waitForNetwork = (onBack: () => void) => {
+  cancelNetworkWait();
+  const handler = () => {
+    stopWaitingForNetwork = null;
+    onBack();
+  };
+  window.addEventListener("online", handler, { once: true });
+  stopWaitingForNetwork = () => window.removeEventListener("online", handler);
+};
+
 // Unplayable tracks skipped since the last one that started.
 let unplayableSkips = 0;
 
@@ -284,7 +303,8 @@ interface MusicPlayerState {
 
   // --- internal: driven by the root <audio> controller (element → store) ---
   _ensureRadio: () => Promise<void>;
-  _loadIndex: (index: number, options?: { resumeAt?: number }) => Promise<void>;
+  /** `autoplay: false` loads the track paused, for a recovery while the user had paused. */
+  _loadIndex: (index: number, options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
   _prefetchUpcoming: () => void;
   _preloadUpcoming: () => void;
   _onPreloadError: () => void;
@@ -412,19 +432,24 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     if (!track) return;
     const videoId = videoIdOf(track);
     const resumeAt = options?.resumeAt ?? 0;
+    const autoplay = options?.autoplay ?? true;
+    cancelNetworkWait();
+    if (autoplay) userPaused = false;
+    const start = async () => {
+      if (autoplay) await musicAudioEngine.play();
+    };
 
     set({
       currentTrack: track,
       currentIndex: index,
       progress: resumeAt,
       duration: track.duration ?? 0,
-      isPlaying: true,
-      isBuffering: true,
+      isPlaying: autoplay,
+      isBuffering: autoplay,
       streamError: null,
       streamErrorKind: null,
       loadingStreamId: videoId,
     });
-    if (recoveredVideoId !== videoId) recoveredVideoId = null;
     loadStartedAt = { videoId, at: performance.now() };
     recordPlayerEvent(`music resolve start: ${videoId}`);
 
@@ -441,7 +466,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       const loudnessDb = musicAudioEngine.getActiveLoudness();
       set({ loudnessDb, loadingStreamId: null });
       musicAudioEngine.setLoudness(loudnessDb, get().normalizationEnabled);
-      await musicAudioEngine.play();
+      await start();
       recordPlayerEvent(`music started from preload: ${videoId}`);
       afterStart();
       return;
@@ -450,6 +475,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     musicAudioEngine.clearPreload();
 
     const audioQuality = getMusicAudioQualitySetting();
+    const lookup = () => resolveMusicStream(videoId, audioQuality, { preferAac: recovery.prefersAac(videoId) });
 
     try {
       // The downloads library is a SQLite read and resolution is a network round
@@ -458,7 +484,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       // so a saved track still needs no network.
       let streamRequest: Promise<MusicStreamInfo> | null = null;
       if (!useDownloadsLibraryStore.getState().loaded) {
-        streamRequest = resolveMusicStream(videoId, audioQuality);
+        streamRequest = lookup();
         streamRequest.catch(() => {});
         await useDownloadsLibraryStore.getState().ensureLoaded();
         if (get().loadingStreamId !== videoId) return;
@@ -481,7 +507,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
           musicAudioEngine.setLoudness(null, get().normalizationEnabled);
           await musicAudioEngine.load(offline.url);
           musicAudioEngine.seekWhenReady(resumeAt);
-          await musicAudioEngine.play();
+          await start();
           afterStart();
           return;
         } catch (offlineError) {
@@ -491,14 +517,16 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
       let info: MusicStreamInfo;
       try {
-        info = await (streamRequest ?? resolveMusicStream(videoId, audioQuality));
+        info = await (streamRequest ?? lookup());
       } catch (firstError) {
-        // One automatic retry on a fresh lookup: a timeout or a dropped
-        // connection on a slow link usually clears on the second attempt.
+        // One automatic retry: a timeout or a dropped connection on a slow
+        // link usually clears on the second attempt. A wait that timed out
+        // left the backend's walk running, so the retry joins it rather than
+        // walking the client ladder a second time.
         if (get().loadingStreamId !== videoId) return;
         recordPlayerEvent(`music resolve retry: ${normalizeBackendError(firstError).kind}`);
-        invalidateMusicStream(videoId);
-        info = await resolveMusicStream(videoId, audioQuality);
+        if (!isResolveTimeout(firstError)) invalidateMusicStream(videoId);
+        info = await lookup();
       }
       if (get().loadingStreamId !== videoId) return;
 
@@ -506,7 +534,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
       await musicAudioEngine.load(info.audioUrl);
       musicAudioEngine.seekWhenReady(resumeAt);
-      await musicAudioEngine.play();
+      await start();
       afterStart();
     } catch (e) {
       if (get().loadingStreamId !== videoId) return;
@@ -522,6 +550,11 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
         return;
       }
       unplayableSkips = 0;
+      if (!navigator.onLine) {
+        waitForNetwork(() => {
+          if (get().queue[get().currentIndex] === track) void get()._loadIndex(index, { resumeAt, autoplay });
+        });
+      }
       set({
         streamError: normalized.message,
         streamErrorKind: normalized.kind,
@@ -539,11 +572,14 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   play: () => {
     if (!get().currentTrack) return;
+    userPaused = false;
     void musicAudioEngine.play();
     set({ isPlaying: true });
   },
 
   pause: () => {
+    userPaused = true;
+    stopStallWatch();
     musicAudioEngine.pause();
     set({ isPlaying: false });
   },
@@ -552,6 +588,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // dock/overlay. (The controller flushes a final history record on track clear.)
   dismiss: () => {
     stopStallWatch();
+    cancelNetworkWait();
     musicAudioEngine.stop();
     resetRadioSession();
     set({
@@ -613,7 +650,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     // The retry exists because the resolved URL stopped working, so it must not
     // be handed the same cached answer again.
     const track = queue[currentIndex];
-    if (track) invalidateMusicStream(videoIdOf(track));
+    if (track) {
+      invalidateMusicStream(videoIdOf(track));
+      recovery.forgive(videoIdOf(track));
+    }
     set({ streamError: null, streamErrorKind: null });
     recordPlayerEvent(`music retry: index ${currentIndex}`);
     // Pick up where it stopped rather than from the start of the track.
@@ -850,6 +890,9 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const seconds = Number.isFinite(progress) ? progress : 0;
     const nextDuration = Number.isFinite(duration) && duration > 0 ? duration : get().duration;
     const current = get();
+    if (current.currentTrack && current.isPlaying && !current.isBuffering) {
+      recovery.notePlaying(videoIdOf(current.currentTrack), Date.now());
+    }
     if (Math.floor(seconds) === Math.floor(current.progress) && nextDuration === current.duration) return;
     set({ progress: seconds, duration: nextDuration });
   },
@@ -858,7 +901,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   _setBuffering: (isBuffering) => {
     stopStallWatch();
-    if (isBuffering && get().loadingStreamId === null) {
+    // A paused song that was still buffering must stay paused, so no watch.
+    if (isBuffering && get().loadingStreamId === null && !userPaused) {
       let lastBuffered = musicAudioEngine.getBufferedEnd();
       let quietSince = Date.now();
       stallWatch = setInterval(() => {
@@ -900,22 +944,41 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   _onPlaybackError: () => {
     if (get().loadingStreamId !== null) return;
-    recordPlayerEvent("music playback error (media element)");
-    // The element rejected the URL it was given, so drop it rather than let any
-    // later attempt be served the same dead one from cache.
     const { currentTrack, currentIndex, progress } = get();
     if (!currentTrack) return;
+    stopStallWatch();
     const videoId = videoIdOf(currentTrack);
+    const code = musicAudioEngine.getErrorCode();
+    const failure = classifyMediaFailure(code, navigator.onLine);
+    recordPlayerEvent(`music playback error (media element ${code ?? "stall"}, ${failure})`);
+    // The element rejected the URL it was given, so drop it rather than let any
+    // later attempt be served the same dead one from cache.
     invalidateMusicStream(videoId);
-    // An expired or refused link usually plays again on a fresh lookup, so try
-    // that once, from the same position, before telling the user.
-    if (recoveredVideoId !== videoId) {
-      recoveredVideoId = videoId;
-      recordPlayerEvent(`music playback recovery: ${videoId} at ${Math.round(progress)}s`);
-      void get()._loadIndex(currentIndex, { resumeAt: progress });
+    // Pick up from the same position, and only play if the user had not paused.
+    const entry = get().queue[currentIndex];
+    const reload = () => {
+      const s = get();
+      if (!entry || s.queue[s.currentIndex] !== entry) return;
+      void s._loadIndex(s.currentIndex, { resumeAt: progress, autoplay: !userPaused });
+    };
+    const decision = recovery.decide(videoId, failure, Date.now());
+    const shown = {
+      isPlaying: false,
+      isBuffering: false,
+      streamError: `media element error ${code ?? "stall"} (${failure})`,
+      streamErrorKind: MEDIA_FAILURE_KIND[failure],
+    };
+    if (decision === "waitForNetwork") {
+      set(shown);
+      waitForNetwork(reload);
       return;
     }
-    set({ isPlaying: false, streamError: PLAYBACK_ERROR_FALLBACK, streamErrorKind: "streaming" });
+    if (decision === "retry") {
+      recordPlayerEvent(`music playback recovery: ${videoId} at ${Math.round(progress)}s`);
+      reload();
+      return;
+    }
+    set(shown);
   },
 }));
 

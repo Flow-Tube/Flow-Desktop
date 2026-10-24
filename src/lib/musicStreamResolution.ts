@@ -17,20 +17,42 @@ import type { MusicStreamInfo } from "../types/music";
  * the proxy has dropped. */
 const MUSIC_STREAM_TTL_MS = 50 * 60_000;
 
-/** Long enough for the backend to walk every client on a slow link; past this
- * the request is treated as failed rather than left spinning. */
+/**
+ * How long one wait for a link lasts before the player says it failed. The
+ * backend's client ladder can take longer (eight clients at six seconds each),
+ * so a wait that times out leaves the walk running and the retry joins it
+ * instead of starting a second one.
+ */
 const MUSIC_STREAM_TIMEOUT_MS = 15_000;
 
 /** A queue only ever needs the track playing and the one or two after it. */
 const MAX_CACHED_TRACKS = 8;
 
+export interface MusicStreamOptions {
+  /** Ask for AAC over Opus, after the element could not decode the first answer. */
+  preferAac?: boolean;
+}
+
 type CacheKey = string;
 type CacheEntry = { info: MusicStreamInfo; resolvedAt: number };
 
 const cache = new Map<CacheKey, CacheEntry>();
-const inFlight = new Map<CacheKey, Promise<MusicStreamInfo>>();
+/** Backend walks still running, which may outlive the wait that started them. */
+const walks = new Map<CacheKey, Promise<MusicStreamInfo>>();
 
-const keyFor = (videoId: string, quality: MusicAudioQuality): CacheKey => `${videoId}::${quality}`;
+const keyFor = (videoId: string, quality: MusicAudioQuality, options?: MusicStreamOptions): CacheKey =>
+  `${videoId}::${quality}${options?.preferAac ? "::aac" : ""}`;
+
+/** The rejection a wait gives when the backend has not answered in time. */
+interface ResolveTimeout {
+  kind: "streaming";
+  message: string;
+  timedOut: true;
+}
+
+/** Whether `error` is a wait that ran out while the backend walk carries on. */
+export const isResolveTimeout = (error: unknown): boolean =>
+  typeof error === "object" && error !== null && (error as Partial<ResolveTimeout>).timedOut === true;
 
 function readCache(key: CacheKey): MusicStreamInfo | null {
   const entry = cache.get(key);
@@ -42,45 +64,53 @@ function readCache(key: CacheKey): MusicStreamInfo | null {
   return entry.info;
 }
 
-function request(videoId: string, quality: MusicAudioQuality): Promise<MusicStreamInfo> {
-  const key = keyFor(videoId, quality);
-  const existing = inFlight.get(key);
+function walk(key: CacheKey, videoId: string, quality: MusicAudioQuality, options?: MusicStreamOptions) {
+  const existing = walks.get(key);
   if (existing) return existing;
+  const tracked: Promise<MusicStreamInfo> = getMusicStream(videoId, quality, options?.preferAac ?? false)
+    .then((info) => {
+      // An invalidate while this was in flight means the caller no longer trusts
+      // the answer; caching it would hand the dead link straight back.
+      if (walks.get(key) !== tracked) return info;
+      cache.set(key, { info, resolvedAt: Date.now() });
+      while (cache.size > MAX_CACHED_TRACKS) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) break;
+        cache.delete(oldest);
+      }
+      return info;
+    })
+    .finally(() => {
+      if (walks.get(key) === tracked) walks.delete(key);
+    });
+  walks.set(key, tracked);
+  return tracked;
+}
 
+function request(videoId: string, quality: MusicAudioQuality, options?: MusicStreamOptions): Promise<MusicStreamInfo> {
+  const pending = walk(keyFor(videoId, quality, options), videoId, quality, options);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject({ kind: "streaming", message: `Timed out resolving the stream for ${videoId}` }),
-      MUSIC_STREAM_TIMEOUT_MS,
-    );
+    timer = setTimeout(() => {
+      const error: ResolveTimeout = {
+        kind: "streaming",
+        message: `Timed out resolving the stream for ${videoId}`,
+        timedOut: true,
+      };
+      reject(error);
+    }, MUSIC_STREAM_TIMEOUT_MS);
   });
-  const pending = Promise.race([getMusicStream(videoId, quality), timeout]).then((info) => {
-    // An invalidate while this was in flight means the caller no longer trusts
-    // the answer; caching it would hand the dead link straight back.
-    if (inFlight.get(key) !== tracked) return info;
-    cache.set(key, { info, resolvedAt: Date.now() });
-    while (cache.size > MAX_CACHED_TRACKS) {
-      const oldest = cache.keys().next().value;
-      if (oldest === undefined) break;
-      cache.delete(oldest);
-    }
-    return info;
-  });
-  const tracked: Promise<MusicStreamInfo> = pending.finally(() => {
-    clearTimeout(timer);
-    if (inFlight.get(key) === tracked) inFlight.delete(key);
-  });
-  inFlight.set(key, tracked);
-  return tracked;
+  return Promise.race([pending, timeout]).finally(() => clearTimeout(timer));
 }
 
 export function resolveMusicStream(
   videoId: string,
   quality: MusicAudioQuality,
+  options?: MusicStreamOptions,
 ): Promise<MusicStreamInfo> {
-  const cached = readCache(keyFor(videoId, quality));
+  const cached = readCache(keyFor(videoId, quality, options));
   if (cached) return Promise.resolve(cached);
-  return request(videoId, quality);
+  return request(videoId, quality, options);
 }
 
 /**
@@ -93,7 +123,7 @@ export function prefetchMusicStream(
 ) {
   if (!videoId) return;
   const key = keyFor(videoId, quality);
-  if (readCache(key) || inFlight.has(key)) return;
+  if (readCache(key) || walks.has(key)) return;
   void request(videoId, quality).catch(() => {
     // A speculative resolve that fails costs nothing — playing the track will
     // resolve it again and surface the real error then.
@@ -104,7 +134,7 @@ export function invalidateMusicStream(videoId: string) {
   for (const key of [...cache.keys()]) {
     if (key.startsWith(`${videoId}::`)) cache.delete(key);
   }
-  for (const key of [...inFlight.keys()]) {
-    if (key.startsWith(`${videoId}::`)) inFlight.delete(key);
+  for (const key of [...walks.keys()]) {
+    if (key.startsWith(`${videoId}::`)) walks.delete(key);
   }
 }

@@ -31,6 +31,7 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     seek: vi.fn(),
     getContextState: vi.fn(() => "running"),
     getBufferedEnd: vi.fn(() => 10),
+    getErrorCode: vi.fn((): number | null => null),
   },
   resolveMusicStream: vi.fn(),
   getMusicWatchQueue: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("../lib/musicStreamResolution", () => ({
   resolveMusicStream,
   prefetchMusicStream: vi.fn(),
   invalidateMusicStream: vi.fn(),
+  isResolveTimeout: (error: { timedOut?: boolean }) => error?.timedOut === true,
 }));
 vi.mock("../lib/musicPreload", () => ({ preloadTrack: vi.fn() }));
 vi.mock("../lib/useDownloads", () => ({ findDownloadedRecord: () => undefined }));
@@ -105,21 +107,130 @@ describe("starting a track", () => {
 });
 
 describe("recovering from a playback error", () => {
-  it("looks the track up again once and resumes where it stopped", async () => {
-    await useMusicPlayerStore.getState().playTrack(song("expiring"));
+  const MEDIA_ERR_NETWORK = 2;
+  const MEDIA_ERR_DECODE = 3;
+  const store = () => useMusicPlayerStore.getState();
+  const fail = async (code: number | null) => {
+    engine.getErrorCode.mockReturnValue(code);
+    const loads = engine.load.mock.calls.length;
+    store()._onPlaybackError();
+    // A recovery reloads the element; a refusal to recover does not.
+    await Promise.resolve();
+    await vi.waitFor(() => expect(engine.load.mock.calls.length).toBeGreaterThanOrEqual(loads));
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    engine.getErrorCode.mockReturnValue(null);
+  });
+
+  it("looks the track up again and resumes where it stopped", async () => {
+    await store().playTrack(song("expiring"));
     useMusicPlayerStore.setState({ progress: 42 });
 
-    useMusicPlayerStore.getState()._onPlaybackError();
+    store()._onPlaybackError();
     await vi.waitFor(() => expect(engine.seekWhenReady).toHaveBeenLastCalledWith(42));
-    expect(useMusicPlayerStore.getState().streamError).toBeNull();
+    expect(store().streamError).toBeNull();
+    expect(store().isPlaying).toBe(true);
+  });
 
-    useMusicPlayerStore.getState()._onPlaybackError();
-    expect(useMusicPlayerStore.getState().streamError).not.toBeNull();
+  it("recovers each expired link up to the limit, then names the failure", async () => {
+    await store().playTrack(song("dying"));
+    for (let i = 0; i < 3; i++) {
+      await fail(MEDIA_ERR_NETWORK);
+      await vi.waitFor(() => expect(store().loadingStreamId).toBeNull());
+      expect(store().streamError).toBeNull();
+    }
+    await fail(MEDIA_ERR_NETWORK);
+    expect(store().streamErrorKind).toBe("streamExpired");
+    expect(store().streamError).not.toContain("Playback failed");
+  });
+
+  it("forgives earlier failures after two minutes of clean playback", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await store().playTrack(song("long-pauses"));
+    for (let i = 0; i < 3; i++) {
+      await fail(MEDIA_ERR_NETWORK);
+      await vi.waitFor(() => expect(store().loadingStreamId).toBeNull());
+    }
+    useMusicPlayerStore.setState({ isBuffering: false, isPlaying: true });
+    vi.setSystemTime(Date.now() + 2 * 60_000 + 1);
+    store()._syncTime(100, 200);
+
+    await fail(MEDIA_ERR_NETWORK);
+    await vi.waitFor(() => expect(store().loadingStreamId).toBeNull());
+    expect(store().streamError).toBeNull();
+  });
+
+  it("asks for AAC after a decode failure, and stops when AAC fails to decode too", async () => {
+    await store().playTrack(song("odd-codec"));
+    await fail(MEDIA_ERR_DECODE);
+    await vi.waitFor(() =>
+      expect(resolveMusicStream).toHaveBeenLastCalledWith("odd-codec", expect.anything(), { preferAac: true }),
+    );
+    await vi.waitFor(() => expect(store().loadingStreamId).toBeNull());
+
+    await fail(MEDIA_ERR_DECODE);
+    expect(store().streamErrorKind).toBe("mediaDecode");
+  });
+
+  it("keeps a paused song paused while it recovers", async () => {
+    await store().playTrack(song("paused-expiry"));
+    store().pause();
+    engine.play.mockClear();
+    await fail(MEDIA_ERR_NETWORK);
+    await vi.waitFor(() => expect(store().loadingStreamId).toBeNull());
+
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(store().isPlaying).toBe(false);
+  });
+
+  it("waits for the connection to come back, then carries on", async () => {
+    await store().playTrack(song("offline"));
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    await fail(MEDIA_ERR_NETWORK);
+    expect(store().streamErrorKind).toBe("network");
+    const lookups = resolveMusicStream.mock.calls.length;
+
+    online.mockReturnValue(true);
+    window.dispatchEvent(new Event("online"));
+    await vi.waitFor(() => expect(resolveMusicStream.mock.calls.length).toBe(lookups + 1));
+    await vi.waitFor(() => expect(store().streamError).toBeNull());
+    online.mockRestore();
+  });
+});
+
+describe("a lookup that times out", () => {
+  it("joins the backend walk instead of starting a new one", async () => {
+    const { invalidateMusicStream } = await import("../lib/musicStreamResolution");
+    resolveMusicStream.mockRejectedValueOnce({ kind: "streaming", message: "timed out", timedOut: true });
+    await useMusicPlayerStore.getState().playTrack(song("slow-ladder"));
+
+    expect(resolveMusicStream).toHaveBeenCalledTimes(2);
+    expect(invalidateMusicStream).not.toHaveBeenCalledWith("slow-ladder");
   });
 });
 
 describe("watching for a stalled connection", () => {
   afterEach(() => vi.useRealTimers());
+
+  it("leaves a song paused during buffering alone", async () => {
+    await useMusicPlayerStore.getState().playTrack(song("paused-buffering"));
+    vi.useFakeTimers();
+    engine.getBufferedEnd.mockReturnValue(10);
+    useMusicPlayerStore.getState()._setBuffering(true);
+    useMusicPlayerStore.getState().pause();
+    engine.play.mockClear();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(resolveMusicStream).toHaveBeenCalledTimes(1);
+    expect(engine.play).not.toHaveBeenCalled();
+
+    // A waiting event after the pause starts no watch either.
+    useMusicPlayerStore.getState()._setBuffering(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(resolveMusicStream).toHaveBeenCalledTimes(1);
+  });
 
   it("recovers when no data arrives for fifteen seconds", async () => {
     await useMusicPlayerStore.getState().playTrack(song("stalls"));

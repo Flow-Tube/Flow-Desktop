@@ -131,6 +131,13 @@ export function MediaScrubber({
     }
   };
 
+  // Shift+wheel scrubs in 5 s steps; a plain wheel keeps scrolling the page.
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!e.shiftKey || duration <= 0) return;
+    const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+    onSeek(Math.min(duration, Math.max(0, progress + (delta < 0 ? 5 : -5))));
+  };
+
   const isEdge = variant === "edge";
   const isLg = size === "lg";
 
@@ -160,6 +167,7 @@ export function MediaScrubber({
     onPointerUp: endDrag,
     onPointerCancel: endDrag,
     onKeyDown,
+    onWheel,
   };
 
   const bar = isExpressive ? (

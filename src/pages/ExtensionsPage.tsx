@@ -9,6 +9,7 @@ import {
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { MusicTraySetting } from "../components/settings/MusicTraySetting";
+import { ScrobblingSection } from "../components/scrobbling/ScrobblingSection";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
@@ -248,6 +249,10 @@ export const ExtensionsPage: React.FC = () => {
               </div>
             )}
           </div>
+        </section>
+
+        <section className="col-span-12 lg:col-span-6">
+          <ScrobblingSection />
         </section>
 
         {sponsorBlockEnabled && (

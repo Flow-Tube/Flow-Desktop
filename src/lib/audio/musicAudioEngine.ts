@@ -1,5 +1,7 @@
 import { loudnessFactor, MUSIC_MAX_CUT_DB } from "../loudness";
+import { IS_LINUX_RUNTIME } from "../platform";
 import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
+import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade } from "./crossfadeRamp";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
 import { volumeGain } from "./volumeCurve";
@@ -13,12 +15,24 @@ interface Slot {
   el: HTMLAudioElement | null;
   source: MediaElementAudioSourceNode | null;
   normGain: GainNode | null;
+  /** The crossfade's share of this element, on the audio clock. */
+  fadeGain: GainNode | null;
+  /** The same share when WebAudio is not in use, applied to the element's volume. */
+  fade: number;
   loudnessDb: number | null;
   /** The track a standby slot holds, so a swap only ever plays the right one. */
   key: string | null;
 }
 
-const emptySlot = (): Slot => ({ el: null, source: null, normGain: null, loudnessDb: null, key: null });
+const emptySlot = (): Slot => ({
+  el: null,
+  source: null,
+  normGain: null,
+  fadeGain: null,
+  fade: 1,
+  loudnessDb: null,
+  key: null,
+});
 
 function unload(el: HTMLAudioElement): void {
   el.pause();
@@ -27,6 +41,12 @@ function unload(el: HTMLAudioElement): void {
     el.load();
   } catch {
   }
+}
+
+interface Fade {
+  previous: Slot;
+  done: ReturnType<typeof setTimeout>;
+  cancelSteps: (() => void) | null;
 }
 
 class MusicAudioEngine {
@@ -46,6 +66,9 @@ class MusicAudioEngine {
   private eqSpec: EqGraphSpec = EQ_GRAPH_OFF;
   private eqEngaged = false;
   private speed = 1;
+  private crossfadeEnabled = false;
+  private armedFadeSeconds: number | null = null;
+  private fading: Fade | null = null;
 
   private get active(): Slot {
     return this.slots[this.activeIndex];
@@ -62,6 +85,7 @@ class MusicAudioEngine {
     if (this.slots[0].el === elements[0] && this.slots[1].el === elements[1]) return;
     this.slots = [emptySlot(), emptySlot()];
     this.activeIndex = 0;
+    this.fading = null;
     for (const [i, el] of elements.entries()) {
       // Required for WebAudio to receive (non-silent) cross-origin samples.
       el.crossOrigin = "anonymous";
@@ -71,7 +95,7 @@ class MusicAudioEngine {
     }
     this.graphReady = false;
     this.applySpeed();
-    if (this.eqEngaged) this.ensureGraph();
+    if (this.eqEngaged || this.crossfadeEnabled) this.ensureGraph();
     this.applyGain();
   }
 
@@ -81,9 +105,9 @@ class MusicAudioEngine {
   }
 
   /**
-   * Routes both elements through WebAudio. Done only once the equalizer changes the sound: a
-   * media element taken over by WebAudio can never play on its own again, and loudness
-   * normalization only ever turns down, which the element's own volume does.
+   * Routes both elements through WebAudio. Done only once the equalizer changes the sound or
+   * crossfade is on: a media element taken over by WebAudio can never play on its own again, and
+   * loudness normalization only ever turns down, which the element's own volume does.
    */
   private ensureGraph(): void {
     if (this.graphReady || this.webAudioFailed || !this.slots[0].el || !this.slots[1].el) return;
@@ -101,14 +125,17 @@ class MusicAudioEngine {
       this.chain.output.connect(this.volGain);
       this.volGain.connect(ctx.destination);
 
-      // Each element keeps its own loudness gain, since the two hold different
-      // tracks; both feed the one shared EQ and volume chain.
+      // Each element keeps its own loudness and crossfade gains, since the two
+      // hold different tracks; both feed the one shared EQ and volume chain.
       for (const slot of this.slots) {
         if (!slot.el) continue;
         slot.source = ctx.createMediaElementSource(slot.el);
         slot.normGain = ctx.createGain();
+        slot.fadeGain = ctx.createGain();
+        slot.fadeGain.gain.value = slot.fade;
         slot.source.connect(slot.normGain);
-        slot.normGain.connect(this.chain.input);
+        slot.normGain.connect(slot.fadeGain);
+        slot.fadeGain.connect(this.chain.input);
       }
 
       this.graphReady = true;
@@ -140,11 +167,11 @@ class MusicAudioEngine {
   /**
    * Start buffering `url` on the standby element for the track `key`, so it can
    * take over the moment the current track ends. A no-op when it already holds
-   * that track.
+   * that track, or while it is still fading out the last one.
    */
   preload(key: string, url: string, loudnessDb: number | null): void {
     const slot = this.standby;
-    if (!slot.el || slot.key === key) return;
+    if (!slot.el || slot.key === key || this.fading) return;
     slot.key = key;
     slot.loudnessDb = loudnessDb;
     slot.el.src = url;
@@ -165,7 +192,7 @@ class MusicAudioEngine {
    * One whose fetch failed or never delivered anything would stall forever if
    * swapped in, so it is skipped and the track loads the normal way.
    */
-  private preloadIsPlayable(key: string): boolean {
+  canPlayPreloaded(key: string): boolean {
     const el = this.standby.el;
     return (
       this.hasPreloaded(key) &&
@@ -175,30 +202,83 @@ class MusicAudioEngine {
     );
   }
 
+  /** Makes the next `activatePreloaded` a crossfade of `seconds` instead of a cut. */
+  armCrossfade(seconds: number): void {
+    this.armedFadeSeconds = seconds > 0 ? seconds : null;
+  }
+
   /**
    * Make the standby element the active one when it holds `key`. The caller
-   * then plays it; the element that was playing is emptied.
+   * then plays it; the element that was playing is emptied, at once or at the
+   * end of an armed crossfade.
    */
   activatePreloaded(key: string): boolean {
-    if (!this.preloadIsPlayable(key)) return false;
+    const fadeSeconds = this.armedFadeSeconds;
+    this.armedFadeSeconds = null;
+    if (!this.canPlayPreloaded(key)) return false;
+    this.finishFade();
     const previous = this.active;
     this.activeIndex = this.activeIndex === 0 ? 1 : 0;
     this.active.key = null;
-    if (previous.el) unload(previous.el);
-    previous.key = null;
-    previous.loudnessDb = null;
+    if (fadeSeconds !== null && previous.el && !previous.el.paused) {
+      this.startFade(previous, fadeSeconds);
+    } else {
+      this.release(previous);
+    }
     this.applyGain();
     return true;
   }
 
+  private release(slot: Slot): void {
+    if (slot.el) unload(slot.el);
+    slot.key = null;
+    slot.loudnessDb = null;
+  }
+
+  // The two elements play together while their gains move in opposite directions; the one
+  // fading out is emptied when the fade ends.
+  private startFade(previous: Slot, seconds: number): void {
+    const next = this.active;
+    let cancelSteps: (() => void) | null = null;
+    if (this.graphReady && this.ctx && previous.fadeGain && next.fadeGain) {
+      const t = this.ctx.currentTime;
+      scheduleFade(previous.fadeGain.gain, "out", t, seconds);
+      scheduleFade(next.fadeGain.gain, "in", t, seconds);
+    } else {
+      cancelSteps = steppedFade(seconds, (progress) => {
+        previous.fade = fadeOutGain(progress);
+        next.fade = fadeInGain(progress);
+        this.applyGain();
+      });
+    }
+    const done = setTimeout(() => this.finishFade(), seconds * 1_000 + 50);
+    this.fading = { previous, done, cancelSteps };
+  }
+
+  /** Ends a crossfade now: the outgoing element is emptied and both gains return to full. */
+  private finishFade(): void {
+    const fading = this.fading;
+    if (!fading) return;
+    this.fading = null;
+    clearTimeout(fading.done);
+    fading.cancelSteps?.();
+    this.release(fading.previous);
+    for (const slot of this.slots) {
+      slot.fade = 1;
+      if (this.ctx && slot.fadeGain) resetFade(slot.fadeGain.gain, this.ctx.currentTime);
+    }
+    this.applyGain();
+    // A speed change made during the fade was held back on Linux; apply it now.
+    this.applySpeed();
+  }
+
   /** Drop whatever the standby element holds, returning the track it was. */
   clearPreload(): string | null {
+    this.finishFade();
     const slot = this.standby;
     const key = slot.key;
     if (key === null) return null;
-    slot.key = null;
-    slot.loudnessDb = null;
-    if (slot.el) unload(slot.el);
+    this.release(slot);
     return key;
   }
 
@@ -240,15 +320,13 @@ class MusicAudioEngine {
   }
 
   pause(): void {
+    this.finishFade();
     this.active.el?.pause();
   }
 
   stop(): void {
-    for (const slot of this.slots) {
-      slot.key = null;
-      slot.loudnessDb = null;
-      if (slot.el) unload(slot.el);
-    }
+    this.finishFade();
+    for (const slot of this.slots) this.release(slot);
   }
 
   seek(seconds: number): void {
@@ -288,10 +366,11 @@ class MusicAudioEngine {
 
   /**
    * WebKitGTK flushes its GStreamer pipeline on every `playbackRate` write, so the rate is only
-   * written when it differs. The default rate carries it across loads, which reset
-   * `playbackRate` to it.
+   * written when it differs, and on Linux not while two elements are crossfading. The default
+   * rate carries it across loads, which reset `playbackRate` to it.
    */
   private applySpeed(): void {
+    if (IS_LINUX_RUNTIME && this.fading) return;
     for (const slot of this.slots) {
       const el = slot.el;
       if (!el) continue;
@@ -341,10 +420,18 @@ class MusicAudioEngine {
       for (const slot of this.slots) {
         if (!slot.el) continue;
         const norm = this.normalizationFactor(slot.loudnessDb);
-        slot.el.volume = Math.max(0, Math.min(1, vol * norm));
+        slot.el.volume = Math.max(0, Math.min(1, vol * norm * slot.fade));
         slot.el.muted = this.muted;
       }
     }
+  }
+
+  // --- crossfade ----------------------------------------------------------
+
+  /** Crossfades are timed on the audio clock, so turning them on brings WebAudio in. */
+  setCrossfadeEnabled(enabled: boolean): void {
+    this.crossfadeEnabled = enabled;
+    if (enabled) this.ensureGraph();
   }
 
   // --- equalizer ----------------------------------------------------------

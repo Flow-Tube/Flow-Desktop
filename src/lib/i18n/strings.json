@@ -1036,6 +1036,8 @@
   "music_queue": "Queue",
   "music_lyrics": "Lyrics",
   "music_equalizer": "Equalizer",
+  "music_loudness_normalization": "Loudness normalization",
+  "music_loudness_normalization_desc": "Turns down songs mastered louder than YouTube Music's target",
   "music_expand": "Expand",
   "music_collapse": "Collapse",
   "music_now_playing": "Now playing",

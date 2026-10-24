@@ -42,6 +42,10 @@ AUDIO
 - Android's 13 presets with translated names, your own presets with Save, Save as, Rename, Duplicate and Delete with Undo, and a Custom entry that keeps the curve you tuned when you try a preset. AutoEQ and EqualizerAPO files import from a file or pasted text and export to a file or the clipboard.
 - The equalizer is saved with your settings, included in backups and synced with Flow for Android. Your old equalizer gains carry over, with the 32 Hz and 16 kHz bands now peaks like on Android, and the panel says when audio processing is not available on your system.
 - Music only goes through audio processing once the equalizer changes the sound, and playback resumes on its own after sleep or an output device change.
+- Music has its own playback speed from 0.5x to 2x, with presets and the pitch kept, saved with your settings.
+- The music volume slider follows how loud it sounds, so each step changes the level by a similar amount. Your saved volume plays at the same level after the update.
+- Music loudness is measured the way Android does it, from the perceptual loudness first, and loud songs are never turned down by more than 20 dB.
+- An optional crossfade, off by default, fades the next song in over 1 to 12 seconds. Consecutive tracks from the same album and repeat-one keep their gapless joins.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

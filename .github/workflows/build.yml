@@ -270,6 +270,10 @@ jobs:
         run: node scripts/write-nightly-config.mjs
 
       - name: Build nightly packages
+        env:
+          # Read at compile time; without them Last.fm sign-in stays off in the build.
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         run: pnpm tauri build ${{ matrix.args }} --config src-tauri/tauri.nightly.generated.json
 
       - name: Log the bundled media stack versions

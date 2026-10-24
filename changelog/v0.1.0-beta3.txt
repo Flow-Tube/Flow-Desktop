@@ -26,6 +26,9 @@ MUSIC
 - Songs added by radio keep their album, explicit badge and song or video type, and radio continues YouTube Music's own mix for the song. Lyrics from YouTube Music show their source.
 - The full player's seek bar glides with the song instead of stepping, and dragging it seeks once when you let go instead of on every move. The page behind the full player stops drawing while it is covered.
 - Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
+- Shuffle now rearranges the queue, so every song plays once, Previous and Up next follow the shuffled order, and turning shuffle off puts the original order back.
+- Radio keeps going after a shuffled queue ends, holds at most two songs per artist, and starts again from songs near the first one when YouTube's mix runs out. The queue says when the radio has run out.
+- Removing a song or clearing the queue can be undone from the message that appears, and songs that already played can be added to the queue again.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

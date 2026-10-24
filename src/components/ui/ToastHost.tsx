@@ -42,6 +42,18 @@ export function ToastHost() {
         ) : null}
         <p className="text-chrome-neutral-300">{toast.message}</p>
       </div>
+      {toast.action ? (
+        <button
+          type="button"
+          onClick={() => {
+            toast.action?.onSelect();
+            dismissToast();
+          }}
+          className="shrink-0 rounded-full px-2 py-0.5 font-medium text-[var(--color-primary)] transition-colors hover:bg-surface-container-highest"
+        >
+          {toast.action.label}
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label="Dismiss notification"

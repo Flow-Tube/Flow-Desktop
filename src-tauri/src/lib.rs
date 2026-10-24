@@ -431,6 +431,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Some(main_window) = app.get_webview_window("main") {
                 macos_window::install_close_handler(&main_window);
+                macos_window::allow_full_frame_rate(&main_window);
             }
 
             #[cfg(target_os = "linux")]

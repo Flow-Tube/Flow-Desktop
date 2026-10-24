@@ -93,6 +93,10 @@ windows = { version = "0.62", features = ["Win32_UI_Shell"] }
 # Single-instance: forward a second `flow://` launch to the running window
 # instead of spawning a duplicate. The "deep-link" feature makes it hand the
 # argv URL to the deep-link plugin's on_open_url automatically.
+# The version wry uses, for WebKit preferences wry does not expose (src/macos_window.rs).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-window-state = "2"

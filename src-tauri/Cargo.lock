@@ -1482,6 +1482,7 @@ dependencies = [
  "local-ip-address",
  "lofty",
  "mp4",
+ "objc2",
  "rand 0.10.3",
  "reqwest",
  "rust-ini",

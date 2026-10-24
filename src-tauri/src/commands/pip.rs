@@ -168,6 +168,8 @@ pub async fn open_pip_window<R: Runtime>(
 
     #[cfg(target_os = "linux")]
     crate::web_process::watch(&window);
+    #[cfg(target_os = "macos")]
+    crate::macos_window::allow_full_frame_rate(&window);
 
     let handle = app.clone();
     window.on_window_event(move |event| {

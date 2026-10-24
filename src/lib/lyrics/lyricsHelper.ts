@@ -1,4 +1,5 @@
 import type { LyricsEntry, LyricsProvider, LyricsResult } from "./types";
+import type { SongItem } from "../../types/music";
 import { getEnabledProviders, parseProviderEnabledStates } from "./registry";
 import { filterCreditLines, normalizeEntries, stripWordTimings } from "./lyricsUtils";
 import { cleanArtist, cleanTitle } from "./matching";
@@ -28,6 +29,17 @@ export interface LyricsRequest {
   artist: string;
   durationSec: number;
   album?: string | null;
+}
+
+/** The lookup for a song: catalogues file it under its first credited artist, not the joined list. */
+export function lyricsRequestFor(track: SongItem, durationSec: number): LyricsRequest {
+  return {
+    videoId: track.videoId ?? track.id,
+    title: track.title,
+    artist: track.artists.find((a) => a.name)?.name ?? "",
+    durationSec: Math.round(durationSec),
+    album: track.album?.name ?? null,
+  };
 }
 
 const cooldowns = new Map<string, number>();

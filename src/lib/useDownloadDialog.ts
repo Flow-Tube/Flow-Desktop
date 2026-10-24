@@ -13,6 +13,7 @@ import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { MusicStreamInfo, SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 import { noteVideoSaved } from "./videoSaved";
+import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
 
 export const MUSIC_QUALITY_VALUES = new Set(["Auto", "High", "Medium", "Low"]);
 
@@ -203,7 +204,7 @@ export function useMusicDownloadDialog(track: SongItem | null) {
     setStarting(true);
     setError(null);
     try {
-      return await startDownload({
+      const started = await startDownload({
         sourceUrl: stream.audioUrl,
         title: title.trim() || track.title,
         mediaKind: "music",
@@ -217,6 +218,8 @@ export function useMusicDownloadDialog(track: SongItem | null) {
         durationSeconds: track.duration ?? undefined,
         loudnessDb: stream.loudnessDb ?? undefined,
       });
+      saveLyricsWithDownload(track, started.id);
+      return started;
     } catch (reason) {
       setError(getBackendErrorMessage(reason));
       return null;

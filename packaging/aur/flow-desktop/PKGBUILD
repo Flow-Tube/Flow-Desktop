@@ -27,8 +27,9 @@ depends=(
   'nodejs'
   'webkit2gtk-4.1'
 )
-makedepends=('pnpm' 'rust')
-optdepends=('gst-plugins-ugly: more audio and video codecs')
+makedepends=('libayatana-appindicator' 'pnpm' 'rust')
+optdepends=('gst-plugins-ugly: more audio and video codecs'
+            'libayatana-appindicator: music controls in the system tray')
 conflicts=("$pkgname-bin")
 # The release profile already strips symbols, so a debug package would be empty.
 options=('!debug')

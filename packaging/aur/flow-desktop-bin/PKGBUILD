@@ -28,7 +28,8 @@ depends=(
   'nodejs'
   'webkit2gtk-4.1'
 )
-optdepends=('gst-plugins-ugly: more audio and video codecs')
+optdepends=('gst-plugins-ugly: more audio and video codecs'
+            'libayatana-appindicator: music controls in the system tray')
 provides=("$_pkgname")
 conflicts=("$_pkgname")
 options=('!strip' '!debug')

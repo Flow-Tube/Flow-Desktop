@@ -76,7 +76,8 @@ async fn android_settings_land_on_the_desktop_keys() {
         entry("return_youtube_dislikes", json!(true), 1_000),
         entry("subscriptions_show_shorts", json!(false), 1_000),
         entry("default_video_codec", json!("av1"), 1_000),
-        entry("equalizer", json!("{\"bands\":[]}"), 1_000),
+        entry("equalizer", json!("{\"enabled\":false}"), 1_000),
+        entry("queue_autoplay", json!(false), 1_000),
         entry("desktop.subtitle_font_scale", json!("150"), 1_000),
     ];
     apply_payload(&pool, OUR, PEER, &[staged(&incoming, "s1")])
@@ -106,7 +107,12 @@ async fn android_settings_land_on_the_desktop_keys() {
         "codec never syncs"
     );
     assert_eq!(
-        stored(&pool, "equalizer").await,
+        stored(&pool, "eq_state_json").await.as_deref(),
+        Some("{\"enabled\":false}"),
+        "the equalizer JSON arrives as Android wrote it"
+    );
+    assert_eq!(
+        stored(&pool, "queue_autoplay").await,
         None,
         "Android-only keys are ignored"
     );
@@ -137,6 +143,7 @@ async fn export_renames_and_types_settings_and_leaves_the_codec_out() {
     set_like_the_app(&pool, "subtitle_font_scale", "150").await;
     set_like_the_app(&pool, "default_video_codec", "av1").await;
     set_like_the_app(&pool, "download_location", "/secret").await;
+    set_like_the_app(&pool, "eq_state_json", "{\"version\":1,\"enabled\":true}").await;
 
     let out = export_collections(&pool, OUR, &[Collection::Settings])
         .await
@@ -156,6 +163,11 @@ async fn export_renames_and_types_settings_and_leaves_the_codec_out() {
     );
     assert!(find("default_video_codec").is_none());
     assert!(find("download_location").is_none());
+    // Android's SettingsMapper reads the equalizer as one string primitive under this key.
+    assert_eq!(
+        find("equalizer").unwrap().value,
+        json!("{\"version\":1,\"enabled\":true}")
+    );
     assert!(
         entries.iter().all(|e| e.hlc.physical_ms > 0),
         "local rows carry their real change time"

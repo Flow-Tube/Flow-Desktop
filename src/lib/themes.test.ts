@@ -33,6 +33,32 @@ describe("themes", () => {
     expect(resolveTheme(custom.id, parsed)).toEqual(custom);
   });
 
+  it("carries Flow for Android's six extra palettes with readable contrast", () => {
+    const luminance = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => {
+        const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const contrast = (a: string, b: string) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (hi! + 0.05) / (lo! + 0.05);
+    };
+
+    for (const id of ["deep-ocean", "gunmetal", "cosmic-void", "cyberpunk", "royal-gold", "cream-paper"]) {
+      const theme = BUILTIN_THEMES.find((item) => item.id === id);
+      expect(theme, id).toBeDefined();
+      for (const variant of ["light", "dark"] as const) {
+        const colors = theme!.variants[variant];
+        expect(contrast(colors.primary, colors.background), `${id} ${variant} accent`).toBeGreaterThanOrEqual(3);
+        expect(contrast(colors.onSurface, colors.surface), `${id} ${variant} text`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(colors.onSurfaceVariant, colors.surface), `${id} ${variant} muted`).toBeGreaterThanOrEqual(4.5);
+        expect(contrast(colors.onPrimary, colors.primary), `${id} ${variant} on accent`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   it("falls back to Flow Default for an unknown selection", () => {
     expect(resolveTheme("missing", []).id).toBe("default");
   });

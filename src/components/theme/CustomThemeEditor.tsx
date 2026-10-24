@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { Button } from "../ui/Button";
 import {
@@ -13,6 +13,7 @@ interface CustomThemeEditorProps {
   theme: CustomThemeDefinition;
   onCancel: () => void;
   onSave: (theme: CustomThemeDefinition) => void;
+  onExport: (theme: CustomThemeDefinition) => void;
 }
 
 const colorFields: { key: keyof ThemeColors; labelKey: Parameters<typeof getString>[0] }[] = [
@@ -31,7 +32,7 @@ const colorFields: { key: keyof ThemeColors; labelKey: Parameters<typeof getStri
   { key: "error", labelKey: "theme_color_error" },
 ];
 
-export function CustomThemeEditor({ theme, onCancel, onSave }: CustomThemeEditorProps) {
+export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomThemeEditorProps) {
   const [draft, setDraft] = useState(() => structuredClone(theme));
   const [variant, setVariant] = useState<ThemeVariant>("dark");
 
@@ -94,6 +95,10 @@ export function CustomThemeEditor({ theme, onCancel, onSave }: CustomThemeEditor
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-4">
+          <Button variant="secondary" className="mr-auto" disabled={!draft.name.trim()} onClick={() => onExport({ ...draft, name: draft.name.trim() })}>
+            <Download size={16} />
+            {getString("theme_export")}
+          </Button>
           <Button variant="secondary" onClick={onCancel}>{getString("theme_cancel")}</Button>
           <Button disabled={!draft.name.trim()} onClick={() => onSave({ ...draft, name: draft.name.trim() })}>{getString("theme_save")}</Button>
         </footer>

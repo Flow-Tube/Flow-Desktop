@@ -7,10 +7,9 @@ import { Select } from '../../ui/Select';
 import { Button } from '../../ui/Button';
 import { usePreference } from '../../../lib/usePreference';
 import { getSetting, setSetting, clearWatchHistory, getWatchHistory } from '../../../lib/api/db';
-import { writeBackupFile } from '../../../lib/api/files';
 import { buildSettingsBackupJson, type SettingsBackupScope } from '../../../lib/settings/backup';
-import { confirmAction, pickSaveFile } from '../../../lib/dialogs';
-import { isTauriEnv } from '../../../lib/api/env';
+import { confirmAction } from '../../../lib/dialogs';
+import { saveJsonFile } from '../../../lib/saveJsonFile';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
@@ -63,22 +62,7 @@ export function DataTab() {
     try {
       const jsonStr = await buildSettingsBackupJson(backupType as SettingsBackupScope);
       const defaultName = `flow_backup_${backupType.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.json`;
-
-      if (await isTauriEnv()) {
-        const savePath = await pickSaveFile(getString('settings_export_data'), defaultName, [{ name: 'JSON', extensions: ['json'] }]);
-        if (!savePath) return;
-        await writeBackupFile(savePath, jsonStr);
-        showToast({ message: getString('settings_export_success'), variant: 'success' });
-        return;
-      }
-
-      const blob = new Blob([jsonStr], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = defaultName;
-      a.click();
-      URL.revokeObjectURL(url);
+      if (!await saveJsonFile(getString('settings_export_data'), defaultName, jsonStr)) return;
       showToast({ message: getString('settings_export_success'), variant: 'success' });
     } catch (e) {
       console.error('Export failed', e);

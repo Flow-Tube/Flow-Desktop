@@ -298,13 +298,12 @@ export function darkVariantOf(variant: ThemeVariant): Exclude<ThemeVariant, "lig
 }
 
 /**
- * The theme's dark tokens, scoped to one element. `-val` variables also get
- * the token Tailwind derives from them, because `@theme` resolves that token
- * once at the root and a descendant overriding only the `-val` would not move it.
+ * One variant's tokens, scoped to one element. `-val` variables also get the
+ * token Tailwind derives from them, because `@theme` resolves that token once
+ * at the root and a descendant overriding only the `-val` would not move it.
  */
-export function darkScopeVariables(theme: ThemeDefinition | CustomThemeDefinition, variant: ThemeVariant): Record<string, string> {
-  const dark = darkVariantOf(variant);
-  const variables = themeCssVariables(theme.variants[dark], dark);
+export function scopeVariables(theme: ThemeDefinition | CustomThemeDefinition, variant: ThemeVariant): Record<string, string> {
+  const variables = themeCssVariables(theme.variants[variant], variant);
   for (const [name, value] of Object.entries(variables)) {
     if (name.endsWith("-val")) variables[name.slice(0, -"-val".length)] = value;
   }

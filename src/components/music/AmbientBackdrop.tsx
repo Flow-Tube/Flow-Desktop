@@ -1,88 +1,68 @@
 import type { CSSProperties } from "react";
-import type { Rgb } from "../../lib/useDominantColor";
+
+import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import type { PlayerBackgroundStyle } from "../../lib/playerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { SoftBackdrop } from "../ui/SoftBackdrop";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
 
+/** `var(--player-*)` at an alpha, for gradient stops. */
+const at = (role: "ground" | "base" | "accent", alpha: number) =>
+  `color-mix(in srgb, var(--player-${role}) ${Math.round(alpha * 100)}%, transparent)`;
+
 /**
- * Ported from the Android player's `MusicPlayerBackgroundStyle`, so a user who
- * runs both apps gets the same four choices under the same names.
+ * The washes of Flow Android's `PlayerBackground`, with the same stops. They
+ * read the `--player-*` colours set on the full player, so the backdrop and the
+ * controls always agree, light player included.
  */
-export type MusicBackgroundStyle = "blur_gradient" | "blur" | "gradient" | "default";
-
-export const MUSIC_BACKGROUND_STYLES: readonly MusicBackgroundStyle[] = [
-  "blur_gradient",
-  "blur",
-  "gradient",
-  "default",
-];
-
-export function isMusicBackgroundStyle(value: string): value is MusicBackgroundStyle {
-  return (MUSIC_BACKGROUND_STYLES as readonly string[]).includes(value);
-}
-
-/** The palette tint, at the two weights the gradients mix between. */
-function tint(accent: Rgb | null | undefined, alpha: number): string {
-  if (!accent) return `rgba(0, 0, 0, ${alpha})`;
-  return `rgba(${accent.r}, ${accent.g}, ${accent.b}, ${alpha})`;
-}
-
-function gradientFor(style: MusicBackgroundStyle, accent: Rgb | null | undefined): CSSProperties | null {
+function washFor(style: PlayerBackgroundStyle): CSSProperties | null {
   switch (style) {
-    // Artwork carries the colour here; the wash only has to keep text legible.
-    case "blur_gradient":
-      return {
-        background: `linear-gradient(to bottom, rgba(0,0,0,0.40) 0%, ${tint(accent, 0.22)} 30%, ${tint(accent, 0.34)} 55%, rgba(0,0,0,0.80) 80%, rgba(0,0,0,0.95) 100%)`,
-      };
     case "blur":
-      return { background: "rgba(0, 0, 0, 0.58)" };
-    // No artwork behind it, so the palette runs much stronger at the top.
+      return { background: at("ground", 0.58) };
     case "gradient":
       return {
-        background: `linear-gradient(to bottom, ${tint(accent, 0.72)} 0%, ${tint(accent, 0.78)} 38%, rgba(0,0,0,0.88) 72%, rgb(0,0,0) 100%)`,
+        background: `linear-gradient(to bottom, ${at("accent", 0.72)} 0%, ${at("base", 0.78)} 38%, ${at("ground", 0.88)} 72%, var(--player-ground) 100%)`,
+      };
+    case "blur_gradient":
+      return {
+        background: `linear-gradient(to bottom, ${at("ground", 0.4)} 0%, ${at("accent", 0.22)} 30%, ${at("base", 0.34)} 55%, ${at("ground", 0.8)} 80%, ${at("ground", 0.95)} 100%)`,
       };
     case "default":
-      return {
-        background: `linear-gradient(to bottom, rgb(0,0,0) 0%, ${tint(accent, 0.22)} 45%, rgb(0,0,0) 100%)`,
-      };
+      return null;
   }
 }
 
+// WebKitGTK would recalculate the full-window wash on the main thread for
+// every frame of the ease, so Linux switches colours in one step.
+const EASE = IS_LINUX_RUNTIME ? "" : "player-palette-ease";
+
+const ARTWORK_OPACITY: Partial<Record<PlayerBackgroundStyle, string>> = {
+  blur: "opacity-[0.62]",
+  blur_gradient: "opacity-[0.55]",
+};
+
 interface AmbientBackdropProps {
   src?: string | null;
-  accent?: Rgb | null;
-  style?: MusicBackgroundStyle;
+  style?: PlayerBackgroundStyle;
 }
 
-export function AmbientBackdrop({ src, accent, style = "blur_gradient" }: AmbientBackdropProps) {
+export function AmbientBackdrop({ src, style = "blur_gradient" }: AmbientBackdropProps) {
   const toSrc = useProxyImageSrc();
   const imageSrc = upgradeMusicImageUrl(src);
-  const showArtwork = style === "blur_gradient" || style === "blur";
-  const overlay = gradientFor(style, accent);
+  const artworkOpacity = ARTWORK_OPACITY[style];
+  const wash = washFor(style);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-chrome-neutral-950">
-      {showArtwork && imageSrc && (
+    <div className={`${EASE} pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[var(--player-ground)]`}>
+      {artworkOpacity && imageSrc && (
         <SoftBackdrop
           src={toSrc(imageSrc)}
           detail={8}
           saturate
-          className={`absolute inset-0 h-full w-full object-cover ${
-            style === "blur" ? "opacity-60" : "opacity-30"
-          }`}
+          className={`absolute inset-0 h-full w-full object-cover ${artworkOpacity}`}
         />
       )}
-
-      {style === "blur_gradient" && accent && (
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `radial-gradient(120% 80% at 50% 0%, rgba(${accent.r},${accent.g},${accent.b},0.22), transparent 60%)`,
-          }}
-        />
-      )}
-
-      {overlay && <div className="absolute inset-0" style={overlay} />}
+      {wash && <div className={`${EASE} absolute inset-0`} style={wash} />}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import {
   parseCustomThemes,
   resolveTheme,
   themeCssVariables,
-  darkScopeVariables,
+  scopeVariables,
 } from "./themes";
 
 describe("themes", () => {
@@ -50,12 +50,12 @@ describe("themes", () => {
     expect(variables["--color-chrome-neutral-900"]).toBe(colors.surfaceContainer);
   });
 
-  it("scopes the dark set, including the tokens Tailwind derives from -val variables", () => {
+  it("scopes one variant, including the tokens Tailwind derives from -val variables", () => {
     const theme = BUILTIN_THEMES[0]!;
-    const fromLight = darkScopeVariables(theme, "light");
-    expect(fromLight["--color-chrome-neutral-100"]).toBe(theme.variants.dark.onSurface);
-    expect(fromLight["--color-surface-container-high"]).toBe(theme.variants.dark.surfaceContainerHigh);
-    expect(fromLight["--color-surface-container-high-val"]).toBe(theme.variants.dark.surfaceContainerHigh);
-    expect(darkScopeVariables(theme, "amoled")["--color-background"]).toBe(theme.variants.amoled.background);
+    const dark = scopeVariables(theme, "dark");
+    expect(dark["--color-chrome-neutral-100"]).toBe(theme.variants.dark.onSurface);
+    expect(dark["--color-surface-container-high"]).toBe(theme.variants.dark.surfaceContainerHigh);
+    expect(dark["--color-surface-container-high-val"]).toBe(theme.variants.dark.surfaceContainerHigh);
+    expect(scopeVariables(theme, "amoled")["--color-background"]).toBe(theme.variants.amoled.background);
   });
 });

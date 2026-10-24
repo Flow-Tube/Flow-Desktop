@@ -88,6 +88,22 @@ pub fn menu_has_icon(r: &Value, icon: &str) -> bool {
         })
 }
 
+/// The album a byline links to ("Artist • Album • 2020"), with its real name.
+#[must_use]
+pub fn album_from_runs(text: &Value) -> Option<Album> {
+    text["runs"].as_array()?.iter().find_map(|run| {
+        let nav = &run["navigationEndpoint"];
+        let page = page_type(nav)?;
+        if !(page.contains("ALBUM") || page.contains("AUDIOBOOK")) {
+            return None;
+        }
+        Some(Album {
+            name: run["text"].as_str()?.to_string(),
+            id: browse_id(nav)?,
+        })
+    })
+}
+
 /// Album from a row's "Go to album" menu, when the byline has no album link. Name
 /// is left empty — the menu label is the localized action text, not the title.
 #[must_use]

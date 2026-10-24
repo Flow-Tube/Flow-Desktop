@@ -4,7 +4,10 @@
 use serde_json::{Value, json};
 
 use super::clients;
-use super::parse::endpoint::{WatchNextTab, album_from_menu, browse_id, watch_next_tab};
+use super::parse::endpoint::{
+    WatchNextTab, album_from_menu, album_from_runs, browse_id, has_explicit, music_video_type,
+    watch_next_tab,
+};
 use super::parse::runs::{parse_artists_and_year, parse_duration, runs_text};
 use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
@@ -54,6 +57,7 @@ impl InnertubeClient {
             lyrics_params: None,
             related_browse_id: None,
             radio_playlist_id: None,
+            radio_params: None,
         })
     }
 
@@ -89,6 +93,7 @@ impl InnertubeClient {
             lyrics_params: None,
             related_browse_id: None,
             radio_playlist_id: playlist_id.map(ToOwned::to_owned),
+            radio_params: None,
         })
     }
 
@@ -221,7 +226,24 @@ fn parse_next_queue(res: &Value) -> QueuePage {
     let current_index = panel["currentIndex"]
         .as_i64()
         .and_then(|v| i32::try_from(v).ok());
-    let radio_playlist_id = panel["playlistId"].as_str().map(ToOwned::to_owned);
+    // The automix row at the end of the queue is the site's own radio: its
+    // playlist id with the params it continues with.
+    let automix = panel["contents"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|item| {
+            &item["automixPreviewVideoRenderer"]["content"]["automixPlaylistVideoRenderer"]["navigationEndpoint"]
+                ["watchPlaylistEndpoint"]
+        })
+        .find(|endpoint| endpoint["playlistId"].is_string());
+    let radio_playlist_id = automix
+        .and_then(|endpoint| endpoint["playlistId"].as_str())
+        .or_else(|| panel["playlistId"].as_str())
+        .map(ToOwned::to_owned);
+    let radio_params = automix
+        .and_then(|endpoint| endpoint["params"].as_str())
+        .map(ToOwned::to_owned);
 
     let lyrics_endpoint = &watch_next_tab(tabs, WatchNextTab::Lyrics)["browseEndpoint"];
     let related_endpoint = &watch_next_tab(tabs, WatchNextTab::Related)["browseEndpoint"];
@@ -234,6 +256,7 @@ fn parse_next_queue(res: &Value) -> QueuePage {
         lyrics_params: lyrics_endpoint["params"].as_str().map(ToOwned::to_owned),
         related_browse_id: related_endpoint["browseId"].as_str().map(ToOwned::to_owned),
         radio_playlist_id,
+        radio_params,
     }
 }
 
@@ -252,7 +275,7 @@ fn parse_panel_video(r: &Value) -> Option<SongItem> {
     let video_id = r["videoId"].as_str()?.to_string();
     let title = runs_text(&r["title"])?;
     let artists = parse_artists_and_year(&r["longBylineText"]).0;
-    let album = album_from_menu(r);
+    let album = album_from_runs(&r["longBylineText"]).or_else(|| album_from_menu(r));
     let duration = runs_text(&r["lengthText"]).and_then(|t| parse_duration(&t));
     Some(SongItem {
         id: video_id.clone(),
@@ -260,9 +283,9 @@ fn parse_panel_video(r: &Value) -> Option<SongItem> {
         artists,
         album,
         duration,
-        music_video_type: None,
+        music_video_type: music_video_type(&r["navigationEndpoint"]),
         thumbnail: thumbnail_url(r).unwrap_or_default(),
-        explicit: false,
+        explicit: has_explicit(r),
         video_id: Some(video_id),
         playlist_id: r["navigationEndpoint"]["watchEndpoint"]["playlistId"]
             .as_str()
@@ -294,6 +317,52 @@ mod tests {
         let album = parse_panel_video(&r).unwrap().album.unwrap();
         assert_eq!(album.id, "MPREmenualbum");
         assert!(album.name.is_empty());
+    }
+
+    #[test]
+    fn panel_video_keeps_its_album_name_type_and_badge() {
+        let r = json!({
+            "videoId": "vid4",
+            "title": { "runs": [{ "text": "Starboy" }] },
+            "longBylineText": { "runs": [
+                { "text": "The Weeknd" }, { "text": " \u{2022} " },
+                { "text": "Starboy", "navigationEndpoint": { "browseEndpoint": {
+                    "browseId": "MPREb_FWIMEPTHFsY",
+                    "browseEndpointContextSupportedConfigs": {
+                        "browseEndpointContextMusicConfig": { "pageType": "MUSIC_PAGE_TYPE_ALBUM" }
+                    }
+                } } }
+            ] },
+            "badges": [{ "musicInlineBadgeRenderer": { "icon": { "iconType": "MUSIC_EXPLICIT_BADGE" } } }],
+            "navigationEndpoint": { "watchEndpoint": { "videoId": "vid4", "watchEndpointMusicSupportedConfigs": {
+                "watchEndpointMusicConfig": { "musicVideoType": "MUSIC_VIDEO_TYPE_ATV" } } } }
+        });
+        let song = parse_panel_video(&r).unwrap();
+        assert_eq!(
+            song.album.map(|album| album.name).as_deref(),
+            Some("Starboy")
+        );
+        assert_eq!(
+            song.music_video_type.as_deref(),
+            Some("MUSIC_VIDEO_TYPE_ATV")
+        );
+        assert!(song.explicit);
+    }
+
+    #[test]
+    fn the_automix_row_names_the_radio_and_its_params() {
+        let res = json!({ "contents": { "singleColumnMusicWatchNextResultsRenderer": { "tabbedRenderer": {
+            "watchNextTabbedResultsRenderer": { "tabs": [{ "tabRenderer": { "content": { "musicQueueRenderer": {
+                "content": { "playlistPanelRenderer": { "playlistId": "RDAMVMvid4", "contents": [
+                    { "automixPreviewVideoRenderer": { "content": { "automixPlaylistVideoRenderer": {
+                        "navigationEndpoint": { "watchPlaylistEndpoint": { "playlistId": "RDAMVMvid4", "params": "OAHyAQIIAQ%3D%3D" } }
+                    } } } }
+                ] } }
+            } } } }] }
+        } } } });
+        let page = parse_next_queue(&res);
+        assert_eq!(page.radio_playlist_id.as_deref(), Some("RDAMVMvid4"));
+        assert_eq!(page.radio_params.as_deref(), Some("OAHyAQIIAQ%3D%3D"));
     }
 
     #[test]

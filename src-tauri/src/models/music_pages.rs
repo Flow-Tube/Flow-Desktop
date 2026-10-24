@@ -177,6 +177,9 @@ pub struct QueuePage {
     pub related_browse_id: Option<String>,
     /// Auto-radio playlist id (`RDAMVM…`) for endless play, when present.
     pub radio_playlist_id: Option<String>,
+    /// The params the site's own automix asks with, kept with its playlist id.
+    #[serde(default)]
+    pub radio_params: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

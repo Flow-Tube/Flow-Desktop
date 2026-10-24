@@ -175,7 +175,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   // Last resort: the lyrics saved with the download. Not cached, so a later attempt with a working
   // connection can still find a synced version.
   const offline = getOfflineLyrics(videoId);
-  return offline ? { entries: offline, provider: "Downloaded" } : null;
+  return offline ? { entries: offline.entries, provider: "Downloaded" } : null;
 }
 
 /**

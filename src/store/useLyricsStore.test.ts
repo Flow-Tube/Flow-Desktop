@@ -94,3 +94,23 @@ describe("lyrics session", () => {
     expect(useLyricsStore.getState().plain).toBe("Plain");
   });
 });
+
+describe("saved lyrics timing", () => {
+  it("starts from the offset a downloaded .lrc file asks for, and drops it when providers replace the file", async () => {
+    let finish: (result: LyricsResult | null) => void = () => {};
+    answer = () => new Promise((resolve) => (finish = resolve));
+    const req = request();
+    seedOfflineLyrics(req.videoId, `[offset:+350]\n${timed}`);
+    useLyricsStore.getState().load(req);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(350);
+    const words = Array.from({ length: 6 }, (_, i) => ({
+      time: 10000 + i * 5000,
+      text: `w${i}`,
+      words: [{ text: `w${i}`, startTime: 10000 + i * 5000, endTime: 12000 + i * 5000 }],
+    }));
+    finish({ entries: words, provider: "BetterLyrics" });
+    await flush();
+    expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+  });
+});

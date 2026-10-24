@@ -9,12 +9,14 @@ import {
   Database,
   Info,
   Palette,
+  Music2,
 } from 'lucide-react';
 import { getString } from '../../lib/i18n/index';
 
 export type SettingsCategory =
   | 'appearance'
   | 'player'
+  | 'music'
   | 'content'
   | 'taste'
   | 'quality'
@@ -32,6 +34,7 @@ interface CategoryDef {
 const categories: CategoryDef[] = [
   { id: 'appearance', labelKey: 'settings_appearance', icon: <Palette size={18} /> },
   { id: 'player', labelKey: 'settings_player', icon: <PlayCircle size={18} /> },
+  { id: 'music', labelKey: 'settings_music', icon: <Music2 size={18} /> },
   { id: 'content', labelKey: 'settings_content_ui', icon: <LayoutGrid size={18} /> },
   { id: 'taste', labelKey: 'settings_taste', icon: <Heart size={18} /> },
   { id: 'quality', labelKey: 'settings_quality_codecs', icon: <Gauge size={18} /> },

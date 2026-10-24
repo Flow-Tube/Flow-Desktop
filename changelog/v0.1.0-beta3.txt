@@ -50,6 +50,7 @@ MUSIC
 - Listens wait on your computer while you are offline and go out once you are back, up to 2,000 per service. Show now playing, Love liked songs and Scrobble during Deep Flow are options, and you can use your own Last.fm API key.
 - Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
 - Settings has a Music section with every music setting in one place: playback, audio and the equalizer, the full player's look, lyrics, the tray and scrobbling.
+- Queue rows show Play next, Move to end and Remove when you point at them or move to them with the keyboard, and Delete removes the focused row. Clicking the song that is playing no longer starts it over.
 
 AUDIO
 - Equalizer boosts no longer distort: the music equalizer turns the whole curve down by its highest boost before the filters, and a soft limiter bends any peak that still goes past full scale.

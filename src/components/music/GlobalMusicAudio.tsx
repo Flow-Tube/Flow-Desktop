@@ -4,7 +4,8 @@ import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
 import { PRELOAD_LEAD_SECONDS } from "../../lib/musicPreload";
 import { recordSongHistory } from "../../lib/musicHistory";
-import { upgradeMusicImageUrl } from "../../lib/thumbnails";
+import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
+import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
 import type { SongItem } from "../../types/music";
 
 const HISTORY_PERSIST_MS = 5000;
@@ -28,7 +29,6 @@ export function GlobalMusicAudio() {
   const firstRef = useRef<HTMLAudioElement | null>(null);
   const secondRef = useRef<HTMLAudioElement | null>(null);
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
-  const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
 
   // --- watch-history persistence ---
   const historyTrackRef = useRef<SongItem | null>(null);
@@ -74,39 +74,7 @@ export function GlobalMusicAudio() {
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
-    const store = () => useMusicPlayerStore.getState();
-
-    if (currentTrack) {
-      const artwork = upgradeMusicImageUrl(currentTrack.thumbnail, 512);
-      try {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: currentTrack.title,
-          artist: currentTrack.artists.map((a) => a.name).join(", "),
-          album: currentTrack.album?.name ?? "",
-          artwork: artwork
-            ? [{ src: artwork, sizes: "512x512", type: "image/jpeg" }]
-            : [],
-        });
-      } catch {
-      }
-    }
-
-    navigator.mediaSession.setActionHandler("play", () => store().play());
-    navigator.mediaSession.setActionHandler("pause", () => store().pause());
-    navigator.mediaSession.setActionHandler("previoustrack", () => store().previous());
-    navigator.mediaSession.setActionHandler("nexttrack", () => store().next());
-    navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (typeof details.seekTime === "number") store().seek(details.seekTime);
-    });
-  }, [currentTrack]);
-
-  useEffect(() => {
-    if ("mediaSession" in navigator) {
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    }
-  }, [isPlaying]);
+  useMusicMediaSession();
 
   const store = () => useMusicPlayerStore.getState();
   const audioProps = {
@@ -135,6 +103,7 @@ export function GlobalMusicAudio() {
         bar, the lyrics) reads the audio engine directly.
       */
       store()._syncTime(el.currentTime, el.duration);
+      reportMediaPosition("music");
 
       // History is persisted from here for the same reason: a frame loop
       // stops in the background, and listening there is the common case.

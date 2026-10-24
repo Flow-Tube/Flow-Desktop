@@ -110,6 +110,8 @@ export const SETTINGS = {
   MUSIC_LOUDNESS_NORMALIZATION: "music_loudness_normalization",
   EQ_STATE_JSON: "eq_state_json",
   MUSIC_PLAYBACK_SPEED: "music_playback_speed",
+  MUSIC_CROSSFADE_ENABLED: "music_crossfade_enabled",
+  MUSIC_CROSSFADE_SECONDS: "music_crossfade_seconds",
 
   BUFFER_PROFILE: "buffer_profile",
   MIN_BUFFER_MS: "min_buffer_ms",
@@ -322,6 +324,8 @@ export const SETTING_DEFINITIONS = [
   // Flow for Android's equalizer JSON, shared by music and video and synced as `equalizer`.
   json(SETTINGS.EQ_STATE_JSON, "player", "{}", "wired"),
   num(SETTINGS.MUSIC_PLAYBACK_SPEED, "player", 1, "wired", 0.5, 2),
+  bool(SETTINGS.MUSIC_CROSSFADE_ENABLED, "player", false, "wired"),
+  num(SETTINGS.MUSIC_CROSSFADE_SECONDS, "player", 5, "wired", 1, 12),
 
   str(SETTINGS.BUFFER_PROFILE, "network", "STABLE", "wired", ["AGGRESSIVE", "STABLE", "DATASAVER", "CUSTOM"]),
   num(SETTINGS.MIN_BUFFER_MS, "network", 30000, "wired", 5000, 120000),

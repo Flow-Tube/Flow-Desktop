@@ -11,7 +11,7 @@ const { player } = vi.hoisted(() => {
 });
 
 vi.mock("../../store/useMusicPlayerStore", () => ({
-  useMusicPlayerStore: { getState: () => player },
+  useMusicPlayerStore: { getState: () => player, subscribe: vi.fn() },
 }));
 vi.mock("../api/db", () => ({ getSetting: vi.fn(), setSetting: vi.fn() }));
 

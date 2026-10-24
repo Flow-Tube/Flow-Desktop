@@ -2,6 +2,7 @@ import { SETTINGS } from "../settings/schema";
 import { getSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { bindEqPersistence, useEqStore } from "../../store/useEqStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
+import { crossfadeTarget } from "./crossfade";
 import { REFERENCE_SAMPLE_RATE } from "./eq/filterMath";
 import { graphChangesSound, graphSpec } from "./eq/graphPlan";
 import { changesSound } from "./eq/stateOps";
@@ -24,13 +25,32 @@ export function bindMusicAudioSettings(): void {
     if (player.normalizationEnabled !== enabled) player.setNormalizationEnabled(enabled);
   };
   const applySpeed = () => musicAudioEngine.setSpeed(Number(getSettingValue(SETTINGS.MUSIC_PLAYBACK_SPEED)));
+  const crossfadeSeconds = () =>
+    getSettingValue(SETTINGS.MUSIC_CROSSFADE_ENABLED) === "true"
+      ? Number(getSettingValue(SETTINGS.MUSIC_CROSSFADE_SECONDS))
+      : 0;
+  const applyCrossfade = () => musicAudioEngine.setCrossfadeEnabled(crossfadeSeconds() > 0);
 
   applyNormalization();
   applySpeed();
+  applyCrossfade();
   useAppSettingsStore.subscribe((state, previous) => {
     if (state.values === previous.values) return;
     applyNormalization();
     applySpeed();
+    applyCrossfade();
+  });
+
+  // The song clock ticks about four times a second; the fade starts on the tick that enters its
+  // window, and only into a next song already buffered, so the current one is never cut short.
+  useMusicPlayerStore.subscribe((state, previous) => {
+    if (state.progress === previous.progress) return;
+    const seconds = crossfadeSeconds();
+    const index = crossfadeTarget(state, seconds);
+    const next = state.queue[index];
+    if (!next || !musicAudioEngine.canPlayPreloaded(next.videoId ?? next.id)) return;
+    musicAudioEngine.armCrossfade(Math.min(seconds, state.duration - state.progress));
+    void state._loadIndex(index);
   });
 
   const applyEq = () => {

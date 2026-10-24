@@ -29,6 +29,8 @@ import {
   type QueueLists,
 } from "../lib/musicQueueEdits";
 import { radioSession } from "../lib/musicRadioSession";
+import type { RestoredQueue } from "../lib/musicQueuePersistence";
+import { isLongTrack, resumePositionFor } from "../lib/musicResume";
 import { POOL_LOW_WATER } from "../lib/musicRadioPlanner";
 import { SETTINGS } from "../lib/settings/schema";
 import { getSettingValue } from "./useAppSettingsStore";
@@ -118,6 +120,10 @@ const waitForNetwork = (onBack: () => void) => {
   window.addEventListener("online", handler, { once: true });
   stopWaitingForNetwork = () => window.removeEventListener("online", handler);
 };
+
+// A queue restored at launch shows its song paused without loading it; the
+// first play loads it at the saved position.
+let awaitingFirstPlay = false;
 
 // Unplayable tracks skipped since the last one that started.
 let unplayableSkips = 0;
@@ -270,6 +276,8 @@ interface MusicPlayerState {
   clearQueue: () => void;
   /** Puts back the queue as it was before the last removal or clear. */
   undoQueueEdit: () => void;
+  /** Shows the queue saved at the last session, paused, unless something already plays. */
+  restoreSavedQueue: (restored: RestoredQueue) => void;
 
   // --- block list integration (driven by useMusicActionsStore) ---
   setHiddenPredicate: (predicate: (track: SongItem) => boolean) => void;
@@ -410,8 +418,9 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const track = get().queue[index];
     if (!track) return;
     const videoId = videoIdOf(track);
-    const resumeAt = options?.resumeAt ?? 0;
+    let resumeAt = options?.resumeAt ?? 0;
     const autoplay = options?.autoplay ?? true;
+    awaitingFirstPlay = false;
     cancelNetworkWait();
     if (autoplay) userPaused = false;
     const start = async () => {
@@ -439,6 +448,13 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       void get()._ensureRadio();
       get()._prefetchUpcoming();
     };
+
+    // A fresh play of a long track picks up where it was left (a setting).
+    if (options?.resumeAt === undefined && isLongTrack(track.duration ?? 0)) {
+      resumeAt = await resumePositionFor(track);
+      if (get().loadingStreamId !== videoId) return;
+      if (resumeAt > 0) set({ progress: resumeAt });
+    }
 
     // Gapless: the standby element already holds this track, buffered.
     if (resumeAt === 0 && musicAudioEngine.activatePreloaded(videoId)) {
@@ -551,6 +567,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   play: () => {
     if (!get().currentTrack) return;
+    if (awaitingFirstPlay) {
+      void get()._loadIndex(get().currentIndex, { resumeAt: get().progress });
+      return;
+    }
     userPaused = false;
     void musicAudioEngine.play();
     set({ isPlaying: true });
@@ -566,6 +586,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // Tear down the player entirely — stops audio, clears the queue, hides the
   // dock/overlay. (The controller flushes a final history record on track clear.)
   dismiss: () => {
+    awaitingFirstPlay = false;
     stopStallWatch();
     cancelNetworkWait();
     musicAudioEngine.stop();
@@ -813,6 +834,26 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     set({ ...snapshot, currentIndex });
   },
 
+  restoreSavedQueue: (restored) => {
+    const track = restored.queue[restored.currentIndex];
+    if (get().currentTrack || !track) return;
+    resetRadioSession(restored.queue.map(videoIdOf));
+    const unshuffled = get().isShuffle ? (restored.unshuffledQueue ?? restored.queue) : null;
+    awaitingFirstPlay = true;
+    set({
+      ...freshQueue(restored.queue, unshuffled),
+      radioQueuedIds: restored.radioQueuedIds,
+      radioStationActive: restored.radioStationActive,
+      queueSource: restored.queueSource,
+      currentTrack: track,
+      currentIndex: restored.currentIndex,
+      progress: restored.resumeAt,
+      duration: track.duration ?? 0,
+      isPlaying: false,
+      isBuffering: false,
+    });
+  },
+
   setHiddenPredicate: (predicate) => {
     hiddenPredicate = predicate;
   },
@@ -935,9 +976,10 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 }));
 
 // Radio additions, queue edits and reorders all change what plays next, so warm
-// its link whenever the queue does.
+// its link whenever the queue does. A queue restored at launch warms nothing
+// until it is played, so startup makes no network request for it.
 useMusicPlayerStore.subscribe((state, previous) => {
-  if (state.queue !== previous.queue && state.currentTrack && state.loadingStreamId === null) {
+  if (state.queue !== previous.queue && state.currentTrack && state.loadingStreamId === null && !awaitingFirstPlay) {
     state._prefetchUpcoming();
   }
 });

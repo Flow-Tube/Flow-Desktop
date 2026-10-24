@@ -13,6 +13,7 @@
 
 use std::time::Duration;
 
+use crate::api::innertube::json::loudness::loudness_db;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
@@ -202,21 +203,6 @@ impl InnertubeClient {
             user_agent: client.user_agent.to_string(),
         }))
     }
-}
-
-/// How many dB louder than the loudness target the track plays, which the player turns down.
-///
-/// `VISIONOS` sends no top-level `loudnessDb`, only a per-format one and the perceptual
-/// loudness with its target, so each is tried in turn.
-fn loudness_db(audio_config: &Value, format: &Value) -> Option<f64> {
-    audio_config["loudnessDb"]
-        .as_f64()
-        .or_else(|| format["loudnessDb"].as_f64())
-        .or_else(|| {
-            let perceptual = audio_config["perceptualLoudnessDb"].as_f64()?;
-            let target = audio_config["loudnessTargetLkfs"].as_f64()?;
-            Some(perceptual - target)
-        })
 }
 
 /// True when the URL has no unsolved `n` throttling parameter (desktop cannot

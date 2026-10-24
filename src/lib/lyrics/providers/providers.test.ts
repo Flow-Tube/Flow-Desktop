@@ -5,7 +5,7 @@ import { pickSearchHit } from "./lrclib";
 import { matchKuGou, normalizeKuGouLrc } from "./kugou";
 import { matchAppleSongs, parseItunesSearch } from "./paxsenix";
 import { isUncachedMiss } from "./betterLyrics";
-import { parseOfflineLyrics } from "../offline";
+import { lrcOffsetMs, parseOfflineLyrics } from "../offline";
 
 describe("BetterLyrics", () => {
   it("reads an uncached 401 as a miss for this song only", () => {
@@ -110,6 +110,19 @@ describe("offline lyrics", () => {
     expect(parseOfflineLyrics("[00:12.34]Hello\n[00:20.00]World").map((e) => [e.time, e.text])).toEqual([
       [12340, "Hello"],
       [20000, "World"],
+    ]);
+  });
+
+  it("reads the offset tag in milliseconds", () => {
+    expect(lrcOffsetMs("[ti:Song]\n[offset:+350]\n[00:01.00]Line")).toBe(350);
+    expect(lrcOffsetMs("[offset: -120]")).toBe(-120);
+    expect(lrcOffsetMs("[00:01.00]Line")).toBe(0);
+  });
+
+  it("drops header tags from plain lyrics", () => {
+    expect(parseOfflineLyrics("[ar:Artist]\n[ti:Song]\nFirst line\nSecond line\n").map((e) => e.text)).toEqual([
+      "First line",
+      "Second line",
     ]);
   });
 

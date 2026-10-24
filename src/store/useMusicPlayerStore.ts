@@ -802,12 +802,15 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   // --- internal (element → store) --------------------------------------
 
+  // Every store write runs every subscriber's selector, so the clock is only
+  // published when the whole second changes; the full player's bar reads the
+  // audio element itself for anything finer.
   _syncTime: (progress, duration) => {
-    const next: Partial<MusicPlayerState> = {
-      progress: Number.isFinite(progress) ? progress : 0,
-    };
-    if (Number.isFinite(duration) && duration > 0) next.duration = duration;
-    set(next);
+    const seconds = Number.isFinite(progress) ? progress : 0;
+    const nextDuration = Number.isFinite(duration) && duration > 0 ? duration : get().duration;
+    const current = get();
+    if (Math.floor(seconds) === Math.floor(current.progress) && nextDuration === current.duration) return;
+    set({ progress: seconds, duration: nextDuration });
   },
 
   _reflectPlaying: (isPlaying) => set({ isPlaying }),

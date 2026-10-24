@@ -7,6 +7,7 @@ import { PRELOAD_LEAD_SECONDS } from "../../lib/musicPreload";
 import { recordSongHistory } from "../../lib/musicHistory";
 import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
 import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
+import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
 import type { SongItem } from "../../types/music";
 
 const HISTORY_PERSIST_MS = 5000;
@@ -74,6 +75,7 @@ export function GlobalMusicAudio() {
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
+  useMusicQueuePersistence();
   useMusicMediaSession();
 
   const store = () => useMusicPlayerStore.getState();

@@ -258,3 +258,40 @@ describe("watching for a stalled connection", () => {
     useMusicPlayerStore.getState()._setBuffering(false);
   });
 });
+
+describe("a queue restored at launch", () => {
+  const saved = (ids: string[], currentIndex: number, resumeAt: number) => ({
+    queue: ids.map(song),
+    currentIndex,
+    resumeAt,
+    queueSource: null,
+    unshuffledQueue: null,
+    radioQueuedIds: [],
+    radioStationActive: false,
+  });
+
+  it("shows the song paused, and the first play loads it at the saved position", async () => {
+    useMusicPlayerStore.getState().dismiss();
+    useMusicPlayerStore.getState().restoreSavedQueue(saved(["restored-a", "restored-b"], 1, 73));
+
+    let state = useMusicPlayerStore.getState();
+    expect(state.currentTrack?.id).toBe("restored-b");
+    expect(state.isPlaying).toBe(false);
+    expect(state.progress).toBe(73);
+    const { prefetchMusicStream } = await import("../lib/musicStreamResolution");
+    expect(resolveMusicStream).not.toHaveBeenCalled();
+    expect(prefetchMusicStream).not.toHaveBeenCalled();
+
+    state.play();
+    await vi.waitFor(() => expect(engine.seekWhenReady).toHaveBeenLastCalledWith(73));
+    state = useMusicPlayerStore.getState();
+    expect(state.isPlaying).toBe(true);
+    expect(resolveMusicStream).toHaveBeenCalledWith("restored-b", expect.anything(), expect.anything());
+  });
+
+  it("never replaces a song the user already started", async () => {
+    await useMusicPlayerStore.getState().playTrack(song("chosen"));
+    useMusicPlayerStore.getState().restoreSavedQueue(saved(["old"], 0, 0));
+    expect(useMusicPlayerStore.getState().currentTrack?.id).toBe("chosen");
+  });
+});

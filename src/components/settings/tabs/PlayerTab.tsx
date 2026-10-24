@@ -35,6 +35,8 @@ export function PlayerTab() {
   const [artworkControlColors, setArtworkControlColors] = useBoolPref(SETTINGS.MUSIC_ARTWORK_CONTROL_COLORS);
   const [plainControlColors, setPlainControlColors] = usePreference(SETTINGS.MUSIC_PLAIN_CONTROL_COLORS);
   const [followLightTheme, setFollowLightTheme] = useBoolPref(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME);
+  const [restoreMusicQueue, setRestoreMusicQueue] = useBoolPref(SETTINGS.MUSIC_RESTORE_QUEUE, true);
+  const [resumeLongTracks, setResumeLongTracks] = useBoolPref(SETTINGS.MUSIC_RESUME_LONG_TRACKS, false);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
@@ -234,6 +236,12 @@ export function PlayerTab() {
         )}
         <SettingItem title={getString('settings_music_player_follow_light_theme')} description={getString('settings_music_player_follow_light_theme_desc')}>
           <ToggleSwitch checked={followLightTheme} onChange={setFollowLightTheme} />
+        </SettingItem>
+        <SettingItem title={getString('settings_music_restore_queue')} description={getString('settings_music_restore_queue_desc')}>
+          <ToggleSwitch checked={restoreMusicQueue} onChange={setRestoreMusicQueue} />
+        </SettingItem>
+        <SettingItem title={getString('settings_music_resume_long_tracks')} description={getString('settings_music_resume_long_tracks_desc')}>
+          <ToggleSwitch checked={resumeLongTracks} onChange={setResumeLongTracks} />
         </SettingItem>
       </SettingsGroup>
     </div>

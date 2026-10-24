@@ -110,7 +110,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   // Disk cache: word sync is final; line or plain lyrics stay a fallback while providers try to
   // upgrade them.
   let cachedFallback: LyricsResult | null = null;
-  const disk = cache.getDisk(videoId);
+  const disk = await cache.getDisk(videoId);
   if (disk && disk.length > 0) {
     const norm = normalizeEntries(sorted(disk));
     if (hasWordSync(norm) && hasReasonableTimestamps(norm, durationSec)) {

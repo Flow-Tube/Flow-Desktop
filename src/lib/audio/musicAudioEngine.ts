@@ -95,7 +95,7 @@ class MusicAudioEngine {
     }
     this.graphReady = false;
     this.applySpeed();
-    if (this.eqEngaged || this.crossfadeEnabled) this.ensureGraph();
+    this.engageWhilePlaying();
     this.applyGain();
   }
 
@@ -306,6 +306,7 @@ class MusicAudioEngine {
   async play(): Promise<void> {
     const el = this.active.el;
     if (!el) return;
+    if (this.needsGraph()) this.ensureGraph();
     if (this.ctx) await resumeWithin(this.ctx);
     try {
       await el.play();
@@ -431,7 +432,7 @@ class MusicAudioEngine {
   /** Crossfades are timed on the audio clock, so turning them on brings WebAudio in. */
   setCrossfadeEnabled(enabled: boolean): void {
     this.crossfadeEnabled = enabled;
-    if (enabled) this.ensureGraph();
+    this.engageWhilePlaying();
   }
 
   // --- equalizer ----------------------------------------------------------
@@ -443,8 +444,20 @@ class MusicAudioEngine {
   setEq(spec: EqGraphSpec, engaged: boolean): void {
     this.eqSpec = spec;
     this.eqEngaged = engaged;
-    if (engaged) this.ensureGraph();
+    this.engageWhilePlaying();
     this.chain?.apply(spec);
+  }
+
+  private needsGraph(): boolean {
+    return this.eqEngaged || this.crossfadeEnabled;
+  }
+
+  /**
+   * Builds the graph now when music is playing (a change the user just made), otherwise on the
+   * next play: a context made at startup, outside any click, may never be allowed to run.
+   */
+  private engageWhilePlaying(): void {
+    if (this.needsGraph() && this.active.el && !this.active.el.paused) this.ensureGraph();
   }
 
   /** False once WebAudio failed here, so the equalizer cannot be heard. */

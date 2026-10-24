@@ -110,10 +110,13 @@ describe("music EQ graph", () => {
     expect(musicAudioEngine.isEqAvailable()).toBe(true);
   });
 
-  it("builds one chain of 20 filters plus bass boost, and keeps it through a gapless swap", async () => {
+  it("builds one chain of 20 filters plus bass boost on play, and keeps it through a gapless swap", async () => {
     const pair = elements();
     musicAudioEngine.attach(pair);
     musicAudioEngine.setEq(rock, true);
+    // Nothing is playing yet: the context waits for the play that a click starts.
+    expect(contexts).toHaveLength(0);
+    await musicAudioEngine.play();
 
     const ctx = lastContext();
     expect(ctx.sources).toEqual(pair);
@@ -140,6 +143,7 @@ describe("music EQ graph", () => {
     const pair = elements();
     musicAudioEngine.attach(pair);
     musicAudioEngine.setEq(rock, true);
+    await musicAudioEngine.play();
     const ctx = lastContext();
     ctx.state = "suspended";
     ctx.resume.mockImplementation(() => new Promise(() => {}));
@@ -153,9 +157,11 @@ describe("music EQ graph", () => {
   it("resumes the context when the system suspends it mid-song", () => {
     const pair = elements();
     musicAudioEngine.attach(pair);
+    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    // Turned on while a song plays, the graph is built at once.
     musicAudioEngine.setEq(rock, true);
     const ctx = lastContext();
-    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    expect(ctx.sources).toContain(pair[0]);
 
     ctx.state = "suspended";
     ctx.dispatchEvent(new Event("statechange"));
@@ -166,12 +172,12 @@ describe("music EQ graph", () => {
     vi.useFakeTimers();
     const pair = elements();
     musicAudioEngine.attach(pair);
+    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
     musicAudioEngine.setCrossfadeEnabled(true);
     const ctx = lastContext();
     await musicAudioEngine.load("http://127.0.0.1/stream/a");
     musicAudioEngine.preload("b", "http://127.0.0.1/stream/b", null);
     Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
-    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
 
     musicAudioEngine.armCrossfade(4);
     expect(musicAudioEngine.activatePreloaded("b")).toBe(true);

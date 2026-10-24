@@ -59,6 +59,7 @@ INTERFACE
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.
+- Stable volume now works: it plays YouTube's stable-volume audio, which evens out loud and quiet parts, on videos that have it. A new Normalize volume across videos setting turns down videos mastered louder than YouTube's target.
 - Fewer "Sign in to confirm you're not a bot" errors: when YouTube asks, the player gets a fresh visitor session and tries again before moving on.
 - Playback now tries the same chain of YouTube clients as Flow for Android: visionOS first, then mobile web and web through SABR streaming, then the Android VR builds, then the Android app.
 - Videos opened right after launch no longer time out on slow connections: playback requests get their own connection instead of queuing behind the home and subscription feeds.

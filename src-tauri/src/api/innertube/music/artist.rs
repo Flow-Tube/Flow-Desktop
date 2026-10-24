@@ -55,6 +55,7 @@ impl InnertubeClient {
                 title,
                 thumbnail,
                 channel_id: Some(browse_id.to_string()),
+                is_profile: false,
             },
             sections,
             description,

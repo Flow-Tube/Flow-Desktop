@@ -398,6 +398,7 @@ mod tests {
             title: id.into(),
             thumbnail: None,
             channel_id: None,
+            is_profile: false,
         })
     }
 

@@ -402,6 +402,7 @@ mod chart_tests {
                 title: "Artist".into(),
                 thumbnail: None,
                 channel_id: None,
+                is_profile: false,
             })],
         };
         assert_eq!(

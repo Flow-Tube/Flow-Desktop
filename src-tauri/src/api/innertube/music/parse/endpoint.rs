@@ -56,6 +56,38 @@ pub fn music_video_type(nav: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+/// A list row's `musicVideoType`, from wherever the row carries a watch
+/// endpoint: its title run, the row, or the play button over its thumbnail
+/// (the only place an episode says it is one).
+#[must_use]
+pub fn row_video_type(r: &Value) -> Option<String> {
+    music_video_type(
+        &r["flexColumns"][0]["musicResponsiveListItemFlexColumnRenderer"]["text"]["runs"][0]
+            ["navigationEndpoint"],
+    )
+    .or_else(|| music_video_type(&r["navigationEndpoint"]))
+    .or_else(|| {
+        music_video_type(
+            &r["overlay"]["musicItemThumbnailOverlayRenderer"]["content"]["musicPlayButtonRenderer"]
+                ["playNavigationEndpoint"],
+        )
+    })
+}
+
+/// Whether a row's menu offers `icon` (`MIX` for an artist's radio).
+#[must_use]
+pub fn menu_has_icon(r: &Value, icon: &str) -> bool {
+    r["menu"]["menuRenderer"]["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|item| {
+            item.as_object()
+                .and_then(|item| item.values().next())
+                .is_some_and(|inner| inner["icon"]["iconType"].as_str() == Some(icon))
+        })
+}
+
 /// Album from a row's "Go to album" menu, when the byline has no album link. Name
 /// is left empty — the menu label is the localized action text, not the title.
 #[must_use]

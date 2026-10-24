@@ -498,6 +498,7 @@ mod tests {
                         title: "A".into(),
                         thumbnail: None,
                         channel_id: None,
+                        is_profile: false,
                     })],
                 },
                 ChartSection {

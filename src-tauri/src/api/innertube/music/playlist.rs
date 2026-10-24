@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use serde_json::Value;
 
 use super::endpoints;
-use super::parse::items::parse_responsive_list_item;
+use super::parse::items::{episode_as_song, parse_responsive_list_item};
 use super::parse::runs::{parse_artists_and_year, runs_text};
 use super::parse::thumbnail::thumbnail_url;
 use super::parse::{continuation, shelves};
@@ -23,7 +23,17 @@ impl InnertubeClient {
         let browse = endpoints::vl(playlist_id);
         let res = self.music_browse(Some(&browse), None, None).await?;
 
-        let header = find_playlist_header(&res);
+        // A podcast's playlist page lists its episodes but has no header; the
+        // show page (`MPSP…`) has it.
+        let show_page = if find_playlist_header(&res).is_null() {
+            let show = format!("MPSP{}", endpoints::unvl(&browse));
+            self.music_browse(Some(&show), None, None).await.ok()
+        } else {
+            None
+        };
+        let header = show_page
+            .as_ref()
+            .map_or_else(|| find_playlist_header(&res), find_playlist_header);
         let title = runs_text(&header["title"]).unwrap_or_default();
         let thumbnail = thumbnail_url(header);
         let description =
@@ -179,9 +189,12 @@ fn collect_playlist_tracks(res: &Value) -> (Vec<SongItem>, Option<String>) {
 fn collect_playlist_rows(items: &Value, songs: &mut Vec<SongItem>, seen: &mut HashSet<String>) {
     if let Some(arr) = items.as_array() {
         for item in arr {
-            if let Some(YTItem::Song(s)) =
-                parse_responsive_list_item(&item["musicResponsiveListItemRenderer"])
-            {
+            let song = match parse_responsive_list_item(&item["musicResponsiveListItemRenderer"]) {
+                Some(YTItem::Song(song)) => Some(song),
+                Some(YTItem::Episode(episode)) => Some(episode_as_song(episode)),
+                _ => None,
+            };
+            if let Some(s) = song {
                 let key = s.video_id.clone().unwrap_or_else(|| s.id.clone());
                 if seen.insert(key) {
                     songs.push(s);

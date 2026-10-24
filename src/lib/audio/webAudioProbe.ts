@@ -1,14 +1,17 @@
 import { resumeWithin } from "./audioContext";
 
-const SAMPLE_RATE = 8_000;
 const TONE_SECONDS = 0.5;
 const POLL_MS = 100;
 const GIVE_UP_MS = 1_500;
 const AUDIBLE = 1e-4;
 
-/** Half a second of a quiet 440 Hz tone as a WAV file, made in memory so it needs no network. */
-function toneWav(): Blob {
-  const samples = Math.round(SAMPLE_RATE * TONE_SECONDS);
+/**
+ * Half a second of a quiet 440 Hz tone as a WAV file, made in memory so it needs no network.
+ * It is written at the context's own rate: macOS WebKit hands a MediaElementAudioSourceNode
+ * silence for an 8 kHz file, which would read as broken routing.
+ */
+function toneWav(sampleRate: number): Blob {
+  const samples = Math.round(sampleRate * TONE_SECONDS);
   const buffer = new ArrayBuffer(44 + samples * 2);
   const view = new DataView(buffer);
   const text = (offset: number, value: string) => {
@@ -21,14 +24,14 @@ function toneWav(): Blob {
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
   view.setUint16(22, 1, true);
-  view.setUint32(24, SAMPLE_RATE, true);
-  view.setUint32(28, SAMPLE_RATE * 2, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
   view.setUint16(32, 2, true);
   view.setUint16(34, 16, true);
   text(36, "data");
   view.setUint32(40, samples * 2, true);
   for (let i = 0; i < samples; i++) {
-    view.setInt16(44 + i * 2, Math.round(3_000 * Math.sin((2 * Math.PI * 440 * i) / SAMPLE_RATE)), true);
+    view.setInt16(44 + i * 2, Math.round(3_000 * Math.sin((2 * Math.PI * 440 * i) / sampleRate)), true);
   }
   return new Blob([buffer], { type: "audio/wav" });
 }
@@ -49,7 +52,7 @@ const peak = (analyser: AnalyserNode, data: Float32Array<ArrayBuffer>): number =
  * Null when the test could not run (the element was not allowed to play), so it can be retried.
  */
 export async function probeMediaElementRouting(ctx: AudioContext): Promise<boolean | null> {
-  const url = URL.createObjectURL(toneWav());
+  const url = URL.createObjectURL(toneWav(ctx.sampleRate));
   const el = new Audio();
   el.loop = true;
   el.src = url;

@@ -16,13 +16,14 @@ pub struct DownloadRecord {
     pub quality_label: Option<String>,
     pub file_size_bytes: Option<i64>,
     pub collection_db_id: Option<i64>,
+    pub loudness_db: Option<f64>,
     #[serde(default)]
     pub created_at: String,
 }
 
 // Dynamic queries here only splice this constant and `?` placeholders, never input, so they
 // are safe to pass through `AssertSqlSafe`.
-const SELECT_COLUMNS: &str = "id, video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, created_at";
+const SELECT_COLUMNS: &str = "id, video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, loudness_db, created_at";
 
 /// Inserts a completed download, replacing any prior entry for the same `video_id`
 /// (re-downloading a video updates its library entry rather than duplicating it).
@@ -50,8 +51,8 @@ pub async fn upsert_download(pool: &SqlitePool, record: &DownloadRecord) -> AppR
     }
 
     sqlx::query(
-        "INSERT INTO downloads (video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO downloads (video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, loudness_db)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&record.video_id)
     .bind(&record.title)
@@ -63,6 +64,7 @@ pub async fn upsert_download(pool: &SqlitePool, record: &DownloadRecord) -> AppR
     .bind(&record.quality_label)
     .bind(record.file_size_bytes)
     .bind(record.collection_db_id)
+    .bind(record.loudness_db)
     .execute(pool)
     .await
     .map_err(AppError::from)?;
@@ -146,4 +148,55 @@ pub async fn downloaded_video_ids(pool: &SqlitePool) -> AppResult<Vec<String>> {
         .await
         .map_err(AppError::from)?;
     Ok(rows.iter().map(|row| row.get::<String, _>(0)).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn pool() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    fn song(loudness_db: Option<f64>) -> DownloadRecord {
+        DownloadRecord {
+            id: None,
+            video_id: Some("abc123def45".into()),
+            title: "Song".into(),
+            author: None,
+            media_kind: "music".into(),
+            file_path: "/music/Song.m4a".into(),
+            thumbnail_url: None,
+            duration_seconds: Some(200),
+            quality_label: None,
+            file_size_bytes: None,
+            collection_db_id: None,
+            loudness_db,
+            created_at: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_downloaded_song_keeps_its_loudness() {
+        let pool = pool().await;
+        upsert_download(&pool, &song(Some(4.5))).await.unwrap();
+        let saved = download_by_video_id(&pool, "abc123def45")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.loudness_db, Some(4.5));
+
+        upsert_download(&pool, &song(None)).await.unwrap();
+        let replaced = download_by_video_id(&pool, "abc123def45")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(replaced.loudness_db, None);
+    }
 }

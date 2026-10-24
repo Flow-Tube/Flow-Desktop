@@ -496,13 +496,13 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
           // use them so an offline track needs no network at all to display.
           if (offline.lyrics) seedOfflineLyrics(videoId, offline.lyrics);
           set({
-            loudnessDb: null,
+            loudnessDb: offline.loudnessDb,
             loadingStreamId: null,
             ...(offline.artworkUrl
               ? { currentTrack: { ...track, thumbnail: offline.artworkUrl } }
               : {}),
           });
-          musicAudioEngine.setLoudness(null, get().normalizationEnabled);
+          musicAudioEngine.setLoudness(offline.loudnessDb, get().normalizationEnabled);
           await musicAudioEngine.load(offline.url);
           musicAudioEngine.seekWhenReady(resumeAt);
           await start();

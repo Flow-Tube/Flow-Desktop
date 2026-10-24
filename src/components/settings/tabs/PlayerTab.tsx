@@ -9,15 +9,6 @@ import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { IS_LINUX_RUNTIME } from '../../../lib/platform';
-import {
-  getOrderedProviders,
-  parseProviderEnabledStates,
-  serializeProviderEnabledStates,
-} from '../../../lib/lyrics/registry';
-import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
-import { LyricsProviderList } from '../LyricsProviderList';
-import { Button } from '../../ui/Button';
-import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -36,28 +27,11 @@ export function PlayerTab() {
   const [speedSlider, setSpeedSlider] = useBoolPref(SETTINGS.SPEED_SLIDER_ENABLED, false);
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
-  const [musicBackground, setMusicBackground] = usePreference(SETTINGS.MUSIC_PLAYER_BACKGROUND);
-  const [artworkControlColors, setArtworkControlColors] = useBoolPref(SETTINGS.MUSIC_ARTWORK_CONTROL_COLORS);
-  const [plainControlColors, setPlainControlColors] = usePreference(SETTINGS.MUSIC_PLAIN_CONTROL_COLORS);
-  const [followLightTheme, setFollowLightTheme] = useBoolPref(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME);
-  const [restoreMusicQueue, setRestoreMusicQueue] = useBoolPref(SETTINGS.MUSIC_RESTORE_QUEUE, true);
-  const [resumeLongTracks, setResumeLongTracks] = useBoolPref(SETTINGS.MUSIC_RESUME_LONG_TRACKS, false);
-  const [sleepTimerButton, setSleepTimerButton] = useBoolPref(SETTINGS.MUSIC_SLEEP_TIMER_BUTTON, false);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
   const [subtitleScale, setSubtitleScale] = usePreference(SETTINGS.SUBTITLE_FONT_SCALE, '100');
   const [subtitleBold, setSubtitleBold] = useBoolPref(SETTINGS.SUBTITLE_BOLD, true);
-  const [lyricsProviderOrder, setLyricsProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
-  const [lyricsEnabledRaw, setLyricsEnabledRaw] = usePreference(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, '{}');
-  const lyricsProviders = getOrderedProviders(lyricsProviderOrder);
-  const lyricsEnabledStates = parseProviderEnabledStates(lyricsEnabledRaw);
-  const lyricsEnabledCount = lyricsProviders.filter((provider) => lyricsEnabledStates[provider.name] !== false).length;
-  const setLyricsProviderEnabled = (providerName: string, enabled: boolean) => {
-    setLyricsEnabledRaw(serializeProviderEnabledStates({ ...lyricsEnabledStates, [providerName]: enabled }));
-  };
-
-  const lyricsCache = useLyricsCache();
 
   const [miniSkip, setMiniSkip] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS, true);
   const [miniNextPrev, setMiniNextPrev] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, true);
@@ -160,42 +134,6 @@ export function PlayerTab() {
         </SettingItem>
       </SettingsGroup>
 
-      <SettingsGroup title={getString('settings_group_lyrics')}>
-        <SettingItem
-          title={getString('settings_lyrics_providers')}
-          description={`${lyricsEnabledCount} / ${lyricsProviders.length} ${getString('settings_lyrics_providers_enabled')}`}
-        >
-          <span className="text-xs font-medium text-chrome-neutral-400">
-            {getString('settings_lyrics_ordered')}
-          </span>
-        </SettingItem>
-        <LyricsProviderList
-          order={lyricsProviders.map((provider) => provider.name)}
-          isEnabled={(name) => lyricsEnabledStates[name] !== false}
-          onReorder={(order) => setLyricsProviderOrder(serializeProviderOrder(order))}
-          onToggle={setLyricsProviderEnabled}
-        />
-        <SettingItem
-          title={getString('settings_lyrics_cache')}
-          description={
-            lyricsCache.failed
-              ? getString('settings_lyrics_cache_clear_failed')
-              : lyricsCache.sizeBytes === null
-                ? getString('settings_lyrics_cache_desc')
-                : getString('settings_lyrics_cache_size', formatCacheSize(lyricsCache.sizeBytes))
-          }
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={lyricsCache.clearing || lyricsCache.sizeBytes === 0}
-            onClick={() => void lyricsCache.clear()}
-          >
-            {getString('settings_lyrics_cache_clear')}
-          </Button>
-        </SettingItem>
-      </SettingsGroup>
-
       <SettingsGroup title={getString('settings_group_mini_player')}>
         <SettingItem title={getString('settings_skip_controls')} description={getString('settings_skip_controls_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS)}>
           <ToggleSwitch checked={miniSkip} onChange={setMiniSkip} disabled={isSettingDisabledUntilWired(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS)} />
@@ -235,38 +173,6 @@ export function PlayerTab() {
         )}
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
-        </SettingItem>
-        <SettingItem title={getString('settings_music_player_background')} description={getString('settings_music_player_background_desc')}>
-          <Select value={musicBackground} onChange={setMusicBackground} options={[
-            { value: 'blur_gradient', label: getString('settings_music_player_background_blur_gradient') },
-            { value: 'blur', label: getString('settings_music_player_background_blur') },
-            { value: 'gradient', label: getString('settings_music_player_background_gradient') },
-            { value: 'immersive', label: getString('settings_music_player_background_immersive') },
-            { value: 'default', label: getString('settings_music_player_background_default') },
-          ]} />
-        </SettingItem>
-        <SettingItem title={getString('settings_music_artwork_control_colors')} description={getString('settings_music_artwork_control_colors_desc')}>
-          <ToggleSwitch checked={artworkControlColors} onChange={setArtworkControlColors} />
-        </SettingItem>
-        {!artworkControlColors && (
-          <SettingItem title={getString('settings_music_plain_control_colors')} description={getString('settings_music_plain_control_colors_desc')}>
-            <Select value={plainControlColors} onChange={setPlainControlColors} options={[
-              { value: 'monochrome', label: getString('settings_music_plain_control_colors_monochrome') },
-              { value: 'app_theme', label: getString('settings_music_plain_control_colors_app_theme') },
-            ]} />
-          </SettingItem>
-        )}
-        <SettingItem title={getString('settings_music_player_follow_light_theme')} description={getString('settings_music_player_follow_light_theme_desc')}>
-          <ToggleSwitch checked={followLightTheme} onChange={setFollowLightTheme} />
-        </SettingItem>
-        <SettingItem title={getString('settings_music_restore_queue')} description={getString('settings_music_restore_queue_desc')}>
-          <ToggleSwitch checked={restoreMusicQueue} onChange={setRestoreMusicQueue} />
-        </SettingItem>
-        <SettingItem title={getString('settings_music_resume_long_tracks')} description={getString('settings_music_resume_long_tracks_desc')}>
-          <ToggleSwitch checked={resumeLongTracks} onChange={setResumeLongTracks} />
-        </SettingItem>
-        <SettingItem title={getString('settings_music_sleep_timer_button')} description={getString('settings_music_sleep_timer_button_desc')}>
-          <ToggleSwitch checked={sleepTimerButton} onChange={setSleepTimerButton} />
         </SettingItem>
       </SettingsGroup>
     </div>

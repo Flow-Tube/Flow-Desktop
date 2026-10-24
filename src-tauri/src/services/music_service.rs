@@ -146,6 +146,15 @@ const fn always<T>(_: &T) -> bool {
     true
 }
 
+/// An artist page cached before sections carried their kind would show nothing.
+fn artist_sections_classified(page: &ArtistPage) -> bool {
+    page.sections.is_empty()
+        || page
+            .sections
+            .iter()
+            .any(|section| section.kind != crate::models::music::ArtistSectionKind::Other)
+}
+
 #[derive(Clone)]
 pub struct MusicService {
     client: Arc<InnertubeClient>,
@@ -375,7 +384,7 @@ impl MusicService {
                 kind: "artist",
                 id: browse_id,
                 max_age_seconds: PAGE_MAX_AGE_SECONDS,
-                usable: always,
+                usable: artist_sections_classified,
             },
             freshness,
             || self.client.music_artist_page(browse_id),

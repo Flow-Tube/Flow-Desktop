@@ -29,6 +29,7 @@ import { useNowPlayingMenuActions } from "./useNowPlayingMenuActions";
 import { MusicArtwork } from "./MusicArtwork";
 import { MusicScrubber } from "./MusicScrubber";
 import { EqPanel } from "./EqPanel";
+import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
 import { useDominantColor } from "../../lib/useDominantColor";
 import { accentForeground, accentSurface } from "../../lib/accentColor";
@@ -44,7 +45,7 @@ export function GlobalMusicDock() {
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const isBuffering = useMusicPlayerStore((s) => s.isBuffering);
   const loadingStreamId = useMusicPlayerStore((s) => s.loadingStreamId);
-  const eqEnabled = useMusicPlayerStore((s) => s.eqEnabled);
+  const eqEnabled = useEqActive();
   const isShuffle = useMusicPlayerStore((s) => s.isShuffle);
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);

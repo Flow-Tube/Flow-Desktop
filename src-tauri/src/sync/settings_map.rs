@@ -83,6 +83,8 @@ const SHARED: &[Shared] = &[
         "preferred_subtitle_language",
         Kind::Text,
     ),
+    // The whole equalizer as Android's `EqStateJson`, carried as one JSON string.
+    shared("equalizer", "eq_state_json", Kind::Text),
 ];
 
 /// Player, content and extension preferences only the desktop has. Download paths, proxy

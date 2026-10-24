@@ -18,6 +18,7 @@ import { GripVertical, ListX, Loader2, Radio, X } from "lucide-react";
 
 import { selectRadioOn, useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicHiddenFilter } from "../../store/useMusicActionsStore";
+import { useUiStore } from "../../store/useUiStore";
 import { getString } from "../../lib/i18n/index";
 import type { SongItem } from "../../types/music";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
@@ -101,10 +102,13 @@ export function MusicQueuePane() {
   const radioOn = useMusicPlayerStore(selectRadioOn);
   const radioLoading = useMusicPlayerStore((s) => s.radioLoading);
   const radioQueuedIds = useMusicPlayerStore((s) => s.radioQueuedIds);
+  const radioExhausted = useMusicPlayerStore((s) => s.radioExhausted);
   const loadIndex = useMusicPlayerStore((s) => s._loadIndex);
   const removeFromQueue = useMusicPlayerStore((s) => s.removeFromQueue);
   const reorderQueue = useMusicPlayerStore((s) => s.reorderQueue);
   const clearQueue = useMusicPlayerStore((s) => s.clearQueue);
+  const undoQueueEdit = useMusicPlayerStore((s) => s.undoQueueEdit);
+  const showToast = useUiStore((s) => s.showToast);
   const toggleRadio = useMusicPlayerStore((s) => s.toggleRadio);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
   const isHidden = useMusicHiddenFilter();
@@ -120,13 +124,32 @@ export function MusicQueuePane() {
     .filter(({ track, i }) => i > currentIndex && !isHidden(track));
   const sortableIds = upcoming.map(({ track }) => videoIdOf(track));
 
+  // A played song can be queued again, so rows are found among the upcoming
+  // ones rather than by the first index with that id.
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const from = queue.findIndex((t) => videoIdOf(t) === active.id);
-    const to = queue.findIndex((t) => videoIdOf(t) === over.id);
-    if (from < 0 || to < 0) return;
+    const from = upcoming.find(({ track }) => videoIdOf(track) === active.id)?.i;
+    const to = upcoming.find(({ track }) => videoIdOf(track) === over.id)?.i;
+    if (from === undefined || to === undefined) return;
     reorderQueue(from, to);
+  };
+
+  const offerUndo = (message: string) =>
+    showToast({
+      message,
+      durationMs: 5000,
+      action: { label: getString("undo"), onSelect: undoQueueEdit },
+    });
+
+  const handleRemove = (index: number) => {
+    removeFromQueue(index);
+    offerUndo(getString("music_queue_removed_toast"));
+  };
+
+  const handleClear = () => {
+    clearQueue();
+    offerUndo(getString("music_queue_cleared_toast"));
   };
 
   return (
@@ -139,7 +162,7 @@ export function MusicQueuePane() {
         {upcoming.length > 0 && (
           <button
             type="button"
-            onClick={clearQueue}
+            onClick={handleClear}
             className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
           >
             <ListX className="h-3.5 w-3.5" />
@@ -189,13 +212,18 @@ export function MusicQueuePane() {
                     track={track}
                     isRadio={radioSet.has(videoIdOf(track))}
                     onPlay={() => void loadIndex(i)}
-                    onRemove={() => removeFromQueue(i)}
+                    onRemove={() => handleRemove(i)}
                     onNavigate={closeOverlay}
                   />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
+        ) : radioOn && radioExhausted ? (
+          <div className="px-2 py-6 text-center">
+            <p className="text-sm text-chrome-neutral-500">{getString("music_radio_ran_out")}</p>
+            <p className="mt-1 text-xs text-chrome-neutral-600">{getString("music_radio_ran_out_hint")}</p>
+          </div>
         ) : (
           <div className="px-2 py-6 text-center">
             <p className="text-sm text-chrome-neutral-500">{getString("music_queue_empty")}</p>

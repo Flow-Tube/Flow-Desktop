@@ -1,101 +1,86 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 
 import type { SongItem } from "../../types/music";
-import type { LyricsEntry } from "./types";
-import { getLyrics, forceRefresh } from "./lyricsHelper";
-import { getOfflineLyrics } from "./offline";
-import { entriesAreSynced } from "./sync";
+import type { LyricsRequest } from "./lyricsHelper";
+import { EMPTY_LYRICS, useLyricsStore, type LyricsView } from "../../store/useLyricsStore";
+import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 
-interface LyricsState {
-  entries: LyricsEntry[];
-  plain: string | null;
-  isSynced: boolean;
-  providerName: string;
-  /** The credit the lyrics' source asks to be shown, such as "Source: Musixmatch". */
-  source: string | null;
-  loading: boolean;
-}
-
-const EMPTY: LyricsState = {
-  entries: [],
-  plain: null,
-  isSynced: false,
-  providerName: "",
-  source: null,
-  loading: false,
-};
+// A song without a listed duration waits this long for the audio element's before looking up.
+const AUDIO_DURATION_WAIT_MS = 3000;
 
 const videoIdOf = (t: SongItem): string => t.videoId ?? t.id;
-// Catalogues file a song under its first credited artist; the joined list matches none of them.
-const primaryArtistOf = (t: SongItem): string => t.artists.find((a) => a.name)?.name ?? "";
 
-/** Resolves lyrics for the current track via the provider fallback chain. */
-export function useLyrics(track: SongItem | null) {
-  const [state, setState] = useState<LyricsState>(EMPTY);
-  const reqRef = useRef(0);
+export function lyricsRequestFor(track: SongItem, durationSec: number): LyricsRequest {
+  return {
+    videoId: videoIdOf(track),
+    title: track.title,
+    // Catalogues file a song under its first credited artist; the joined list matches none of them.
+    artist: track.artists.find((a) => a.name)?.name ?? "",
+    durationSec: Math.round(durationSec),
+    album: track.album?.name ?? null,
+  };
+}
 
-  const load = useCallback(
-    async (t: SongItem) => {
-      const req = ++reqRef.current;
-      const videoId = videoIdOf(t);
-      setState((s) => ({ ...s, loading: true }));
-      try {
-        const result = await getLyrics(
-          videoId,
-          t.title,
-          primaryArtistOf(t),
-          t.duration ?? 0,
-          t.album?.name ?? null,
-        );
-        if (reqRef.current !== req) return;
-        if (!result) {
-          setState({ ...EMPTY });
-          return;
-        }
-        const synced = entriesAreSynced(result.entries);
-        setState({
-          entries: result.entries,
-          plain: synced ? null : result.entries.map((e) => e.text).join("\n"),
-          isSynced: synced,
-          providerName: result.provider,
-          source: result.source ?? null,
-          loading: false,
-        });
-      } catch {
-        if (reqRef.current === req) setState({ ...EMPTY });
-      }
-    },
-    [],
-  );
-
+/**
+ * Starts the lyrics lookup when a song starts, so lyrics are usually ready by the time they are
+ * opened. Mount once. It follows the player store without re-rendering its host.
+ */
+export function useLyricsLookup(): void {
   useEffect(() => {
-    if (!track) {
-      reqRef.current++;
-      setState({ ...EMPTY });
-      return;
-    }
-    // Show lyrics saved with a download immediately instead of making an offline
-    // listener wait out the whole provider chain. `load` keeps these visible
-    // while it runs, and a synced result still replaces them if one arrives.
-    const offline = getOfflineLyrics(videoIdOf(track));
-    if (offline) {
-      setState({
-        entries: offline,
-        plain: offline.map((entry) => entry.text).join("\n"),
-        isSynced: false,
-        providerName: "Downloaded",
-        source: null,
-        loading: true,
-      });
-    }
-    void load(track);
-  }, [track, load]);
+    let currentId: string | null = null;
+    let waiting: SongItem | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const refresh = useCallback(() => {
-    if (!track) return;
-    forceRefresh(videoIdOf(track));
-    void load(track);
-  }, [track, load]);
+    const start = (track: SongItem, durationSec: number) => {
+      waiting = null;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      useLyricsStore.getState().load(lyricsRequestFor(track, durationSec));
+    };
 
-  return { ...state, refresh };
+    const follow = (state: ReturnType<typeof useMusicPlayerStore.getState>) => {
+      const track = state.currentTrack;
+      const id = track ? videoIdOf(track) : null;
+      if (id !== currentId) {
+        currentId = id;
+        waiting = null;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        if (!track) {
+          useLyricsStore.getState().clear();
+        } else if ((track.duration ?? 0) > 0) {
+          start(track, track.duration ?? 0);
+        } else {
+          waiting = track;
+          timer = setTimeout(() => start(track, useMusicPlayerStore.getState().duration), AUDIO_DURATION_WAIT_MS);
+        }
+      } else if (waiting && state.duration > 0) {
+        start(waiting, state.duration);
+      }
+    };
+
+    follow(useMusicPlayerStore.getState());
+    const unsubscribe = useMusicPlayerStore.subscribe(follow);
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+}
+
+/** The lyrics of `track`, as found by the lookup `useLyricsLookup` started. */
+export function useLyrics(track: SongItem | null): LyricsView & { refresh: () => void } {
+  const state = useLyricsStore();
+  const refresh = state.refresh;
+  if (!track) return { ...EMPTY_LYRICS, refresh };
+  if (state.videoId !== videoIdOf(track)) return { ...EMPTY_LYRICS, loading: true, refresh };
+  return {
+    entries: state.entries,
+    plain: state.plain,
+    isSynced: state.isSynced,
+    providerName: state.providerName,
+    source: state.source,
+    loading: state.loading,
+    refresh,
+  };
 }

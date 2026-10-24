@@ -63,3 +63,10 @@ export function hasReasonableTimestamps(entries: LyricsEntry[], durationSec: num
   if (durationSec > 0 && firstMs > durationSec * 1000 + 10000) return false;
   return true;
 }
+
+/** 3 word-synced, 2 line-synced, 1 plain, 0 none: which of two results is worth showing. */
+export function lyricsQuality(entries: LyricsEntry[]): number {
+  if (entries.length === 0) return 0;
+  if (!entriesAreSynced(entries)) return 1;
+  return hasWordSync(entries) ? 3 : 2;
+}

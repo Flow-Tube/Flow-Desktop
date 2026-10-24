@@ -9,5 +9,6 @@ pub mod playlist;
 pub mod resolve;
 pub mod search;
 pub mod shorts;
+pub mod storyboard;
 pub mod subscription;
 pub mod watch_next;

@@ -240,10 +240,27 @@ pub struct StreamInfo {
     // `None` when extraction found no SABR metadata at all.
     #[serde(default)]
     pub sabr: Option<SabrStreamInfo>,
+    /// Seek-bar preview sheets, one entry per resolution, smallest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub storyboard: Vec<StoryboardLevel>,
     // Internal: everything needed to spin up a SABR session. Never serialized;
     // consumed by the command layer to register a session with the proxy.
     #[serde(skip)]
     pub sabr_descriptor: Option<crate::streaming::sabr::SabrSessionDescriptor>,
+}
+
+/// One resolution of a video's preview frames: sprite sheets of `columns` ×
+/// `rows` frames, one every `interval_ms`. `$M` in the template numbers the sheet.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoryboardLevel {
+    pub width: u32,
+    pub height: u32,
+    pub count: u32,
+    pub columns: u32,
+    pub rows: u32,
+    pub interval_ms: u64,
+    pub url_template: String,
 }
 
 // Frontend-facing SABR metadata. Mirrors `src/types/video.ts`.

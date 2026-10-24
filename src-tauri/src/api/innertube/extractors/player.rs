@@ -2030,6 +2030,7 @@ impl InnertubeClient {
             hls_manifest_url,
             dash_manifest_url,
             is_live,
+            storyboard: super::storyboard::parse_storyboard(&res, duration_seconds),
             sabr,
             sabr_descriptor,
         })

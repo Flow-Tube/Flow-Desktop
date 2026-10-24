@@ -59,6 +59,7 @@ fn stream_info_from(fixture_name: &str) -> StreamInfo {
         hls_manifest_url: None,
         dash_manifest_url: None,
         is_live: false,
+        storyboard: Vec::new(),
         sabr: None,
         sabr_descriptor: None,
     }

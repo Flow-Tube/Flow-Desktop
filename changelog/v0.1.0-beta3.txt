@@ -22,6 +22,9 @@ MUSIC
 - Podcast episodes in music search are shown as episodes of their show instead of songs by an artist called "Episode", and play when clicked. Podcast cards open the show with its title, author and description.
 - Profiles in music search are labelled Profile and open their channel page instead of an empty artist page. The top result keeps the songs listed under it.
 - Music search only offers the categories YouTube Music has results for, and its filters use the parameters YouTube Music sends today.
+- An artist's Shuffle plays YouTube Music's shuffle of their whole catalogue and Mix plays their station, instead of both reshuffling the few top songs on the page. Artist pages sort their shelves the same way in every language and link the sources under the bio.
+- Songs added by radio keep their album, explicit badge and song or video type, and radio continues YouTube Music's own mix for the song. Lyrics from YouTube Music show their source.
+- Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

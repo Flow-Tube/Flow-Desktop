@@ -19,6 +19,7 @@ export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
   const [loop, setLoop] = useBoolPref(SETTINGS.VIDEO_LOOP_ENABLED, false);
   const [skipSilence, setSkipSilence] = useBoolPref(SETTINGS.SKIP_SILENCE_ENABLED, false);
+  const skipSilenceDisabled = isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED);
   const [stableVolume, setStableVolume] = useBoolPref(SETTINGS.STABLE_VOLUME_ENABLED, false);
   const [videoLoudness, setVideoLoudness] = useBoolPref(SETTINGS.VIDEO_LOUDNESS_NORMALIZATION, false);
   const [volumeBoost, setVolumeBoost] = useBoolPref(SETTINGS.ALLOW_VOLUME_BOOST, false);
@@ -74,8 +75,9 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_loop_video')} description={getString('settings_loop_video_desc')}>
           <ToggleSwitch checked={loop} onChange={setLoop} />
         </SettingItem>
-        <SettingItem title={getString('settings_skip_silence')} description={getString('settings_skip_silence_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED)}>
-          <ToggleSwitch checked={skipSilence} onChange={setSkipSilence} disabled={isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED)} />
+        <SettingItem title={getString('settings_skip_silence')} description={getString('settings_skip_silence_desc')} disabled={skipSilenceDisabled}>
+          {/* Older builds synced Android's value in; until the feature exists it must not show as on. */}
+          <ToggleSwitch checked={skipSilence && !skipSilenceDisabled} onChange={setSkipSilence} disabled={skipSilenceDisabled} />
         </SettingItem>
         <SettingItem title={getString('settings_stable_volume')} description={getString('settings_stable_volume_desc')}>
           <ToggleSwitch checked={stableVolume} onChange={setStableVolume} />

@@ -27,6 +27,10 @@ MUSIC
 - The full player stays dark in light themes, as it does on Android. Its title, controls and lyrics were dark text on a dark backdrop.
 - The full player takes its colours from the cover the way Flow for Android does: a dark base and a vivid accent, each moved until it reads, so pale or grey covers no longer wash out the text. Colours ease over a second when the song changes.
 - New Player settings: "Artwork colors on controls", with black and white or the app theme instead, and "Light in light theme" for a light full player. The Default Surface background now follows the app theme like on Android.
+- On wide windows the full player keeps the song on the left and shows Up next or the lyrics beside it, like Flow for Android on tablets. Lyrics can still take the whole player. The artwork shrinks to fit short windows instead of pushing the controls off screen.
+- The full player answers the same keys as Flow for Android: Space or K to play and pause, J, L and the arrow keys to seek, Up and Down for volume, M to mute, Shift+N and Shift+P to skip, 0 to 9 to jump through the song, S, R and Q for shuffle, repeat and the queue. Escape closes an open menu before the player.
+- The full player has its own volume button, the mouse wheel changes volume over either volume button, and Shift with the wheel seeks over the seek bar. Hovering Next shows the song that plays next, and the top shows what you are playing from.
+- The song menu in the player adds Start radio, Equalizer, Not interested and Don't recommend this artist.
 - The full player's seek bar glides with the song instead of stepping, and dragging it seeks once when you let go instead of on every move. The page behind the full player stops drawing while it is covered.
 - Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
 - Shuffle now rearranges the queue, so every song plays once, Previous and Up next follow the shuffled order, and turning shuffle off puts the original order back.

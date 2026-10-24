@@ -23,9 +23,14 @@ export function bindMusicAudioSettings(): void {
     const player = useMusicPlayerStore.getState();
     if (player.normalizationEnabled !== enabled) player.setNormalizationEnabled(enabled);
   };
+  const applySpeed = () => musicAudioEngine.setSpeed(Number(getSettingValue(SETTINGS.MUSIC_PLAYBACK_SPEED)));
+
   applyNormalization();
+  applySpeed();
   useAppSettingsStore.subscribe((state, previous) => {
-    if (state.values !== previous.values) applyNormalization();
+    if (state.values === previous.values) return;
+    applyNormalization();
+    applySpeed();
   });
 
   const applyEq = () => {

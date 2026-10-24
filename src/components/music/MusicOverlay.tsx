@@ -135,7 +135,7 @@ export function MusicOverlay() {
           className="fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-[var(--player-ground)] outline-none"
           style={playerColors.rootStyle}
         >
-          <AmbientBackdrop src={currentTrack.thumbnail} style={playerColors.style} />
+          <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkAtStart={wide} />
 
           {/* TOP BAR */}
           <div className="absolute top-0 z-20 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
@@ -254,7 +254,12 @@ export function MusicOverlay() {
               className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center gap-8 px-8 pb-10 pt-24"
             >
               <div className={`flex min-h-0 min-w-0 justify-center ${wide ? "flex-1" : isQueue ? "w-1/2" : "w-full max-w-2xl"}`}>
-                <NowPlayingColumn track={currentTrack} compact={!wide && isQueue} onOpenEqualizer={() => setEqOpen(true)} />
+                <NowPlayingColumn
+                  track={currentTrack}
+                  compact={!wide && isQueue}
+                  artworkHidden={playerColors.style === "immersive"}
+                  onOpenEqualizer={() => setEqOpen(true)}
+                />
               </div>
 
               {wide ? (

@@ -10,6 +10,7 @@ import { useTrackDownloadAction } from './useTrackDownloadAction';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
 import { useTrackRadioAction } from './useTrackRadioAction';
+import { useTrackWatchVideoAction } from './useTrackWatchVideoAction';
 
 function videoIdOf(track: SongItem): string {
   return track.videoId ?? track.id;
@@ -22,6 +23,7 @@ export function useNowPlayingMenuActions(
 ): MusicMenuAction[] {
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const radioActions = useTrackRadioAction(track);
+  const watchVideoActions = useTrackWatchVideoAction(track, options);
   const navActions = useTrackNavActions(track, options);
   const downloadActions = useTrackDownloadAction(track);
   const blockActions = useTrackBlockActions(track);
@@ -31,6 +33,7 @@ export function useNowPlayingMenuActions(
   const onOpenEqualizer = options?.onOpenEqualizer;
   return [
     ...radioActions,
+    ...watchVideoActions,
     ...navActions,
     {
       id: 'add-to-album',

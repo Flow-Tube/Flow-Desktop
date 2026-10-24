@@ -45,6 +45,7 @@ describe("playerColors", () => {
     expect(playerTurnsLight("blur", true, white)).toBe(true);
     expect(playerTurnsLight("blur", false, white)).toBe(false);
     expect(playerTurnsLight("default", true, white)).toBe(false);
+    expect(playerTurnsLight("immersive", true, white)).toBe(false);
     expect(playerTurnsLight("blur", true, { r: 10, g: 10, b: 10 })).toBe(false);
   });
 

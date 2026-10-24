@@ -277,7 +277,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.PIP_ALWAYS_ON_TOP, "player", true, "wired"),
   bool(SETTINGS.PIP_ON_MINIMIZE, "player", true, "wired"),
   str(SETTINGS.MUSIC_PLAYER_BACKGROUND, "player", "blur_gradient", "wired",
-    ["blur_gradient", "blur", "gradient", "default"]),
+    ["blur_gradient", "blur", "gradient", "immersive", "default"]),
   bool(SETTINGS.MUSIC_ARTWORK_CONTROL_COLORS, "player", true, "wired"),
   str(SETTINGS.MUSIC_PLAIN_CONTROL_COLORS, "player", "monochrome", "wired", ["monochrome", "app_theme"]),
   bool(SETTINGS.MUSIC_PLAYER_FOLLOW_LIGHT_THEME, "player", false, "wired"),

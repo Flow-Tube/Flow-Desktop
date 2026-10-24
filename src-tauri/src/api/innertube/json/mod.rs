@@ -1,6 +1,7 @@
 //! Readers for values inside `InnerTube` responses.
 
 pub mod age;
+mod age_patterns;
 pub mod continuation;
 pub mod count;
 pub mod duration;

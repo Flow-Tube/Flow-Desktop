@@ -31,6 +31,8 @@ interface NowPlayingColumnProps {
   track: SongItem;
   /** A narrower column next to the queue, with a smaller title. */
   compact: boolean;
+  /** Immersive draws the cover full-bleed behind the player, so the card keeps its place but not its picture. */
+  artworkHidden: boolean;
   onOpenEqualizer: () => void;
 }
 
@@ -39,7 +41,7 @@ interface NowPlayingColumnProps {
  * transport. The artwork takes whatever square the column has left above the
  * details, so it never pushes the controls out of a short window.
  */
-export function NowPlayingColumn({ track, compact, onOpenEqualizer }: NowPlayingColumnProps) {
+export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualizer }: NowPlayingColumnProps) {
   const navigate = useNavigate();
   const columnRef = useRef<HTMLDivElement>(null);
   const { width, height } = useElementSize(columnRef);
@@ -86,7 +88,8 @@ export function NowPlayingColumn({ track, compact, onOpenEqualizer }: NowPlaying
         alt={track.title}
         loading={loading}
         iconClassName="h-16 w-16"
-        className="aspect-square shrink-0 rounded-2xl"
+        // Visibility, not opacity: the shared-layout morph writes its own inline opacity.
+        className={`aspect-square shrink-0 rounded-2xl ${artworkHidden ? "invisible" : ""}`}
         style={{ width: artSize }}
       />
 

@@ -647,6 +647,7 @@
   "settings_music_player_background_blur_gradient": "Blur + Gradient",
   "settings_music_player_background_blur": "Blurred Artwork",
   "settings_music_player_background_gradient": "Palette Gradient",
+  "settings_music_player_background_immersive": "Immersive Artwork",
   "settings_music_player_background_default": "Default Surface",
   "settings_music_artwork_control_colors": "Artwork colors on controls",
   "settings_music_artwork_control_colors_desc": "Tint the buttons and seek bar from the cover",

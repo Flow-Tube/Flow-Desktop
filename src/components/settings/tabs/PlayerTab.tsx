@@ -217,6 +217,7 @@ export function PlayerTab() {
             { value: 'blur_gradient', label: getString('settings_music_player_background_blur_gradient') },
             { value: 'blur', label: getString('settings_music_player_background_blur') },
             { value: 'gradient', label: getString('settings_music_player_background_gradient') },
+            { value: 'immersive', label: getString('settings_music_player_background_immersive') },
             { value: 'default', label: getString('settings_music_player_background_default') },
           ]} />
         </SettingItem>

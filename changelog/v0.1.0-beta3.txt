@@ -33,6 +33,11 @@ MUSIC
 - A song whose link expires during long pauses recovers each time, waits for the connection to come back when the network drops, and tries another audio format when one cannot be decoded. Errors now say which of these went wrong.
 - Media keys and the system's Now Playing controls follow whichever player started last, show the song's progress, and seek forward and back. Starting a video pauses the music and starting music pauses the video.
 
+AUDIO
+- Equalizer boosts no longer distort: the music equalizer turns the whole curve down by its highest boost before the filters, and a soft limiter bends any peak that still goes past full scale.
+- Loudness normalization for music can now be turned off in the equalizer panel. It stays on by default, as on Android.
+- Downloaded songs keep their loudness value, so they play at the same level as streamed songs instead of louder. Songs downloaded before this update keep playing at full level.
+
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
 - The window background now follows your theme. A Tauri bug was clearing it, which showed a mismatched color around the app while resizing.

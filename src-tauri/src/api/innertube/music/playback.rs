@@ -13,7 +13,7 @@
 
 use std::time::Duration;
 
-use crate::api::innertube::json::loudness::loudness_db;
+use crate::api::innertube::json::loudness::music_loudness_db;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
@@ -191,7 +191,7 @@ impl InnertubeClient {
             .as_str()
             .and_then(|s| s.parse::<u64>().ok());
         let audio_config = &res["playerConfig"]["audioConfig"];
-        let loudness_db = loudness_db(audio_config, &format);
+        let loudness_db = music_loudness_db(audio_config, &format);
         let perceptual_loudness_db = audio_config["perceptualLoudnessDb"].as_f64();
         let expires_in_seconds = streaming["expiresInSeconds"]
             .as_str()
@@ -436,21 +436,23 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn loudness_falls_back_to_the_format_then_the_perceptual_value() {
+    fn music_loudness_takes_the_perceptual_value_before_the_others() {
         let top =
             json!({ "loudnessDb": 1.5, "perceptualLoudnessDb": -9.0, "loudnessTargetLkfs": -14.0 });
-        assert_eq!(loudness_db(&top, &json!({ "loudnessDb": 3.0 })), Some(1.5));
-
-        let visionos = json!({ "perceptualLoudnessDb": -10.59, "loudnessTargetLkfs": -14.0 });
         assert_eq!(
-            loudness_db(&visionos, &json!({ "loudnessDb": 3.41 })),
-            Some(3.41)
+            music_loudness_db(&top, &json!({ "loudnessDb": 3.0 })),
+            Some(5.0)
         );
 
-        let perceptual = loudness_db(&visionos, &json!({})).unwrap();
+        let visionos = json!({ "perceptualLoudnessDb": -10.59, "loudnessTargetLkfs": -14.0 });
+        let perceptual = music_loudness_db(&visionos, &json!({ "loudnessDb": 1.0 })).unwrap();
         assert!((perceptual - 3.41).abs() < 1e-9);
 
-        assert_eq!(loudness_db(&json!({}), &json!({})), None);
+        assert_eq!(
+            music_loudness_db(&json!({ "loudnessDb": 1.5 }), &json!({ "loudnessDb": 3.0 })),
+            Some(1.5)
+        );
+        assert_eq!(music_loudness_db(&json!({}), &json!({})), None);
     }
 
     #[test]

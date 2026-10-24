@@ -16,6 +16,7 @@ import { normalizeBackendError } from "../lib/api/errors";
 import { recordPlayerEvent } from "../lib/playerDiagnostics";
 import { logToBackend } from "../lib/diagnostics";
 import { musicAudioEngine } from "../lib/audio/musicAudioEngine";
+import { migrateSavedMusicVolume } from "../lib/audio/volumeCurve";
 import { preloadTrack } from "../lib/musicPreload";
 import { upcomingIndex, type QueueRepeatMode } from "../lib/musicQueueOrder";
 import { restoreOriginalOrder, shuffleFrom, shuffleUpcoming } from "../lib/musicShuffle";
@@ -77,6 +78,7 @@ const loadConfig = (): PersistedMusicConfig => {
   }
 };
 
+migrateSavedMusicVolume();
 const initialConfig = loadConfig();
 
 const saveConfig = (get: () => MusicPlayerState) => {

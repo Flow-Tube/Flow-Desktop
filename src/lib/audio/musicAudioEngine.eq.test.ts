@@ -10,6 +10,13 @@ class FakeParam {
   setTargetAtTime = vi.fn((value: number) => {
     this.value = value;
   });
+  setValueAtTime = vi.fn((value: number) => {
+    this.value = value;
+  });
+  cancelScheduledValues = vi.fn();
+  setValueCurveAtTime = vi.fn((curve: Float32Array, _start: number, _seconds: number) => {
+    this.value = curve[curve.length - 1] ?? this.value;
+  });
 }
 class FakeNode {
   connect = vi.fn((node: unknown) => node);
@@ -34,6 +41,7 @@ class FakeContext extends EventTarget {
   sampleRate = 48_000;
   destination = new FakeNode();
   biquads: FakeBiquad[] = [];
+  gains: FakeGain[] = [];
   sources: HTMLMediaElement[] = [];
   resume = vi.fn(async () => {
     this.state = "running";
@@ -43,7 +51,9 @@ class FakeContext extends EventTarget {
     contexts.push(this);
   }
   createGain() {
-    return new FakeGain();
+    const g = new FakeGain();
+    this.gains.push(g);
+    return g;
   }
   createBiquadFilter() {
     const f = new FakeBiquad();
@@ -95,15 +105,18 @@ describe("music EQ graph", () => {
     musicAudioEngine.setLoudness(6, true);
 
     expect(contexts).toHaveLength(0);
-    // Normalization turns the element down by itself: 6 dB over the target is about half.
-    expect(pair[0].volume).toBeCloseTo(0.25, 2);
+    // Half way on the slider is a quarter of the gain, and 6 dB over the target halves it again.
+    expect(pair[0].volume).toBeCloseTo(0.125, 2);
     expect(musicAudioEngine.isEqAvailable()).toBe(true);
   });
 
-  it("builds one chain of 20 filters plus bass boost, and keeps it through a gapless swap", async () => {
+  it("builds one chain of 20 filters plus bass boost on play, and keeps it through a gapless swap", async () => {
     const pair = elements();
     musicAudioEngine.attach(pair);
     musicAudioEngine.setEq(rock, true);
+    // Nothing is playing yet: the context waits for the play that a click starts.
+    expect(contexts).toHaveLength(0);
+    await musicAudioEngine.play();
 
     const ctx = lastContext();
     expect(ctx.sources).toEqual(pair);
@@ -130,6 +143,7 @@ describe("music EQ graph", () => {
     const pair = elements();
     musicAudioEngine.attach(pair);
     musicAudioEngine.setEq(rock, true);
+    await musicAudioEngine.play();
     const ctx = lastContext();
     ctx.state = "suspended";
     ctx.resume.mockImplementation(() => new Promise(() => {}));
@@ -143,12 +157,68 @@ describe("music EQ graph", () => {
   it("resumes the context when the system suspends it mid-song", () => {
     const pair = elements();
     musicAudioEngine.attach(pair);
+    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    // Turned on while a song plays, the graph is built at once.
     musicAudioEngine.setEq(rock, true);
     const ctx = lastContext();
-    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    expect(ctx.sources).toContain(pair[0]);
 
     ctx.state = "suspended";
     ctx.dispatchEvent(new Event("statechange"));
     expect(ctx.resume).toHaveBeenCalled();
+  });
+
+  it("crossfades into a buffered song on the audio clock, then empties the one that ended", async () => {
+    vi.useFakeTimers();
+    const pair = elements();
+    musicAudioEngine.attach(pair);
+    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    musicAudioEngine.setCrossfadeEnabled(true);
+    const ctx = lastContext();
+    await musicAudioEngine.load("http://127.0.0.1/stream/a");
+    musicAudioEngine.preload("b", "http://127.0.0.1/stream/b", null);
+    Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
+
+    musicAudioEngine.armCrossfade(4);
+    expect(musicAudioEngine.activatePreloaded("b")).toBe(true);
+
+    expect(musicAudioEngine.getActiveElement()).toBe(pair[1]);
+    expect(pair[0].getAttribute("src")).toBe("http://127.0.0.1/stream/a");
+    const fades = ctx.gains.filter((g) => g.gain.setValueCurveAtTime.mock.calls.length > 0);
+    expect(fades).toHaveLength(2);
+    expect(fades.every((g) => g.gain.setValueCurveAtTime.mock.calls[0]![2] === 4)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(4_100);
+    expect(pair[0].getAttribute("src")).toBeNull();
+    musicAudioEngine.setCrossfadeEnabled(false);
+  });
+});
+
+describe("crossfade without WebAudio", () => {
+  it("steps the two elements' volume instead", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("AudioContext", undefined);
+    vi.resetModules();
+    const { musicAudioEngine: engine } = await import("./musicAudioEngine");
+    const pair = elements();
+    engine.attach(pair);
+    engine.setCrossfadeEnabled(true);
+    expect(engine.isEqAvailable()).toBe(false);
+
+    await engine.load("http://127.0.0.1/stream/a");
+    engine.preload("b", "http://127.0.0.1/stream/b", null);
+    Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
+    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    engine.armCrossfade(2);
+    engine.activatePreloaded("b");
+
+    expect(pair[1].volume).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(pair[0].volume).toBeGreaterThan(0.6);
+    expect(pair[0].volume).toBeLessThan(0.8);
+    expect(pair[1].volume).toBeCloseTo(pair[0].volume, 1);
+    await vi.advanceTimersByTimeAsync(1_200);
+    expect(pair[1].volume).toBe(1);
+    expect(pair[0].getAttribute("src")).toBeNull();
   });
 });

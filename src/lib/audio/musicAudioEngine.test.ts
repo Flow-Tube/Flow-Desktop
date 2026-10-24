@@ -66,3 +66,38 @@ describe("gapless standby element", () => {
     expect(musicAudioEngine.clearPreload()).toBeNull();
   });
 });
+
+describe("music speed", () => {
+  // Counts writes: on WebKitGTK every playbackRate write flushes the audio pipeline.
+  const countRateWrites = (el: HTMLAudioElement) => {
+    let rate = 1;
+    const writes = { count: 0 };
+    Object.defineProperty(el, "playbackRate", {
+      configurable: true,
+      get: () => rate,
+      set: (value: number) => {
+        writes.count++;
+        rate = value;
+      },
+    });
+    return writes;
+  };
+
+  it("writes the rate only when it changes, and carries it across loads", () => {
+    const fresh = elements();
+    const writes = countRateWrites(fresh[0]);
+    musicAudioEngine.attach(fresh);
+    musicAudioEngine.setSpeed(1);
+    expect(writes.count).toBe(0);
+
+    musicAudioEngine.setSpeed(1.5);
+    musicAudioEngine.setSpeed(1.5);
+    expect(writes.count).toBe(1);
+    expect(fresh[0].defaultPlaybackRate).toBe(1.5);
+    expect(fresh[0].preservesPitch).toBe(true);
+
+    musicAudioEngine.setSpeed(9);
+    expect(fresh[0].playbackRate).toBe(2);
+    musicAudioEngine.setSpeed(1);
+  });
+});

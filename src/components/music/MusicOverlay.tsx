@@ -99,14 +99,16 @@ export function MusicOverlay() {
 
   // Android draws the lyrics in the player's primary, checked against the surface behind them.
   const lyricsView = (variant: "full" | "pane", className: string) => (
-    <MusicLyrics
-      track={currentTrack}
-      variant={variant}
-      accent={playerColors.colors.roles.primary}
-      backdrop={playerColors.colors.roles.surface}
-      active
-      className={className}
-    />
+    <div className={className}>
+      <MusicLyrics
+        track={currentTrack}
+        variant={variant}
+        accent={playerColors.colors.roles.primary}
+        backdrop={playerColors.colors.roles.surface}
+        active
+        className="h-full w-full"
+      />
+    </div>
   );
 
   return (

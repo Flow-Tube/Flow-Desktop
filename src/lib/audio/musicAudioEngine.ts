@@ -45,6 +45,7 @@ class MusicAudioEngine {
   private normalizationEnabled = true;
   private eqSpec: EqGraphSpec = EQ_GRAPH_OFF;
   private eqEngaged = false;
+  private speed = 1;
 
   private get active(): Slot {
     return this.slots[this.activeIndex];
@@ -65,9 +66,11 @@ class MusicAudioEngine {
       // Required for WebAudio to receive (non-silent) cross-origin samples.
       el.crossOrigin = "anonymous";
       el.preload = "auto";
+      el.preservesPitch = true;
       this.slots[i as 0 | 1].el = el;
     }
     this.graphReady = false;
+    this.applySpeed();
     if (this.eqEngaged) this.ensureGraph();
     this.applyGain();
   }
@@ -274,6 +277,27 @@ class MusicAudioEngine {
   getDuration(): number {
     const d = this.active.el?.duration ?? 0;
     return Number.isFinite(d) ? d : 0;
+  }
+
+  // --- speed --------------------------------------------------------------
+
+  setSpeed(rate: number): void {
+    this.speed = Math.max(0.5, Math.min(2, rate));
+    this.applySpeed();
+  }
+
+  /**
+   * WebKitGTK flushes its GStreamer pipeline on every `playbackRate` write, so the rate is only
+   * written when it differs. The default rate carries it across loads, which reset
+   * `playbackRate` to it.
+   */
+  private applySpeed(): void {
+    for (const slot of this.slots) {
+      const el = slot.el;
+      if (!el) continue;
+      if (el.defaultPlaybackRate !== this.speed) el.defaultPlaybackRate = this.speed;
+      if (el.playbackRate !== this.speed) el.playbackRate = this.speed;
+    }
   }
 
   // --- gain (volume + loudness normalization) -----------------------------

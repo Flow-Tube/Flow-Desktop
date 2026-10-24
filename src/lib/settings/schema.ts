@@ -109,6 +109,7 @@ export const SETTINGS = {
 
   MUSIC_LOUDNESS_NORMALIZATION: "music_loudness_normalization",
   EQ_STATE_JSON: "eq_state_json",
+  MUSIC_PLAYBACK_SPEED: "music_playback_speed",
 
   BUFFER_PROFILE: "buffer_profile",
   MIN_BUFFER_MS: "min_buffer_ms",
@@ -320,6 +321,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION, "player", true, "wired"),
   // Flow for Android's equalizer JSON, shared by music and video and synced as `equalizer`.
   json(SETTINGS.EQ_STATE_JSON, "player", "{}", "wired"),
+  num(SETTINGS.MUSIC_PLAYBACK_SPEED, "player", 1, "wired", 0.5, 2),
 
   str(SETTINGS.BUFFER_PROFILE, "network", "STABLE", "wired", ["AGGRESSIVE", "STABLE", "DATASAVER", "CUSTOM"]),
   num(SETTINGS.MIN_BUFFER_MS, "network", 30000, "wired", 5000, 120000),

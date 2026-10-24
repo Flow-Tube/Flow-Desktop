@@ -5,16 +5,18 @@ import { EqLimits } from "../../lib/audio/eq/models";
 import { withBassBoost } from "../../lib/audio/eq/stateOps";
 import { pickEqPreset, restoreCustomEq, useEqualizer, useMusicEqAvailable } from "../../lib/audio/eq/useEqualizer";
 import { getString } from "../../lib/i18n/index";
-import { SETTINGS } from "../../lib/settings/schema";
-import { useBoolPref } from "../../lib/usePreference";
 import { useEqStore } from "../../store/useEqStore";
 import { Chip } from "../ui/Chip";
 import { Slider } from "../ui/Slider";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { EqResponseGraph } from "./eq/EqResponseGraph";
 import { formatDb } from "./eq/eqFormat";
+import { MusicAudioOptions } from "./MusicAudioOptions";
 
-/** The quick equalizer panel: switch, curve, presets and bass boost, with Edit for the rest. */
+/**
+ * The quick audio panel: the equalizer's switch, curve, presets and bass boost with Edit for the
+ * rest, then the other music audio settings.
+ */
 export function EqPanel({
   open,
   onClose,
@@ -28,7 +30,6 @@ export function EqPanel({
   const available = useMusicEqAvailable();
   const update = useEqStore((s) => s.update);
   const setEditorOpen = useEqStore((s) => s.setEditorOpen);
-  const [normalization, setNormalization] = useBoolPref(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION);
 
   const fromY = placement === "top" ? 10 : -10;
   const selectedId = eq.active.presetId;
@@ -127,12 +128,8 @@ export function EqPanel({
             {getString("eq_edit")}
           </button>
 
-          <div className="mt-4 flex items-center justify-between gap-3 border-t border-chrome-neutral-800 pt-3">
-            <span className="flex min-w-0 flex-col">
-              <span className="text-sm text-chrome-neutral-200">{getString("music_loudness_normalization")}</span>
-              <span className="text-xs text-chrome-neutral-500">{getString("music_loudness_normalization_desc")}</span>
-            </span>
-            <ToggleSwitch checked={normalization} onChange={setNormalization} />
+          <div className="mt-4 border-t border-chrome-neutral-800 pt-3">
+            <MusicAudioOptions />
           </div>
         </motion.div>
       )}

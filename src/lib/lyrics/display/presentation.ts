@@ -1,6 +1,6 @@
 import type { LyricsEntry } from "../types";
 import type { Rgb } from "../../useDominantColor";
-import { ensureContrastOn, withTone } from "./tone";
+import { ensureContrastOn, withTone } from "../../color/tone";
 
 /** Port of Android's LyricsPresentation.kt (romanization from the source only). */
 

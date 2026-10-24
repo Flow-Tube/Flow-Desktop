@@ -20,7 +20,6 @@ export function QualityTab() {
   const [qualityWifi, setQualityWifi] = usePreference(SETTINGS.DEFAULT_QUALITY_WIFI, '1080p');
   const [codec, setCodec] = usePreference(SETTINGS.DEFAULT_VIDEO_CODEC, 'H.264');
   const [shortsQuality, setShortsQuality] = usePreference(SETTINGS.SHORTS_QUALITY_WIFI, '720p');
-  const [audioQuality, setAudioQuality] = usePreference(SETTINGS.MUSIC_AUDIO_QUALITY, 'Auto');
   const [audioLang, setAudioLang] = usePreference(SETTINGS.PREFERRED_AUDIO_LANGUAGE, 'original');
   const { i18n } = useTranslation();
   const languageOptions = useMemo(() => [
@@ -49,12 +48,6 @@ export function QualityTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_audio')}>
-        <SettingItem title={getString('settings_music_audio_quality')} description={getString('settings_music_audio_quality_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_AUDIO_QUALITY)}>
-          <Select value={audioQuality} onChange={setAudioQuality} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_AUDIO_QUALITY)} options={[
-            { value: 'Auto', label: getString('quality_auto') }, { value: 'High', label: getString('settings_option_high') },
-            { value: 'Medium', label: getString('settings_option_medium') }, { value: 'Low', label: getString('settings_option_low') },
-          ]} />
-        </SettingItem>
         <SettingItem title={getString('settings_audio_track_language')} description={getString('settings_audio_track_language_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.PREFERRED_AUDIO_LANGUAGE)}>
           <Select value={audioLang} onChange={setAudioLang} options={languageOptions} disabled={isSettingDisabledUntilWired(SETTINGS.PREFERRED_AUDIO_LANGUAGE)} />
         </SettingItem>

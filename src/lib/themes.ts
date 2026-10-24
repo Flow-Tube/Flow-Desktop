@@ -291,3 +291,22 @@ export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): R
   });
   return variables;
 }
+
+/** The variant a surface that always stays dark uses: AMOLED keeps its black, every other choice its dark set. */
+export function darkVariantOf(variant: ThemeVariant): Exclude<ThemeVariant, "light"> {
+  return variant === "amoled" ? "amoled" : "dark";
+}
+
+/**
+ * The theme's dark tokens, scoped to one element. `-val` variables also get
+ * the token Tailwind derives from them, because `@theme` resolves that token
+ * once at the root and a descendant overriding only the `-val` would not move it.
+ */
+export function darkScopeVariables(theme: ThemeDefinition | CustomThemeDefinition, variant: ThemeVariant): Record<string, string> {
+  const dark = darkVariantOf(variant);
+  const variables = themeCssVariables(theme.variants[dark], dark);
+  for (const [name, value] of Object.entries(variables)) {
+    if (name.endsWith("-val")) variables[name.slice(0, -"-val".length)] = value;
+  }
+  return variables;
+}

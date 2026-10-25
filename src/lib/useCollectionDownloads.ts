@@ -134,6 +134,7 @@ export async function downloadAlbum(album: AlbumItem): Promise<void> {
       title: album.title,
       author: album.artists?.[0]?.name ?? undefined,
       thumbnailUrl: album.thumbnail || undefined,
+      year: album.year,
     },
     songs,
   );

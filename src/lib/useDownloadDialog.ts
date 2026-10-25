@@ -16,7 +16,11 @@ import { noteVideoSaved } from "./videoSaved";
 import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
 import { trackDownloadTags, videoDownloadTags } from "./downloadTags";
 
-export const MUSIC_QUALITY_VALUES = new Set(["Auto", "High", "Medium", "Low"]);
+/** Songs are saved as AAC so they can carry tags: the best AAC on offer, unless the
+ *  user asked for low quality. */
+export function musicDownloadQuality(values: Record<string, string>): MusicAudioQuality {
+  return values[SETTINGS.MUSIC_AUDIO_QUALITY] === "Low" ? "Low" : "High";
+}
 
 function codecLabel(mimeType?: string | null): string {
   const value = mimeType?.toLowerCase() ?? "";
@@ -180,13 +184,9 @@ export function useMusicDownloadDialog(track: SongItem | null) {
     setError(null);
     if (!track) return;
     const id = track.videoId ?? track.id;
-    const configuredQuality = values[SETTINGS.MUSIC_AUDIO_QUALITY] ?? "Auto";
-    const quality = MUSIC_QUALITY_VALUES.has(configuredQuality)
-      ? (configuredQuality as MusicAudioQuality)
-      : "Auto";
     let cancelled = false;
     setLoading(true);
-    void getMusicStream(id, quality)
+    void getMusicStream(id, musicDownloadQuality(values), true)
       .then((resolved) => {
         if (!cancelled) setStream(resolved);
       })

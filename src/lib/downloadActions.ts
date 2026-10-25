@@ -3,16 +3,16 @@ import {
   startDownload,
   type DownloadStarted,
 } from "./api/downloads";
-import { getMusicStream, type MusicAudioQuality } from "./api/music";
+import { getMusicStream } from "./api/music";
 import {
   describeDownloadFormat,
   describeMusicStream,
-  MUSIC_QUALITY_VALUES,
+  musicDownloadQuality,
   selectDefaultFormat,
 } from "./useDownloadDialog";
 import { SETTINGS } from "./settings/schema";
 import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
-import { trackDownloadTags, videoDownloadTags } from "./downloadTags";
+import { trackDownloadTags, videoDownloadTags, type TrackPosition } from "./downloadTags";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 
@@ -21,6 +21,10 @@ type SettingsValues = Record<string, string>;
 interface DownloadOverrides {
   destinationDirectory?: string;
   collectionDbId?: number;
+  /** The song's place in the album being downloaded. */
+  position?: TrackPosition;
+  albumArtist?: string;
+  releaseYear?: number | null;
 }
 
 export async function startVideoDownload(
@@ -62,9 +66,7 @@ export async function startMusicDownload(
   overrides: DownloadOverrides = {},
 ): Promise<DownloadStarted | null> {
   const id = track.videoId ?? track.id;
-  const configured = values[SETTINGS.MUSIC_AUDIO_QUALITY] ?? "Auto";
-  const quality = MUSIC_QUALITY_VALUES.has(configured) ? (configured as MusicAudioQuality) : "Auto";
-  const stream = await getMusicStream(id, quality);
+  const stream = await getMusicStream(id, musicDownloadQuality(values), true);
   const started = await startDownload({
     sourceUrl: stream.audioUrl,
     title: track.title,
@@ -80,7 +82,7 @@ export async function startMusicDownload(
     durationSeconds: track.duration ?? undefined,
     collectionDbId: overrides.collectionDbId,
     loudnessDb: stream.loudnessDb ?? undefined,
-    tags: trackDownloadTags(track),
+    tags: trackDownloadTags(track, overrides.position, overrides.albumArtist, overrides.releaseYear),
   });
   saveLyricsWithDownload(track, started.id);
   return started;

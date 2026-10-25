@@ -21,6 +21,8 @@ export interface CollectionMeta {
   title: string;
   author?: string;
   thumbnailUrl?: string;
+  /** An album's release year, written into each song. */
+  year?: number | null;
 }
 
 export interface CollectionRun {
@@ -156,7 +158,13 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
         songs,
         (song) => song.videoId ?? song.id,
         (song, folderPath, dbId) =>
-          startMusicDownload(song, settings(), { destinationDirectory: folderPath, collectionDbId: dbId }),
+          startMusicDownload(song, settings(), {
+            destinationDirectory: folderPath,
+            collectionDbId: dbId,
+            position: { number: songs.indexOf(song) + 1, total: songs.length },
+            albumArtist: meta.author,
+            releaseYear: meta.year,
+          }),
       ),
 
     dismissRun: (dbId) =>

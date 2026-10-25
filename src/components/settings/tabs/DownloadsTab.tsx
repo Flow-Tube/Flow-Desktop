@@ -15,8 +15,7 @@ export function DownloadsTab() {
   const [threads, setThreads] = useNumberPref(SETTINGS.DOWNLOAD_THREADS, 3);
   const [downloadPath, setDownloadPath] = usePreference(SETTINGS.DOWNLOAD_LOCATION, '');
   const [musicPath, setMusicPath] = usePreference(SETTINGS.MUSIC_DOWNLOAD_LOCATION, '');
-  const [thumbnailsEnabled, setThumbnailsEnabled] = useBoolPref(SETTINGS.DOWNLOAD_THUMBNAILS_ENABLED, true);
-  const [thumbnailMode, setThumbnailMode] = usePreference(SETTINGS.DOWNLOAD_THUMBNAIL_MODE, 'SIDECAR');
+  const [posterSidecar, setPosterSidecar] = useBoolPref(SETTINGS.DOWNLOAD_POSTER_SIDECAR, false);
 
   const downloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_LOCATION);
   const musicDownloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.MUSIC_DOWNLOAD_LOCATION);
@@ -55,16 +54,9 @@ export function DownloadsTab() {
         </SettingItem>
       </SettingsGroup>
 
-      <SettingsGroup title={getString('settings_group_thumbnails')}>
-        <SettingItem title={getString('settings_download_thumbnails')} description={getString('settings_download_thumbnails_desc')}>
-          <ToggleSwitch checked={thumbnailsEnabled} onChange={setThumbnailsEnabled} />
-        </SettingItem>
-        <SettingItem title={getString('settings_thumbnail_mode')} description={getString('settings_thumbnail_mode_desc')} disabled={!thumbnailsEnabled}>
-          <Select value={thumbnailMode} onChange={setThumbnailMode} disabled={!thumbnailsEnabled} options={[
-            { value: 'SIDECAR', label: getString('thumbnail_mode_sidecar') },
-            { value: 'EMBED', label: getString('thumbnail_mode_embed') },
-            { value: 'BOTH', label: getString('thumbnail_mode_both') },
-          ]} />
+      <SettingsGroup title={getString('settings_group_artwork')}>
+        <SettingItem title={getString('settings_download_poster_sidecar')} description={getString('settings_download_poster_sidecar_desc')}>
+          <ToggleSwitch checked={posterSidecar} onChange={setPosterSidecar} />
         </SettingItem>
       </SettingsGroup>
 

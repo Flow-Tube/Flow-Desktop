@@ -219,6 +219,9 @@ DOWNLOADS
 - Videos now save as MP4 with AAC audio in every quality, VP9 and AV1 included, so they open in more players. A video with no AAC track still saves as MKV.
 - Downloaded videos carry their title, channel and YouTube link inside the file, plus the poster when Embed is chosen.
 - Saved videos start at once offline, keep sound and picture in step from the first frame, and are checked for a missing track or a wrong length before they count as done.
+- Every download carries a sharp cover inside the file: a 1200 px square for songs and the full 16:9 frame for videos. Flow keeps its own copy, so the artwork stays when you are offline.
+- Video downloads also store their description, release date, channel and category, looked up while the file downloads.
+- The artwork setting is now one switch, Also save a poster image next to the file, off by default.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.

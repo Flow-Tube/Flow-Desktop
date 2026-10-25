@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
 import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
+import { useMusicSheetStore } from "../../store/useMusicSheetStore";
 import { useMusicPlayerError } from "../../lib/useMusicPlayerError";
 import { useCoverAppContent } from "../../lib/useCoverAppContent";
 import { useMusicPlayerKeyboard } from "../../lib/useMusicPlayerKeyboard";
@@ -27,6 +28,16 @@ import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useFullPlayerColors } from "../../lib/usePlayerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import {
+  contentOpacity,
+  contentScale,
+  settleSheet,
+  sheetBox,
+  sheetClip,
+  sheetDockBox,
+  sheetOpacity,
+  sheetProgress,
+} from "../../lib/musicSheet";
 
 const TOP_BTN =
   "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
@@ -54,6 +65,7 @@ export function MusicOverlay() {
   const wide = useMediaQuery(WIDE_QUERY);
   const [paneVisible, setPaneVisible] = useBoolPref(SETTINGS.MUSIC_SIDE_PANE_VISIBLE);
   const open = currentTrack !== null && viewState !== "dock";
+  const peeking = useMusicSheetStore((s) => s.peeking);
   const isQueue = viewState === "queue";
   const isLyrics = viewState === "lyrics";
   /*
@@ -67,11 +79,34 @@ export function MusicOverlay() {
   const accentSrc = useProxiedImageUrl(upgradeMusicImageUrl(currentTrack?.thumbnail));
   const playerColors = useFullPlayerColors(useArtworkSwatches(accentSrc));
 
-  // The page only goes away once the fade-in has finished covering it.
-  const [entered, setEntered] = useState(false);
+  /*
+    The player grows out of the dock when it opens and sinks back into it when it closes, as
+    Android's player sheet does; a drag on the dock moves the same progress by hand. It stays
+    mounted until the sinking has finished.
+  */
+  const [closing, setClosing] = useState(false);
   useEffect(() => {
-    if (!open) setEntered(false);
+    if (open) {
+      setClosing(false);
+      void settleSheet(1);
+    } else if (sheetProgress.get() > 0 && !useMusicSheetStore.getState().peeking) {
+      setClosing(true);
+      void settleSheet(0).then((settled) => {
+        if (settled) setClosing(false);
+      });
+    }
   }, [open]);
+  const shown = open || peeking || closing;
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const clipPath = useTransform(sheetProgress, (progress) => sheetClip(progress, sheetDockBox(), sheetBox()));
+  const groundOpacity = useTransform(sheetProgress, sheetOpacity);
+  const innerOpacity = useTransform(sheetProgress, contentOpacity);
+  const innerScale = useTransform(sheetProgress, contentScale);
+
+  // The page only goes away once the player has finished covering it.
+  const [entered, setEntered] = useState(() => sheetProgress.get() >= 1);
+  useMotionValueEvent(sheetProgress, "change", (progress) => setEntered(progress >= 1));
   useCoverAppContent(open && entered);
 
   useEffect(() => {
@@ -79,7 +114,6 @@ export function MusicOverlay() {
   }, [isLyrics]);
 
   // Focus moves into the player when it opens and back to where it was when it closes.
-  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -145,192 +179,188 @@ export function MusicOverlay() {
     </div>
   );
 
-  return (
-    <AnimatePresence>
-      {open && currentTrack && (
-        <motion.div
-          key="music-overlay"
-          ref={dialogRef}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          aria-label={currentTrack.title}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-          onAnimationComplete={(definition) => {
-            // Also fires when the exit fade ends; only the fade-in counts.
-            if ((definition as { opacity?: number }).opacity === 1) setEntered(true);
-          }}
-          className="fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-[var(--player-ground)] outline-none"
-          style={playerColors.rootStyle}
-        >
-          <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkAtStart={wide} />
+  if (!shown || !currentTrack) return null;
 
-          {/* TOP BAR */}
-          <div className="absolute top-0 z-20 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
+  return (
+    <motion.div
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={currentTrack.title}
+      aria-hidden={!open}
+      // While the dock is dragged or the player sinks, the pointer belongs to the dock.
+      className={`fixed inset-x-0 bottom-0 top-[var(--app-titlebar-height)] z-[60] flex flex-col overflow-hidden bg-[var(--player-ground)] outline-none ${open ? "" : "pointer-events-none"}`}
+      style={{ ...playerColors.rootStyle, clipPath, opacity: groundOpacity }}
+    >
+      <motion.div
+        style={{ opacity: innerOpacity, scale: innerScale, transformOrigin: "50% 100%" }}
+        className="relative flex min-h-0 flex-1 flex-col"
+      >
+        <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkAtStart={wide} />
+
+        {/* TOP BAR */}
+        <div className="absolute top-0 z-20 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
+          <HapticButton
+            onClick={closeOverlay}
+            aria-label={getString("music_collapse")}
+            className={`${TOP_BTN} justify-self-start`}
+          >
+            <ChevronDown className="h-6 w-6" />
+          </HapticButton>
+
+          <p className="line-clamp-1 max-w-md text-center text-sm text-chrome-neutral-400">
+            {queueSource ? (
+              <>
+                {getString("playing_from")} <span className="font-medium text-chrome-neutral-200">{queueSource}</span>
+              </>
+            ) : null}
+          </p>
+
+          <div className="relative flex items-center gap-1 justify-self-end">
+            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
+            {wide && lyricsExpanded && (
+              <HapticButton
+                onClick={() => setLyricsExpanded(false)}
+                aria-label={getString("music_lyrics_back_to_pane")}
+                title={getString("music_lyrics_back_to_pane")}
+                className={TOP_BTN}
+              >
+                <Minimize2 className="h-5 w-5" />
+              </HapticButton>
+            )}
+
             <HapticButton
-              onClick={closeOverlay}
-              aria-label={getString("music_collapse")}
-              className={`${TOP_BTN} justify-self-start`}
+              onClick={onQueueButton}
+              aria-label={getString("music_queue")}
+              aria-pressed={queueShown}
+              className={queueShown ? TOP_BTN_ACTIVE : TOP_BTN}
             >
-              <ChevronDown className="h-6 w-6" />
+              <ListMusic className="h-5 w-5" />
             </HapticButton>
 
-            <p className="line-clamp-1 max-w-md text-center text-sm text-chrome-neutral-400">
-              {queueSource ? (
-                <>
-                  {getString("playing_from")} <span className="font-medium text-chrome-neutral-200">{queueSource}</span>
-                </>
-              ) : null}
-            </p>
+            <HapticButton
+              onClick={onLyricsButton}
+              aria-label={getString("music_lyrics")}
+              aria-pressed={lyricsShown}
+              className={lyricsShown ? TOP_BTN_ACTIVE : TOP_BTN}
+            >
+              <Mic2 className="h-5 w-5" />
+            </HapticButton>
 
-            <div className="relative flex items-center gap-1 justify-self-end">
-              {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
-              {wide && lyricsExpanded && (
-                <HapticButton
-                  onClick={() => setLyricsExpanded(false)}
-                  aria-label={getString("music_lyrics_back_to_pane")}
-                  title={getString("music_lyrics_back_to_pane")}
-                  className={TOP_BTN}
-                >
-                  <Minimize2 className="h-5 w-5" />
-                </HapticButton>
-              )}
-
+            <div className="relative">
               <HapticButton
-                onClick={onQueueButton}
-                aria-label={getString("music_queue")}
-                aria-pressed={queueShown}
-                className={queueShown ? TOP_BTN_ACTIVE : TOP_BTN}
+                onClick={() => setVolumeOpen((v) => !v)}
+                onWheel={(event) => setVolume(volumeAfterWheel(volume, event.deltaY))}
+                aria-label={getString("music_volume")}
+                aria-pressed={volumeOpen}
+                className={volumeOpen ? TOP_BTN_ACTIVE : TOP_BTN}
               >
-                <ListMusic className="h-5 w-5" />
+                {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </HapticButton>
-
-              <HapticButton
-                onClick={onLyricsButton}
-                aria-label={getString("music_lyrics")}
-                aria-pressed={lyricsShown}
-                className={lyricsShown ? TOP_BTN_ACTIVE : TOP_BTN}
-              >
-                <Mic2 className="h-5 w-5" />
-              </HapticButton>
-
-              <div className="relative">
-                <HapticButton
-                  onClick={() => setVolumeOpen((v) => !v)}
-                  onWheel={(event) => setVolume(volumeAfterWheel(volume, event.deltaY))}
-                  aria-label={getString("music_volume")}
-                  aria-pressed={volumeOpen}
-                  className={volumeOpen ? TOP_BTN_ACTIVE : TOP_BTN}
-                >
-                  {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                </HapticButton>
-                <div className="absolute right-0 top-full mt-2">
-                  <VolumePopover open={volumeOpen} />
-                </div>
-              </div>
-
-              <HapticButton
-                onClick={() => setEqOpen((v) => !v)}
-                aria-label={getString("music_equalizer")}
-                aria-pressed={eqOpen}
-                className={eqOpen || eqEnabled ? TOP_BTN_ACTIVE : TOP_BTN}
-              >
-                <SlidersHorizontal className="h-5 w-5" />
-              </HapticButton>
-
-              {/* EQ opens BELOW the top bar so it stays in frame */}
               <div className="absolute right-0 top-full mt-2">
-                <EqPanel open={eqOpen} onClose={() => setEqOpen(false)} placement="bottom" />
+                <VolumePopover open={volumeOpen} />
               </div>
+            </div>
+
+            <HapticButton
+              onClick={() => setEqOpen((v) => !v)}
+              aria-label={getString("music_equalizer")}
+              aria-pressed={eqOpen}
+              className={eqOpen || eqEnabled ? TOP_BTN_ACTIVE : TOP_BTN}
+            >
+              <SlidersHorizontal className="h-5 w-5" />
+            </HapticButton>
+
+            {/* EQ opens BELOW the top bar so it stays in frame */}
+            <div className="absolute right-0 top-full mt-2">
+              <EqPanel open={eqOpen} onClose={() => setEqOpen(false)} placement="bottom" />
             </div>
           </div>
+        </div>
 
-          {/* Playback failure banner — floats below the top bar across all sub-views. */}
-          {musicError.errorInfo && (
-            <div className="pointer-events-none absolute left-1/2 top-20 z-30 w-full max-w-xl -translate-x-1/2 px-6">
-              <div className="pointer-events-auto">
-                <PlayerErrorState
-                  variant="compact"
-                  error={musicError.errorInfo}
-                  onRetry={musicError.onRetry}
-                  onCopyLogs={musicError.onCopyLogs}
-                  onOpenInBrowser={musicError.onOpenInBrowser}
-                />
-              </div>
+        {/* Playback failure banner — floats below the top bar across all sub-views. */}
+        {musicError.errorInfo && (
+          <div className="pointer-events-none absolute left-1/2 top-20 z-30 w-full max-w-xl -translate-x-1/2 px-6">
+            <div className="pointer-events-auto">
+              <PlayerErrorState
+                variant="compact"
+                error={musicError.errorInfo}
+                onRetry={musicError.onRetry}
+                onCopyLogs={musicError.onCopyLogs}
+                onOpenInBrowser={musicError.onOpenInBrowser}
+              />
             </div>
-          )}
+          </div>
+        )}
 
-          {/* MAIN */}
-          {fullBleedLyrics ? (
-            <>
-              {lyricsView("full", "absolute inset-0 z-10")}
-              <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
-                <div className="w-full max-w-2xl">
-                  <MusicScrubber size="lg" showTimes countdown expressive />
-                </div>
-                <PlayerTransport size="md" withModes={false} />
+        {/* MAIN */}
+        {fullBleedLyrics ? (
+          <>
+            {lyricsView("full", "absolute inset-0 z-10")}
+            <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
+              <div className="w-full max-w-2xl">
+                <MusicScrubber size="lg" showTimes countdown expressive />
               </div>
-            </>
-          ) : (
-            <motion.div
-              layout
-              transition={LAYOUT_SPRING}
-              className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center gap-8 px-8 pb-10 pt-24"
-            >
-              <div className={`flex min-h-0 min-w-0 justify-center ${showPane ? "flex-1" : !wide && isQueue ? "w-1/2" : "w-full max-w-2xl"}`}>
-                <NowPlayingColumn
-                  track={currentTrack}
-                  compact={!wide && isQueue}
-                  artworkHidden={playerColors.style === "immersive"}
-                  onOpenEqualizer={() => setEqOpen(true)}
-                />
-              </div>
+              <PlayerTransport size="md" withModes={false} />
+            </div>
+          </>
+        ) : (
+          <motion.div
+            layout
+            transition={LAYOUT_SPRING}
+            className="relative z-10 flex min-h-0 flex-1 items-stretch justify-center gap-8 px-8 pb-10 pt-24"
+          >
+            <div className={`flex min-h-0 min-w-0 justify-center ${showPane ? "flex-1" : !wide && isQueue ? "w-1/2" : "w-full max-w-2xl"}`}>
+              <NowPlayingColumn
+                track={currentTrack}
+                compact={!wide && isQueue}
+                artworkHidden={playerColors.style === "immersive"}
+                onOpenEqualizer={() => setEqOpen(true)}
+              />
+            </div>
 
-              {wide ? (
-                <AnimatePresence mode="popLayout">
-                  {showPane && (
-                    <motion.div
-                      key="side-pane"
-                      initial={{ opacity: 0, x: 48 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 48 }}
-                      transition={LAYOUT_SPRING}
-                      className="flex min-h-0 w-[min(460px,40%)] shrink-0"
+            {wide ? (
+              <AnimatePresence mode="popLayout">
+                {showPane && (
+                  <motion.div
+                    key="side-pane"
+                    initial={{ opacity: 0, x: 48 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 48 }}
+                    transition={LAYOUT_SPRING}
+                    className="flex min-h-0 w-[min(460px,40%)] shrink-0"
+                  >
+                    <PlayerSidePane
+                      tab={sideTab}
+                      onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
+                      onExpandLyrics={() => setLyricsExpanded(true)}
+                      onHide={hidePane}
                     >
-                      <PlayerSidePane
-                        tab={sideTab}
-                        onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
-                        onExpandLyrics={() => setLyricsExpanded(true)}
-                        onHide={hidePane}
-                      >
-                        {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
-                      </PlayerSidePane>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              ) : (
-                <AnimatePresence mode="popLayout">
-                  {isQueue && (
-                    <motion.div
-                      key="queue-pane"
-                      initial={{ opacity: 0, x: 48 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 48 }}
-                      transition={LAYOUT_SPRING}
-                      className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4"
-                    >
-                      <MusicQueuePane />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              )}
-            </motion.div>
-          )}
-        </motion.div>
-      )}
-    </AnimatePresence>
+                      {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
+                    </PlayerSidePane>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {isQueue && (
+                  <motion.div
+                    key="queue-pane"
+                    initial={{ opacity: 0, x: 48 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 48 }}
+                    transition={LAYOUT_SPRING}
+                    className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4"
+                  >
+                    <MusicQueuePane />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
+          </motion.div>
+        )}
+      </motion.div>
+    </motion.div>
   );
 }

@@ -52,7 +52,6 @@ tracing-appender = "0.2"
 
 # HTTP Client
 reqwest = { version = "0.13.3", features = ["stream", "json", "form", "brotli", "gzip", "rustls"] }
-mp4 = "0.14"
 webm-iterable = "0.6.2"
 
 # Cover-art embedding for downloaded music/audio (MP4 covr, ID3 APIC, Vorbis pictures).

@@ -27,6 +27,7 @@ use crate::streaming::proxy::{StreamSession, StreamSessionKind, StreamingManager
 
 mod muxer;
 mod sidecars;
+pub mod tags;
 
 const DOWNLOAD_EVENT: &str = "download-progress";
 const MIN_PARALLEL_FILE_BYTES: u64 = 4 * 1024 * 1024;
@@ -239,8 +240,8 @@ struct AdaptiveSources {
     video_session: StreamSession,
     audio_session: StreamSession,
     output_container: DownloadContainer,
-    video_container: DownloadContainer,
-    audio_container: DownloadContainer,
+    video_mime_type: String,
+    audio_mime_type: String,
 }
 
 struct AdaptiveDownloadContext {
@@ -249,6 +250,8 @@ struct AdaptiveDownloadContext {
     container: DownloadContainer,
     video_container: DownloadContainer,
     audio_container: DownloadContainer,
+    video_mime_type: String,
+    audio_mime_type: String,
     video_path: PathBuf,
     audio_path: PathBuf,
 }
@@ -395,8 +398,8 @@ pub async fn start_download(
                     video_session,
                     audio_session,
                     output_container: adaptive.container,
-                    video_container: container_from_mime(&adaptive.video_mime_type),
-                    audio_container: container_from_mime(&adaptive.audio_mime_type),
+                    video_mime_type: adaptive.video_mime_type,
+                    audio_mime_type: adaptive.audio_mime_type,
                 }),
                 extension,
             )
@@ -436,8 +439,10 @@ pub async fn start_download(
         video_session: sources.video_session,
         audio_session: sources.audio_session,
         container: sources.output_container,
-        video_container: sources.video_container,
-        audio_container: sources.audio_container,
+        video_container: container_from_mime(&sources.video_mime_type),
+        audio_container: container_from_mime(&sources.audio_mime_type),
+        video_mime_type: sources.video_mime_type,
+        audio_mime_type: sources.audio_mime_type,
         video_path: directory.join(format!(".{id}.video.flowpart")),
         audio_path: directory.join(format!(".{id}.audio.flowpart")),
     });
@@ -766,14 +771,17 @@ async fn run_download(mut context: DownloadContext, app: AppHandle) {
             if let Ok(metadata) = tokio::fs::metadata(&context.file_path).await {
                 downloaded.store(metadata.len(), Ordering::Relaxed);
             }
+            let poster =
+                sidecars::fetch_poster(context.thumbnail_url.as_deref(), &emitter, &context.pool)
+                    .await;
             sidecars::write_sidecars(
                 &app,
                 context.media_kind,
                 &context.file_path,
                 context.video_id.as_deref(),
-                context.thumbnail_url.as_deref(),
+                poster,
+                false,
                 &emitter,
-                &context.pool,
             )
             .await;
             record_completed_download(&context).await;
@@ -944,6 +952,12 @@ async fn run_adaptive_download(
     }
 
     emitter.emit(DownloadStatus::Muxing, None);
+    let poster =
+        sidecars::fetch_poster(context.thumbnail_url.as_deref(), &emitter, &context.pool).await;
+    let metadata = muxer::EmbeddedMetadata {
+        tags: download_tags(&context),
+        cover: poster.as_ref().and_then(sidecars::Poster::embeddable),
+    };
     emitter.log("Track downloads completed; starting native muxer");
     let video_path = adaptive.video_path.clone();
     let audio_path = adaptive.audio_path.clone();
@@ -952,16 +966,36 @@ async fn run_adaptive_download(
     let output_container = adaptive.container;
     let video_container = adaptive.video_container;
     let audio_container = adaptive.audio_container;
+    let video_mime_type = adaptive.video_mime_type.clone();
+    let audio_mime_type = adaptive.audio_mime_type.clone();
+    let expectation = muxer::validate::OutputExpectation {
+        video: true,
+        audio: true,
+        duration_seconds: context
+            .duration_seconds
+            .map(|seconds| f64::from(u32::try_from(seconds).unwrap_or(u32::MAX))),
+    };
     let mux_result = tokio::task::spawn_blocking(move || {
         muxer::mux_adaptive_tracks(
             output_container,
-            video_container,
-            &video_path,
-            audio_container,
-            &audio_path,
+            muxer::TrackInput {
+                path: &video_path,
+                container: video_container,
+                mime_type: &video_mime_type,
+            },
+            muxer::TrackInput {
+                path: &audio_path,
+                container: audio_container,
+                mime_type: &audio_mime_type,
+            },
             &output_path,
+            Some(&metadata),
             &control.cancelled,
-        )
+        )?;
+        if output_container == DownloadContainer::Mp4 {
+            muxer::validate::validate_mp4(&output_path, expectation)?;
+        }
+        Ok(())
     })
     .await
     .map_err(|error| format!("Media muxer stopped unexpectedly: {error}"))
@@ -986,9 +1020,9 @@ async fn run_adaptive_download(
                 context.media_kind,
                 &context.file_path,
                 context.video_id.as_deref(),
-                context.thumbnail_url.as_deref(),
+                poster,
+                true,
                 &emitter,
-                &context.pool,
             )
             .await;
             record_completed_download(&context).await;
@@ -1638,6 +1672,22 @@ async fn finalize_download_file(temp_path: &Path, file_path: &Path) -> Result<()
 fn is_transient_file_lock(error: &std::io::Error) -> bool {
     // Windows: 32 = ERROR_SHARING_VIOLATION, 5 = ERROR_ACCESS_DENIED (a scanner holds the file).
     matches!(error.raw_os_error(), Some(5 | 32))
+}
+
+/// The tags known from the request itself.
+fn download_tags(context: &DownloadContext) -> tags::DownloadTags {
+    let kind = match context.media_kind {
+        DownloadMediaKind::Video => tags::TagKind::Video,
+        DownloadMediaKind::Music | DownloadMediaKind::Audio => tags::TagKind::Music,
+    };
+    tags::DownloadTags {
+        kind,
+        video_id: context.video_id.clone().unwrap_or_default(),
+        title: context.title.clone(),
+        channel_name: context.author.clone(),
+        thumbnail_url: context.thumbnail_url.clone(),
+        ..tags::DownloadTags::default()
+    }
 }
 
 /// Persists a finished download into the library table so it shows on the Downloads

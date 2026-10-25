@@ -22,16 +22,75 @@ enum ThumbnailMode {
     Both,
 }
 
+/// A downloaded poster and how the user wants it saved.
+pub struct Poster {
+    bytes: Vec<u8>,
+    extension: &'static str,
+    mode: ThumbnailMode,
+}
+
+impl Poster {
+    /// The bytes to put inside the file, when the user wants that and the image is a
+    /// format MP4 can hold.
+    pub fn embeddable(&self) -> Option<Vec<u8>> {
+        (self.mode != ThumbnailMode::Sidecar
+            && matches!(self.extension, "jpg" | "png")
+            && self.bytes.len() <= super::muxer::MAX_COVER_BYTES)
+            .then(|| self.bytes.clone())
+    }
+}
+
+/// Fetches the poster once, before the file is written, so it can be embedded.
+pub async fn fetch_poster(
+    thumbnail_url: Option<&str>,
+    emitter: &ProgressEmitter,
+    pool: &SqlitePool,
+) -> Option<Poster> {
+    let url = thumbnail_url.map(str::trim).filter(|url| !url.is_empty())?;
+    let enabled = get_setting(pool, THUMBNAILS_ENABLED_KEY)
+        .await
+        .ok()
+        .flatten()
+        .is_none_or(|value| value != "false");
+    if !enabled {
+        return None;
+    }
+    let mode = match get_setting(pool, THUMBNAIL_MODE_KEY)
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+    {
+        Some("EMBED") => ThumbnailMode::Embed,
+        Some("BOTH") => ThumbnailMode::Both,
+        _ => ThumbnailMode::Sidecar,
+    };
+    match download_poster(url).await {
+        Ok((bytes, extension)) => Some(Poster {
+            bytes,
+            extension,
+            mode,
+        }),
+        Err(error) => {
+            emitter.log(format!("Could not fetch the poster image: {error}"));
+            None
+        }
+    }
+}
+
+/// `embedded_in_file` says the muxer already put the poster inside the media file.
 pub async fn write_sidecars(
     app: &AppHandle,
     media_kind: DownloadMediaKind,
     media_path: &Path,
     video_id: Option<&str>,
-    thumbnail_url: Option<&str>,
+    poster: Option<Poster>,
+    embedded_in_file: bool,
     emitter: &ProgressEmitter,
-    pool: &SqlitePool,
 ) {
-    write_poster(media_kind, media_path, thumbnail_url, emitter, pool).await;
+    if let Some(poster) = poster {
+        write_poster(media_kind, media_path, poster, embedded_in_file, emitter).await;
+    }
 
     let Some(video_id) = video_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return;
@@ -61,52 +120,27 @@ pub async fn write_sidecars(
 async fn write_poster(
     media_kind: DownloadMediaKind,
     media_path: &Path,
-    thumbnail_url: Option<&str>,
+    poster: Poster,
+    embedded_in_file: bool,
     emitter: &ProgressEmitter,
-    pool: &SqlitePool,
 ) {
-    let Some(url) = thumbnail_url.map(str::trim).filter(|url| !url.is_empty()) else {
-        return;
-    };
-
-    let enabled = get_setting(pool, THUMBNAILS_ENABLED_KEY)
-        .await
-        .ok()
-        .flatten()
-        .map(|value| value != "false")
-        .unwrap_or(true);
-    if !enabled {
-        return;
-    }
-    let mode = match get_setting(pool, THUMBNAIL_MODE_KEY)
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-    {
-        Some("EMBED") => ThumbnailMode::Embed,
-        Some("BOTH") => ThumbnailMode::Both,
-        _ => ThumbnailMode::Sidecar,
-    };
-
-    let (bytes, extension) = match fetch_poster(url).await {
-        Ok(poster) => poster,
-        Err(error) => {
-            emitter.log(format!("Could not fetch the poster image: {error}"));
-            return;
-        }
-    };
-
-    // Embedding is only tractable for taggable audio containers; video downloads
-    // (WebM/MKV/fMP4 video) always fall back to a sidecar file.
-    let wants_embed = mode != ThumbnailMode::Sidecar
+    let mut embedded = embedded_in_file && poster.embeddable().is_some();
+    if embedded {
+        emitter.log("Embedded cover art into the media file");
+    } else if poster.mode != ThumbnailMode::Sidecar
         && matches!(
             media_kind,
             DownloadMediaKind::Music | DownloadMediaKind::Audio
-        );
-    let mut embedded = false;
-    if wants_embed {
-        match embed_poster(media_path.to_path_buf(), bytes.clone(), extension).await {
+        )
+    {
+        // Audio saved as the original stream is tagged in place after the fact.
+        match embed_poster(
+            media_path.to_path_buf(),
+            poster.bytes.clone(),
+            poster.extension,
+        )
+        .await
+        {
             Ok(()) => {
                 embedded = true;
                 emitter.log("Embedded cover art into the media file");
@@ -121,23 +155,18 @@ async fn write_poster(
 
     // EMBED falls back to a sidecar when embedding fails or is unsupported, so
     // the artwork is never silently lost.
-    if mode != ThumbnailMode::Embed || !embedded {
-        match write_poster_file(media_path, &bytes, extension).await {
+    if poster.mode != ThumbnailMode::Embed || !embedded {
+        match write_poster_file(media_path, &poster.bytes, poster.extension).await {
             Ok(path) => emitter.log(format!("Saved poster image to `{}`", path.display())),
             Err(error) => emitter.log(format!("Could not save the poster image: {error}")),
         }
     }
 }
 
-async fn fetch_poster(url: &str) -> Result<(Vec<u8>, &'static str), String> {
-    let client = reqwest::Client::builder()
-        .user_agent(crate::api::http::BROWSER_USER_AGENT)
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .build()
-        .map_err(|error| format!("client error: {error}"))?;
-    let response = client
+async fn download_poster(url: &str) -> Result<(Vec<u8>, &'static str), String> {
+    let response = crate::api::http::shared_client()
         .get(url)
+        .timeout(Duration::from_secs(30))
         .send()
         .await
         .map_err(|error| format!("request failed: {error}"))?;

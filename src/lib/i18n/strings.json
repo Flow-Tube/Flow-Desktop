@@ -826,6 +826,8 @@
   "settings_group_artwork": "Artwork",
   "settings_download_poster_sidecar": "Also save a poster image next to the file",
   "settings_download_poster_sidecar_desc": "The cover is always saved inside the file. Turn this on for media servers that look for an image beside it",
+  "settings_download_lyrics_file": "Save lyrics as an .lrc file",
+  "settings_download_lyrics_file_desc": "Synced lyrics are always saved inside the song. Many desktop music players also read an .lrc file beside it",
   "settings_group_auto_backup": "Auto Backup",
   "settings_backup_frequency": "Backup Frequency",
   "settings_backup_frequency_desc": "Schedule automatic background backups",

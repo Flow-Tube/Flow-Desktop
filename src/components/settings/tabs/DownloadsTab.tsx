@@ -16,6 +16,7 @@ export function DownloadsTab() {
   const [downloadPath, setDownloadPath] = usePreference(SETTINGS.DOWNLOAD_LOCATION, '');
   const [musicPath, setMusicPath] = usePreference(SETTINGS.MUSIC_DOWNLOAD_LOCATION, '');
   const [posterSidecar, setPosterSidecar] = useBoolPref(SETTINGS.DOWNLOAD_POSTER_SIDECAR, false);
+  const [lyricsFile, setLyricsFile] = useBoolPref(SETTINGS.DOWNLOAD_LYRICS_FILE, true);
 
   const downloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_LOCATION);
   const musicDownloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.MUSIC_DOWNLOAD_LOCATION);
@@ -57,6 +58,9 @@ export function DownloadsTab() {
       <SettingsGroup title={getString('settings_group_artwork')}>
         <SettingItem title={getString('settings_download_poster_sidecar')} description={getString('settings_download_poster_sidecar_desc')}>
           <ToggleSwitch checked={posterSidecar} onChange={setPosterSidecar} />
+        </SettingItem>
+        <SettingItem title={getString('settings_download_lyrics_file')} description={getString('settings_download_lyrics_file_desc')}>
+          <ToggleSwitch checked={lyricsFile} onChange={setLyricsFile} />
         </SettingItem>
       </SettingsGroup>
 

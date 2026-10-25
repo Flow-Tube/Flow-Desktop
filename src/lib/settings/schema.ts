@@ -147,6 +147,7 @@ export const SETTINGS = {
   DOWNLOAD_LOCATION: "download_location",
   MUSIC_DOWNLOAD_LOCATION: "music_download_location",
   DOWNLOAD_POSTER_SIDECAR: "download_poster_sidecar",
+  DOWNLOAD_LYRICS_FILE: "download_lyrics_file",
 
   AUTO_BACKUP_FREQUENCY: "auto_backup_frequency",
   AUTO_BACKUP_TYPE: "auto_backup_type",
@@ -377,6 +378,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.DOWNLOAD_LOCATION, "downloads", "", "wired"),
   str(SETTINGS.MUSIC_DOWNLOAD_LOCATION, "downloads", "", "wired"),
   bool(SETTINGS.DOWNLOAD_POSTER_SIDECAR, "downloads", false, "wired"),
+  bool(SETTINGS.DOWNLOAD_LYRICS_FILE, "downloads", true, "wired"),
 
   str(SETTINGS.AUTO_BACKUP_FREQUENCY, "data", "NONE", "persisted-only", ["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
   str(SETTINGS.AUTO_BACKUP_TYPE, "data", "APP_DATA", "wired", ["APP_DATA", "BRAIN", "MASTER"]),

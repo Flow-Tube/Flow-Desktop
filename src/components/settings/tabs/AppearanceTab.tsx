@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { Download, Plus, Upload } from "lucide-react";
 import { CustomThemeEditor } from "../../theme/CustomThemeEditor";
 import { ThemePreview } from "../../theme/ThemePreview";
 import { Button } from "../../ui/Button";
@@ -9,11 +9,13 @@ import { SETTINGS } from "../../../lib/settings/schema";
 import { getString } from "../../../lib/i18n/index";
 import {
   BUILTIN_THEMES,
+  MAX_CUSTOM_THEMES,
   THEME_VARIANTS,
   createCustomTheme,
   type CustomThemeDefinition,
 } from "../../../lib/themes";
 import { useTheme } from "../../../lib/useTheme";
+import { useThemeTransfer } from "../../../lib/useThemeTransfer";
 import { IS_LINUX_RUNTIME } from "../../../lib/platform";
 import { GraphicsCompatibilitySection } from "../GraphicsCompatibilitySection";
 
@@ -28,6 +30,14 @@ export function AppearanceTab() {
   } = useTheme();
   const [editingTheme, setEditingTheme] = useState<CustomThemeDefinition | null>(null);
   const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
+  const { exportThemes, importThemes } = useThemeTransfer();
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void importThemes(file);
+  };
 
   const createTheme = () => {
     const id = `custom-${crypto.randomUUID()}`;
@@ -58,10 +68,21 @@ export function AppearanceTab() {
           <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString("settings_appearance")}</h1>
           <p className="mt-2 text-sm text-chrome-neutral-400">{getString("theme_page_description")}</p>
         </div>
-        <Button onClick={createTheme} disabled={customThemes.length >= 24}>
-          <Plus size={17} />
-          {getString("theme_create")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => importInputRef.current?.click()} disabled={customThemes.length >= MAX_CUSTOM_THEMES}>
+            <Upload size={17} />
+            {getString("theme_import")}
+          </Button>
+          <Button variant="secondary" onClick={() => void exportThemes(customThemes)} disabled={customThemes.length === 0}>
+            <Download size={17} />
+            {getString("theme_export_all")}
+          </Button>
+          <Button onClick={createTheme} disabled={customThemes.length >= MAX_CUSTOM_THEMES}>
+            <Plus size={17} />
+            {getString("theme_create")}
+          </Button>
+          <input ref={importInputRef} type="file" accept=".json,application/json" onChange={handleImportFile} className="hidden" />
+        </div>
       </div>
 
       <section className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
@@ -120,7 +141,7 @@ export function AppearanceTab() {
               <h2 className="text-base font-medium text-chrome-neutral-200">{getString("theme_custom")}</h2>
               <p className="mt-1 text-sm text-chrome-neutral-400">{getString("theme_custom_description")}</p>
             </div>
-            <span className="font-mono text-xs text-chrome-neutral-500">{customThemes.length}/24</span>
+            <span className="font-mono text-xs text-chrome-neutral-500">{customThemes.length}/{MAX_CUSTOM_THEMES}</span>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
             {customThemes.map((theme) => (
@@ -148,6 +169,7 @@ export function AppearanceTab() {
           theme={editingTheme}
           onCancel={() => setEditingTheme(null)}
           onSave={(theme) => void saveTheme(theme)}
+          onExport={(theme) => void exportThemes([theme])}
         />
       )}
     </div>

@@ -203,8 +203,8 @@ function ArtistHeroScaffold({
               disabled={!hasSongs}
               onClick={onRadio}
               className="h-12 w-12 bg-chrome-white/10 px-0 text-chrome-neutral-50 hover:bg-chrome-white/20 [&>svg]:shrink-0"
-              aria-label="Radio"
-              title="Radio"
+              aria-label={getString('music_radio')}
+              title={getString('music_radio')}
             >
               <RadioGlyph />
             </ArtistActionButton>

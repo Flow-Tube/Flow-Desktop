@@ -38,18 +38,6 @@ export function decodeHtmlEntities(text: string): string {
   return out;
 }
 
-export function cleanTitle(title: string): string {
-  return title
-    .replace(/\s*[([].*?[)\]]/g, "")
-    .replace(/\b(official video|official audio|lyrics|lyric video|hq|hd|audio|video|clip)\b/gi, "")
-    .trim();
-}
-
-export function cleanArtist(artist: string): string {
-  const head = artist.replace(/\s*-\s*Topic/gi, "").split(/\s+(?:feat\.?|ft\.?|featuring|&|,|vs\.?)\s+/i)[0];
-  return (head ?? artist).trim();
-}
-
 const CREDIT_PREFIXES = [
   "synced by",
   "lyrics by",
@@ -64,13 +52,6 @@ export function filterCreditLines(entries: LyricsEntry[]): LyricsEntry[] {
     const t = e.text.trim().toLowerCase();
     return !CREDIT_PREFIXES.some((p) => t.startsWith(p));
   });
-}
-
-export function findCurrentLineIndex(lines: LyricsEntry[], position: number): number {
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i]!.time >= position + 300) return i - 1;
-  }
-  return lines.length - 1;
 }
 
 export function normalizeEntries(entries: LyricsEntry[]): LyricsEntry[] {

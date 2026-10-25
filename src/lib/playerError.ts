@@ -93,6 +93,18 @@ const SPECS: Record<string, KindSpec> = {
     retryable: true,
     openable: true,
   },
+  mediaDecode: {
+    titleKey: "player_error_media_decode_title",
+    hintKey: "player_error_media_decode_hint",
+    retryable: true,
+    openable: true,
+  },
+  streamExpired: {
+    titleKey: "player_error_stream_expired_title",
+    hintKey: "player_error_stream_expired_hint",
+    retryable: true,
+    openable: true,
+  },
   network: {
     titleKey: "player_error_network_title",
     hintKey: "player_error_network_hint",

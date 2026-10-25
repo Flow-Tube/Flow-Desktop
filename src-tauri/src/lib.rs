@@ -18,6 +18,7 @@ mod linux_startup;
 mod macos_window;
 pub mod models;
 mod music_brain;
+mod scrobble;
 mod security;
 mod services;
 mod streaming;
@@ -49,7 +50,11 @@ use commands::downloads::{
     get_offline_stream, list_download_collections, list_downloads, pause_download, resume_download,
     start_download,
 };
-use commands::files::write_backup_file;
+use commands::files::{write_backup_file, write_lyrics_file};
+use commands::lyrics::{
+    clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
+    put_cached_lyrics, save_download_lyrics,
+};
 use commands::music::{
     get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
     get_music_artist_items, get_music_artist_page, get_music_charts_page, get_music_deep_cuts,
@@ -66,6 +71,10 @@ use commands::music_brain::{
     get_heavy_rotation, get_music_brain_snapshot, get_music_rediscover, get_music_taste_profile,
     get_music_time_rotation, rank_music_candidates, record_music_interaction, reset_music_brain,
     unblock_music_artist,
+};
+use commands::music_queue::{
+    clear_music_queue_state, get_music_resume_position, load_music_queue_state,
+    save_music_queue_state, save_music_resume_position,
 };
 use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
@@ -86,6 +95,10 @@ use commands::recommendation::{
     record_feed_impressions, remove_preferred_topic, report_watch_progress, reset_brain,
     resolve_hidden_channel_names, unblock_channel, unblock_topic,
 };
+use commands::scrobble::{
+    scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing, scrobble_set_own_key,
+    scrobble_sign_in, scrobble_sign_out, scrobble_status,
+};
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
 };
@@ -93,6 +106,7 @@ use commands::sync::{
     sync_cancel, sync_device_info, sync_host_receive, sync_respond_consent, sync_scan_join,
     sync_start_host, sync_status,
 };
+use commands::tray::{music_tray_hide, music_tray_supported, music_tray_update};
 use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_about, get_channel_details, get_channel_page, get_channel_tab,
@@ -321,6 +335,12 @@ pub fn run() {
 
             // Manage database pool
             app.manage(pool.clone());
+            let scrobbler = Arc::new(scrobble::scrobbler::Scrobbler::new(
+                pool.clone(),
+                Arc::new(scrobble::credentials::Keychain),
+            ));
+            scrobble::worker::spawn(Arc::clone(&scrobbler));
+            app.manage(scrobbler);
             app.manage(MusicService::new(extractor, pool.clone()));
 
             let music_pool = pool.clone();
@@ -388,6 +408,7 @@ pub fn run() {
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
             app.manage(DiscordPresence::new());
+            app.manage(services::music_tray::MusicTray::default());
 
             // Initialize and manage streaming proxy
             let (streaming_manager, proxy_listeners) = streaming::proxy::StreamingManager::new();
@@ -486,6 +507,13 @@ pub fn run() {
             get_setting,
             set_setting,
             write_backup_file,
+            write_lyrics_file,
+            get_cached_lyrics,
+            put_cached_lyrics,
+            evict_cached_lyrics,
+            lyrics_cache_size,
+            clear_lyrics_cache,
+            save_download_lyrics,
             export_backup_data,
             import_backup_data,
             get_download_formats,
@@ -617,6 +645,12 @@ pub fn run() {
             get_music_brain_snapshot,
             get_music_taste_profile,
             reset_music_brain,
+            // --- Music queue restore and long-track resume ---
+            save_music_queue_state,
+            load_music_queue_state,
+            clear_music_queue_state,
+            save_music_resume_position,
+            get_music_resume_position,
             // --- Flow Local Sync (P2P LAN) ---
             sync_device_info,
             sync_status,
@@ -633,7 +667,20 @@ pub fn run() {
             check_subscriptions_now,
             // --- Discord Rich Presence ---
             set_discord_presence,
-            clear_discord_presence
+            clear_discord_presence,
+            // --- Music tray ---
+            music_tray_supported,
+            music_tray_update,
+            music_tray_hide,
+            // --- Scrobbling ---
+            scrobble_status,
+            scrobble_sign_in,
+            scrobble_sign_out,
+            scrobble_set_own_key,
+            scrobble_now_playing,
+            scrobble_listened,
+            scrobble_love,
+            scrobble_flush
         ])
         .build(context)
         .expect("error while building Flow Desktop")

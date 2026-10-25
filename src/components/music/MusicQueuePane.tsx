@@ -7,90 +7,30 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ListX, Loader2, Radio, X } from "lucide-react";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { ListX, Loader2, Radio } from "lucide-react";
 
 import { selectRadioOn, useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicHiddenFilter } from "../../store/useMusicActionsStore";
+import { useUiStore } from "../../store/useUiStore";
 import { getString } from "../../lib/i18n/index";
+import {
+  DEFAULT_LEFT_SWIPE,
+  DEFAULT_RIGHT_SWIPE,
+  parseQueueSwipeAction,
+  type QueueSwipeAction,
+} from "../../lib/queueRowSwipe";
+import { SETTINGS } from "../../lib/settings/schema";
+import { usePreference } from "../../lib/usePreference";
 import type { SongItem } from "../../types/music";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { MusicItemCard } from "./MusicItemCard";
+import { QueueSwipeRow } from "./QueueSwipeRow";
 
 const videoIdOf = (t: SongItem): string => t.videoId ?? t.id;
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
-}
-
-interface QueueRowProps {
-  track: SongItem;
-  isRadio: boolean;
-  onPlay: () => void;
-  onRemove: () => void;
-  onNavigate: () => void;
-}
-
-function QueueRow({ track, isRadio, onPlay, onRemove, onNavigate }: QueueRowProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: videoIdOf(track) });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cx("group/queue relative flex items-center rounded-lg", isDragging && "z-10 opacity-80")}
-    >
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        title={getString("music_drag_to_reorder")}
-        aria-label={getString("music_drag_to_reorder")}
-        className="grid w-6 shrink-0 cursor-grab touch-none place-items-center self-stretch text-chrome-neutral-600 outline-none active:cursor-grabbing"
-      >
-        {isRadio ? (
-          <>
-            <Radio className="h-3.5 w-3.5 text-[var(--color-primary)] group-hover/queue:hidden" />
-            <GripVertical className="hidden h-4 w-4 text-chrome-neutral-400 group-hover/queue:block" />
-          </>
-        ) : (
-          <GripVertical className="h-4 w-4 opacity-0 transition-opacity group-hover/queue:opacity-100" />
-        )}
-      </button>
-
-      <div className="min-w-0 flex-1">
-        <MusicItemCard
-          variant="track-list"
-          item={track}
-          onPlay={onPlay}
-          onNavigate={onNavigate}
-          appendActions={[
-            {
-              id: "remove-from-queue",
-              label: getString("music_remove_from_queue"),
-              icon: <X size={16} />,
-              onSelect: onRemove,
-            },
-          ]}
-        />
-      </div>
-    </div>
-  );
 }
 
 export function MusicQueuePane() {
@@ -101,13 +41,21 @@ export function MusicQueuePane() {
   const radioOn = useMusicPlayerStore(selectRadioOn);
   const radioLoading = useMusicPlayerStore((s) => s.radioLoading);
   const radioQueuedIds = useMusicPlayerStore((s) => s.radioQueuedIds);
+  const radioExhausted = useMusicPlayerStore((s) => s.radioExhausted);
   const loadIndex = useMusicPlayerStore((s) => s._loadIndex);
   const removeFromQueue = useMusicPlayerStore((s) => s.removeFromQueue);
   const reorderQueue = useMusicPlayerStore((s) => s.reorderQueue);
+  const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
   const clearQueue = useMusicPlayerStore((s) => s.clearQueue);
+  const undoQueueEdit = useMusicPlayerStore((s) => s.undoQueueEdit);
+  const showToast = useUiStore((s) => s.showToast);
   const toggleRadio = useMusicPlayerStore((s) => s.toggleRadio);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
   const isHidden = useMusicHiddenFilter();
+  const [leftSetting] = usePreference(SETTINGS.MUSIC_QUEUE_SWIPE_LEFT);
+  const [rightSetting] = usePreference(SETTINGS.MUSIC_QUEUE_SWIPE_RIGHT);
+  const leftSwipe = parseQueueSwipeAction(leftSetting, DEFAULT_LEFT_SWIPE);
+  const rightSwipe = parseQueueSwipeAction(rightSetting, DEFAULT_RIGHT_SWIPE);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -120,13 +68,38 @@ export function MusicQueuePane() {
     .filter(({ track, i }) => i > currentIndex && !isHidden(track));
   const sortableIds = upcoming.map(({ track }) => videoIdOf(track));
 
+  // A played song can be queued again, so rows are found among the upcoming
+  // ones rather than by the first index with that id.
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const from = queue.findIndex((t) => videoIdOf(t) === active.id);
-    const to = queue.findIndex((t) => videoIdOf(t) === over.id);
-    if (from < 0 || to < 0) return;
+    const from = upcoming.find(({ track }) => videoIdOf(track) === active.id)?.i;
+    const to = upcoming.find(({ track }) => videoIdOf(track) === over.id)?.i;
+    if (from === undefined || to === undefined) return;
     reorderQueue(from, to);
+  };
+
+  const offerUndo = (message: string) =>
+    showToast({
+      message,
+      durationMs: 5000,
+      action: { label: getString("undo"), onSelect: undoQueueEdit },
+    });
+
+  const handleRemove = (index: number) => {
+    removeFromQueue(index);
+    offerUndo(getString("music_queue_removed_toast"));
+  };
+
+  const handleAction = (index: number, action: QueueSwipeAction) => {
+    if (action === "PLAY_NEXT") reorderQueue(index, currentIndex + 1);
+    else if (action === "MOVE_TO_END") reorderQueue(index, queue.length - 1);
+    else handleRemove(index);
+  };
+
+  const handleClear = () => {
+    clearQueue();
+    offerUndo(getString("music_queue_cleared_toast"));
   };
 
   return (
@@ -139,7 +112,7 @@ export function MusicQueuePane() {
         {upcoming.length > 0 && (
           <button
             type="button"
-            onClick={clearQueue}
+            onClick={handleClear}
             className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium text-chrome-neutral-400 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
           >
             <ListX className="h-3.5 w-3.5" />
@@ -155,7 +128,7 @@ export function MusicQueuePane() {
       )}
 
       {/* Scroll area */}
-      <div className="hide-scrollbar -mx-1 flex-1 overflow-y-auto px-1">
+      <div className="hide-scrollbar -mx-1 flex-1 overflow-y-auto overflow-x-hidden px-1">
         {currentTrack && (
           <>
             <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-widest text-chrome-neutral-600">
@@ -164,7 +137,10 @@ export function MusicQueuePane() {
             <MusicItemCard
               variant="track-list"
               item={currentTrack}
-              onPlay={() => void loadIndex(currentIndex)}
+              // The song is already loaded: clicking it resumes rather than starting it over.
+              onPlay={() => {
+                if (!useMusicPlayerStore.getState().isPlaying) togglePlay();
+              }}
               onNavigate={closeOverlay}
             />
           </>
@@ -184,18 +160,25 @@ export function MusicQueuePane() {
             <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
               <div className="flex flex-col">
                 {upcoming.map(({ track, i }) => (
-                  <QueueRow
+                  <QueueSwipeRow
                     key={videoIdOf(track)}
                     track={track}
                     isRadio={radioSet.has(videoIdOf(track))}
+                    leftSwipe={leftSwipe}
+                    rightSwipe={rightSwipe}
                     onPlay={() => void loadIndex(i)}
-                    onRemove={() => removeFromQueue(i)}
+                    onAction={(action) => handleAction(i, action)}
                     onNavigate={closeOverlay}
                   />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
+        ) : radioOn && radioExhausted ? (
+          <div className="px-2 py-6 text-center">
+            <p className="text-sm text-chrome-neutral-500">{getString("music_radio_ran_out")}</p>
+            <p className="mt-1 text-xs text-chrome-neutral-600">{getString("music_radio_ran_out_hint")}</p>
+          </div>
         ) : (
           <div className="px-2 py-6 text-center">
             <p className="text-sm text-chrome-neutral-500">{getString("music_queue_empty")}</p>

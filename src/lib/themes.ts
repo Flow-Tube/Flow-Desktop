@@ -51,7 +51,13 @@ export type ThemeDescriptionKey =
   | "theme_description_tide"
   | "theme_description_sage"
   | "theme_description_caffeine"
-  | "theme_description_claude";
+  | "theme_description_claude"
+  | "theme_description_deep_ocean"
+  | "theme_description_gunmetal"
+  | "theme_description_cosmic_void"
+  | "theme_description_cyberpunk"
+  | "theme_description_royal_gold"
+  | "theme_description_cream_paper";
 
 interface PaletteSeed {
   id: string;
@@ -196,6 +202,36 @@ const seeds: PaletteSeed[] = [
     light: { primary: "#c15f3c", onPrimary: "#ffffff", secondary: "#7d685f", background: "#f7f4ef", surface: "#ece7df", onSurface: "#2f2926", onSurfaceVariant: "#6b605b", outline: "#d2c9c0", error: "#b3261e" },
     dark: { primary: "#e07a58", onPrimary: "#2b1510", secondary: "#b9a49b", background: "#1d1b19", surface: "#282522", onSurface: "#eee9e5", onSurfaceVariant: "#c8beb8", outline: "#4b4541", error: "#ffb4ab" },
   },
+  {
+    id: "deep-ocean", name: "Deep Ocean", descriptionKey: "theme_description_deep_ocean",
+    light: { primary: "#00629b", onPrimary: "#ffffff", secondary: "#2e7fa6", background: "#f5faff", surface: "#e6f0f9", onSurface: "#0b2135", onSurfaceVariant: "#4a6072", outline: "#bfd0df", error: "#ba1a1a" },
+    dark: { primary: "#4fb3e8", onPrimary: "#00253a", secondary: "#7fd1e0", background: "#0a1929", surface: "#132438", onSurface: "#e3f2fd", onSurfaceVariant: "#a9c1d6", outline: "#2a4058", error: "#ffb4ab" },
+  },
+  {
+    id: "gunmetal", name: "Gunmetal", descriptionKey: "theme_description_gunmetal",
+    light: { primary: "#455a64", onPrimary: "#ffffff", secondary: "#607d8b", background: "#f7f9fa", surface: "#eceff1", onSurface: "#1c2429", onSurfaceVariant: "#546e7a", outline: "#cfd8dc", error: "#b3261e" },
+    dark: { primary: "#90a4ae", onPrimary: "#11181d", secondary: "#78909c", background: "#0f1216", surface: "#1a1f26", onSurface: "#eceff1", onSurfaceVariant: "#b0bec5", outline: "#37424c", error: "#ef9a9a" },
+  },
+  {
+    id: "cosmic-void", name: "Cosmic Void", descriptionKey: "theme_description_cosmic_void",
+    light: { primary: "#5b2de0", onPrimary: "#ffffff", secondary: "#7c4dff", background: "#fbf9ff", surface: "#f0ecfb", onSurface: "#1b1726", onSurfaceVariant: "#5b5470", outline: "#d6cfe6", error: "#b3261e" },
+    dark: { primary: "#a384ff", onPrimary: "#1a0059", secondary: "#8c63ff", background: "#050505", surface: "#121212", onSurface: "#e8e3f5", onSurfaceVariant: "#b9b0cc", outline: "#2e2a38", error: "#ff8a80" },
+  },
+  {
+    id: "cyberpunk", name: "Cyberpunk", descriptionKey: "theme_description_cyberpunk",
+    light: { primary: "#a3008f", onPrimary: "#ffffff", secondary: "#00838f", background: "#fff7fe", surface: "#f6e9f7", onSurface: "#24102a", onSurfaceVariant: "#66506b", outline: "#dcc5df", error: "#ba1a1a" },
+    dark: { primary: "#ff4df0", onPrimary: "#2b0029", secondary: "#00e5ff", background: "#0d001a", surface: "#1a0a2e", onSurface: "#f2e6ff", onSurfaceVariant: "#c4b0dd", outline: "#3d2a5a", error: "#ff5c8a" },
+  },
+  {
+    id: "royal-gold", name: "Royal Gold", descriptionKey: "theme_description_royal_gold",
+    light: { primary: "#7d6300", onPrimary: "#ffffff", secondary: "#9a7d12", background: "#fffdf5", surface: "#f7f0dc", onSurface: "#221c08", onSurfaceVariant: "#665c3d", outline: "#ddd2b0", error: "#ba1a1a" },
+    dark: { primary: "#ffd700", onPrimary: "#2a2100", secondary: "#c5a000", background: "#050505", surface: "#141210", onSurface: "#fff8e1", onSurfaceVariant: "#d6c9a3", outline: "#3a3423", error: "#ffb4ab" },
+  },
+  {
+    id: "cream-paper", name: "Cream Paper", descriptionKey: "theme_description_cream_paper",
+    light: { primary: "#7f6157", onPrimary: "#ffffff", secondary: "#a1887f", background: "#fffbf0", surface: "#f5f5dc", onSurface: "#3e2723", onSurfaceVariant: "#6d5c52", outline: "#dcd3bd", error: "#b3261e" },
+    dark: { primary: "#d7b7a8", onPrimary: "#3b2620", secondary: "#bcaaa4", background: "#1a1712", surface: "#25211a", onSurface: "#f1ebdf", onSurfaceVariant: "#cfc4b3", outline: "#4a4336", error: "#ffb4ab" },
+  },
 ];
 
 export const BUILTIN_THEMES = seeds.map(createTheme);
@@ -217,11 +253,14 @@ function isThemeColors(value: unknown): value is ThemeColors {
   return keys.every((key) => typeof colors[key] === "string" && (HEX_COLOR.test(colors[key]) || colors[key].startsWith("color-mix(")));
 }
 
-export function parseCustomThemes(serialized: string): CustomThemeDefinition[] {
+export const MAX_CUSTOM_THEMES = 24;
+
+/** Accepts a list or a single theme object, the two shapes Flow for Android and desktop export. */
+export function parseCustomThemes(serialized: string, limit = MAX_CUSTOM_THEMES): CustomThemeDefinition[] {
   try {
     const parsed: unknown = JSON.parse(serialized);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((theme): theme is CustomThemeDefinition => {
+    const candidates: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+    return candidates.filter((theme): theme is CustomThemeDefinition => {
       if (!theme || typeof theme !== "object") return false;
       const candidate = theme as Partial<CustomThemeDefinition>;
       return typeof candidate.id === "string"
@@ -232,7 +271,7 @@ export function parseCustomThemes(serialized: string): CustomThemeDefinition[] {
         && candidate.custom === true
         && !!candidate.variants
         && THEME_VARIANTS.every((variant) => isThemeColors(candidate.variants?.[variant]));
-    }).slice(0, 24);
+    }).slice(0, limit);
   } catch {
     return [];
   }
@@ -289,5 +328,23 @@ export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): R
     variables[`--color-chrome-neutral-${step}`] = colors[role];
     if (step !== "50") variables[`--color-chrome-zinc-${step}`] = colors[role];
   });
+  return variables;
+}
+
+/** The variant a surface that always stays dark uses: AMOLED keeps its black, every other choice its dark set. */
+export function darkVariantOf(variant: ThemeVariant): Exclude<ThemeVariant, "light"> {
+  return variant === "amoled" ? "amoled" : "dark";
+}
+
+/**
+ * One variant's tokens, scoped to one element. `-val` variables also get the
+ * token Tailwind derives from them, because `@theme` resolves that token once
+ * at the root and a descendant overriding only the `-val` would not move it.
+ */
+export function scopeVariables(theme: ThemeDefinition | CustomThemeDefinition, variant: ThemeVariant): Record<string, string> {
+  const variables = themeCssVariables(theme.variants[variant], variant);
+  for (const [name, value] of Object.entries(variables)) {
+    if (name.endsWith("-val")) variables[name.slice(0, -"-val".length)] = value;
+  }
   return variables;
 }

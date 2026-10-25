@@ -2,16 +2,14 @@ import { useEffect, useRef, type SyntheticEvent } from "react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
+import { bindMusicAudioSettings } from "../../lib/audio/musicAudioSettings";
 import { PRELOAD_LEAD_SECONDS } from "../../lib/musicPreload";
-import { recordSongHistory } from "../../lib/musicHistory";
-import { upgradeMusicImageUrl } from "../../lib/thumbnails";
-import type { SongItem } from "../../types/music";
-
-const HISTORY_PERSIST_MS = 5000;
-/**
- * Media-time delta below which a progress write is skipped. A seek always
- * exceeds it, so scrubbing still lands immediately.
- */
+import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
+import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
+import { musicListens, useMusicListenHistory } from "../../lib/useMusicListenHistory";
+import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
+import { sleepTimerTakesEnd, tickSleepTimer, useSleepTimerDriver } from "../../lib/useSleepTimerDriver";
+import { useLyricsLookup } from "../../lib/lyrics/useLyrics";
 
 /**
  * Wraps a media-element handler so only the element that is playing drives the
@@ -27,13 +25,6 @@ const fromActive =
 export function GlobalMusicAudio() {
   const firstRef = useRef<HTMLAudioElement | null>(null);
   const secondRef = useRef<HTMLAudioElement | null>(null);
-  const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
-  const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
-
-  // --- watch-history persistence ---
-  const historyTrackRef = useRef<SongItem | null>(null);
-  const lastProgressRef = useRef({ time: 0, duration: 0 });
-  const lastPersistAtRef = useRef(0);
 
   useEffect(() => {
     const first = firstRef.current;
@@ -43,87 +34,50 @@ export function GlobalMusicAudio() {
     const s = useMusicPlayerStore.getState();
     musicAudioEngine.setVolume(s.volume);
     musicAudioEngine.setMuted(s.isMuted);
-    musicAudioEngine.setEqEnabled(s.eqEnabled);
-    musicAudioEngine.setEqGains(s.eqGains);
+    bindMusicAudioSettings();
   }, []);
 
-  useEffect(() => {
-    if (currentTrack) {
-      historyTrackRef.current = currentTrack;
-      lastProgressRef.current = { time: 0, duration: currentTrack.duration ?? 0 };
-      lastPersistAtRef.current = Date.now();
-      void recordSongHistory(currentTrack, 0, currentTrack.duration ?? 0);
-    }
-    return () => {
-      const prev = historyTrackRef.current;
-      if (prev) {
-        const { time, duration } = lastProgressRef.current;
-        void recordSongHistory(prev, time, duration);
-      }
-    };
-  }, [currentTrack?.id]);
-
-  useEffect(() => {
-    const handler = () => {
-      const t = historyTrackRef.current;
-      if (!t) return;
-      const { time, duration } = lastProgressRef.current;
-      void recordSongHistory(t, time, duration);
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, []);
-
-  useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
-    const store = () => useMusicPlayerStore.getState();
-
-    if (currentTrack) {
-      const artwork = upgradeMusicImageUrl(currentTrack.thumbnail, 512);
-      try {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: currentTrack.title,
-          artist: currentTrack.artists.map((a) => a.name).join(", "),
-          album: currentTrack.album?.name ?? "",
-          artwork: artwork
-            ? [{ src: artwork, sizes: "512x512", type: "image/jpeg" }]
-            : [],
-        });
-      } catch {
-      }
-    }
-
-    navigator.mediaSession.setActionHandler("play", () => store().play());
-    navigator.mediaSession.setActionHandler("pause", () => store().pause());
-    navigator.mediaSession.setActionHandler("previoustrack", () => store().previous());
-    navigator.mediaSession.setActionHandler("nexttrack", () => store().next());
-    navigator.mediaSession.setActionHandler("seekto", (details) => {
-      if (typeof details.seekTime === "number") store().seek(details.seekTime);
-    });
-  }, [currentTrack]);
-
-  useEffect(() => {
-    if ("mediaSession" in navigator) {
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    }
-  }, [isPlaying]);
+  useMusicListenHistory();
+  useMusicQueuePersistence();
+  useSleepTimerDriver();
+  useMusicMediaSession();
+  useLyricsLookup();
 
   const store = () => useMusicPlayerStore.getState();
+  const finishTrack = () => {
+    musicListens.finish(Date.now());
+    if (sleepTimerTakesEnd()) return;
+    store().handleEnded();
+  };
+  // The engine corrects a length WebKit reports wrong, so the player reads it there.
+  const syncTime = (el: HTMLAudioElement) => store()._syncTime(el.currentTime, musicAudioEngine.getDuration());
   const audioProps = {
     hidden: true,
     preload: "auto",
     onPlay: fromActive(() => store()._reflectPlaying(true)),
-    onPause: fromActive(() => store()._reflectPlaying(false)),
-    onWaiting: fromActive(() => store()._setBuffering(true)),
+    onPause: fromActive(() => {
+      musicListens.pause();
+      store()._reflectPlaying(false);
+    }),
+    onWaiting: fromActive(() => {
+      musicListens.hold();
+      store()._setBuffering(true);
+    }),
     onPlaying: fromActive(() => store()._setBuffering(false)),
-    onDurationChange: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
-    onSeeked: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
+    onDurationChange: fromActive(syncTime),
+    onSeeked: fromActive(syncTime),
     // Near the end, buffer the next track on the standby element so the change
     // is a swap. Driven by the element rather than the frame loop, which WebKit
     // pauses while the window is hidden, as it usually is while music plays.
     // The listed length stands in when WebKit reports a stream as endless.
     onTimeUpdate: fromActive((el) => {
-      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : store().duration;
+      // A song whose element reports twice its length ends at the listed one, not after the
+      // silence the element would play to reach its own.
+      if (musicAudioEngine.takeListedEnd()) {
+        finishTrack();
+        return;
+      }
+      const duration = musicAudioEngine.getDuration() || store().duration;
       if (duration > 0 && duration - el.currentTime <= PRELOAD_LEAD_SECONDS) store()._preloadUpcoming();
 
       /*
@@ -134,19 +88,22 @@ export function GlobalMusicAudio() {
         card. Anything that needs the exact position (the full player's seek
         bar, the lyrics) reads the audio engine directly.
       */
-      store()._syncTime(el.currentTime, el.duration);
+      syncTime(el);
+      reportMediaPosition("music");
+      tickSleepTimer();
 
-      // History is persisted from here for the same reason: a frame loop
+      // Listening time is counted from here for the same reason: a frame loop
       // stops in the background, and listening there is the common case.
-      lastProgressRef.current = { time: el.currentTime, duration };
-      const now = Date.now();
-      if (now - lastPersistAtRef.current > HISTORY_PERSIST_MS) {
-        lastPersistAtRef.current = now;
-        const t = historyTrackRef.current;
-        if (t) void recordSongHistory(t, el.currentTime, duration);
+      // While the next song resolves, the element still plays the last one,
+      // which must not count toward the new song.
+      const { currentTrack, loadingStreamId } = store();
+      if (currentTrack && !el.paused && loadingStreamId === null) {
+        musicListens.tick(currentTrack, el.currentTime, duration, Date.now());
+      } else {
+        musicListens.hold();
       }
     }),
-    onEnded: fromActive(() => store().handleEnded()),
+    onEnded: fromActive(finishTrack),
     onError: (event: SyntheticEvent<HTMLAudioElement>) => {
       if (event.currentTarget === musicAudioEngine.getActiveElement()) store()._onPlaybackError();
       else store()._onPreloadError();

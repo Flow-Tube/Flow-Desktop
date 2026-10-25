@@ -1,30 +1,22 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 
-import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
-import {
-  EQ_BANDS,
-  EQ_MAX_GAIN_DB,
-  EQ_PRESETS,
-  type EqPresetName,
-} from "../../lib/audio/eqBands";
-import { ToggleSwitch } from "../ui/ToggleSwitch";
-import { Chip } from "../ui/Chip";
+import { EqLimits } from "../../lib/audio/eq/models";
+import { withBassBoost } from "../../lib/audio/eq/stateOps";
+import { pickEqPreset, restoreCustomEq, useEqualizer, useMusicEqAvailable } from "../../lib/audio/eq/useEqualizer";
 import { getString } from "../../lib/i18n/index";
+import { useEqStore } from "../../store/useEqStore";
+import { Chip } from "../ui/Chip";
 import { Slider } from "../ui/Slider";
+import { ToggleSwitch } from "../ui/ToggleSwitch";
+import { EqResponseGraph } from "./eq/EqResponseGraph";
+import { formatDb } from "./eq/eqFormat";
+import { MusicAudioOptions } from "./MusicAudioOptions";
 
-const PRESETS: EqPresetName[] = ["flat", "bass", "vocal", "treble", "electronic", "acoustic"];
-
-function arraysEqual(a: number[], b: number[]): boolean {
-  return a.length === b.length && a.every((v, i) => v === b[i]);
-}
-
-function formatGain(db: number | undefined): string {
-  const v = Math.round(db ?? 0);
-  return v > 0 ? `+${v}` : `${v}`;
-}
-
-
+/**
+ * The quick audio panel: the equalizer's switch, curve, presets and bass boost with Edit for the
+ * rest, then the other music audio settings.
+ */
 export function EqPanel({
   open,
   onClose,
@@ -34,13 +26,13 @@ export function EqPanel({
   onClose: () => void;
   placement?: "top" | "bottom";
 }) {
-  const eqEnabled = useMusicPlayerStore((s) => s.eqEnabled);
-  const eqGains = useMusicPlayerStore((s) => s.eqGains);
-  const setEqEnabled = useMusicPlayerStore((s) => s.setEqEnabled);
-  const setEqBand = useMusicPlayerStore((s) => s.setEqBand);
-  const applyEqPreset = useMusicPlayerStore((s) => s.applyEqPreset);
+  const eq = useEqualizer();
+  const available = useMusicEqAvailable();
+  const update = useEqStore((s) => s.update);
+  const setEditorOpen = useEqStore((s) => s.setEditorOpen);
 
   const fromY = placement === "top" ? 10 : -10;
+  const selectedId = eq.active.presetId;
 
   return (
     <AnimatePresence>
@@ -54,13 +46,15 @@ export function EqPanel({
           style={{ transformOrigin: placement === "top" ? "bottom right" : "top right" }}
           className="w-80 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-4"
         >
-          {/* header */}
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
               {getString("music_equalizer")}
             </span>
             <div className="flex items-center gap-2">
-              <ToggleSwitch checked={eqEnabled} onChange={setEqEnabled} />
+              <ToggleSwitch
+                checked={eq.state.enabled}
+                onChange={(enabled) => update((s) => ({ ...s, enabled }))}
+              />
               <button
                 type="button"
                 onClick={onClose}
@@ -72,43 +66,70 @@ export function EqPanel({
             </div>
           </div>
 
-          {/* presets */}
-          <div className="mb-4 flex flex-wrap gap-1.5">
-            {PRESETS.map((p) => (
-              <Chip
-                key={p}
-                active={arraysEqual(eqGains, EQ_PRESETS[p])}
-                onClick={() => applyEqPreset(p)}
-                className="h-7 px-2.5 text-xs capitalize"
-              >
-                {p}
-              </Chip>
-            ))}
+          {!available && (
+            <p className="mb-3 rounded-lg border border-chrome-neutral-800 px-3 py-2 text-xs text-chrome-neutral-400">
+              {getString("eq_unavailable")}
+            </p>
+          )}
+
+          <div className={`flex flex-col gap-3 transition-opacity duration-200 ${eq.state.enabled ? "" : "opacity-40"}`}>
+            <div className="rounded-lg border border-chrome-neutral-800 bg-surface-container-low">
+              <EqResponseGraph bands={eq.drawnBands} height={64} rangeDb={15} ariaLabel={getString("eq_graph_label")} />
+            </div>
+
+            <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto hide-scrollbar">
+              {eq.hasCustom && (
+                <Chip
+                  active={selectedId === null}
+                  onClick={() => restoreCustomEq(eq.state.mode)}
+                  className="h-7 px-2.5 text-xs"
+                >
+                  {getString("eq_preset_custom")}
+                </Chip>
+              )}
+              {eq.presets.map((preset) => (
+                <Chip
+                  key={preset.id}
+                  active={preset.id === selectedId}
+                  onClick={() => pickEqPreset(preset.id)}
+                  className="h-7 px-2.5 text-xs"
+                >
+                  {preset.name}
+                </Chip>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-chrome-neutral-200">{getString("eq_bass_boost")}</span>
+              <Slider
+                min={0}
+                max={EqLimits.MAX_BASS_BOOST}
+                step={0.5}
+                value={eq.state.bassBoost}
+                onChange={(db) => update((s) => withBassBoost(s, db))}
+                aria-label={getString("eq_bass_boost")}
+                className="flex-1"
+              />
+              <span className="w-10 text-right font-mono text-xs text-chrome-neutral-400">
+                {formatDb(eq.state.bassBoost)}
+              </span>
+            </div>
           </div>
 
-          {/* sliders */}
-          <div
-            className={`flex items-end justify-between gap-1 transition-opacity duration-200 ${
-              eqEnabled ? "" : "pointer-events-none opacity-40"
-            }`}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              setEditorOpen(true);
+            }}
+            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-surface-container-high px-3 py-2 text-sm text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
           >
-            {EQ_BANDS.map((band, i) => (
-              <div key={band.frequency} className="flex flex-col items-center gap-1.5">
-                <span className="font-mono text-[10px] tabular-nums text-chrome-neutral-500">
-                  {formatGain(eqGains[i])}
-                </span>
-                <Slider
-                  orientation="vertical"
-                  min={-EQ_MAX_GAIN_DB}
-                  max={EQ_MAX_GAIN_DB}
-                  step={1}
-                  value={eqGains[i] ?? 0}
-                  onChange={(gain) => setEqBand(i, gain)}
-                  aria-label={`${band.label} Hz`}
-                />
-                <span className="text-[10px] text-chrome-neutral-500">{band.label}</span>
-              </div>
-            ))}
+            <SlidersHorizontal className="h-4 w-4" />
+            {getString("eq_edit")}
+          </button>
+
+          <div className="mt-4 border-t border-chrome-neutral-800 pt-3">
+            <MusicAudioOptions />
           </div>
         </motion.div>
       )}

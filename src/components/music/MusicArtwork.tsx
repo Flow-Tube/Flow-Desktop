@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { motion } from "framer-motion";
 import { Music2, Loader2 } from "lucide-react";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
@@ -8,6 +9,7 @@ interface MusicArtworkProps {
   src?: string | null;
   alt: string;
   className?: string;
+  style?: CSSProperties;
 
   layoutId?: string;
   loading?: boolean;
@@ -18,6 +20,7 @@ export function MusicArtwork({
   src,
   alt,
   className,
+  style,
   layoutId,
   loading = false,
   iconClassName = "h-5 w-5",
@@ -30,6 +33,7 @@ export function MusicArtwork({
     <motion.div
       layoutId={layoutId}
       className={`relative overflow-hidden bg-surface-container-highest ${className ?? ""}`}
+      style={style}
     >
       {showImage ? (
         <img

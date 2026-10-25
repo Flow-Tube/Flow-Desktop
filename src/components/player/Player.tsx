@@ -28,6 +28,7 @@ import {
 import { SubtitleOverlay } from "./SubtitleOverlay";
 import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
+import { useVideoEq } from "../../lib/audio/useVideoEq";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
@@ -36,6 +37,7 @@ import {
 } from "../../lib/externalAudioSync";
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import { openPopoutPlayer } from "../../lib/pipHandoff";
+import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -357,7 +359,6 @@ export const Player: React.FC<PlayerProps> = ({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
   const keyboardFocusInsideRef = useRef(false);
-  const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skippedSegmentsRef = useRef<Set<string>>(new Set());
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
   const mutedSegmentsRecordedRef = useRef<Set<string>>(new Set());
@@ -527,7 +528,6 @@ export const Player: React.FC<PlayerProps> = ({
     setIsBuffering(false);
   }, []);
   const [bufferedPct, setBufferedPct] = useState(0);
-  const [sleepMinutes, setSleepMinutes] = useState(0);
   const [selectedCaptionId, setSelectedCaptionId] = useState<string>("off");
   const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
@@ -595,6 +595,8 @@ export const Player: React.FC<PlayerProps> = ({
     !isDashPlayback &&
     !isHlsPlayback &&
     (hasSelectedAlternateAudio || (!!selectedQuality && !selectedQuality.hasAudio));
+
+  useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null);
 
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
@@ -2143,16 +2145,6 @@ export const Player: React.FC<PlayerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-    if (sleepMinutes > 0) {
-      sleepTimerRef.current = setTimeout(() => setPlaybackDesired(false), sleepMinutes * 60_000);
-    }
-    return () => {
-      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-    };
-  }, [setPlaybackDesired, sleepMinutes]);
-
-  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
@@ -2521,6 +2513,8 @@ export const Player: React.FC<PlayerProps> = ({
 
       <video
         ref={videoRef}
+        // Set before src: the equalizer can only read cross-origin audio fetched with CORS.
+        crossOrigin="anonymous"
         src={isDashPlayback || isHlsPlayback ? undefined : src || undefined}
         poster={effectivePoster}
         loop={videoLoopEnabled && !isLive}
@@ -2567,6 +2561,10 @@ export const Player: React.FC<PlayerProps> = ({
           setIsPlaying(false);
         }}
         onEnded={() => {
+          if (sleepTimerTakesEnd()) {
+            setPlaybackDesired(false);
+            return;
+          }
           if (videoLoopEnabled && !isLive) {
             seekTo(0);
             setPlaybackDesired(true);
@@ -2588,6 +2586,7 @@ export const Player: React.FC<PlayerProps> = ({
       {usesExternalAudio && selectedAudioTrack?.localUrl && (
         <audio
           ref={audioRef}
+          crossOrigin="anonymous"
           src={selectedAudioTrack.localUrl}
           preload="auto"
           onLoadedMetadata={handleAudioLoadedMetadata}
@@ -2794,8 +2793,6 @@ export const Player: React.FC<PlayerProps> = ({
         selectedAudioTrackId={selectedAudioTrackId}
         setSelectedAudioTrackId={setSelectedAudioTrackId}
         bufferedPct={bufferedPct}
-        sleepMinutes={sleepMinutes}
-        setSleepMinutes={setSleepMinutes}
         muted={muted}
         setMuted={setMuted}
         isFullscreen={isFullscreen}

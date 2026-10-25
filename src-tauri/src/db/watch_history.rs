@@ -45,14 +45,16 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
     if let Some(row) = existing {
         let id: i64 = sqlx::Row::get(&row, 0);
         // Clearing the sync stamp makes it follow the new watch time, so a re-watch beats a
-        // deletion synced from another device before it.
+        // deletion synced from another device before it. A song's row keeps its longest listen:
+        // a short replay or a skip must not wipe out a full play recorded earlier.
         sqlx::query(
             "UPDATE watch_history SET
                 title = ?,
                 channel_name = ?,
                 channel_id = COALESCE(?, channel_id),
                 watch_date = ?,
-                watch_duration_seconds = ?,
+                watch_duration_seconds = CASE WHEN ? AND is_music
+                    THEN MAX(watch_duration_seconds, ?) ELSE ? END,
                 total_duration_seconds = ?,
                 is_music = ?,
                 is_short = is_short OR ?,
@@ -63,6 +65,8 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
         .bind(&record.channel_name)
         .bind(&record.channel_id)
         .bind(&record.watch_date)
+        .bind(record.is_music)
+        .bind(record.watch_duration_seconds)
         .bind(record.watch_duration_seconds)
         .bind(record.total_duration_seconds)
         .bind(record.is_music)
@@ -298,6 +302,38 @@ mod channel_tests {
         let history = get_watch_history(&pool, 10, 0).await.unwrap();
         assert_eq!(history[0].channel_id.as_deref(), Some("UC1"));
         assert_eq!(history[0].watch_duration_seconds, 20);
+    }
+
+    #[tokio::test]
+    async fn a_song_keeps_its_longest_listen_and_a_video_its_latest_watch() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let song = |seconds| WatchHistoryRecord {
+            video_id: "song".into(),
+            is_music: true,
+            ..record(None, seconds)
+        };
+        upsert_watch_record(&pool, &song(190)).await.unwrap();
+        upsert_watch_record(&pool, &song(2)).await.unwrap();
+        upsert_watch_record(&pool, &record(None, 300))
+            .await
+            .unwrap();
+        upsert_watch_record(&pool, &record(None, 40)).await.unwrap();
+
+        let history = get_watch_history(&pool, 10, 0).await.unwrap();
+        let seconds = |id: &str| {
+            history
+                .iter()
+                .find(|row| row.video_id == id)
+                .unwrap()
+                .watch_duration_seconds
+        };
+        assert_eq!(seconds("song"), 190);
+        assert_eq!(seconds("v1"), 40);
     }
 
     #[tokio::test]

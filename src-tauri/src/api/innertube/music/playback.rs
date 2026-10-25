@@ -13,7 +13,7 @@
 
 use std::time::Duration;
 
-use crate::api::innertube::json::loudness::loudness_db;
+use crate::api::innertube::json::loudness::music_loudness_db;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
@@ -49,10 +49,14 @@ impl InnertubeClient {
     /// under a fresh visitor identity, and a refusal that belongs to the track
     /// itself (region, privacy, removal) ends the walk, since every client would
     /// give the same answer.
+    ///
+    /// `prefer_aac` asks for AAC over Opus where a client offers both: the
+    /// player's retry after the media element could not decode the first one.
     pub(crate) async fn resolve_music_stream(
         &self,
         video_id: &str,
         audio_quality: MusicAudioQuality,
+        prefer_aac: bool,
     ) -> AppResult<MusicStreamInfo> {
         let video_id = video_id.trim();
         if video_id.is_empty() {
@@ -67,7 +71,13 @@ impl InnertubeClient {
 
         for client in gated_last(clients::DIRECT_AUDIO_CLIENTS, |client| client.name) {
             let mut answer = self
-                .ask_music_client(client, video_id, audio_quality, visitor.as_deref())
+                .ask_music_client(
+                    client,
+                    video_id,
+                    audio_quality,
+                    prefer_aac,
+                    visitor.as_deref(),
+                )
                 .await;
             if !identity_refreshed
                 && matches!(&answer, ClientAnswer::Refused(refusal) if is_bot_wall(&refusal.playability))
@@ -80,7 +90,13 @@ impl InnertubeClient {
                     );
                     visitor = Some(fresh);
                     answer = self
-                        .ask_music_client(client, video_id, audio_quality, visitor.as_deref())
+                        .ask_music_client(
+                            client,
+                            video_id,
+                            audio_quality,
+                            prefer_aac,
+                            visitor.as_deref(),
+                        )
                         .await;
                 }
             }
@@ -120,6 +136,7 @@ impl InnertubeClient {
         client: &clients::MusicClient,
         video_id: &str,
         audio_quality: MusicAudioQuality,
+        prefer_aac: bool,
         visitor: Option<&str>,
     ) -> ClientAnswer {
         // Only a client Flow can attest gets a token, and it is bound to the same
@@ -154,7 +171,7 @@ impl InnertubeClient {
         }
 
         let streaming = &res["streamingData"];
-        let Some((format, url)) = pick_audio_format(streaming, audio_quality) else {
+        let Some((format, url)) = pick_audio_format(streaming, audio_quality, prefer_aac) else {
             debug!(client = client.name, "no clean direct audio format");
             return ClientAnswer::Unusable;
         };
@@ -174,7 +191,7 @@ impl InnertubeClient {
             .as_str()
             .and_then(|s| s.parse::<u64>().ok());
         let audio_config = &res["playerConfig"]["audioConfig"];
-        let loudness_db = loudness_db(audio_config, &format);
+        let loudness_db = music_loudness_db(audio_config, &format);
         let perceptual_loudness_db = audio_config["perceptualLoudnessDb"].as_f64();
         let expires_in_seconds = streaming["expiresInSeconds"]
             .as_str()
@@ -186,6 +203,7 @@ impl InnertubeClient {
             itag,
             ?bitrate,
             audio_quality = audio_quality.as_str(),
+            prefer_aac,
             "music stream resolved"
         );
 
@@ -336,10 +354,17 @@ fn pick_targeted_quality(
         })
 }
 
+fn is_aac(format: &Value) -> bool {
+    format["mimeType"]
+        .as_str()
+        .is_some_and(|mime| mime.starts_with("audio/mp4"))
+}
+
 /// Choose a directly-playable audio-only format. Returns `(format, url)`.
 fn pick_audio_format(
     streaming: &Value,
     audio_quality: MusicAudioQuality,
+    prefer_aac: bool,
 ) -> Option<(Value, String)> {
     let formats = streaming["adaptiveFormats"].as_array()?;
     let mut candidates: Vec<AudioCandidate> = Vec::new();
@@ -372,6 +397,9 @@ fn pick_audio_format(
         .any(|candidate| !candidate.is_fallback_copy)
     {
         candidates.retain(|candidate| !candidate.is_fallback_copy);
+    }
+    if prefer_aac && candidates.iter().any(|candidate| is_aac(&candidate.format)) {
+        candidates.retain(|candidate| is_aac(&candidate.format));
     }
 
     let selected = match audio_quality {
@@ -408,21 +436,23 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn loudness_falls_back_to_the_format_then_the_perceptual_value() {
+    fn music_loudness_takes_the_perceptual_value_before_the_others() {
         let top =
             json!({ "loudnessDb": 1.5, "perceptualLoudnessDb": -9.0, "loudnessTargetLkfs": -14.0 });
-        assert_eq!(loudness_db(&top, &json!({ "loudnessDb": 3.0 })), Some(1.5));
-
-        let visionos = json!({ "perceptualLoudnessDb": -10.59, "loudnessTargetLkfs": -14.0 });
         assert_eq!(
-            loudness_db(&visionos, &json!({ "loudnessDb": 3.41 })),
-            Some(3.41)
+            music_loudness_db(&top, &json!({ "loudnessDb": 3.0 })),
+            Some(5.0)
         );
 
-        let perceptual = loudness_db(&visionos, &json!({})).unwrap();
+        let visionos = json!({ "perceptualLoudnessDb": -10.59, "loudnessTargetLkfs": -14.0 });
+        let perceptual = music_loudness_db(&visionos, &json!({ "loudnessDb": 1.0 })).unwrap();
         assert!((perceptual - 3.41).abs() < 1e-9);
 
-        assert_eq!(loudness_db(&json!({}), &json!({})), None);
+        assert_eq!(
+            music_loudness_db(&json!({ "loudnessDb": 1.5 }), &json!({ "loudnessDb": 3.0 })),
+            Some(1.5)
+        );
+        assert_eq!(music_loudness_db(&json!({}), &json!({})), None);
     }
 
     #[test]
@@ -438,10 +468,10 @@ mod tests {
         };
         let streaming =
             json!({ "adaptiveFormats": [format(140_000, false), format(140_005, true)] });
-        let (picked, _) = pick_audio_format(&streaming, MusicAudioQuality::High).unwrap();
+        let (picked, _) = pick_audio_format(&streaming, MusicAudioQuality::High, false).unwrap();
         assert_eq!(picked["isDrc"], false);
         let only_drc = json!({ "adaptiveFormats": [format(140_005, true)] });
-        assert!(pick_audio_format(&only_drc, MusicAudioQuality::High).is_some());
+        assert!(pick_audio_format(&only_drc, MusicAudioQuality::High, false).is_some());
     }
 
     #[test]
@@ -489,8 +519,28 @@ mod tests {
                   "url": "https://rr1.googlevideo.com/videoplayback?c=VISIONOS" },
             ],
         });
-        let (format, _) =
-            pick_audio_format(&streaming, MusicAudioQuality::Auto).expect("one clean format");
+        let (format, _) = pick_audio_format(&streaming, MusicAudioQuality::Auto, false)
+            .expect("one clean format");
         assert_eq!(format["itag"], 139);
+    }
+
+    #[test]
+    fn a_decoder_retry_takes_aac_when_it_is_offered() {
+        let streaming = json!({
+            "adaptiveFormats": [
+                { "itag": 251, "mimeType": "audio/webm; codecs=\"opus\"", "bitrate": 150_000,
+                  "url": "https://rr1.googlevideo.com/videoplayback?itag=251" },
+                { "itag": 140, "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"", "bitrate": 130_000,
+                  "url": "https://rr1.googlevideo.com/videoplayback?itag=140" },
+            ],
+        });
+        let (opus, _) = pick_audio_format(&streaming, MusicAudioQuality::Auto, false).unwrap();
+        assert_eq!(opus["itag"], 251);
+        let (aac, _) = pick_audio_format(&streaming, MusicAudioQuality::Auto, true).unwrap();
+        assert_eq!(aac["itag"], 140);
+
+        let opus_only = json!({ "adaptiveFormats": [streaming["adaptiveFormats"][0].clone()] });
+        let (fallback, _) = pick_audio_format(&opus_only, MusicAudioQuality::Auto, true).unwrap();
+        assert_eq!(fallback["itag"], 251);
     }
 }

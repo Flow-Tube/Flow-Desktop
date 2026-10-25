@@ -24,13 +24,58 @@ MUSIC
 - Music search only offers the categories YouTube Music has results for, and its filters use the parameters YouTube Music sends today.
 - An artist's Shuffle plays YouTube Music's shuffle of their whole catalogue and Mix plays their station, instead of both reshuffling the few top songs on the page. Artist pages sort their shelves the same way in every language and link the sources under the bio.
 - Songs added by radio keep their album, explicit badge and song or video type, and radio continues YouTube Music's own mix for the song. Lyrics from YouTube Music show their source.
+- The full player stays dark in light themes, as it does on Android. Its title, controls and lyrics were dark text on a dark backdrop.
+- The full player takes its colours from the cover the way Flow for Android does: a dark base and a vivid accent, each moved until it reads, so pale or grey covers no longer wash out the text. Colours ease over a second when the song changes.
+- New Player settings: "Artwork colors on controls", with black and white or the app theme instead, and "Light in light theme" for a light full player. The Default Surface background now follows the app theme like on Android.
+- On wide windows the full player keeps the song on the left and shows Up next or the lyrics beside it, like Flow for Android on tablets. Lyrics can still take the whole player. The artwork shrinks to fit short windows instead of pushing the controls off screen.
+- The side pane can be put away with its hide button, or by pressing the Queue or Lyrics button again, and the song takes the whole player. Flow remembers this, and the Queue and Lyrics buttons bring the pane back.
+- The full player answers the same keys as Flow for Android: Space or K to play and pause, J, L and the arrow keys to seek, Up and Down for volume, M to mute, Shift+N and Shift+P to skip, 0 to 9 to jump through the song, S, R and Q for shuffle, repeat and the queue. Escape closes an open menu before the player.
+- The full player has its own volume button, the mouse wheel changes volume over either volume button, and Shift with the wheel seeks over the seek bar. Hovering Next shows the song that plays next, and the top shows what you are playing from.
+- The song menu in the player adds Start radio, Equalizer, Not interested and Don't recommend this artist.
+- New Immersive Artwork background for the full player: the cover fills the top, or the left side of a wide window, and fades into the player. The blurred backgrounds now load the cover through the same copy as the artwork, so they no longer stay black when the cover is slow.
+- "Watch video" in the player's song menu opens the song's official music video at the same moment and pauses the song. The video is matched the same way Flow for Android does, so live takes, remixes and audio uploads are skipped.
 - The full player's seek bar glides with the song instead of stepping, and dragging it seeks once when you let go instead of on every move. The page behind the full player stops drawing while it is covered.
 - Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
+- Shuffle now rearranges the queue, so every song plays once, Previous and Up next follow the shuffled order, and turning shuffle off puts the original order back.
+- Radio keeps going after a shuffled queue ends, holds at most two songs per artist, and starts again from songs near the first one when YouTube's mix runs out. The queue says when the radio has run out.
+- Removing a song or clearing the queue can be undone from the message that appears, and songs that already played can be added to the queue again.
+- A song paused while it was still loading stays paused, and a recovery never starts a song you paused.
+- A song whose link expires during long pauses recovers each time, waits for the connection to come back when the network drops, and tries another audio format when one cannot be decoded. Errors now say which of these went wrong.
+- Media keys and the system's Now Playing controls follow whichever player started last, show the song's progress, and seek forward and back. Starting a video pauses the music and starting music pauses the video.
+- Flow reopens the music player on the song you stopped at, paused at the same point, with its queue, shuffle order and radio. "Restore the last queue" in Settings turns this off.
+- History and recommendations count the time a song actually played, so skipping or dragging to the end no longer counts as a full listen, and a short replay no longer replaces a longer one.
+- A new "Resume long tracks" setting, off by default, starts mixes, podcasts and episodes of 10 minutes or more where you left them.
+- Music controls in the menu bar or system tray: the current song on top, then Play or Pause, Previous, Next and Show Flow. Turn it off under Integrations with Show music controls in the tray.
+- On Linux the tray is off by default and needs the libayatana-appindicator3 library, which the .deb, .rpm and AppImage now bring along. Without it the switch stays off instead of stopping Flow from starting.
+- Scrobbling to Last.fm, Libre.fm and ListenBrainz, under Integrations. A song counts once you have heard half of it or four minutes, and songs of 30 seconds or less never count. Videos are never sent.
+- Listens wait on your computer while you are offline and go out once you are back, up to 2,000 per service. Show now playing, Love liked songs and Scrobble during Deep Flow are options, and you can use your own Last.fm API key.
+- Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
+- Settings has a Music section with every music setting in one place: playback, audio and the equalizer, the full player's look, lyrics, the tray and scrobbling.
+- Swipe a song in Up next to the left to play it next, or to the right to remove it, by dragging the row or with two fingers on a trackpad, as on Android. Settings › Music can change what each side does. The row menu has the same actions, Delete removes the focused row, and clicking the song that is playing no longer starts it over.
+- Drag the music dock up, or swipe up on it with two fingers, and the full player grows out of it as on Android; it sinks back into the dock when it closes. The dock also has larger artwork with a playing animation and a clearer title.
+
+AUDIO
+- Equalizer boosts no longer distort: the music equalizer turns the whole curve down by its highest boost before the filters, and a soft limiter bends any peak that still goes past full scale.
+- Loudness normalization for music can now be turned off in the equalizer panel. It stays on by default, as on Android.
+- Downloaded songs keep their loudness value, so they play at the same level as streamed songs instead of louder. Songs downloaded before this update keep playing at full level.
+- A new equalizer, the same as Flow for Android's: graphic and parametric modes, a response graph you can drag, per-band type, frequency, gain and Q, hold to compare, auto preamp or a manual preamp, and bass boost.
+- Android's 13 presets with translated names, your own presets with Save, Save as, Rename, Duplicate and Delete with Undo, and a Custom entry that keeps the curve you tuned when you try a preset. AutoEQ and EqualizerAPO files import from a file or pasted text and export to a file or the clipboard.
+- The equalizer is saved with your settings, included in backups and synced with Flow for Android. Your old equalizer gains carry over, with the 32 Hz and 16 kHz bands now peaks like on Android, and the panel says when audio processing is not available on your system.
+- Music only goes through audio processing once the equalizer changes the sound, and playback resumes on its own after sleep or an output device change.
+- Music has its own playback speed from 0.5x to 2x, with presets and the pitch kept, saved with your settings.
+- The music volume slider follows how loud it sounds, so each step changes the level by a similar amount. Your saved volume plays at the same level after the update.
+- Music loudness is measured the way Android does it, from the perceptual loudness first, and loud songs are never turned down by more than 20 dB.
+- An optional crossfade, off by default, fades the next song in over 1 to 12 seconds. Consecutive tracks from the same album and repeat-one keep their gapless joins.
+- The equalizer now also applies to videos, including the pop-out player, and opens from the video settings menu. Shorts are left as they are.
+- Videos only go through audio processing once the equalizer changes the sound, and only after a short silent self-test shows it works. Where it does not, as on some Linux setups, videos keep playing normally and the menu says the equalizer is not available.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.
 - The window background now follows your theme. A Tauri bug was clearing it, which showed a mismatched color around the app while resizing.
 - On 120 Hz ProMotion screens Flow now draws at 120 frames per second. WebKit was holding every animation, scroll and lyric line to 60.
+- The music equalizer and crossfade are now heard on macOS. WebKit cannot pass Opus songs through audio processing, so once either is on, songs stream as AAC and the song playing reloads once from where it is.
+- The volume slider keeps working on a downloaded Opus song while the equalizer is on.
+- AAC songs now show and play for their real length on macOS. WebKit reported them at twice their length, so a song ran on in silence before the next one started.
 
 LINUX
 - The AppImage is built on Ubuntu 24.04 with a newer WebKitGTK that no longer crashes on color emoji fonts, the cause of the freeze on Fedora 44 and Bazzite. It needs glibc 2.39 or newer, so on Ubuntu 22.04, Mint 21 or Debian 12 use the .deb instead.
@@ -101,6 +146,9 @@ PLAYER
 - Shorts in Subscriptions are taken from each channel's own Shorts tab instead of guessed from length, so long Shorts and short videos land in the right place. Premieres show as upcoming instead of "Just now", members-only uploads are left out, and cards show view counts.
 - The Shorts feed's subscription lane finds your channels' Shorts again; it was asking for their Videos tab.
 - The Shorts feed loads its reels in pages about a hundred times smaller, drops the ads mixed into them, and gives them their real titles and channels so your interests and blocked channels apply to them.
+- One sleep timer now serves both the video and the music player, with Flow for Android's choices: 10 to 90 minutes, a custom time, End of song, and Quit Flow when it ends, which is remembered.
+- Music fades out over the last 20 seconds before the timer stops it, and the fade keeps going while Flow is in the background.
+- A Sleep timer button can be added next to Like in the full music player from Settings, Player.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.
@@ -145,6 +193,20 @@ RECOMMENDATIONS
 - A sync no longer brings back entries this device already trimmed from its recommendation profile, and the profile is not saved over a merge while it runs.
 - Home's related videos lane works again: dates on related cards such as "2d ago" are now understood, so those videos are no longer dropped as undated.
 
+LYRICS
+- BetterLyrics no longer switches off for 10 minutes after a song it has not seen before, so word-by-word lyrics stop disappearing.
+- Lyrics are looked up by the song's main artist with only credits and "Official Video" style words removed, so songs with several artists, live and remix versions and titles such as "Video Games" find the right lyrics. Providers must match the title and artist, not just the length.
+- Lyrics are looked up once per song as soon as it starts, so they are usually ready when you open them. Word-by-word lyrics win over line-by-line ones found a moment earlier.
+- Lyrics saved with a download show at once, with their timing, instead of behind a spinner.
+- Two new lyrics sources: lrc.red, second in line, brings word-by-word lyrics for many songs BetterLyrics has not seen, and Unison, eighth, has lyrics people submit themselves.
+- The lyrics providers in Settings can be reordered by dragging them or with their arrow buttons.
+- Lyrics requests only go to the lyrics providers and give up after 8 seconds, so a lookup that was left behind no longer keeps running.
+- The lyrics view is a port of Flow for Android's: lines spring into place one after another, the sung word lifts and fills behind a soft edge, long notes glow, and instrumental breaks show three breathing dots. Only the sung line redraws, and nothing moves while the song is paused or the window is hidden.
+- Lyrics show their translation and romanization under each line, duets put each singer on their own side, background vocals stay with their line, Arabic and Hebrew read right to left, and line-by-line lyrics fill word by word.
+- A new lyrics menu adjusts the timing, picks another source, edits, copies or saves the lyrics as an .lrc file, and sets their alignment.
+- Lyrics found for a song are kept as files in Flow's app data instead of browser storage, which could fill up and stop saving them. Settings shows how much space they take and can clear them. Lyrics saved by earlier versions move over on their own.
+- Downloaded songs get the timed lyrics the lyrics sources found, saved as a real .lrc file, instead of YouTube's plain text. A downloaded .lrc file's offset tag sets the starting timing.
+
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.
 - Each playlist remembers its sort, and while sorted by date added, rows show when each video was added.
@@ -152,6 +214,12 @@ PLAYLISTS
 - Playlists whose id contains "VL" open correctly, playlist headers show their owner again, and changing the 4K, HD or subtitles search filter now runs the search again.
 - Long YouTube playlists load past their first 100 videos as you scroll, show their real title and video count, and download or save in full. Sorting a playlist by date or popularity reads the whole playlist first.
 - Searching inside a channel keeps returning results past the first page, and long comment threads keep their Show more replies button.
+
+SETTINGS
+- Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.
+- Custom themes can be exported one at a time or all together, and imported from a file made on the desktop or on Flow for Android. An imported theme never replaces one you already have.
+- The music player background now syncs between desktops. Skip silence no longer syncs in from Flow for Android, where it showed as on with no way to turn it off.
+- The integrations page, the artist Radio button and the audio language names are now translatable.
 
 UNDER THE HOOD
 - Updated Tauri to 2.12 and its plugins (updater, deep links, dialogs, notifications and others), with the app and its web side kept on matching versions.

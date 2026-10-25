@@ -11,6 +11,8 @@ export interface LyricsEntry {
   agent?: string | null;
   isBackground?: boolean;
   translation?: string | null;
+  /** The line in Latin script when the source provides it, kept apart from the translation. */
+  romanization?: string | null;
 }
 
 /** Lyrics with the credit their source asks to be shown ("Source: Musixmatch"). */

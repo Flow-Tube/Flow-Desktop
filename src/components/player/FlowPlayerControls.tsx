@@ -22,6 +22,7 @@ import {
   Volume2,
   VolumeX,
   Sliders,
+  SlidersHorizontal,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
@@ -49,6 +50,11 @@ import {
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
+import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
+import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
+import { useEqActive } from "../../lib/audio/eq/useEqualizer";
+import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
+import { useEqStore } from "../../store/useEqStore";
 import { Slider } from "../ui/Slider";
 import { videoCodecLabel } from "../../lib/settings/playerRuntime";
 
@@ -79,9 +85,6 @@ export interface FlowPlayerControlsProps {
   setSelectedAudioTrackId: (id: string | null) => void;
 
   bufferedPct: number;
-
-  sleepMinutes: number;
-  setSleepMinutes: React.Dispatch<React.SetStateAction<number>>;
 
   muted: boolean;
   setMuted: React.Dispatch<React.SetStateAction<boolean>>;
@@ -124,13 +127,6 @@ type SettingsPane =
   | "sleep";
 
 const defaultSpeedOptions: PlaybackRate[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-const sleepOptions = [
-  { label: "Off", minutes: 0 },
-  { label: "15 min", minutes: 15 },
-  { label: "30 min", minutes: 30 },
-  { label: "45 min", minutes: 45 },
-  { label: "1 hour", minutes: 60 },
-];
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -174,8 +170,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   selectedAudioTrackId,
   setSelectedAudioTrackId,
   bufferedPct,
-  sleepMinutes,
-  setSleepMinutes,
   muted,
   setMuted,
   isFullscreen,
@@ -487,6 +481,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const handleProgressMove = (event: React.MouseEvent<HTMLDivElement>) => {
     updateHoverPreview(event.clientX, event.currentTarget);
   };
+
+  const eqActive = useEqActive();
+  const eqEditorHosted = useEqStore((s) => s.editorHosted);
+  const openEqEditor = useEqStore((s) => s.setEditorOpen);
 
   const renderSettingRow = (
     label: string,
@@ -907,7 +905,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 ? "Subtitle Style"
                 : settingsPane === "audio"
                 ? "Audio track"
-                : "Sleep timer"}
+                : getString("sleep_timer")}
             </button>
             {settingsPane === "captions" && (
               <button
@@ -957,11 +955,22 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               () => setSettingsPane("audio")
             )}
             {renderSettingRow(
-              "Sleep timer",
-              sleepMinutes ? `${sleepMinutes} min` : "Off",
+              getString("sleep_timer"),
+              <SleepTimerLabel />,
               <Pause size={18} />,
               () => setSettingsPane("sleep")
             )}
+            {eqEditorHosted &&
+              renderSettingRow(
+                getString("music_equalizer"),
+                // Read when the menu draws: the self-test only settles once the equalizer is used.
+                getString(!videoEqAvailable() ? "eq_state_unavailable" : eqActive ? "eq_state_on" : "eq_state_off"),
+                <SlidersHorizontal size={18} />,
+                () => {
+                  setSettingsOpen(false);
+                  openEqEditor(true);
+                }
+              )}
           </div>
         )}
 
@@ -1184,20 +1193,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
         {settingsPane === "sleep" && (
           <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            {sleepOptions.map((option) => (
-              <button
-                key={option.minutes}
-                type="button"
-                onClick={() => {
-                  setSleepMinutes(option.minutes);
-                  setSettingsPane("root");
-                }}
-                className="flex h-10 w-full items-center justify-between rounded-md px-3 text-sm font-medium hover:bg-chrome-white/10"
-              >
-                <span>{option.label}</span>
-                {sleepMinutes === option.minutes && <Check size={17} />}
-              </button>
-            ))}
+            <SleepTimerPanel tone="video" onDone={() => setSettingsPane("root")} />
           </div>
         )}
       </div>

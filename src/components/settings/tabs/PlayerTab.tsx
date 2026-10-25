@@ -9,16 +9,12 @@ import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { IS_LINUX_RUNTIME } from '../../../lib/platform';
-import {
-  getOrderedProviders,
-  parseProviderEnabledStates,
-  serializeProviderEnabledStates,
-} from '../../../lib/lyrics/registry';
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
   const [loop, setLoop] = useBoolPref(SETTINGS.VIDEO_LOOP_ENABLED, false);
   const [skipSilence, setSkipSilence] = useBoolPref(SETTINGS.SKIP_SILENCE_ENABLED, false);
+  const skipSilenceDisabled = isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED);
   const [stableVolume, setStableVolume] = useBoolPref(SETTINGS.STABLE_VOLUME_ENABLED, false);
   const [videoLoudness, setVideoLoudness] = useBoolPref(SETTINGS.VIDEO_LOUDNESS_NORMALIZATION, false);
   const [volumeBoost, setVolumeBoost] = useBoolPref(SETTINGS.ALLOW_VOLUME_BOOST, false);
@@ -31,20 +27,11 @@ export function PlayerTab() {
   const [speedSlider, setSpeedSlider] = useBoolPref(SETTINGS.SPEED_SLIDER_ENABLED, false);
 
   const [doubleTapSeek, setDoubleTapSeek] = useNumberPref(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, 10);
-  const [musicBackground, setMusicBackground] = usePreference(SETTINGS.MUSIC_PLAYER_BACKGROUND);
 
   const [subtitles, setSubtitles] = useBoolPref(SETTINGS.SUBTITLES_ENABLED, false);
   const [subtitleLang, setSubtitleLang] = usePreference(SETTINGS.PREFERRED_SUBTITLE_LANGUAGE, 'en');
   const [subtitleScale, setSubtitleScale] = usePreference(SETTINGS.SUBTITLE_FONT_SCALE, '100');
   const [subtitleBold, setSubtitleBold] = useBoolPref(SETTINGS.SUBTITLE_BOLD, true);
-  const [lyricsProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
-  const [lyricsEnabledRaw, setLyricsEnabledRaw] = usePreference(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, '{}');
-  const lyricsProviders = getOrderedProviders(lyricsProviderOrder);
-  const lyricsEnabledStates = parseProviderEnabledStates(lyricsEnabledRaw);
-  const lyricsEnabledCount = lyricsProviders.filter((provider) => lyricsEnabledStates[provider.name] !== false).length;
-  const setLyricsProviderEnabled = (providerName: string, enabled: boolean) => {
-    setLyricsEnabledRaw(serializeProviderEnabledStates({ ...lyricsEnabledStates, [providerName]: enabled }));
-  };
 
   const [miniSkip, setMiniSkip] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS, true);
   const [miniNextPrev, setMiniNextPrev] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, true);
@@ -68,8 +55,9 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_loop_video')} description={getString('settings_loop_video_desc')}>
           <ToggleSwitch checked={loop} onChange={setLoop} />
         </SettingItem>
-        <SettingItem title={getString('settings_skip_silence')} description={getString('settings_skip_silence_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED)}>
-          <ToggleSwitch checked={skipSilence} onChange={setSkipSilence} disabled={isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED)} />
+        <SettingItem title={getString('settings_skip_silence')} description={getString('settings_skip_silence_desc')} disabled={skipSilenceDisabled}>
+          {/* Older builds synced Android's value in; until the feature exists it must not show as on. */}
+          <ToggleSwitch checked={skipSilence && !skipSilenceDisabled} onChange={setSkipSilence} disabled={skipSilenceDisabled} />
         </SettingItem>
         <SettingItem title={getString('settings_stable_volume')} description={getString('settings_stable_volume_desc')}>
           <ToggleSwitch checked={stableVolume} onChange={setStableVolume} />
@@ -146,29 +134,6 @@ export function PlayerTab() {
         </SettingItem>
       </SettingsGroup>
 
-      <SettingsGroup title={getString('settings_group_lyrics')}>
-        <SettingItem
-          title={getString('settings_lyrics_providers')}
-          description={`${lyricsEnabledCount} / ${lyricsProviders.length} ${getString('settings_lyrics_providers_enabled')}`}
-        >
-          <span className="text-xs font-medium text-chrome-neutral-400">
-            {getString('settings_lyrics_ordered')}
-          </span>
-        </SettingItem>
-        {lyricsProviders.map((provider, index) => {
-          const enabled = lyricsEnabledStates[provider.name] !== false;
-          return (
-            <SettingItem
-              key={provider.name}
-              title={`${index + 1}. ${provider.name}`}
-              description={enabled ? getString('settings_lyrics_provider_enabled') : getString('settings_lyrics_provider_disabled')}
-            >
-              <ToggleSwitch checked={enabled} onChange={(next) => setLyricsProviderEnabled(provider.name, next)} />
-            </SettingItem>
-          );
-        })}
-      </SettingsGroup>
-
       <SettingsGroup title={getString('settings_group_mini_player')}>
         <SettingItem title={getString('settings_skip_controls')} description={getString('settings_skip_controls_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS)}>
           <ToggleSwitch checked={miniSkip} onChange={setMiniSkip} disabled={isSettingDisabledUntilWired(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS)} />
@@ -208,14 +173,6 @@ export function PlayerTab() {
         )}
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
-        </SettingItem>
-        <SettingItem title={getString('settings_music_player_background')} description={getString('settings_music_player_background_desc')}>
-          <Select value={musicBackground} onChange={setMusicBackground} options={[
-            { value: 'blur_gradient', label: getString('settings_music_player_background_blur_gradient') },
-            { value: 'blur', label: getString('settings_music_player_background_blur') },
-            { value: 'gradient', label: getString('settings_music_player_background_gradient') },
-            { value: 'default', label: getString('settings_music_player_background_default') },
-          ]} />
         </SettingItem>
       </SettingsGroup>
     </div>

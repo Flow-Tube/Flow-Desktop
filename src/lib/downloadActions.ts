@@ -12,6 +12,7 @@ import {
 } from "./useDownloadDialog";
 import { SETTINGS } from "./settings/schema";
 import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
+import { trackDownloadTags, videoDownloadTags } from "./downloadTags";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 
@@ -50,6 +51,7 @@ export async function startVideoDownload(
     author: video.channelName || undefined,
     durationSeconds: video.durationSeconds ?? undefined,
     collectionDbId: overrides.collectionDbId,
+    tags: videoDownloadTags(video),
   });
 }
 
@@ -78,6 +80,7 @@ export async function startMusicDownload(
     durationSeconds: track.duration ?? undefined,
     collectionDbId: overrides.collectionDbId,
     loudnessDb: stream.loudnessDb ?? undefined,
+    tags: trackDownloadTags(track),
   });
   saveLyricsWithDownload(track, started.id);
   return started;

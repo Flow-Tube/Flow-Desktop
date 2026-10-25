@@ -29,6 +29,26 @@ export interface StartDownloadRequest {
   collectionDbId?: number;
   /** The stream's loudness, kept with a song so it is normalized offline too. */
   loudnessDb?: number;
+  /** What is written into the file besides the title. */
+  tags?: DownloadTagsInput;
+}
+
+/** Tags the caller knows. Field names match the backend's `DownloadTags`. */
+export interface DownloadTagsInput {
+  artists?: string[];
+  channelId?: string;
+  channelName?: string;
+  album?: string;
+  albumId?: string;
+  albumArtist?: string;
+  trackNumber?: number;
+  trackTotal?: number;
+  playlistId?: string;
+  /** `YYYY-MM-DD` or a year. */
+  releaseDate?: string;
+  description?: string;
+  viewCount?: number;
+  likeCount?: number;
 }
 
 export interface AdaptiveDownloadRequest {

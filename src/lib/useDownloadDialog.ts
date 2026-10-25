@@ -14,6 +14,7 @@ import type { MusicStreamInfo, SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 import { noteVideoSaved } from "./videoSaved";
 import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
+import { trackDownloadTags, videoDownloadTags } from "./downloadTags";
 
 export const MUSIC_QUALITY_VALUES = new Set(["Auto", "High", "Medium", "Low"]);
 
@@ -135,6 +136,7 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
         thumbnailUrl: video.thumbnailUrl ?? undefined,
         author: video.channelName || undefined,
         durationSeconds: video.durationSeconds ?? undefined,
+        tags: videoDownloadTags(video),
       });
       setStartedId(started.id);
       noteVideoSaved(video);
@@ -217,6 +219,7 @@ export function useMusicDownloadDialog(track: SongItem | null) {
         author: track.artists.map((artist) => artist.name).filter(Boolean).join(", ") || undefined,
         durationSeconds: track.duration ?? undefined,
         loudnessDb: stream.loudnessDb ?? undefined,
+        tags: trackDownloadTags(track),
       });
       saveLyricsWithDownload(track, started.id);
       return started;

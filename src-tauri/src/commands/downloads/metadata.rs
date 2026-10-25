@@ -9,7 +9,9 @@ use tauri::{AppHandle, Manager};
 use super::ProgressEmitter;
 use super::cover::{self, CoverShape};
 use super::tags::{DownloadTags, TagKind};
+use crate::models::music_pages::AlbumPage;
 use crate::models::video::{VideoChapter, VideoDetails};
+use crate::services::music_service::{Freshness, MusicService};
 use crate::services::youtube_service::YoutubeService;
 
 /// Android's watch-page deadline; past it the file is tagged with what is known.
@@ -73,10 +75,52 @@ pub async fn prepare(
             }
         }
     };
-    let (details, cover) = tokio::join!(details, cover);
+    let music = async {
+        if tags.kind != TagKind::Music {
+            return (None, None);
+        }
+        let Some(service) = app.try_state::<MusicService>() else {
+            return (None, None);
+        };
+        let service = service.inner().clone();
+        let wants_album =
+            tags.album_id.is_some() && (tags.release_date.is_none() || tags.track_number.is_none());
+        let album = async {
+            let album_id = tags.album_id.as_deref()?;
+            if !wants_album {
+                return None;
+            }
+            let page =
+                tokio::time::timeout(DETAILS_TIMEOUT, service.album(album_id, Freshness::Cached))
+                    .await
+                    .ok()
+                    .and_then(Result::ok);
+            if page.is_none() {
+                emitter.log("Could not load the album for its year and track number");
+            }
+            page
+        };
+        let lyrics = async {
+            if tags.video_id.is_empty() {
+                return None;
+            }
+            match tokio::time::timeout(DETAILS_TIMEOUT, service.lyrics(&tags.video_id)).await {
+                Ok(Ok(Some(lyrics))) => Some(lyrics.text).filter(|text| !text.trim().is_empty()),
+                _ => None,
+            }
+        };
+        tokio::join!(album, lyrics)
+    };
+    let (details, cover, (album, lyrics)) = tokio::join!(details, cover, music);
     let chapters = details
         .map(|details| apply_details(&mut tags, details))
         .unwrap_or_default();
+    if let Some(album) = album {
+        apply_album(&mut tags, &album);
+    }
+    if tags.lyrics.is_none() {
+        tags.lyrics = lyrics;
+    }
     PreparedMetadata {
         tags,
         cover,
@@ -108,6 +152,38 @@ fn apply_details(tags: &mut DownloadTags, details: VideoDetails) -> Vec<VideoCha
         tags.like_count = details.like_count_text.as_deref().and_then(plain_count);
     }
     details.chapters
+}
+
+/// Fills the year, album artist and the song's place from its album page.
+fn apply_album(tags: &mut DownloadTags, page: &AlbumPage) {
+    if tags.release_date.is_none() {
+        tags.release_date = page.album.year.map(|year| year.to_string());
+    }
+    if tags.album.is_none() && !page.album.title.is_empty() {
+        tags.album = Some(page.album.title.clone());
+    }
+    if tags.album_artist.is_none() {
+        tags.album_artist = page
+            .album
+            .artists
+            .as_ref()
+            .and_then(|artists| artists.first())
+            .map(|artist| artist.name.clone())
+            .filter(|name| !name.is_empty());
+    }
+    if tags.track_number.is_none()
+        && let Some(index) = page
+            .songs
+            .iter()
+            .position(|song| song.video_id.as_deref() == Some(tags.video_id.as_str()))
+    {
+        tags.track_number = u32::try_from(index + 1).ok();
+        let total = page
+            .song_count
+            .and_then(|count| usize::try_from(count).ok())
+            .unwrap_or(page.songs.len());
+        tags.track_total = u32::try_from(total.max(index + 1)).ok();
+    }
 }
 
 const MONTHS: [&str; 12] = [

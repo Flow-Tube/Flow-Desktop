@@ -111,8 +111,11 @@ pub async fn clear_lyrics_cache(app: AppHandle) -> CmdResult<()> {
     }
 }
 
-/// Replaces the `.lrc` file saved next to a downloaded song with the lyrics the provider chain
-/// found, synced when any provider had timing, and writes them into the file's tags.
+/// "Save lyrics as an .lrc file" for downloaded songs; on unless turned off.
+const LYRICS_FILE_KEY: &str = "download_lyrics_file";
+
+/// Writes the lyrics the provider chain found into a downloaded song's tags, and into
+/// an `.lrc` file beside it when they are synced and the user wants the file.
 #[tauri::command]
 pub async fn save_download_lyrics(
     video_id: String,
@@ -135,18 +138,47 @@ pub async fn save_download_lyrics(
         return Ok(false);
     }
     let media_path = Path::new(&record.file_path);
-    tokio::fs::write(media_path.with_extension("lrc"), &lrc)
+    let wants_file = crate::db::settings::get_setting(&pool, LYRICS_FILE_KEY)
         .await
-        .map_err(|e| io_error(&e))?;
+        .ok()
+        .flatten()
+        .is_none_or(|value| value != "false");
+    if wants_file && is_synced_lrc(&lrc) {
+        tokio::fs::write(media_path.with_extension("lrc"), &lrc)
+            .await
+            .map_err(|e| io_error(&e))?;
+    }
     if let Err(error) = crate::commands::downloads::embed_download_lyrics(media_path, lrc).await {
         tracing::warn!(video_id = %video_id, %error, "Could not embed lyrics into a download");
     }
     Ok(true)
 }
 
+/// True when the text has at least one `[mm:ss…]` time tag.
+fn is_synced_lrc(text: &str) -> bool {
+    text.lines().any(|line| {
+        let Some(rest) = line.trim_start().strip_prefix('[') else {
+            return false;
+        };
+        let mut parts = rest.splitn(2, ':');
+        let minutes = parts.next().unwrap_or_default();
+        let seconds = parts.next().unwrap_or_default();
+        !minutes.is_empty()
+            && minutes.chars().all(|c| c.is_ascii_digit())
+            && seconds.chars().next().is_some_and(|c| c.is_ascii_digit())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_timed_text_counts_as_synced() {
+        assert!(is_synced_lrc("[ar:M83]\n[00:12.30]Waiting in a car"));
+        assert!(!is_synced_lrc("[ar:M83]\nWaiting in a car"));
+        assert!(!is_synced_lrc("Waiting in a car"));
+    }
 
     #[tokio::test]
     async fn the_cache_size_counts_every_file() {

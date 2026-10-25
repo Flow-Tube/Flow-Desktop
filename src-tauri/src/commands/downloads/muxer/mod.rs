@@ -130,6 +130,31 @@ fn mux_mp4(
     )
 }
 
+/// Rewrites a downloaded fragmented AAC track as a progressive, tagged M4A.
+pub fn remux_audio_to_m4a(
+    input: &Path,
+    output: &Path,
+    metadata: Option<&EmbeddedMetadata>,
+    cancelled: &AtomicBool,
+) -> Result<(), String> {
+    let track = mp4_demux::open_progressive(input, TrackKind::Audio)?;
+    if !matches!(track.codec, Codec::Aac) {
+        return Err("Only AAC audio is saved as M4A".to_string());
+    }
+    let options = Mp4Options {
+        major_brand: *b"M4A ",
+        compatible_brands: vec![*b"M4A ", *b"isom", *b"iso2", *b"mp42"],
+        udta: metadata.map(ilst::udta_box),
+        padding: RETAG_PADDING,
+    };
+    mp4_writer::write_mp4(
+        output,
+        vec![fragmented_writer_track(track, TrackKind::Audio)],
+        &options,
+        cancelled,
+    )
+}
+
 impl SampleSource for ProgressiveTrack {
     fn read_sample(&mut self, index: usize, _sample: &WriterSample) -> Result<Vec<u8>, String> {
         let sample: ProgressiveSample = *self

@@ -426,6 +426,15 @@ pub async fn start_download(
         .await
         .map_err(|error| download_error(format!("Could not create download folder: {error}")))?;
 
+    let tags = request_download_tags(
+        request_tags,
+        media_kind,
+        video_id.as_deref(),
+        &title,
+        author.as_deref(),
+        thumbnail_url.as_deref(),
+    );
+    let stem = download_file_stem(&title, media_kind, &tags, collection_db_id.is_some());
     let id = Uuid::new_v4().to_string();
     let control = Arc::new(DownloadControl::default());
     let file_path = {
@@ -433,12 +442,7 @@ pub async fn start_download(
             .registry
             .lock()
             .map_err(|_| download_error("Download manager is unavailable"))?;
-        let path = available_file_path(
-            &directory,
-            &sanitize_file_stem(&title),
-            extension,
-            &registry.reserved_paths,
-        );
+        let path = available_file_path(&directory, &stem, extension, &registry.reserved_paths);
         registry.reserved_paths.insert(path.clone());
         registry.controls.insert(id.clone(), control.clone());
         path
@@ -468,14 +472,6 @@ pub async fn start_download(
         )));
     }
 
-    let tags = request_download_tags(
-        request_tags,
-        media_kind,
-        video_id.as_deref(),
-        &title,
-        author.as_deref(),
-        thumbnail_url.as_deref(),
-    );
     let context = DownloadContext {
         id: id.clone(),
         title: title.clone(),
@@ -676,15 +672,53 @@ fn extension_for_content_type(content_type: &str, media_kind: DownloadMediaKind)
     }
 }
 
+/// The file name (without extension): `Artist - Title` for a song, `NN - Title`
+/// inside an album, the title for everything else.
+fn download_file_stem(
+    title: &str,
+    media_kind: DownloadMediaKind,
+    tags: &tags::DownloadTags,
+    in_collection: bool,
+) -> String {
+    if matches!(media_kind, DownloadMediaKind::Video) {
+        return sanitize_file_stem(title);
+    }
+    if in_collection && let Some(number) = tags.track_number.filter(|number| *number > 0) {
+        let width = tags
+            .track_total
+            .unwrap_or(number)
+            .max(number)
+            .to_string()
+            .len()
+            .max(2);
+        return sanitize_file_stem(&format!("{number:0width$} - {title}"));
+    }
+    match tags.display_artist() {
+        Some(artist) if !title.to_lowercase().contains(&artist.to_lowercase()) => {
+            sanitize_file_stem(&format!("{artist} - {title}"))
+        }
+        _ => sanitize_file_stem(title),
+    }
+}
+
+/// Longest file-name stem in bytes: 255 minus room for " (99).ext" and a margin.
+const MAX_STEM_BYTES: usize = 239;
+
 fn sanitize_file_stem(title: &str) -> String {
-    let mut value = title
+    let replaced = title
         .chars()
         .map(|character| match character {
-            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '\0'..='\u{1f}' => '_',
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '\0'..='\u{1f}' | '\u{7f}' => {
+                '_'
+            }
             _ => character,
         })
         .collect::<String>();
-    value = value.trim().trim_end_matches(['.', ' ']).to_string();
+    let mut value = replaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    value = value
+        .trim_start_matches(['.', ' '])
+        .trim_end_matches(['.', ' '])
+        .to_string();
     if value.is_empty() {
         value = "Flow download".to_string();
     }
@@ -695,7 +729,16 @@ fn sanitize_file_stem(title: &str) -> String {
     if reserved.iter().any(|name| value.eq_ignore_ascii_case(name)) {
         value.insert(0, '_');
     }
-    value.chars().take(180).collect()
+    let mut stem: String = value.chars().take(180).collect();
+    if stem.len() > MAX_STEM_BYTES {
+        let mut end = MAX_STEM_BYTES;
+        while !stem.is_char_boundary(end) {
+            end -= 1;
+        }
+        stem.truncate(end);
+        stem = stem.trim_end_matches(['.', ' ']).to_string();
+    }
+    stem
 }
 
 fn available_file_path(
@@ -781,8 +824,18 @@ async fn run_download(mut context: DownloadContext, app: AppHandle) {
             emitter.emit(DownloadStatus::Cancelled, None);
         }
         Ok(()) => {
-            if let Err(error) = finalize_download_file(&context.temp_path, &context.file_path).await
-            {
+            let prepared = metadata_task.await.unwrap_or_default();
+            let source = match package_song(&context, &prepared, &emitter).await {
+                Ok(source) => source,
+                Err(error) => {
+                    cleanup_partial_files(&context).await;
+                    emitter.emit(DownloadStatus::Failed, Some(error));
+                    return;
+                }
+            };
+            let cover_in_file = source != context.temp_path && prepared.cover.is_some();
+            if let Err(error) = finalize_download_file(&source, &context.file_path).await {
+                let _ = tokio::fs::remove_file(&source).await;
                 cleanup_partial_files(&context).await;
                 emitter.emit(DownloadStatus::Failed, Some(error));
                 return;
@@ -790,8 +843,7 @@ async fn run_download(mut context: DownloadContext, app: AppHandle) {
             if let Ok(metadata) = tokio::fs::metadata(&context.file_path).await {
                 downloaded.store(metadata.len(), Ordering::Relaxed);
             }
-            let prepared = metadata_task.await.unwrap_or_default();
-            finish_download(&app, &context, &prepared, false, None, &emitter).await;
+            finish_download(&app, &context, &prepared, cover_in_file, None, &emitter).await;
             emitter.log("Download completed successfully");
             emitter.emit(DownloadStatus::Completed, None);
         }
@@ -1063,6 +1115,63 @@ async fn run_adaptive_download(
             );
         }
     }
+}
+
+/// Turns a downloaded AAC song into a progressive, tagged M4A and returns the file to
+/// finalize. Other audio is kept as it arrived. A song whose length is wrong fails
+/// the download; a remux error keeps the original stream, which still plays.
+async fn package_song(
+    context: &DownloadContext,
+    prepared: &metadata::PreparedMetadata,
+    emitter: &ProgressEmitter,
+) -> Result<PathBuf, String> {
+    let is_m4a = context
+        .file_path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("m4a"));
+    if matches!(context.media_kind, DownloadMediaKind::Video) || !is_m4a {
+        return Ok(context.temp_path.clone());
+    }
+    emitter.emit(DownloadStatus::Muxing, None);
+    let input = context.temp_path.clone();
+    let output = PathBuf::from(format!("{}.m4a", context.temp_path.to_string_lossy()));
+    let metadata = muxer::EmbeddedMetadata {
+        tags: prepared.tags.clone(),
+        cover: prepared.cover.clone(),
+        chapters: Vec::new(),
+    };
+    let expectation = muxer::validate::OutputExpectation {
+        video: false,
+        audio: true,
+        duration_seconds: context
+            .duration_seconds
+            .map(|seconds| f64::from(u32::try_from(seconds).unwrap_or(u32::MAX))),
+    };
+    let control = context.control.clone();
+    let staged = output.clone();
+    let remuxed = tokio::task::spawn_blocking(move || {
+        muxer::remux_audio_to_m4a(&input, &staged, Some(&metadata), &control.cancelled)
+    })
+    .await
+    .map_err(|error| format!("Audio packaging stopped unexpectedly: {error}"))
+    .and_then(|result| result);
+    if let Err(error) = remuxed {
+        let _ = tokio::fs::remove_file(&output).await;
+        emitter.log(format!("Kept the song as it was downloaded: {error}"));
+        return Ok(context.temp_path.clone());
+    }
+    let checked = output.clone();
+    let valid =
+        tokio::task::spawn_blocking(move || muxer::validate::validate_mp4(&checked, expectation))
+            .await
+            .map_err(|error| format!("The song check stopped unexpectedly: {error}"))
+            .and_then(|result| result);
+    if let Err(error) = valid {
+        let _ = tokio::fs::remove_file(&output).await;
+        return Err(error);
+    }
+    let _ = tokio::fs::remove_file(&context.temp_path).await;
+    Ok(output)
 }
 
 fn child_download_context(context: &DownloadContext, temp_path: PathBuf) -> DownloadContext {
@@ -1749,7 +1858,6 @@ async fn finish_download(
         None => None,
     };
     sidecars::write_sidecars(
-        app,
         &sidecars::FinishedFile {
             media_kind: context.media_kind,
             media_path: &context.file_path,
@@ -2160,7 +2268,13 @@ pub async fn create_download_collection(
     }
 
     let base = resolve_destination_directory(&app, media_kind, None)?;
-    let folder = base.join(sanitize_file_stem(&title));
+    let folder_name = match (&request.kind[..], request.author.as_deref()) {
+        ("album", Some(artist)) if !artist.trim().is_empty() => {
+            format!("{} - {title}", artist.trim())
+        }
+        _ => title.clone(),
+    };
+    let folder = base.join(sanitize_file_stem(&folder_name));
     tokio::fs::create_dir_all(&folder)
         .await
         .map_err(|error| download_error(format!("Could not create collection folder: {error}")))?;
@@ -2257,8 +2371,8 @@ async fn remove_download_files(record: &DownloadRecord) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DownloadContainer, DownloadMediaKind, extension_for_content_type, has_container_signature,
-        parse_content_range, sanitize_file_stem,
+        DownloadContainer, DownloadMediaKind, download_file_stem, extension_for_content_type,
+        has_container_signature, parse_content_range, sanitize_file_stem,
     };
 
     #[test]
@@ -2266,6 +2380,51 @@ mod tests {
         assert_eq!(sanitize_file_stem("A/B:C*D?"), "A_B_C_D_");
         assert_eq!(sanitize_file_stem("CON"), "_CON");
         assert_eq!(sanitize_file_stem("  title.  "), "title");
+        assert_eq!(sanitize_file_stem("..hidden   name"), "hidden name");
+        let long = "é".repeat(170);
+        let stem = sanitize_file_stem(&long);
+        assert!(stem.len() <= super::MAX_STEM_BYTES);
+        assert!(stem.chars().all(|character| character == 'é'));
+    }
+
+    #[test]
+    fn songs_are_named_by_artist_or_album_position() {
+        let tags = super::tags::DownloadTags {
+            artists: vec!["M83".into()],
+            track_number: Some(2),
+            track_total: Some(22),
+            ..super::tags::DownloadTags::default()
+        };
+        assert_eq!(
+            download_file_stem("Midnight City", DownloadMediaKind::Music, &tags, false),
+            "M83 - Midnight City"
+        );
+        assert_eq!(
+            download_file_stem("Midnight City", DownloadMediaKind::Music, &tags, true),
+            "02 - Midnight City"
+        );
+        assert_eq!(
+            download_file_stem(
+                "M83 - Midnight City",
+                DownloadMediaKind::Music,
+                &tags,
+                false
+            ),
+            "M83 - Midnight City"
+        );
+        assert_eq!(
+            download_file_stem("Midnight City", DownloadMediaKind::Video, &tags, false),
+            "Midnight City"
+        );
+        let long_album = super::tags::DownloadTags {
+            track_number: Some(7),
+            track_total: Some(120),
+            ..super::tags::DownloadTags::default()
+        };
+        assert_eq!(
+            download_file_stem("Song", DownloadMediaKind::Music, &long_album, true),
+            "007 - Song"
+        );
     }
 
     #[test]

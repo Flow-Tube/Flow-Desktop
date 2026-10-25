@@ -1,5 +1,6 @@
 //! Best-effort companion files written next to a finished download: the poster
-//! image (both kinds), `SponsorBlock` segments for video, and lyrics for music.
+//! image when asked for, and `SponsorBlock` segments for video. Lyrics are saved by
+//! `save_download_lyrics` once the provider chain has them.
 
 use std::path::{Path, PathBuf};
 
@@ -9,7 +10,6 @@ use tauri::{AppHandle, Manager};
 use super::{DownloadMediaKind, ProgressEmitter};
 use crate::commands::youtube::fetch_sponsorblock_segments;
 use crate::db::settings::get_setting;
-use crate::services::music_service::MusicService;
 
 /// "Also save a poster image next to the file"; the cover is always embedded.
 const POSTER_SIDECAR_KEY: &str = "download_poster_sidecar";
@@ -34,12 +34,7 @@ pub struct FinishedFile<'a> {
     pub cover_in_file: bool,
 }
 
-pub async fn write_sidecars(
-    app: &AppHandle,
-    file: &FinishedFile<'_>,
-    emitter: &ProgressEmitter,
-    pool: &SqlitePool,
-) {
+pub async fn write_sidecars(file: &FinishedFile<'_>, emitter: &ProgressEmitter, pool: &SqlitePool) {
     let media_kind = file.media_kind;
     let media_path = file.media_path;
     if let Some(cover) = file.cover {
@@ -50,8 +45,8 @@ pub async fn write_sidecars(
         return;
     };
 
-    match media_kind {
-        DownloadMediaKind::Video => match write_sponsorblock(media_path, video_id).await {
+    if matches!(media_kind, DownloadMediaKind::Video) {
+        match write_sponsorblock(media_path, video_id).await {
             Ok(Some(path)) => {
                 emitter.log(format!(
                     "Saved SponsorBlock segments to `{}`",
@@ -60,13 +55,6 @@ pub async fn write_sidecars(
             }
             Ok(None) => {}
             Err(error) => emitter.log(format!("Could not save SponsorBlock segments: {error}")),
-        },
-        DownloadMediaKind::Music | DownloadMediaKind::Audio => {
-            match write_lyrics(app, media_path, video_id).await {
-                Ok(Some(path)) => emitter.log(format!("Saved lyrics to `{}`", path.display())),
-                Ok(None) => {}
-                Err(error) => emitter.log(format!("Could not save lyrics: {error}")),
-            }
         }
     }
 }
@@ -165,30 +153,5 @@ async fn write_sponsorblock(media_path: &Path, video_id: &str) -> Result<Option<
     tokio::fs::write(&path, body)
         .await
         .map_err(|error| format!("could not write segments: {error}"))?;
-    Ok(Some(path))
-}
-
-async fn write_lyrics(
-    app: &AppHandle,
-    media_path: &Path,
-    video_id: &str,
-) -> Result<Option<PathBuf>, String> {
-    let Some(music) = app.try_state::<MusicService>() else {
-        return Err("music service is unavailable".to_string());
-    };
-    let lyrics = music
-        .lyrics(video_id)
-        .await
-        .map_err(|error| error.to_string())?;
-    let Some(text) = lyrics
-        .map(|lyrics| lyrics.text)
-        .filter(|text| !text.trim().is_empty())
-    else {
-        return Ok(None);
-    };
-    let path = media_path.with_extension("lrc");
-    tokio::fs::write(&path, text.as_bytes())
-        .await
-        .map_err(|error| format!("could not write lyrics: {error}"))?;
     Ok(Some(path))
 }

@@ -74,6 +74,7 @@ MACOS
 - On 120 Hz ProMotion screens Flow now draws at 120 frames per second. WebKit was holding every animation, scroll and lyric line to 60.
 - The music equalizer and crossfade are now heard on macOS. WebKit cannot pass Opus songs through audio processing, so once either is on, songs stream as AAC and the song playing reloads once from where it is.
 - The volume slider keeps working on a downloaded Opus song while the equalizer is on.
+- AAC songs now show and play for their real length on macOS. WebKit reported them at twice their length, so a song ran on in silence before the next one started.
 
 LINUX
 - The AppImage is built on Ubuntu 24.04 with a newer WebKitGTK that no longer crashes on color emoji fonts, the cause of the freeze on Fedora 44 and Bazzite. It needs glibc 2.39 or newer, so on Ubuntu 22.04, Mint 21 or Debian 12 use the .deb instead.

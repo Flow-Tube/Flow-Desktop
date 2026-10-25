@@ -12,10 +12,11 @@ mod boxes;
 mod ilst;
 mod mp4_demux;
 mod mp4_writer;
+pub mod retag;
 pub mod validate;
 mod vp9;
 
-pub use ilst::{EmbeddedMetadata, MAX_COVER_BYTES};
+pub use ilst::{EmbeddedChapter, EmbeddedMetadata, MAX_COVER_BYTES};
 
 use mp4_demux::{Codec, ProgressiveSample, ProgressiveTrack};
 use mp4_writer::{Mp4Options, SampleSource, TrackRole, WriterSample, WriterTrack};

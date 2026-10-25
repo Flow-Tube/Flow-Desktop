@@ -112,7 +112,7 @@ pub async fn clear_lyrics_cache(app: AppHandle) -> CmdResult<()> {
 }
 
 /// Replaces the `.lrc` file saved next to a downloaded song with the lyrics the provider chain
-/// found, synced when any provider had timing.
+/// found, synced when any provider had timing, and writes them into the file's tags.
 #[tauri::command]
 pub async fn save_download_lyrics(
     video_id: String,
@@ -134,10 +134,13 @@ pub async fn save_download_lyrics(
     if tokio::fs::metadata(&record.file_path).await.is_err() {
         return Ok(false);
     }
-    let path = Path::new(&record.file_path).with_extension("lrc");
-    tokio::fs::write(&path, lrc)
+    let media_path = Path::new(&record.file_path);
+    tokio::fs::write(media_path.with_extension("lrc"), &lrc)
         .await
         .map_err(|e| io_error(&e))?;
+    if let Err(error) = crate::commands::downloads::embed_download_lyrics(media_path, lrc).await {
+        tracing::warn!(video_id = %video_id, %error, "Could not embed lyrics into a download");
+    }
     Ok(true)
 }
 

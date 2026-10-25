@@ -17,11 +17,51 @@ pub struct EmbeddedMetadata {
     pub tags: DownloadTags,
     /// JPEG or PNG bytes; anything else, or anything over 1 MB, is not embedded.
     pub cover: Option<Vec<u8>>,
+    pub chapters: Vec<EmbeddedChapter>,
 }
 
-/// `udta` holding `meta` (with an `mdir` handler) and the `ilst` atoms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbeddedChapter {
+    pub start_ms: u64,
+    pub title: String,
+}
+
+/// `udta` holding `meta` (with an `mdir` handler) and the `ilst` atoms, then the
+/// chapter list.
 pub(super) fn udta_box(metadata: &EmbeddedMetadata) -> Vec<u8> {
-    container(b"udta", &[meta_box(&ilst_box(metadata))])
+    let mut children = vec![meta_box(&ilst_box(metadata))];
+    if !metadata.chapters.is_empty() {
+        children.push(chpl_box(&metadata.chapters));
+    }
+    container(b"udta", &children)
+}
+
+/// The Nero chapter list (`chpl`), which VLC, mpv, MPC-HC, ffmpeg and Plex read:
+/// version 1, four reserved bytes, a count, then each start in 100 ns units and a
+/// length-prefixed title of at most 255 bytes.
+fn chpl_box(chapters: &[EmbeddedChapter]) -> Vec<u8> {
+    let count = chapters.len().min(255);
+    let mut payload = vec![0_u8; 4];
+    payload.push(u8::try_from(count).unwrap_or(u8::MAX));
+    for chapter in &chapters[..count] {
+        payload.extend_from_slice(&chapter.start_ms.saturating_mul(10_000).to_be_bytes());
+        let title = truncate_bytes(&chapter.title, 255);
+        payload.push(u8::try_from(title.len()).unwrap_or(u8::MAX));
+        payload.extend_from_slice(title.as_bytes());
+    }
+    full_box(b"chpl", 1, 0, &payload)
+}
+
+/// The longest prefix of `text` within `max` bytes that ends on a character boundary.
+fn truncate_bytes(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 pub(super) fn meta_box(ilst: &[u8]) -> Vec<u8> {
@@ -146,6 +186,7 @@ mod tests {
                 ..DownloadTags::default()
             },
             cover: None,
+            chapters: Vec::new(),
         };
         let ilst = ilst_box(&metadata);
         let at = find(&ilst, b"\xA9nam").expect("title atom");
@@ -165,6 +206,7 @@ mod tests {
                 ..DownloadTags::default()
             },
             cover: None,
+            chapters: Vec::new(),
         };
         let ilst = ilst_box(&metadata);
         let mean = find(&ilst, b"mean").expect("mean atom");
@@ -187,6 +229,33 @@ mod tests {
         let mut big = vec![0xFF, 0xD8, 0xFF];
         big.resize(1_000_001, 0);
         assert_eq!(cover_data_type(&big), None);
+    }
+
+    #[test]
+    fn chapters_follow_meta_as_a_nero_chpl() {
+        let metadata = EmbeddedMetadata {
+            chapters: vec![
+                super::EmbeddedChapter {
+                    start_ms: 0,
+                    title: "Intro".into(),
+                },
+                super::EmbeddedChapter {
+                    start_ms: 90_500,
+                    title: "é".repeat(200),
+                },
+            ],
+            ..EmbeddedMetadata::default()
+        };
+        let udta = udta_box(&metadata);
+        let at = find(&udta, b"chpl").expect("chapter list");
+        assert_eq!(&udta[at + 4..at + 8], &[1, 0, 0, 0]);
+        assert_eq!(udta[at + 12], 2);
+        assert_eq!(&udta[at + 13..at + 21], &0_u64.to_be_bytes());
+        assert_eq!(udta[at + 21], 5);
+        assert_eq!(&udta[at + 22..at + 27], b"Intro");
+        assert_eq!(&udta[at + 27..at + 35], &905_000_000_u64.to_be_bytes());
+        // 200 two-byte characters cut to 127 whole ones.
+        assert_eq!(udta[at + 35], 254);
     }
 
     #[test]

@@ -964,6 +964,14 @@ async fn run_adaptive_download(
     let metadata = muxer::EmbeddedMetadata {
         tags: prepared.tags.clone(),
         cover: prepared.cover.clone(),
+        chapters: prepared
+            .chapters
+            .iter()
+            .map(|chapter| muxer::EmbeddedChapter {
+                start_ms: chapter.start_seconds.saturating_mul(1000),
+                title: chapter.title.clone(),
+            })
+            .collect(),
     };
     emitter.log("Track downloads completed; starting native muxer");
     let video_path = adaptive.video_path.clone();
@@ -2215,6 +2223,23 @@ pub async fn delete_download_collections(
     crate::db::download_collections::delete_collections(&pool, &ids)
         .await
         .map_err(ErrorResponse::from)
+}
+
+/// Puts lyrics that arrived after a download finished into the file's `©lyr` tag.
+/// Only MP4/M4A files Flow wrote progressively can be retagged.
+pub async fn embed_download_lyrics(media_path: &Path, lyrics: String) -> Result<bool, String> {
+    let is_mp4 = media_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| matches!(extension.to_ascii_lowercase().as_str(), "m4a" | "mp4"));
+    if !is_mp4 {
+        return Ok(false);
+    }
+    let path = media_path.to_path_buf();
+    tokio::task::spawn_blocking(move || muxer::retag::set_mp4_lyrics(&path, &lyrics))
+        .await
+        .map_err(|error| format!("Lyrics tagging stopped unexpectedly: {error}"))??;
+    Ok(true)
 }
 
 /// Removes a downloaded media file, its companion files and Flow's cover copy.

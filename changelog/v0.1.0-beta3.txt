@@ -224,6 +224,9 @@ DOWNLOADS
 - The artwork setting is now one switch, Also save a poster image next to the file, off by default.
 - Downloaded videos keep their chapters, so chapter skipping works in VLC, mpv and other players too.
 - Lyrics found after a song has downloaded are written into the file as well as the .lrc file.
+- Songs save as M4A files named Artist - Title, with their cover, artist, album, track number, year and lyrics inside. They play at their real length everywhere and seek at once.
+- Albums save as numbered songs inside an Artist - Album folder.
+- A new switch, Save lyrics as an .lrc file, keeps synced lyrics beside each song for desktop music players. Untimed lyrics no longer end up in .lrc files.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.

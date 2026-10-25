@@ -4,6 +4,7 @@ import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from
 import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade } from "./crossfadeRamp";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
+import { pastListedEnd, playableLength } from "./listedLength";
 import { volumeGain } from "./volumeCurve";
 import { webAudioHears } from "./webAudioFormats";
 
@@ -23,6 +24,10 @@ interface Slot {
   loudnessDb: number | null;
   /** The loaded file's MIME type, which decides whether WebAudio can hear it. */
   mime: string | null;
+  /** The song's listed length in seconds, for when the element reports a wrong one. */
+  listed: number | null;
+  /** Set once the end at the listed length has been handed to the player. */
+  listedEndTaken: boolean;
   /** The track a standby slot holds, so a swap only ever plays the right one. */
   key: string | null;
 }
@@ -35,6 +40,8 @@ const emptySlot = (): Slot => ({
   fade: 1,
   loudnessDb: null,
   mime: null,
+  listed: null,
+  listedEndTaken: false,
   key: null,
 });
 
@@ -161,11 +168,13 @@ class MusicAudioEngine {
 
   // --- transport ----------------------------------------------------------
 
-  async load(url: string, mime: string | null): Promise<void> {
+  async load(url: string, mime: string | null, listedSeconds: number | null = null): Promise<void> {
     const el = this.active.el;
     if (!el) return;
     this.active.key = null;
     this.active.mime = mime;
+    this.active.listed = listedSeconds;
+    this.active.listedEndTaken = false;
     this.applyGain();
     el.src = url;
     try {
@@ -179,12 +188,20 @@ class MusicAudioEngine {
    * take over the moment the current track ends. A no-op when it already holds
    * that track, or while it is still fading out the last one.
    */
-  preload(key: string, url: string, loudnessDb: number | null, mime: string | null): void {
+  preload(
+    key: string,
+    url: string,
+    loudnessDb: number | null,
+    mime: string | null,
+    listedSeconds: number | null = null,
+  ): void {
     const slot = this.standby;
     if (!slot.el || slot.key === key || this.fading) return;
     slot.key = key;
     slot.loudnessDb = loudnessDb;
     slot.mime = mime;
+    slot.listed = listedSeconds;
+    slot.listedEndTaken = false;
     slot.el.src = url;
     try {
       slot.el.load();
@@ -245,6 +262,8 @@ class MusicAudioEngine {
     slot.key = null;
     slot.loudnessDb = null;
     slot.mime = null;
+    slot.listed = null;
+    slot.listedEndTaken = false;
   }
 
   // The two elements play together while their gains move in opposite directions; the one
@@ -346,6 +365,7 @@ class MusicAudioEngine {
     const el = this.active.el;
     if (el && Number.isFinite(seconds)) {
       el.currentTime = Math.max(0, seconds);
+      this.active.listedEndTaken = false;
     }
   }
 
@@ -366,8 +386,21 @@ class MusicAudioEngine {
   }
 
   getDuration(): number {
-    const d = this.active.el?.duration ?? 0;
-    return Number.isFinite(d) ? d : 0;
+    return playableLength(this.active.el?.duration ?? Number.NaN, this.active.listed);
+  }
+
+  /**
+   * True once, when the playing song passes its listed length on an element that reports more
+   * than it holds. The element would play silence until its own end and fire `ended` only then,
+   * so it is paused here and the caller ends the song instead.
+   */
+  takeListedEnd(): boolean {
+    const slot = this.active;
+    const el = slot.el;
+    if (!el || slot.listedEndTaken || !pastListedEnd(el.currentTime, el.duration, slot.listed)) return false;
+    slot.listedEndTaken = true;
+    el.pause();
+    return true;
   }
 
   // --- speed --------------------------------------------------------------

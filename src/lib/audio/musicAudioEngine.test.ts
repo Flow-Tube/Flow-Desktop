@@ -116,3 +116,43 @@ describe("sleep timer fade-out", () => {
     expect(pair[0].volume).toBeCloseTo(1);
   });
 });
+
+describe("a song WebKit reports at twice its length", () => {
+  const reports = (el: HTMLAudioElement, duration: number, currentTime: number) => {
+    Object.defineProperty(el, "duration", { value: duration, configurable: true });
+    Object.defineProperty(el, "currentTime", { value: currentTime, configurable: true, writable: true });
+  };
+
+  it("plays for its listed length and ends there once", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/aac", 'audio/mp4; codecs="mp4a.40.2"', 245.269);
+    reports(pair[0], 490.5, 120);
+    expect(musicAudioEngine.getDuration()).toBe(245.269);
+    expect(musicAudioEngine.takeListedEnd()).toBe(false);
+
+    reports(pair[0], 490.5, 245.4);
+    expect(musicAudioEngine.takeListedEnd()).toBe(true);
+    expect(pair[0].pause).toHaveBeenCalled();
+    expect(musicAudioEngine.takeListedEnd()).toBe(false);
+
+    // Repeat one seeks back, and the song can end again.
+    musicAudioEngine.seek(0);
+    reports(pair[0], 490.5, 245.4);
+    expect(musicAudioEngine.takeListedEnd()).toBe(true);
+  });
+
+  it("carries the next song's listed length through the gapless swap", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/current", null, 200);
+    musicAudioEngine.preload("next", "http://127.0.0.1/stream/next", null, null, 180);
+    bufferedEnough(pair[1]);
+    musicAudioEngine.activatePreloaded("next");
+    reports(pair[1], 360, 0);
+    expect(musicAudioEngine.getDuration()).toBe(180);
+  });
+
+  it("leaves a correctly reported song to its own end", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/opus", 'audio/webm; codecs="opus"', 245.281);
+    reports(pair[0], 245.3, 245.29);
+    expect(musicAudioEngine.getDuration()).toBe(245.3);
+    expect(musicAudioEngine.takeListedEnd()).toBe(false);
+  });
+});

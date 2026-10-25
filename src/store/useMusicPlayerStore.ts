@@ -15,6 +15,7 @@ import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
 import { normalizeBackendError } from "../lib/api/errors";
 import { recordPlayerEvent } from "../lib/playerDiagnostics";
 import { logToBackend } from "../lib/diagnostics";
+import { listedSeconds } from "../lib/audio/listedLength";
 import { musicAudioEngine } from "../lib/audio/musicAudioEngine";
 import { migrateSavedMusicVolume } from "../lib/audio/volumeCurve";
 import { preloadTrack } from "../lib/musicPreload";
@@ -505,7 +506,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
               : {}),
           });
           musicAudioEngine.setLoudness(offline.loudnessDb, get().normalizationEnabled);
-          await musicAudioEngine.load(offline.url, offline.contentType);
+          await musicAudioEngine.load(offline.url, offline.contentType, track.duration ?? null);
           musicAudioEngine.seekWhenReady(resumeAt);
           await start();
           afterStart();
@@ -532,7 +533,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
       set({ loudnessDb: info.loudnessDb, loadingStreamId: null });
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
-      await musicAudioEngine.load(info.audioUrl, info.mimeType);
+      await musicAudioEngine.load(info.audioUrl, info.mimeType, listedSeconds(info, track));
       musicAudioEngine.seekWhenReady(resumeAt);
       await start();
       afterStart();

@@ -44,6 +44,13 @@ export function GlobalMusicAudio() {
   useLyricsLookup();
 
   const store = () => useMusicPlayerStore.getState();
+  const finishTrack = () => {
+    musicListens.finish(Date.now());
+    if (sleepTimerTakesEnd()) return;
+    store().handleEnded();
+  };
+  // The engine corrects a length WebKit reports wrong, so the player reads it there.
+  const syncTime = (el: HTMLAudioElement) => store()._syncTime(el.currentTime, musicAudioEngine.getDuration());
   const audioProps = {
     hidden: true,
     preload: "auto",
@@ -57,14 +64,20 @@ export function GlobalMusicAudio() {
       store()._setBuffering(true);
     }),
     onPlaying: fromActive(() => store()._setBuffering(false)),
-    onDurationChange: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
-    onSeeked: fromActive((el) => store()._syncTime(el.currentTime, el.duration)),
+    onDurationChange: fromActive(syncTime),
+    onSeeked: fromActive(syncTime),
     // Near the end, buffer the next track on the standby element so the change
     // is a swap. Driven by the element rather than the frame loop, which WebKit
     // pauses while the window is hidden, as it usually is while music plays.
     // The listed length stands in when WebKit reports a stream as endless.
     onTimeUpdate: fromActive((el) => {
-      const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : store().duration;
+      // A song whose element reports twice its length ends at the listed one, not after the
+      // silence the element would play to reach its own.
+      if (musicAudioEngine.takeListedEnd()) {
+        finishTrack();
+        return;
+      }
+      const duration = musicAudioEngine.getDuration() || store().duration;
       if (duration > 0 && duration - el.currentTime <= PRELOAD_LEAD_SECONDS) store()._preloadUpcoming();
 
       /*
@@ -75,7 +88,7 @@ export function GlobalMusicAudio() {
         card. Anything that needs the exact position (the full player's seek
         bar, the lyrics) reads the audio engine directly.
       */
-      store()._syncTime(el.currentTime, el.duration);
+      syncTime(el);
       reportMediaPosition("music");
       tickSleepTimer();
 
@@ -90,11 +103,7 @@ export function GlobalMusicAudio() {
         musicListens.hold();
       }
     }),
-    onEnded: fromActive(() => {
-      musicListens.finish(Date.now());
-      if (sleepTimerTakesEnd()) return;
-      store().handleEnded();
-    }),
+    onEnded: fromActive(finishTrack),
     onError: (event: SyntheticEvent<HTMLAudioElement>) => {
       if (event.currentTarget === musicAudioEngine.getActiveElement()) store()._onPlaybackError();
       else store()._onPreloadError();

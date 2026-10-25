@@ -215,6 +215,11 @@ PLAYLISTS
 - Long YouTube playlists load past their first 100 videos as you scroll, show their real title and video count, and download or save in full. Sorting a playlist by date or popularity reads the whole playlist first.
 - Searching inside a channel keeps returning results past the first page, and long comment threads keep their Show more replies button.
 
+DOWNLOADS
+- Videos now save as MP4 with AAC audio in every quality, VP9 and AV1 included, so they open in more players. A video with no AAC track still saves as MKV.
+- Downloaded videos carry their title, channel and YouTube link inside the file, plus the poster when Embed is chosen.
+- Saved videos start at once offline, keep sound and picture in step from the first frame, and are checked for a missing track or a wrong length before they count as done.
+
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.
 - Custom themes can be exported one at a time or all together, and imported from a file made on the desktop or on Flow for Android. An imported theme never replaces one you already have.

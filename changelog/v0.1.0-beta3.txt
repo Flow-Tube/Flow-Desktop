@@ -222,6 +222,8 @@ DOWNLOADS
 - Every download carries a sharp cover inside the file: a 1200 px square for songs and the full 16:9 frame for videos. Flow keeps its own copy, so the artwork stays when you are offline.
 - Video downloads also store their description, release date, channel and category, looked up while the file downloads.
 - The artwork setting is now one switch, Also save a poster image next to the file, off by default.
+- Downloaded videos keep their chapters, so chapter skipping works in VLC, mpv and other players too.
+- Lyrics found after a song has downloaded are written into the file as well as the .lrc file.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.

@@ -2,7 +2,6 @@
 //! image (both kinds), `SponsorBlock` segments for video, and lyrics for music.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
@@ -12,87 +11,42 @@ use crate::commands::youtube::fetch_sponsorblock_segments;
 use crate::db::settings::get_setting;
 use crate::services::music_service::MusicService;
 
-const THUMBNAILS_ENABLED_KEY: &str = "download_thumbnails_enabled";
-const THUMBNAIL_MODE_KEY: &str = "download_thumbnail_mode";
+/// "Also save a poster image next to the file"; the cover is always embedded.
+const POSTER_SIDECAR_KEY: &str = "download_poster_sidecar";
+const COVER_STORE_DIR: &str = "download_covers";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ThumbnailMode {
-    Sidecar,
-    Embed,
-    Both,
+/// Keeps Flow's own copy of the cover in app data, for the library and offline UI.
+pub async fn store_cover(app: &AppHandle, id: &str, jpeg: &[u8]) -> Option<String> {
+    let dir = app.path().app_data_dir().ok()?.join(COVER_STORE_DIR);
+    tokio::fs::create_dir_all(&dir).await.ok()?;
+    let path = dir.join(format!("{id}.jpg"));
+    tokio::fs::write(&path, jpeg).await.ok()?;
+    Some(path.to_string_lossy().into_owned())
 }
 
-/// A downloaded poster and how the user wants it saved.
-pub struct Poster {
-    bytes: Vec<u8>,
-    extension: &'static str,
-    mode: ThumbnailMode,
+/// A download that has just been moved to its final name.
+pub struct FinishedFile<'a> {
+    pub media_kind: DownloadMediaKind,
+    pub media_path: &'a Path,
+    pub video_id: Option<&'a str>,
+    pub cover: Option<&'a [u8]>,
+    /// The muxer already put the cover inside the media file.
+    pub cover_in_file: bool,
 }
 
-impl Poster {
-    /// The bytes to put inside the file, when the user wants that and the image is a
-    /// format MP4 can hold.
-    pub fn embeddable(&self) -> Option<Vec<u8>> {
-        (self.mode != ThumbnailMode::Sidecar
-            && matches!(self.extension, "jpg" | "png")
-            && self.bytes.len() <= super::muxer::MAX_COVER_BYTES)
-            .then(|| self.bytes.clone())
-    }
-}
-
-/// Fetches the poster once, before the file is written, so it can be embedded.
-pub async fn fetch_poster(
-    thumbnail_url: Option<&str>,
-    emitter: &ProgressEmitter,
-    pool: &SqlitePool,
-) -> Option<Poster> {
-    let url = thumbnail_url.map(str::trim).filter(|url| !url.is_empty())?;
-    let enabled = get_setting(pool, THUMBNAILS_ENABLED_KEY)
-        .await
-        .ok()
-        .flatten()
-        .is_none_or(|value| value != "false");
-    if !enabled {
-        return None;
-    }
-    let mode = match get_setting(pool, THUMBNAIL_MODE_KEY)
-        .await
-        .ok()
-        .flatten()
-        .as_deref()
-    {
-        Some("EMBED") => ThumbnailMode::Embed,
-        Some("BOTH") => ThumbnailMode::Both,
-        _ => ThumbnailMode::Sidecar,
-    };
-    match download_poster(url).await {
-        Ok((bytes, extension)) => Some(Poster {
-            bytes,
-            extension,
-            mode,
-        }),
-        Err(error) => {
-            emitter.log(format!("Could not fetch the poster image: {error}"));
-            None
-        }
-    }
-}
-
-/// `embedded_in_file` says the muxer already put the poster inside the media file.
 pub async fn write_sidecars(
     app: &AppHandle,
-    media_kind: DownloadMediaKind,
-    media_path: &Path,
-    video_id: Option<&str>,
-    poster: Option<Poster>,
-    embedded_in_file: bool,
+    file: &FinishedFile<'_>,
     emitter: &ProgressEmitter,
+    pool: &SqlitePool,
 ) {
-    if let Some(poster) = poster {
-        write_poster(media_kind, media_path, poster, embedded_in_file, emitter).await;
+    let media_kind = file.media_kind;
+    let media_path = file.media_path;
+    if let Some(cover) = file.cover {
+        write_cover(file, cover, emitter, pool).await;
     }
 
-    let Some(video_id) = video_id.map(str::trim).filter(|id| !id.is_empty()) else {
+    let Some(video_id) = file.video_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return;
     };
 
@@ -117,102 +71,64 @@ pub async fn write_sidecars(
     }
 }
 
-async fn write_poster(
-    media_kind: DownloadMediaKind,
-    media_path: &Path,
-    poster: Poster,
-    embedded_in_file: bool,
+async fn write_cover(
+    file: &FinishedFile<'_>,
+    cover: &[u8],
     emitter: &ProgressEmitter,
+    pool: &SqlitePool,
 ) {
-    let mut embedded = embedded_in_file && poster.embeddable().is_some();
-    if embedded {
-        emitter.log("Embedded cover art into the media file");
-    } else if poster.mode != ThumbnailMode::Sidecar
+    let mut embedded = file.cover_in_file;
+    if !embedded
         && matches!(
-            media_kind,
+            file.media_kind,
             DownloadMediaKind::Music | DownloadMediaKind::Audio
         )
     {
         // Audio saved as the original stream is tagged in place after the fact.
-        match embed_poster(
-            media_path.to_path_buf(),
-            poster.bytes.clone(),
-            poster.extension,
-        )
-        .await
-        {
-            Ok(()) => {
-                embedded = true;
-                emitter.log("Embedded cover art into the media file");
-            }
-            Err(error) => {
-                emitter.log(format!(
-                    "Could not embed cover art (saving separately instead): {error}"
-                ));
-            }
+        match embed_cover(file.media_path.to_path_buf(), cover.to_vec()).await {
+            Ok(()) => embedded = true,
+            Err(error) => emitter.log(format!(
+                "Could not embed cover art (saving it beside the file instead): {error}"
+            )),
         }
     }
+    if embedded {
+        emitter.log("Embedded cover art into the media file");
+    }
 
-    // EMBED falls back to a sidecar when embedding fails or is unsupported, so
-    // the artwork is never silently lost.
-    if poster.mode != ThumbnailMode::Embed || !embedded {
-        match write_poster_file(media_path, &poster.bytes, poster.extension).await {
-            Ok(path) => emitter.log(format!("Saved poster image to `{}`", path.display())),
+    let wants_sidecar = get_setting(pool, POSTER_SIDECAR_KEY)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|value| value == "true");
+    // A cover that could not go inside the file is never silently lost.
+    if wants_sidecar || !embedded {
+        match write_poster_file(file.media_path, cover).await {
+            Ok(Some(path)) => emitter.log(format!("Saved poster image to `{}`", path.display())),
+            Ok(None) => emitter.log("A file with the poster's name already exists; left it alone"),
             Err(error) => emitter.log(format!("Could not save the poster image: {error}")),
         }
     }
 }
 
-async fn download_poster(url: &str) -> Result<(Vec<u8>, &'static str), String> {
-    let response = crate::api::http::shared_client()
-        .get(url)
-        .timeout(Duration::from_secs(30))
-        .send()
-        .await
-        .map_err(|error| format!("request failed: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!("image server returned {}", response.status()));
+/// Writes `<media>.jpg` unless something else already owns that name.
+async fn write_poster_file(media_path: &Path, jpeg: &[u8]) -> Result<Option<PathBuf>, String> {
+    let path = media_path.with_extension("jpg");
+    if tokio::fs::try_exists(&path).await.unwrap_or(true) {
+        return Ok(None);
     }
-    let extension = poster_extension(&response, url);
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("could not read image: {error}"))?;
-    if bytes.is_empty() {
-        return Err("image was empty".to_string());
-    }
-    Ok((bytes.to_vec(), extension))
-}
-
-async fn write_poster_file(
-    media_path: &Path,
-    bytes: &[u8],
-    extension: &'static str,
-) -> Result<PathBuf, String> {
-    let path = media_path.with_extension(extension);
-    tokio::fs::write(&path, bytes)
+    tokio::fs::write(&path, jpeg)
         .await
         .map_err(|error| format!("could not write image: {error}"))?;
-    Ok(path)
+    Ok(Some(path))
 }
 
-async fn embed_poster(
-    media_path: PathBuf,
-    bytes: Vec<u8>,
-    extension: &'static str,
-) -> Result<(), String> {
+async fn embed_cover(media_path: PathBuf, jpeg: Vec<u8>) -> Result<(), String> {
     use lofty::config::WriteOptions;
     use lofty::file::TaggedFileExt;
     use lofty::picture::{MimeType, Picture, PictureType};
     use lofty::probe::Probe;
     use lofty::tag::{Tag, TagExt};
-
-    // MP4 `covr` and ID3 `APIC` only reliably support JPEG/PNG payloads.
-    let mime = match extension {
-        "jpg" => MimeType::Jpeg,
-        "png" => MimeType::Png,
-        other => return Err(format!("{other} artwork is not supported for embedding")),
-    };
 
     tokio::task::spawn_blocking(move || {
         let tagged = Probe::open(&media_path)
@@ -225,9 +141,9 @@ async fn embed_poster(
             .unwrap_or_else(|| Tag::new(tagged.primary_tag_type()));
         tag.remove_picture_type(PictureType::CoverFront);
         tag.push_picture(
-            Picture::unchecked(bytes)
+            Picture::unchecked(jpeg)
                 .pic_type(PictureType::CoverFront)
-                .mime_type(mime)
+                .mime_type(MimeType::Jpeg)
                 .build(),
         );
         tag.save_to_path(&media_path, WriteOptions::default())
@@ -235,30 +151,6 @@ async fn embed_poster(
     })
     .await
     .map_err(|error| format!("embed task failed: {error}"))?
-}
-
-fn poster_extension(response: &reqwest::Response, url: &str) -> &'static str {
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let url_extension = url
-        .split('?')
-        .next()
-        .unwrap_or(url)
-        .rsplit('.')
-        .next()
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    if content_type.contains("png") || url_extension == "png" {
-        "png"
-    } else if content_type.contains("webp") || url_extension == "webp" {
-        "webp"
-    } else {
-        "jpg"
-    }
 }
 
 async fn write_sponsorblock(media_path: &Path, video_id: &str) -> Result<Option<PathBuf>, String> {

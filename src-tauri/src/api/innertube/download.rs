@@ -179,6 +179,12 @@ fn video_codec(mime_type: &str) -> VideoCodec {
     }
 }
 
+/// "H.264", "VP9", "AV1"… for a video mime type.
+#[must_use]
+pub fn video_codec_name(mime_type: &str) -> &'static str {
+    video_codec_label(video_codec(mime_type))
+}
+
 fn audio_codec(mime_type: &str) -> AudioCodec {
     let value = mime_type.to_ascii_lowercase();
     if value.contains("opus") {

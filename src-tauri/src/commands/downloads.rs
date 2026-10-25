@@ -17,6 +17,7 @@ use sqlx::SqlitePool;
 
 use crate::api::innertube::download::{
     DownloadContainer, DownloadableFormat, container_from_mime, pair_downloadable_formats,
+    video_codec_name,
 };
 use crate::db::download_collections::DownloadCollectionRecord;
 use crate::db::downloads::DownloadRecord;
@@ -25,6 +26,8 @@ use crate::security::validation::validate_video_id;
 use crate::services::youtube_service::YoutubeService;
 use crate::streaming::proxy::{StreamSession, StreamSessionKind, StreamingManager};
 
+mod cover;
+mod metadata;
 mod muxer;
 mod sidecars;
 pub mod tags;
@@ -156,6 +159,10 @@ pub struct StartDownloadRequest {
     /// How much louder than the site's target the saved stream plays, so the offline copy is
     /// normalized like the streamed one.
     pub loudness_db: Option<f64>,
+    /// What the caller already knows about the item (artists, album, track number,
+    /// date…). The kind, id and title come from the request itself.
+    #[serde(default)]
+    pub tags: Option<tags::DownloadTags>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -233,6 +240,7 @@ struct DownloadContext {
     duration_seconds: Option<u64>,
     collection_db_id: Option<i64>,
     loudness_db: Option<f64>,
+    tags: tags::DownloadTags,
     pool: SqlitePool,
 }
 
@@ -368,6 +376,7 @@ pub async fn start_download(
         duration_seconds,
         collection_db_id,
         loudness_db,
+        tags: request_tags,
     } = request;
     let title = title.trim().to_string();
 
@@ -459,6 +468,14 @@ pub async fn start_download(
         )));
     }
 
+    let tags = request_download_tags(
+        request_tags,
+        media_kind,
+        video_id.as_deref(),
+        &title,
+        author.as_deref(),
+        thumbnail_url.as_deref(),
+    );
     let context = DownloadContext {
         id: id.clone(),
         title: title.clone(),
@@ -477,6 +494,7 @@ pub async fn start_download(
         duration_seconds,
         collection_db_id,
         loudness_db: loudness_db.filter(|db| db.is_finite()),
+        tags,
         pool,
     };
     let _ = app.emit(
@@ -753,6 +771,7 @@ async fn run_download(mut context: DownloadContext, app: AppHandle) {
         collection_db_id: context.collection_db_id,
     };
     emitter.emit(DownloadStatus::Queued, None);
+    let metadata_task = spawn_metadata(&app, &context, &emitter);
 
     let result = download_to_temp(&client, &remote_url, &context, &emitter, total, true).await;
 
@@ -771,20 +790,8 @@ async fn run_download(mut context: DownloadContext, app: AppHandle) {
             if let Ok(metadata) = tokio::fs::metadata(&context.file_path).await {
                 downloaded.store(metadata.len(), Ordering::Relaxed);
             }
-            let poster =
-                sidecars::fetch_poster(context.thumbnail_url.as_deref(), &emitter, &context.pool)
-                    .await;
-            sidecars::write_sidecars(
-                &app,
-                context.media_kind,
-                &context.file_path,
-                context.video_id.as_deref(),
-                poster,
-                false,
-                &emitter,
-            )
-            .await;
-            record_completed_download(&context).await;
+            let prepared = metadata_task.await.unwrap_or_default();
+            finish_download(&app, &context, &prepared, false, None, &emitter).await;
             emitter.log("Download completed successfully");
             emitter.emit(DownloadStatus::Completed, None);
         }
@@ -869,6 +876,7 @@ async fn run_adaptive_download(
         collection_db_id: context.collection_db_id,
     };
     emitter.emit(DownloadStatus::Downloading, None);
+    let metadata_task = spawn_metadata(&app, &context, &emitter);
 
     let video_context = child_download_context(&context, adaptive.video_path.clone());
     let audio_context = child_download_context(&context, adaptive.audio_path.clone());
@@ -952,11 +960,10 @@ async fn run_adaptive_download(
     }
 
     emitter.emit(DownloadStatus::Muxing, None);
-    let poster =
-        sidecars::fetch_poster(context.thumbnail_url.as_deref(), &emitter, &context.pool).await;
+    let prepared = metadata_task.await.unwrap_or_default();
     let metadata = muxer::EmbeddedMetadata {
-        tags: download_tags(&context),
-        cover: poster.as_ref().and_then(sidecars::Poster::embeddable),
+        tags: prepared.tags.clone(),
+        cover: prepared.cover.clone(),
     };
     emitter.log("Track downloads completed; starting native muxer");
     let video_path = adaptive.video_path.clone();
@@ -1015,17 +1022,17 @@ async fn run_adaptive_download(
                 emitter.emit(DownloadStatus::Failed, Some(error));
                 return;
             }
-            sidecars::write_sidecars(
+            let video_codec = video_codec_name(&adaptive.video_mime_type);
+            let cover_in_file = output_container == DownloadContainer::Mp4;
+            finish_download(
                 &app,
-                context.media_kind,
-                &context.file_path,
-                context.video_id.as_deref(),
-                poster,
-                true,
+                &context,
+                &prepared,
+                cover_in_file,
+                Some(video_codec),
                 &emitter,
             )
             .await;
-            record_completed_download(&context).await;
             emitter.log("Download and native mux completed successfully");
             emitter.emit(DownloadStatus::Completed, None);
         }
@@ -1069,6 +1076,7 @@ fn child_download_context(context: &DownloadContext, temp_path: PathBuf) -> Down
         duration_seconds: None,
         collection_db_id: None,
         loudness_db: None,
+        tags: tags::DownloadTags::default(),
         pool: context.pool.clone(),
     }
 }
@@ -1517,6 +1525,7 @@ async fn ensure_valid_adaptive_source(
         duration_seconds: None,
         collection_db_id: None,
         loudness_db: None,
+        tags: tags::DownloadTags::default(),
         pool: context.pool.clone(),
     };
     cleanup_partial_files(&repair_context).await;
@@ -1674,25 +1683,87 @@ fn is_transient_file_lock(error: &std::io::Error) -> bool {
     matches!(error.raw_os_error(), Some(5 | 32))
 }
 
-/// The tags known from the request itself.
-fn download_tags(context: &DownloadContext) -> tags::DownloadTags {
-    let kind = match context.media_kind {
+/// The tags a request starts with: what the caller sent, plus the kind, id, title and
+/// channel the request itself names.
+fn request_download_tags(
+    sent: Option<tags::DownloadTags>,
+    media_kind: DownloadMediaKind,
+    video_id: Option<&str>,
+    title: &str,
+    author: Option<&str>,
+    thumbnail_url: Option<&str>,
+) -> tags::DownloadTags {
+    let mut tags = sent.unwrap_or_default();
+    tags.kind = match media_kind {
         DownloadMediaKind::Video => tags::TagKind::Video,
         DownloadMediaKind::Music | DownloadMediaKind::Audio => tags::TagKind::Music,
     };
-    tags::DownloadTags {
-        kind,
-        video_id: context.video_id.clone().unwrap_or_default(),
-        title: context.title.clone(),
-        channel_name: context.author.clone(),
-        thumbnail_url: context.thumbnail_url.clone(),
-        ..tags::DownloadTags::default()
+    tags.video_id = video_id.unwrap_or_default().to_string();
+    tags.title = title.to_string();
+    if tags.channel_name.is_none() {
+        tags.channel_name = author
+            .map(ToOwned::to_owned)
+            .filter(|name| !name.is_empty());
     }
+    if tags.thumbnail_url.is_none() {
+        tags.thumbnail_url = thumbnail_url.map(ToOwned::to_owned);
+    }
+    tags.lyrics = None;
+    tags
+}
+
+/// Starts gathering tags and the cover alongside the transfer.
+fn spawn_metadata(
+    app: &AppHandle,
+    context: &DownloadContext,
+    emitter: &ProgressEmitter,
+) -> tokio::task::JoinHandle<metadata::PreparedMetadata> {
+    tokio::spawn(metadata::prepare(
+        app.clone(),
+        context.tags.clone(),
+        context.thumbnail_url.clone(),
+        emitter.clone(),
+    ))
+}
+
+/// Everything after the file has its final name: Flow's cover copy, companion
+/// files and the library row.
+async fn finish_download(
+    app: &AppHandle,
+    context: &DownloadContext,
+    prepared: &metadata::PreparedMetadata,
+    cover_in_file: bool,
+    video_codec: Option<&str>,
+    emitter: &ProgressEmitter,
+) {
+    let cover_path = match prepared.cover.as_deref() {
+        Some(cover) => sidecars::store_cover(app, &context.id, cover).await,
+        None => None,
+    };
+    sidecars::write_sidecars(
+        app,
+        &sidecars::FinishedFile {
+            media_kind: context.media_kind,
+            media_path: &context.file_path,
+            video_id: context.video_id.as_deref(),
+            cover: prepared.cover.as_deref(),
+            cover_in_file,
+        },
+        emitter,
+        &context.pool,
+    )
+    .await;
+    record_completed_download(context, prepared, cover_path, video_codec).await;
 }
 
 /// Persists a finished download into the library table so it shows on the Downloads
 /// page and marks its source as downloaded. Best-effort — a DB error never fails it.
-async fn record_completed_download(context: &DownloadContext) {
+async fn record_completed_download(
+    context: &DownloadContext,
+    prepared: &metadata::PreparedMetadata,
+    cover_path: Option<String>,
+    video_codec: Option<&str>,
+) {
     let file_size_bytes = tokio::fs::metadata(&context.file_path)
         .await
         .ok()
@@ -1702,11 +1773,12 @@ async fn record_completed_download(context: &DownloadContext) {
         DownloadMediaKind::Music => "music",
         DownloadMediaKind::Audio => "audio",
     };
+    let tags = &prepared.tags;
     let record = DownloadRecord {
         id: None,
         video_id: context.video_id.clone(),
         title: context.title.clone(),
-        author: context.author.clone(),
+        author: tags.display_artist().or_else(|| context.author.clone()),
         media_kind: media_kind.to_string(),
         file_path: context.file_path.to_string_lossy().into_owned(),
         thumbnail_url: context.thumbnail_url.clone(),
@@ -1718,6 +1790,27 @@ async fn record_completed_download(context: &DownloadContext) {
         collection_db_id: context.collection_db_id,
         loudness_db: context.loudness_db,
         created_at: String::new(),
+        cover_path,
+        artists_json: (!tags.artists.is_empty())
+            .then(|| serde_json::to_string(&tags.artists).ok())
+            .flatten(),
+        album: tags.album.clone(),
+        album_id: tags.album_id.clone(),
+        album_artist: tags.album_artist.clone(),
+        track_number: tags.track_number.map(i64::from),
+        track_total: tags.track_total.map(i64::from),
+        release_date: tags.release_date.clone(),
+        description: tags.description.clone(),
+        channel_id: tags.channel_id.clone(),
+        container: context
+            .file_path
+            .extension()
+            .map(|extension| extension.to_string_lossy().to_ascii_lowercase()),
+        video_codec: video_codec.map(ToOwned::to_owned),
+        chapters_json: (!prepared.chapters.is_empty())
+            .then(|| serde_json::to_string(&prepared.chapters).ok())
+            .flatten(),
+        sponsorblock_json: None,
     };
     if let Err(error) = crate::db::downloads::upsert_download(&context.pool, &record).await {
         tracing::warn!(%error, "Failed to record completed download in the library");
@@ -1815,7 +1908,7 @@ pub async fn delete_downloads(
         .await
         .map_err(ErrorResponse::from)?;
     for record in &records {
-        remove_download_files(Path::new(&record.file_path)).await;
+        remove_download_files(record).await;
     }
     crate::db::downloads::delete_downloads(&pool, &ids)
         .await
@@ -1828,7 +1921,7 @@ pub async fn clear_downloads(pool: State<'_, SqlitePool>) -> Result<(), ErrorRes
         .await
         .map_err(ErrorResponse::from)?;
     for record in &records {
-        remove_download_files(Path::new(&record.file_path)).await;
+        remove_download_files(record).await;
     }
     crate::db::downloads::clear_downloads(&pool)
         .await
@@ -1848,10 +1941,8 @@ pub struct OfflineStreamInfo {
     pub loudness_db: Option<f64>,
 }
 
-/// Cover art and lyrics are written next to the media file when a download
-/// finishes (see `sidecars::write_sidecars`). They are located by convention
-/// rather than recorded in the database, so downloads saved before this was
-/// wired up are picked up too.
+/// Downloads saved before Flow kept its own cover copy have their poster next to
+/// the media file instead; this finds it by name.
 async fn find_artwork_sidecar(media_path: &str) -> Option<(String, String)> {
     for (extension, content_type) in [
         ("jpg", "image/jpeg"),
@@ -1909,7 +2000,17 @@ pub async fn get_offline_stream(
     );
     let port = streaming_manager.get_port();
 
-    let artwork_url = match find_artwork_sidecar(&record.file_path).await {
+    let stored_cover = match record.cover_path.as_deref() {
+        Some(path) if tokio::fs::try_exists(path).await.unwrap_or(false) => {
+            Some((path.to_string(), "image/jpeg".to_string()))
+        }
+        _ => None,
+    };
+    let artwork = match stored_cover {
+        Some(cover) => Some(cover),
+        None => find_artwork_sidecar(&record.file_path).await,
+    };
+    let artwork_url = match artwork {
         Some((path, image_type)) => {
             let artwork_token = Uuid::new_v4().to_string();
             streaming_manager.register_local_session(artwork_token.clone(), path, image_type);
@@ -2102,7 +2203,7 @@ pub async fn delete_download_collections(
                 .await
                 .unwrap_or_default();
             for record in &records {
-                remove_download_files(Path::new(&record.file_path)).await;
+                remove_download_files(record).await;
             }
         }
         // Only removes the folder if our files left it empty (never nukes unrelated content).
@@ -2116,11 +2217,15 @@ pub async fn delete_download_collections(
         .map_err(ErrorResponse::from)
 }
 
-/// Removes a downloaded media file along with its best-effort companion sidecars.
-async fn remove_download_files(media_path: &Path) {
+/// Removes a downloaded media file, its companion files and Flow's cover copy.
+async fn remove_download_files(record: &DownloadRecord) {
+    let media_path = Path::new(&record.file_path);
     let _ = tokio::fs::remove_file(media_path).await;
     for extension in ["jpg", "png", "webp", "sponsorblock.json", "lrc"] {
         let _ = tokio::fs::remove_file(media_path.with_extension(extension)).await;
+    }
+    if let Some(cover) = record.cover_path.as_deref() {
+        let _ = tokio::fs::remove_file(cover).await;
     }
 }
 

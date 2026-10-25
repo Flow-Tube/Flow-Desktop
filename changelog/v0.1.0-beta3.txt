@@ -52,6 +52,7 @@ MUSIC
 - Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
 - Settings has a Music section with every music setting in one place: playback, audio and the equalizer, the full player's look, lyrics, the tray and scrobbling.
 - Swipe a song in Up next to the left to play it next, or to the right to remove it, by dragging the row or with two fingers on a trackpad, as on Android. Settings › Music can change what each side does. The row menu has the same actions, Delete removes the focused row, and clicking the song that is playing no longer starts it over.
+- Drag the music dock up, or swipe up on it with two fingers, and the full player grows out of it as on Android; it sinks back into the dock when it closes. The dock also has larger artwork with a playing animation and a clearer title.
 
 AUDIO
 - Equalizer boosts no longer distort: the music equalizer turns the whole curve down by its highest boost before the filters, and a soft limiter bends any peak that still goes past full scale.

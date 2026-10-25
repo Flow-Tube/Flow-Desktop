@@ -1059,10 +1059,10 @@ async fn run_adaptive_download(
             Some(&metadata),
             &control.cancelled,
         )?;
-        if output_container == DownloadContainer::Mp4 {
-            muxer::validate::validate_mp4(&output_path, expectation)?;
+        match output_container {
+            DownloadContainer::Mp4 => muxer::validate::validate_mp4(&output_path, expectation),
+            DownloadContainer::Mkv => muxer::validate::validate_matroska(&output_path, expectation),
         }
-        Ok(())
     })
     .await
     .map_err(|error| format!("Media muxer stopped unexpectedly: {error}"))
@@ -1083,7 +1083,7 @@ async fn run_adaptive_download(
                 return;
             }
             let video_codec = video_codec_name(&adaptive.video_mime_type);
-            let cover_in_file = output_container == DownloadContainer::Mp4;
+            let cover_in_file = prepared.cover.is_some();
             finish_download(
                 &app,
                 &context,

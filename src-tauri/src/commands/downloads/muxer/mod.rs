@@ -1,15 +1,16 @@
 use std::fs::File;
-use std::io::{BufWriter, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
+use webm_iterable::WebmIterator;
 use webm_iterable::matroska_spec::{BlockLacing, Master, MatroskaSpec, SimpleBlock};
-use webm_iterable::{WebmIterator, WebmWriter, WriteOptions};
 
 use crate::api::innertube::download::DownloadContainer;
 
 mod boxes;
 mod ilst;
+mod matroska;
 mod mp4_demux;
 mod mp4_writer;
 pub mod retag;
@@ -67,14 +68,29 @@ pub fn mux_adaptive_tracks(
 ) -> Result<(), String> {
     match output {
         DownloadContainer::Mp4 => mux_mp4(video, audio, output_path, metadata, cancelled),
-        DownloadContainer::Mkv => mux_matroska(
-            video.container,
-            video.path,
-            audio.container,
-            audio.path,
-            output_path,
-            cancelled,
-        ),
+        DownloadContainer::Mkv => {
+            let (video_entry, video_packets) =
+                open_track_source(video.container, video.path, 1, TrackKind::Video)?;
+            let (audio_entry, audio_packets) =
+                open_track_source(audio.container, audio.path, 2, TrackKind::Audio)?;
+            matroska::write_matroska(
+                output_path,
+                vec![
+                    matroska::MatroskaInput {
+                        entry: video_entry,
+                        packets: video_packets,
+                        is_video: true,
+                    },
+                    matroska::MatroskaInput {
+                        entry: audio_entry,
+                        packets: audio_packets,
+                        is_video: false,
+                    },
+                ],
+                metadata,
+                cancelled,
+            )
+        }
     }
 }
 
@@ -440,133 +456,6 @@ impl MatroskaTrack {
         }
         Ok(None)
     }
-}
-
-#[allow(clippy::too_many_lines)] // Mirrors the ordered EBML header, track, cluster, and finalization pipeline.
-fn mux_matroska(
-    video_container: DownloadContainer,
-    video_path: &Path,
-    audio_container: DownloadContainer,
-    audio_path: &Path,
-    output_path: &Path,
-    cancelled: &AtomicBool,
-) -> Result<(), String> {
-    let (video_entry, mut video) =
-        open_track_source(video_container, video_path, 1, TrackKind::Video)?;
-    let (audio_entry, mut audio) =
-        open_track_source(audio_container, audio_path, 2, TrackKind::Audio)?;
-    let output = File::create(output_path)
-        .map_err(|error| format!("Could not create Matroska output: {error}"))?;
-    let mut writer = WebmWriter::new(BufWriter::new(output));
-
-    writer
-        .write(&MatroskaSpec::Ebml(Master::Full(vec![
-            MatroskaSpec::EbmlVersion(1),
-            MatroskaSpec::EbmlReadVersion(1),
-            MatroskaSpec::EbmlMaxIdLength(4),
-            MatroskaSpec::EbmlMaxSizeLength(8),
-            MatroskaSpec::DocType("matroska".to_string()),
-            MatroskaSpec::DocTypeVersion(4),
-            MatroskaSpec::DocTypeReadVersion(2),
-        ])))
-        .map_err(|error| format!("Could not write Matroska header: {error}"))?;
-    writer
-        .write_advanced(
-            &MatroskaSpec::Segment(Master::Start),
-            WriteOptions::is_unknown_sized_element(),
-        )
-        .map_err(|error| format!("Could not start Matroska segment: {error}"))?;
-    writer
-        .write(&MatroskaSpec::Info(Master::Full(vec![
-            MatroskaSpec::TimestampScale(1_000_000),
-            MatroskaSpec::MuxingApp("Flow Desktop".to_string()),
-            MatroskaSpec::WritingApp("Flow Desktop".to_string()),
-        ])))
-        .map_err(|error| format!("Could not write Matroska info: {error}"))?;
-    writer
-        .write(&MatroskaSpec::Tracks(Master::Full(vec![
-            video_entry,
-            audio_entry,
-        ])))
-        .map_err(|error| format!("Could not write Matroska tracks: {error}"))?;
-
-    let mut video_packet = video.next_packet()?;
-    let mut audio_packet = audio.next_packet()?;
-    let mut cluster_start_ms: Option<i64> = None;
-    while video_packet.is_some() || audio_packet.is_some() {
-        if cancelled.load(Ordering::Relaxed) {
-            return Err("Download cancelled".into());
-        }
-        let take_video = match (&video_packet, &audio_packet) {
-            (Some(video), Some(audio)) => video.timestamp_ns <= audio.timestamp_ns,
-            (Some(_), None) => true,
-            _ => false,
-        };
-        let (packet, output_track) = if take_video {
-            (video_packet.take().expect("video packet is present"), 1)
-        } else {
-            (audio_packet.take().expect("audio packet is present"), 2)
-        };
-        let timestamp_ms = i64::try_from(packet.timestamp_ns / 1_000_000)
-            .map_err(|_| "Matroska timestamp is outside the supported range".to_string())?
-            .max(0);
-        let should_rotate = match cluster_start_ms {
-            None => true,
-            Some(start) => {
-                let relative = timestamp_ms - start;
-                relative > i64::from(i16::MAX)
-                    || (output_track == 1 && packet.keyframe && relative >= 5_000)
-            }
-        };
-        if should_rotate {
-            if cluster_start_ms.is_some() {
-                writer
-                    .write(&MatroskaSpec::Cluster(Master::End))
-                    .map_err(|error| format!("Could not finish Matroska cluster: {error}"))?;
-            }
-            cluster_start_ms = Some(timestamp_ms);
-            writer
-                .write(&MatroskaSpec::Cluster(Master::Start))
-                .map_err(|error| format!("Could not start Matroska cluster: {error}"))?;
-            let timestamp = u64::try_from(timestamp_ms)
-                .map_err(|_| "Matroska cluster timestamp cannot be negative".to_string())?;
-            writer
-                .write(&MatroskaSpec::Timestamp(timestamp))
-                .map_err(|error| format!("Could not write Matroska cluster timestamp: {error}"))?;
-        }
-        let relative = timestamp_ms - cluster_start_ms.unwrap_or(timestamp_ms);
-        let relative = i16::try_from(relative)
-            .map_err(|_| "Matroska block timestamp exceeded its cluster range".to_string())?;
-        let block = SimpleBlock::new_uncheked(
-            packet.data.as_slice(),
-            output_track,
-            relative,
-            packet.invisible,
-            packet.lacing,
-            packet.discardable,
-            packet.keyframe,
-        );
-        writer
-            .write(&MatroskaSpec::from(block))
-            .map_err(|error| format!("Could not write Matroska block: {error}"))?;
-        if take_video {
-            video_packet = video.next_packet()?;
-        } else {
-            audio_packet = audio.next_packet()?;
-        }
-    }
-    if cluster_start_ms.is_some() {
-        writer
-            .write(&MatroskaSpec::Cluster(Master::End))
-            .map_err(|error| format!("Could not finish Matroska cluster: {error}"))?;
-    }
-    writer
-        .write(&MatroskaSpec::Segment(Master::End))
-        .map_err(|error| format!("Could not finish Matroska segment: {error}"))?;
-    writer
-        .into_inner()
-        .map_err(|error| format!("Could not flush Matroska output: {error}"))?;
-    Ok(())
 }
 
 fn read_matroska_track_entry(

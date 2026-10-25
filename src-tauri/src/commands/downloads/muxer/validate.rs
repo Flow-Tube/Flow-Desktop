@@ -36,6 +36,57 @@ pub struct OutputExpectation {
     pub duration_seconds: Option<f64>,
 }
 
+/// Checks a Matroska file's tracks and the length its `Info` declares.
+pub fn validate_matroska(path: &Path, expected: OutputExpectation) -> Result<(), String> {
+    use webm_iterable::WebmIterator;
+    use webm_iterable::matroska_spec::{Master, MatroskaSpec};
+
+    let file =
+        File::open(path).map_err(|error| format!("Could not reopen the finished file: {error}"))?;
+    let mut duration_ms: Option<f64> = None;
+    let mut timestamp_scale = 1_000_000_u64;
+    let (mut video, mut audio) = (false, false);
+    for tag in WebmIterator::new(
+        file,
+        &[
+            MatroskaSpec::Info(Master::Start),
+            MatroskaSpec::TrackEntry(Master::Start),
+        ],
+    ) {
+        let tag = tag.map_err(|error| format!("The finished file is damaged: {error}"))?;
+        match tag {
+            MatroskaSpec::Info(Master::Full(children)) => {
+                for child in children {
+                    match child {
+                        MatroskaSpec::Duration(value) => duration_ms = Some(value),
+                        MatroskaSpec::TimestampScale(value) => timestamp_scale = value.max(1),
+                        _ => {}
+                    }
+                }
+            }
+            MatroskaSpec::TrackEntry(Master::Full(children)) => {
+                for child in children {
+                    if let MatroskaSpec::TrackType(kind) = child {
+                        video |= kind == 1;
+                        audio |= kind == 2;
+                    }
+                }
+            }
+            MatroskaSpec::Cluster(_) => break,
+            _ => {}
+        }
+    }
+    if expected.video && !video {
+        return Err("The finished file has no video track".into());
+    }
+    if expected.audio && !audio {
+        return Err("The finished file has no audio track".into());
+    }
+    let ticks = duration_ms.ok_or("The finished file does not state its length")?;
+    let scale = f64::from(u32::try_from(timestamp_scale).unwrap_or(u32::MAX));
+    check_duration(ticks * scale / 1_000_000_000.0, expected.duration_seconds)
+}
+
 pub fn validate_mp4(path: &Path, expected: OutputExpectation) -> Result<(), String> {
     let mut file =
         File::open(path).map_err(|error| format!("Could not reopen the finished file: {error}"))?;

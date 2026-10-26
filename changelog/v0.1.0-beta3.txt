@@ -239,6 +239,10 @@ DOWNLOADS
 - Albums and playlists ask before downloading, with the number of songs, length, size, the ones already saved and the folder.
 - Subtitles chosen for a download are saved beside the video as an .srt file and play in Flow offline.
 - New Downloads settings: preferred codec (Auto picks H.264 on a Mac, where VP9 videos do not play), music quality, subtitle language and how many downloads run at once. Video quality now defaults to 1080p, Auto means 1080p instead of the largest file, and the download dialog style setting is gone.
+- Download cards show the item's thumbnail or cover, the step it is on, and the speed and time left. Finished cards offer Play and Show in folder, failed ones Retry, and a finished card stays while the pointer is on it.
+- Several downloads, albums and playlists share one card that lists what is downloading, each with its artwork and progress.
+- Flow shows a system notification when a download finishes or fails while it is in the background; it can be turned off in Settings.
+- Download messages show the item's thumbnail, and the separate "Download started" message is gone.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.

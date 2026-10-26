@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useVideoReactions } from "../../lib/useVideoReactions";
 import { useUiStore } from "../../store/useUiStore";
+import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import {
   isShortSaved,
@@ -158,20 +159,37 @@ export function ShortActionBar({
 
   const toggleSavedShort = async () => {
     setMenuOpen(false);
+    const removing = savedToLibrary;
+    const item = { title: savedShort.title, image: savedShort.thumbnailUrl, shape: "portrait" as const };
     try {
-      if (savedToLibrary) {
+      if (removing) {
         await removeShortFromLibrary(short.id);
         setSavedToLibrary(false);
-        showToast({ variant: "success", message: getString("shorts_removed_from_library") });
+        showSaveToast({
+          destination: { kind: "savedShorts" },
+          item,
+          removed: true,
+          undo: async () => {
+            await saveShortToLibrary(savedShort);
+            setSavedToLibrary(true);
+          },
+        });
         return;
       }
 
       await saveShortToLibrary(savedShort);
       setSavedToLibrary(true);
-      showToast({ variant: "success", message: getString("shorts_saved_to_library") });
+      showSaveToast({
+        destination: { kind: "savedShorts" },
+        item,
+        undo: async () => {
+          await removeShortFromLibrary(short.id);
+          setSavedToLibrary(false);
+        },
+      });
     } catch (error) {
       console.error("Failed to update saved Shorts", error);
-      showToast({ variant: "error", message: getString("shorts_save_failed") });
+      showSaveFailedToast({ destination: { kind: "savedShorts" }, item, removed: removing, retry: toggleSavedShort });
     }
   };
 

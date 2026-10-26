@@ -15,7 +15,8 @@ import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
-import { useUiStore } from '../../store/useUiStore';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
+import { toggleSongLikeWithToast } from '../../lib/songLikeToast';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
@@ -129,8 +130,6 @@ function useSongLike(track: SongItem | null | undefined) {
   const likedItems = useLikesStore((s) => s.items);
   const loaded = useLikesStore((s) => s.loaded);
   const load = useLikesStore((s) => s.load);
-  const toggleSong = useLikesStore((s) => s.toggleSong);
-  const showToast = useUiStore((s) => s.showToast);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -143,16 +142,7 @@ function useSongLike(track: SongItem | null | undefined) {
 
   const toggle = async () => {
     if (!track) return;
-    try {
-      const nowLiked = await toggleSong(track);
-      showToast({
-        variant: "success",
-        message: getString(nowLiked ? "liked_added_toast" : "liked_removed_toast"),
-      });
-    } catch (error) {
-      console.warn("Failed to update song like", error);
-      showToast({ variant: "error", message: getString("liked_update_failed") });
-    }
+    await toggleSongLikeWithToast(track, liked);
   };
 
   return { liked, toggle };
@@ -275,7 +265,6 @@ function SquareCard({
   const albumSaved = useAlbumLibraryStore((s) => (albumBrowseId ? s.isSaved(albumBrowseId) : false));
   const toggleAlbumLibrary = useAlbumLibraryStore((s) => s.toggle);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
-  const showToast = useUiStore((s) => s.showToast);
   const albumDownload = useCollectionDownloadState(albumBrowseId ?? undefined, "album");
   const openCollectionDownload = useDownloadStore((s) => s.openCollection);
   const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 320));
@@ -318,11 +307,19 @@ function SquareCard({
             label: getString(albumSaved ? 'music_remove_from_library' : 'music_add_to_library'),
             icon: <Library size={16} />,
             onSelect: async () => {
-              const nowSaved = await toggleAlbumLibrary(item);
-              showToast({
-                variant: 'success',
-                message: getString(nowSaved ? 'music_saved_to_library' : 'music_removed_from_library'),
-              });
+              const toastItem = { title: item.title, image: item.thumbnail, shape: 'square' as const };
+              try {
+                const nowSaved = await toggleAlbumLibrary(item);
+                showSaveToast({
+                  destination: { kind: 'albums' },
+                  item: toastItem,
+                  removed: !nowSaved,
+                  undo: () => toggleAlbumLibrary(item),
+                });
+              } catch (error) {
+                console.error('Failed to update the album library', error);
+                showSaveFailedToast({ destination: { kind: 'albums' }, item: toastItem, removed: albumSaved });
+              }
             },
           },
           {

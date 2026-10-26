@@ -1,8 +1,23 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { StreamInfo, VideoSummary } from "../../types/video";
 import { invokeBackend } from "./errors";
 
 /** Window label of the pop-out player; must match `commands::pip::PIP_WINDOW_LABEL`. */
 export const PIP_WINDOW_LABEL = "pip";
+
+/** Whether this window is the pop-out player. False outside Tauri. */
+export function isPopOutWindow(): boolean {
+  try {
+    return getCurrentWindow().label === PIP_WINDOW_LABEL;
+  } catch {
+    return false;
+  }
+}
+
+/** Hands the pointer to the OS, which moves this window until it is released. */
+export function startWindowDrag(): Promise<void> {
+  return getCurrentWindow().startDragging();
+}
 
 /**
  * Playback handed between the main window and the pop-out player. Both windows

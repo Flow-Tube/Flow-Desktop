@@ -17,6 +17,8 @@ import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore
 import { copyText } from "../../../lib/clipboard";
 import { getString } from "../../../lib/i18n/index";
 import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
+import { LONG_PRESS_MS, shouldStartWindowDrag } from "../../../lib/pointerGesture";
+import { startWindowDrag } from "../../../lib/api/pip";
 import { StatsForNerds } from "../StatsForNerds";
 
 export type PlayerSeekFeedback = {
@@ -56,7 +58,8 @@ type PlayerGestureOverlayProps = {
   bitrate?: number | null;
   captionCount?: number;
   seekIntervalSeconds: number;
-  longPressPlaybackRate: PlaybackRate;
+  /** Null when hold-to-speed-up is off. */
+  longPressPlaybackRate: PlaybackRate | null;
   loopEnabled: boolean;
   setPlaybackRate: (playbackRate: PlaybackRate) => void;
   onToggleLoop: () => void;
@@ -67,6 +70,8 @@ type PlayerGestureOverlayProps = {
   onSeekFeedback: (direction: PlayerSeekFeedback["direction"], seconds: number) => void;
   onRevealControls: () => void;
   isCompact?: boolean;
+  /** In the pop-out window, a press that moves drags the window. */
+  canDragWindow?: boolean;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -110,6 +115,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   onSeekFeedback,
   onRevealControls,
   isCompact = false,
+  canDragWindow = false,
 }) => {
   const [centerFeedback, setCenterFeedback] = useState<CenterFeedback | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -122,6 +128,10 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const previousRateRef = useRef<PlaybackRate | null>(null);
   const longPressActiveRef = useRef(false);
   const suppressClickRef = useRef(false);
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null);
+  // The OS takes the pointer for a window drag, so the click that may follow
+  // arrives late or never; it is dropped here and forgotten on the next press.
+  const draggedRef = useRef(false);
 
   useEffect(() => {
     if (!centerFeedback) return;
@@ -171,6 +181,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
     longPressActiveRef.current = false;
     previousRateRef.current = null;
+    pressStartRef.current = null;
     setIsBoosting(false);
   };
 
@@ -178,19 +189,44 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     if (event.button !== 0) return;
     setContextMenu(null);
     onRevealControls();
+    draggedRef.current = false;
+    pressStartRef.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
 
+    if (longPressPlaybackRate === null) return;
     longPressTimerRef.current = setTimeout(() => {
       previousRateRef.current = playbackRate;
       longPressActiveRef.current = true;
       setIsBoosting(true);
       setPlaybackRate(longPressPlaybackRate);
       onRevealControls();
-    }, 420);
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = pressStartRef.current;
+    if (!start) return;
+    const drag = shouldStartWindowDrag({
+      canDragWindow,
+      boosting: longPressActiveRef.current,
+      dx: event.clientX - start.x,
+      dy: event.clientY - start.y,
+    });
+    if (!drag) return;
+    restorePlaybackRate();
+    draggedRef.current = true;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    void startWindowDrag().catch(() => {});
   };
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      return;
+    }
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
       return;
@@ -293,6 +329,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       <div
         className="absolute inset-0 z-[15] cursor-default"
         onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
         onPointerUp={restorePlaybackRate}
         onPointerCancel={restorePlaybackRate}
         onPointerLeave={restorePlaybackRate}

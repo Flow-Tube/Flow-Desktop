@@ -39,7 +39,7 @@
     "@zxing/browser": "^0.2.1",
     "dashjs": "5.2.1",
     "fflate": "^0.8.3",
-    "framer-motion": "13.0.0",
+    "framer-motion": "14.6.0",
     "hls.js": "1.7.3",
     "i18next": "^26.5.2",
     "lucide-react": "^1.59.0",

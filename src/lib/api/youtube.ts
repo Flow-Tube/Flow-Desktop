@@ -2,6 +2,7 @@ import type {
   SearchVideosRequest,
   SearchVideosResponse,
   VideoDetails,
+  VideoMetadata,
   StreamInfo,
   ChannelAbout,
   ChannelDetails,
@@ -125,6 +126,12 @@ export async function getRelatedVideos(videoId: string): Promise<RelatedPage> {
 export async function getMoreRelatedVideos(continuation: string): Promise<RelatedPage> {
   if (!(await isTauriEnv())) return { items: [], continuation: null };
   return invokeBackend<RelatedPage>("get_more_related_videos", { continuation });
+}
+
+/** A listed video's length, views, upload date and category, from one small request. */
+export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> {
+  if (!(await isTauriEnv())) throw new Error("Video metadata requires the desktop app.");
+  return invokeBackend<VideoMetadata>("get_video_metadata", { videoId });
 }
 
 /** The video's category, from a small request of its own. */

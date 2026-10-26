@@ -7,7 +7,7 @@ import { useSettingsStore } from "../store/useSettingsStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { getPlaylistDetails } from "../lib/api/youtube";
 import { getSponsorBlockSegments, getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
-import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
+import { useDownloadedVideoRecord, downloadRecordToVideo, downloadSponsorSegments } from "../lib/useDownloads";
 import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
 import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { useRelatedLane } from "../lib/useRelatedLane";
@@ -63,7 +63,7 @@ export function Watch() {
 
   const offlineRecord = useDownloadedVideoRecord(videoId);
   const playbackSettled = usePlaybackSettled(videoId);
-  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord, retryNonce);
+  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord, retryNonce, offlineRecord);
   const relatedLane = useRelatedLane(
     videoId,
     relatedVideosEnabled && !offlineRecord,
@@ -123,7 +123,7 @@ export function Watch() {
   }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
 
   useEffect(() => {
-    if (!videoId || offlineRecord) return;
+    if (!videoId) return;
 
     const loadSponsorBlock = async () => {
       try {
@@ -133,8 +133,11 @@ export function Watch() {
           setSponsorBlockSegments([]);
           return;
         }
+        // A saved video skips with the segments stored when it was downloaded.
         setSponsorBlockSegments(
-          await getSponsorBlockSegments(videoId, settings.serverUrl).catch(() => []),
+          offlineRecord
+            ? downloadSponsorSegments(offlineRecord)
+            : await getSponsorBlockSegments(videoId, settings.serverUrl).catch(() => []),
         );
       } catch (e) {
         console.warn("Failed SponsorBlock loading process", e);

@@ -165,6 +165,21 @@ export interface DownloadRecord {
   fileSizeBytes: number | null;
   collectionDbId: number | null;
   createdAt: string;
+  /** A loopback link to Flow's own copy of the cover; works offline. */
+  coverUrl: string | null;
+  /** JSON array of the credited artists. */
+  artistsJson: string | null;
+  album: string | null;
+  albumId: string | null;
+  releaseDate: string | null;
+  description: string | null;
+  channelId: string | null;
+  container: string | null;
+  videoCodec: string | null;
+  /** JSON array of `{ title, startSeconds, endSeconds }`. */
+  chaptersJson: string | null;
+  /** JSON array of SponsorBlock segments, saved when SponsorBlock was on. */
+  sponsorblockJson: string | null;
 }
 
 export function listDownloads(): Promise<DownloadRecord[]> {
@@ -231,6 +246,8 @@ export interface DownloadCollectionRecord {
   totalCount: number;
   downloadedCount: number;
   createdAt: string;
+  /** The first saved item's stored cover; works offline. */
+  coverUrl: string | null;
 }
 
 /** Creates (or reuses) a collection folder + record; returns the destination folder. */

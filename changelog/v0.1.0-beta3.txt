@@ -234,6 +234,11 @@ DOWNLOADS
 - Downloading a song no longer replaces the video download of the same item, and replacing a download removes the old file.
 - Downloads keep their artwork offline on the Downloads page, in the library and in the player, from the cover Flow saved with them.
 - A downloaded video keeps its description, chapters and SponsorBlock segments when watched offline. Segments are fetched only when SponsorBlock is on and are kept with the download instead of in a separate file.
+- A redesigned video download dialog: choose video or audio only, filter by codec, see every quality with its size, pick a dubbed audio track and subtitles, rename the file, change the folder, and see what is saved inside the file.
+- A redesigned music download dialog shows the cover and credits, offers High quality or Data saver with sizes, shows whether lyrics were found, and lets you fix the title, artist and album before saving.
+- Albums and playlists ask before downloading, with the number of songs, length, size, the ones already saved and the folder.
+- Subtitles chosen for a download are saved beside the video as an .srt file and play in Flow offline.
+- New Downloads settings: preferred codec (Auto picks H.264 on a Mac, where VP9 videos do not play), music quality, subtitle language and how many downloads run at once. Video quality now defaults to 1080p, Auto means 1080p instead of the largest file, and the download dialog style setting is gone.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.

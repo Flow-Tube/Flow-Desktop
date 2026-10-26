@@ -162,6 +162,9 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
 }
 
 const FULLSCREEN_SETTLE_MS = 120;
+/** Video kept behind the playhead. Keeping as much behind as ahead held up to
+ * two extra minutes of 1080p in memory. */
+const BACK_BUFFER_SECONDS = 30;
 const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -1587,7 +1590,7 @@ export const Player: React.FC<PlayerProps> = ({
         },
         buffer: {
           fastSwitchEnabled: false,
-          bufferToKeep: Math.max(60, bufferConfig.maxSeconds),
+          bufferToKeep: BACK_BUFFER_SECONDS,
           bufferPruningInterval: 120,
           bufferTimeDefault: bufferConfig.minSeconds,
           bufferTimeAtTopQuality: bufferConfig.maxSeconds,

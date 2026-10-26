@@ -150,6 +150,7 @@ export const SETTINGS = {
   DOWNLOAD_MUSIC_QUALITY: "download_music_quality",
   DOWNLOAD_SUBTITLE_LANGUAGE: "download_subtitle_language",
   DOWNLOAD_CONCURRENCY: "download_concurrency",
+  DOWNLOAD_NOTIFICATIONS: "download_notifications",
   DOWNLOAD_LYRICS_FILE: "download_lyrics_file",
 
   AUTO_BACKUP_FREQUENCY: "auto_backup_frequency",
@@ -379,6 +380,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.DOWNLOAD_MUSIC_QUALITY, "downloads", "High", "wired", ["High", "Low"]),
   str(SETTINGS.DOWNLOAD_SUBTITLE_LANGUAGE, "downloads", "", "wired"),
   num(SETTINGS.DOWNLOAD_CONCURRENCY, "downloads", 3, "wired", 1, 5),
+  bool(SETTINGS.DOWNLOAD_NOTIFICATIONS, "downloads", true, "wired"),
   bool(SETTINGS.PARALLEL_DOWNLOAD_ENABLED, "downloads", true, "wired"),
   num(SETTINGS.DOWNLOAD_THREADS, "downloads", 3, "wired", 1, 8),
   str(SETTINGS.DOWNLOAD_LOCATION, "downloads", "", "wired"),

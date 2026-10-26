@@ -16,6 +16,9 @@ export interface ToastState {
   variant: ToastVariant;
   durationMs: number;
   action?: ToastAction;
+  /** A thumbnail or cover shown at the start of the toast. */
+  image?: string | null;
+  imageShape?: "landscape" | "square";
 }
 
 export interface ShowToastOptions {
@@ -24,6 +27,8 @@ export interface ShowToastOptions {
   variant?: ToastVariant;
   durationMs?: number;
   action?: ToastAction;
+  image?: string | null;
+  imageShape?: "landscape" | "square";
 }
 
 const getSavedSidebarExpanded = () => {
@@ -93,7 +98,7 @@ export const useUiStore = create<UiState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setWatchSidebarOpen: (isWatchSidebarOpen) => set({ isWatchSidebarOpen }),
-  showToast: ({ title, message, variant = "info", durationMs = 2400, action }) => set({
+  showToast: ({ title, message, variant = "info", durationMs = 2400, action, image, imageShape }) => set({
     toast: {
       id: Date.now(),
       title,
@@ -101,6 +106,8 @@ export const useUiStore = create<UiState>((set) => ({
       variant,
       durationMs,
       action,
+      image,
+      imageShape,
     },
   }),
   dismissToast: () => set({ toast: null }),

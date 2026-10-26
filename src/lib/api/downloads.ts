@@ -149,6 +149,14 @@ export function getDownloadFormats(videoId: string): Promise<DownloadOptions> {
   return invokeBackend<DownloadOptions>("get_download_formats", { videoId });
 }
 
+export function revealDownload(videoId: string, mediaKind: DownloadMediaKind): Promise<void> {
+  return invokeBackend<void>("reveal_download", { videoId, mediaKind });
+}
+
+export function showDownloadNotification(title: string, body: string): Promise<void> {
+  return invokeBackend<void>("show_download_notification", { title, body });
+}
+
 export function setDownloadConcurrency(limit: number): Promise<void> {
   return invokeBackend<void>("set_download_concurrency", { limit });
 }

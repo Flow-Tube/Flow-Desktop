@@ -8,6 +8,8 @@ import {
 } from "../lib/api/downloads";
 import { startMusicDownload, startVideoDownload } from "../lib/downloadActions";
 import { SETTINGS } from "../lib/settings/schema";
+import { getString } from "../lib/i18n/index";
+import { notifyDownloadInBackground } from "../lib/downloadNotifications";
 import { useAppSettingsStore } from "./useAppSettingsStore";
 import { useDownloadCollectionsLibraryStore } from "./useDownloadCollectionsLibraryStore";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
@@ -148,6 +150,7 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
       if (!run) return {};
       return { runs: { ...state.runs, [dbId]: { ...run, active: false } } };
     });
+    notifyDownloadInBackground(getString("download_notification_collection", meta.title), meta.author ?? "");
     void useDownloadCollectionsLibraryStore.getState().load();
     void useDownloadsLibraryStore.getState().load();
   }

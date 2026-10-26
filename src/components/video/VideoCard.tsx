@@ -50,6 +50,8 @@ export interface VideoCardProps {
   showAddedDate?: boolean;
   /** Why a feed shows this card, at the top of its menu. */
   reason?: string;
+  /** Whether the card is drawn wider than `hqdefault`; left out, the screen's pixel ratio decides. */
+  highResThumbnail?: boolean;
 }
 
 /*
@@ -107,6 +109,7 @@ function VideoCardComponent({
   isDragActive = false,
   showAddedDate = false,
   reason,
+  highResThumbnail,
 }: VideoCardProps) {
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
@@ -177,8 +180,8 @@ function VideoCardComponent({
 
   const displayTitle = overriddenTitle || video.title;
   const thumbnailCandidates = useMemo(
-    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl),
-    [overriddenThumbnail, video.id, video.thumbnailUrl],
+    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, highResThumbnail),
+    [highResThumbnail, overriddenThumbnail, video.id, video.thumbnailUrl],
   );
   const { src: displayThumbnail, onError: handleThumbnailError } = useImageFallback(thumbnailCandidates);
 

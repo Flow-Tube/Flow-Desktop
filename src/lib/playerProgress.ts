@@ -44,3 +44,23 @@ export function setTextIfChanged(element: HTMLElement | null | undefined, value:
 export function progressTickBelongsTo(currentVideoId: string | null, streamVideoId: string | null): boolean {
   return currentVideoId !== null && currentVideoId === streamVideoId;
 }
+
+/**
+ * Whether a timeupdate is a real playback position. Changing the source resets
+ * the element to 0 and fires timeupdate before the new source has loaded, and a
+ * swap that waits to seek to its resume point is paused at 0 until it can.
+ * Publishing those ticks saved 0 as the watch position and made the next
+ * recovery start the video over.
+ */
+export function shouldPublishPlaybackTime(switchingSource: boolean, readyState: number, hasSource: boolean): boolean {
+  return hasSource && !switchingSource && readyState > 0;
+}
+
+/**
+ * Where a recovery resumes. Until the source it replaced has played, the
+ * position it was handed is the only true one; afterwards it is the last time
+ * the player published.
+ */
+export function recoveryPosition(lastPlayedTime: number, pendingResume: number | null): number {
+  return pendingResume ?? lastPlayedTime;
+}

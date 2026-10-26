@@ -110,6 +110,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const handleTimeUpdate = useCallback(
     (time: number, mediaDuration: number) => {
       if (!progressTickBelongsTo(currentVideo?.id ?? null, stream.streamVideoId)) return;
+      stream.notePlaybackTime(time);
       const nextDuration = mediaDuration || currentVideo?.durationSeconds || 1;
       setCurrentTime(time);
       setDuration(nextDuration);
@@ -139,7 +140,15 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
         isMusic: isMusicVideo(currentVideo),
       });
     },
-    [currentVideo, prefetchNextVideo, reportWatchTime, setCurrentTime, setDuration, stream.streamVideoId],
+    [
+      currentVideo,
+      prefetchNextVideo,
+      reportWatchTime,
+      setCurrentTime,
+      setDuration,
+      stream.streamVideoId,
+      stream.notePlaybackTime,
+    ],
   );
 
   // Keyed by video id alone: details or a channel id arriving later must not

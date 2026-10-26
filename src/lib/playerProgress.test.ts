@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { progressTickBelongsTo, segmentFillPercent, shouldAnimateProgress } from "./playerProgress";
+import {
+  progressTickBelongsTo,
+  recoveryPosition,
+  segmentFillPercent,
+  shouldAnimateProgress,
+  shouldPublishPlaybackTime,
+} from "./playerProgress";
 
 describe("shouldAnimateProgress", () => {
   it("animates only a playing bar someone can see, or a scrub", () => {
@@ -29,5 +35,34 @@ describe("progressTickBelongsTo", () => {
     expect(progressTickBelongsTo("new", "old")).toBe(false);
     expect(progressTickBelongsTo("new", null)).toBe(false);
     expect(progressTickBelongsTo(null, null)).toBe(false);
+  });
+});
+
+describe("shouldPublishPlaybackTime", () => {
+  it("publishes only a loaded source that is not mid-swap", () => {
+    expect(shouldPublishPlaybackTime(false, 4, true)).toBe(true);
+    expect(shouldPublishPlaybackTime(false, 1, true)).toBe(true);
+  });
+
+  it("drops the reset to 0 a new source fires before it loads", () => {
+    expect(shouldPublishPlaybackTime(false, 0, true)).toBe(false);
+  });
+
+  it("drops ticks while a swap waits to seek to its resume point", () => {
+    expect(shouldPublishPlaybackTime(true, 4, true)).toBe(false);
+  });
+
+  it("drops ticks once the source is gone", () => {
+    expect(shouldPublishPlaybackTime(false, 4, false)).toBe(false);
+  });
+});
+
+describe("recoveryPosition", () => {
+  it("keeps the handed position until the new source has played", () => {
+    expect(recoveryPosition(0, 2400)).toBe(2400);
+  });
+
+  it("follows playback once it has", () => {
+    expect(recoveryPosition(2460, null)).toBe(2460);
   });
 });

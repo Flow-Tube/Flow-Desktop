@@ -20,6 +20,7 @@ import { MiniPlayerControls } from "./MiniPlayerControls";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
+import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
 import {
   PlayerGestureOverlay,
   type PlayerSeekFeedback,
@@ -2388,6 +2389,9 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
+    if (!shouldPublishPlaybackTime(sourceSwitchingRef.current, video.readyState, lastMediaIdentityRef.current !== "")) {
+      return;
+    }
     const nextTime = video.currentTime;
     const nextDuration = video.duration || duration || 0;
 

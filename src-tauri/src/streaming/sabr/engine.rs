@@ -200,13 +200,11 @@ impl SabrEngine {
             .or_else(|| audio_tracks.first());
         let (active_key, active_itag) = match initial {
             Some(t) => {
-                state.set_audio_format(
-                    FormatId::new(
-                        t.format.itag,
-                        t.format.last_modified,
-                        t.format.xtags.clone(),
-                    ),
-                );
+                state.set_audio_format(FormatId::new(
+                    t.format.itag,
+                    t.format.last_modified,
+                    t.format.xtags.clone(),
+                ));
                 (t.key.clone(), t.format.itag)
             }
             None => (String::new(), selected.audio.itag),
@@ -735,13 +733,11 @@ impl SabrEngine {
             .store(track.format.itag, Ordering::Relaxed);
         {
             let mut st = self.state.lock().await;
-            st.set_audio_format(
-                FormatId::new(
-                    track.format.itag,
-                    track.format.last_modified,
-                    track.format.xtags.clone(),
-                ),
-            );
+            st.set_audio_format(FormatId::new(
+                track.format.itag,
+                track.format.last_modified,
+                track.format.xtags.clone(),
+            ));
         }
         {
             let mut store = self.store.lock().await;

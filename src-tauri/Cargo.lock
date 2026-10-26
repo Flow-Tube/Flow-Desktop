@@ -1553,6 +1553,7 @@ dependencies = [
  "webkit2gtk",
  "webm-iterable",
  "windows",
+ "windows-core",
  "windows-registry",
  "zeroize",
 ]

@@ -300,6 +300,10 @@ pub fn run() {
             #[cfg(windows)]
             services::win_notify::ensure_setup(app.handle());
 
+            // Name Flow's audio in the volume mixer instead of "Microsoft Edge WebView2".
+            #[cfg(windows)]
+            services::win_mixer::start(app.handle());
+
             api::http::warm_shared_client();
 
             // Initialize native Innertube extractor (shared by the video path and

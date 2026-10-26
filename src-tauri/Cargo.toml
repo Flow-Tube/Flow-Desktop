@@ -94,7 +94,16 @@ local-ip-address = "0.6"
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.8"
 windows-registry = "0.6"
-windows = { version = "0.62", features = ["Win32_UI_Shell"] }
+# Core Audio and the process snapshot name Flow's WebView2 audio in the volume mixer.
+windows = { version = "0.62", features = [
+  "Win32_UI_Shell",
+  "Win32_Media_Audio",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_System_Diagnostics_ToolHelp",
+] }
+windows-core = "0.62"
 
 # Single-instance: forward a second `flow://` launch to the running window
 # instead of spawning a duplicate. The "deep-link" feature makes it hand the

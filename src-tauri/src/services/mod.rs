@@ -11,5 +11,7 @@ pub mod shorts_service;
 pub mod subscription_feed;
 pub mod taste_service;
 #[cfg(windows)]
+pub mod win_mixer;
+#[cfg(windows)]
 pub mod win_notify;
 pub mod youtube_service;

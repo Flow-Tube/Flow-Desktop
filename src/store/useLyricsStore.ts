@@ -9,7 +9,14 @@ import {
   type LyricsCandidate,
   type LyricsRequest,
 } from "../lib/lyrics/lyricsHelper";
-import { getOfflineLyrics, onOfflineLyrics, parseOfflineLyrics, type OfflineLyrics } from "../lib/lyrics/offline";
+import {
+  getOfflineLyrics,
+  OFFLINE_LYRICS_PROVIDER,
+  onOfflineLyrics,
+  parseOfflineLyrics,
+  type OfflineLyrics,
+} from "../lib/lyrics/offline";
+import { getLyricsSourceChoice, setLyricsSourceChoice } from "../lib/lyrics/sourceChoice";
 import { isAbortError } from "../lib/lyrics/inFlight";
 import { entriesAreSynced, lyricsQuality } from "../lib/lyrics/sync";
 import { getString } from "../lib/i18n/index";
@@ -60,7 +67,7 @@ export const EMPTY_LYRICS: LyricsView = {
   loading: false,
 };
 
-const OFFLINE_PROVIDER = "Downloaded";
+const OFFLINE_PROVIDER = OFFLINE_LYRICS_PROVIDER;
 
 function viewOf(result: LyricsResult): LyricsView {
   const synced = entriesAreSynced(result.entries);
@@ -96,14 +103,21 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     const controller = new AbortController();
     lookup = controller;
     const offline = getOfflineLyrics(request.videoId);
+    const choice = getLyricsSourceChoice(request.videoId);
+    const showSaved = offline !== null && choice !== "online";
     const sameSong = get().videoId === request.videoId;
     const session = sameSong ? get() : SESSION_RESET;
     set({
       videoId: request.videoId,
       request,
       ...(sameSong ? {} : SESSION_RESET),
-      ...(offline ? offlineView(offline, session) : { ...EMPTY_LYRICS, loading: true }),
+      ...(showSaved ? offlineView(offline, session) : { ...EMPTY_LYRICS, loading: true }),
     });
+    // The user chose the copy saved with the download: no lookup at all.
+    if (showSaved && choice === "downloaded") {
+      lookup = null;
+      return;
+    }
 
     getLyrics(request, controller.signal).then(
       (result) => {
@@ -121,7 +135,8 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
       (error: unknown) => {
         if (lookup !== controller || isAbortError(error)) return;
         lookup = null;
-        set((s) => (s.providerName === OFFLINE_PROVIDER ? {} : { ...EMPTY_LYRICS }));
+        const saved = getOfflineLyrics(request.videoId);
+        set((s) => (s.providerName === OFFLINE_PROVIDER ? {} : saved ? offlineView(saved, s) : { ...EMPTY_LYRICS }));
       },
     );
   };
@@ -144,6 +159,8 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     refresh: () => {
       const { request } = get();
       if (!request) return;
+      // A refresh asks the providers again, so the song goes back to choosing automatically.
+      setLyricsSourceChoice(request.videoId, null);
       forceRefresh(request.videoId);
       run(request);
     },
@@ -166,7 +183,14 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
       browse?.abort();
       const controller = new AbortController();
       browse = controller;
-      set({ isBrowsing: true, candidates: [] });
+      // The copy saved with the download is always offered first, next to every provider.
+      const saved = getOfflineLyrics(request.videoId);
+      set({
+        isBrowsing: true,
+        candidates: saved
+          ? [{ providerName: OFFLINE_PROVIDER, entries: saved.entries, synced: entriesAreSynced(saved.entries) }]
+          : [],
+      });
       void getAllLyrics(
         request,
         (candidate) => {
@@ -186,14 +210,42 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
       browse = null;
       set({ isBrowsing: false });
     },
-    applyCandidate: (candidate) => showManual(candidate.entries, candidate.providerName, false),
+    applyCandidate: (candidate) => {
+      const { videoId } = get();
+      if (!videoId) return;
+      const saved = getOfflineLyrics(videoId);
+      if (candidate.providerName === OFFLINE_PROVIDER) {
+        if (!saved) return;
+        lookup?.abort();
+        lookup = null;
+        setLyricsSourceChoice(videoId, "downloaded");
+        set((s) => ({ ...offlineView(saved, s), loading: false }));
+        return;
+      }
+      if (saved) setLyricsSourceChoice(videoId, "online");
+      showManual(candidate.entries, candidate.providerName, false);
+    },
     // An edit keeps the timing nudge: it was most likely made to match it.
-    applyEdited: (text) => showManual(parseOfflineLyrics(text), getString("lyrics_source_edited"), true),
+    applyEdited: (text) => {
+      const { videoId } = get();
+      if (videoId && getOfflineLyrics(videoId)) setLyricsSourceChoice(videoId, "online");
+      showManual(parseOfflineLyrics(text), getString("lyrics_source_edited"), true);
+    },
   };
 });
 
 onOfflineLyrics((videoId, lyrics) => {
   const state = useLyricsStore.getState();
-  if (state.videoId !== videoId || lyricsQuality(lyrics.entries) <= lyricsQuality(state.entries)) return;
+  if (state.videoId !== videoId) return;
+  const choice = getLyricsSourceChoice(videoId);
+  if (choice === "downloaded") {
+    lookup?.abort();
+    lookup = null;
+    useLyricsStore.setState({ ...offlineView(lyrics, state), loading: false });
+    return;
+  }
+  // With the providers chosen, the saved copy only fills in when they found nothing.
+  if (choice === "online" && (state.loading || state.entries.length > 0)) return;
+  if (lyricsQuality(lyrics.entries) <= lyricsQuality(state.entries)) return;
   useLyricsStore.setState(offlineView(lyrics, state));
 });

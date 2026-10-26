@@ -109,3 +109,44 @@ pub fn validate_browse_id(id: &str) -> AppResult<()> {
         ))
     }
 }
+
+/// Links Flow hands to the system to open: web pages and mail only, never a
+/// file, a script or another app's scheme.
+pub fn validate_external_url(url: &str) -> AppResult<()> {
+    let parsed =
+        reqwest::Url::parse(url.trim()).map_err(|_| AppError::Validation("Invalid link".into()))?;
+    match parsed.scheme() {
+        "http" | "https" if parsed.host_str().is_some_and(|host| !host.is_empty()) => Ok(()),
+        "mailto" => Ok(()),
+        _ => Err(AppError::Validation(
+            "Only web and mail links can be opened".into(),
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_external_url;
+
+    #[test]
+    fn web_and_mail_links_open() {
+        assert!(validate_external_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ").is_ok());
+        assert!(validate_external_url("http://example.com").is_ok());
+        assert!(validate_external_url("mailto:someone@example.com").is_ok());
+    }
+
+    #[test]
+    fn files_scripts_and_other_schemes_do_not() {
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "smb://server/share",
+            "flow://watch?v=x",
+            "https://",
+            "not a url",
+            "",
+        ] {
+            assert!(validate_external_url(url).is_err(), "{url}");
+        }
+    }
+}

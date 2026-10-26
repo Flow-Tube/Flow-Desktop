@@ -1,16 +1,19 @@
 //! Sends what the music player plays to every signed-in service. Counted listens are queued first
 //! and sent by the worker, so a listen survives going offline or quitting.
+//!
+//! The keychain is read only to send, at most once per launch, and a refusal is remembered until
+//! the listener retries: on macOS each read of an item another build wrote is a password prompt.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use serde::Serialize;
 use sqlx::SqlitePool;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 
 use super::SignInError;
 use super::audioscrobbler::{self, Client, Keys};
-use super::credentials::{self, CredentialError, CredentialStore, OwnKey};
+use super::credentials::{self, CredentialError, CredentialStore, Credentials, OwnKey};
+use super::index::{self, Index};
 use super::listenbrainz;
 use super::models::{Account, ScrobbleEntry, SendOutcome, Service};
 use super::queue::{self, Table};
@@ -19,12 +22,12 @@ use crate::errors::{AppError, AppResult};
 
 const LAST_FM: Client = Client::new(audioscrobbler::LASTFM_URL);
 const LIBRE_FM: Client = Client::new(audioscrobbler::LIBREFM_URL);
-const VISIBLE_KEY_CHARS: usize = 6;
 
-#[derive(Clone, Default)]
-struct Credentials {
-    accounts: HashMap<Service, Account>,
-    own_key: OwnKey,
+enum Cache {
+    Unread,
+    Loaded(Credentials),
+    /// Why the keychain could not be read; kept so later sends do not ask again.
+    Refused(String),
 }
 
 #[derive(Debug, Serialize)]
@@ -45,15 +48,16 @@ pub struct ScrobbleStatus {
     pub own_key_enabled: bool,
     /// The first characters of the listener's own API key, never the secret.
     pub own_key_hint: Option<String>,
-    /// Set when the system keychain cannot be used, so nothing can sign in.
+    /// Set when the system keychain cannot be used, so nothing can sign in or send.
     pub keychain_error: Option<String>,
 }
 
 pub struct Scrobbler {
     pool: SqlitePool,
     store: Arc<dyn CredentialStore>,
-    cache: Mutex<Option<Credentials>>,
-    flush_lock: tokio::sync::Mutex<()>,
+    /// Held across a keychain read, so two callers never raise two prompts.
+    cache: Mutex<Cache>,
+    flush_lock: Mutex<()>,
     pub(super) wake: Notify,
 }
 
@@ -62,8 +66,8 @@ impl Scrobbler {
         Self {
             pool,
             store,
-            cache: Mutex::new(None),
-            flush_lock: tokio::sync::Mutex::new(()),
+            cache: Mutex::new(Cache::Unread),
+            flush_lock: Mutex::new(()),
             wake: Notify::new(),
         }
     }
@@ -93,56 +97,105 @@ impl Scrobbler {
             .map_err(|error| AppError::Keychain(error.to_string()))
     }
 
-    async fn credentials(&self) -> AppResult<Credentials> {
-        if let Some(cached) = self.lock_cache().clone() {
-            return Ok(cached);
+    /// The credentials, reading the keychain only if this launch has not yet.
+    async fn loaded(&self, cache: &mut Cache) -> AppResult<Credentials> {
+        match cache {
+            Cache::Loaded(credentials) => return Ok(credentials.clone()),
+            Cache::Refused(reason) => return Err(AppError::Keychain(reason.clone())),
+            Cache::Unread => {}
         }
-        let loaded = self
-            .blocking(|store| {
-                let mut accounts = HashMap::new();
-                for service in Service::ALL {
-                    if let Some(account) = credentials::read_account(store, service)? {
-                        accounts.insert(service, account);
-                    }
-                }
-                Ok(Credentials {
-                    accounts,
-                    own_key: credentials::read_own_key(store)?,
-                })
-            })
-            .await?;
-        *self.lock_cache() = Some(loaded.clone());
-        Ok(loaded)
+        match self.blocking(credentials::load).await {
+            Ok(loaded) => {
+                index::rebuild(&self.pool, &loaded).await?;
+                *cache = Cache::Loaded(loaded.clone());
+                Ok(loaded)
+            }
+            Err(AppError::Keychain(reason)) => {
+                tracing::warn!(%reason, "Scrobbling keychain unavailable until retried");
+                *cache = Cache::Refused(reason.clone());
+                Err(AppError::Keychain(reason))
+            }
+            Err(error) => Err(error),
+        }
     }
 
-    fn lock_cache(&self) -> std::sync::MutexGuard<'_, Option<Credentials>> {
-        self.cache.lock().unwrap_or_else(PoisonError::into_inner)
+    async fn credentials(&self) -> AppResult<Credentials> {
+        let mut cache = self.cache.lock().await;
+        self.loaded(&mut cache).await
+    }
+
+    /// Who is signed in. Reads the keychain only the first time ever, before the index exists.
+    async fn index(&self) -> AppResult<Index> {
+        if let Some(index) = index::read(&self.pool).await? {
+            return Ok(index);
+        }
+        self.credentials().await?;
+        Ok(index::read(&self.pool).await?.unwrap_or_default())
+    }
+
+    /// Forgets a refused keychain and reads it again, as the listener asked.
+    pub async fn retry_keychain(&self) -> AppResult<()> {
+        let mut cache = self.cache.lock().await;
+        if matches!(*cache, Cache::Refused(_)) {
+            *cache = Cache::Unread;
+        }
+        self.loaded(&mut cache).await?;
+        drop(cache);
+        self.wake.notify_one();
+        Ok(())
+    }
+
+    /// Applies `change` to the credentials and writes them back to the keychain and the index.
+    async fn update(
+        &self,
+        change: impl FnOnce(&mut Credentials),
+    ) -> AppResult<(Credentials, Credentials)> {
+        let mut cache = self.cache.lock().await;
+        let before = self.loaded(&mut cache).await?;
+        let mut after = before.clone();
+        change(&mut after);
+        let stored = after.clone();
+        self.blocking(move |store| credentials::save(store, &stored))
+            .await?;
+        index::rebuild(&self.pool, &after).await?;
+        *cache = Cache::Loaded(after.clone());
+        Ok((before, after))
     }
 
     pub async fn status(&self) -> AppResult<ScrobbleStatus> {
-        let (creds, keychain_error) = match self.credentials().await {
-            Ok(creds) => (creds, None),
-            Err(error) => (Credentials::default(), Some(error.to_string())),
+        let (index, keychain_error) = match self.index().await {
+            Ok(index) => {
+                let refused = match &*self.cache.lock().await {
+                    Cache::Refused(reason) => Some(reason.clone()),
+                    _ => None,
+                };
+                (index, refused)
+            }
+            Err(AppError::Keychain(reason)) => (Index::default(), Some(reason)),
+            Err(error) => return Err(error),
         };
         let mut services = Vec::new();
         for service in Service::ALL {
-            let account = creds.accounts.get(&service);
+            let user_name = index.user_name(service);
             services.push(ServiceStatus {
                 service,
-                signed_in: account.is_some(),
-                user_name: account
-                    .map(|a| a.user_name.clone())
-                    .filter(|name| !name.is_empty()),
+                signed_in: user_name.is_some(),
+                user_name: user_name
+                    .filter(|name| !name.is_empty())
+                    .map(str::to_string),
                 waiting: queue::waiting(&self.pool, service).await?,
             });
         }
-        let api_key = creds.own_key.api_key.trim();
+        let own_key = index.own_key;
         Ok(ScrobbleStatus {
             services,
-            last_fm_ready: Self::last_fm_keys(&creds.own_key).is_some(),
-            own_key_enabled: creds.own_key.enabled,
-            own_key_hint: (!api_key.is_empty())
-                .then(|| api_key.chars().take(VISIBLE_KEY_CHARS).collect()),
+            last_fm_ready: if own_key.enabled {
+                own_key.usable
+            } else {
+                Keys::bundled_last_fm().is_usable()
+            },
+            own_key_enabled: own_key.enabled,
+            own_key_hint: own_key.hint,
             keychain_error,
         })
     }
@@ -180,19 +233,15 @@ impl Scrobbler {
     }
 
     async fn set_account(&self, service: Service, account: Option<Account>) -> AppResult<()> {
-        let stored = account.clone();
-        self.blocking(move |store| credentials::write_account(store, service, stored.as_ref()))
-            .await?;
-        if let Some(cache) = self.lock_cache().as_mut() {
-            match account {
-                Some(account) => {
-                    cache.accounts.insert(service, account);
-                }
-                None => {
-                    cache.accounts.remove(&service);
-                }
+        self.update(|creds| match account {
+            Some(account) => {
+                creds.accounts.insert(service, account);
             }
-        }
+            None => {
+                creds.accounts.remove(&service);
+            }
+        })
+        .await?;
         Ok(())
     }
 
@@ -210,22 +259,22 @@ impl Scrobbler {
         api_key: Option<String>,
         secret: Option<String>,
     ) -> AppResult<()> {
-        let before = self.credentials().await?.own_key;
-        let next = OwnKey {
-            enabled,
-            api_key: api_key.map_or_else(|| before.api_key.clone(), |key| key.trim().to_string()),
-            secret: secret
-                .map_or_else(|| before.secret.clone(), |secret| secret.trim().to_string()),
-        };
-        let stored = next.clone();
-        self.blocking(move |store| credentials::write_own_key(store, &stored))
+        let (before, after) = self
+            .update(|creds| {
+                let own_key = &mut creds.own_key;
+                own_key.enabled = enabled;
+                if let Some(key) = api_key {
+                    own_key.api_key = key.trim().to_string();
+                }
+                if let Some(secret) = secret {
+                    own_key.secret = secret.trim().to_string();
+                }
+            })
             .await?;
-        if let Some(cache) = self.lock_cache().as_mut() {
-            cache.own_key = next.clone();
-        }
+        let (before, next) = (before.own_key, after.own_key);
         let changed = before.enabled != next.enabled
             || (next.enabled && (before.api_key != next.api_key || before.secret != next.secret));
-        if changed {
+        if changed && after.accounts.contains_key(&Service::LastFm) {
             self.sign_out(Service::LastFm).await?;
         }
         Ok(())
@@ -236,6 +285,9 @@ impl Scrobbler {
         let Some(entry) = rules::entry_for(track, now_ms()) else {
             return Ok(());
         };
+        if self.index().await?.accounts.is_empty() {
+            return Ok(());
+        }
         let creds = self.credentials().await?;
         for (service, account) in &creds.accounts {
             let outcome = match service {
@@ -284,12 +336,12 @@ impl Scrobbler {
         let Some(entry) = rules::entry_for(track, started_at_ms) else {
             return Ok(false);
         };
-        let creds = self.credentials().await?;
-        if creds.accounts.is_empty() {
+        let index = self.index().await?;
+        if index.accounts.is_empty() {
             return Ok(false);
         }
-        for service in creds.accounts.keys() {
-            queue::enqueue(&self.pool, *service, &entry).await?;
+        for service in index.services() {
+            queue::enqueue(&self.pool, service, &entry).await?;
         }
         self.wake.notify_one();
         Ok(true)
@@ -300,10 +352,10 @@ impl Scrobbler {
         let Some(love) = rules::love_for(track, loved) else {
             return Ok(());
         };
-        let creds = self.credentials().await?;
+        let index = self.index().await?;
         let mut queued = false;
-        for service in creds.accounts.keys().filter(|s| s.takes_loves()) {
-            queue::enqueue_love(&self.pool, *service, &love).await?;
+        for service in index.services().filter(|s| s.takes_loves()) {
+            queue::enqueue_love(&self.pool, service, &love).await?;
             queued = true;
         }
         if queued {
@@ -425,18 +477,56 @@ fn now_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
     use super::*;
     use crate::scrobble::credentials::memory::MemoryStore;
     use sqlx::sqlite::SqlitePoolOptions;
 
-    async fn scrobbler() -> Scrobbler {
+    /// Counts reads, and can refuse them as a denied macOS prompt does.
+    #[derive(Default)]
+    struct CountingStore {
+        inner: MemoryStore,
+        reads: AtomicUsize,
+        refuse: AtomicBool,
+    }
+
+    impl CredentialStore for CountingStore {
+        fn read(&self, name: &str) -> Result<Option<String>, CredentialError> {
+            self.reads.fetch_add(1, Ordering::SeqCst);
+            if self.refuse.load(Ordering::SeqCst) {
+                return Err(CredentialError("refused"));
+            }
+            self.inner.read(name)
+        }
+
+        fn write(&self, name: &str, value: &str) -> Result<(), CredentialError> {
+            self.inner.write(name, value)
+        }
+
+        fn remove(&self, name: &str) -> Result<(), CredentialError> {
+            self.inner.remove(name)
+        }
+    }
+
+    impl CountingStore {
+        fn reads(&self) -> usize {
+            self.reads.load(Ordering::SeqCst)
+        }
+    }
+
+    async fn pool() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        Scrobbler::new(pool, Arc::new(MemoryStore::default()))
+        pool
+    }
+
+    async fn scrobbler() -> Scrobbler {
+        Scrobbler::new(pool().await, Arc::new(MemoryStore::default()))
     }
 
     fn track(duration_ms: u64) -> TrackInfo {
@@ -579,5 +669,118 @@ mod tests {
             .await
             .unwrap();
         assert!(scrobbler.flush().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_new_launch_with_nobody_signed_in_never_reads_the_keychain() {
+        let pool = pool().await;
+        let store = Arc::new(CountingStore::default());
+        Scrobbler::new(pool.clone(), store.clone())
+            .status()
+            .await
+            .unwrap();
+        let first_launch = store.reads();
+
+        let scrobbler = Scrobbler::new(pool, store.clone());
+        scrobbler.status().await.unwrap();
+        scrobbler.now_playing(&track(200_000)).await.unwrap();
+        assert!(
+            !scrobbler
+                .listened(&track(200_000), 150_000, 0)
+                .await
+                .unwrap()
+        );
+        scrobbler.love(&track(200_000), true).await.unwrap();
+        assert!(scrobbler.flush().await.unwrap());
+        assert_eq!(store.reads(), first_launch);
+    }
+
+    #[tokio::test]
+    async fn a_signed_in_launch_reads_the_keychain_once() {
+        let pool = pool().await;
+        let store = Arc::new(CountingStore::default());
+        Scrobbler::new(pool.clone(), store.clone())
+            .set_account(Service::LastFm, Some(account()))
+            .await
+            .unwrap();
+
+        let scrobbler = Scrobbler::new(pool, store.clone());
+        let before = store.reads();
+        let status = scrobbler.status().await.unwrap();
+        assert!(status.services[0].signed_in);
+        assert_eq!(status.services[0].user_name.as_deref(), Some("listener"));
+        assert!(
+            scrobbler
+                .listened(&track(200_000), 150_000, 0)
+                .await
+                .unwrap()
+        );
+        assert_eq!(store.reads(), before, "status and queueing use the index");
+
+        for _ in 0..5 {
+            scrobbler.credentials().await.unwrap();
+        }
+        assert_eq!(store.reads(), before + 1);
+    }
+
+    #[tokio::test]
+    async fn a_refused_keychain_is_not_asked_again_until_retried() {
+        let pool = pool().await;
+        let store = Arc::new(CountingStore::default());
+        Scrobbler::new(pool.clone(), store.clone())
+            .set_account(Service::ListenBrainz, Some(account()))
+            .await
+            .unwrap();
+
+        let scrobbler = Scrobbler::new(pool, store.clone());
+        store.refuse.store(true, Ordering::SeqCst);
+        let before = store.reads();
+        assert!(matches!(
+            scrobbler.credentials().await,
+            Err(AppError::Keychain(_))
+        ));
+        for _ in 0..3 {
+            assert!(scrobbler.credentials().await.is_err());
+            assert!(scrobbler.flush().await.unwrap());
+        }
+        assert_eq!(store.reads(), before + 1);
+
+        let status = scrobbler.status().await.unwrap();
+        assert!(status.services[2].signed_in, "the index still knows");
+        assert!(status.keychain_error.is_some());
+        assert_eq!(store.reads(), before + 1);
+
+        store.refuse.store(false, Ordering::SeqCst);
+        scrobbler.retry_keychain().await.unwrap();
+        assert_eq!(store.reads(), before + 2);
+        assert!(scrobbler.status().await.unwrap().keychain_error.is_none());
+    }
+
+    #[tokio::test]
+    async fn the_first_launch_after_the_update_moves_old_items_into_one() {
+        let store = Arc::new(CountingStore::default());
+        store
+            .inner
+            .write("LIBREFM", &serde_json::to_string(&account()).unwrap())
+            .unwrap();
+        let scrobbler = Scrobbler::new(pool().await, store.clone());
+
+        let status = scrobbler.status().await.unwrap();
+        assert!(status.services[1].signed_in);
+        let items = store.inner.0.lock().unwrap();
+        assert_eq!(items.keys().collect::<Vec<_>>(), ["CREDENTIALS"]);
+    }
+
+    #[tokio::test]
+    async fn signing_out_of_everything_removes_the_keychain_item() {
+        let store = Arc::new(CountingStore::default());
+        let scrobbler = Scrobbler::new(pool().await, store.clone());
+        scrobbler
+            .set_account(Service::LastFm, Some(account()))
+            .await
+            .unwrap();
+        assert!(!store.inner.0.lock().unwrap().is_empty());
+        scrobbler.sign_out(Service::LastFm).await.unwrap();
+        assert!(store.inner.0.lock().unwrap().is_empty());
     }
 }

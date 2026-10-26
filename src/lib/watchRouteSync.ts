@@ -40,18 +40,14 @@ export interface RouteChangePlayerInput {
   nextWatchId: string | null;
   currentVideoId: string | null;
   videoPlayerMode: VideoPlayerMode;
-  isPlaying: boolean;
   autoPipEnabled: boolean;
-  videoPipIntent?: "manual" | "auto" | null;
 }
 
 /** What the player does when the route moves, from the store as it is now. */
 export function decideRouteChangePlayerAction(input: RouteChangePlayerInput): RouteChangePlayerAction {
   const { currentVideoId, nextWatchId } = input;
   if (!currentVideoId) return "none";
-  if (nextWatchId === currentVideoId) {
-    return input.videoPlayerMode === "pip" && input.videoPipIntent !== "manual" ? "expand" : "none";
-  }
+  if (nextWatchId === currentVideoId) return input.videoPlayerMode === "pip" ? "expand" : "none";
   if (nextWatchId !== null || input.previousWatchId !== currentVideoId || input.videoPlayerMode !== "watch") {
     return "none";
   }

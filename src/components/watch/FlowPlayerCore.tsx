@@ -112,7 +112,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       if (!currentVideo || currentVideo.id !== videoId || stream.loadingStream) return;
       if (!progressTickBelongsTo(currentVideo.id, stream.streamVideoId)) return;
       stream.notePlaybackTime(time);
-      const nextDuration = mediaDuration || currentVideo?.durationSeconds || 1;
+      const nextDuration = mediaDuration || currentVideo.durationSeconds || 1;
       setCurrentTime(time);
       setDuration(nextDuration);
       prefetchNextVideo(time, nextDuration);
@@ -250,7 +250,6 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
 
   return (
     <Player
-      videoId={videoId}
       src={stream.streamUrl}
       title={title}
       poster={poster}

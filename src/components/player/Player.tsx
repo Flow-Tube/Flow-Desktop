@@ -67,7 +67,6 @@ import {
 } from "../../lib/playerChrome";
 
 type PlayerProps = {
-  videoId?: string;
   src?: string | null;
   dashManifestUrl?: string | null;
   hlsManifestUrl?: string | null;
@@ -333,7 +332,6 @@ function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 export const Player: React.FC<PlayerProps> = ({
-  videoId,
   src,
   dashManifestUrl,
   hlsManifestUrl,
@@ -373,7 +371,7 @@ export const Player: React.FC<PlayerProps> = ({
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
   const mutedSegmentsRecordedRef = useRef<Set<string>>(new Set());
   const notifiedSegmentsRef = useRef<Set<string>>(new Set());
-  const lastMediaIdentityRef = useRef<string>(videoId ? `${videoId}:${src || dashManifestUrl || hlsManifestUrl || ""}` : (src || dashManifestUrl || hlsManifestUrl || ""));
+  const lastMediaIdentityRef = useRef<string>(src || dashManifestUrl || hlsManifestUrl || "");
   const desiredPlayingRef = useRef(false);
   const pendingResumeTimeRef = useRef(0);
   const sourceSwitchingRef = useRef(false);
@@ -963,7 +961,7 @@ export const Player: React.FC<PlayerProps> = ({
     loadSettings();
   }, [loadSettings]);
 
-  const mediaIdentity = videoId ? `${videoId}:${src || dashManifestUrl || hlsManifestUrl || ""}` : (src || dashManifestUrl || hlsManifestUrl || "");
+  const mediaIdentity = src || dashManifestUrl || hlsManifestUrl || "";
   const appliedInitialRateForRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1757,14 +1755,6 @@ export const Player: React.FC<PlayerProps> = ({
       if (dashPlayerRef.current === player) {
         dashPlayerRef.current = null;
       }
-      video.pause();
-      audioRef.current?.pause();
-      if (Number.isFinite(video.currentTime) && video.currentTime !== 0) {
-        try { video.currentTime = 0; } catch {}
-      }
-      if (audioRef.current && Number.isFinite(audioRef.current.currentTime) && audioRef.current.currentTime !== 0) {
-        try { audioRef.current.currentTime = 0; } catch {}
-      }
     };
   }, [bufferConfig, dashManifestUrl, dashProxyPrefix, isDashPlayback]);
 
@@ -2041,23 +2031,26 @@ export const Player: React.FC<PlayerProps> = ({
     videoProgressSampleRef.current = null;
     postSwitchRealignPendingRef.current = true;
 
-    video?.pause();
-    audio?.pause();
-
-    sourceSwitchingRef.current = true;
-    setIsSourceSwitching(true);
-    setHasStartedPlayback(false);
-
-    if (video && Number.isFinite(video.currentTime) && video.currentTime !== targetTime) {
-      try {
-        video.currentTime = targetTime;
-      } catch {
+    if (targetTime > 0) {
+      sourceSwitchingRef.current = true;
+      setIsSourceSwitching(true);
+      video?.pause();
+      audio?.pause();
+    } else {
+      sourceSwitchingRef.current = false;
+      setHasStartedPlayback(false);
+      setIsSourceSwitching(false);
+      if (video && Number.isFinite(video.currentTime) && video.currentTime !== 0) {
+        try {
+          video.currentTime = 0;
+        } catch {
+        }
       }
-    }
-    if (audio && Number.isFinite(audio.currentTime) && audio.currentTime !== targetTime) {
-      try {
-        audio.currentTime = targetTime;
-      } catch {
+      if (audio && Number.isFinite(audio.currentTime) && audio.currentTime !== 0) {
+        try {
+          audio.currentTime = 0;
+        } catch {
+        }
       }
     }
   }, [clearMediaBuffering, mediaIdentity, resumeTime]);
@@ -2334,8 +2327,7 @@ export const Player: React.FC<PlayerProps> = ({
     if (!video) return;
     const nextDuration = video.duration || duration || 0;
     setDuration(nextDuration);
-    const pendingResumeTime = resumeTime > 0 ? Math.max(resumeTime, pendingResumeTimeRef.current) : 0;
-    pendingResumeTimeRef.current = 0;
+    const pendingResumeTime = Math.max(resumeTime, pendingResumeTimeRef.current);
     if (pendingResumeTime > 0 && Math.abs(video.currentTime - pendingResumeTime) > 0.25) {
       const restoredTime = Math.min(pendingResumeTime, Math.max(0, nextDuration - 0.25));
       video.currentTime = restoredTime;
@@ -2345,24 +2337,19 @@ export const Player: React.FC<PlayerProps> = ({
         } catch {
         }
       }
-    } else if (pendingResumeTime === 0) {
-      if (video.currentTime !== 0) {
-        try { video.currentTime = 0; } catch {}
-      }
-      if (audio && audio.currentTime !== 0) {
-        try { audio.currentTime = 0; } catch {}
-      }
     }
-    setHasStartedPlayback(pendingResumeTime > 0);
-    sourceSwitchingRef.current = false;
-    setIsSourceSwitching(false);
-    requestAnimationFrame(() => {
-      syncExternalAudio(true);
-      if (desiredPlayingRef.current || isPlaying) {
-        void videoRef.current?.play().catch(() => {});
-        if (usesExternalAudio) void audioRef.current?.play().catch(() => {});
-      }
-    });
+    if (pendingResumeTime > 0) {
+      setHasStartedPlayback(true);
+      sourceSwitchingRef.current = false;
+      setIsSourceSwitching(false);
+      requestAnimationFrame(() => {
+        syncExternalAudio(true);
+        if (desiredPlayingRef.current || isPlaying) {
+          void videoRef.current?.play().catch(() => {});
+          if (usesExternalAudio) void audioRef.current?.play().catch(() => {});
+        }
+      });
+    }
     updateBuffered();
   };
 
@@ -2428,7 +2415,7 @@ export const Player: React.FC<PlayerProps> = ({
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     const audio = audioRef.current;
-    if (!video || isLoading || isSourceSwitching) return;
+    if (!video) return;
     if (!shouldPublishPlaybackTime(sourceSwitchingRef.current, video.readyState, lastMediaIdentityRef.current !== "")) {
       return;
     }

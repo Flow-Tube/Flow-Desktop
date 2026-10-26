@@ -52,19 +52,16 @@ describe("decideRouteChangePlayerAction", () => {
     nextWatchId: null,
     currentVideoId: "a",
     videoPlayerMode: "watch" as const,
-    isPlaying: true,
     autoPipEnabled: true,
   };
 
-  it("shrinks a video into the mini player when leaving its page if auto pip is enabled", () => {
+  it("shrinks the video into the mini player when leaving its page, paused or playing", () => {
     expect(decideRouteChangePlayerAction(base)).toBe("enter-pip");
-    expect(decideRouteChangePlayerAction({ ...base, isPlaying: false })).toBe("enter-pip");
     expect(decideRouteChangePlayerAction({ ...base, autoPipEnabled: false })).toBe("dismiss");
   });
 
-  it("expands the mini player when its video's page opens unless manually minimized", () => {
+  it("expands the mini player when its video's page opens", () => {
     expect(decideRouteChangePlayerAction({ ...base, nextWatchId: "a", videoPlayerMode: "pip" })).toBe("expand");
-    expect(decideRouteChangePlayerAction({ ...base, nextWatchId: "a", videoPlayerMode: "pip", videoPipIntent: "manual" })).toBe("none");
   });
 
   it("keeps the player when the route moves between watch pages", () => {

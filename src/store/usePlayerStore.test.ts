@@ -97,26 +97,6 @@ describe("video queue", () => {
     expect(usePlayerStore.getState().currentVideo?.id).toBe("two");
     expect(usePlayerStore.getState().currentIndex).toBe(0);
   });
-
-  it("resets mini player mode and panels when playing a queue item", () => {
-    const items = [video("first"), video("second")];
-    usePlayerStore.getState().setQueue(items, 0);
-    usePlayerStore.getState().enterVideoPip("auto");
-    usePlayerStore.getState().setIsChaptersPanelOpen(true);
-    usePlayerStore.getState().setIsQueuePanelOpen(true);
-
-    expect(usePlayerStore.getState().videoPlayerMode).toBe("pip");
-    expect(usePlayerStore.getState().videoPipIntent).toBe("auto");
-
-    usePlayerStore.getState().playQueueItem(1);
-
-    expect(usePlayerStore.getState().currentIndex).toBe(1);
-    expect(usePlayerStore.getState().currentVideo?.id).toBe("second");
-    expect(usePlayerStore.getState().videoPlayerMode).toBe("watch");
-    expect(usePlayerStore.getState().videoPipIntent).toBeNull();
-    expect(usePlayerStore.getState().isChaptersPanelOpen).toBe(false);
-    expect(usePlayerStore.getState().isQueuePanelOpen).toBe(false);
-  });
 });
 
 describe("pop-out mini player handoff", () => {

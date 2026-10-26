@@ -232,6 +232,8 @@ DOWNLOADS
 - Downloads get a fresh link when YouTube refuses an old one, stop retrying a dead connection after a few tries, and a failed download can be retried from where it stopped.
 - Pausing a download lets the next one in the queue start, and playlists and albums now save to the download folder you chose.
 - Downloading a song no longer replaces the video download of the same item, and replacing a download removes the old file.
+- Downloads keep their artwork offline on the Downloads page, in the library and in the player, from the cover Flow saved with them.
+- A downloaded video keeps its description, chapters and SponsorBlock segments when watched offline. Segments are fetched only when SponsorBlock is on and are kept with the download instead of in a separate file.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.

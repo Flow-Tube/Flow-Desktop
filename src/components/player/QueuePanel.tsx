@@ -1,6 +1,6 @@
+import { useMemo } from "react";
 import {
-  ChevronDown,
-  ChevronUp,
+  GripHorizontal,
   ListVideo,
   Play,
   Repeat,
@@ -8,10 +8,28 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { useNavigate } from "react-router-dom";
 
 import { getString } from "../../lib/i18n/index";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
+import {
+  WATCH_LATER_PLAYLIST_ID,
+  moveStoredPlaylistTrack,
+  removeVideoFromStoredPlaylist,
+} from "../../lib/playlistLibrary";
+import { resolveDragMove, sortableRowStyle, useListDragSensors } from "../../lib/sortableList";
 import { usePlayerStore, type RepeatMode } from "../../store/usePlayerStore";
+import type { VideoSummary } from "../../types/video";
 
 const repeatLabels: Record<RepeatMode, string> = {
   none: getString("queue_repeat_off"),
@@ -33,10 +51,115 @@ function formatDuration(seconds?: number | null) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-export function QueuePanel() {
+interface QueueRowProps {
+  video: VideoSummary;
+  index: number;
+  isCurrent: boolean;
+  isManual: boolean;
+  canReorder: boolean;
+  onPlay: (index: number) => void;
+  onRemove: (index: number) => void;
+}
+
+function QueueRow({ video, index, isCurrent, isManual, canReorder, onPlay, onRemove }: QueueRowProps) {
   const toSrc = useProxyImageSrc();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: video.id, disabled: !canReorder });
+
+  const style = sortableRowStyle(transform, transition);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group flex items-center gap-2 px-3 py-3 transition-colors duration-200 ease-out ${
+        isCurrent ? "bg-surface-container" : "hover:bg-surface-container-high"
+      } ${isDragging ? "opacity-80" : ""}`}
+    >
+      {canReorder ? (
+        <button
+          ref={setActivatorNodeRef}
+          type="button"
+          aria-label={getString("reorder_item", video.title)}
+          className="shrink-0 cursor-grab rounded-md p-1 text-chrome-neutral-500 transition-colors hover:text-chrome-neutral-300 active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+        >
+          <GripHorizontal size={18} strokeWidth={2.5} />
+        </button>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={() => onPlay(index)}
+        className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-xl bg-surface-container-highest"
+        aria-label={getString("queue_play_item", video.title)}
+      >
+        {video.thumbnailUrl ? (
+          <img
+            src={toSrc(video.thumbnailUrl)}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : null}
+        <span className="absolute inset-0 grid place-items-center bg-chrome-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+          <Play className="h-5 w-5 fill-current text-chrome-white" />
+        </span>
+        {video.durationSeconds ? (
+          <span className="absolute bottom-1 right-1 rounded bg-chrome-black/80 px-1 py-0.5 font-mono text-[10px] text-chrome-white">
+            {formatDuration(video.durationSeconds)}
+          </span>
+        ) : null}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onPlay(index)}
+        className="min-w-0 flex-1 text-left"
+      >
+        {isCurrent ? (
+          <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-primary)]">
+            {getString("queue_now_playing")}
+          </span>
+        ) : isManual ? (
+          <span className="text-[11px] font-semibold uppercase tracking-widest text-chrome-neutral-400">
+            {getString("queue_added_label")}
+          </span>
+        ) : null}
+        <span className="mt-0.5 block line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100">
+          {video.title}
+        </span>
+        <span className="mt-1 block truncate text-xs text-chrome-neutral-500">{video.channelName}</span>
+      </button>
+
+      <button
+        type="button"
+        title={getString("remove")}
+        aria-label={getString("remove")}
+        disabled={isCurrent}
+        onClick={() => onRemove(index)}
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-chrome-neutral-500 transition-colors hover:bg-chrome-red-950/30 hover:text-chrome-red-400 disabled:opacity-25"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+}
+
+export function QueuePanel() {
+  const navigate = useNavigate();
   const queue = usePlayerStore((state) => state.queue);
   const currentIndex = usePlayerStore((state) => state.currentIndex);
+  const playlistContext = usePlayerStore((state) => state.playlistContext);
+  const manualQueueIds = usePlayerStore((state) => state.manualQueueIds);
   const repeatMode = usePlayerStore((state) => state.repeatMode);
   const isShuffle = usePlayerStore((state) => state.isShuffle);
   const setIsQueuePanelOpen = usePlayerStore((state) => state.setIsQueuePanelOpen);
@@ -49,17 +172,78 @@ export function QueuePanel() {
 
   const upcomingCount = Math.max(0, queue.length - currentIndex - 1);
 
+  // Hand-added items sit in the queue but aren't part of the playlist.
+  const isPlaylistItem = (item: VideoSummary) => !manualQueueIds.has(item.id);
+  const playlistPosition = queue.slice(0, currentIndex + 1).filter(isPlaylistItem).length;
+  const playlistLength = queue.filter(isPlaylistItem).length;
+
+  // A playlist can only be dragged while the move is saved to it (Manual order, shuffle off).
+  const canReorderPlaylist = Boolean(playlistContext?.reorderable) && !isShuffle;
+  const showReorder = !playlistContext || canReorderPlaylist;
+
+  const sensors = useListDragSensors();
+  const sortableIds = useMemo(() => queue.map((item) => item.id), [queue]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const move = resolveDragMove(event, sortableIds);
+    if (!move) return;
+    moveQueueItem(move[0], move[1]);
+    if (!playlistContext || !canReorderPlaylist) return;
+
+    const nextQueue = usePlayerStore.getState().queue;
+    const moved = nextQueue[move[1]];
+    if (!moved || !isPlaylistItem(moved)) return;
+    // Saved after its new neighbour, not as the whole queue, so edits made to the playlist meanwhile survive.
+    const anchor = nextQueue.slice(0, move[1]).reverse().find(isPlaylistItem);
+    moveStoredPlaylistTrack(playlistContext.id, moved.id, anchor?.id ?? null).catch((error) => {
+      console.warn("Failed to reorder stored playlist", error);
+    });
+  };
+
+  const handleRemove = (index: number) => {
+    const removed = queue[index];
+    removeFromQueue(index);
+    if (removed && playlistContext?.editable && isPlaylistItem(removed)) {
+      removeVideoFromStoredPlaylist(playlistContext.id, removed.id).catch((error) => {
+        console.warn("Failed to remove video from stored playlist", error);
+      });
+    }
+  };
+
   return (
     <section className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low text-chrome-neutral-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-chrome-neutral-800 px-4 py-3.5">
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-chrome-neutral-800 px-4 py-3.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <ListVideo className="h-4 w-4 text-chrome-neutral-400" />
-            <h2 className="text-base font-medium text-chrome-neutral-100">{getString("queue_title")}</h2>
+            <ListVideo className="h-4 w-4 shrink-0 text-chrome-neutral-400" />
+            <h2 className="truncate text-base font-medium text-chrome-neutral-100">
+              {playlistContext ? playlistContext.title : getString("queue_title")}
+            </h2>
           </div>
-          <p className="mt-0.5 font-mono text-xs text-chrome-neutral-500">
-            {getString("queue_upcoming_count", upcomingCount)}
-          </p>
+          {playlistContext ? (
+            <div className="mt-0.5 flex items-center gap-2">
+              <span className="font-mono text-xs text-chrome-neutral-500">
+                {getString("queue_playlist_position", Math.max(1, playlistPosition), playlistLength)}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    playlistContext.id === WATCH_LATER_PLAYLIST_ID
+                      ? "/watch-later"
+                      : `/playlist/${playlistContext.id}`,
+                  )
+                }
+                className="text-xs font-medium text-[var(--color-primary)] transition-opacity duration-200 ease-out hover:opacity-80"
+              >
+                {getString("queue_view_playlist")}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-0.5 font-mono text-xs text-chrome-neutral-500">
+              {getString("queue_upcoming_count", upcomingCount)}
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -97,14 +281,16 @@ export function QueuePanel() {
           <Shuffle size={15} />
           {getString("shuffle")}
         </button>
-        <button
-          type="button"
-          onClick={clearUpcoming}
-          disabled={upcomingCount === 0}
-          className="ml-auto rounded-full px-3 py-2 text-xs font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {getString("queue_clear_upcoming")}
-        </button>
+        {!playlistContext ? (
+          <button
+            type="button"
+            onClick={clearUpcoming}
+            disabled={upcomingCount === 0}
+            className="ml-auto rounded-full px-3 py-2 text-xs font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {getString("queue_clear_upcoming")}
+          </button>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -115,92 +301,28 @@ export function QueuePanel() {
             <p className="mt-1 text-xs text-chrome-neutral-500">{getString("queue_empty_body")}</p>
           </div>
         ) : (
-          <div className="divide-y divide-chrome-neutral-800">
-            {queue.map((video, index) => {
-              const isCurrent = index === currentIndex;
-              return (
-                <div
-                  key={`${video.id}-${index}`}
-                  className={`group flex items-center gap-3 px-3 py-3 transition-colors duration-200 ease-out ${
-                    isCurrent ? "bg-surface-container" : "hover:bg-surface-container-high"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => playQueueItem(index)}
-                    className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-xl bg-surface-container-highest"
-                    aria-label={getString("queue_play_item", video.title)}
-                  >
-                    {video.thumbnailUrl ? (
-                      <img
-                        src={toSrc(video.thumbnailUrl)}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : null}
-                    <span className="absolute inset-0 grid place-items-center bg-chrome-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                      <Play className="h-5 w-5 fill-current text-chrome-white" />
-                    </span>
-                    {video.durationSeconds ? (
-                      <span className="absolute bottom-1 right-1 rounded bg-chrome-black/80 px-1 py-0.5 font-mono text-[10px] text-chrome-white">
-                        {formatDuration(video.durationSeconds)}
-                      </span>
-                    ) : null}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => playQueueItem(index)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    {isCurrent ? (
-                      <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-primary)]">
-                        {getString("queue_now_playing")}
-                      </span>
-                    ) : null}
-                    <span className="mt-0.5 block line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100">
-                      {video.title}
-                    </span>
-                    <span className="mt-1 block truncate text-xs text-chrome-neutral-500">{video.channelName}</span>
-                  </button>
-
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <button
-                      type="button"
-                      title={getString("move_up")}
-                      aria-label={getString("move_up")}
-                      disabled={index === 0}
-                      onClick={() => moveQueueItem(index, index - 1)}
-                      className="grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-500 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-200 disabled:opacity-25"
-                    >
-                      <ChevronUp size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      title={getString("move_down")}
-                      aria-label={getString("move_down")}
-                      disabled={index === queue.length - 1}
-                      onClick={() => moveQueueItem(index, index + 1)}
-                      className="grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-500 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-200 disabled:opacity-25"
-                    >
-                      <ChevronDown size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      title={getString("remove")}
-                      aria-label={getString("remove")}
-                      disabled={isCurrent}
-                      onClick={() => removeFromQueue(index)}
-                      className="grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-500 transition-colors hover:bg-chrome-red-950/30 hover:text-chrome-red-400 disabled:opacity-25"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+              <div className="divide-y divide-chrome-neutral-800">
+                {queue.map((video, index) => (
+                  <QueueRow
+                    key={video.id}
+                    video={video}
+                    index={index}
+                    isCurrent={index === currentIndex}
+                    isManual={manualQueueIds.has(video.id)}
+                    canReorder={showReorder}
+                    onPlay={playQueueItem}
+                    onRemove={handleRemove}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </section>

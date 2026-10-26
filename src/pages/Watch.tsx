@@ -210,7 +210,12 @@ export function Watch() {
               const safeIndex = startIndex >= 0 ? startIndex : 0;
               const startVideo = playlist.videos[safeIndex];
               if (startVideo) {
-                setQueue(playlist.videos, safeIndex);
+                setQueue(playlist.videos, safeIndex, {
+                  id: item.playlistId,
+                  title: item.title,
+                  editable: false,
+                  reorderable: false,
+                });
                 navigate(`/watch/${startVideo.id}`);
                 return;
               }

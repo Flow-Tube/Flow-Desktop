@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import type { CaptionTrack, RelatedContentItem, VideoDetails, VideoSummary } from "../types/video";
 import { prefetchStreamInfo } from "../lib/streamResolution";
+import { orderByIds } from "../lib/listOrder";
+import { fisherYates } from "../lib/musicShuffle";
+import { appendUniqueVideos } from "../lib/playlistPages";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
 
@@ -16,6 +19,16 @@ export type PlayMode = "video" | "music";
  */
 export type VideoPlayerMode = "watch" | "pip" | "window";
 export type VideoPipIntent = "auto" | "manual";
+
+/** The playlist a queue was started from, named in the queue panel. */
+export interface PlaylistContext {
+  id: string;
+  title: string;
+  /** Removing a video in the panel removes it from the playlist too (Watch Later, the user's own). */
+  editable: boolean;
+  /** Started in the playlist's Manual order, so a drag in the panel is saved to it too. */
+  reorderable: boolean;
+}
 
 export interface WatchPageCache {
   videoId: string;
@@ -81,8 +94,13 @@ interface PlayerState {
   playbackRate: PlaybackRate;
   queue: VideoSummary[];
   currentIndex: number;
+  playlistContext: PlaylistContext | null;
   repeatMode: RepeatMode;
   isShuffle: boolean;
+  /** The order turning shuffle off restores; null while shuffle is off. */
+  unshuffledQueue: VideoSummary[] | null;
+  /** Videos added with Add to queue during a playlist: they play next and are never saved to it. */
+  manualQueueIds: Set<string>;
   playMode: PlayMode;
   currentTime: number;
   duration: number;
@@ -120,7 +138,12 @@ interface PlayerState {
   setMuted: (muted: boolean | ((previous: boolean) => boolean)) => void;
   setIsVideoFullscreenTransitioning: (transitioning: boolean) => void;
   setPlaybackRate: (playbackRate: PlaybackRate) => void;
-  setQueue: (queue: VideoSummary[], startIndex?: number) => void;
+  setQueue: (
+    queue: VideoSummary[],
+    startIndex?: number,
+    playlistContext?: PlaylistContext | null,
+    unshuffledQueue?: VideoSummary[] | null,
+  ) => void;
   addToQueue: (video: VideoSummary) => QueueAddResult;
   removeFromQueue: (index: number) => void;
   moveQueueItem: (fromIndex: number, toIndex: number) => void;
@@ -178,8 +201,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackRate: 1,
   queue: [],
   currentIndex: -1,
+  playlistContext: null,
   repeatMode: "none",
   isShuffle: false,
+  unshuffledQueue: null,
+  manualQueueIds: new Set<string>(),
   playMode: "video",
   currentTime: 0,
   duration: 0,
@@ -247,21 +273,31 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setPlaybackRate: (playbackRate) => set({ playbackRate: Math.min(4, Math.max(0.25, playbackRate)) }),
 
-  setQueue: (queue, startIndex = 0) => {
-    const safeIndex = queue.length > 0
-      ? Math.max(0, Math.min(startIndex, queue.length - 1))
-      : -1;
+  setQueue: (rawQueue, startIndex = 0, playlistContext = null, unshuffledQueue = null) => {
+    // Rows and drag handles are keyed by video id, and a YouTube playlist can list one twice.
+    const queue = appendUniqueVideos([], rawQueue);
+    const startId = rawQueue[startIndex]?.id;
+    const startIdIndex = startId ? queue.findIndex((item) => item.id === startId) : -1;
+    const safeIndex = queue.length === 0
+      ? -1
+      : startIdIndex >= 0
+        ? startIdIndex
+        : Math.max(0, Math.min(startIndex, queue.length - 1));
     const nextVideo = safeIndex >= 0 ? queue[safeIndex] || null : null;
     const isNew = get().currentVideo?.id !== nextVideo?.id;
     set({
       queue,
       currentIndex: safeIndex,
+      playlistContext,
+      isShuffle: unshuffledQueue !== null,
+      unshuffledQueue: unshuffledQueue && appendUniqueVideos([], unshuffledQueue),
+      manualQueueIds: new Set<string>(),
       currentVideo: nextVideo,
       isPlaying: queue.length > 0,
       videoPlayerMode: "watch",
       videoPipIntent: null,
       isChaptersPanelOpen: false,
-      isQueuePanelOpen: false,
+      isQueuePanelOpen: Boolean(playlistContext) || queue.length > 1,
       ...(isNew ? { watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       currentTime: 0,
@@ -275,13 +311,38 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   addToQueue: (video) => {
-    const { queue, currentVideo, currentIndex } = get();
+    const { queue, currentVideo, currentIndex, playlistContext, manualQueueIds } = get();
     if (queue.some((item) => item.id === video.id) || currentVideo?.id === video.id) {
       return "duplicate";
     }
 
+    // With nothing playing, a queued video would never show, so it plays in the mini player.
+    if (queue.length === 0 && !currentVideo) {
+      get().setQueue([video], 0);
+      get().enterVideoPip("auto");
+      return "added";
+    }
+
+    // The queue and chapters panels share one slot.
+    const openQueuePanel = { isQueuePanelOpen: true, isChaptersPanelOpen: false };
+
     if (queue.length === 0 && currentVideo) {
-      set({ queue: [currentVideo, video], currentIndex: 0 });
+      set({ queue: [currentVideo, video], currentIndex: 0, ...openQueuePanel });
+      return "added";
+    }
+
+    // After the current video and earlier additions, not behind the whole playlist.
+    if (playlistContext && currentIndex >= 0) {
+      let insertAt = currentIndex + 1;
+      while (insertAt < queue.length && manualQueueIds.has(queue[insertAt]?.id ?? "")) {
+        insertAt += 1;
+      }
+      const nextQueue = [...queue.slice(0, insertAt), video, ...queue.slice(insertAt)];
+      set({
+        queue: nextQueue,
+        manualQueueIds: new Set(manualQueueIds).add(video.id),
+        ...openQueuePanel,
+      });
       return "added";
     }
 
@@ -289,12 +350,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       queue: nextQueue,
       currentIndex: currentVideo && currentIndex < 0 ? 0 : currentIndex,
+      ...openQueuePanel,
     });
     return "added";
   },
 
   removeFromQueue: (index) => {
-    const { queue, currentIndex } = get();
+    const { queue, currentIndex, manualQueueIds } = get();
+    const removedId = queue[index]?.id;
     const newQueue = queue.filter((_, i) => i !== index);
     let newIndex = currentIndex;
     if (index < currentIndex) {
@@ -302,10 +365,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     } else if (index === currentIndex) {
       newIndex = Math.min(currentIndex, newQueue.length - 1);
     }
+    const nextManual = new Set(manualQueueIds);
+    if (removedId) nextManual.delete(removedId);
     set({
       queue: newQueue,
       currentIndex: newIndex,
       currentVideo: newQueue[newIndex] || null,
+      manualQueueIds: nextManual,
     });
   },
 
@@ -377,6 +443,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const nextQueue = [...queue, nextCandidate];
         set({
           queue: nextQueue,
+          // Autoplay has gone past the end of the playlist.
+          playlistContext: null,
           autoplayCandidates: autoplayCandidates.filter((item) => item.id !== nextCandidate.id),
         });
         get().playQueueItem(nextQueue.length - 1);
@@ -440,15 +508,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   toggleShuffle: () => {
-    const { isShuffle, queue, currentIndex } = get();
-    if (!isShuffle) {
-      const fixed = currentIndex >= 0 ? queue.slice(0, currentIndex + 1) : [];
-      const upcoming = queue.slice(currentIndex + 1);
-      const shuffled = [...upcoming].sort(() => Math.random() - 0.5);
-      set({ isShuffle: true, queue: [...fixed, ...shuffled] });
-    } else {
-      set({ isShuffle: false });
+    const { queue, currentIndex, currentVideo, unshuffledQueue, manualQueueIds } = get();
+    const played = queue.slice(0, currentIndex + 1);
+    const upcoming = queue.slice(currentIndex + 1);
+    // Videos added during the playlist keep their place right after the current one.
+    const pinned = upcoming.filter((item) => manualQueueIds.has(item.id));
+    const rest = upcoming.filter((item) => !manualQueueIds.has(item.id));
+
+    if (!unshuffledQueue) {
+      set({ isShuffle: true, unshuffledQueue: queue, queue: [...played, ...pinned, ...fisherYates(rest)] });
+      return;
     }
+
+    // Matched by id so details filled in meanwhile survive; videos added while shuffled go last.
+    const restored = orderByIds([...played, ...rest], unshuffledQueue.map((item) => item.id));
+    const restoredIndex = restored.findIndex((item) => item.id === currentVideo?.id);
+    const pinAt = restoredIndex + 1;
+    set({
+      isShuffle: false,
+      unshuffledQueue: null,
+      queue: [...restored.slice(0, pinAt), ...pinned, ...restored.slice(pinAt)],
+      currentIndex: restoredIndex >= 0 ? restoredIndex : currentIndex,
+    });
   },
   setAutoplayCandidates: (videos) => {
     const currentId = get().currentVideo?.id;
@@ -477,6 +558,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   clearQueue: () => set({
     queue: [],
     currentIndex: -1,
+    playlistContext: null,
+    isShuffle: false,
+    unshuffledQueue: null,
+    manualQueueIds: new Set<string>(),
     currentVideo: null,
     isPlaying: false,
     currentTime: 0,

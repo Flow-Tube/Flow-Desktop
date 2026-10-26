@@ -185,3 +185,196 @@ describe("pop-out mini player handoff", () => {
     expect(usePlayerStore.getState().videoPlayerMode).toBe("watch");
   });
 });
+
+describe("shuffle", () => {
+  const ids = () => usePlayerStore.getState().queue.map((item) => item.id);
+
+  it("restores the original order when shuffle is turned off", () => {
+    const items = [video("a"), video("b"), video("c"), video("d"), video("e")];
+    usePlayerStore.getState().setQueue(items, 0);
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(usePlayerStore.getState().isShuffle).toBe(true);
+    expect(usePlayerStore.getState().unshuffledQueue).toEqual(items);
+    // A random shuffle can land on the original order, so force a change.
+    usePlayerStore.getState().moveQueueItem(4, 1);
+    expect(ids()).not.toEqual(["a", "b", "c", "d", "e"]);
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(usePlayerStore.getState().isShuffle).toBe(false);
+    expect(usePlayerStore.getState().unshuffledQueue).toBeNull();
+    expect(ids()).toEqual(["a", "b", "c", "d", "e"]);
+    expect(usePlayerStore.getState().currentIndex).toBe(0);
+  });
+
+  it("drops items removed while shuffled and keeps the rest in original order", () => {
+    const items = [video("a"), video("b"), video("c"), video("d")];
+    usePlayerStore.getState().setQueue(items, 0);
+    usePlayerStore.getState().toggleShuffle();
+
+    // "c" is somewhere in the shuffled tail behind the current "a".
+    const cIndex = usePlayerStore.getState().queue.findIndex((v) => v.id === "c");
+    usePlayerStore.getState().removeFromQueue(cIndex);
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids()).toEqual(["a", "b", "d"]);
+  });
+
+  it("appends items added while shuffled to the end on restore", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b"), video("c")], 0);
+    usePlayerStore.getState().toggleShuffle();
+
+    usePlayerStore.getState().addToQueue(video("late"));
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids()).toEqual(["a", "b", "c", "late"]);
+  });
+
+  it("treats a queue launched shuffled as restorable to its ordered form", () => {
+    const ordered = [video("a"), video("b"), video("c")];
+    const shuffled = [ordered[2]!, ordered[0]!, ordered[1]!];
+    usePlayerStore.getState().setQueue(shuffled, 0, null, ordered);
+
+    expect(usePlayerStore.getState().isShuffle).toBe(true);
+    expect(usePlayerStore.getState().unshuffledQueue).toEqual(ordered);
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids()).toEqual(["a", "b", "c"]);
+    expect(usePlayerStore.getState().currentVideo?.id).toBe("c");
+    expect(usePlayerStore.getState().currentIndex).toBe(2);
+  });
+
+  it("clears shuffle state when a fresh queue is set", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b")], 0);
+    usePlayerStore.getState().toggleShuffle();
+    expect(usePlayerStore.getState().isShuffle).toBe(true);
+
+    usePlayerStore.getState().setQueue([video("x")], 0);
+    expect(usePlayerStore.getState().isShuffle).toBe(false);
+    expect(usePlayerStore.getState().unshuffledQueue).toBeNull();
+  });
+
+  it("keeps hand-added play-next items right after the current video in both directions", () => {
+    const playlist = { id: "wl", title: "Watch Later", editable: true, reorderable: true };
+    usePlayerStore
+      .getState()
+      .setQueue([video("w0"), video("w1"), video("w2"), video("w3")], 0, playlist);
+    usePlayerStore.getState().addToQueue(video("x"));
+    usePlayerStore.getState().addToQueue(video("y"));
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids().slice(0, 3)).toEqual(["w0", "x", "y"]);
+    expect([...ids().slice(3)].sort()).toEqual(["w1", "w2", "w3"]);
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids()).toEqual(["w0", "x", "y", "w1", "w2", "w3"]);
+  });
+
+  it("pins an item hand-added while shuffled after the current video on restore", () => {
+    const playlist = { id: "wl", title: "Watch Later", editable: true, reorderable: true };
+    usePlayerStore.getState().setQueue([video("a"), video("b"), video("c")], 0, playlist);
+    usePlayerStore.getState().toggleShuffle();
+    usePlayerStore.getState().addToQueue(video("x"));
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids()).toEqual(["a", "x", "b", "c"]);
+  });
+});
+
+describe("set queue", () => {
+  const ids = () => usePlayerStore.getState().queue.map((item) => item.id);
+
+  it("drops duplicate ids and still starts on the requested video", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b"), video("a"), video("c")], 3);
+    expect(ids()).toEqual(["a", "b", "c"]);
+    expect(usePlayerStore.getState().currentIndex).toBe(2);
+    expect(usePlayerStore.getState().currentVideo?.id).toBe("c");
+  });
+});
+
+describe("autoplay", () => {
+  it("drops the playlist context once autoplay extends the queue", () => {
+    const playlist = { id: "wl", title: "Watch Later", editable: true, reorderable: true };
+    usePlayerStore.getState().setQueue([video("a")], 0, playlist);
+    usePlayerStore.getState().setAutoplayCandidates([video("auto")]);
+
+    expect(usePlayerStore.getState().playNext(true)?.id).toBe("auto");
+    expect(usePlayerStore.getState().playlistContext).toBeNull();
+  });
+});
+
+describe("add to queue", () => {
+  const ids = () => usePlayerStore.getState().queue.map((item) => item.id);
+  const playlist = { id: "wl", title: "Watch Later", editable: true, reorderable: true };
+
+  it("plays hand-added videos right after the current one, in add order", () => {
+    usePlayerStore.getState().setQueue([video("w0"), video("w1"), video("w2")], 0, playlist);
+
+    usePlayerStore.getState().addToQueue(video("x"));
+    expect(ids()).toEqual(["w0", "x", "w1", "w2"]);
+
+    usePlayerStore.getState().addToQueue(video("y"));
+    expect(ids()).toEqual(["w0", "x", "y", "w1", "w2"]);
+
+    const manual = usePlayerStore.getState().manualQueueIds;
+    expect(manual.has("x")).toBe(true);
+    expect(manual.has("y")).toBe(true);
+    expect(manual.has("w1")).toBe(false);
+  });
+
+  it("starts playback in the mini player when nothing is playing", () => {
+    expect(usePlayerStore.getState().currentVideo).toBeNull();
+
+    usePlayerStore.getState().addToQueue(video("solo"));
+
+    const state = usePlayerStore.getState();
+    expect(state.currentVideo?.id).toBe("solo");
+    expect(state.currentIndex).toBe(0);
+    expect(state.isPlaying).toBe(true);
+    expect(state.videoPlayerMode).toBe("pip");
+    expect(ids()).toEqual(["solo"]);
+  });
+
+  it("starts a clean queue when nothing is playing after a playlist ran out", () => {
+    usePlayerStore.getState().setQueue([video("w0")], 0, playlist);
+    usePlayerStore.getState().toggleShuffle();
+    usePlayerStore.getState().removeFromQueue(0);
+    expect(usePlayerStore.getState().currentVideo).toBeNull();
+
+    usePlayerStore.getState().addToQueue(video("solo"));
+
+    const state = usePlayerStore.getState();
+    expect(state.playlistContext).toBeNull();
+    expect(state.isShuffle).toBe(false);
+    expect(state.videoPlayerMode).toBe("pip");
+  });
+
+  it("closes the chapters panel when it opens the queue panel", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b")], 0);
+    usePlayerStore.getState().setIsChaptersPanelOpen(true);
+
+    usePlayerStore.getState().addToQueue(video("c"));
+
+    expect(usePlayerStore.getState().isQueuePanelOpen).toBe(true);
+    expect(usePlayerStore.getState().isChaptersPanelOpen).toBe(false);
+  });
+
+  it("still appends to the end for a plain (non-playlist) queue", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b")], 0);
+
+    usePlayerStore.getState().addToQueue(video("c"));
+    expect(ids()).toEqual(["a", "b", "c"]);
+    expect(usePlayerStore.getState().manualQueueIds.size).toBe(0);
+  });
+
+  it("forgets a hand-added video once it is removed", () => {
+    usePlayerStore.getState().setQueue([video("w0"), video("w1")], 0, playlist);
+    usePlayerStore.getState().addToQueue(video("x"));
+
+    const index = usePlayerStore.getState().queue.findIndex((v) => v.id === "x");
+    usePlayerStore.getState().removeFromQueue(index);
+
+    expect(ids()).toEqual(["w0", "w1"]);
+    expect(usePlayerStore.getState().manualQueueIds.has("x")).toBe(false);
+  });
+});

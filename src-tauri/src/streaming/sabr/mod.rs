@@ -293,6 +293,31 @@ impl SabrSessionManager {
         self.prepared.lock().unwrap().remove(session_id);
     }
 
+    /// Drops every session of `video_id`. A refresh asks for fresh links
+    /// because the old ones stopped working, and `prepare` would otherwise hand
+    /// back the session built on them.
+    pub fn discard_video(&self, video_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        let mut prepared = self.prepared.lock().unwrap();
+        let ids: Vec<String> = sessions
+            .values()
+            .filter(|h| h.video_id == video_id)
+            .map(|h| h.session_id.clone())
+            .chain(
+                prepared
+                    .iter()
+                    .filter(|(_, (d, _))| d.video_id == video_id)
+                    .map(|(id, _)| id.clone()),
+            )
+            .collect();
+        for id in ids {
+            if let Some(removed) = sessions.remove(&id) {
+                removed.engine.cancel();
+            }
+            prepared.remove(&id);
+        }
+    }
+
     fn prune_expired(&self) {
         let mut sessions = self.sessions.lock().unwrap();
         let idle_ttl = self.idle_ttl;
@@ -320,6 +345,20 @@ impl SabrSessionManager {
 mod tests {
     use super::*;
 
+    fn descriptor(video_id: &str) -> SabrSessionDescriptor {
+        SabrSessionDescriptor {
+            video_id: video_id.to_string(),
+            server_abr_streaming_url: "https://rr1.googlevideo.com/videoplayback?expire=9999999999"
+                .to_string(),
+            visitor_data: None,
+            po_token: None,
+            ustreamer_config: Vec::new(),
+            client_profile: ClientProfile::ios(),
+            duration_ms: 0,
+            formats: Vec::new(),
+        }
+    }
+
     #[test]
     fn a_session_outlives_an_hour_while_its_url_is_valid() {
         let idle_ttl = Duration::from_secs(600);
@@ -344,5 +383,25 @@ mod tests {
             Duration::from_secs(601),
             idle_ttl
         ));
+    }
+
+    #[test]
+    fn a_refresh_gets_a_new_session() {
+        let manager = SabrSessionManager::new();
+        let first = manager.prepare(descriptor("video"), CodecSupport::default());
+        assert_eq!(
+            manager.prepare(descriptor("video"), CodecSupport::default()),
+            first
+        );
+        let other = manager.prepare(descriptor("other"), CodecSupport::default());
+        manager.discard_video("video");
+        assert_ne!(
+            manager.prepare(descriptor("video"), CodecSupport::default()),
+            first
+        );
+        assert_eq!(
+            manager.prepare(descriptor("other"), CodecSupport::default()),
+            other
+        );
     }
 }

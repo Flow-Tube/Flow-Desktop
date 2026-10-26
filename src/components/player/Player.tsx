@@ -2660,7 +2660,7 @@ export const Player: React.FC<PlayerProps> = ({
       />
 
       {pendingQualitySwitch && (
-        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border border-neutral-800 bg-neutral-950/85 px-3.5 py-1 text-xs font-medium text-neutral-200 tracking-wide animate-fade-in shadow-none">
+        <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border border-chrome-neutral-800 bg-chrome-neutral-950/85 px-3.5 py-1 text-xs font-medium tracking-wide text-chrome-neutral-200 animate-fade-in">
           {pendingQualitySwitch.etaSeconds && pendingQualitySwitch.etaSeconds > 1
             ? getString("player_quality_switch_in", pendingQualitySwitch.label, pendingQualitySwitch.etaSeconds)
             : getString("player_quality_switching", pendingQualitySwitch.label)}
@@ -2699,11 +2699,11 @@ export const Player: React.FC<PlayerProps> = ({
       />
 
       {(isLoading || error || errorInfo) && (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-black/40 px-6 text-center">
+        <div className="absolute inset-0 z-30 grid place-items-center bg-chrome-black/60 px-6 text-center">
           {isLoading ? (
             <div className="flex flex-col items-center gap-2.5">
               <Loader2 className="animate-spin text-primary" size={28} />
-              <span className="text-xs font-medium tracking-wide text-neutral-300">
+              <span className="text-xs font-medium tracking-wide text-chrome-neutral-300">
                 {getString("player_resolving_stream")}
               </span>
             </div>

@@ -52,10 +52,10 @@ tracing-appender = "0.2"
 
 # HTTP Client
 reqwest = { version = "0.13.3", features = ["stream", "json", "form", "brotli", "gzip", "rustls"] }
-webm-iterable = "0.6.2"
+webm-iterable = "0.7.1"
 
 # Cover-art embedding for downloaded music/audio (MP4 covr, ID3 APIC, Vorbis pictures).
-lofty = "0.24"
+lofty = "0.25.4"
 # Cropping and re-encoding download covers (decoders for what the image CDNs serve, JPEG out).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 

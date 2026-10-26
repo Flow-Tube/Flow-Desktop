@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { segmentFillPercent, shouldAnimateProgress } from "./playerProgress";
+import { progressTickBelongsTo, segmentFillPercent, shouldAnimateProgress } from "./playerProgress";
 
 describe("shouldAnimateProgress", () => {
   it("animates only a playing bar someone can see, or a scrub", () => {
@@ -20,5 +20,14 @@ describe("segmentFillPercent", () => {
   it("treats an empty segment as unfilled until the playhead passes it", () => {
     expect(segmentFillPercent(10, 10, 10)).toBe(0);
     expect(segmentFillPercent(11, 10, 10)).toBe(100);
+  });
+});
+
+describe("progressTickBelongsTo", () => {
+  it("counts ticks only from the stream of the video now playing", () => {
+    expect(progressTickBelongsTo("new", "new")).toBe(true);
+    expect(progressTickBelongsTo("new", "old")).toBe(false);
+    expect(progressTickBelongsTo("new", null)).toBe(false);
+    expect(progressTickBelongsTo(null, null)).toBe(false);
   });
 });

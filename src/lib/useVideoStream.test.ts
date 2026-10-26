@@ -38,3 +38,30 @@ it("keeps the resolved source and resume position when metadata enriches the sam
     expect(getStreamInfo).toHaveBeenCalledTimes(1);
   } finally { await act(async () => root.unmount()); }
 });
+
+it("names the stream's video only once that video's source is set", async () => {
+  vi.stubGlobal("MediaSource", { isTypeSupported: () => true });
+  useDownloadsLibraryStore.setState({ loaded: true, records: [] });
+  useAppSettingsStore.setState({ values: {} });
+  const info = {
+    streamId: "s", localUrl: "video", expiresAt: "", captions: [], dashManifestUrl: "manifest",
+    variants: [{ id: "v", localUrl: "video", mimeType: 'video/mp4; codecs="avc1.4d401f"', qualityLabel: "720p", isPlayable: true, isDefault: true, hasAudio: true, isVideoOnly: false, deliveryMethod: "progressive" }],
+    audioTracks: [],
+  };
+  let answerNext!: (value: typeof info) => void;
+  vi.mocked(getStreamInfo)
+    .mockResolvedValueOnce(info)
+    .mockReturnValueOnce(new Promise((resolve) => { answerNext = resolve; }) as never);
+  usePlayerStore.setState({ currentVideo: { id: "first", title: "", channelName: "" } });
+  let latest!: ReturnType<typeof useVideoStream>;
+  function Harness() { latest = useVideoStream(usePlayerStore((s) => s.currentVideo?.id)); return null; }
+  const root = createRoot(document.createElement("div"));
+  try {
+    await act(async () => root.render(createElement(Harness)));
+    expect(latest.streamVideoId).toBe("first");
+    await act(async () => usePlayerStore.setState({ currentVideo: { id: "second", title: "", channelName: "" } }));
+    expect(latest.streamVideoId).toBeNull();
+    await act(async () => answerNext(info));
+    expect(latest.streamVideoId).toBe("second");
+  } finally { await act(async () => root.unmount()); }
+});

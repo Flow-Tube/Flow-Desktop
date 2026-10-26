@@ -35,3 +35,12 @@ export function setStyleIfChanged(
 export function setTextIfChanged(element: HTMLElement | null | undefined, value: string): void {
   if (element && element.textContent !== value) element.textContent = value;
 }
+
+/**
+ * Whether a timeupdate counts toward the current video. After a switch the media
+ * element still plays the previous stream until the new one is loaded, and its
+ * position must not be filed under the new video.
+ */
+export function progressTickBelongsTo(currentVideoId: string | null, streamVideoId: string | null): boolean {
+  return currentVideoId !== null && currentVideoId === streamVideoId;
+}

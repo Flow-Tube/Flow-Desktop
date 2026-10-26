@@ -160,6 +160,8 @@ const pickDirectVariantUrl = (info: StreamInfo, qualityId: string, preferredCode
 
 export interface VideoStream {
   streamUrl: string | null;
+  /** The video the current source belongs to; null while a new one resolves. */
+  streamVideoId: string | null;
   streamVariants: StreamVariant[];
   captions: CaptionTrack[];
   audioTracks: AudioTrack[];
@@ -197,6 +199,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const preferredCodec = useAppSettingsStore((s) => s.values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264");
 
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [streamVideoId, setStreamVideoId] = useState<string | null>(null);
   const [streamVariants, setStreamVariants] = useState<StreamVariant[]>([]);
   const [captions, setCaptions] = useState<CaptionTrack[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
@@ -245,6 +248,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       stallExhaustedCyclesRef.current = 0;
       recordPlayerEvent(`video resolve start: ${currentVideo.id}`);
       setStreamUrl(null);
+      setStreamVideoId(null);
       setDashManifestUrl(null);
       setHlsManifestUrl(null);
       setAudioTracks([]);
@@ -282,6 +286,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
             setResumeTime(offlineHandoff.resumeTime);
             setSourceMode("direct");
             setStreamUrl(offline.url);
+            setStreamVideoId(currentVideo.id);
             publishCaptions(offline.captions ?? []);
             setIsPlaying(offlineHandoff.playing);
             if (shouldRecordWatchHistory()) {
@@ -361,6 +366,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
           setDashManifestUrl(null);
           setStreamUrl(pickDirectVariantUrl(info, initialQualityId, preferredCodec));
         }
+        setStreamVideoId(currentVideo.id);
 
         setIsPlaying(handoff.playing);
 
@@ -577,6 +583,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
   return {
     streamUrl,
+    streamVideoId,
     streamVariants,
     captions,
     audioTracks,

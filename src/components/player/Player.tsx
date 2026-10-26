@@ -1734,6 +1734,10 @@ export const Player: React.FC<PlayerProps> = ({
         clearTimeout(qualitySwitchTimeoutRef.current);
         qualitySwitchTimeoutRef.current = null;
       }
+      // A snapshot left from the previous manifest would "correct" the next
+      // video back to the old one's position.
+      qualitySwitchSnapshotRef.current = null;
+      setPendingQualitySwitch(null);
       player.destroy();
       if (dashPlayerRef.current === player) {
         dashPlayerRef.current = null;

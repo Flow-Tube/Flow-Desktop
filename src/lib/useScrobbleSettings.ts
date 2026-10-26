@@ -4,6 +4,7 @@ import { normalizeBackendError } from "./api/errors";
 import {
   flushScrobbles,
   getScrobbleStatus,
+  retryScrobbleKeychain,
   scrobbleSignIn,
   scrobbleSignOut,
   setScrobbleOwnKey,
@@ -80,6 +81,18 @@ export function useScrobbleSettings() {
     }
   }, [refresh]);
 
+  /** True once the keychain could be read. */
+  const retryKeychain = useCallback(async () => {
+    try {
+      await retryScrobbleKeychain();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      await refresh();
+    }
+  }, [refresh]);
+
   /** True when everything was sent, false when some listens are still waiting. */
   const sendNow = useCallback(async () => {
     try {
@@ -91,5 +104,5 @@ export function useScrobbleSettings() {
     }
   }, [refresh]);
 
-  return { status, loadFailed, refresh, signIn, signOut, saveOwnKey, sendNow };
+  return { status, loadFailed, refresh, signIn, signOut, saveOwnKey, retryKeychain, sendNow };
 }

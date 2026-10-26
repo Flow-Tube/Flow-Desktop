@@ -49,6 +49,8 @@ MUSIC
 - On Linux the tray is off by default and needs the libayatana-appindicator3 library, which the .deb, .rpm and AppImage now bring along. Without it the switch stays off instead of stopping Flow from starting.
 - Scrobbling to Last.fm, Libre.fm and ListenBrainz, under Integrations. A song counts once you have heard half of it or four minutes, and songs of 30 seconds or less never count. Videos are never sent.
 - Listens wait on your computer while you are offline and go out once you are back, up to 2,000 per service. Show now playing, Love liked songs and Scrobble during Deep Flow are options, and you can use your own Last.fm API key.
+- Scrobbling no longer asks for your keychain password every time you open music settings or play a song. Flow reads the keychain only to send a listen while you are signed in, at most once per launch, and keeps all its scrobbling secrets in one keychain item.
+- If you refuse keychain access, Flow stops asking and keeps your listens waiting. Settings shows an Allow access button to try again.
 - Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
 - Settings has a Music section with every music setting in one place: playback, audio and the equalizer, the full player's look, lyrics, the tray and scrobbling.
 - Swipe a song in Up next to the left to play it next, or to the right to remove it, by dragging the row or with two fingers on a trackpad, as on Android. Settings › Music can change what each side does. The row menu has the same actions, Delete removes the focused row, and clicking the song that is playing no longer starts it over.
@@ -102,6 +104,8 @@ INTERFACE
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.
 - Share buttons open the system share sheet where there is one and copy the link where there isn't. A copy that fails now says so instead of showing "copied".
 - A maximized or fullscreen window no longer shows a resize cursor along its edges.
+- The collapsed side rail shows icons only, with each name in a tooltip, a little more room between them, and Sync, Extensions and Support at the bottom. Opening or closing it now slides smoothly and pushes the page instead of swapping at once. The top bar button shows a panel open or close icon to match.
+- The menu on the watch and settings pages slides in and out, sits right under the top bar on macOS, closes when you leave the page or press Escape, and moves keyboard focus into the menu.
 - Artist, album and playlist headers, the music player background, playlist cards and blocked-video cards draw their soft artwork once instead of blurring it on every repaint. Player menus and overlays use solid backgrounds instead of blurring what is behind them.
 - The home feed keeps loading new videos as you scroll instead of stopping after a few pages. Each search now continues to its next page of results instead of repeating the first one.
 - New search topics are only picked once the current ones run out of results, so the feed no longer reruns the same searches every few seconds at the bottom.
@@ -110,6 +114,7 @@ INTERFACE
 - A Short found in search or a channel opens in the Shorts player, and collaboration videos open the lead channel instead of none. Related cards show channel avatars.
 - A new Content language setting has YouTube write dates, view counts, labels and its translated titles in one of 75 languages. Upload dates are read in that language, so Home still knows how new each video is. Playback stays as it was.
 - Video cards on standard-resolution screens load a smaller thumbnail when the card is small enough for it, and switch to the sharper one in wide layouts. Playlist headers fall back to a sharp thumbnail when the largest one is missing.
+- Open Collective is now the main way to support Flow, ahead of Patreon, on the Support page, in Settings > About and in the occasional support reminder. Open Collective lists every contribution and expense publicly.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

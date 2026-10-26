@@ -61,6 +61,11 @@ export function setScrobbleOwnKey(enabled: boolean, keys?: { apiKey: string; sec
   });
 }
 
+/** Reads the keychain again after it was refused or locked. */
+export function retryScrobbleKeychain(): Promise<void> {
+  return invokeBackend<void>("scrobble_retry_keychain");
+}
+
 /** Sends waiting listens now; false when some are still waiting. */
 export function flushScrobbles(): Promise<boolean> {
   return invokeBackend<boolean>("scrobble_flush");

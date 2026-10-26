@@ -98,6 +98,9 @@ INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.
 - Share buttons open the system share sheet where there is one and copy the link where there isn't. A copy that fails now says so instead of showing "copied".
+- The search box has a new look and richer suggestions: the part you typed stays plain and the rest is bold, well-known people and places show their picture and a short description, and an arrow puts a suggestion into the box to keep editing.
+- Songs, artists, albums and videos from YouTube Music appear beside the suggestions with their covers and avatars, and open or play straight away.
+- Searches are remembered on this computer and shown when you click the empty search box, with a button to remove one or clear them all. Deep Flow keeps searches out of it unless history is allowed there. Ctrl K shows as Cmd K on macOS.
 - A maximized or fullscreen window no longer shows a resize cursor along its edges.
 - The collapsed side rail shows icons only, with each name in a tooltip, a little more room between them, and Sync, Extensions and Support at the bottom. Opening or closing it now slides smoothly and pushes the page instead of swapping at once. The top bar button shows a panel open or close icon to match.
 - The menu on the watch and settings pages slides in and out, sits right under the top bar on macOS, closes when you leave the page or press Escape, and moves keyboard focus into the menu.

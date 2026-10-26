@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getPlaylistDetails, getVideoDetails } from "./api/youtube";
+import { getPlaylistDetails, getVideoMetadata } from "./api/youtube";
 import {
   formatVideoCountText,
   getStoredPlaylistById,
@@ -11,13 +11,14 @@ import {
 } from "./playlistLibrary";
 import { appendUniqueVideos, loadRemainingPlaylistVideos } from "./playlistPages";
 import {
-  applyVideoDetails,
+  applyVideoMetadata,
   ENRICHMENT_CHUNK_DELAY_MS,
   ENRICHMENT_CHUNK_SIZE,
   ENRICHMENT_TRACK_LIMIT,
   needsEnrichment,
 } from "./playlistEnrichment";
-import type { VideoDetails, VideoSummary } from "../types/video";
+import { recentlyCheckedIds, rememberChecks } from "./playlistMetadataChecks";
+import type { VideoMetadata, VideoSummary } from "../types/video";
 
 export interface PlaylistDetailsMeta {
   id: string;
@@ -183,43 +184,61 @@ export function usePlaylistDetails(playlistId: string | undefined) {
   }, [playlistId, nextPageToken, videos]);
 
   // Per playlist, since this hook outlives a switch; a pass stops once its playlist leaves the screen.
-  const attemptedEnrichment = useRef(new Set<string>());
+  // Tracks this visit has dealt with, looked up or skipped, and how many lookups it has made.
+  const consideredTracks = useRef(new Set<string>());
+  const lookupsThisVisit = useRef(0);
   const enrichmentRunning = useRef<string | null>(null);
   const activePlaylistId = useRef(playlistId);
+  const latestVideos = useRef(videos);
+  latestVideos.current = videos;
   useEffect(() => {
     activePlaylistId.current = playlistId;
-    attemptedEnrichment.current = new Set();
+    consideredTracks.current = new Set();
+    lookupsThisVisit.current = 0;
     return () => {
       activePlaylistId.current = undefined;
     };
   }, [playlistId]);
 
   const enrichTracks = useCallback((id: string, tracks: VideoSummary[]) => {
-    const targets = tracks
-      .filter((track) => needsEnrichment(track) && !attemptedEnrichment.current.has(track.id))
-      .slice(0, ENRICHMENT_TRACK_LIMIT);
-    if (targets.length === 0) return;
-    if (enrichmentRunning.current === id) return;
+    // The visit's budget: at most ENRICHMENT_TRACK_LIMIT lookups, however many passes it takes.
+    const budget = ENRICHMENT_TRACK_LIMIT - lookupsThisVisit.current;
+    if (budget <= 0 || enrichmentRunning.current === id) return;
+    const candidates = tracks.filter((track) => needsEnrichment(track) && !consideredTracks.current.has(track.id));
+    if (candidates.length === 0) return;
     enrichmentRunning.current = id;
-    for (const track of targets) attemptedEnrichment.current.add(track.id);
+    let lookedUp = 0;
 
     void (async () => {
       try {
+        const checked = await recentlyCheckedIds();
+        for (const track of candidates) {
+          if (checked.has(track.id)) consideredTracks.current.add(track.id);
+        }
+        const targets = candidates.filter((track) => !checked.has(track.id)).slice(0, budget);
+        for (const track of targets) consideredTracks.current.add(track.id);
+        lookupsThisVisit.current += targets.length;
+        lookedUp = targets.length;
+
         for (let start = 0; start < targets.length; start += ENRICHMENT_CHUNK_SIZE) {
           if (activePlaylistId.current !== id) return;
-          const refreshed = new Map<string, VideoDetails>();
-          for (const track of targets.slice(start, start + ENRICHMENT_CHUNK_SIZE)) {
+          const chunk = targets.slice(start, start + ENRICHMENT_CHUNK_SIZE);
+          const refreshed = new Map<string, VideoMetadata>();
+          for (const track of chunk) {
             try {
-              refreshed.set(track.id, await getVideoDetails(track.id));
+              refreshed.set(track.id, await getVideoMetadata(track.id));
             } catch {
               // Private or removed videos are expected in old playlists.
             }
           }
           if (refreshed.size > 0) {
-            setVideos((previous) => applyVideoDetails(previous, refreshed));
+            setVideos((previous) => applyVideoMetadata(previous, refreshed));
             // Applied to what's stored now, so a reorder or removal meanwhile survives.
-            await updateStoredPlaylistTracks(id, (stored) => applyVideoDetails(stored, refreshed));
+            await updateStoredPlaylistTracks(id, (stored) => applyVideoMetadata(stored, refreshed));
           }
+          // Failed or still incomplete: leave it alone for a while instead of on every visit.
+          const enriched = applyVideoMetadata(chunk, refreshed);
+          await rememberChecks(enriched.filter(needsEnrichment).map((track) => track.id));
           await new Promise((resolve) => setTimeout(resolve, ENRICHMENT_CHUNK_DELAY_MS));
         }
       } catch (enrichError) {
@@ -227,6 +246,8 @@ export function usePlaylistDetails(playlistId: string | undefined) {
       } finally {
         if (enrichmentRunning.current === id) enrichmentRunning.current = null;
       }
+      // Pages loaded while the pass ran are looked at now, within what is left of the budget.
+      if (lookedUp > 0 && activePlaylistId.current === id) enrichTracks(id, latestVideos.current);
     })();
   }, []);
 

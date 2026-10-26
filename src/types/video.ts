@@ -121,6 +121,19 @@ export interface RelatedPage {
   continuation?: string | null;
 }
 
+/** What a listed video is, from one small request that stays out of playback's way. */
+export interface VideoMetadata {
+  title: string;
+  channelName: string;
+  channelId?: string | null;
+  durationSeconds?: number | null;
+  viewCount?: number | null;
+  /** The upload time, exact, in epoch milliseconds. */
+  publishedAtMs?: number | null;
+  isLive: boolean;
+  category?: string | null;
+}
+
 export interface VideoDetails {
   id: string;
   title: string;

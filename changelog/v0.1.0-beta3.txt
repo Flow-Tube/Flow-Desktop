@@ -91,6 +91,8 @@ LINUX
 - Arch Linux packaging for the AUR: flow-desktop builds Flow from source and flow-desktop-bin installs the release .deb. Both use your system's WebKitGTK and Node, and start with the flow-desktop command so they don't clash with the AUR packages that already use flow.
 - Nightly builds now include a Flatpak (#91), built from source on the GNOME 51 runtime with its own sandbox permissions and app data. It is the first step toward a Flathub release.
 - The last-resort graphics fallback only switches to X11 when an X server is running, so it no longer stops the window from opening on Wayland without XWayland or inside the Flatpak.
+- Open in browser, links in descriptions and on channel pages, Open logs folder and Show in folder work in the AppImage (#141). Flow starts your system's own launcher there instead of the AppImage's copy, which failed without a word.
+- When no browser opens, Open in browser says so and offers to copy the link instead.
 
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.

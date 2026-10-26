@@ -218,6 +218,8 @@ PLAYLISTS
 - Playlists whose id contains "VL" open correctly, playlist headers show their owner again, and changing the 4K, HD or subtitles search filter now runs the search again.
 - Long YouTube playlists load past their first 100 videos as you scroll, show their real title and video count, and download or save in full. Sorting a playlist by date or popularity reads the whole playlist first.
 - Searching inside a channel keeps returning results past the first page, and long comment threads keep their Show more replies button.
+- Playlist tracks that came from sync or an import without a length, view count or upload date get them filled in when the playlist is open, a few a second, and keep them. Sorting by date uses each video's exact upload time, and a drag made meanwhile is kept.
+- Videos that can't be filled in, such as removed ones, are skipped for a week instead of being looked up on every visit.
 
 DOWNLOADS
 - Videos now save as MP4 with AAC audio in every quality, VP9 and AV1 included, so they open in more players. A video with no AAC track still saves as MKV.

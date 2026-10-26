@@ -114,7 +114,7 @@ rust-ini = "=0.21.1"
 # The version wry uses, for the web-process-terminated signal (src/web_process.rs).
 webkit2gtk = { version = "=2.0.2", features = ["v2_20"] }
 # Probes for the AppIndicator library before building the tray (src/services/music_tray.rs).
-libloading = "0.7"
+libloading = "0.9"
 
 [profile.release]
 # Keep production binaries compact without sacrificing the normal release optimizer.

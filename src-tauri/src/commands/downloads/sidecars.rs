@@ -1,6 +1,6 @@
-//! Best-effort companion files written next to a finished download: the poster
-//! image when asked for, and `SponsorBlock` segments for video. Lyrics are saved by
-//! `save_download_lyrics` once the provider chain has them.
+//! Best-effort extras of a finished download: the poster image beside it when asked
+//! for, Flow's own cover copy, and `SponsorBlock` segments for the library. Lyrics
+//! are saved by `save_download_lyrics` once the provider chain has them.
 
 use std::path::{Path, PathBuf};
 
@@ -13,6 +13,8 @@ use crate::db::settings::get_setting;
 
 /// "Also save a poster image next to the file"; the cover is always embedded.
 const POSTER_SIDECAR_KEY: &str = "download_poster_sidecar";
+const SPONSORBLOCK_ENABLED_KEY: &str = "sponsorblock_enabled";
+const SPONSORBLOCK_SERVER_KEY: &str = "sponsorblock_server";
 const COVER_STORE_DIR: &str = "download_covers";
 
 /// Keeps Flow's own copy of the cover in app data, for the library and offline UI.
@@ -28,33 +30,45 @@ pub async fn store_cover(app: &AppHandle, id: &str, jpeg: &[u8]) -> Option<Strin
 pub struct FinishedFile<'a> {
     pub media_kind: DownloadMediaKind,
     pub media_path: &'a Path,
-    pub video_id: Option<&'a str>,
     pub cover: Option<&'a [u8]>,
     /// The muxer already put the cover inside the media file.
     pub cover_in_file: bool,
 }
 
 pub async fn write_sidecars(file: &FinishedFile<'_>, emitter: &ProgressEmitter, pool: &SqlitePool) {
-    let media_kind = file.media_kind;
-    let media_path = file.media_path;
     if let Some(cover) = file.cover {
         write_cover(file, cover, emitter, pool).await;
     }
+}
 
-    let Some(video_id) = file.video_id.map(str::trim).filter(|id| !id.is_empty()) else {
-        return;
-    };
-
-    if matches!(media_kind, DownloadMediaKind::Video) {
-        match write_sponsorblock(media_path, video_id).await {
-            Ok(Some(path)) => {
-                emitter.log(format!(
-                    "Saved SponsorBlock segments to `{}`",
-                    path.display()
-                ));
-            }
-            Ok(None) => {}
-            Err(error) => emitter.log(format!("Could not save SponsorBlock segments: {error}")),
+/// A video's `SponsorBlock` segments as JSON, kept with the download so skipping works
+/// offline. Asked for only when `SponsorBlock` is on, so no video id is sent otherwise.
+pub async fn sponsorblock_segments(
+    pool: &SqlitePool,
+    video_id: &str,
+    emitter: &ProgressEmitter,
+) -> Option<String> {
+    let enabled = get_setting(pool, SPONSORBLOCK_ENABLED_KEY)
+        .await
+        .ok()
+        .flatten()
+        .is_none_or(|value| value != "false");
+    if !enabled {
+        return None;
+    }
+    let server = get_setting(pool, SPONSORBLOCK_SERVER_KEY)
+        .await
+        .ok()
+        .flatten()
+        .filter(|server| !server.trim().is_empty());
+    match fetch_sponsorblock_segments(video_id, server.as_deref()).await {
+        Ok(segments) if segments.as_array().is_some_and(|list| !list.is_empty()) => {
+            serde_json::to_string(&segments).ok()
+        }
+        Ok(_) => None,
+        Err(error) => {
+            emitter.log(format!("Could not save SponsorBlock segments: {error}"));
+            None
         }
     }
 }
@@ -139,19 +153,4 @@ async fn embed_cover(media_path: PathBuf, jpeg: Vec<u8>) -> Result<(), String> {
     })
     .await
     .map_err(|error| format!("embed task failed: {error}"))?
-}
-
-async fn write_sponsorblock(media_path: &Path, video_id: &str) -> Result<Option<PathBuf>, String> {
-    let segments = fetch_sponsorblock_segments(video_id, None)
-        .await
-        .map_err(|error| error.to_string())?;
-    if segments.as_array().is_none_or(Vec::is_empty) {
-        return Ok(None);
-    }
-    let body = serde_json::to_vec_pretty(&segments).map_err(|error| error.to_string())?;
-    let path = media_path.with_extension("sponsorblock.json");
-    tokio::fs::write(&path, body)
-        .await
-        .map_err(|error| format!("could not write segments: {error}"))?;
-    Ok(Some(path))
 }

@@ -21,6 +21,10 @@ pub struct DownloadCollectionRecord {
     #[serde(default)]
     #[sqlx(default)]
     pub downloaded_count: i64,
+    /// The first saved item's stored cover, so the card has art offline.
+    #[serde(default)]
+    #[sqlx(skip)]
+    pub cover_url: Option<String>,
 }
 
 // Dynamic queries here only splice this constant and `?` placeholders, never input, so they

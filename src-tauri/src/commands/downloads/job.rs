@@ -482,7 +482,6 @@ async fn finish(
         &sidecars::FinishedFile {
             media_kind: job.request.media_kind,
             media_path: &packaged.file,
-            video_id: Some(job.request.video_id.as_str()),
             cover: prepared.cover.as_deref(),
             cover_in_file: packaged.cover_in_file,
         },
@@ -490,7 +489,12 @@ async fn finish(
         pool,
     )
     .await;
-    record_completed_download(pool, job, &packaged, &prepared, cover_path).await;
+    let sponsorblock = if matches!(job.request.media_kind, DownloadMediaKind::Video) {
+        sidecars::sponsorblock_segments(pool, &job.request.video_id, emitter).await
+    } else {
+        None
+    };
+    record_completed_download(pool, job, &packaged, &prepared, cover_path, sponsorblock).await;
 }
 
 /// Persists a finished download into the library. A download of the same item and
@@ -501,6 +505,7 @@ async fn record_completed_download(
     packaged: &Packaged,
     prepared: &PreparedMetadata,
     cover_path: Option<String>,
+    sponsorblock_json: Option<String>,
 ) {
     let file_size_bytes = tokio::fs::metadata(&packaged.file)
         .await
@@ -547,7 +552,8 @@ async fn record_completed_download(
         chapters_json: (!prepared.chapters.is_empty())
             .then(|| serde_json::to_string(&prepared.chapters).ok())
             .flatten(),
-        sponsorblock_json: None,
+        sponsorblock_json,
+        cover_url: None,
     };
     match crate::db::downloads::upsert_download(pool, &record).await {
         Ok(replaced) => {

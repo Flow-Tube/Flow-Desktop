@@ -624,10 +624,34 @@ fn download_error(message: impl Into<String>) -> ErrorResponse {
 #[tauri::command]
 pub async fn list_downloads(
     pool: State<'_, SqlitePool>,
+    streaming_manager: State<'_, StreamingManager>,
 ) -> Result<Vec<DownloadRecord>, ErrorResponse> {
-    crate::db::downloads::list_downloads(&pool)
+    let mut records = crate::db::downloads::list_downloads(&pool)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    for record in &mut records {
+        record.cover_url = cover_url(&streaming_manager, record);
+    }
+    Ok(records)
+}
+
+/// A stable loopback link to a download's stored cover, served on the image port
+/// so artwork shows without a network connection.
+fn cover_url(streaming_manager: &StreamingManager, record: &DownloadRecord) -> Option<String> {
+    let path = record.cover_path.as_deref()?;
+    if !Path::new(path).is_file() {
+        return None;
+    }
+    let token = format!("download-cover-{}", record.id?);
+    streaming_manager.register_local_session(
+        token.clone(),
+        path.to_string(),
+        "image/jpeg".to_string(),
+    );
+    Some(format!(
+        "http://127.0.0.1:{}/stream/{token}",
+        streaming_manager.get_image_port()
+    ))
 }
 
 #[tauri::command]
@@ -921,6 +945,7 @@ pub async fn create_download_collection(
         total_count: request.total_count,
         created_at: String::new(),
         downloaded_count: 0,
+        cover_url: None,
     };
     let id = crate::db::download_collections::insert_collection(&pool, &record)
         .await
@@ -935,10 +960,25 @@ pub async fn create_download_collection(
 #[tauri::command]
 pub async fn list_download_collections(
     pool: State<'_, SqlitePool>,
+    streaming_manager: State<'_, StreamingManager>,
 ) -> Result<Vec<DownloadCollectionRecord>, ErrorResponse> {
-    crate::db::download_collections::list_collections(&pool)
+    let mut collections = crate::db::download_collections::list_collections(&pool)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    let records = crate::db::downloads::list_downloads(&pool)
+        .await
+        .map_err(ErrorResponse::from)?;
+    for collection in &mut collections {
+        // Records arrive newest first, so the last match is the first item saved.
+        collection.cover_url = records
+            .iter()
+            .rev()
+            .filter(|record| {
+                record.collection_db_id.is_some() && record.collection_db_id == collection.id
+            })
+            .find_map(|record| cover_url(&streaming_manager, record));
+    }
+    Ok(collections)
 }
 
 #[tauri::command]

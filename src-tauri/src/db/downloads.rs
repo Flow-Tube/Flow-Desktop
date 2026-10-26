@@ -50,6 +50,10 @@ pub struct DownloadRecord {
     pub chapters_json: Option<String>,
     #[serde(default)]
     pub sponsorblock_json: Option<String>,
+    /// A loopback link to the stored cover, filled in when the library is listed.
+    #[serde(default)]
+    #[sqlx(skip)]
+    pub cover_url: Option<String>,
 }
 
 // Dynamic queries here only splice this constant and `?` placeholders, never input, so they

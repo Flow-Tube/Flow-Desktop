@@ -109,7 +109,7 @@ const UNDATED_SESSION_SECS: u64 = 6 * 3600;
 
 /// A remote session lives as long as its URL does. A fixed hour cut every video
 /// still playing an hour after it resolved off mid-stream.
-fn remote_session_expiry(remote_url: &str, now: u64) -> u64 {
+pub(crate) fn remote_session_expiry(remote_url: &str, now: u64) -> u64 {
     crate::api::innertube::core::gate_tracker::url_expiry_secs(remote_url)
         .filter(|expire| *expire > now)
         .unwrap_or(now + UNDATED_SESSION_SECS)
@@ -1519,5 +1519,30 @@ mod range_recovery_tests {
             100,
             None
         ));
+    }
+}
+
+#[cfg(test)]
+mod session_expiry_tests {
+    use super::{UNDATED_SESSION_SECS, remote_session_expiry};
+
+    #[test]
+    fn a_session_lives_as_long_as_its_url() {
+        let url = "https://rr1.googlevideo.com/videoplayback?expire=30000&c=VISIONOS";
+        assert_eq!(remote_session_expiry(url, 1000), 30000);
+    }
+
+    #[test]
+    fn an_undated_or_expired_url_gets_six_hours() {
+        let undated = "https://example.com/manifest.mpd";
+        assert_eq!(
+            remote_session_expiry(undated, 1000),
+            1000 + UNDATED_SESSION_SECS
+        );
+        let expired = "https://rr1.googlevideo.com/videoplayback?expire=500";
+        assert_eq!(
+            remote_session_expiry(expired, 1000),
+            1000 + UNDATED_SESSION_SECS
+        );
     }
 }

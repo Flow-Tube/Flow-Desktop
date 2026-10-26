@@ -109,7 +109,7 @@ tauri-plugin-window-state = "2"
 # tauri-plugin-deep-link 2.6.2 builds `ini::ParseOption` with only the fields rust-ini 0.21.1
 # has, so 0.21.3 breaks its Linux build. Drop this pin once deep-link ships a fix.
 [target.'cfg(target_os = "linux")'.dependencies]
-rust-ini = "=0.21.1"
+rust-ini = "=0.21.3"
 # The version wry uses, for the web-process-terminated signal (src/web_process.rs).
 webkit2gtk = { version = "=2.0.2", features = ["v2_20"] }
 # Probes for the AppIndicator library before building the tray (src/services/music_tray.rs).

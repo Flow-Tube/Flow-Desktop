@@ -59,13 +59,27 @@ export function upgradeThumbnailUrl(
   return upgraded;
 }
 
+/** Exists for every video, unlike `hq720` and `maxresdefault`. */
+function youtubeHqDefaultUrl(videoId: string): string {
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+}
+
+/**
+ * `hqdefault` is 480×360 with the 16:9 frame letterboxed inside, so a card's
+ * `object-cover` crops it to 480×270: enough for a card on a 1× screen, at
+ * about a quarter of the decoded memory of a 1280×720 `hq720`.
+ */
+function prefersHighResThumbnails(): boolean {
+  return typeof window !== "undefined" && (window.devicePixelRatio || 1) > 1;
+}
+
 export function buildThumbnailSources(
   videoId?: string | null,
   fallbackUrl?: string | null,
   quality: ThumbnailQuality = "standard",
 ) {
   const hqFallback = isYoutubeVideoId(videoId)
-    ? youtubeThumbnailUrl(videoId, "standard")
+    ? youtubeHqDefaultUrl(videoId)
     : fallbackUrl
       ? upgradeThumbnailUrl(fallbackUrl, "standard")
       : undefined;
@@ -89,10 +103,8 @@ export function resolveYoutubeThumbnailCandidates(
 
   const candidates: string[] = [];
   if (resolvedId) {
-    candidates.push(
-      youtubeThumbnailUrl(resolvedId, "standard"),
-      `https://i.ytimg.com/vi/${resolvedId}/hqdefault.jpg`,
-    );
+    if (prefersHighResThumbnails()) candidates.push(youtubeThumbnailUrl(resolvedId, "standard"));
+    candidates.push(youtubeHqDefaultUrl(resolvedId));
   }
   if (raw) {
     candidates.push(upgradeThumbnailUrl(raw, "standard"), raw);

@@ -8,7 +8,7 @@ use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::live_chat::LiveChatResponse;
 use crate::models::playlist::PlaylistDetailsResponse;
-use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
+use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
 use crate::models::shorts::{ShortItem, ShortsFeed};
 use crate::models::video::{RelatedPage, StreamInfo, VideoBasics, VideoDetails, VideoMetadata};
 
@@ -171,7 +171,7 @@ impl YoutubeService {
         &self,
         query: &str,
         region: Option<&str>,
-    ) -> AppResult<Vec<String>> {
+    ) -> AppResult<Vec<SearchSuggestion>> {
         self.extractor.get_search_suggestions(query, region).await
     }
 

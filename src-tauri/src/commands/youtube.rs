@@ -8,7 +8,7 @@ use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelT
 use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
-use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
+use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoMetadata, VideoSummary};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
@@ -797,7 +797,7 @@ pub async fn get_search_suggestions(
     query: String,
     region: Option<String>,
     youtube_service: State<'_, YoutubeService>,
-) -> Result<Vec<String>, ErrorResponse> {
+) -> Result<Vec<SearchSuggestion>, ErrorResponse> {
     youtube_service
         .get_search_suggestions(&query, region.as_deref())
         .await

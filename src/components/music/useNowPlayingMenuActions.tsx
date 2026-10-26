@@ -39,6 +39,7 @@ export function useNowPlayingMenuActions(
       id: 'add-to-album',
       label: getString('music_add_to_album'),
       icon: <Disc3 size={16} />,
+      group: 'library',
       onSelect: () => openAddToAlbum(track),
     },
     ...downloadActions,
@@ -46,10 +47,11 @@ export function useNowPlayingMenuActions(
       id: 'share',
       label: getString('music_share'),
       icon: <Share2 size={16} />,
+      group: 'library',
       onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
     ...(onOpenEqualizer
-      ? [{ id: 'equalizer', label: getString('music_equalizer'), icon: <SlidersHorizontal size={16} />, onSelect: onOpenEqualizer }]
+      ? [{ id: 'equalizer', label: getString('music_equalizer'), icon: <SlidersHorizontal size={16} />, group: 'go' as const, onSelect: onOpenEqualizer }]
       : []),
     ...blockActions,
   ];

@@ -1841,5 +1841,22 @@
   "toast_remove_failed": "Couldn't remove from %s",
   "toast_action_failed": "That didn't work. Try again.",
   "toast_your_library": "your library",
-  "toast_queue": "queue"
+  "toast_queue": "queue",
+  "menu_tile_play_next": "Play next",
+  "menu_tile_queue": "Queue",
+  "menu_tile_radio": "Radio",
+  "menu_tile_download": "Download",
+  "menu_tile_downloaded": "Downloaded",
+  "menu_tile_save": "Save",
+  "menu_tile_saved": "Saved",
+  "menu_tile_playlist": "Playlist",
+  "menu_tile_share": "Share",
+  "menu_tile_copy_link": "Copy link",
+  "menu_more_like_this": "More like this",
+  "menu_mark_watched": "Mark as watched",
+  "menu_not_interested": "Not interested",
+  "menu_dont_show_channel": "Don't show this channel",
+  "menu_save_to_library": "Save to library",
+  "menu_remove_from_library": "Remove from library",
+  "playlist_card_view_full": "View full playlist"
 }

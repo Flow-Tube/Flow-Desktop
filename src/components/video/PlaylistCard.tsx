@@ -1,7 +1,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, ListVideo, MoreVertical, Plus, Trash2 } from 'lucide-react';
+import { Download, Library, ListVideo, MoreVertical } from 'lucide-react';
 import type { PlaylistSummary } from '../../types/video';
 import {
   isPlaylistInLibrary,
@@ -13,7 +13,9 @@ import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
-import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { getString } from '../../lib/i18n/index';
+import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
@@ -215,52 +217,45 @@ export function PlaylistCard({
     });
   };
 
-  const runMenuAction = async (
-    event: React.MouseEvent,
-    action: () => void | Promise<void>,
-  ) => {
-    event.stopPropagation();
-    await action();
-    setShowMenu(false);
-  };
+  const menuActions: MediaMenuAction[] = [
+    ...(isProtected
+      ? []
+      : [{
+        id: 'library',
+        label: getString(isSaved ? 'menu_remove_from_library' : 'menu_save_to_library'),
+        tileLabel: getString(isSaved ? 'menu_tile_saved' : 'menu_tile_save'),
+        icon: <Library size={18} />,
+        group: 'quick' as const,
+        active: isSaved,
+        onSelect: isSaved ? handleRemoveFromLibrary : handleSaveToLibrary,
+      }]),
+    {
+      id: 'download',
+      label: getString('download'),
+      tileLabel: getString('menu_tile_download'),
+      icon: <Download size={18} />,
+      group: 'quick',
+      onSelect: handleDownload,
+    },
+    {
+      id: 'open',
+      label: getString('playlist_card_view_full'),
+      icon: <ListVideo size={16} />,
+      group: 'go',
+      onSelect: () => navigate(`/playlist/${playlist.id}`),
+    },
+  ];
 
   const renderMenu = () => {
     if (!showMenu || !menuAnchor) return null;
 
     return (
-      <AnchoredPortalMenu
+      <MediaMenu
         anchor={menuAnchor}
         onClose={() => setShowMenu(false)}
-        className="z-50 w-52 rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
-      >
-        {!isProtected && (isSaved ? (
-          <button
-            type="button"
-            onClick={(event) => void runMenuAction(event, handleRemoveFromLibrary)}
-            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-neutral-300 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
-          >
-            <Trash2 size={16} />
-            Remove from library
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={(event) => void runMenuAction(event, handleSaveToLibrary)}
-            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-neutral-300 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
-          >
-            <Plus size={16} />
-            Save to library
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={(event) => void runMenuAction(event, handleDownload)}
-          className="flex w-full items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-neutral-300 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
-        >
-          <Download size={16} />
-          Download
-        </button>
-      </AnchoredPortalMenu>
+        header={{ title: playlist.title, subtitle: videoCountText, image: playlist.thumbnailUrl, imageShape: 'landscape' }}
+        actions={menuActions}
+      />
     );
   };
 
@@ -293,7 +288,7 @@ export function PlaylistCard({
             {playlist.title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs font-medium text-chrome-zinc-400 transition-colors">
-            {playlist.description || 'View full playlist'}
+            {playlist.description || getString('playlist_card_view_full')}
           </p>
         </div>
 

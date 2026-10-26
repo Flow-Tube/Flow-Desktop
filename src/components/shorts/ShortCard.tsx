@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Ban,
@@ -9,9 +9,9 @@ import {
   EyeOff,
   MoreVertical,
   Play,
-  type LucideIcon,
 } from "lucide-react";
-import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
+import type { MenuAnchor } from "../ui/AnchoredPortalMenu";
+import { MediaMenu } from "../ui/MediaMenu";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import { useUiStore } from "../../store/useUiStore";
@@ -223,46 +223,61 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
       </button>
 
       {menuAnchor && (
-        <AnchoredPortalMenu
+        <MediaMenu
           anchor={menuAnchor}
           onClose={() => setMenuAnchor(null)}
-          className="z-50 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1"
-        >
-          <MenuItem icon={savedToLibrary ? BookmarkCheck : Bookmark} onClick={() => void toggleSavedShort()}>
-            {getString(savedToLibrary ? "shorts_menu_remove_from_library" : "shorts_menu_save_to_library")}
-          </MenuItem>
-          <MenuItem icon={Download} onClick={downloadShort}>{getString("shorts_menu_download")}</MenuItem>
-          <MenuItem icon={Ban} onClick={notInterested}>{getString("shorts_menu_not_interested")}</MenuItem>
-          {short.channelId && (
-            <MenuItem icon={EyeOff} onClick={dontRecommendChannel}>
-              {getString("shorts_menu_dont_recommend_channel")}
-            </MenuItem>
-          )}
-          <MenuItem icon={Copy} onClick={copyLink}>{getString("shorts_menu_copy_link")}</MenuItem>
-        </AnchoredPortalMenu>
+          header={{
+            title,
+            subtitle: short.channelName,
+            image: short.thumbnailUrl ? toSrc(short.thumbnailUrl) : null,
+            imageShape: "portrait",
+          }}
+          actions={[
+            {
+              id: "save",
+              label: getString(savedToLibrary ? "shorts_menu_remove_from_library" : "shorts_menu_save_to_library"),
+              tileLabel: getString(savedToLibrary ? "menu_tile_saved" : "menu_tile_save"),
+              icon: savedToLibrary ? <BookmarkCheck size={18} /> : <Bookmark size={18} />,
+              group: "quick",
+              active: savedToLibrary,
+              onSelect: toggleSavedShort,
+            },
+            {
+              id: "download",
+              label: getString("shorts_menu_download"),
+              tileLabel: getString("menu_tile_download"),
+              icon: <Download size={18} />,
+              group: "quick",
+              onSelect: downloadShort,
+            },
+            {
+              id: "copy-link",
+              label: getString("shorts_menu_copy_link"),
+              tileLabel: getString("menu_tile_copy_link"),
+              icon: <Copy size={18} />,
+              group: "quick",
+              onSelect: copyLink,
+            },
+            {
+              id: "not-interested",
+              label: getString("shorts_menu_not_interested"),
+              icon: <Ban size={16} />,
+              group: "feed",
+              onSelect: notInterested,
+            },
+            ...(short.channelId
+              ? [{
+                id: "block-channel",
+                label: getString("shorts_menu_dont_recommend_channel"),
+                icon: <EyeOff size={16} />,
+                group: "feed" as const,
+                onSelect: dontRecommendChannel,
+              }]
+              : []),
+          ]}
+        />
       )}
     </div>
-  );
-}
-
-function MenuItem({
-  icon: Icon,
-  onClick,
-  children,
-}: {
-  icon: LucideIcon;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
-    >
-      <Icon className="h-4 w-4 shrink-0 text-chrome-neutral-400" />
-      {children}
-    </button>
   );
 }
 

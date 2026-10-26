@@ -53,7 +53,9 @@ import {
   type WindowFullscreenController,
 } from "../../lib/windowFullscreen";
 import {
+  SOURCE_SWITCH_TIMEOUT_MS,
   hasMediaPlaybackProgressed,
+  hasSourceSwitchTimedOut,
   shouldEnterMediaBuffering,
 } from "../../lib/mediaBuffering";
 import {
@@ -2019,6 +2021,8 @@ export const Player: React.FC<PlayerProps> = ({
     mutedSegmentsRecordedRef.current.clear();
     notifiedSegmentsRef.current.clear();
     lastMediaIdentityRef.current = mediaIdentity;
+    // A new source gets its own failure report; a re-resolve keeps the mode.
+    retrySourceFiredRef.current = false;
 
     clearMediaBuffering();
     videoProgressSampleRef.current = null;
@@ -2047,6 +2051,19 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
   }, [clearMediaBuffering, mediaIdentity, resumeTime]);
+
+  useEffect(() => {
+    if (!isSourceSwitching) return;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => {
+      const video = videoRef.current;
+      if (!video || !sourceSwitchingRef.current) return;
+      if (!hasSourceSwitchTimedOut(startedAt, Date.now(), video.readyState)) return;
+      logPlayerEventRef.current("source-switch-timeout", { waitedMs: Date.now() - startedAt });
+      fireRetrySourceRef.current("source-switch-timeout");
+    }, SOURCE_SWITCH_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [isSourceSwitching, mediaIdentity]);
 
   useEffect(() => {
     const video = videoRef.current;

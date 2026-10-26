@@ -160,6 +160,11 @@ const pickDirectVariantUrl = (info: StreamInfo, qualityId: string, preferredCode
   return chosen?.localUrl || info.localUrl || null;
 };
 
+/** Fresh links walk the whole client ladder; past this the retry reports an error. */
+const HARD_RETRY_TIMEOUT_MS = 60_000;
+
+const NO_SOURCE_MESSAGE = "No playable source was returned for this video.";
+
 export interface VideoStream {
   streamUrl: string | null;
   /** The video the current source belongs to; null while a new one resolves. */
@@ -222,6 +227,9 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const lastPlayedTimeRef = useRef(0);
   const pendingResumeRef = useRef<number | null>(null);
   const hardRetryRef = useRef<() => void>(() => undefined);
+  // While fresh links resolve, the old source's failures are expected; switching
+  // modes on them would load the links the retry is replacing.
+  const hardRetryInFlightRef = useRef(false);
   const [loadingStream, setLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamErrorKind, setStreamErrorKind] = useState<string | null>(null);
@@ -258,6 +266,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
     const loadToken = ++loadTokenRef.current;
     const isCurrentLoad = () => loadTokenRef.current === loadToken;
+    hardRetryInFlightRef.current = false;
 
     const loadStream = async () => {
       setLoadingStream(true);
@@ -358,11 +367,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         setSourceMode(initialMode);
 
         if (initialMode === "unavailable") {
-          setStreamError(
-            info.isLive
-              ? "This live broadcast did not return a playable manifest."
-              : "No playable source was returned for this video.",
-          );
+          setStreamError(info.isLive ? "This live broadcast did not return a playable manifest." : NO_SOURCE_MESSAGE);
           setStreamErrorKind("streaming");
           recordPlayerEvent(`video resolve produced no source (live=${info.isLive})`);
           return;
@@ -465,7 +470,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const onRetrySource = useCallback(
     (reason: string) => {
       const info = streamInfoRef.current;
-      if (!info) return;
+      if (!info || hardRetryInFlightRef.current) return;
       const available = computeAvailableSourceModes(info);
       const resumeAt = positionNow();
 
@@ -540,6 +545,11 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const onHardRetry = useCallback(() => {
     if (!currentVideo) return;
     const resumeAt = streamInfoRef.current?.isLive ? 0 : positionNow();
+    // Shares the first load's token, so switching videos drops a late answer.
+    const loadToken = ++loadTokenRef.current;
+    const isCurrentLoad = () => loadTokenRef.current === loadToken;
+    hardRetryInFlightRef.current = true;
+    setLoadingStream(true);
     setStreamUrl(null);
     setStreamVariants([]);
     publishCaptions([]);
@@ -554,8 +564,9 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     // A hard retry exists because the resolved URLs stopped working, so it has
     // to walk a fresh client ladder rather than be handed the same answer again.
     invalidateStreamInfo(currentVideo.id);
-    void resolveStreamInfo(currentVideo.id, { refresh: true })
+    void resolveStreamInfo(currentVideo.id, { refresh: true, timeoutMs: HARD_RETRY_TIMEOUT_MS })
       .then((info) => {
+        if (!isCurrentLoad()) return;
         streamInfoRef.current = info;
         attemptedModesRef.current = new Set();
         setStreamVariants(info.variants || []);
@@ -580,7 +591,13 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         const mode = computeAvailableSourceModes(info)[0] || "unavailable";
         attemptedModesRef.current.add(mode);
         setSourceMode(mode);
-        if (mode === "hls") {
+        if (mode === "unavailable") {
+          setHlsManifestUrl(null);
+          setDashManifestUrl(null);
+          setStreamError(NO_SOURCE_MESSAGE);
+          setStreamErrorKind("streaming");
+          recordPlayerEvent("video hard retry produced no source");
+        } else if (mode === "hls") {
           setHlsManifestUrl(info.hlsManifestUrl || null);
           setDashManifestUrl(null);
           setStreamUrl(null);
@@ -599,11 +616,17 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         }
       })
       .catch((err) => {
+        if (!isCurrentLoad()) return;
         const info = classifyPlayerError(err);
         setStreamError(info.rawMessage);
         setStreamErrorKind(info.kind);
         setStreamStartsAtMs(info.startsAtMs ?? null);
         recordPlayerEvent(`video hard retry failed: ${info.kind} (${info.rawMessage})`);
+      })
+      .finally(() => {
+        if (!isCurrentLoad()) return;
+        hardRetryInFlightRef.current = false;
+        setLoadingStream(false);
       });
   }, [currentVideo, preferredCodec, preferredQuality, publishCaptions, handResumeToSource]);
   hardRetryRef.current = onHardRetry;

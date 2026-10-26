@@ -115,3 +115,68 @@ describe("recovering a long video", () => {
     } finally { await act(async () => root.unmount()); }
   });
 });
+
+describe("fetching fresh links", () => {
+  const info = {
+    streamId: "s", localUrl: "video", expiresAt: "", captions: [], dashManifestUrl: "manifest",
+    variants: [{ id: "v", localUrl: "video", mimeType: 'video/mp4; codecs="avc1.4d401f"', qualityLabel: "720p", isPlayable: true, isDefault: true, hasAudio: false, isVideoOnly: true, deliveryMethod: "progressive" }],
+    audioTracks: [{ id: "a", label: "Original", localUrl: "audio", mimeType: 'audio/mp4; codecs="mp4a.40.2"', isDefault: true, available: true }],
+  };
+
+  async function mount() {
+    vi.stubGlobal("MediaSource", { isTypeSupported: (mime: string) => mime.includes("avc1") || mime.includes("mp4a") });
+    useDownloadsLibraryStore.setState({ loaded: true, records: [] });
+    useAppSettingsStore.setState({ values: {} });
+    usePlayerStore.setState({ currentVideo: { id: "first", title: "", channelName: "" } });
+    vi.mocked(getStreamInfo).mockReset().mockResolvedValue(info);
+    const state = { latest: null as unknown as ReturnType<typeof useVideoStream> };
+    function Harness() { state.latest = useVideoStream(usePlayerStore((s) => s.currentVideo?.id)); return null; }
+    const root = createRoot(document.createElement("div"));
+    await act(async () => root.render(createElement(Harness)));
+    return { state, root };
+  }
+
+  it("shows loading, and drops an answer that arrives after the video changed", async () => {
+    const { state, root } = await mount();
+    try {
+      let answer!: (value: typeof info) => void;
+      vi.mocked(getStreamInfo)
+        .mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }) as never)
+        .mockReturnValueOnce(new Promise(() => {}) as never);
+      await act(async () => state.latest.onHardRetry());
+      expect(state.latest.loadingStream).toBe(true);
+      await act(async () => usePlayerStore.setState({ currentVideo: { id: "second", title: "", channelName: "" } }));
+      await act(async () => answer({ ...info, dashManifestUrl: "stale" }));
+      expect(state.latest.dashManifestUrl).toBeNull();
+      expect(state.latest.streamVideoId).toBeNull();
+    } finally { await act(async () => root.unmount()); }
+  });
+
+  it("reports an error when the fresh links have no playable source", async () => {
+    const { state, root } = await mount();
+    try {
+      vi.mocked(getStreamInfo).mockResolvedValueOnce({ ...info, dashManifestUrl: undefined, variants: [], audioTracks: [], localUrl: "" } as never);
+      await act(async () => state.latest.onHardRetry());
+      expect(state.latest.sourceMode).toBe("unavailable");
+      expect(state.latest.streamErrorKind).toBe("streaming");
+      expect(state.latest.loadingStream).toBe(false);
+    } finally { await act(async () => root.unmount()); }
+  });
+
+  it("holds source fallback while the retry runs, and gives up after a minute", async () => {
+    const { state, root } = await mount();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      vi.mocked(getStreamInfo).mockReturnValueOnce(new Promise(() => {}) as never);
+      await act(async () => state.latest.onHardRetry());
+      await act(async () => state.latest.onRetrySource("media-error:4"));
+      expect(state.latest.sourceMode).toBe("dash-native");
+      await act(async () => { vi.advanceTimersByTime(60_000); });
+      expect(state.latest.streamErrorKind).toBe("network");
+      expect(state.latest.loadingStream).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      await act(async () => root.unmount());
+    }
+  });
+});

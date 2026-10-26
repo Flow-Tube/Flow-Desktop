@@ -279,7 +279,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.PLAYBACK_SPEED, "player", "1.0", "wired", SPEED_VALUES),
   bool(SETTINGS.CUSTOM_SPEEDS_ENABLED, "player", false, "wired"),
   str(SETTINGS.CUSTOM_SPEED_PRESETS, "player", "", "wired"),
-  str(SETTINGS.LONG_PRESS_PLAYBACK_SPEED, "player", "2.0", "wired", ["1.5", "2.0", "2.5", "3.0", "4.0"]),
+  str(SETTINGS.LONG_PRESS_PLAYBACK_SPEED, "player", "2.0", "wired", ["1.5", "2.0", "2.5", "3.0", "4.0", "off"]),
   bool(SETTINGS.SPEED_SLIDER_ENABLED, "player", false, "wired"),
   num(SETTINGS.DOUBLE_TAP_SEEK_SECONDS, "player", 10, "wired", 5, 30),
   bool(SETTINGS.SUBTITLES_ENABLED, "player", false, "wired"),

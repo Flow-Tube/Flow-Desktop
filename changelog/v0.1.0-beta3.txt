@@ -49,6 +49,8 @@ MUSIC
 - On Linux the tray is off by default and needs the libayatana-appindicator3 library, which the .deb, .rpm and AppImage now bring along. Without it the switch stays off instead of stopping Flow from starting.
 - Scrobbling to Last.fm, Libre.fm and ListenBrainz, under Integrations. A song counts once you have heard half of it or four minutes, and songs of 30 seconds or less never count. Videos are never sent.
 - Listens wait on your computer while you are offline and go out once you are back, up to 2,000 per service. Show now playing, Love liked songs and Scrobble during Deep Flow are options, and you can use your own Last.fm API key.
+- Scrobbling no longer asks for your keychain password every time you open music settings or play a song. Flow reads the keychain only to send a listen while you are signed in, at most once per launch, and keeps all its scrobbling secrets in one keychain item.
+- If you refuse keychain access, Flow stops asking and keeps your listens waiting. Settings shows an Allow access button to try again.
 - Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
 - Settings has a Music section with every music setting in one place: playback, audio and the equalizer, the full player's look, lyrics, the tray and scrobbling.
 - Swipe a song in Up next to the left to play it next, or to the right to remove it, by dragging the row or with two fingers on a trackpad, as on Android. Settings › Music can change what each side does. The row menu has the same actions, Delete removes the focused row, and clicking the song that is playing no longer starts it over.
@@ -95,6 +97,9 @@ LINUX
 - When no browser opens, Open in browser says so and offers to copy the link instead.
 
 INTERFACE
+- Saving, liking or adding a video, Short, song, album or playlist shows a toast with its poster and title, names where it went, and offers View and Undo. A failed save names the item and offers Retry.
+- Toasts slide in and out, stay up longer when they have buttons, pause while you point at them, and sit above the music player bar instead of covering its buttons.
+- Right-clicking or opening the three-dot menu on a video, Short, playlist, song or album shows a redesigned menu: the item's poster and title at the top, its main actions as quick buttons, and the rest grouped, with removals in red and arrow-key navigation. Videos gain Share.
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.
 - Share buttons open the system share sheet where there is one and copy the link where there isn't. A copy that fails now says so instead of showing "copied".
@@ -112,6 +117,7 @@ INTERFACE
 - A Short found in search or a channel opens in the Shorts player, and collaboration videos open the lead channel instead of none. Related cards show channel avatars.
 - A new Content language setting has YouTube write dates, view counts, labels and its translated titles in one of 75 languages. Upload dates are read in that language, so Home still knows how new each video is. Playback stays as it was.
 - Video cards on standard-resolution screens load a smaller thumbnail when the card is small enough for it, and switch to the sharper one in wide layouts. Playlist headers fall back to a sharp thumbnail when the largest one is missing.
+- Open Collective is now the main way to support Flow, ahead of Patreon, on the Support page, in Settings > About and in the occasional support reminder. Open Collective lists every contribution and expense publicly.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

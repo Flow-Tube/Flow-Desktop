@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Disc3, Download, Heart, Library, ListPlus, MoreVertical, Music2, Play, Share2 } from 'lucide-react';
+import { CheckCircle2, Download, Heart, Library, MoreVertical, Music2, Play, Share2 } from 'lucide-react';
 import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
 import { getString } from '../../lib/i18n/index';
 import { useActiveDownloadForVideo, useIsDownloaded } from '../../lib/useDownloads';
@@ -15,19 +15,17 @@ import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
-import { useUiStore } from '../../store/useUiStore';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
+import { toggleSongLikeWithToast } from '../../lib/songLikeToast';
+import { useSongMenuActions } from './useSongMenuActions';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
-import { youtubeMusicAlbumUrl, youtubeMusicWatchUrl } from '../../lib/youtubeUrl';
+import { youtubeMusicAlbumUrl } from '../../lib/youtubeUrl';
 import { shareLink } from '../../lib/clipboard';
 import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
-import { useTrackBlockActions } from './useTrackBlockActions';
-import { useTrackNavActions } from './useTrackNavActions';
-import { useTrackDownloadAction } from './useTrackDownloadAction';
-import { useTrackRadioAction } from './useTrackRadioAction';
 
 type BaseProps = {
   className?: string;
@@ -129,8 +127,6 @@ function useSongLike(track: SongItem | null | undefined) {
   const likedItems = useLikesStore((s) => s.items);
   const loaded = useLikesStore((s) => s.loaded);
   const load = useLikesStore((s) => s.load);
-  const toggleSong = useLikesStore((s) => s.toggleSong);
-  const showToast = useUiStore((s) => s.showToast);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -143,16 +139,7 @@ function useSongLike(track: SongItem | null | undefined) {
 
   const toggle = async () => {
     if (!track) return;
-    try {
-      const nowLiked = await toggleSong(track);
-      showToast({
-        variant: "success",
-        message: getString(nowLiked ? "liked_added_toast" : "liked_removed_toast"),
-      });
-    } catch (error) {
-      console.warn("Failed to update song like", error);
-      showToast({ variant: "error", message: getString("liked_update_failed") });
-    }
+    await toggleSongLikeWithToast(track, liked);
   };
 
   return { liked, toggle };
@@ -260,69 +247,44 @@ function SquareCard({
   className?: string;
   fill?: boolean;
 }) {
-  const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
-  const playNextInQueue = useMusicPlayerStore((s) => s.playNextInQueue);
   const menu = useMusicContextMenu(Boolean(menuKind));
   const isTrack = menuKind === 'track' && item && 'videoId' in item;
   const isAlbum = menuKind === 'album' && item && 'browseId' in item;
   const songLike = useSongLike(isTrack ? item : null);
-  const navActions = useTrackNavActions(isTrack ? item : null);
-  const radioActions = useTrackRadioAction(isTrack ? item : null);
-  const downloadActions = useTrackDownloadAction(isTrack ? item : null);
-  const blockActions = useTrackBlockActions(isTrack ? item : null);
+  const songActions = useSongMenuActions(isTrack ? item : null);
 
   const albumBrowseId = isAlbum ? item.browseId : null;
   const albumSaved = useAlbumLibraryStore((s) => (albumBrowseId ? s.isSaved(albumBrowseId) : false));
   const toggleAlbumLibrary = useAlbumLibraryStore((s) => s.toggle);
-  const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
-  const showToast = useUiStore((s) => s.showToast);
   const albumDownload = useCollectionDownloadState(albumBrowseId ?? undefined, "album");
   const openCollectionDownload = useDownloadStore((s) => s.openCollection);
   const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 320));
   const wash = useHoverWashColor(washSrc);
   const menuActions: MusicMenuAction[] = isTrack
-    ? [
-        ...radioActions,
-        {
-          id: 'add-to-queue',
-          label: getString('music_add_to_queue'),
-          icon: <ListPlus size={16} />,
-          onSelect: () => addToQueue(item),
-        },
-        {
-          id: 'play-next',
-          label: getString('music_play_next'),
-          icon: <Play size={16} />,
-          onSelect: () => playNextInQueue(item),
-        },
-        ...navActions,
-        {
-          id: 'add-to-album',
-          label: getString('music_add_to_album'),
-          icon: <Disc3 size={16} />,
-          onSelect: () => openAddToAlbum(item),
-        },
-        ...downloadActions,
-        {
-          id: 'share',
-          label: getString('music_share'),
-          icon: <Share2 size={16} />,
-          onSelect: () => void shareLink(item.title, youtubeMusicWatchUrl(videoIdOf(item))),
-        },
-        ...blockActions,
-      ]
+    ? songActions
     : isAlbum
       ? [
           {
             id: 'add-to-library',
             label: getString(albumSaved ? 'music_remove_from_library' : 'music_add_to_library'),
+            tileLabel: getString(albumSaved ? 'menu_tile_saved' : 'menu_tile_save'),
             icon: <Library size={16} />,
+            group: 'quick',
+            active: albumSaved,
             onSelect: async () => {
-              const nowSaved = await toggleAlbumLibrary(item);
-              showToast({
-                variant: 'success',
-                message: getString(nowSaved ? 'music_saved_to_library' : 'music_removed_from_library'),
-              });
+              const toastItem = { title: item.title, image: item.thumbnail, shape: 'square' as const };
+              try {
+                const nowSaved = await toggleAlbumLibrary(item);
+                showSaveToast({
+                  destination: { kind: 'albums' },
+                  item: toastItem,
+                  removed: !nowSaved,
+                  undo: () => toggleAlbumLibrary(item),
+                });
+              } catch (error) {
+                console.error('Failed to update the album library', error);
+                showSaveFailedToast({ destination: { kind: 'albums' }, item: toastItem, removed: albumSaved });
+              }
             },
           },
           {
@@ -332,8 +294,11 @@ function SquareCard({
               : albumDownload.active
                 ? getString('downloads_downloading')
                 : getString('downloads_download_album'),
+            tileLabel: getString(albumDownload.isComplete ? 'menu_tile_downloaded' : 'menu_tile_download'),
             icon:
               albumDownload.isComplete ? <CheckCircle2 size={16} /> : <Download size={16} />,
+            group: 'quick',
+            active: albumDownload.isComplete,
             onSelect: () => {
               if (albumDownload.active) return;
               openCollectionDownload({
@@ -346,7 +311,9 @@ function SquareCard({
           {
             id: 'share',
             label: getString('music_share'),
+            tileLabel: getString('menu_tile_share'),
             icon: <Share2 size={16} />,
+            group: 'quick',
             onSelect: () => void shareLink(item.title, youtubeMusicAlbumUrl(item.browseId)),
           },
         ]
@@ -422,6 +389,7 @@ function SquareCard({
       <MusicCardMenu
         actions={menuActions}
         anchor={menu.anchor}
+        header={{ title, subtitle, image: washSrc, imageShape: 'square' }}
         onClose={menu.closeMenu}
         show={menu.showMenu}
       />
@@ -570,50 +538,14 @@ function ListRow({
   const artworkRef = useRef<HTMLImageElement | null>(null);
   const colorImageSrc = useProxiedImageUrl(upgradeMusicImageUrl(item.thumbnail, 320));
   const preloadedColor = useDominantColor(colorImageSrc);
-  const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
-  const playNextInQueue = useMusicPlayerStore((s) => s.playNextInQueue);
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const playerIsPlaying = useMusicPlayerStore((s) => s.isPlaying);
-  const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
-  const navActions = useTrackNavActions(item, { onNavigate });
-  const radioActions = useTrackRadioAction(item);
-  const downloadActions = useTrackDownloadAction(item);
-  const blockActions = useTrackBlockActions(item);
+  const songActions = useSongMenuActions(item, { onNavigate });
   const menu = useMusicContextMenu(true);
   const isPlayingTrack = !!currentTrack && videoIdOf(currentTrack) === trackId && playerIsPlaying;
   const isHighlighted = isHovered || isPlayingTrack;
   const activeColor = dominantColor ?? preloadedColor;
-  const menuActions: MusicMenuAction[] = [
-    ...radioActions,
-    {
-      id: 'add-to-queue',
-      label: getString('music_add_to_queue'),
-      icon: <ListPlus size={16} />,
-      onSelect: () => addToQueue(item),
-    },
-    {
-      id: 'play-next',
-      label: getString('music_play_next'),
-      icon: <Play size={16} />,
-      onSelect: () => playNextInQueue(item),
-    },
-    ...navActions,
-    {
-      id: 'add-to-album',
-      label: getString('music_add_to_album'),
-      icon: <Disc3 size={16} />,
-      onSelect: () => openAddToAlbum(item),
-    },
-    ...downloadActions,
-    {
-      id: 'share',
-      label: getString('music_share'),
-      icon: <Share2 size={16} />,
-      onSelect: () => void shareLink(title, youtubeMusicWatchUrl(videoIdOf(item))),
-    },
-    ...blockActions,
-    ...(appendActions ?? []),
-  ];
+  const menuActions: MusicMenuAction[] = [...songActions, ...(appendActions ?? [])];
   const resolveColor = (img?: HTMLImageElement) => {
     const source = img ?? artworkRef.current;
     if (!source || !source.complete || source.naturalWidth === 0) {
@@ -725,6 +657,7 @@ function ListRow({
       <MusicCardMenu
         actions={menuActions}
         anchor={menu.anchor}
+        header={{ title, subtitle, image: colorImageSrc, imageShape: 'square' }}
         onClose={menu.closeMenu}
         show={menu.showMenu}
       />

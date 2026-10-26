@@ -4,7 +4,7 @@ import { useBlockedKeywordMatch, useFeedActionsStore } from '../../store/useFeed
 import { useBlockedRevealStore } from '../../lib/blockedContent';
 import { BlockedVideoCard } from './BlockedVideoCard';
 import { useLiveStore } from '../../store/useLiveStore';
-import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, Download, User, Info } from 'lucide-react';
+import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, ListVideo, Download, User, Share2 } from 'lucide-react';
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -18,10 +18,14 @@ import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, upgra
 import { IS_LINUX_RUNTIME } from '../../lib/platform';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { SETTINGS } from '../../lib/settings/schema';
-import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
+import { shareLink } from '../../lib/clipboard';
+import { youtubeWatchUrl } from '../../lib/youtubeUrl';
 import { getString } from '../../lib/i18n/index';
 import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useUiStore } from '../../store/useUiStore';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
@@ -268,8 +272,8 @@ function VideoCardComponent({
     onRemoveFromHistory?.(video.id);
   };
 
-  const handleChannelNavigate = useCallback(async (e: React.MouseEvent<HTMLElement>) => {
-    e.stopPropagation();
+  const handleChannelNavigate = useCallback(async (e?: React.MouseEvent<HTMLElement>) => {
+    e?.stopPropagation();
     if (channelId) {
       navigate(`/channel/${channelId}`);
       return;
@@ -285,33 +289,37 @@ function VideoCardComponent({
     }
   }, [channelId, navigate, video.id]);
 
-  const handleRemoveFromContinueWatching = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onRemoveFromContinueWatching?.(video.id);
-    setShowMenu(false);
-  };
+
+
+  const toastItem = { title: displayTitle, image: displayThumbnail, shape: "landscape" as const };
 
   const handleToggleWatchLater = async () => {
+    const removing = isSavedToWatchLater;
     try {
-      if (isSavedToWatchLater) {
+      if (removing) {
         await removeFromWatchLater(video.id);
-        showToast({
-          variant: "success",
-          message: getString("video_removed_from_watch_later"),
+        showSaveToast({
+          destination: { kind: "watchLater" },
+          item: toastItem,
+          removed: true,
+          undo: () => saveToWatchLater(video),
         });
         return;
       }
 
       await saveToWatchLater(video);
-      showToast({
-        variant: "success",
-        message: getString("video_saved_to_watch_later"),
+      showSaveToast({
+        destination: { kind: "watchLater" },
+        item: toastItem,
+        undo: () => removeFromWatchLater(video.id),
       });
     } catch (error) {
       console.error("Failed to update Watch Later", error);
-      showToast({
-        variant: "error",
-        message: getString("video_watch_later_failed"),
+      showSaveFailedToast({
+        destination: { kind: "watchLater" },
+        item: toastItem,
+        removed: removing,
+        retry: handleToggleWatchLater,
       });
     }
   };
@@ -327,9 +335,18 @@ function VideoCardComponent({
       player.addToQueue(video);
     }
 
-    showToast({
-      variant: isDuplicate ? "info" : "success",
-      message: getString(isDuplicate ? "queue_duplicate_toast" : "queue_added_toast"),
+    if (isDuplicate) {
+      showToast({ variant: "info", message: getString("queue_duplicate_toast") });
+      return;
+    }
+    showSaveToast({
+      destination: { kind: "queue" },
+      item: toastItem,
+      undo: () => {
+        const { queue, removeFromQueue } = usePlayerStore.getState();
+        const index = queue.map((item) => item.id).lastIndexOf(video.id);
+        if (index >= 0) removeFromQueue(index);
+      },
     });
   };
 
@@ -349,139 +366,133 @@ function VideoCardComponent({
   };
 
   // ── Menu dropdown ───
+  const handleShare = async () => {
+    const result = await shareLink(displayTitle, youtubeWatchUrl(video.id));
+    if (result === "copied") showToast({ variant: "success", message: getString("share_link_copied") });
+    if (result === "failed") showToast({ variant: "error", message: getString("share_link_copy_failed") });
+  };
+
+  const feedActionFailed = () => showToast({ variant: "error", message: getString("feed_action_failed") });
+
+  const menuActions: MediaMenuAction[] = [
+    {
+      id: "queue",
+      label: getString("music_add_to_queue"),
+      tileLabel: getString("menu_tile_queue"),
+      icon: <ListPlus size={18} />,
+      group: "quick",
+      onSelect: handleAddToQueue,
+    },
+    {
+      id: "watch-later",
+      label: getString(isSavedToWatchLater ? "video_remove_from_watch_later" : "video_save_to_watch_later"),
+      tileLabel: getString(isSavedToWatchLater ? "menu_tile_saved" : "menu_tile_save"),
+      icon: <Clock size={18} />,
+      group: "quick",
+      active: isSavedToWatchLater,
+      onSelect: handleToggleWatchLater,
+    },
+    {
+      id: "playlist",
+      label: getString("video_add_to_playlist"),
+      tileLabel: getString("menu_tile_playlist"),
+      icon: <ListVideo size={18} />,
+      group: "quick",
+      onSelect: () => openAddToPlaylist(video),
+    },
+    isDownloaded
+      ? {
+        id: "share",
+        label: getString("share"),
+        tileLabel: getString("menu_tile_share"),
+        icon: <Share2 size={18} />,
+        group: "quick",
+        onSelect: handleShare,
+      }
+      : {
+        id: "download",
+        label: getString("download"),
+        tileLabel: getString("menu_tile_download"),
+        icon: <Download size={18} />,
+        group: "quick",
+        onSelect: handleDownloadAction,
+      },
+    ...(isDownloaded
+      ? [{
+        id: "remove-download",
+        label: getString("video_remove_download"),
+        icon: <Trash2 size={16} />,
+        group: "library" as const,
+        danger: true,
+        onSelect: handleDownloadAction,
+      }]
+      : [{
+        id: "share",
+        label: getString("share"),
+        icon: <Share2 size={16} />,
+        group: "library" as const,
+        onSelect: handleShare,
+      }]),
+    ...(onRemoveFromContinueWatching
+      ? [{
+        id: "remove-continue",
+        label: getString("video_remove_from_continue_watching"),
+        icon: <Trash2 size={16} />,
+        group: "library" as const,
+        danger: true,
+        onSelect: () => onRemoveFromContinueWatching(video.id),
+      }]
+      : []),
+    {
+      id: "channel",
+      label: getString("video_view_channel"),
+      icon: <User size={16} />,
+      group: "go",
+      onSelect: () => handleChannelNavigate(),
+    },
+    {
+      id: "more-like-this",
+      label: getString("menu_more_like_this"),
+      icon: <Sparkles size={16} />,
+      group: "feed",
+      onSelect: () => moreLikeThis(video),
+    },
+    {
+      id: "mark-watched",
+      label: getString("menu_mark_watched"),
+      icon: <Eye size={16} />,
+      group: "feed",
+      onSelect: () => markWatched(video),
+    },
+    {
+      id: "not-interested",
+      label: getString("menu_not_interested"),
+      icon: <Ban size={16} />,
+      group: "feed",
+      onSelect: () => notInterested(video).catch(feedActionFailed),
+    },
+    ...(video.channelId
+      ? [{
+        id: "block-channel",
+        label: getString("menu_dont_show_channel"),
+        icon: <EyeOff size={16} />,
+        group: "feed" as const,
+        onSelect: () => blockChannelAction(video).catch(feedActionFailed),
+      }]
+      : []),
+  ];
+
   const renderMenu = () => {
     if (!showMenu || !menuAnchor) return null;
 
     return (
-      <AnchoredPortalMenu
+      <MediaMenu
         anchor={menuAnchor}
         onClose={() => setShowMenu(false)}
-        className="z-50 w-60 rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
-      >
-        {reason ? (
-          <div className="flex items-start gap-3 border-b border-chrome-neutral-800 px-3.5 pb-2.5 pt-1.5 text-xs text-chrome-zinc-400">
-            <Info size={14} className="mt-0.5 shrink-0" />
-            <span>
-              <span className="block font-semibold text-chrome-zinc-300">{getString("home_feed_why")}</span>
-              {reason}
-            </span>
-          </div>
-        ) : null}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleAddToQueue();
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <Plus size={16} />
-          {getString("music_add_to_queue")}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            openAddToPlaylist(video);
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 whitespace-nowrap px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <ListPlus size={16} />
-          {getString("video_add_to_playlist")}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleChannelNavigate(e);
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 whitespace-nowrap px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <User size={16} />
-          {getString("video_view_channel")}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleDownloadAction();
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 whitespace-nowrap px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          {isDownloaded ? <Trash2 size={16} /> : <Download size={16} />}
-          {getString(isDownloaded ? "video_remove_download" : "download")}
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void handleToggleWatchLater();
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 whitespace-nowrap px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <Clock size={16} />
-          {getString(isSavedToWatchLater ? "video_remove_from_watch_later" : "video_save_to_watch_later")}
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            void moreLikeThis(video);
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <Sparkles size={16} />
-          More like this
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            void markWatched(video);
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <Eye size={16} />
-          Mark as watched
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            void notInterested(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
-            setShowMenu(false);
-          }}
-          className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-        >
-          <Ban size={16} />
-          Not interested
-        </button>
-        {onRemoveFromContinueWatching ? (
-          <button
-            onClick={handleRemoveFromContinueWatching}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-          >
-            <Trash2 size={16} />
-            {getString("video_remove_from_continue_watching")}
-          </button>
-        ) : null}
-        {video.channelId && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              void blockChannelAction(video).catch(() => showToast({ variant: "error", message: getString("feed_action_failed") }));
-              setShowMenu(false);
-            }}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100 transition-colors"
-          >
-            <EyeOff size={16} />
-            Don't show this channel
-          </button>
-        )}
-      </AnchoredPortalMenu>
+        header={{ title: displayTitle, subtitle: byline, image: displayThumbnail, imageShape: "landscape" }}
+        actions={menuActions}
+        note={reason ? { title: getString("home_feed_why"), body: reason } : null}
+      />
     );
   };
 

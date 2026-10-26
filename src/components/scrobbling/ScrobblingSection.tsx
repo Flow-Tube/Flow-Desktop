@@ -8,6 +8,7 @@ import { ScrobbleOwnKeyDialog } from "./ScrobbleOwnKeyDialog";
 import { confirmAction } from "../../lib/dialogs";
 import { getString, type StringKey } from "../../lib/i18n/index";
 import { SETTINGS } from "../../lib/settings/schema";
+import { IS_MACOS_RUNTIME } from "../../lib/platform";
 import { useBoolPref } from "../../lib/usePreference";
 import { useScrobbleSettings } from "../../lib/useScrobbleSettings";
 import { SCROBBLE_SERVICES, type ScrobbleService, type ScrobbleServiceStatus } from "../../lib/api/scrobble";
@@ -27,7 +28,7 @@ function accountLabel(status: ScrobbleServiceStatus | undefined, ready: boolean)
 }
 
 export function ScrobblingSection() {
-  const { status, loadFailed, signIn, signOut, saveOwnKey, sendNow } = useScrobbleSettings();
+  const { status, loadFailed, signIn, signOut, saveOwnKey, retryKeychain, sendNow } = useScrobbleSettings();
   const showToast = useUiStore((state) => state.showToast);
   const [nowPlaying, setNowPlaying] = useBoolPref(SETTINGS.SCROBBLE_NOW_PLAYING);
   const [loveLikes, setLoveLikes] = useBoolPref(SETTINGS.SCROBBLE_LOVE_LIKES);
@@ -35,6 +36,7 @@ export function ScrobblingSection() {
   const [signingIn, setSigningIn] = useState<ScrobbleService | null>(null);
   const [editingKey, setEditingKey] = useState(false);
   const [sending, setSending] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const keychainBroken = !!status?.keychainError;
   const waiting = status?.services.reduce((sum, service) => sum + service.waiting, 0) ?? 0;
@@ -49,6 +51,13 @@ export function ScrobblingSection() {
     if (!await saveOwnKey(enabled)) showToast({ message: getString("scrobbling_own_key_failed"), variant: "error" });
   };
 
+  const allowKeychain = async () => {
+    setRetrying(true);
+    const allowed = await retryKeychain();
+    setRetrying(false);
+    if (!allowed) showToast({ message: getString("scrobbling_keychain_retry_failed"), variant: "error" });
+  };
+
   const sendWaiting = async () => {
     setSending(true);
     const done = await sendNow();
@@ -61,13 +70,18 @@ export function ScrobblingSection() {
   const description = loadFailed
     ? getString("scrobbling_status_failed")
     : keychainBroken
-      ? getString("scrobbling_keychain_unavailable")
+      ? getString("scrobbling_keychain_paused")
       : getString("scrobbling_summary");
 
   return (
     <div className="space-y-4">
       <SettingsGroup title={getString("scrobbling_title")}>
         <p className="px-5 py-3 text-xs text-chrome-neutral-400">{description}</p>
+        {keychainBroken && (
+          <SettingItem title={getString("scrobbling_keychain_title")} description={getString(IS_MACOS_RUNTIME ? "scrobbling_keychain_retry_summary_macos" : "scrobbling_keychain_retry_summary")}>
+            <Button size="sm" disabled={retrying} onClick={() => void allowKeychain()}>{getString("scrobbling_keychain_retry")}</Button>
+          </SettingItem>
+        )}
         {SCROBBLE_SERVICES.map((service) => {
           const serviceStatus = status?.services.find((item) => item.service === service);
           const ready = service !== "LASTFM" || !!status?.lastFmReady;

@@ -1,7 +1,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, ListVideo, MoreVertical, Plus, Trash2 } from 'lucide-react';
+import { Download, Library, ListVideo, MoreVertical } from 'lucide-react';
 import type { PlaylistSummary } from '../../types/video';
 import {
   isPlaylistInLibrary,
@@ -12,8 +12,10 @@ import {
 import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
-import { useUiStore } from '../../store/useUiStore';
-import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
+import { getString } from '../../lib/i18n/index';
+import type { MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
@@ -104,7 +106,6 @@ export function PlaylistCard({
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [isSaved, setIsSaved] = useState(Boolean(isInLibrary));
   const cardRef = useRef<HTMLDivElement>(null);
-  const showToast = useUiStore((state) => state.showToast);
   const openCollectionDownload = useDownloadStore((state) => state.openCollection);
   const wash = useHoverWashColor(playlist.thumbnailUrl);
   const isProtected = Boolean(playlist.isProtected) || isProtectedPlaylistId(playlist.id);
@@ -157,25 +158,34 @@ export function PlaylistCard({
     };
   }, [isInLibrary, isProtected, playlist.id]);
 
+  const toastItem = { title: playlist.title, image: playlist.thumbnailUrl, shape: 'landscape' as const };
+
+  // Each returns false when the owner of the card declined the change.
+  const save = async () => {
+    const result = onSaveToLibrary
+      ? await onSaveToLibrary(playlist)
+      : await savePlaylistToLibrary(playlist);
+    if (result === false) return false;
+    setIsSaved(true);
+    return true;
+  };
+
+  const remove = async () => {
+    const result = onRemoveFromLibrary
+      ? await onRemoveFromLibrary(playlist)
+      : await removePlaylistFromLibrary(playlist.id);
+    if (result === false) return false;
+    setIsSaved(false);
+    return true;
+  };
+
   const handleSaveToLibrary = async () => {
     try {
-      const result = onSaveToLibrary
-        ? await onSaveToLibrary(playlist)
-        : await savePlaylistToLibrary(playlist);
-
-      if (result === false) return;
-
-      setIsSaved(true);
-      showToast({
-        variant: 'success',
-        message: `Saved "${playlist.title}" to library`,
-      });
+      if (!await save()) return;
+      showSaveToast({ destination: { kind: 'library' }, item: toastItem, undo: remove });
     } catch (error) {
       console.error('Failed to save playlist to library', error);
-      showToast({
-        variant: 'error',
-        message: `Could not save "${playlist.title}"`,
-      });
+      showSaveFailedToast({ destination: { kind: 'library' }, item: toastItem, retry: handleSaveToLibrary });
     }
   };
 
@@ -183,23 +193,11 @@ export function PlaylistCard({
     if (isProtected) return;
 
     try {
-      const result = onRemoveFromLibrary
-        ? await onRemoveFromLibrary(playlist)
-        : await removePlaylistFromLibrary(playlist.id);
-
-      if (result === false) return;
-
-      setIsSaved(false);
-      showToast({
-        variant: 'success',
-        message: `Removed "${playlist.title}" from library`,
-      });
+      if (!await remove()) return;
+      showSaveToast({ destination: { kind: 'library' }, item: toastItem, removed: true, undo: save });
     } catch (error) {
       console.error('Failed to remove playlist from library', error);
-      showToast({
-        variant: 'error',
-        message: `Could not remove "${playlist.title}"`,
-      });
+      showSaveFailedToast({ destination: { kind: 'library' }, item: toastItem, removed: true, retry: handleRemoveFromLibrary });
     }
   };
 
@@ -219,52 +217,45 @@ export function PlaylistCard({
     });
   };
 
-  const runMenuAction = async (
-    event: React.MouseEvent,
-    action: () => void | Promise<void>,
-  ) => {
-    event.stopPropagation();
-    await action();
-    setShowMenu(false);
-  };
+  const menuActions: MediaMenuAction[] = [
+    ...(isProtected
+      ? []
+      : [{
+        id: 'library',
+        label: getString(isSaved ? 'menu_remove_from_library' : 'menu_save_to_library'),
+        tileLabel: getString(isSaved ? 'menu_tile_saved' : 'menu_tile_save'),
+        icon: <Library size={18} />,
+        group: 'quick' as const,
+        active: isSaved,
+        onSelect: isSaved ? handleRemoveFromLibrary : handleSaveToLibrary,
+      }]),
+    {
+      id: 'download',
+      label: getString('download'),
+      tileLabel: getString('menu_tile_download'),
+      icon: <Download size={18} />,
+      group: 'quick',
+      onSelect: handleDownload,
+    },
+    {
+      id: 'open',
+      label: getString('playlist_card_view_full'),
+      icon: <ListVideo size={16} />,
+      group: 'go',
+      onSelect: () => navigate(`/playlist/${playlist.id}`),
+    },
+  ];
 
   const renderMenu = () => {
     if (!showMenu || !menuAnchor) return null;
 
     return (
-      <AnchoredPortalMenu
+      <MediaMenu
         anchor={menuAnchor}
         onClose={() => setShowMenu(false)}
-        className="z-50 w-52 rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1.5"
-      >
-        {!isProtected && (isSaved ? (
-          <button
-            type="button"
-            onClick={(event) => void runMenuAction(event, handleRemoveFromLibrary)}
-            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-neutral-300 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
-          >
-            <Trash2 size={16} />
-            Remove from library
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={(event) => void runMenuAction(event, handleSaveToLibrary)}
-            className="flex w-full items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-neutral-300 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
-          >
-            <Plus size={16} />
-            Save to library
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={(event) => void runMenuAction(event, handleDownload)}
-          className="flex w-full items-center gap-3 px-3.5 py-2.5 text-sm text-chrome-neutral-300 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
-        >
-          <Download size={16} />
-          Download
-        </button>
-      </AnchoredPortalMenu>
+        header={{ title: playlist.title, subtitle: videoCountText, image: playlist.thumbnailUrl, imageShape: 'landscape' }}
+        actions={menuActions}
+      />
     );
   };
 
@@ -297,7 +288,7 @@ export function PlaylistCard({
             {playlist.title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs font-medium text-chrome-zinc-400 transition-colors">
-            {playlist.description || 'View full playlist'}
+            {playlist.description || getString('playlist_card_view_full')}
           </p>
         </div>
 

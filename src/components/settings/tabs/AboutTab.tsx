@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ExternalLink, Globe, Scale, Code2, Cpu, Monitor, User, Package, Fingerprint, Info, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronRight, ExternalLink, Globe, Heart, Scale, Code2, Cpu, Monitor, User, Package, Fingerprint, Info, RefreshCw } from 'lucide-react';
 import { SettingsGroup } from '../SettingsGroup';
 import Logo from '../../common/Logo';
 import { Button } from '../../ui/Button';
@@ -11,6 +12,8 @@ import { getSystemMetadata, type SystemMetadata } from '../../../lib/systemMetad
 import { useUpdaterStore } from '../../../store/useUpdaterStore';
 import { updateBlockedStringKey } from '../../../lib/updateSupport';
 import { useUiStore } from '../../../store/useUiStore';
+import { OPEN_COLLECTIVE_URL, PATREON_URL } from '../../../lib/supportLinks';
+import { OpenCollectiveIcon, PatreonIcon } from '../../ui/SupportPlatformIcons';
 
 function GithubIcon({ size = 16 }: { size?: number }) {
   return (
@@ -28,19 +31,12 @@ function RedditIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-function PatreonIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M14.82 2.41c3.96 0 7.18 3.24 7.18 7.21 0 3.96-3.22 7.18-7.18 7.18-3.97 0-7.21-3.22-7.21-7.18 0-3.97 3.24-7.21 7.21-7.21zM2 21.6h3.5V2.41H2V21.6z" />
-    </svg>
-  );
-}
-
-function LinkRow({ icon, label, value, href }: { icon: ReactNode; label: string; value: string; href?: string }) {
+function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; label: string; value: string; href?: string; onSelect?: () => void }) {
+  const select = onSelect ?? (href ? () => void openExternal(href) : undefined);
   return (
     <div
-      onClick={href ? () => openExternal(href) : undefined}
-      className={`flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out group ${href ? 'cursor-pointer' : ''}`}
+      onClick={select}
+      className={`flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out group ${select ? 'cursor-pointer' : ''}`}
     >
       <div className="flex items-center gap-3 shrink-0 pr-4">
         <span className="text-chrome-neutral-400">{icon}</span>
@@ -49,6 +45,7 @@ function LinkRow({ icon, label, value, href }: { icon: ReactNode; label: string;
       <div className="flex items-center justify-end gap-2 min-w-0 text-right">
         {value && <span className="text-sm text-chrome-neutral-400 break-all">{value}</span>}
         {href && <ExternalLink size={12} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
+        {onSelect && <ChevronRight size={14} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
       </div>
     </div>
   );
@@ -63,6 +60,7 @@ const sourceLabel = (source?: AppMetadata['source'] | SystemMetadata['source']) 
 };
 
 export function AboutTab() {
+  const navigate = useNavigate();
   const [appMetadata, setAppMetadata] = useState<AppMetadata | null>(null);
   const [systemMetadata, setSystemMetadata] = useState<SystemMetadata | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -181,10 +179,14 @@ export function AboutTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_support')}>
-        <LinkRow icon={<PatreonIcon />} label={getString('settings_donate_patreon')} value="" href="https://patreon.com/A_EDev" />
+        <LinkRow icon={<OpenCollectiveIcon />} label={getString('settings_donate_open_collective')} value="" href={OPEN_COLLECTIVE_URL} />
+        <div className="border-t border-chrome-neutral-800/50" />
+        <LinkRow icon={<PatreonIcon />} label={getString('settings_donate_patreon')} value="" href={PATREON_URL} />
+        <div className="border-t border-chrome-neutral-800/50" />
+        <LinkRow icon={<Heart size={16} />} label={getString('settings_donate_all_ways')} value="" onSelect={() => navigate('/support')} />
         <div className="border-t border-chrome-neutral-800/50" />
         <div className="px-5 py-4">
-          <p className="text-xs text-chrome-neutral-400 leading-relaxed">{getString('settings_donate_patreon_desc')}</p>
+          <p className="text-xs text-chrome-neutral-400 leading-relaxed">{getString('settings_donate_desc')}</p>
         </div>
       </SettingsGroup>
 

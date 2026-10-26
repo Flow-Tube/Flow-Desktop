@@ -10,7 +10,7 @@ import { useMusicPlayerStore } from "./useMusicPlayerStore";
 
 describe("the published music clock", () => {
   beforeEach(() => {
-    useMusicPlayerStore.setState({ progress: 0, duration: 200 });
+    useMusicPlayerStore.setState({ progress: 0, duration: 200, loadingStreamId: null });
   });
 
   it("notifies subscribers once per whole second", () => {
@@ -31,5 +31,11 @@ describe("the published music clock", () => {
   it("keeps the listed duration when the element reports an endless stream", () => {
     useMusicPlayerStore.getState()._syncTime(3.2, Number.POSITIVE_INFINITY);
     expect(useMusicPlayerStore.getState()).toMatchObject({ progress: 3.2, duration: 200 });
+  });
+
+  it("keeps the next song's start while the last one still plays", () => {
+    useMusicPlayerStore.setState({ progress: 0, duration: 180, loadingStreamId: "next" });
+    useMusicPlayerStore.getState()._syncTime(95, 200);
+    expect(useMusicPlayerStore.getState()).toMatchObject({ progress: 0, duration: 180 });
   });
 });

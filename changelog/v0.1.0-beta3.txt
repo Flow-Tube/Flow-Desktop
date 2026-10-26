@@ -91,6 +91,8 @@ LINUX
 - Arch Linux packaging for the AUR: flow-desktop builds Flow from source and flow-desktop-bin installs the release .deb. Both use your system's WebKitGTK and Node, and start with the flow-desktop command so they don't clash with the AUR packages that already use flow.
 - Nightly builds now include a Flatpak (#91), built from source on the GNOME 51 runtime with its own sandbox permissions and app data. It is the first step toward a Flathub release.
 - The last-resort graphics fallback only switches to X11 when an X server is running, so it no longer stops the window from opening on Wayland without XWayland or inside the Flatpak.
+- Open in browser, links in descriptions and on channel pages, Open logs folder and Show in folder work in the AppImage (#141). Flow starts your system's own launcher there instead of the AppImage's copy, which failed without a word.
+- When no browser opens, Open in browser says so and offers to copy the link instead.
 
 INTERFACE
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
@@ -149,6 +151,16 @@ PLAYER
 - One sleep timer now serves both the video and the music player, with Flow for Android's choices: 10 to 90 minutes, a custom time, End of song, and Quit Flow when it ends, which is remembered.
 - Music fades out over the last 20 seconds before the timer stops it, and the fade keeps going while Flow is in the background.
 - A Sleep timer button can be added next to Like in the full music player from Settings, Player.
+- Clicking a related video, Next or autoplay switches straight to the new video. Before, the old one loaded again for a moment, which could restart its opening, leave a stale position or clear its title in History.
+- A quality change in progress when the video changes can no longer move the new video to the old one's position, and the music seek bar no longer shows the last song's time while the next one loads.
+- A long video that stops and recovers carries on from where it stopped instead of the beginning, and so does Retry. A source change no longer records 0 as your place in the video.
+- A video can fetch fresh links on its own up to three times, each after at least five more minutes of playback, and videos resume at your place directly instead of loading the opening first.
+- A source that never starts loading is dropped after 30 seconds for the next one, and fetching fresh links shows the loading spinner and gives up after a minute. When nothing plays, the player now says so instead of spinning forever or going blank.
+- The player keeps 30 seconds of video behind the playhead instead of as much as it buffers ahead, which used up to two extra minutes of video in memory.
+- Videos streamed through SABR no longer stop an hour after they started, and fetching fresh links gives them a new SABR session instead of the expired one.
+- A VPN or network change no longer pushes Flow's most reliable playback client to the back of the line for half an hour. Only a link refused within minutes of being issued counts against its client.
+- The pop-out player window moves when you drag the video itself, not only the strip along its top (#140). Holding the video still speeds it up, and a click still pauses.
+- Long Press Speed has an Off choice that turns hold-to-speed-up off in the player, the pop-out window and Shorts.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

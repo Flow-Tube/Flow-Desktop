@@ -416,8 +416,9 @@ pub async fn get_stream_info(
 ) -> Result<StreamInfo, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
+    let refresh = refresh.unwrap_or(false);
     let mut stream_info = youtube_service
-        .get_stream_info(&video_id, refresh.unwrap_or(false))
+        .get_stream_info(&video_id, refresh)
         .await
         .map_err(ErrorResponse::from)?;
 
@@ -553,6 +554,9 @@ pub async fn get_stream_info(
     }
 
     if let Some(descriptor) = stream_info.sabr_descriptor.take() {
+        if refresh {
+            streaming_manager.sabr().discard_video(&descriptor.video_id);
+        }
         let session_id = streaming_manager
             .sabr()
             .prepare(descriptor, crate::streaming::sabr::CodecSupport::default());

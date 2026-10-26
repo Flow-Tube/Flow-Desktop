@@ -51,6 +51,7 @@ use commands::downloads::{
     list_downloads, pause_download, restore_downloads, resume_download, retry_download,
     reveal_download, set_download_concurrency, show_download_notification, start_download,
 };
+use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
@@ -588,6 +589,7 @@ pub fn run() {
             clear_logs,
             logs_dir_path,
             reveal_logs_folder,
+            open_external,
             reset_visitor_identity,
             startup_render_ok,
             get_graphics_mode,

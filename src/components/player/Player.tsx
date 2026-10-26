@@ -20,6 +20,9 @@ import { MiniPlayerControls } from "./MiniPlayerControls";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
+import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
+import { longPressRate } from "../../lib/pointerGesture";
+import { isPopOutWindow } from "../../lib/api/pip";
 import {
   PlayerGestureOverlay,
   type PlayerSeekFeedback,
@@ -52,7 +55,9 @@ import {
   type WindowFullscreenController,
 } from "../../lib/windowFullscreen";
 import {
+  SOURCE_SWITCH_TIMEOUT_MS,
   hasMediaPlaybackProgressed,
+  hasSourceSwitchTimedOut,
   shouldEnterMediaBuffering,
 } from "../../lib/mediaBuffering";
 import {
@@ -120,7 +125,7 @@ type DashTrackInfo = {
 };
 
 type DashPlayerController = {
-  initialize: (element: HTMLMediaElement, source: string, autoPlay: boolean) => void;
+  initialize: (element: HTMLMediaElement, source: string, autoPlay: boolean, startTime?: number) => void;
   destroy: () => void;
   off: (type: string, listener: (event: unknown) => void, scope?: object) => void;
   on: (type: string, listener: (event: unknown) => void, scope?: object) => void;
@@ -159,6 +164,9 @@ function readBufferedAheadSeconds(player: DashPlayerController): number | null {
 }
 
 const FULLSCREEN_SETTLE_MS = 120;
+/** Video kept behind the playhead. Keeping as much behind as ahead held up to
+ * two extra minutes of 1080p in memory. */
+const BACK_BUFFER_SECONDS = 30;
 const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -459,10 +467,8 @@ export const Player: React.FC<PlayerProps> = ({
     () => normalizePlaybackRate(playbackSpeedSetting),
     [playbackSpeedSetting],
   );
-  const longPressPlaybackRate = useMemo(
-    () => normalizePlaybackRate(longPressSpeedSetting, 2),
-    [longPressSpeedSetting],
-  );
+  const longPressPlaybackRate = useMemo(() => longPressRate(longPressSpeedSetting), [longPressSpeedSetting]);
+  const [isPopOut] = useState(isPopOutWindow);
   const configuredSpeedOptions = useMemo(
     () => parseCustomSpeedPresets(customSpeedPresets, customSpeedsEnabled),
     [customSpeedPresets, customSpeedsEnabled],
@@ -1031,6 +1037,11 @@ export const Player: React.FC<PlayerProps> = ({
     logPlayerEventRef.current = logPlayerEvent;
   }, [logPlayerEvent]);
 
+  const resumeTimeRef = useRef(resumeTime);
+  useEffect(() => {
+    resumeTimeRef.current = resumeTime;
+  }, [resumeTime]);
+
   useEffect(() => {
     onRetrySourceRef.current = onRetrySource;
   }, [onRetrySource]);
@@ -1579,7 +1590,7 @@ export const Player: React.FC<PlayerProps> = ({
         },
         buffer: {
           fastSwitchEnabled: false,
-          bufferToKeep: Math.max(60, bufferConfig.maxSeconds),
+          bufferToKeep: BACK_BUFFER_SECONDS,
           bufferPruningInterval: 120,
           bufferTimeDefault: bufferConfig.minSeconds,
           bufferTimeAtTopQuality: bufferConfig.maxSeconds,
@@ -1718,7 +1729,9 @@ export const Player: React.FC<PlayerProps> = ({
     player.on(dashEvents.STREAM_INITIALIZED, onStreamInitialized);
 
     dashPlayerRef.current = player;
-    player.initialize(video, dashManifestUrl, desiredPlayingRef.current || isPlaying);
+    // Starting at 0 and seeking once loaded fetched the opening segments first.
+    const startAt = resumeTimeRef.current;
+    player.initialize(video, dashManifestUrl, desiredPlayingRef.current || isPlaying, startAt > 0 ? startAt : undefined);
 
     return () => {
       dashReadyRef.current = false;
@@ -1734,6 +1747,10 @@ export const Player: React.FC<PlayerProps> = ({
         clearTimeout(qualitySwitchTimeoutRef.current);
         qualitySwitchTimeoutRef.current = null;
       }
+      // A snapshot left from the previous manifest would "correct" the next
+      // video back to the old one's position.
+      qualitySwitchSnapshotRef.current = null;
+      setPendingQualitySwitch(null);
       player.destroy();
       if (dashPlayerRef.current === player) {
         dashPlayerRef.current = null;
@@ -2007,6 +2024,8 @@ export const Player: React.FC<PlayerProps> = ({
     mutedSegmentsRecordedRef.current.clear();
     notifiedSegmentsRef.current.clear();
     lastMediaIdentityRef.current = mediaIdentity;
+    // A new source gets its own failure report; a re-resolve keeps the mode.
+    retrySourceFiredRef.current = false;
 
     clearMediaBuffering();
     videoProgressSampleRef.current = null;
@@ -2035,6 +2054,19 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
   }, [clearMediaBuffering, mediaIdentity, resumeTime]);
+
+  useEffect(() => {
+    if (!isSourceSwitching) return;
+    const startedAt = Date.now();
+    const timer = window.setTimeout(() => {
+      const video = videoRef.current;
+      if (!video || !sourceSwitchingRef.current) return;
+      if (!hasSourceSwitchTimedOut(startedAt, Date.now(), video.readyState)) return;
+      logPlayerEventRef.current("source-switch-timeout", { waitedMs: Date.now() - startedAt });
+      fireRetrySourceRef.current("source-switch-timeout");
+    }, SOURCE_SWITCH_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [isSourceSwitching, mediaIdentity]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2384,6 +2416,9 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
+    if (!shouldPublishPlaybackTime(sourceSwitchingRef.current, video.readyState, lastMediaIdentityRef.current !== "")) {
+      return;
+    }
     const nextTime = video.currentTime;
     const nextDuration = video.duration || duration || 0;
 
@@ -2621,6 +2656,7 @@ export const Player: React.FC<PlayerProps> = ({
         onSeekFeedback={showSeekFeedback}
         onRevealControls={revealControls}
         isCompact={isPipMode}
+        canDragWindow={isPopOut}
       />
 
       {pendingQualitySwitch && (

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  SOURCE_SWITCH_TIMEOUT_MS,
   hasMediaPlaybackProgressed,
+  hasSourceSwitchTimedOut,
   shouldEnterMediaBuffering,
   type MediaBufferingSnapshot,
 } from "./mediaBuffering";
@@ -52,5 +54,17 @@ describe("hasMediaPlaybackProgressed", () => {
     expect(hasMediaPlaybackProgressed(Number.NaN, 10)).toBe(false);
     expect(hasMediaPlaybackProgressed(10, Number.NaN)).toBe(false);
     expect(hasMediaPlaybackProgressed(10, Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe("hasSourceSwitchTimedOut", () => {
+  it("gives a source that never answers 30 seconds", () => {
+    expect(hasSourceSwitchTimedOut(0, SOURCE_SWITCH_TIMEOUT_MS - 1, 0)).toBe(false);
+    expect(hasSourceSwitchTimedOut(0, SOURCE_SWITCH_TIMEOUT_MS, 0)).toBe(true);
+  });
+
+  it("keeps waiting on a source that has answered", () => {
+    expect(hasSourceSwitchTimedOut(0, SOURCE_SWITCH_TIMEOUT_MS * 2, 1)).toBe(false);
+    expect(hasSourceSwitchTimedOut(0, SOURCE_SWITCH_TIMEOUT_MS * 2, 4)).toBe(false);
   });
 });

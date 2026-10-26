@@ -899,9 +899,11 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // published when the whole second changes; the full player's bar reads the
   // audio element itself for anything finer.
   _syncTime: (progress, duration) => {
-    const seconds = Number.isFinite(progress) ? progress : 0;
-    const nextDuration = Number.isFinite(duration) && duration > 0 ? duration : get().duration;
     const current = get();
+    // While the next song resolves, the element still plays the last one.
+    if (current.loadingStreamId !== null) return;
+    const seconds = Number.isFinite(progress) ? progress : 0;
+    const nextDuration = Number.isFinite(duration) && duration > 0 ? duration : current.duration;
     if (current.currentTrack && current.isPlaying && !current.isBuffering) {
       recovery.notePlaying(videoIdOf(current.currentTrack), Date.now());
     }

@@ -9,6 +9,7 @@ import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { IS_LINUX_RUNTIME } from '../../../lib/platform';
+import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -95,6 +96,7 @@ export function PlayerTab() {
           <Select value={longPressSpeed} onChange={setLongPressSpeed} options={[
             { value: '1.5', label: '1.5x' }, { value: '2.0', label: '2.0x' },
             { value: '2.5', label: '2.5x' }, { value: '3.0', label: '3.0x' }, { value: '4.0', label: '4.0x' },
+            { value: LONG_PRESS_OFF, label: getString('settings_long_press_speed_off') },
           ]} />
         </SettingItem>
         <SettingItem title={getString('settings_speed_slider')} description={getString('settings_speed_slider_desc')}>

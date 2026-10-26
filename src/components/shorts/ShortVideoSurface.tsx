@@ -27,6 +27,7 @@ import {
   parseCustomSpeedPresets,
   selectPreferredCaptionId,
 } from "../../lib/settings/playerRuntime";
+import { LONG_PRESS_MS, longPressRate } from "../../lib/pointerGesture";
 import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
   AUDIO_RESYNC_MIN_INTERVAL_MS,
@@ -153,7 +154,7 @@ export function ShortVideoSurface({
   useSubtitleSettingsSync();
 
   const defaultPlaybackRate = normalizePlaybackRate(playbackSpeedSetting);
-  const longPressPlaybackRate = normalizePlaybackRate(longPressSpeedSetting, 2);
+  const longPressPlaybackRate = longPressRate(longPressSpeedSetting);
   const speedOptions = parseCustomSpeedPresets(customSpeedPresets, customSpeedsEnabled);
   const selectedCaption = captions.find((caption) => caption.id === selectedCaptionId) ?? null;
   const selectedVariant = qualities.find((quality) => quality.id === selectedQualityId) ?? null;
@@ -510,12 +511,13 @@ export function ShortVideoSurface({
       if (!active || event.button !== 0) return;
       setContextMenu(null);
       event.currentTarget.setPointerCapture(event.pointerId);
+      if (longPressPlaybackRate === null) return;
       longPressTimerRef.current = setTimeout(() => {
         previousRateRef.current = playbackRate;
         longPressActiveRef.current = true;
         setIsBoosting(true);
         setPlaybackRate(longPressPlaybackRate);
-      }, 420);
+      }, LONG_PRESS_MS);
     },
     [active, longPressPlaybackRate, playbackRate, setPlaybackRate],
   );

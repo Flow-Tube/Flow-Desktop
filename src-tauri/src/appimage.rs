@@ -126,6 +126,12 @@ fn bundle_env_changes() -> Vec<EnvChange> {
         .unwrap_or_default()
 }
 
+/// Whether Flow runs from an `AppImage`, whose environment points into the bundle.
+#[cfg(target_os = "linux")]
+pub fn in_appimage() -> bool {
+    std::env::var_os("APPDIR").is_some_and(|appdir| !appdir.is_empty())
+}
+
 /// `std::process::Command::new`, minus the bundle paths.
 #[cfg(target_os = "linux")]
 pub fn host_command(program: impl AsRef<OsStr>) -> std::process::Command {

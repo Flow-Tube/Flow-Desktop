@@ -10,7 +10,7 @@ use crate::models::live_chat::LiveChatResponse;
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
 use crate::models::shorts::{ShortItem, ShortsFeed};
-use crate::models::video::{RelatedPage, StreamInfo, VideoBasics, VideoDetails};
+use crate::models::video::{RelatedPage, StreamInfo, VideoBasics, VideoDetails, VideoMetadata};
 
 #[derive(Clone)]
 pub struct YoutubeService {
@@ -40,6 +40,10 @@ impl YoutubeService {
 
     pub async fn get_related_videos(&self, video_id: &str) -> AppResult<RelatedPage> {
         self.extractor.get_related_videos(video_id).await
+    }
+
+    pub async fn get_video_metadata(&self, video_id: &str) -> AppResult<VideoMetadata> {
+        self.extractor.get_video_metadata(video_id).await
     }
 
     pub async fn get_video_category(&self, video_id: &str) -> AppResult<Option<String>> {

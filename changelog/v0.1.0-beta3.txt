@@ -149,6 +149,12 @@ PLAYER
 - One sleep timer now serves both the video and the music player, with Flow for Android's choices: 10 to 90 minutes, a custom time, End of song, and Quit Flow when it ends, which is remembered.
 - Music fades out over the last 20 seconds before the timer stops it, and the fade keeps going while Flow is in the background.
 - A Sleep timer button can be added next to Like in the full music player from Settings, Player.
+- Clicking a related video, Next or autoplay switches straight to the new video. Before, the old one loaded again for a moment, which could restart its opening, leave a stale position or clear its title in History.
+- A quality change in progress when the video changes can no longer move the new video to the old one's position, and the music seek bar no longer shows the last song's time while the next one loads.
+- A long video that stops and recovers carries on from where it stopped instead of the beginning, and so does Retry. A source change no longer records 0 as your place in the video.
+- A video can fetch fresh links on its own up to three times, each after at least five more minutes of playback, and videos resume at your place directly instead of loading the opening first.
+- A source that never starts loading is dropped after 30 seconds for the next one, and fetching fresh links shows the loading spinner and gives up after a minute. When nothing plays, the player now says so instead of spinning forever or going blank.
+- The player keeps 30 seconds of video behind the playhead instead of as much as it buffers ahead, which used up to two extra minutes of video in memory.
 - Videos streamed through SABR no longer stop an hour after they started, and fetching fresh links gives them a new SABR session instead of the expired one.
 - A VPN or network change no longer pushes Flow's most reliable playback client to the back of the line for half an hour. Only a link refused within minutes of being issued counts against its client.
 
@@ -218,6 +224,8 @@ PLAYLISTS
 - Playlists whose id contains "VL" open correctly, playlist headers show their owner again, and changing the 4K, HD or subtitles search filter now runs the search again.
 - Long YouTube playlists load past their first 100 videos as you scroll, show their real title and video count, and download or save in full. Sorting a playlist by date or popularity reads the whole playlist first.
 - Searching inside a channel keeps returning results past the first page, and long comment threads keep their Show more replies button.
+- Playlist tracks that came from sync or an import without a length, view count or upload date get them filled in when the playlist is open, a few a second, and keep them. Sorting by date uses each video's exact upload time, and a drag made meanwhile is kept.
+- Videos that can't be filled in, such as removed ones, are skipped for a week instead of being looked up on every visit.
 
 DOWNLOADS
 - Videos now save as MP4 with AAC audio in every quality, VP9 and AV1 included, so they open in more players. A video with no AAC track still saves as MKV.

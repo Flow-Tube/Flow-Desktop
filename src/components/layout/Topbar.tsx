@@ -13,9 +13,14 @@ import { getString } from '../../lib/i18n/index';
 import { toggleDeepFlow } from '../../lib/deepFlow';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 
+/** PageWrapper returns focus here when Escape closes the drawer. */
+export const SIDEBAR_MENU_BUTTON_ID = 'sidebar-menu-button';
+
 export function Topbar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const toggleWatchSidebar = useUiStore((s) => s.toggleWatchSidebar);
+  const isSidebarExpanded = useUiStore((s) => s.isSidebarExpanded);
+  const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const [localSearch, setLocalSearch] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -24,6 +29,7 @@ export function Topbar() {
   const [resolving, setResolving] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const usesDrawer = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/settings');
   const suggestionRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const showAppLogo = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_APP_LOGO_ICON] !== 'false');
@@ -167,7 +173,12 @@ export function Topbar() {
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent bg-background px-3">
       {/* Left */}
       <div className="flex min-w-0 items-center gap-2">
-        <IconButton onClick={(location.pathname.startsWith('/watch/') || location.pathname.startsWith('/settings')) ? toggleWatchSidebar : toggleSidebar}>
+        <IconButton
+          id={SIDEBAR_MENU_BUTTON_ID}
+          aria-label={getString('sidebar_menu')}
+          aria-expanded={usesDrawer ? isWatchSidebarOpen : isSidebarExpanded}
+          onClick={usesDrawer ? toggleWatchSidebar : toggleSidebar}
+        >
           <Menu />
         </IconButton>
         {showAppLogo && (

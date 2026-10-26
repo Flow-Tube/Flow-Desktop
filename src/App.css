@@ -269,7 +269,7 @@
   Icons sit in a fixed 56 px slot, so only labels and the extra sections fade.
 */
 :root {
-  --sidebar-motion-duration: 800ms;
+  --sidebar-motion-duration: 600ms;
   --sidebar-motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 

@@ -108,8 +108,8 @@ export function SubscriptionsNav({
   useSubscriptionAvatarHydration(visibleSubs);
 
   return (
-    <nav className="mt-1 flex flex-col">
-      <div className={subsExpanded ? 'max-h-[45vh] overflow-y-auto' : ''}>
+    <nav className="mt-1 flex flex-col gap-1.5">
+      <div className={`flex flex-col gap-1.5 ${subsExpanded ? 'max-h-[45vh] overflow-y-auto' : ''}`}>
         {visibleSubs.map((channel) => (
           <SidebarItem
             key={channel.id}

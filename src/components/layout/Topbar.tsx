@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, HatGlasses, Loader2, Menu, Search, Settings } from 'lucide-react';
+import { ArrowLeft, ArrowRight, HatGlasses, Loader2, PanelLeftClose, PanelLeftOpen, Search, Settings } from 'lucide-react';
 import { useUiStore } from '../../store/useUiStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import Logo from '../common/Logo';
@@ -30,6 +30,7 @@ export function Topbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const usesDrawer = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/settings');
+  const sidebarOpen = usesDrawer ? isWatchSidebarOpen : isSidebarExpanded;
   const suggestionRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const showAppLogo = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_APP_LOGO_ICON] !== 'false');
@@ -176,10 +177,10 @@ export function Topbar() {
         <IconButton
           id={SIDEBAR_MENU_BUTTON_ID}
           aria-label={getString('sidebar_menu')}
-          aria-expanded={usesDrawer ? isWatchSidebarOpen : isSidebarExpanded}
+          aria-expanded={sidebarOpen}
           onClick={usesDrawer ? toggleWatchSidebar : toggleSidebar}
         >
-          <Menu />
+          {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </IconButton>
         {showAppLogo && (
           <div className="cursor-pointer" onClick={() => navigate('/')}>

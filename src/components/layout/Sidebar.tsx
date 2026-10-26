@@ -69,7 +69,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
     >
       {/* Always 240 px wide, so labels never rewrap while the rail opens and closes. */}
       <div className="flex min-h-0 w-60 flex-1 flex-col overflow-y-auto overflow-x-hidden py-2">
-        <nav className="flex flex-col gap-0.5">
+        <nav className="flex flex-col gap-1.5">
           <SidebarItem to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} collapsed={collapsed} />
           <SidebarItem to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} collapsed={collapsed} />
           {showShortsNav && <SidebarItem to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} collapsed={collapsed} />}
@@ -79,7 +79,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
 
         {/* The rail's two icons and the full sections share one spot and cross-fade. */}
         <div className="grid">
-          <nav className="sidebar-when-collapsed flex flex-col gap-0.5 [grid-area:1/1]">
+          <nav className="sidebar-when-collapsed flex flex-col gap-1.5 [grid-area:1/1]">
             <SidebarItem to="/subscriptions" {...navIconPair('subscriptions')} label={getString('sidebar_subscriptions')} collapsed={collapsed} />
             <SidebarItem to="/library" {...navIconPair('you')} label={getString('sidebar_you')} collapsed={collapsed} />
           </nav>
@@ -108,7 +108,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
 
             <section>
               <SectionHeader label={getString('sidebar_you')} to="/library" onClick={closeOverlay} />
-              <nav className="mt-1 flex flex-col gap-0.5">
+              <nav className="mt-1 flex flex-col gap-1.5">
                 <SidebarItem to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
                 <SidebarItem to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
                 <SidebarItem to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
@@ -121,16 +121,17 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
           </div>
         </div>
 
+        {/* Sync, Extensions and Support stay in the rail; Settings is already in the top bar. */}
         <div className="mt-auto">
           <div className="sidebar-when-expanded">
             {divider}
-            <nav className="flex flex-col gap-0.5">
+            <nav className="mb-1.5 flex flex-col">
               <SidebarItem to="/settings" {...navIconPair('settings')} label={getString('settings_title')} onClick={closeOverlay} />
-              <SidebarItem to="/sync" {...navIconPair('sync')} label={getString('sidebar_sync')} onClick={closeOverlay} />
-              <SidebarItem to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} />
             </nav>
           </div>
-          <nav className="mt-0.5 flex flex-col">
+          <nav className="flex flex-col gap-1.5">
+            <SidebarItem to="/sync" {...navIconPair('sync')} label={getString('sidebar_sync')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} collapsed={collapsed} />
             <SidebarItem to="/support" {...navIconPair('support')} label={getString('sidebar_support')} onClick={closeOverlay} collapsed={collapsed} />
           </nav>
         </div>

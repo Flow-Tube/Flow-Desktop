@@ -169,6 +169,19 @@ const withRequiredPlaylists = (playlists: StoredPlaylist[]) => {
   ];
 };
 
+let libraryWrites: Promise<unknown> = Promise.resolve();
+
+/**
+ * Every change reads the stored library and writes it back whole, so two at once would undo
+ * one another: a reorder saved while an enrichment chunk is saving, or two adds in a row. They
+ * run one at a time instead. A change must not start another from inside itself.
+ */
+function withLibraryWrite<T>(change: () => Promise<T>): Promise<T> {
+  const run = libraryWrites.then(change, change);
+  libraryWrites = run.catch(() => undefined);
+  return run;
+}
+
 export const loadStoredPlaylists = async () => {
   const playlistsJson = await getSetting(PLAYLISTS_SETTING_KEY);
   if (!playlistsJson) return withRequiredPlaylists([]);
@@ -186,7 +199,7 @@ export const getStoredPlaylistById = async (playlistId: string) => {
 export const updateStoredPlaylistTracks = async (
   playlistId: string,
   tracks: VideoSummary[] | ((current: VideoSummary[]) => VideoSummary[]),
-) => {
+) => withLibraryWrite(async () => {
   const playlists = await loadStoredPlaylists();
   const index = playlists.findIndex((stored) => stored.id === playlistId);
   if (index === -1) return null;
@@ -219,7 +232,7 @@ export const updateStoredPlaylistTracks = async (
 
   await persistStoredPlaylists(nextPlaylists);
   return updated;
-};
+});
 
 export const persistStoredPlaylists = async (playlists: StoredPlaylist[]) => {
   const now = Date.now();
@@ -242,9 +255,6 @@ export const isPlaylistInLibrary = async (playlistId: string) => {
 export const savePlaylistToLibrary = async (playlist: PlaylistSummary) => {
   if (isProtectedPlaylistId(playlist.id)) return loadStoredPlaylists();
 
-  const playlists = await loadStoredPlaylists();
-  const existingPlaylist = playlists.find((storedPlaylist) => storedPlaylist.id === playlist.id);
-
   let details: Awaited<ReturnType<typeof getPlaylistDetails>> | null = null;
   try {
     details = await getPlaylistDetails(playlist.id);
@@ -252,10 +262,7 @@ export const savePlaylistToLibrary = async (playlist: PlaylistSummary) => {
     console.warn("Failed to fetch playlist details while saving", error);
   }
 
-  const addedAt = Date.now();
-  const existingAddedAt = new Map(
-    (existingPlaylist?.tracks ?? []).map((track) => [track.id, track.addedAtInPlaylist]),
-  );
+  // The pages are fetched before taking the library, so a slow save never holds up other changes.
   let fetchedVideos = details?.videos ?? [];
   if (details?.nextPageToken) {
     try {
@@ -264,65 +271,76 @@ export const savePlaylistToLibrary = async (playlist: PlaylistSummary) => {
       console.warn("Failed to fetch every playlist page while saving", error);
     }
   }
-  const fetchedTracks = fetchedVideos.map((track) => ({
-    ...track,
-    addedAtInPlaylist: existingAddedAt.get(track.id) ?? addedAt,
-  }));
-  const parsedCount = parseVideoCountFromText(playlist.videoCountText);
-  const videoCount = details?.videoCount
-    ?? (fetchedTracks.length > 0 ? fetchedTracks.length : null)
-    ?? parsedCount
-    ?? existingPlaylist?.videoCount
-    ?? 0;
 
-  const thumbnailUrl = playlist.thumbnailUrl
-    ?? fetchedTracks[0]?.thumbnailUrl
-    ?? existingPlaylist?.thumbnailUrl
-    ?? null;
+  return withLibraryWrite(async () => {
+    const playlists = await loadStoredPlaylists();
+    const existingPlaylist = playlists.find((storedPlaylist) => storedPlaylist.id === playlist.id);
+    const addedAt = Date.now();
+    const existingAddedAt = new Map(
+      (existingPlaylist?.tracks ?? []).map((track) => [track.id, track.addedAtInPlaylist]),
+    );
+    const fetchedTracks = fetchedVideos.map((track) => ({
+      ...track,
+      addedAtInPlaylist: existingAddedAt.get(track.id) ?? addedAt,
+    }));
+    const parsedCount = parseVideoCountFromText(playlist.videoCountText);
+    const videoCount = details?.videoCount
+      ?? (fetchedTracks.length > 0 ? fetchedTracks.length : null)
+      ?? parsedCount
+      ?? existingPlaylist?.videoCount
+      ?? 0;
 
-  const resolvedName = resolvePlaylistTitle(
-    playlist.title,
-    details?.title,
-    existingPlaylist?.sourceTitle,
-    existingPlaylist?.name,
-  );
+    const thumbnailUrl = playlist.thumbnailUrl
+      ?? fetchedTracks[0]?.thumbnailUrl
+      ?? existingPlaylist?.thumbnailUrl
+      ?? null;
 
-  const savedPlaylist: StoredPlaylist = {
-    id: playlist.id,
-    name: resolvedName,
-    sourceTitle: playlist.title.trim() || existingPlaylist?.sourceTitle || resolvedName,
-    description: details?.description?.trim() || existingPlaylist?.description || "Saved playlist",
-    tracks: fetchedTracks.length > 0 ? fetchedTracks : (existingPlaylist?.tracks ?? []),
-    createdAt: existingPlaylist?.createdAt ?? new Date().toISOString(),
-    source: "Saved",
-    thumbnailUrl,
-    videoCount: videoCount > 0 ? videoCount : null,
-    videoCountText: playlist.videoCountText ?? (videoCount > 0 ? formatVideoCountText(videoCount) : null),
-  };
+    const resolvedName = resolvePlaylistTitle(
+      playlist.title,
+      details?.title,
+      existingPlaylist?.sourceTitle,
+      existingPlaylist?.name,
+    );
 
-  const updatedPlaylists = existingPlaylist
-    ? playlists.map((storedPlaylist) => (
-      storedPlaylist.id === playlist.id ? savedPlaylist : storedPlaylist
-    ))
-    : [...playlists, savedPlaylist];
+    const savedPlaylist: StoredPlaylist = {
+      id: playlist.id,
+      name: resolvedName,
+      sourceTitle: playlist.title.trim() || existingPlaylist?.sourceTitle || resolvedName,
+      description: details?.description?.trim() || existingPlaylist?.description || "Saved playlist",
+      tracks: fetchedTracks.length > 0 ? fetchedTracks : (existingPlaylist?.tracks ?? []),
+      createdAt: existingPlaylist?.createdAt ?? new Date().toISOString(),
+      source: "Saved",
+      thumbnailUrl,
+      videoCount: videoCount > 0 ? videoCount : null,
+      videoCountText: playlist.videoCountText ?? (videoCount > 0 ? formatVideoCountText(videoCount) : null),
+    };
 
-  await persistStoredPlaylists(updatedPlaylists);
-  return updatedPlaylists;
+    const updatedPlaylists = existingPlaylist
+      ? playlists.map((storedPlaylist) => (
+        storedPlaylist.id === playlist.id ? savedPlaylist : storedPlaylist
+      ))
+      : [...playlists, savedPlaylist];
+
+    await persistStoredPlaylists(updatedPlaylists);
+    return updatedPlaylists;
+  });
 };
 
 export const removePlaylistFromLibrary = async (playlistId: string) => {
   if (isProtectedPlaylistId(playlistId)) return loadStoredPlaylists();
 
-  const playlists = await loadStoredPlaylists();
-  const updatedPlaylists = playlists.filter((playlist) => playlist.id !== playlistId);
-  await persistStoredPlaylists(updatedPlaylists);
-  return updatedPlaylists;
+  return withLibraryWrite(async () => {
+    const playlists = await loadStoredPlaylists();
+    const updatedPlaylists = playlists.filter((playlist) => playlist.id !== playlistId);
+    await persistStoredPlaylists(updatedPlaylists);
+    return updatedPlaylists;
+  });
 };
 
 export const createStoredPlaylist = async (
   name: string,
   description = "",
-) => {
+) => withLibraryWrite(async () => {
   const playlists = await loadStoredPlaylists();
   const playlist: StoredPlaylist = normalizePlaylist({
     id: `playlist-${Date.now()}`,
@@ -338,7 +356,7 @@ export const createStoredPlaylist = async (
 
   await persistStoredPlaylists([...playlists, playlist]);
   return playlist;
-};
+});
 
 export const addVideoToStoredPlaylist = async (
   playlistId: string,
@@ -346,33 +364,35 @@ export const addVideoToStoredPlaylist = async (
 ) => {
   if (isProtectedPlaylistId(playlistId)) return addVideoToWatchLater(video);
 
-  const playlists = await loadStoredPlaylists();
-  let updatedPlaylist: StoredPlaylist | null = null;
-  const nextPlaylists = playlists.map((playlist) => {
-    if (playlist.id !== playlistId || playlist.source !== "Owned") return playlist;
-    if (playlist.tracks.some((track) => track.id === video.id)) {
-      updatedPlaylist = playlist;
-      return playlist;
-    }
+  return withLibraryWrite(async () => {
+    const playlists = await loadStoredPlaylists();
+    let updatedPlaylist: StoredPlaylist | null = null;
+    const nextPlaylists = playlists.map((playlist) => {
+      if (playlist.id !== playlistId || playlist.source !== "Owned") return playlist;
+      if (playlist.tracks.some((track) => track.id === video.id)) {
+        updatedPlaylist = playlist;
+        return playlist;
+      }
 
-    const tracks = [...playlist.tracks, { ...video, addedAtInPlaylist: Date.now() }];
-    updatedPlaylist = normalizePlaylist({
-      ...playlist,
-      tracks,
-      thumbnailUrl: playlist.thumbnailUrl ?? video.thumbnailUrl ?? null,
-      videoCount: tracks.length,
-      videoCountText: formatVideoCountText(tracks.length),
+      const tracks = [...playlist.tracks, { ...video, addedAtInPlaylist: Date.now() }];
+      updatedPlaylist = normalizePlaylist({
+        ...playlist,
+        tracks,
+        thumbnailUrl: playlist.thumbnailUrl ?? video.thumbnailUrl ?? null,
+        videoCount: tracks.length,
+        videoCountText: formatVideoCountText(tracks.length),
+      });
+      return updatedPlaylist;
     });
+
+    if (!updatedPlaylist) return null;
+
+    await persistStoredPlaylists(nextPlaylists);
     return updatedPlaylist;
   });
-
-  if (!updatedPlaylist) return null;
-
-  await persistStoredPlaylists(nextPlaylists);
-  return updatedPlaylist;
 };
 
-export const addVideoToWatchLater = async (video: VideoSummary) => {
+export const addVideoToWatchLater = async (video: VideoSummary) => withLibraryWrite(async () => {
   const playlists = await loadStoredPlaylists();
   const nextPlaylists = playlists.map((playlist) => {
     if (playlist.id !== WATCH_LATER_PLAYLIST_ID) return playlist;
@@ -390,9 +410,9 @@ export const addVideoToWatchLater = async (video: VideoSummary) => {
 
   await persistStoredPlaylists(nextPlaylists);
   return getStoredPlaylistById(WATCH_LATER_PLAYLIST_ID);
-};
+});
 
-export const removeVideoFromWatchLater = async (videoId: string) => {
+export const removeVideoFromWatchLater = async (videoId: string) => withLibraryWrite(async () => {
   const playlists = await loadStoredPlaylists();
   const nextPlaylists = playlists.map((playlist) => {
     if (playlist.id !== WATCH_LATER_PLAYLIST_ID) return playlist;
@@ -409,4 +429,4 @@ export const removeVideoFromWatchLater = async (videoId: string) => {
 
   await persistStoredPlaylists(nextPlaylists);
   return getStoredPlaylistById(WATCH_LATER_PLAYLIST_ID);
-};
+});

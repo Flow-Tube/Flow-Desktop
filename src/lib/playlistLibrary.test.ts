@@ -83,6 +83,17 @@ describe("updateStoredPlaylistTracks", () => {
     expect(updated?.thumbnailUrl).toBe("thumb-x");
     expect(updated?.videoCountText).toBe("500 videos");
   });
+
+  it("runs changes made at the same time one after another, so neither undoes the other", async () => {
+    await Promise.all([
+      addVideoToWatchLater(video("new")),
+      updateStoredPlaylistTracks(WATCH_LATER_PLAYLIST_ID, (tracks) =>
+        tracks.map((track) => (track.id === "a" ? { ...track, durationSeconds: 99 } : track))),
+    ]);
+    const stored = await getStoredPlaylistById(WATCH_LATER_PLAYLIST_ID);
+    expect(stored?.tracks.map((track) => track.id)).toEqual(["new", "a", "b", "c"]);
+    expect(stored?.tracks.find((track) => track.id === "a")?.durationSeconds).toBe(99);
+  });
 });
 
 describe("add times", () => {

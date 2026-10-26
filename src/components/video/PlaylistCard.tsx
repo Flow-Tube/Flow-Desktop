@@ -12,7 +12,7 @@ import {
 import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
-import { useUiStore } from '../../store/useUiStore';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { SoftBackdrop } from '../ui/SoftBackdrop';
@@ -104,7 +104,6 @@ export function PlaylistCard({
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [isSaved, setIsSaved] = useState(Boolean(isInLibrary));
   const cardRef = useRef<HTMLDivElement>(null);
-  const showToast = useUiStore((state) => state.showToast);
   const openCollectionDownload = useDownloadStore((state) => state.openCollection);
   const wash = useHoverWashColor(playlist.thumbnailUrl);
   const isProtected = Boolean(playlist.isProtected) || isProtectedPlaylistId(playlist.id);
@@ -157,25 +156,34 @@ export function PlaylistCard({
     };
   }, [isInLibrary, isProtected, playlist.id]);
 
+  const toastItem = { title: playlist.title, image: playlist.thumbnailUrl, shape: 'landscape' as const };
+
+  // Each returns false when the owner of the card declined the change.
+  const save = async () => {
+    const result = onSaveToLibrary
+      ? await onSaveToLibrary(playlist)
+      : await savePlaylistToLibrary(playlist);
+    if (result === false) return false;
+    setIsSaved(true);
+    return true;
+  };
+
+  const remove = async () => {
+    const result = onRemoveFromLibrary
+      ? await onRemoveFromLibrary(playlist)
+      : await removePlaylistFromLibrary(playlist.id);
+    if (result === false) return false;
+    setIsSaved(false);
+    return true;
+  };
+
   const handleSaveToLibrary = async () => {
     try {
-      const result = onSaveToLibrary
-        ? await onSaveToLibrary(playlist)
-        : await savePlaylistToLibrary(playlist);
-
-      if (result === false) return;
-
-      setIsSaved(true);
-      showToast({
-        variant: 'success',
-        message: `Saved "${playlist.title}" to library`,
-      });
+      if (!await save()) return;
+      showSaveToast({ destination: { kind: 'library' }, item: toastItem, undo: remove });
     } catch (error) {
       console.error('Failed to save playlist to library', error);
-      showToast({
-        variant: 'error',
-        message: `Could not save "${playlist.title}"`,
-      });
+      showSaveFailedToast({ destination: { kind: 'library' }, item: toastItem, retry: handleSaveToLibrary });
     }
   };
 
@@ -183,23 +191,11 @@ export function PlaylistCard({
     if (isProtected) return;
 
     try {
-      const result = onRemoveFromLibrary
-        ? await onRemoveFromLibrary(playlist)
-        : await removePlaylistFromLibrary(playlist.id);
-
-      if (result === false) return;
-
-      setIsSaved(false);
-      showToast({
-        variant: 'success',
-        message: `Removed "${playlist.title}" from library`,
-      });
+      if (!await remove()) return;
+      showSaveToast({ destination: { kind: 'library' }, item: toastItem, removed: true, undo: save });
     } catch (error) {
       console.error('Failed to remove playlist from library', error);
-      showToast({
-        variant: 'error',
-        message: `Could not remove "${playlist.title}"`,
-      });
+      showSaveFailedToast({ destination: { kind: 'library' }, item: toastItem, removed: true, retry: handleRemoveFromLibrary });
     }
   };
 

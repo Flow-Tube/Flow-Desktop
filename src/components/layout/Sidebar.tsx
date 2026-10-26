@@ -1,84 +1,20 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import {
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-} from 'lucide-react';
+import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useUiStore } from '../../store/useUiStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
-import { useSubscriptionStore, type SubscribedChannel } from '../../store/useSubscriptionStore';
+import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { SidebarItem } from '../ui/SidebarItem';
 import { SidebarNavIcon, type SidebarNavIconName } from '../ui/SidebarNavIcon';
 import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
+import { SectionHeader, SubscriptionsNav } from './SidebarSections';
 import { getString } from '../../lib/i18n/index';
 import { SETTINGS } from '../../lib/settings/schema';
-import { upgradeAvatarUrl } from '../../lib/thumbnails';
-import { useImageFallback } from '../../lib/useImageFallback';
-import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
-import { useSubscriptionAvatarHydration } from '../../lib/useSubscriptionAvatarHydration';
-
-const SUBS_DEFAULT_LIMIT = 7;
 
 type SidebarProps = {
   mode?: 'normal' | 'overlay';
 };
 
-function SidebarAvatar({ src }: { src?: string | null }) {
-  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
-  const { src: displaySrc, onError } = useImageFallback([imageSrc]);
-
-  if (!displaySrc) return <div className="w-6 h-6 rounded-full bg-surface-container-high" />;
-  return (
-    <img
-      src={displaySrc}
-      alt=""
-      className="w-6 h-6 rounded-full object-cover"
-      onError={onError}
-    />
-  );
-}
-
-function CompactRailItem({
-  path,
-  icon,
-  activeIcon,
-  label,
-  end,
-}: {
-  path: string;
-  icon: ReactNode;
-  activeIcon?: ReactNode;
-  label: string;
-  end?: boolean;
-}) {
-  return (
-    <NavLink
-      to={path}
-      end={end}
-      className={({ isActive }) =>
-        `flex h-[74px] w-full flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium transition-colors ${
-          isActive
-            ? 'text-[var(--color-primary)]'
-            : 'text-chrome-neutral-300 hover:bg-surface-container-low hover:text-chrome-neutral-100'
-        }`
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {isActive ? (activeIcon ?? icon) : icon}
-          <span className="max-w-full truncate px-1">{label}</span>
-        </>
-      )}
-    </NavLink>
-  );
-}
-
 const navIcon = (name: SidebarNavIconName, variant: 'outline' | 'filled' = 'outline') => (
-  <SidebarNavIcon name={name} variant={variant} className="h-5 w-5 shrink-0" />
-);
-
-const railIcon = (name: SidebarNavIconName, variant: 'outline' | 'filled' = 'outline') => (
   <SidebarNavIcon name={name} variant={variant} className="h-6 w-6 shrink-0" />
 );
 
@@ -89,133 +25,12 @@ function navIconPair(name: SidebarNavIconName) {
   };
 }
 
-function railIconPair(name: SidebarNavIconName) {
-  return {
-    icon: railIcon(name, 'outline'),
-    activeIcon: railIcon(name, 'filled'),
-  };
-}
-
 const shortsNavIconPair = {
-  icon: <ShortsIcon className="h-5 w-5 shrink-0" />,
-  activeIcon: <ShortsAIcon className="h-5 w-5 shrink-0" />,
-};
-
-const shortsRailIconPair = {
   icon: <ShortsIcon className="h-6 w-6 shrink-0" />,
-  activeIcon: <ShortsIcon className="h-6 w-6 shrink-0" />,
+  activeIcon: <ShortsAIcon className="h-6 w-6 shrink-0" />,
 };
 
-function SectionHeader({
-  label,
-  to,
-  onClick,
-  collapsed,
-  onToggleCollapse,
-}: {
-  label: string;
-  to?: string;
-  onClick?: () => void;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
-}) {
-  const inner = (
-    <>
-      <span>{label}</span>
-      <ChevronRight className="w-4 h-4 text-chrome-neutral-400 transition-transform group-hover:translate-x-0.5" />
-    </>
-  );
-
-  const header = to ? (
-    <NavLink
-      to={to}
-      onClick={onClick}
-      className={({ isActive }) =>
-        `group flex flex-1 items-center gap-2 px-5 py-2 text-base font-semibold cursor-pointer rounded-lg transition-colors ${
-          isActive
-            ? 'text-[var(--color-primary)]'
-            : 'text-chrome-neutral-100 hover:bg-surface-container-low'
-        }`
-      }
-    >
-      {inner}
-    </NavLink>
-  ) : (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex flex-1 items-center gap-2 px-5 py-2 text-base font-semibold text-chrome-neutral-100 cursor-pointer hover:bg-surface-container-low rounded-lg"
-    >
-      {inner}
-    </button>
-  );
-
-  return (
-    <div className="mx-2 mt-2 flex items-center">
-      {header}
-      {onToggleCollapse && (
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          aria-expanded={!collapsed}
-          aria-label={getString(collapsed ? 'sidebar_section_expand' : 'sidebar_section_collapse')}
-          className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-chrome-neutral-400 transition-colors hover:bg-surface-container-low hover:text-chrome-neutral-100"
-        >
-          <ChevronDown
-            className={`h-4 w-4 transition-transform duration-200 ease-out ${collapsed ? '-rotate-90' : ''}`}
-          />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function SubscriptionsNav({
-  subscriptions,
-  subsExpanded,
-  onToggleExpanded,
-  closeOverlay,
-}: {
-  subscriptions: SubscribedChannel[];
-  subsExpanded: boolean;
-  onToggleExpanded: () => void;
-  closeOverlay?: () => void;
-}) {
-  const visibleSubs = useMemo(
-    () => (subsExpanded ? subscriptions : subscriptions.slice(0, SUBS_DEFAULT_LIMIT)),
-    [subscriptions, subsExpanded],
-  );
-  useSubscriptionAvatarHydration(visibleSubs);
-
-  return (
-    <nav className="mt-1 flex flex-col">
-      <div className={subsExpanded ? 'max-h-[45vh] overflow-y-auto' : ''}>
-        {visibleSubs.map((channel) => (
-          <SidebarItem
-            key={channel.id}
-            to={`/channel/${channel.id}`}
-            icon={
-              channel.avatarUrl ? (
-                <SidebarAvatar src={channel.avatarUrl} />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-surface-container-high" />
-              )
-            }
-            label={channel.name}
-            onClick={closeOverlay}
-          />
-        ))}
-      </div>
-      {subscriptions.length > SUBS_DEFAULT_LIMIT && (
-        <SidebarItem
-          icon={subsExpanded ? <ChevronUp className="h-5 w-5 shrink-0" /> : <ChevronDown className="h-5 w-5 shrink-0" />}
-          label={subsExpanded ? getString('sidebar_show_less') : getString('sidebar_show_more')}
-          onClick={onToggleExpanded}
-        />
-      )}
-    </nav>
-  );
-}
+const divider = <hr className="mx-4 my-3 border-chrome-neutral-800/50" />;
 
 export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const isSidebarExpanded = useUiStore((s) => s.isSidebarExpanded);
@@ -230,7 +45,8 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const showCategoriesNav = useAppSettingsStore((state) => state.values[SETTINGS.CATEGORIES_NAV_TAB_ENABLED] !== 'false');
 
   const isOverlay = mode === 'overlay';
-  const isExpanded = isOverlay || isSidebarExpanded;
+  const expanded = isOverlay || isSidebarExpanded;
+  const collapsed = !expanded;
 
   if (
     !isOverlay &&
@@ -240,87 +56,85 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
     return null;
   }
 
-  if (!isExpanded) {
-    return (
-      <aside className="hidden w-20 shrink-0 overflow-y-auto bg-background px-1.5 py-2 sm:flex">
-        <nav className="flex w-full flex-col items-center gap-1">
-          <CompactRailItem path="/" {...railIconPair('home')} label={getString('home')} end />
-          <CompactRailItem path="/feed" {...railIconPair('feed')} label={getString('sidebar_flowneuron')} />
-          {showShortsNav && <CompactRailItem path="/shorts" {...shortsRailIconPair} label={getString('sidebar_shorts')} />}
-          {showCategoriesNav && <CompactRailItem path="/explore" {...railIconPair('explore')} label={getString('sidebar_explore')} />}
-          {showMusicNav && <CompactRailItem path="/music" {...railIconPair('music')} label={getString('sidebar_music')} />}
-          <CompactRailItem path="/subscriptions" {...railIconPair('subscriptions')} label={getString('sidebar_subscriptions')} />
-          <CompactRailItem path="/library" {...railIconPair('you')} label={getString('sidebar_you')} />
-          <div className="mt-auto w-full pt-1">
-            <CompactRailItem path="/support" {...railIconPair('support')} label={getString('settings_group_support')} />
-          </div>
-        </nav>
-      </aside>
-    );
-  }
-
   const closeOverlay = isOverlay ? () => setWatchSidebarOpen(false) : undefined;
 
   return (
     <aside
-      className={`flex h-full w-64 shrink-0 flex-col overflow-y-auto bg-background py-3 ${
-        isOverlay ? '' : 'hidden sm:flex'
-      }`}
+      data-expanded={expanded}
+      className={
+        isOverlay
+          ? 'flex h-full w-60 shrink-0 flex-col bg-background'
+          : 'sidebar-rail hidden shrink-0 overflow-hidden bg-background sm:flex'
+      }
     >
-      {/* Core */}
-      <nav className="flex flex-col">
-        <SidebarItem to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} />
-        <SidebarItem to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} />
-        {showShortsNav && <SidebarItem to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} />}
-        {showCategoriesNav && <SidebarItem to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} />}
-        {showMusicNav && <SidebarItem to="/music" {...navIconPair('music')} label={getString('sidebar_music')} onClick={closeOverlay} />}
-      </nav>
-
-      <hr className="border-chrome-neutral-800/50 my-3 mx-4" />
-
-      {/* Subscriptions */}
-      <section>
-        <SectionHeader
-          label={getString('sidebar_subscriptions')}
-          to="/subscriptions"
-          onClick={closeOverlay}
-          collapsed={isSubsSectionCollapsed}
-          onToggleCollapse={toggleSubsSection}
-        />
-        {!isSubsSectionCollapsed && (
-          <SubscriptionsNav
-            subscriptions={subscriptions}
-            subsExpanded={subsExpanded}
-            onToggleExpanded={() => setSubsExpanded(!subsExpanded)}
-            closeOverlay={closeOverlay}
-          />
-        )}
-      </section>
-
-      <hr className="border-chrome-neutral-800/50 my-3 mx-4" />
-
-      {/* You */}
-      <section>
-        <SectionHeader label={getString('sidebar_you')} to="/library" onClick={closeOverlay} />
-        <nav className="mt-1 flex flex-col">
-          <SidebarItem to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
-          <SidebarItem to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
-          <SidebarItem to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
-          <SidebarItem to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
-          <SidebarItem to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
-          <SidebarItem to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
-          <SidebarItem to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
+      {/* Always 240 px wide, so labels never rewrap while the rail opens and closes. */}
+      <div className="flex min-h-0 w-60 flex-1 flex-col overflow-y-auto overflow-x-hidden py-2">
+        <nav className="flex flex-col gap-1.5">
+          <SidebarItem to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} collapsed={collapsed} />
+          <SidebarItem to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} collapsed={collapsed} />
+          {showShortsNav && <SidebarItem to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} collapsed={collapsed} />}
+          {showCategoriesNav && <SidebarItem to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} collapsed={collapsed} />}
+          {showMusicNav && <SidebarItem to="/music" {...navIconPair('music')} label={getString('sidebar_music')} onClick={closeOverlay} collapsed={collapsed} />}
         </nav>
-      </section>
 
-      <div className="mt-auto">
-        <hr className="border-chrome-neutral-800/50 my-3 mx-4" />
-        <nav className="flex flex-col">
-          <SidebarItem to="/settings" {...navIconPair('settings')} label={getString('settings_title')} onClick={closeOverlay} />
-          <SidebarItem to="/sync" {...navIconPair('sync')} label="Sync" onClick={closeOverlay} />
-          <SidebarItem to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} />
-          <SidebarItem to="/support" {...navIconPair('support')} label={getString('sidebar_support')} onClick={closeOverlay} />
-        </nav>
+        {/* The rail's two icons and the full sections share one spot and cross-fade. */}
+        <div className="grid">
+          <nav className="sidebar-when-collapsed flex flex-col gap-1.5 [grid-area:1/1]">
+            <SidebarItem to="/subscriptions" {...navIconPair('subscriptions')} label={getString('sidebar_subscriptions')} collapsed={collapsed} />
+            <SidebarItem to="/library" {...navIconPair('you')} label={getString('sidebar_you')} collapsed={collapsed} />
+          </nav>
+
+          <div className="sidebar-when-expanded [grid-area:1/1]">
+            {divider}
+            <section>
+              <SectionHeader
+                label={getString('sidebar_subscriptions')}
+                to="/subscriptions"
+                onClick={closeOverlay}
+                collapsed={isSubsSectionCollapsed}
+                onToggleCollapse={toggleSubsSection}
+              />
+              {!isSubsSectionCollapsed && (
+                <SubscriptionsNav
+                  subscriptions={subscriptions}
+                  subsExpanded={subsExpanded}
+                  onToggleExpanded={() => setSubsExpanded(!subsExpanded)}
+                  closeOverlay={closeOverlay}
+                />
+              )}
+            </section>
+
+            {divider}
+
+            <section>
+              <SectionHeader label={getString('sidebar_you')} to="/library" onClick={closeOverlay} />
+              <nav className="mt-1 flex flex-col gap-1.5">
+                <SidebarItem to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
+                <SidebarItem to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
+                <SidebarItem to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
+                <SidebarItem to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
+                <SidebarItem to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
+                <SidebarItem to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
+                <SidebarItem to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
+              </nav>
+            </section>
+          </div>
+        </div>
+
+        {/* Sync, Extensions and Support stay in the rail; Settings is already in the top bar. */}
+        <div className="mt-auto">
+          <div className="sidebar-when-expanded">
+            {divider}
+            <nav className="mb-1.5 flex flex-col">
+              <SidebarItem to="/settings" {...navIconPair('settings')} label={getString('settings_title')} onClick={closeOverlay} />
+            </nav>
+          </div>
+          <nav className="flex flex-col gap-1.5">
+            <SidebarItem to="/sync" {...navIconPair('sync')} label={getString('sidebar_sync')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem to="/support" {...navIconPair('support')} label={getString('sidebar_support')} onClick={closeOverlay} collapsed={collapsed} />
+          </nav>
+        </div>
       </div>
     </aside>
   );

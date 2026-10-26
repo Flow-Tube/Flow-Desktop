@@ -22,6 +22,7 @@ import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
 import { getString } from '../../lib/i18n/index';
 import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useUiStore } from '../../store/useUiStore';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
@@ -50,6 +51,8 @@ export interface VideoCardProps {
   showAddedDate?: boolean;
   /** Why a feed shows this card, at the top of its menu. */
   reason?: string;
+  /** Whether the card is drawn wider than `hqdefault`; left out, the screen's pixel ratio decides. */
+  highResThumbnail?: boolean;
 }
 
 /*
@@ -107,6 +110,7 @@ function VideoCardComponent({
   isDragActive = false,
   showAddedDate = false,
   reason,
+  highResThumbnail,
 }: VideoCardProps) {
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
@@ -177,8 +181,8 @@ function VideoCardComponent({
 
   const displayTitle = overriddenTitle || video.title;
   const thumbnailCandidates = useMemo(
-    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl),
-    [overriddenThumbnail, video.id, video.thumbnailUrl],
+    () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, highResThumbnail),
+    [highResThumbnail, overriddenThumbnail, video.id, video.thumbnailUrl],
   );
   const { src: displayThumbnail, onError: handleThumbnailError } = useImageFallback(thumbnailCandidates);
 
@@ -288,27 +292,35 @@ function VideoCardComponent({
     setShowMenu(false);
   };
 
+  const toastItem = { title: displayTitle, image: displayThumbnail, shape: "landscape" as const };
+
   const handleToggleWatchLater = async () => {
+    const removing = isSavedToWatchLater;
     try {
-      if (isSavedToWatchLater) {
+      if (removing) {
         await removeFromWatchLater(video.id);
-        showToast({
-          variant: "success",
-          message: getString("video_removed_from_watch_later"),
+        showSaveToast({
+          destination: { kind: "watchLater" },
+          item: toastItem,
+          removed: true,
+          undo: () => saveToWatchLater(video),
         });
         return;
       }
 
       await saveToWatchLater(video);
-      showToast({
-        variant: "success",
-        message: getString("video_saved_to_watch_later"),
+      showSaveToast({
+        destination: { kind: "watchLater" },
+        item: toastItem,
+        undo: () => removeFromWatchLater(video.id),
       });
     } catch (error) {
       console.error("Failed to update Watch Later", error);
-      showToast({
-        variant: "error",
-        message: getString("video_watch_later_failed"),
+      showSaveFailedToast({
+        destination: { kind: "watchLater" },
+        item: toastItem,
+        removed: removing,
+        retry: handleToggleWatchLater,
       });
     }
   };
@@ -324,9 +336,18 @@ function VideoCardComponent({
       player.addToQueue(video);
     }
 
-    showToast({
-      variant: isDuplicate ? "info" : "success",
-      message: getString(isDuplicate ? "queue_duplicate_toast" : "queue_added_toast"),
+    if (isDuplicate) {
+      showToast({ variant: "info", message: getString("queue_duplicate_toast") });
+      return;
+    }
+    showSaveToast({
+      destination: { kind: "queue" },
+      item: toastItem,
+      undo: () => {
+        const { queue, removeFromQueue } = usePlayerStore.getState();
+        const index = queue.map((item) => item.id).lastIndexOf(video.id);
+        if (index >= 0) removeFromQueue(index);
+      },
     });
   };
 

@@ -13,7 +13,7 @@ import { shareLink } from '../../lib/clipboard';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
-import { useUiStore } from '../../store/useUiStore';
+import { toggleSongLikeWithToast } from '../../lib/songLikeToast';
 import type { SongItem } from '../../types/music';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { ExplicitBadge } from './ExplicitBadge';
@@ -51,8 +51,6 @@ function useSongLike(track: SongItem) {
   const likedItems = useLikesStore((s) => s.items);
   const loaded = useLikesStore((s) => s.loaded);
   const load = useLikesStore((s) => s.load);
-  const toggleSong = useLikesStore((s) => s.toggleSong);
-  const showToast = useUiStore((s) => s.showToast);
   const trackId = videoIdOf(track);
 
   useEffect(() => {
@@ -61,18 +59,7 @@ function useSongLike(track: SongItem) {
 
   const liked = likedItems.some((item) => item.kind === 'music' && item.id === trackId);
 
-  const toggle = async () => {
-    try {
-      const nowLiked = await toggleSong(track);
-      showToast({
-        variant: 'success',
-        message: getString(nowLiked ? 'liked_added_toast' : 'liked_removed_toast'),
-      });
-    } catch (error) {
-      console.warn('Failed to update song like', error);
-      showToast({ variant: 'error', message: getString('liked_update_failed') });
-    }
-  };
+  const toggle = () => toggleSongLikeWithToast(track, liked);
 
   return { liked, toggle };
 }

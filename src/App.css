@@ -263,17 +263,92 @@
   animation: player-seek-pop 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes sidebar-slide-in {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+/*
+  The side rail pushes the page as it opens and closes. One duration and curve serve both
+  directions and the drawer on the watch and settings pages, so they all move alike.
+  Icons sit in a fixed 56 px slot, so only labels and the extra sections fade.
+*/
+:root {
+  --sidebar-motion-duration: 600ms;
+  --sidebar-motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
-.animate-sidebar-slide-in {
-  animation: sidebar-slide-in 0.2s cubic-bezier(0.2, 0, 0, 1) forwards;
+.sidebar-rail {
+  width: 72px;
+  transition: width var(--sidebar-motion-duration) var(--sidebar-motion-ease);
+}
+
+.sidebar-rail[data-expanded="true"] {
+  width: 240px;
+}
+
+/* Hidden content keeps no height, so the rail never scrolls through it. */
+.sidebar-when-expanded,
+.sidebar-when-collapsed {
+  overflow: hidden;
+}
+
+[data-expanded="false"] .sidebar-when-expanded,
+[data-expanded="true"] .sidebar-when-collapsed {
+  max-height: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 200ms linear, visibility 0s linear 200ms, max-height 0s linear 200ms;
+}
+
+[data-expanded="true"] .sidebar-when-expanded,
+[data-expanded="false"] .sidebar-when-collapsed {
+  max-height: 9999px;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 320ms linear 200ms, visibility 0s linear 200ms, max-height 0s linear 200ms;
+}
+
+.sidebar-label {
+  transition: opacity 200ms linear;
+}
+
+[data-expanded="false"] .sidebar-label {
+  opacity: 0;
+}
+
+[data-expanded="true"] .sidebar-label {
+  opacity: 1;
+  transition: opacity 320ms linear 160ms;
+}
+
+.sidebar-drawer {
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition:
+    transform var(--sidebar-motion-duration) var(--sidebar-motion-ease),
+    visibility 0s linear var(--sidebar-motion-duration);
+}
+
+[data-open="true"] > .sidebar-drawer {
+  transform: none;
+  visibility: visible;
+  transition: transform var(--sidebar-motion-duration) var(--sidebar-motion-ease), visibility 0s;
+}
+
+.sidebar-scrim {
+  opacity: 0;
+  transition: opacity 300ms linear;
+}
+
+[data-open="true"] > .sidebar-scrim {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-drawer,
+  .sidebar-scrim,
+  .sidebar-rail,
+  .sidebar-label,
+  .sidebar-when-expanded,
+  .sidebar-when-collapsed {
+    transition: none !important;
+  }
 }
 
 /*

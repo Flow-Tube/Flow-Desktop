@@ -3,10 +3,14 @@ import { create } from "zustand";
 export type ActiveTab = "home" | "search" | "subscriptions" | "history" | "playlists" | "settings";
 export type ToastVariant = "success" | "error" | "info";
 
-/** A button on the toast, such as Undo; pressing it also dismisses the toast. */
+export type ToastImageShape = "landscape" | "square" | "portrait";
+
+/** A button on the toast, such as Undo or View; pressing it also dismisses the toast. */
 export interface ToastAction {
   label: string;
-  onSelect: () => void;
+  onSelect?: () => void;
+  /** A route to open, such as the list the item was saved to. */
+  to?: string;
 }
 
 export interface ToastState {
@@ -15,10 +19,10 @@ export interface ToastState {
   message: string;
   variant: ToastVariant;
   durationMs: number;
-  action?: ToastAction;
+  actions: ToastAction[];
   /** A thumbnail or cover shown at the start of the toast. */
   image?: string | null;
-  imageShape?: "landscape" | "square";
+  imageShape?: ToastImageShape;
 }
 
 export interface ShowToastOptions {
@@ -26,10 +30,18 @@ export interface ShowToastOptions {
   message: string;
   variant?: ToastVariant;
   durationMs?: number;
-  action?: ToastAction;
+  /** At most two; the last one is drawn as the main action. */
+  actions?: ToastAction[];
   image?: string | null;
-  imageShape?: "landscape" | "square";
+  imageShape?: ToastImageShape;
 }
+
+/** Long enough to reach a button, which is also why hovering pauses the timer. */
+export const TOAST_DURATION_MS = 3000;
+export const TOAST_WITH_ACTIONS_DURATION_MS = 5000;
+const MAX_TOAST_ACTIONS = 2;
+
+let nextToastId = 0;
 
 const getSavedSidebarExpanded = () => {
   try {
@@ -79,7 +91,8 @@ interface UiState {
   setIsSearching: (isSearching: boolean) => void;
   setWatchSidebarOpen: (open: boolean) => void;
   showToast: (toast: ShowToastOptions) => void;
-  dismissToast: () => void;
+  /** With an id, only dismisses that toast, so a toast on its way out cannot close a newer one. */
+  dismissToast: (id?: number) => void;
   toggleSidebar: () => void;
   toggleWatchSidebar: () => void;
   toggleSubsSection: () => void;
@@ -98,19 +111,19 @@ export const useUiStore = create<UiState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setWatchSidebarOpen: (isWatchSidebarOpen) => set({ isWatchSidebarOpen }),
-  showToast: ({ title, message, variant = "info", durationMs = 2400, action, image, imageShape }) => set({
+  showToast: ({ title, message, variant = "info", durationMs, actions = [], image, imageShape }) => set({
     toast: {
-      id: Date.now(),
+      id: ++nextToastId,
       title,
       message,
       variant,
-      durationMs,
-      action,
+      durationMs: durationMs ?? (actions.length > 0 ? TOAST_WITH_ACTIONS_DURATION_MS : TOAST_DURATION_MS),
+      actions: actions.slice(-MAX_TOAST_ACTIONS),
       image,
       imageShape,
     },
   }),
-  dismissToast: () => set({ toast: null }),
+  dismissToast: (id) => set((state) => (id === undefined || state.toast?.id === id ? { toast: null } : state)),
   toggleSubsSection: () => set((state) => {
     const isSubsSectionCollapsed = !state.isSubsSectionCollapsed;
     saveSubsSectionCollapsed(isSubsSectionCollapsed);

@@ -98,8 +98,9 @@ use commands::recommendation::{
     resolve_hidden_channel_names, unblock_channel, unblock_topic,
 };
 use commands::scrobble::{
-    scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing, scrobble_set_own_key,
-    scrobble_sign_in, scrobble_sign_out, scrobble_status,
+    scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing,
+    scrobble_retry_keychain, scrobble_set_own_key, scrobble_sign_in, scrobble_sign_out,
+    scrobble_status,
 };
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
@@ -691,7 +692,8 @@ pub fn run() {
             scrobble_now_playing,
             scrobble_listened,
             scrobble_love,
-            scrobble_flush
+            scrobble_flush,
+            scrobble_retry_keychain
         ])
         .build(context)
         .expect("error while building Flow Desktop")

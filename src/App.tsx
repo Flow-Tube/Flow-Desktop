@@ -50,7 +50,7 @@ import { ShortsFeed } from "./components/shorts/ShortsFeed";
 import Onboarding from "./pages/Onboarding";
 import FlowNeuroPersona from "./pages/FlowNeuroPersona";
 import { LayoutGroup } from "framer-motion";
-import { ToastHost } from "./components/ui/ToastHost";
+import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
 import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
 import { MusicOverlay } from "./components/music/MusicOverlay";

@@ -33,7 +33,7 @@ describe("openExternalOrOfferCopy", () => {
     await openExternalOrOfferCopy("https://example.com/watch");
     const toast = useUiStore.getState().toast;
     expect(toast?.variant).toBe("error");
-    toast?.action?.onSelect();
+    toast?.actions[0]?.onSelect?.();
     expect(copyText).toHaveBeenCalledWith("https://example.com/watch");
   });
 

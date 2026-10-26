@@ -46,6 +46,12 @@ pub async fn scrobble_set_own_key(
     Ok(scrobbler.set_own_key(enabled, api_key, secret).await?)
 }
 
+/// Read the keychain again after the listener refused or it was locked.
+#[tauri::command]
+pub async fn scrobble_retry_keychain(scrobbler: Scrobbling<'_>) -> Result<(), ErrorResponse> {
+    Ok(scrobbler.retry_keychain().await?)
+}
+
 /// The song started playing for real.
 #[tauri::command]
 pub async fn scrobble_now_playing(

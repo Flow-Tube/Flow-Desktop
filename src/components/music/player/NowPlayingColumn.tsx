@@ -8,7 +8,7 @@ import { artistsText } from "../../../lib/musicFormat";
 import { useElementSize } from "../../../lib/useElementSize";
 import { useLikesStore } from "../../../store/useLikesStore";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
-import { useUiStore } from "../../../store/useUiStore";
+import { toggleSongLikeWithToast } from "../../../lib/songLikeToast";
 import type { SongItem } from "../../../types/music";
 import { HapticButton } from "../HapticButton";
 import { MusicArtwork } from "../MusicArtwork";
@@ -53,8 +53,6 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
   const likedItems = useLikesStore((s) => s.items);
   const likesLoaded = useLikesStore((s) => s.loaded);
   const loadLikes = useLikesStore((s) => s.load);
-  const toggleSongLike = useLikesStore((s) => s.toggleSong);
-  const showToast = useUiStore((s) => s.showToast);
   const menu = useMusicContextMenu(true);
   const menuActions = useNowPlayingMenuActions(track, { onNavigate: closeOverlay, onOpenEqualizer });
 
@@ -66,15 +64,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
     if (!likesLoaded) void loadLikes();
   }, [likesLoaded, loadLikes]);
 
-  const handleLike = async () => {
-    try {
-      const nowLiked = await toggleSongLike(track);
-      showToast({ variant: "success", message: getString(nowLiked ? "liked_added_toast" : "liked_removed_toast") });
-    } catch (error) {
-      console.warn("Failed to update music like", error);
-      showToast({ variant: "error", message: getString("liked_update_failed") });
-    }
-  };
+  const handleLike = () => toggleSongLikeWithToast(track, liked);
 
   return (
     <motion.div

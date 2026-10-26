@@ -1,11 +1,12 @@
+import type { ReactNode } from "react";
 import { Copy, Heart } from "lucide-react";
 import { Button } from "../components/ui/Button";
+import { OpenCollectiveIcon, PatreonIcon } from "../components/ui/SupportPlatformIcons";
 import { getString } from "../lib/i18n/index";
 import { copyText } from "../lib/clipboard";
 import { openExternal } from "../lib/openExternal";
+import { OPEN_COLLECTIVE_URL, PATREON_URL } from "../lib/supportLinks";
 import { useUiStore } from "../store/useUiStore";
-
-const PATREON_URL = "https://patreon.com/A_EDev";
 
 type CryptoMethod = {
   name: string;
@@ -99,6 +100,46 @@ function CryptoMethodCard({
   );
 }
 
+function PlatformCard({
+  icon,
+  title,
+  badge,
+  description,
+  action,
+  primary,
+}: {
+  icon: ReactNode;
+  title: string;
+  badge?: string;
+  description: string;
+  action: ReactNode;
+  primary?: boolean;
+}) {
+  return (
+    <section
+      className={`flex flex-col gap-4 rounded-2xl border border-chrome-neutral-800/50 p-6 sm:flex-row sm:items-center ${
+        primary ? "bg-surface-container" : "bg-surface-container-low"
+      }`}
+    >
+      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-surface-container-high text-chrome-neutral-100">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-medium text-chrome-neutral-100">{title}</h2>
+          {badge && (
+            <span className="rounded-full bg-surface-container-highest px-2 py-0.5 text-[11px] font-semibold text-chrome-neutral-200">
+              {badge}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-sm text-chrome-neutral-400">{description}</p>
+      </div>
+      <div className="shrink-0">{action}</div>
+    </section>
+  );
+}
+
 export default function Donations() {
   const showToast = useUiStore((state) => state.showToast);
 
@@ -131,23 +172,31 @@ export default function Donations() {
         </p>
       </header>
 
-      {/* Patreon */}
-      <section className="mt-8 rounded-2xl border border-chrome-neutral-800/50 bg-surface-container-low p-6">
-        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h2 className="text-base font-medium text-chrome-neutral-200">
-              {getString("donations_patreon_title")}
-            </h2>
-            <p className="mt-1 text-sm text-chrome-neutral-400">
-              {getString("donations_patreon_desc")}
-            </p>
-          </div>
-          <Button onClick={() => void openExternal(PATREON_URL)} className="shrink-0 px-5">
-            <Heart className="h-4 w-4" />
-            {getString("donations_patreon_button")}
-          </Button>
-        </div>
-      </section>
+      <div className="mt-8 flex flex-col gap-3">
+        <PlatformCard
+          primary
+          icon={<OpenCollectiveIcon size={24} />}
+          title={getString("donations_oc_title")}
+          badge={getString("donations_recommended")}
+          description={getString("donations_oc_desc")}
+          action={
+            <Button onClick={() => void openExternal(OPEN_COLLECTIVE_URL)} className="px-5">
+              <Heart className="h-4 w-4" />
+              {getString("donations_oc_button")}
+            </Button>
+          }
+        />
+        <PlatformCard
+          icon={<PatreonIcon size={22} />}
+          title={getString("donations_patreon_title")}
+          description={getString("donations_patreon_desc")}
+          action={
+            <Button variant="tonal" onClick={() => void openExternal(PATREON_URL)} className="px-5">
+              {getString("donations_patreon_button")}
+            </Button>
+          }
+        />
+      </div>
 
       {/* Crypto */}
       <section className="mt-10">

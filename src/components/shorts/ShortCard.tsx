@@ -15,6 +15,7 @@ import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import { useUiStore } from "../../store/useUiStore";
+import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
 import { SETTINGS } from "../../lib/settings/schema";
 import { buildShortQueue, shortSummaryToItem } from "../../lib/shortsQueue";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
@@ -118,20 +119,37 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
 
   const toggleSavedShort = async () => {
     setMenuAnchor(null);
+    const removing = savedToLibrary;
+    const item = { title, image: short.thumbnailUrl, shape: "portrait" as const };
     try {
-      if (savedToLibrary) {
+      if (removing) {
         await removeShortFromLibrary(short.id);
         setSavedToLibrary(false);
-        showToast({ variant: "success", message: getString("shorts_removed_from_library") });
+        showSaveToast({
+          destination: { kind: "savedShorts" },
+          item,
+          removed: true,
+          undo: async () => {
+            await saveShortToLibrary({ ...short, title });
+            setSavedToLibrary(true);
+          },
+        });
         return;
       }
 
       await saveShortToLibrary({ ...short, title });
       setSavedToLibrary(true);
-      showToast({ variant: "success", message: getString("shorts_saved_to_library") });
+      showSaveToast({
+        destination: { kind: "savedShorts" },
+        item,
+        undo: async () => {
+          await removeShortFromLibrary(short.id);
+          setSavedToLibrary(false);
+        },
+      });
     } catch (error) {
       console.error("Failed to update saved Shorts", error);
-      showToast({ variant: "error", message: getString("shorts_save_failed") });
+      showSaveFailedToast({ destination: { kind: "savedShorts" }, item, removed: removing, retry: toggleSavedShort });
     }
   };
 

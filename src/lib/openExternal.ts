@@ -24,6 +24,6 @@ export async function openExternalOrOfferCopy(url: string): Promise<void> {
     variant: 'error',
     message: getString('open_external_failed'),
     durationMs: 6000,
-    action: { label: getString('open_external_copy_link'), onSelect: () => void copyText(url) },
+    actions: [{ label: getString('open_external_copy_link'), onSelect: () => void copyText(url) }],
   });
 }

@@ -14,11 +14,11 @@ import { useCollectionDownloadState } from '../../lib/useCollectionDownloads';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
-import { useUiStore } from '../../store/useUiStore';
 import { getString } from '../../lib/i18n/index';
 import { artistsText } from '../../lib/musicFormat';
 import type { AlbumItem, SongItem } from '../../types/music';
 import { shuffled } from '../../lib/musicRecall';
+import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 
 const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
 
@@ -71,7 +71,6 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
   const toggleAlbumSave = useAlbumLibraryStore((s) => s.toggle);
   const isAlbumSaved = useAlbumLibraryStore((s) => (kind === 'album' && id ? s.isSaved(id) : false));
   const openTrackSearch = useAlbumLibraryStore((s) => s.openTrackSearch);
-  const showToast = useUiStore((s) => s.showToast);
   const [showMiniHeader, setShowMiniHeader] = useState(false);
 
   const { meta, songs, otherVersions, loading, loadingMore, error, hasMore, loadMore, reload, ownedAlbumId } =
@@ -167,11 +166,17 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
       thumbnail: meta.thumbnail ?? '',
       explicit: false,
     };
+    const toastItem = { title: meta.title, image: meta.thumbnail, shape: 'square' as const };
     void toggleAlbumSave(albumItem).then((nowSaved) => {
-      showToast({
-        variant: 'success',
-        message: getString(nowSaved ? 'music_saved_to_library' : 'music_removed_from_library'),
+      showSaveToast({
+        destination: { kind: 'albums' },
+        item: toastItem,
+        removed: !nowSaved,
+        undo: () => toggleAlbumSave(albumItem),
       });
+    }).catch((error) => {
+      console.error('Failed to update the album library', error);
+      showSaveFailedToast({ destination: { kind: 'albums' }, item: toastItem });
     });
   };
 

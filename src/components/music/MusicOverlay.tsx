@@ -133,6 +133,8 @@ export function MusicOverlay() {
   const fullBleedLyrics = isLyrics && (!wide || lyricsExpanded);
   const sideTab: SidePaneTab = isLyrics ? "lyrics" : "queue";
   const showPane = wide && paneVisible;
+  // Immersive's cover sits beside the side pane, and moves behind the song once the pane is hidden.
+  const artworkPlacement = !wide ? "top" : showPane && !fullBleedLyrics ? "start" : "center";
 
   // Asking for the queue or the lyrics from elsewhere (a key, the dock) brings a hidden pane back.
   // It follows the view only, so hiding the pane is never undone by the pane's own state.
@@ -197,7 +199,7 @@ export function MusicOverlay() {
         style={{ opacity: innerOpacity, scale: innerScale, transformOrigin: "50% 100%" }}
         className="relative flex min-h-0 flex-1 flex-col"
       >
-        <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkAtStart={wide} />
+        <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkPlacement={artworkPlacement} />
 
         {/* TOP BAR */}
         <div className="absolute top-0 z-20 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">

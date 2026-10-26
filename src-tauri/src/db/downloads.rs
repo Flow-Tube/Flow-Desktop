@@ -50,6 +50,8 @@ pub struct DownloadRecord {
     pub chapters_json: Option<String>,
     #[serde(default)]
     pub sponsorblock_json: Option<String>,
+    #[serde(default)]
+    pub subtitles_json: Option<String>,
     /// A loopback link to the stored cover, filled in when the library is listed.
     #[serde(default)]
     #[sqlx(skip)]
@@ -58,7 +60,7 @@ pub struct DownloadRecord {
 
 // Dynamic queries here only splice this constant and `?` placeholders, never input, so they
 // are safe to pass through `AssertSqlSafe`.
-const SELECT_COLUMNS: &str = "id, video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, loudness_db, created_at, cover_path, artists_json, album, album_id, album_artist, track_number, track_total, release_date, description, channel_id, container, video_codec, chapters_json, sponsorblock_json";
+const SELECT_COLUMNS: &str = "id, video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, loudness_db, created_at, cover_path, artists_json, album, album_id, album_artist, track_number, track_total, release_date, description, channel_id, container, video_codec, chapters_json, sponsorblock_json, subtitles_json";
 
 /// Inserts a completed download. An earlier download of the same item and kind in
 /// the same place (standalone, or the same collection) is replaced; the replaced
@@ -92,8 +94,8 @@ pub async fn upsert_download(
 
     sqlx::query(
         "INSERT INTO downloads (video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, loudness_db,
-             cover_path, artists_json, album, album_id, album_artist, track_number, track_total, release_date, description, channel_id, container, video_codec, chapters_json, sponsorblock_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             cover_path, artists_json, album, album_id, album_artist, track_number, track_total, release_date, description, channel_id, container, video_codec, chapters_json, sponsorblock_json, subtitles_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&record.video_id)
     .bind(&record.title)
@@ -120,6 +122,7 @@ pub async fn upsert_download(
     .bind(&record.video_codec)
     .bind(&record.chapters_json)
     .bind(&record.sponsorblock_json)
+    .bind(&record.subtitles_json)
     .execute(pool)
     .await
     .map_err(AppError::from)?;

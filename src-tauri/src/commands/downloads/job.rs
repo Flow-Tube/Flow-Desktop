@@ -18,9 +18,11 @@ use super::tags::{DownloadTags, TagKind};
 use super::transfer::{self, TrackFetch};
 use super::{
     DownloadControl, DownloadManager, DownloadMediaKind, StartDownloadRequest, muxer, sidecars,
+    subtitles,
 };
 use crate::api::innertube::download::DownloadContainer;
 use crate::db::downloads::DownloadRecord;
+use crate::models::video::CaptionTrack;
 
 pub struct DownloadJob {
     pub id: String,
@@ -37,6 +39,7 @@ struct Packaged {
     cover_in_file: bool,
     video_codec: Option<&'static str>,
     loudness_db: Option<f64>,
+    captions: Vec<CaptionTrack>,
 }
 
 impl DownloadJob {
@@ -192,6 +195,7 @@ async fn run_single(
             cover_in_file,
             video_codec: None,
             loudness_db: source.current(Role::Single).await.loudness_db,
+            captions: Vec::new(),
         },
         prepared,
     ))
@@ -204,7 +208,10 @@ async fn run_pair(
     emitter: &ProgressEmitter,
 ) -> Result<(Packaged, PreparedMetadata), String> {
     let resolved = source.resolved().await;
-    let Resolved::Pair { output, .. } = resolved else {
+    let Resolved::Pair {
+        output, captions, ..
+    } = resolved.clone()
+    else {
         return Err("Expected a video and audio pair".into());
     };
     let (video_container, audio_container) = resolved.track_containers();
@@ -261,6 +268,7 @@ async fn run_pair(
             cover_in_file: prepared.cover.is_some(),
             video_codec: resolved.video_codec(),
             loudness_db: None,
+            captions,
         },
         prepared,
     ))
@@ -494,7 +502,44 @@ async fn finish(
     } else {
         None
     };
-    record_completed_download(pool, job, &packaged, &prepared, cover_path, sponsorblock).await;
+    let subtitles = save_subtitles(app, job, &packaged, emitter).await;
+    record_completed_download(
+        pool,
+        job,
+        &packaged,
+        &prepared,
+        Extras {
+            cover_path,
+            sponsorblock_json: sponsorblock,
+            subtitles_json: subtitles,
+        },
+    )
+    .await;
+}
+
+async fn save_subtitles(
+    app: &AppHandle,
+    job: &DownloadJob,
+    packaged: &Packaged,
+    emitter: &ProgressEmitter,
+) -> Option<String> {
+    let choice = job.request.subtitle.as_ref()?;
+    let Some(track) = subtitles::pick_track(&packaged.captions, choice) else {
+        emitter.log(format!(
+            "This video has no {} subtitles to save",
+            choice.language_code
+        ));
+        return None;
+    };
+    let saved = subtitles::save_subtitle(app, &job.id, &packaged.file, track, emitter).await?;
+    serde_json::to_string(&[saved]).ok()
+}
+
+/// What `finish` saved beside the file, recorded with it.
+struct Extras {
+    cover_path: Option<String>,
+    sponsorblock_json: Option<String>,
+    subtitles_json: Option<String>,
 }
 
 /// Persists a finished download into the library. A download of the same item and
@@ -504,8 +549,7 @@ async fn record_completed_download(
     job: &DownloadJob,
     packaged: &Packaged,
     prepared: &PreparedMetadata,
-    cover_path: Option<String>,
-    sponsorblock_json: Option<String>,
+    extras: Extras,
 ) {
     let file_size_bytes = tokio::fs::metadata(&packaged.file)
         .await
@@ -532,7 +576,7 @@ async fn record_completed_download(
             .or(packaged.loudness_db)
             .filter(|db| db.is_finite()),
         created_at: String::new(),
-        cover_path,
+        cover_path: extras.cover_path,
         artists_json: (!tags.artists.is_empty())
             .then(|| serde_json::to_string(&tags.artists).ok())
             .flatten(),
@@ -552,7 +596,8 @@ async fn record_completed_download(
         chapters_json: (!prepared.chapters.is_empty())
             .then(|| serde_json::to_string(&prepared.chapters).ok())
             .flatten(),
-        sponsorblock_json,
+        sponsorblock_json: extras.sponsorblock_json,
+        subtitles_json: extras.subtitles_json,
         cover_url: None,
     };
     match crate::db::downloads::upsert_download(pool, &record).await {

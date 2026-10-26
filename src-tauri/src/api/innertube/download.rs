@@ -53,7 +53,94 @@ enum AudioCodec {
     Unknown,
 }
 
+/// One audio track a video can be downloaded with: the original, or a dub.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadAudioOption {
+    /// Stays the same across fresh stream links; passed back to pick this track.
+    pub key: String,
+    pub label: String,
+    pub language_code: Option<String>,
+    pub is_default: bool,
+    pub codec: String,
+    pub bitrate: Option<u64>,
+    pub size_bytes: Option<u64>,
+}
+
+/// A track's identity without its itag: `en.4-140` and `en.4-251` are one track.
+fn track_key(track: &AudioTrack) -> &str {
+    track
+        .id
+        .rsplit_once('-')
+        .map_or(track.id.as_str(), |(key, _)| key)
+}
+
+/// Every audio track on offer, each in its best MP4-friendly form.
+#[must_use]
+pub fn download_audio_options(stream_info: &StreamInfo) -> Vec<DownloadAudioOption> {
+    let mut options: Vec<DownloadAudioOption> = Vec::new();
+    for codec in [AudioCodec::Aac, AudioCodec::Opus] {
+        let mut tracks: Vec<&AudioTrack> = stream_info
+            .download_audio_tracks
+            .iter()
+            .filter(|track| {
+                !track.local_url.is_empty()
+                    && track
+                        .mime_type
+                        .as_deref()
+                        .is_some_and(|mime| audio_codec(mime) == codec)
+            })
+            .collect();
+        tracks.sort_by_key(|track| std::cmp::Reverse(track.bitrate.unwrap_or(0)));
+        for track in tracks {
+            let key = track_key(track);
+            if options.iter().any(|option| option.key == key) {
+                continue;
+            }
+            options.push(DownloadAudioOption {
+                key: key.to_string(),
+                label: track.label.clone(),
+                language_code: track.language_code.clone(),
+                is_default: track.is_default,
+                codec: audio_codec_label(codec).to_string(),
+                bitrate: track.bitrate,
+                size_bytes: track
+                    .content_length
+                    .or_else(|| estimate_size(track.bitrate, track.approx_duration_ms)),
+            });
+        }
+    }
+    options.sort_by_key(|option| std::cmp::Reverse(option.is_default));
+    options
+}
+
+#[must_use]
 pub fn pair_downloadable_formats(stream_info: &StreamInfo) -> Vec<DownloadableFormat> {
+    pair_downloadable_formats_with(stream_info, None)
+}
+
+/// The formats a video can be saved in, each paired with `audio_key`'s track when it
+/// is offered, otherwise with the default track.
+#[must_use]
+pub fn pair_downloadable_formats_with(
+    stream_info: &StreamInfo,
+    audio_key: Option<&str>,
+) -> Vec<DownloadableFormat> {
+    let chosen: Vec<AudioTrack> = audio_key
+        .map(|key| {
+            stream_info
+                .download_audio_tracks
+                .iter()
+                .filter(|track| track_key(track) == key)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    let audio_tracks = if chosen.is_empty() {
+        &stream_info.download_audio_tracks
+    } else {
+        &chosen
+    };
     let mut formats = stream_info
         .variants
         .iter()
@@ -63,7 +150,7 @@ pub fn pair_downloadable_formats(stream_info: &StreamInfo) -> Vec<DownloadableFo
                 && video.delivery_method == "adaptive"
                 && !video.local_url.is_empty()
         })
-        .filter_map(|video| pair_video_with_audio(video, &stream_info.download_audio_tracks))
+        .filter_map(|video| pair_video_with_audio(video, audio_tracks))
         .collect::<Vec<_>>();
 
     formats.sort_by(|left, right| {

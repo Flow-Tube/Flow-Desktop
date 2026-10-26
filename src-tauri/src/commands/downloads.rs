@@ -10,13 +10,15 @@ use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
 use crate::api::innertube::download::{
-    DownloadContainer, DownloadableFormat, pair_downloadable_formats,
+    DownloadAudioOption, DownloadContainer, DownloadableFormat, download_audio_options,
+    pair_downloadable_formats,
 };
 use crate::db::download_collections::DownloadCollectionRecord;
 use crate::db::download_jobs::DownloadJobRow;
 use crate::db::downloads::DownloadRecord;
 use crate::errors::{AppError, ErrorResponse};
 use crate::models::music_stream::MusicAudioQuality;
+use crate::models::video::CaptionTrack;
 use crate::security::validation::validate_video_id;
 use crate::services::youtube_service::YoutubeService;
 use crate::streaming::proxy::StreamingManager;
@@ -29,6 +31,7 @@ mod naming;
 mod progress;
 mod sidecars;
 mod source;
+mod subtitles;
 pub mod tags;
 mod transfer;
 
@@ -39,25 +42,62 @@ const MAX_ACTIVE_DOWNLOADS: usize = 3;
 /// Logs of this many recent downloads stay readable in the details view.
 const MAX_REMEMBERED_LOGS: usize = 100;
 
-/// The formats a video can be downloaded in. Only the choice travels back to
-/// `start_download`; links are resolved when the download runs.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadOptions {
+    pub formats: Vec<DownloadableFormat>,
+    pub audio_tracks: Vec<DownloadAudioOption>,
+    pub captions: Vec<CaptionOption>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CaptionOption {
+    pub language_code: String,
+    pub label: String,
+    pub is_auto_generated: bool,
+}
+
+/// What a video can be downloaded with: formats, audio tracks and subtitles. Only
+/// the choice travels back to `start_download`; links are resolved when it runs.
 #[tauri::command]
 pub async fn get_download_formats(
     video_id: String,
     youtube_service: State<'_, YoutubeService>,
-) -> Result<Vec<DownloadableFormat>, ErrorResponse> {
+) -> Result<DownloadOptions, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
     let stream_info = youtube_service
         .get_stream_info(&video_id, false)
         .await
         .map_err(ErrorResponse::from)?;
-    Ok(pair_downloadable_formats(&stream_info))
+    Ok(DownloadOptions {
+        formats: pair_downloadable_formats(&stream_info),
+        audio_tracks: download_audio_options(&stream_info),
+        captions: stream_info
+            .captions
+            .iter()
+            .filter(|track| !track.is_translation)
+            .map(|track| CaptionOption {
+                language_code: track.language_code.clone(),
+                label: track.label.clone(),
+                is_auto_generated: track.is_auto_generated,
+            })
+            .collect(),
+    })
+}
+
+/// How many downloads run at once, from the Downloads settings.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)] // Tauri commands deserialize owned State.
+pub fn set_download_concurrency(limit: u8, manager: State<'_, DownloadManager>) {
+    manager.set_limit(usize::from(limit.clamp(1, 5)));
 }
 
 #[derive(Clone)]
 pub struct DownloadManager {
     registry: Arc<Mutex<DownloadRegistry>>,
     permits: Arc<Semaphore>,
+    limit: Arc<Mutex<usize>>,
     /// Interrupted downloads are picked up once per run of the app.
     restored: Arc<AtomicBool>,
 }
@@ -67,6 +107,7 @@ impl Default for DownloadManager {
         Self {
             registry: Arc::new(Mutex::new(DownloadRegistry::default())),
             permits: Arc::new(Semaphore::new(MAX_ACTIVE_DOWNLOADS)),
+            limit: Arc::new(Mutex::new(MAX_ACTIVE_DOWNLOADS)),
             restored: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -84,6 +125,26 @@ struct DownloadRegistry {
 }
 
 impl DownloadManager {
+    /// Changes how many downloads run at once. Fewer takes effect as running ones
+    /// finish: the surplus slots are claimed and dropped as they come free.
+    fn set_limit(&self, limit: usize) {
+        let Ok(mut current) = self.limit.lock() else {
+            return;
+        };
+        if limit > *current {
+            self.permits.add_permits(limit - *current);
+        } else if limit < *current {
+            let surplus = u32::try_from(*current - limit).unwrap_or(0);
+            let permits = self.permits.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Ok(claimed) = permits.acquire_many_owned(surplus).await {
+                    claimed.forget();
+                }
+            });
+        }
+        *current = limit;
+    }
+
     fn lock(&self) -> Result<MutexGuard<'_, DownloadRegistry>, ErrorResponse> {
         self.registry
             .lock()
@@ -245,6 +306,9 @@ pub struct StartDownloadRequest {
     /// The audio quality chosen, for a song.
     #[serde(default)]
     pub music: Option<MusicSelection>,
+    /// A subtitle track to save with a video.
+    #[serde(default)]
+    pub subtitle: Option<subtitles::SubtitleChoice>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -255,6 +319,9 @@ pub struct VideoSelection {
     pub fps: Option<u64>,
     pub video_codec: String,
     pub container: DownloadContainer,
+    /// An audio track's key (a dub), when the user chose one.
+    #[serde(default)]
+    pub audio_track: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -703,6 +770,8 @@ pub struct OfflineStreamInfo {
     pub lyrics: Option<String>,
     /// The loudness recorded when the file was downloaded.
     pub loudness_db: Option<f64>,
+    /// Subtitles saved with a video, served from disk.
+    pub captions: Vec<CaptionTrack>,
 }
 
 /// Downloads saved before Flow kept its own cover copy have their poster next to
@@ -792,6 +861,7 @@ pub async fn get_offline_stream(
         artwork_url,
         lyrics: read_lyrics_sidecar(&record.file_path).await,
         loudness_db: record.loudness_db,
+        captions: offline_captions(&streaming_manager, &record),
     })
 }
 
@@ -1036,6 +1106,50 @@ async fn remove_download_files(record: &DownloadRecord) {
     if let Some(cover) = record.cover_path.as_deref() {
         let _ = tokio::fs::remove_file(cover).await;
     }
+    for subtitle in saved_subtitles(record) {
+        let _ = tokio::fs::remove_file(&subtitle.path).await;
+        let _ =
+            tokio::fs::remove_file(subtitles::srt_path(media_path, &subtitle.language_code)).await;
+    }
+}
+
+fn saved_subtitles(record: &DownloadRecord) -> Vec<subtitles::SavedSubtitle> {
+    record
+        .subtitles_json
+        .as_deref()
+        .and_then(|json| serde_json::from_str(json).ok())
+        .unwrap_or_default()
+}
+
+/// Caption tracks for a saved video, each served from its stored `WebVTT` copy.
+fn offline_captions(
+    streaming_manager: &StreamingManager,
+    record: &DownloadRecord,
+) -> Vec<CaptionTrack> {
+    let Some(id) = record.id else {
+        return Vec::new();
+    };
+    let port = streaming_manager.get_port();
+    saved_subtitles(record)
+        .into_iter()
+        .filter(|subtitle| Path::new(&subtitle.path).is_file())
+        .map(|subtitle| {
+            let token = format!("download-subtitle-{id}-{}", subtitle.language_code);
+            streaming_manager.register_local_session(
+                token.clone(),
+                subtitle.path.clone(),
+                "text/vtt".to_string(),
+            );
+            CaptionTrack {
+                id: format!("download-{}", subtitle.language_code),
+                label: subtitle.label,
+                language_code: subtitle.language_code,
+                url: format!("http://127.0.0.1:{port}/stream/{token}"),
+                is_auto_generated: subtitle.is_auto_generated,
+                is_translation: false,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

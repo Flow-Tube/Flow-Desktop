@@ -8,10 +8,10 @@ use tokio::sync::Mutex;
 
 use super::{DownloadMediaKind, MusicSelection, StartDownloadRequest, VideoSelection};
 use crate::api::innertube::download::{
-    DownloadContainer, DownloadableFormat, container_from_mime, pair_downloadable_formats,
+    DownloadContainer, DownloadableFormat, container_from_mime, pair_downloadable_formats_with,
     video_codec_name,
 };
-use crate::models::video::StreamInfo;
+use crate::models::video::{CaptionTrack, StreamInfo};
 use crate::services::music_service::MusicService;
 use crate::services::youtube_service::YoutubeService;
 
@@ -36,6 +36,8 @@ pub enum Resolved {
         output: DownloadContainer,
         /// The format the links belong to; a refresh must find the same one.
         format_id: String,
+        /// The video's caption tracks, for a subtitle chosen with the download.
+        captions: Vec<CaptionTrack>,
     },
 }
 
@@ -161,7 +163,7 @@ async fn resolve_music(
 }
 
 fn resolve_video(info: &StreamInfo, selection: &VideoSelection) -> Result<Resolved, String> {
-    let formats = pair_downloadable_formats(info);
+    let formats = pair_downloadable_formats_with(info, selection.audio_track.as_deref());
     let format = pick_format(&formats, selection)
         .ok_or("This video has no downloadable video and audio pair")?;
     let fallback_agent = info
@@ -190,11 +192,13 @@ fn resolve_video(info: &StreamInfo, selection: &VideoSelection) -> Result<Resolv
         },
         output: format.container,
         format_id: format.format_id.clone(),
+        captions: info.captions.clone(),
     })
 }
 
 /// The exact format the user chose when it is still offered; otherwise the closest:
-/// same height, codec and frame rate, then same height, then the tallest below it.
+/// same height and codec (and frame rate when one was chosen), then same height,
+/// then the tallest below it, preferring the same codec.
 pub fn pick_format<'a>(
     formats: &'a [DownloadableFormat],
     selection: &VideoSelection,
@@ -208,29 +212,19 @@ pub fn pick_format<'a>(
     let Some(height) = selection.height else {
         return formats.first();
     };
+    let same_codec = |format: &&DownloadableFormat| format.video_codec == selection.video_codec;
+    let same_height = |format: &&DownloadableFormat| format.height == Some(height);
+    let below = |format: &&DownloadableFormat| format.height.unwrap_or(0) <= height;
+    // Formats arrive tallest first, so the first match below is the tallest one.
     formats
         .iter()
-        .find(|format| {
-            format.height == selection.height
-                && format.fps == selection.fps
-                && format.video_codec == selection.video_codec
-        })
-        .or_else(|| {
-            formats
-                .iter()
-                .find(|format| format.height == selection.height)
-        })
-        // Formats arrive tallest first, so the first one at or below is the tallest.
-        .or_else(|| {
-            formats.iter().find(|format| {
-                format.height.unwrap_or(0) <= height && format.video_codec == selection.video_codec
-            })
-        })
-        .or_else(|| {
-            formats
-                .iter()
-                .find(|format| format.height.unwrap_or(0) <= height)
-        })
+        .filter(same_height)
+        .filter(same_codec)
+        .find(|format| selection.fps.is_none_or(|fps| format.fps == Some(fps)))
+        .or_else(|| formats.iter().filter(same_height).find(same_codec))
+        .or_else(|| formats.iter().find(same_height))
+        .or_else(|| formats.iter().filter(below).find(same_codec))
+        .or_else(|| formats.iter().find(below))
         .or_else(|| formats.last())
 }
 
@@ -291,6 +285,7 @@ mod tests {
             fps: Some(fps),
             video_codec: codec.into(),
             container: DownloadContainer::Mp4,
+            audio_track: None,
         }
     }
 

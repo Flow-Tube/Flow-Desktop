@@ -13,7 +13,9 @@ import { listen } from "@tauri-apps/api/event";
 
 import {
   cancelDownload,
+  discardDownload,
   pauseDownload,
+  restoreDownloads,
   resumeDownload,
   type DownloadProgress,
   type DownloadStatus,
@@ -149,7 +151,10 @@ function DockCard({
             onClick={(event) => {
               event.stopPropagation();
               if (running) void cancelDownload(item.id);
-              else onDismiss();
+              else {
+                if (failed) void discardDownload(item.id);
+                onDismiss();
+              }
             }}
             className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-low hover:text-chrome-neutral-100"
           >
@@ -294,8 +299,15 @@ export function DownloadActivity() {
           }
         }
       });
-      if (disposed) stop();
-      else unlisten = stop;
+      if (disposed) {
+        stop();
+        return;
+      }
+      unlisten = stop;
+      // Downloads a previous run left unfinished resume now, and every unfinished one
+      // shows in the dock even if this window opened after it started.
+      const unfinished = await restoreDownloads().catch(() => []);
+      for (const progress of unfinished) updateProgress(progress);
     });
     return () => {
       disposed = true;
@@ -410,7 +422,12 @@ export function DownloadActivity() {
             state={soloGroup.state}
             onTogglePause={() => toggleGroupPause(soloGroup!)}
             onCancelAll={() => soloGroup!.runningItems.forEach((item) => void cancelDownload(item.id))}
-            onDismiss={() => soloGroup!.ids.forEach((id) => dismissProgress(id))}
+            onDismiss={() => {
+              for (const item of solo) {
+                if (item.status === "failed") void discardDownload(item.id);
+                dismissProgress(item.id);
+              }
+            }}
           />
         ) : single ? (
           <DockCard

@@ -6,21 +6,22 @@ import {
   type DownloadContainer,
   type DownloadableFormat,
 } from "./api/downloads";
+import {
+  AUTO_DOWNLOAD_HEIGHT,
+  musicDownloadQuality,
+  musicDownloadRequest,
+  videoDownloadRequest,
+  videoSelectionFor,
+} from "./downloadActions";
 import { getBackendErrorMessage } from "./api/errors";
-import { getMusicStream, type MusicAudioQuality } from "./api/music";
+import { getMusicStream } from "./api/music";
 import { SETTINGS } from "./settings/schema";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { MusicStreamInfo, SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 import { noteVideoSaved } from "./videoSaved";
 import { saveLyricsWithDownload } from "./lyrics/downloadLyrics";
-import { trackDownloadTags, videoDownloadTags } from "./downloadTags";
 
-/** Songs are saved as AAC so they can carry tags: the best AAC on offer, unless the
- *  user asked for low quality. */
-export function musicDownloadQuality(values: Record<string, string>): MusicAudioQuality {
-  return values[SETTINGS.MUSIC_AUDIO_QUALITY] === "Low" ? "Low" : "High";
-}
 
 function codecLabel(mimeType?: string | null): string {
   const value = mimeType?.toLowerCase() ?? "";
@@ -34,8 +35,12 @@ export function selectDefaultFormat(
   preferred: string,
 ): DownloadableFormat | null {
   if (formats.length === 0) return null;
-  const preferredHeight = Number.parseInt(preferred, 10);
-  if (!Number.isFinite(preferredHeight)) return formats[0] ?? null;
+  const parsed = Number.parseInt(preferred, 10);
+  const preferredHeight = Number.isFinite(parsed) ? parsed : AUTO_DOWNLOAD_HEIGHT;
+  const atOrBelow = formats.filter((format) => (format.height ?? 0) <= preferredHeight);
+  if (atOrBelow.length > 0) {
+    return atOrBelow.reduce((best, format) => ((format.height ?? 0) > (best.height ?? 0) ? format : best));
+  }
   return [...formats].sort(
     (left, right) =>
       Math.abs((left.height ?? 0) - preferredHeight)
@@ -122,26 +127,11 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
     setStarting(true);
     setError(null);
     try {
-      const started = await startDownload({
-        adaptive: {
-          videoUrl: selected.videoUrl,
-          audioUrl: selected.audioUrl,
-          container: selected.container,
-          videoMimeType: selected.videoMimeType,
-          audioMimeType: selected.audioMimeType,
-        },
-        title: title.trim() || video.title,
-        mediaKind: "video",
-        qualityLabel: describeDownloadFormat(selected),
-        destinationDirectory: values[SETTINGS.DOWNLOAD_LOCATION] || undefined,
-        parallel: values[SETTINGS.PARALLEL_DOWNLOAD_ENABLED] !== "false",
-        threads: Number(values[SETTINGS.DOWNLOAD_THREADS] ?? 3),
-        videoId: video.id,
-        thumbnailUrl: video.thumbnailUrl ?? undefined,
-        author: video.channelName || undefined,
-        durationSeconds: video.durationSeconds ?? undefined,
-        tags: videoDownloadTags(video),
-      });
+      const started = await startDownload(
+        videoDownloadRequest(video, values, videoSelectionFor(selected), describeDownloadFormat(selected), {
+          title,
+        }),
+      );
       setStartedId(started.id);
       noteVideoSaved(video);
       return started;
@@ -207,19 +197,8 @@ export function useMusicDownloadDialog(track: SongItem | null) {
     setError(null);
     try {
       const started = await startDownload({
-        sourceUrl: stream.audioUrl,
-        title: title.trim() || track.title,
-        mediaKind: "music",
-        qualityLabel: describeMusicStream(stream),
-        destinationDirectory: values[SETTINGS.MUSIC_DOWNLOAD_LOCATION] || undefined,
-        parallel: values[SETTINGS.PARALLEL_DOWNLOAD_ENABLED] !== "false",
-        threads: Number(values[SETTINGS.DOWNLOAD_THREADS] ?? 3),
-        videoId: track.videoId ?? track.id,
-        thumbnailUrl: track.thumbnail || undefined,
-        author: track.artists.map((artist) => artist.name).filter(Boolean).join(", ") || undefined,
-        durationSeconds: track.duration ?? undefined,
+        ...musicDownloadRequest(track, values, describeMusicStream(stream), { title }),
         loudnessDb: stream.loudnessDb ?? undefined,
-        tags: trackDownloadTags(track),
       });
       saveLyricsWithDownload(track, started.id);
       return started;

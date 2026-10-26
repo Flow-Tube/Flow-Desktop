@@ -7,6 +7,7 @@ import {
   type DownloadStarted,
 } from "../lib/api/downloads";
 import { startMusicDownload, startVideoDownload } from "../lib/downloadActions";
+import { SETTINGS } from "../lib/settings/schema";
 import { useAppSettingsStore } from "./useAppSettingsStore";
 import { useDownloadCollectionsLibraryStore } from "./useDownloadCollectionsLibraryStore";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
@@ -74,6 +75,8 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
         author: meta.author,
         thumbnailUrl: meta.thumbnailUrl,
         totalCount: items.length,
+        destinationDirectory:
+          settings()[kind === "album" ? SETTINGS.MUSIC_DOWNLOAD_LOCATION : SETTINGS.DOWNLOAD_LOCATION] || undefined,
       });
     } catch (error) {
       console.error("Failed to create the download collection", error);

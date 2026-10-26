@@ -1,4 +1,5 @@
 import { invokeBackend } from "./errors";
+import type { MusicAudioQuality } from "./music";
 
 export type DownloadMediaKind = "video" | "music" | "audio";
 export type DownloadStatus =
@@ -11,18 +12,18 @@ export type DownloadStatus =
   | "failed"
   | "cancelled";
 
+/** What the user chose. Stream links are resolved by the backend when the download
+ *  runs, so a queued or restarted download never starts with an expired link. */
 export interface StartDownloadRequest {
-  sourceUrl?: string;
-  adaptive?: AdaptiveDownloadRequest;
+  videoId: string;
   title: string;
   mediaKind: DownloadMediaKind;
   qualityLabel: string;
   destinationDirectory?: string;
   parallel: boolean;
   threads: number;
-  /** Source identifiers used to save companion files (poster, SponsorBlock, lyrics)
-   *  and to populate the persisted downloads library. */
-  videoId?: string;
+  video?: VideoSelection;
+  music?: MusicSelection;
   thumbnailUrl?: string;
   author?: string;
   durationSeconds?: number;
@@ -51,12 +52,18 @@ export interface DownloadTagsInput {
   likeCount?: number;
 }
 
-export interface AdaptiveDownloadRequest {
-  videoUrl: string;
-  audioUrl: string;
+export interface VideoSelection {
+  /** The exact format; when it is no longer offered the closest one is used. */
+  formatId: string;
+  height: number | null;
+  fps: number | null;
+  videoCodec: string;
   container: DownloadContainer;
-  videoMimeType: string;
-  audioMimeType: string;
+}
+
+export interface MusicSelection {
+  quality: MusicAudioQuality;
+  preferAac: boolean;
 }
 
 export interface DownloadStarted {
@@ -77,10 +84,13 @@ export interface DownloadProgress {
   /** Coarse failure category for a `failed` download (e.g. "network", "streaming",
    *  "internal", "download"); null unless the download terminally failed. */
   errorKind: string | null;
-  logs: string[];
   videoId: string | null;
   thumbnailUrl: string | null;
   collectionDbId: number | null;
+  artist: string | null;
+  /** Speed over the last few seconds, while downloading. */
+  bytesPerSecond: number | null;
+  etaSeconds: number | null;
 }
 
 export type DownloadContainer = "mp4" | "mkv";
@@ -101,8 +111,6 @@ export interface DownloadableFormat {
   videoSizeBytes: number | null;
   audioSizeBytes: number | null;
   estimatedSizeBytes: number | null;
-  videoUrl: string;
-  audioUrl: string;
 }
 
 export function getDownloadFormats(videoId: string): Promise<DownloadableFormat[]> {
@@ -123,6 +131,25 @@ export function pauseDownload(id: string): Promise<boolean> {
 
 export function resumeDownload(id: string): Promise<boolean> {
   return invokeBackend<boolean>("resume_download", { id });
+}
+
+/** Starts a failed download again from where it stopped. */
+export function retryDownload(id: string): Promise<boolean> {
+  return invokeBackend<boolean>("retry_download", { id });
+}
+
+/** Removes a failed download and its partial files. */
+export function discardDownload(id: string): Promise<boolean> {
+  return invokeBackend<boolean>("discard_download", { id });
+}
+
+/** Resumes downloads an earlier run left unfinished and returns every unfinished one. */
+export function restoreDownloads(): Promise<DownloadProgress[]> {
+  return invokeBackend<DownloadProgress[]>("restore_downloads");
+}
+
+export function getDownloadLogs(id: string): Promise<string[]> {
+  return invokeBackend<string[]>("get_download_logs", { id });
 }
 
 export interface DownloadRecord {
@@ -183,6 +210,8 @@ export interface CreateCollectionRequest {
   author?: string;
   thumbnailUrl?: string;
   totalCount: number;
+  /** The user's video or music download folder, when they chose one. */
+  destinationDirectory?: string;
 }
 
 export interface CreatedCollection {

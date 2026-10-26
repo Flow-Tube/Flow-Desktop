@@ -251,6 +251,8 @@
   "download_queued": "Queued for download",
   "download_pause": "Pause",
   "download_resume": "Resume",
+  "download_retry": "Retry",
+  "download_discard": "Remove download",
   "download_failure_reason": "Failure reason",
   "download_failure_logs": "Download log",
   "download_copy_logs": "Copy logs",

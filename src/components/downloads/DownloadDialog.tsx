@@ -18,6 +18,7 @@ import {
   cancelDownload,
   pauseDownload,
   resumeDownload,
+  retryDownload,
   type DownloadProgress,
 } from "../../lib/api/downloads";
 import { getString } from "../../lib/i18n/index";
@@ -30,6 +31,7 @@ import {
   useVideoDownloadDialog,
 } from "../../lib/useDownloadDialog";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { useDownloadLogs } from "../../lib/useDownloadLogs";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useDownloadStore } from "../../store/useDownloadStore";
 import { useUiStore } from "../../store/useUiStore";
@@ -156,11 +158,13 @@ function DownloadProgressPanel({
   onCancel,
   onPause,
   onResume,
+  onRetry,
 }: {
   progress: DownloadProgress | undefined;
   onCancel: () => void;
   onPause: () => void;
   onResume: () => void;
+  onRetry: () => void;
 }) {
   const status = progress?.status ?? "queued";
   const percent = progressPercent(progress);
@@ -208,6 +212,12 @@ function DownloadProgressPanel({
                 : progress?.qualityLabel ?? getString("download_preparing"))}
           </div>
         </div>
+        {status === "failed" ? (
+          <Button variant="ghost" size="sm" onClick={onRetry}>
+            <Play size={15} />
+            {getString("download_retry")}
+          </Button>
+        ) : null}
         {!terminal ? (
           <div className="flex items-center gap-1">
             {status !== "muxing" ? (
@@ -405,7 +415,7 @@ function DownloadActivityDialog({
 }) {
   const progress = useDownloadStore((state) => state.active[id]);
   const showToast = useUiStore((state) => state.showToast);
-  const logs = progress?.logs ?? [];
+  const logs = useDownloadLogs(id, progress?.status);
 
   const copyLogs = async () => {
     const text = [
@@ -449,6 +459,7 @@ function DownloadActivityDialog({
         onCancel={() => void cancelDownload(id)}
         onPause={() => void pauseDownload(id)}
         onResume={() => void resumeDownload(id)}
+        onRetry={() => void retryDownload(id)}
       />
       <div className="mt-5">
         <div className="flex items-center justify-between gap-3">

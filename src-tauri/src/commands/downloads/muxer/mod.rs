@@ -514,7 +514,7 @@ fn read_matroska_track_entry(
 }
 
 fn media_file_diagnostics(path: &Path) -> String {
-    let size = path.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+    let size = path.metadata().map_or(0, |metadata| metadata.len());
     let mut prefix = [0_u8; 32];
     let read = File::open(path)
         .and_then(|mut file| file.read(&mut prefix))

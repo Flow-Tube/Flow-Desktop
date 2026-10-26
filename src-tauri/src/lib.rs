@@ -49,7 +49,7 @@ use commands::downloads::{
     delete_download_collections, delete_downloads, discard_download, get_download_formats,
     get_download_logs, get_downloaded_video_ids, get_offline_stream, list_download_collections,
     list_downloads, pause_download, restore_downloads, resume_download, retry_download,
-    set_download_concurrency, start_download,
+    reveal_download, set_download_concurrency, show_download_notification, start_download,
 };
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::lyrics::{
@@ -527,6 +527,8 @@ pub fn run() {
             restore_downloads,
             get_download_logs,
             set_download_concurrency,
+            reveal_download,
+            show_download_notification,
             list_downloads,
             get_downloaded_video_ids,
             get_offline_stream,

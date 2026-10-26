@@ -42,7 +42,6 @@ pub struct MusicSignal {
     pub track_id: String,
     pub artist_key: String,
     pub genre: Option<String>,
-    pub percent_played: f32,
     pub is_explicit_like: bool,
     pub title: Option<String>,
     pub artist_display: Option<String>,
@@ -341,12 +340,11 @@ where
 mod tests {
     use super::*;
 
-    fn sig(track: &str, artist: &str, pct: f32) -> MusicSignal {
+    fn sig(track: &str, artist: &str, _pct: f32) -> MusicSignal {
         MusicSignal {
             track_id: track.to_string(),
             artist_key: artist.to_string(),
             genre: None,
-            percent_played: pct,
             is_explicit_like: false,
             title: None,
             artist_display: None,

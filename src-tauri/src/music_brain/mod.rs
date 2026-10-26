@@ -1,4 +1,5 @@
 pub mod backfill;
+#[cfg(test)]
 pub mod eval;
 pub mod learn;
 pub mod mixes;

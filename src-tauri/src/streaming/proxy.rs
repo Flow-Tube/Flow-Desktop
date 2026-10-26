@@ -822,7 +822,6 @@ async fn relay_remote(
     let mut bytes_relayed: u64 = 0;
     let mut attempt: u32 = 0;
     let mut content_length_value: usize = 0;
-    let mut should_cache = false;
     let mut content_type_value = session.content_type.clone();
     let mut content_range_value: Option<String> = None;
     let mut accept_ranges_value = "bytes".to_string();
@@ -994,7 +993,7 @@ async fn relay_remote(
                 || ct_lower.contains("text/vtt");
             let is_cacheable_kind = ct_lower.starts_with("image/");
 
-            should_cache = status.is_success()
+            let should_cache = status.is_success()
                 && !is_manifest
                 && is_cacheable_kind
                 && content_length_header.is_some()

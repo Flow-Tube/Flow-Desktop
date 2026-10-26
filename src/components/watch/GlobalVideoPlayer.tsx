@@ -47,6 +47,7 @@ export function GlobalVideoPlayer() {
   const location = useLocation();
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   const videoPlayerMode = usePlayerStore((s) => s.videoPlayerMode);
+  const videoPipIntent = usePlayerStore((s) => s.videoPipIntent);
   const isVideoFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
   const isVideoFullscreenTransitioning = usePlayerStore((s) => s.isVideoFullscreenTransitioning);
   const watchPageCache = usePlayerStore((s) => s.watchPageCache);
@@ -61,7 +62,8 @@ export function GlobalVideoPlayer() {
   const previousPathRef = useRef(location.pathname);
   const previousVideoIdRef = useRef(currentVideo?.id ?? null);
 
-  const isFloating = videoPlayerMode === "pip";
+  const isWatchRoute = Boolean(watchVideoIdFromPath(location.pathname));
+  const isFloating = videoPlayerMode === "pip" || (!isWatchRoute && autoPipEnabled && Boolean(currentVideo));
   // The pop-out window owns playback in this mode, so this window renders no
   // media element — two decoding the same video would double audio and CPU.
   const isPoppedOut = videoPlayerMode === "window";
@@ -152,7 +154,11 @@ export function GlobalVideoPlayer() {
     return () => {
       observer.disconnect();
       // Floating and fullscreen layouts position the frame with insets.
-      if (frameRef.current) frameRef.current.style.transform = "";
+      if (frameRef.current) {
+        frameRef.current.style.transform = "";
+        frameRef.current.style.width = "";
+        frameRef.current.style.height = "";
+      }
       lastSlotBoundsRef.current = null;
       if (resizeRaf !== null) window.cancelAnimationFrame(resizeRaf);
       window.removeEventListener("resize", onResize);
@@ -161,6 +167,16 @@ export function GlobalVideoPlayer() {
       window.cancelAnimationFrame(settleRaf);
     };
   }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo?.id, location.pathname]);
+
+  // Whenever active on the watch route for the playing video, ensure it expands out of mini player
+  // (unless the user manually toggled pip mode)
+  useEffect(() => {
+    if (!currentVideo) return;
+    const currentWatchId = watchVideoIdFromPath(location.pathname);
+    if (currentWatchId && currentWatchId === currentVideo.id && videoPlayerMode === "pip" && videoPipIntent !== "manual") {
+      expandVideoPlayer();
+    }
+  }, [location.pathname, currentVideo?.id, videoPlayerMode, videoPipIntent, expandVideoPlayer]);
 
   useEffect(() => {
     const previousPath = previousPathRef.current;
@@ -177,6 +193,7 @@ export function GlobalVideoPlayer() {
       videoPlayerMode: player.videoPlayerMode,
       isPlaying: player.isPlaying,
       autoPipEnabled,
+      videoPipIntent: player.videoPipIntent,
     });
     if (action === "expand") expandVideoPlayer();
     else if (action === "enter-pip") enterVideoPip("auto");

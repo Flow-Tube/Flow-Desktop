@@ -253,13 +253,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       : -1;
     const nextVideo = safeIndex >= 0 ? queue[safeIndex] || null : null;
     const isNew = get().currentVideo?.id !== nextVideo?.id;
+    const currentMode = get().videoPlayerMode;
     set({
       queue,
       currentIndex: safeIndex,
       currentVideo: nextVideo,
       isPlaying: queue.length > 0,
-      videoPlayerMode: "watch",
-      videoPipIntent: null,
+      videoPlayerMode: currentMode === "pip" ? "pip" : "watch",
+      videoPipIntent: currentMode === "pip" ? "manual" : null,
       isChaptersPanelOpen: false,
       isQueuePanelOpen: false,
       ...(isNew ? { watchPageCache: null } : {}),
@@ -344,6 +345,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isPlaying: true,
       currentTime: 0,
       duration: item.durationSeconds ?? 0,
+      videoPlayerMode: "watch",
+      videoPipIntent: null,
+      isChaptersPanelOpen: false,
+      isQueuePanelOpen: false,
       watchPageCache: null,
       autoplayCandidates: [],
       playbackStartedVideoId: null,

@@ -130,8 +130,11 @@ function App() {
     a fresh closure per render defeats `React.memo(VideoCard)` for the whole feed.
   */
   const handlePlayVideo = useCallback((video: VideoSummary) => {
+    const isPip = usePlayerStore.getState().videoPlayerMode === "pip";
     setQueue([video], 0);
-    navigate(`/watch/${video.id}`);
+    if (!isPip) {
+      navigate(`/watch/${video.id}`);
+    }
   }, [setQueue, navigate]);
 
   const handleAddToQueue = useCallback((video: VideoSummary) => {

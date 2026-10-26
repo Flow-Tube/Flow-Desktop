@@ -28,7 +28,7 @@ pub mod manifest;
 pub mod session;
 
 pub use errors::{SabrError, SabrResult};
-pub use selector::{CodecSupport, SabrFormat, SelectedFormats};
+pub use selector::{CodecSupport, SabrFormat};
 
 use std::collections::HashMap;
 use std::sync::{

@@ -82,10 +82,12 @@ impl TrackBuffer {
             ..Default::default()
         }
     }
+    #[cfg(test)]
     fn done(&self) -> bool {
         (self.end_seq > 0 && i64::from(self.max_seq) >= self.end_seq)
             || (self.total_ms > 0 && self.init.is_some() && self.segments_cover_total())
     }
+    #[cfg(test)]
     fn segments_cover_total(&self) -> bool {
         // crude: rely on max_seq vs end_seq; total_ms handled by state
         self.end_seq > 0 && i64::from(self.max_seq) >= self.end_seq
@@ -204,7 +206,6 @@ impl SabrEngine {
                         t.format.last_modified,
                         t.format.xtags.clone(),
                     ),
-                    t.format.mime_type.clone(),
                 );
                 (t.key.clone(), t.format.itag)
             }
@@ -445,7 +446,6 @@ impl SabrEngine {
                 {
                     match action {
                         CycleAction::Reload => return Err(SabrError::ReloadRequired),
-                        CycleAction::Stop => return Ok(false),
                     }
                 }
             }
@@ -741,7 +741,6 @@ impl SabrEngine {
                     track.format.last_modified,
                     track.format.xtags.clone(),
                 ),
-                track.format.mime_type.clone(),
             );
         }
         {
@@ -930,7 +929,6 @@ impl SabrEngine {
 
 enum CycleAction {
     Reload,
-    Stop,
 }
 
 // Decode standard or URL-safe base64 (with or without padding).

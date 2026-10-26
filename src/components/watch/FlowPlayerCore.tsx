@@ -109,14 +109,14 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
 
   const handleTimeUpdate = useCallback(
     (time: number, mediaDuration: number) => {
-      if (!progressTickBelongsTo(currentVideo?.id ?? null, stream.streamVideoId)) return;
+      if (!currentVideo || currentVideo.id !== videoId || stream.loadingStream) return;
+      if (!progressTickBelongsTo(currentVideo.id, stream.streamVideoId)) return;
       stream.notePlaybackTime(time);
       const nextDuration = mediaDuration || currentVideo?.durationSeconds || 1;
       setCurrentTime(time);
       setDuration(nextDuration);
       prefetchNextVideo(time, nextDuration);
 
-      if (!currentVideo) return;
       reportWatchTime(time, mediaDuration);
       latestProgressRef.current = { videoId: currentVideo.id, time, duration: nextDuration };
       if (!shouldRecordWatchHistory()) return;
@@ -142,6 +142,8 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     },
     [
       currentVideo,
+      videoId,
+      stream.loadingStream,
       prefetchNextVideo,
       reportWatchTime,
       setCurrentTime,
@@ -248,6 +250,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
 
   return (
     <Player
+      videoId={videoId}
       src={stream.streamUrl}
       title={title}
       poster={poster}

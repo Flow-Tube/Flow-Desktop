@@ -49,6 +49,8 @@ MUSIC
 - On Linux the tray is off by default and needs the libayatana-appindicator3 library, which the .deb, .rpm and AppImage now bring along. Without it the switch stays off instead of stopping Flow from starting.
 - Scrobbling to Last.fm, Libre.fm and ListenBrainz, under Integrations. A song counts once you have heard half of it or four minutes, and songs of 30 seconds or less never count. Videos are never sent.
 - Listens wait on your computer while you are offline and go out once you are back, up to 2,000 per service. Show now playing, Love liked songs and Scrobble during Deep Flow are options, and you can use your own Last.fm API key.
+- Scrobbling no longer asks for your keychain password every time you open music settings or play a song. Flow reads the keychain only to send a listen while you are signed in, at most once per launch, and keeps all its scrobbling secrets in one keychain item.
+- If you refuse keychain access, Flow stops asking and keeps your listens waiting. Settings shows an Allow access button to try again.
 - Your Last.fm password is sent once and never stored. Sessions and tokens are kept in the system keychain, never in sync, backups or settings exports.
 - Settings has a Music section with every music setting in one place: playback, audio and the equalizer, the full player's look, lyrics, the tray and scrobbling.
 - Swipe a song in Up next to the left to play it next, or to the right to remove it, by dragging the row or with two fingers on a trackpad, as on Android. Settings › Music can change what each side does. The row menu has the same actions, Delete removes the focused row, and clicking the song that is playing no longer starts it over.

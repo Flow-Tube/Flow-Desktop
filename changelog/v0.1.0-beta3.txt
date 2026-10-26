@@ -206,6 +206,8 @@ LYRICS
 - A new lyrics menu adjusts the timing, picks another source, edits, copies or saves the lyrics as an .lrc file, and sets their alignment.
 - Lyrics found for a song are kept as files in Flow's app data instead of browser storage, which could fill up and stop saving them. Settings shows how much space they take and can clear them. Lyrics saved by earlier versions move over on their own.
 - Downloaded songs get the timed lyrics the lyrics sources found, saved as a real .lrc file, instead of YouTube's plain text. A downloaded .lrc file's offset tag sets the starting timing.
+- A downloaded song's lyrics show offline even without an .lrc file, read from inside the song file.
+- Choose lyrics source lists the copy saved with the download first, next to the online sources. Picking it keeps it for that song with no online lookup; picking an online source looks online first and falls back to the saved copy. Refresh goes back to choosing automatically.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.
@@ -243,6 +245,7 @@ DOWNLOADS
 - Several downloads, albums and playlists share one card that lists what is downloading, each with its artwork and progress.
 - Flow shows a system notification when a download finishes or fails while it is in the background; it can be turned off in Settings.
 - Download messages show the item's thumbnail, and the separate "Download started" message is gone.
+- Menus in the download dialog, such as subtitles and audio track, open above the dialog instead of stretching it.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.
@@ -255,6 +258,7 @@ UNDER THE HOOD
 - Updated the database layer, sync encryption libraries, cover-art tagging and random number generation to their current major versions.
 - Updated React, the video players (dash.js and hls.js), icons, translations and the build tools to their latest compatible releases.
 - Linux nightly builds package again. The updated bundler rejected the nightly version number for the RPM package, which stopped the AppImage and Debian builds from being published too.
+- Updated the WebM reader and the tagging library used for downloads to their latest versions.
 - On Windows, Flow keeps WebView2's default protections, including SmartScreen, and opens its hidden playback-token window with the same settings as the main window.
 
 SUPPORTED DEVICES

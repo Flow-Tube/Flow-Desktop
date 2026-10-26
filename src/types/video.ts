@@ -350,6 +350,18 @@ export interface SearchShelf {
   videos: VideoSummary[];
 }
 
+/** One autocomplete row; well-known people, places and things carry a knowledge card. */
+export interface SearchSuggestion {
+  text: string;
+  entity: SuggestionEntity | null;
+}
+
+export interface SuggestionEntity {
+  title: string;
+  description: string | null;
+  image: string | null;
+}
+
 /** YouTube's spelling correction: results already shown for `query`, or only suggested. */
 export interface SearchCorrection {
   query: string;

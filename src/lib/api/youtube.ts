@@ -1,4 +1,5 @@
 import type {
+  SearchSuggestion,
   SearchVideosRequest,
   SearchVideosResponse,
   VideoDetails,
@@ -461,17 +462,12 @@ export async function getExploreGrid(
 }
 
 /** Suggestions for `query`; `region` is the viewer's two-letter country code. */
-export async function getSearchSuggestions(query: string, region?: string | null): Promise<string[]> {
+export async function getSearchSuggestions(query: string, region?: string | null): Promise<SearchSuggestion[]> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock suggestions.");
-    return [
-      `${query} tutorial`,
-      `${query} crash course`,
-      `${query} setup guide`,
-      `${query} tips & tricks`,
-    ];
+    return ["tutorial", "crash course", "setup guide"].map((tail) => ({ text: `${query} ${tail}`, entity: null }));
   }
-  return invokeBackend<string[]>("get_search_suggestions", { query, region: region ?? null });
+  return invokeBackend<SearchSuggestion[]>("get_search_suggestions", { query, region: region ?? null });
 }
 
 export async function parseSubscriptionExport(

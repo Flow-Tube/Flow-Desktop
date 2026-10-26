@@ -5,6 +5,9 @@ export interface MenuAnchor {
   top: number;
   left?: number;
   right?: number;
+  /** Where the menu's bottom edge goes when it does not fit below `top`, such as
+   *  just above the button that opened it. */
+  flipBottom?: number;
 }
 
 const VIEWPORT_MARGIN = 8;
@@ -45,12 +48,12 @@ export function AnchoredPortalMenu({
 
     let top = anchor.top;
     if (top + height > vh - VIEWPORT_MARGIN) {
-      top = Math.max(VIEWPORT_MARGIN, top - height);
+      top = Math.max(VIEWPORT_MARGIN, (anchor.flipBottom ?? top) - height);
     }
     top = Math.max(VIEWPORT_MARGIN, Math.min(top, vh - height - VIEWPORT_MARGIN));
 
     setStyle({ position: "fixed", top, left, visibility: "visible" });
-  }, [anchor.top, anchor.left, anchor.right]);
+  }, [anchor.top, anchor.left, anchor.right, anchor.flipBottom]);
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -63,13 +66,18 @@ export function AnchoredPortalMenu({
         onClose();
       }
     };
+    // Scrolling the menu's own list keeps it open; scrolling what is under it closes it.
+    const onScroll = (event: Event) => {
+      if (ref.current && ref.current.contains(event.target as Node)) return;
+      onClose();
+    };
     document.addEventListener("mousedown", onPointerDown);
-    if (closeOnScroll) window.addEventListener("scroll", onClose, true);
+    if (closeOnScroll) window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onClose);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
-      if (closeOnScroll) window.removeEventListener("scroll", onClose, true);
+      if (closeOnScroll) window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onClose);
       document.removeEventListener("keydown", onKey);
     };

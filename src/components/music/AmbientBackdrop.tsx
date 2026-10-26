@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import type { PlayerBackgroundStyle } from "../../lib/playerColors";
@@ -45,25 +46,33 @@ const ARTWORK_OPACITY: Partial<Record<PlayerBackgroundStyle, string>> = {
   immersive: "opacity-[0.85]",
 };
 
+/** Where immersive's cover sits: across the top, on the start side, or behind a centred song. */
+type ImmersiveArtworkPlacement = "top" | "start" | "center";
+
 /**
  * Immersive's full-bleed cover (Android issue #954): it holds the top of the
- * player, or the start side of a wide one, then melts into its own blurred
- * continuation underneath.
+ * player, the start side of a wide one beside Up next or the lyrics, or the
+ * middle of a wide one with the side pane hidden, then melts into its own
+ * blurred continuation underneath.
  */
-const IMMERSIVE_MASK = {
-  top: "linear-gradient(to bottom, black 42%, transparent 85%)",
-  start: "linear-gradient(to right, black 50%, transparent 100%)",
-} as const;
+const IMMERSIVE_COVER: Record<ImmersiveArtworkPlacement, { className: string; mask: string }> = {
+  top: { className: "left-0 w-full object-top", mask: "linear-gradient(to bottom, black 42%, transparent 85%)" },
+  start: { className: "left-0 w-[62%] object-center", mask: "linear-gradient(to right, black 50%, transparent 100%)" },
+  center: {
+    className: "left-[19%] w-[62%] object-center",
+    mask: "radial-gradient(ellipse 50% 50% at 50% 50%, black 45%, transparent 100%)",
+  },
+};
 
 interface AmbientBackdropProps {
   /** The cover as the artwork card loads it, so both share one cached copy. */
   imageSrc?: string | null;
   style?: PlayerBackgroundStyle;
-  /** Wide layouts put the immersive cover on the start side, where the controls are not. */
-  artworkAtStart?: boolean;
+  /** Wide layouts put the immersive cover beside the side pane, or behind the song when it is hidden. */
+  artworkPlacement?: ImmersiveArtworkPlacement;
 }
 
-export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkAtStart = false }: AmbientBackdropProps) {
+export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkPlacement = "top" }: AmbientBackdropProps) {
   const artworkOpacity = ARTWORK_OPACITY[style];
   const wash = washFor(style);
 
@@ -77,18 +86,26 @@ export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkAtSt
           className={`absolute inset-0 h-full w-full object-cover ${artworkOpacity}`}
         />
       )}
-      {style === "immersive" && imageSrc && (
-        <img
-          src={imageSrc}
-          alt=""
-          draggable={false}
-          className={`absolute inset-y-0 left-0 h-full object-cover ${artworkAtStart ? "w-[62%] object-center" : "w-full object-top"}`}
-          style={{
-            maskImage: IMMERSIVE_MASK[artworkAtStart ? "start" : "top"],
-            WebkitMaskImage: IMMERSIVE_MASK[artworkAtStart ? "start" : "top"],
-          }}
-        />
-      )}
+      {/* The cover crossfades to its new place as the side pane opens or closes. */}
+      <AnimatePresence initial={false}>
+        {style === "immersive" && imageSrc && (
+          <motion.img
+            key={artworkPlacement}
+            src={imageSrc}
+            alt=""
+            draggable={false}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className={`absolute inset-y-0 h-full object-cover ${IMMERSIVE_COVER[artworkPlacement].className}`}
+            style={{
+              maskImage: IMMERSIVE_COVER[artworkPlacement].mask,
+              WebkitMaskImage: IMMERSIVE_COVER[artworkPlacement].mask,
+            }}
+          />
+        )}
+      </AnimatePresence>
       {wash && <div className={`${EASE} absolute inset-0`} style={wash} />}
     </div>
   );

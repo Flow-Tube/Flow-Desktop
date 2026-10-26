@@ -282,6 +282,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
             setResumeTime(offlineHandoff.resumeTime);
             setSourceMode("direct");
             setStreamUrl(offline.url);
+            publishCaptions(offline.captions ?? []);
             setIsPlaying(offlineHandoff.playing);
             if (shouldRecordWatchHistory()) {
               void addWatchRecord({

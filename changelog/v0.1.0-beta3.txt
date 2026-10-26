@@ -151,6 +151,8 @@ PLAYER
 - A Sleep timer button can be added next to Like in the full music player from Settings, Player.
 - Clicking a related video, Next or autoplay switches straight to the new video. Before, the old one loaded again for a moment, which could restart its opening, leave a stale position or clear its title in History.
 - A quality change in progress when the video changes can no longer move the new video to the old one's position, and the music seek bar no longer shows the last song's time while the next one loads.
+- A long video that stops and recovers carries on from where it stopped instead of the beginning, and so does Retry. A source change no longer records 0 as your place in the video.
+- A video can fetch fresh links on its own up to three times, each after at least five more minutes of playback, and videos resume at your place directly instead of loading the opening first.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

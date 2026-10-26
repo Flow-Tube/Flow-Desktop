@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
@@ -12,6 +12,7 @@ import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
 import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { useRelatedLane } from "../lib/useRelatedLane";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
+import { decideWatchRouteSync } from "../lib/watchRouteSync";
 import { setSetting } from "../lib/api/db";
 import { seekToTime } from "../lib/playerSeek";
 import { Chapters } from "../components/player/chapters";
@@ -74,29 +75,33 @@ export function Watch() {
     loadSubscriptions();
   }, [loadSubscriptions]);
 
+  const syncedRouteRef = useRef<{ videoId: string | undefined; retryNonce: number } | null>(null);
   useEffect(() => {
-    if (!videoId) return;
-    if (currentVideo && currentVideo.id === videoId) return;
+    const synced = syncedRouteRef.current;
+    syncedRouteRef.current = { videoId, retryNonce };
+    const action = decideWatchRouteSync({
+      routeVideoId: videoId,
+      currentVideoId: currentVideo?.id ?? null,
+      routeChanged: synced === null || synced.videoId !== videoId,
+      retryRequested: synced !== null && synced.retryNonce !== retryNonce,
+      queuedIndex: usePlayerStore.getState().queue.findIndex((item) => item.id === videoId),
+      hasOfflineRecord: !!offlineRecord,
+    });
 
-    const queuedIndex = usePlayerStore.getState().queue.findIndex((item) => item.id === videoId);
-    if (queuedIndex >= 0) {
-      playQueueItem(queuedIndex);
-      return;
-    }
-
-    if (offlineRecord) {
+    if (action.kind === "play-queued") {
+      playQueueItem(action.index);
+    } else if (action.kind === "play-offline" && offlineRecord) {
       setPageError(null);
       setQueue([downloadRecordToVideo(offlineRecord)], 0);
-      return;
+    } else if (action.kind === "play-stub" && videoId) {
+      // A cold open — a deep link, a reload, a notification — knows the id and
+      // nothing else. Playback needs only the id, so the player is handed a stub
+      // and starts resolving immediately; the title and channel are filled in from
+      // the details request below once it answers. The old order made every cold
+      // open pay for metadata before the first byte.
+      setPageError(null);
+      setQueue([{ id: videoId, title: "", channelName: "" }], 0);
     }
-
-    // A cold open — a deep link, a reload, a notification — knows the id and
-    // nothing else. Playback needs only the id, so the player is handed a stub
-    // and starts resolving immediately; the title and channel are filled in from
-    // the details request below once it answers. The old order made every cold
-    // open pay for metadata before the first byte.
-    setPageError(null);
-    setQueue([{ id: videoId, title: "", channelName: "" }], 0);
   }, [videoId, currentVideo, playQueueItem, setQueue, retryNonce, offlineRecord]);
 
   // Fills in the stub a cold open started with. Details are fetched once, by the

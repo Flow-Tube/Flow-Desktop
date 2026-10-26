@@ -9,7 +9,7 @@ use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoSummary};
+use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoMetadata, VideoSummary};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -367,6 +367,20 @@ pub async fn get_related_videos(
     Ok(related)
 }
 
+/// A listed video's length, views, upload date and category, from one small
+/// request that stays out of the playback caches.
+#[tauri::command]
+pub async fn get_video_metadata(
+    video_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<VideoMetadata, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_video_metadata(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 /// The video's category, for the recommendation engine. A small request of
 /// its own, so the watch page asks only once playback has settled.
 #[tauri::command]
@@ -402,8 +416,9 @@ pub async fn get_stream_info(
 ) -> Result<StreamInfo, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
+    let refresh = refresh.unwrap_or(false);
     let mut stream_info = youtube_service
-        .get_stream_info(&video_id, refresh.unwrap_or(false))
+        .get_stream_info(&video_id, refresh)
         .await
         .map_err(ErrorResponse::from)?;
 
@@ -539,6 +554,9 @@ pub async fn get_stream_info(
     }
 
     if let Some(descriptor) = stream_info.sabr_descriptor.take() {
+        if refresh {
+            streaming_manager.sabr().discard_video(&descriptor.video_id);
+        }
         let session_id = streaming_manager
             .sabr()
             .prepare(descriptor, crate::streaming::sabr::CodecSupport::default());

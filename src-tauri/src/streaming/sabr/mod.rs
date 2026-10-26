@@ -35,7 +35,7 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU64, Ordering},
 };
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::api::innertube::core::clients;
 use engine::{SabrEngine, SabrEngineConfig};
@@ -119,9 +119,9 @@ pub struct SabrSessionHandle {
     pub session_id: String,
     pub video_id: String,
     pub engine: Arc<SabrEngine>,
-    created_at: Instant,
     last_access: Mutex<Instant>,
-    expires_in_seconds: u64,
+    /// When the streaming URL stops working, in seconds since the epoch.
+    expires_at: u64,
 }
 
 impl SabrSessionHandle {
@@ -131,16 +131,25 @@ impl SabrSessionHandle {
         }
     }
 
-    fn is_expired(&self, idle_ttl: Duration) -> bool {
-        let hard_cap = Duration::from_secs(self.expires_in_seconds.max(60).min(3600));
-        if self.created_at.elapsed() > hard_cap {
-            return true;
-        }
-        match self.last_access.lock() {
-            Ok(last) => last.elapsed() > idle_ttl,
-            Err(_) => false,
-        }
+    fn is_expired(&self, idle_ttl: Duration, now: u64) -> bool {
+        let idle = self
+            .last_access
+            .lock()
+            .map_or(Duration::ZERO, |last| last.elapsed());
+        session_expired(self.expires_at, now, idle, idle_ttl)
     }
+}
+
+/// A session ends when its streaming URL expires or nothing has read it for a
+/// while. A fixed hour from creation cut off every video still playing then.
+fn session_expired(expires_at: u64, now: u64, idle: Duration, idle_ttl: Duration) -> bool {
+    now >= expires_at || idle > idle_ttl
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 // Owns SABR sessions. Descriptors are *prepared* cheaply (no network) when a
@@ -180,6 +189,7 @@ impl SabrSessionManager {
     // Register a descriptor for lazy activation. Returns the session id to embed
     // in the manifest URL. No engine is started yet.
     pub fn prepare(&self, descriptor: SabrSessionDescriptor, support: CodecSupport) -> String {
+        self.prune_expired();
         // Reuse an existing session for the same video. The frontend may resolve a
         // stream more than once (re-mount / double-fetch); two concurrent SABR
         // sessions for one video share a pot/visitor and trip YouTube's attestation.
@@ -244,9 +254,11 @@ impl SabrSessionManager {
             session_id: session_id.to_string(),
             video_id: descriptor.video_id.clone(),
             engine,
-            created_at: Instant::now(),
             last_access: Mutex::new(Instant::now()),
-            expires_in_seconds: 3600,
+            expires_at: crate::streaming::proxy::remote_session_expiry(
+                &descriptor.server_abr_streaming_url,
+                now_secs(),
+            ),
         });
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -281,18 +293,115 @@ impl SabrSessionManager {
         self.prepared.lock().unwrap().remove(session_id);
     }
 
+    /// Drops every session of `video_id`. A refresh asks for fresh links
+    /// because the old ones stopped working, and `prepare` would otherwise hand
+    /// back the session built on them.
+    pub fn discard_video(&self, video_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        let mut prepared = self.prepared.lock().unwrap();
+        let ids: Vec<String> = sessions
+            .values()
+            .filter(|h| h.video_id == video_id)
+            .map(|h| h.session_id.clone())
+            .chain(
+                prepared
+                    .iter()
+                    .filter(|(_, (d, _))| d.video_id == video_id)
+                    .map(|(id, _)| id.clone()),
+            )
+            .collect();
+        for id in ids {
+            if let Some(removed) = sessions.remove(&id) {
+                removed.engine.cancel();
+            }
+            prepared.remove(&id);
+        }
+    }
+
     fn prune_expired(&self) {
         let mut sessions = self.sessions.lock().unwrap();
         let idle_ttl = self.idle_ttl;
-        let expired: Vec<String> = sessions
+        let now = now_secs();
+        let expired: Vec<(String, bool)> = sessions
             .iter()
-            .filter(|(_, h)| h.is_expired(idle_ttl))
-            .map(|(k, _)| k.clone())
+            .filter(|(_, h)| h.is_expired(idle_ttl, now))
+            .map(|(k, h)| (k.clone(), now >= h.expires_at))
             .collect();
-        for key in expired {
+        let mut prepared = self.prepared.lock().unwrap();
+        for (key, links_expired) in expired {
             if let Some(removed) = sessions.remove(&key) {
                 removed.engine.cancel();
             }
+            // An idle session can start again from its descriptor; one whose
+            // links expired cannot.
+            if links_expired {
+                prepared.remove(&key);
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn descriptor(video_id: &str) -> SabrSessionDescriptor {
+        SabrSessionDescriptor {
+            video_id: video_id.to_string(),
+            server_abr_streaming_url: "https://rr1.googlevideo.com/videoplayback?expire=9999999999"
+                .to_string(),
+            visitor_data: None,
+            po_token: None,
+            ustreamer_config: Vec::new(),
+            client_profile: ClientProfile::ios(),
+            duration_ms: 0,
+            formats: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_session_outlives_an_hour_while_its_url_is_valid() {
+        let idle_ttl = Duration::from_secs(600);
+        let issued = 1_000_000;
+        let expires_at = issued + 6 * 3600;
+        let two_hours_in = issued + 2 * 3600;
+        assert!(!session_expired(
+            expires_at,
+            two_hours_in,
+            Duration::from_secs(5),
+            idle_ttl
+        ));
+        assert!(session_expired(
+            expires_at,
+            expires_at,
+            Duration::ZERO,
+            idle_ttl
+        ));
+        assert!(session_expired(
+            expires_at,
+            two_hours_in,
+            Duration::from_secs(601),
+            idle_ttl
+        ));
+    }
+
+    #[test]
+    fn a_refresh_gets_a_new_session() {
+        let manager = SabrSessionManager::new();
+        let first = manager.prepare(descriptor("video"), CodecSupport::default());
+        assert_eq!(
+            manager.prepare(descriptor("video"), CodecSupport::default()),
+            first
+        );
+        let other = manager.prepare(descriptor("other"), CodecSupport::default());
+        manager.discard_video("video");
+        assert_ne!(
+            manager.prepare(descriptor("video"), CodecSupport::default()),
+            first
+        );
+        assert_eq!(
+            manager.prepare(descriptor("other"), CodecSupport::default()),
+            other
+        );
     }
 }

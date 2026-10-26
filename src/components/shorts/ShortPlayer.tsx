@@ -106,7 +106,7 @@ export function ShortPlayer({
   }, [active, activeRetryAttempted, loading, unavailable, onUnavailable]);
 
   return (
-    <div className="relative h-[calc(100vh-64px)] w-full overflow-hidden flex items-end justify-center pb-10">
+    <div className="relative h-full w-full overflow-hidden flex items-end justify-center py-6">
       {thumbnail && active && !IS_LINUX_RUNTIME && (
         <img
           src={thumbnail}
@@ -119,7 +119,7 @@ export function ShortPlayer({
 
       <motion.div
         layout={active}
-        className="relative z-10 flex w-full max-w-none flex-row items-end justify-center gap-6 px-6 lg:gap-8"
+        className="relative z-10 flex h-full w-full max-w-none flex-row items-end justify-center gap-6 px-6 lg:gap-8"
       >
         {active ? (
           <ShortMetadata
@@ -133,7 +133,7 @@ export function ShortPlayer({
 
         <motion.div
           layout={active}
-          className="flex h-[85vh] max-h-[850px] flex-row overflow-hidden rounded-2xl bg-chrome-black ring-1 ring-chrome-white/10"
+          className="flex h-full flex-row overflow-hidden rounded-2xl bg-chrome-black ring-1 ring-chrome-white/10"
         >
           <div className="relative z-20 aspect-[9/16] h-full bg-chrome-black">
             <ShortVideoSurface

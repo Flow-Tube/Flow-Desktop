@@ -95,6 +95,8 @@ LINUX
 - When no browser opens, Open in browser says so and offers to copy the link instead.
 
 INTERFACE
+- Saving, liking or adding a video, Short, song, album or playlist shows a toast with its poster and title, names where it went, and offers View and Undo. A failed save names the item and offers Retry.
+- Toasts slide in and out, stay up longer when they have buttons, pause while you point at them, and sit above the music player bar instead of covering its buttons.
 - Resizing the window is smoother: video grids and the lyrics view re-measure once per frame instead of on every resize event.
 - Copying or sharing a video, Short, chapter, song or post gives a real YouTube link instead of Flow's own address, and Shorts links now include the video.
 - Share buttons open the system share sheet where there is one and copy the link where there isn't. A copy that fails now says so instead of showing "copied".

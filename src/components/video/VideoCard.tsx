@@ -341,6 +341,7 @@ function VideoCardComponent({
     showToast({
       variant: "success",
       message: getString("video_download_removed_toast"),
+      image: video.thumbnailUrl,
     });
   };
 

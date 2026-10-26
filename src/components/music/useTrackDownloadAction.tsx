@@ -32,7 +32,12 @@ export function useTrackDownloadAction(track: SongItem | null): MusicMenuAction[
           const record = findDownloadedRecord(trackId, 'audio');
           if (!record) return;
           await removeDownloads([record.id]);
-          showToast({ variant: 'success', message: getString('music_download_removed_toast') });
+          showToast({
+            variant: 'success',
+            message: getString('music_download_removed_toast'),
+            image: track.thumbnail,
+            imageShape: 'square',
+          });
         },
       },
     ];

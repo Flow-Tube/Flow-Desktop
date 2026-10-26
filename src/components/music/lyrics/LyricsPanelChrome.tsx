@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 
 import type { Rgb } from "../../../lib/useDominantColor";
 import { getString } from "../../../lib/i18n/index";
+import { lyricsSourceLabel } from "../../../lib/lyrics/offline";
 
 const rgba = (c: Rgb, a: number): string => `rgba(${c.r},${c.g},${c.b},${a})`;
 
@@ -59,7 +60,7 @@ export function LyricsProviderLabel({ providerName, accent }: { providerName: st
       }`}
       style={{ color: rgba(accent, 0.6) }}
     >
-      {providerName}
+      {lyricsSourceLabel(providerName)}
     </span>
   );
 }

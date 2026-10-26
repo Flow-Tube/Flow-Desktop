@@ -24,7 +24,7 @@ export function DownloadCollectionCard({
   onOpen,
   onDelete,
 }: DownloadCollectionCardProps) {
-  const thumbnail = useProxiedImageUrl(collection.thumbnailUrl);
+  const thumbnail = useProxiedImageUrl(collection.coverUrl ?? collection.thumbnailUrl);
   const isAlbum = collection.kind === "album";
   const { total, completed, active, isComplete } = progress;
   const percent = total > 0 ? Math.min(100, (completed / total) * 100) : 0;

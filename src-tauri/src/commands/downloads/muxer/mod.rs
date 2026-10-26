@@ -1,19 +1,32 @@
 use std::fs::File;
-use std::io::{BufWriter, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
-use mp4::{
-    AacConfig, AudioObjectType, AvcConfig, Bytes, ChannelConfig, MediaConfig, Mp4Config, Mp4Sample,
-    Mp4Writer, SampleFreqIndex, TrackConfig, TrackType,
-};
+use webm_iterable::WebmIterator;
 use webm_iterable::matroska_spec::{BlockLacing, Master, MatroskaSpec, SimpleBlock};
-use webm_iterable::{WebmIterator, WebmWriter, WriteOptions};
 
 use crate::api::innertube::download::DownloadContainer;
 
-mod faststart;
+mod boxes;
+mod ilst;
+mod matroska;
 mod mp4_demux;
+mod mp4_writer;
+pub mod retag;
+pub mod validate;
+mod vp9;
+
+pub use ilst::{EmbeddedChapter, EmbeddedMetadata, MAX_COVER_BYTES};
+
+use mp4_demux::{Codec, ProgressiveSample, ProgressiveTrack};
+use mp4_writer::{Mp4Options, SampleSource, TrackRole, WriterSample, WriterTrack};
+
+/// Bytes left free after `moov` so tags (synced lyrics above all) can be rewritten
+/// later without moving the media data.
+const RETAG_PADDING: u32 = 64 * 1024;
+/// `WebM` timestamps are in milliseconds; 90 kHz keeps them exact in MP4.
+const WEBM_VIDEO_TIMESCALE: u32 = 90_000;
 
 /// Which half of an adaptive pair a track is, used for diagnostics and demuxer selection.
 #[derive(Clone, Copy)]
@@ -31,268 +44,303 @@ impl TrackKind {
     }
 }
 
+/// One downloaded track: where it is, the container its bytes arrived in, and its
+/// mime type (VP9's `vpcC` fields come from the codecs string).
+#[derive(Clone, Copy)]
+pub struct TrackInput<'a> {
+    pub path: &'a Path,
+    pub container: DownloadContainer,
+    pub mime_type: &'a str,
+}
+
 /// Muxes a downloaded video and audio track into a single output file.
 ///
-/// `output` selects the destination container; `video_container` / `audio_container`
-/// describe the real container each downloaded track arrived in (ISO-BMFF or EBML),
-/// which can differ from `output` — AV1/HEVC ship as fragmented MP4 yet are written
-/// into Matroska next to a WebM/Opus audio track.
+/// `output` selects the destination container; each input's `container` is the one
+/// its bytes really arrived in, which can differ from `output`: AV1 ships as
+/// fragmented MP4 and VP9 as `WebM`, and both end up in MP4 next to AAC.
 pub fn mux_adaptive_tracks(
     output: DownloadContainer,
-    video_container: DownloadContainer,
-    video_path: &Path,
-    audio_container: DownloadContainer,
-    audio_path: &Path,
+    video: TrackInput<'_>,
+    audio: TrackInput<'_>,
     output_path: &Path,
+    metadata: Option<&EmbeddedMetadata>,
     cancelled: &AtomicBool,
 ) -> Result<(), String> {
     match output {
-        DownloadContainer::Mp4 => mux_mp4(video_path, audio_path, output_path, cancelled),
-        DownloadContainer::Mkv => mux_matroska(
-            video_container,
-            video_path,
-            audio_container,
-            audio_path,
-            output_path,
-            cancelled,
-        ),
+        DownloadContainer::Mp4 => mux_mp4(video, audio, output_path, metadata, cancelled),
+        DownloadContainer::Mkv => {
+            let (video_entry, video_packets) =
+                open_track_source(video.container, video.path, 1, TrackKind::Video)?;
+            let (audio_entry, audio_packets) =
+                open_track_source(audio.container, audio.path, 2, TrackKind::Audio)?;
+            matroska::write_matroska(
+                output_path,
+                vec![
+                    matroska::MatroskaInput {
+                        entry: video_entry,
+                        packets: video_packets,
+                        is_video: true,
+                    },
+                    matroska::MatroskaInput {
+                        entry: audio_entry,
+                        packets: audio_packets,
+                        is_video: false,
+                    },
+                ],
+                metadata,
+                cancelled,
+            )
+        }
     }
 }
 
-/// Re-wraps a downloaded H.264 video track and AAC audio track — both delivered as
-/// fragmented MP4 — into one progressive (non-fragmented) MP4. Sample timing comes
-/// from `mp4_demux` (which reads `moof`/`trun`); the `mp4` crate's `Mp4Reader` cannot,
-/// and feeding it fragmented input yields a zero-duration, unplayable file.
+/// Writes a progressive MP4 from a fragmented-MP4 or `WebM` VP9 video track and a
+/// fragmented-MP4 AAC track, with the tags and cover in `moov/udta`.
 fn mux_mp4(
-    video_path: &Path,
-    audio_path: &Path,
+    video: TrackInput<'_>,
+    audio: TrackInput<'_>,
     output_path: &Path,
+    metadata: Option<&EmbeddedMetadata>,
     cancelled: &AtomicBool,
 ) -> Result<(), String> {
-    let mut video = mp4_demux::open_progressive(video_path, TrackKind::Video)?;
-    let mut audio = mp4_demux::open_progressive(audio_path, TrackKind::Audio)?;
-    if !video.is_h264 {
-        return Err("The MP4 muxer requires an H.264 video track".to_string());
-    }
-    if !audio.is_aac {
-        return Err("The MP4 muxer requires an AAC audio track".to_string());
-    }
-
-    let avcc = video
-        .codec_private
-        .clone()
-        .ok_or_else(|| "The H.264 track is missing its avcC configuration".to_string())?;
-    let (sps, pps) = parse_avc_sps_pps(&avcc)?;
-    let asc = audio
-        .codec_private
-        .clone()
-        .ok_or_else(|| "The AAC track is missing its AudioSpecificConfig".to_string())?;
-    let aac_config = parse_aac_config(&asc, audio.sample_rate, audio.channels)?;
-
-    let video_timescale = video.timescale.max(1);
-    let audio_timescale = audio.timescale.max(1);
-    let config = Mp4Config {
-        major_brand: "isom"
-            .parse()
-            .map_err(|error| format!("Invalid MP4 brand: {error}"))?,
-        minor_version: 512,
-        compatible_brands: ["isom", "iso2", "avc1", "mp41"]
-            .into_iter()
-            .map(|brand| {
-                brand
-                    .parse()
-                    .map_err(|error| format!("Invalid MP4 brand: {error}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        timescale: video_timescale.max(audio_timescale),
-    };
-    let output = File::create(output_path)
-        .map_err(|error| format!("Could not create MP4 output: {error}"))?;
-    let mut writer = Mp4Writer::write_start(BufWriter::new(output), &config)
-        .map_err(|error| format!("Could not initialize MP4 muxer: {error}"))?;
-    writer
-        .add_track(&TrackConfig {
-            track_type: TrackType::Video,
-            timescale: video_timescale,
-            language: "und".to_string(),
-            media_conf: MediaConfig::AvcConfig(AvcConfig {
-                width: video.width,
-                height: video.height,
-                seq_param_set: sps,
-                pic_param_set: pps,
-            }),
-        })
-        .map_err(|error| format!("Could not add MP4 video track: {error}"))?;
-    writer
-        .add_track(&TrackConfig {
-            track_type: TrackType::Audio,
-            timescale: audio_timescale,
-            language: "und".to_string(),
-            media_conf: MediaConfig::AacConfig(aac_config),
-        })
-        .map_err(|error| format!("Could not add MP4 audio track: {error}"))?;
-
-    // Interleave by decode time. Each track's samples are already in decode order;
-    // `start_time` is ignored by the writer (it accumulates durations), so the
-    // running decode clocks only steer interleaving.
-    let mut video_decode: u64 = 0;
-    let mut audio_decode: u64 = 0;
-    let mut video_index = 0;
-    let mut audio_index = 0;
-    while video_index < video.samples.len() || audio_index < audio.samples.len() {
-        if cancelled.load(Ordering::Relaxed) {
-            return Err("Download cancelled".into());
-        }
-        let take_video = match (
-            video_index < video.samples.len(),
-            audio_index < audio.samples.len(),
-        ) {
-            (true, true) => {
-                u128::from(video_decode) * u128::from(audio_timescale)
-                    <= u128::from(audio_decode) * u128::from(video_timescale)
+    let (video_track, video_codec) = match video.container {
+        DownloadContainer::Mp4 => {
+            let track = mp4_demux::open_progressive(video.path, TrackKind::Video)?;
+            if matches!(track.codec, Codec::Vp8) {
+                return Err("VP8 video cannot be stored in MP4".to_string());
             }
-            (true, false) => true,
-            _ => false,
-        };
-        if take_video {
-            let sample = video.samples[video_index];
-            let data = video.read_sample(sample)?;
-            write_mp4_sample(&mut writer, 1, &sample, data, video_decode)?;
-            video_decode += u64::from(sample.duration);
-            video_index += 1;
-        } else {
-            let sample = audio.samples[audio_index];
-            let data = audio.read_sample(sample)?;
-            write_mp4_sample(&mut writer, 2, &sample, data, audio_decode)?;
-            audio_decode += u64::from(sample.duration);
-            audio_index += 1;
+            let codec = track.codec;
+            (fragmented_writer_track(track, TrackKind::Video), codec)
         }
+        DownloadContainer::Mkv => (
+            webm_vp9_writer_track(video.path, video.mime_type)?,
+            Codec::Vp9,
+        ),
+    };
+    if audio.container != DownloadContainer::Mp4 {
+        return Err("MP4 downloads need an AAC audio track".to_string());
     }
-    writer
-        .write_end()
-        .map_err(|error| format!("Could not finalize MP4 output: {error}"))?;
-    drop(writer);
+    let audio_track = mp4_demux::open_progressive(audio.path, TrackKind::Audio)?;
+    if !matches!(audio_track.codec, Codec::Aac) {
+        return Err("MP4 downloads need an AAC audio track".to_string());
+    }
+    let audio_track = fragmented_writer_track(audio_track, TrackKind::Audio);
 
-    if let Err(error) = faststart::faststart_in_place(output_path) {
-        tracing::warn!("MP4 faststart skipped: {error}");
+    let mut compatible_brands = vec![*b"isom", *b"iso2", *b"mp41"];
+    match video_codec {
+        Codec::H264 => compatible_brands.push(*b"avc1"),
+        Codec::Av1 => compatible_brands.push(*b"av01"),
+        _ => {}
     }
-    Ok(())
+    let options = Mp4Options {
+        major_brand: *b"isom",
+        compatible_brands,
+        udta: metadata.map(ilst::udta_box),
+        padding: RETAG_PADDING,
+    };
+    mp4_writer::write_mp4(
+        output_path,
+        vec![video_track, audio_track],
+        &options,
+        cancelled,
+    )
 }
 
-fn write_mp4_sample(
-    writer: &mut Mp4Writer<BufWriter<File>>,
-    track_id: u32,
-    sample: &mp4_demux::ProgressiveSample,
-    data: Vec<u8>,
-    decode_time: u64,
+/// Rewrites a downloaded fragmented AAC track as a progressive, tagged M4A.
+pub fn remux_audio_to_m4a(
+    input: &Path,
+    output: &Path,
+    metadata: Option<&EmbeddedMetadata>,
+    cancelled: &AtomicBool,
 ) -> Result<(), String> {
-    writer
-        .write_sample(
-            track_id,
-            &Mp4Sample {
-                start_time: decode_time,
-                duration: sample.duration,
-                rendering_offset: sample.composition_offset,
-                is_sync: sample.is_sync,
-                bytes: Bytes::from(data),
-            },
-        )
-        .map_err(|error| format!("Could not write MP4 sample: {error}"))
-}
-
-/// Extracts the first SPS and PPS NAL units from an `avcC` configuration record so the
-/// `mp4` writer can rebuild the `avc1` sample entry. Samples stay in their length-prefixed
-/// AVCC form (4-byte prefixes), which the writer copies verbatim.
-fn parse_avc_sps_pps(avcc: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
-    if avcc.len() < 6 {
-        return Err("H.264 avcC is too short".to_string());
+    let track = mp4_demux::open_progressive(input, TrackKind::Audio)?;
+    if !matches!(track.codec, Codec::Aac) {
+        return Err("Only AAC audio is saved as M4A".to_string());
     }
-    let mut offset = 6;
-    let sps_count = usize::from(avcc[5] & 0x1F);
-    let sps = read_param_set(avcc, &mut offset, sps_count)?
-        .ok_or_else(|| "H.264 avcC has no SPS".to_string())?;
-    let pps_count = usize::from(
-        *avcc
-            .get(offset)
-            .ok_or_else(|| "H.264 avcC is missing its PPS count".to_string())?,
-    );
-    offset += 1;
-    let pps = read_param_set(avcc, &mut offset, pps_count)?
-        .ok_or_else(|| "H.264 avcC has no PPS".to_string())?;
-    Ok((sps, pps))
+    let options = Mp4Options {
+        major_brand: *b"M4A ",
+        compatible_brands: vec![*b"M4A ", *b"isom", *b"iso2", *b"mp42"],
+        udta: metadata.map(ilst::udta_box),
+        padding: RETAG_PADDING,
+    };
+    mp4_writer::write_mp4(
+        output,
+        vec![fragmented_writer_track(track, TrackKind::Audio)],
+        &options,
+        cancelled,
+    )
 }
 
-/// Reads `count` length-prefixed parameter sets, returning the first one.
-fn read_param_set(
-    data: &[u8],
-    offset: &mut usize,
-    count: usize,
-) -> Result<Option<Vec<u8>>, String> {
-    let mut first = None;
-    for _ in 0..count {
-        let length = data
-            .get(*offset..*offset + 2)
-            .map(|bytes| usize::from(u16::from_be_bytes([bytes[0], bytes[1]])))
-            .ok_or_else(|| "H.264 avcC parameter set is truncated".to_string())?;
-        *offset += 2;
-        let nal = data
-            .get(*offset..*offset + length)
-            .ok_or_else(|| "H.264 avcC parameter set is truncated".to_string())?;
-        if first.is_none() {
-            first = Some(nal.to_vec());
+impl SampleSource for ProgressiveTrack {
+    fn read_sample(&mut self, index: usize, _sample: &WriterSample) -> Result<Vec<u8>, String> {
+        let sample: ProgressiveSample = *self
+            .samples
+            .get(index)
+            .ok_or_else(|| format!("MP4 sample {index} is out of range"))?;
+        ProgressiveTrack::read_sample(self, sample)
+    }
+}
+
+fn fragmented_writer_track(track: ProgressiveTrack, kind: TrackKind) -> WriterTrack<'static> {
+    let samples: Vec<WriterSample> = track
+        .samples
+        .iter()
+        .map(|sample| WriterSample {
+            size: sample.size,
+            duration: sample.duration,
+            composition_offset: sample.composition_offset,
+            is_sync: sample.is_sync,
+        })
+        .collect();
+    let role = match kind {
+        TrackKind::Video => TrackRole::Video {
+            width: track.width,
+            height: track.height,
+        },
+        TrackKind::Audio => TrackRole::Audio,
+    };
+    let media_time = track
+        .edit_media_time
+        .or_else(|| first_presentation_time(&samples));
+    WriterTrack {
+        role,
+        timescale: track.timescale,
+        sample_entry: track.sample_entry.clone(),
+        samples,
+        media_time,
+        source: Box::new(track),
+    }
+}
+
+/// The earliest presentation time when the stream starts after zero, as B-frame
+/// video does when the source declared no edit list.
+fn first_presentation_time(samples: &[WriterSample]) -> Option<i64> {
+    let mut decode = 0_i64;
+    let mut earliest: Option<i64> = None;
+    for sample in samples.iter().take(256) {
+        let presentation = decode + i64::from(sample.composition_offset);
+        earliest = Some(earliest.map_or(presentation, |value| value.min(presentation)));
+        decode += i64::from(sample.duration);
+    }
+    earliest.filter(|time| *time > 0)
+}
+
+/// Reads a `WebM` VP9 track's frames in order for the MP4 writer.
+struct WebmFrameSource {
+    track: MatroskaTrack,
+    next: usize,
+}
+
+impl SampleSource for WebmFrameSource {
+    fn read_sample(&mut self, index: usize, _sample: &WriterSample) -> Result<Vec<u8>, String> {
+        if index != self.next {
+            return Err(format!(
+                "WebM frames must be read in order (wanted {index}, at {})",
+                self.next
+            ));
         }
-        *offset += length;
+        self.next += 1;
+        self.track
+            .next_packet()?
+            .map(|packet| packet.data)
+            .ok_or_else(|| "The WebM video track ended early".to_string())
     }
-    Ok(first)
 }
 
-/// Builds an [`AacConfig`] from a raw `AudioSpecificConfig`, falling back to the sample
-/// entry's rate/channel count when the config uses escape values.
-fn parse_aac_config(asc: &[u8], sample_rate: u32, channels: u16) -> Result<AacConfig, String> {
-    if asc.len() < 2 {
-        return Err("AAC AudioSpecificConfig is too short".to_string());
+fn webm_vp9_writer_track(path: &Path, mime_type: &str) -> Result<WriterTrack<'static>, String> {
+    let (entry, source_track) = read_matroska_track_entry(path, 1, TrackKind::Video.label())?;
+    let (codec_id, width, height, default_duration) = webm_video_info(&entry);
+    if codec_id.as_deref() != Some("V_VP9") {
+        return Err(format!(
+            "Only VP9 WebM video can be stored in MP4 (got {})",
+            codec_id.unwrap_or_else(|| "an unknown codec".to_string())
+        ));
     }
-    let object_type = (asc[0] >> 3) & 0x1F;
-    let freq_index_raw = ((asc[0] & 0x07) << 1) | (asc[1] >> 7);
-    let chan_conf_raw = (asc[1] >> 3) & 0x0F;
 
-    let profile = AudioObjectType::try_from(object_type)
-        .map_err(|_| format!("Unsupported AAC object type {object_type}"))?;
-    let freq_index = SampleFreqIndex::try_from(freq_index_raw)
-        .or_else(|_| freq_index_for_rate(sample_rate))
-        .map_err(|()| "Unsupported AAC sample rate".to_string())?;
-    let chan_conf = ChannelConfig::try_from(if chan_conf_raw == 0 {
-        u8::try_from(channels).unwrap_or(2).max(1)
-    } else {
-        chan_conf_raw
-    })
-    .map_err(|_| "Unsupported AAC channel configuration".to_string())?;
+    let mut scan = MatroskaTrack::open(path, source_track, TrackKind::Video.label())?;
+    let mut frames: Vec<(i128, u32, bool)> = Vec::new();
+    let mut first_keyframe: Option<Vec<u8>> = None;
+    while let Some(packet) = scan.next_packet()? {
+        if packet.keyframe && first_keyframe.is_none() {
+            first_keyframe = Some(packet.data.clone());
+        }
+        let size = u32::try_from(packet.data.len())
+            .map_err(|_| "A WebM video frame is larger than 4 GiB".to_string())?;
+        frames.push((packet.timestamp_ns, size, packet.keyframe));
+    }
+    if frames.is_empty() {
+        return Err("The WebM video track has no frames".to_string());
+    }
 
-    Ok(AacConfig {
-        bitrate: 0,
-        profile,
-        freq_index,
-        chan_conf,
+    let ticks = |ns: i128| -> i64 {
+        i64::try_from(ns * i128::from(WEBM_VIDEO_TIMESCALE) / 1_000_000_000).unwrap_or(0)
+    };
+    let fallback = default_duration
+        .map(|ns| ticks(i128::from(ns)))
+        .filter(|value| *value > 0)
+        .unwrap_or(i64::from(WEBM_VIDEO_TIMESCALE / 30));
+    let mut samples = Vec::with_capacity(frames.len());
+    let mut previous_duration = fallback;
+    for (index, (timestamp, size, keyframe)) in frames.iter().enumerate() {
+        let duration = frames
+            .get(index + 1)
+            .map_or(previous_duration, |(next, _, _)| {
+                ticks(*next) - ticks(*timestamp)
+            })
+            .max(1);
+        previous_duration = duration;
+        samples.push(WriterSample {
+            size: *size,
+            duration: u32::try_from(duration).unwrap_or(u32::MAX),
+            composition_offset: 0,
+            is_sync: *keyframe,
+        });
+    }
+
+    let config = vp9::Vp9Config::resolve(mime_type, first_keyframe.as_deref());
+    Ok(WriterTrack {
+        role: TrackRole::Video { width, height },
+        timescale: WEBM_VIDEO_TIMESCALE,
+        sample_entry: vp9::vp09_sample_entry(width, height, config),
+        samples,
+        media_time: None,
+        source: Box::new(WebmFrameSource {
+            track: MatroskaTrack::open(path, source_track, TrackKind::Video.label())?,
+            next: 0,
+        }),
     })
 }
 
-fn freq_index_for_rate(rate: u32) -> Result<SampleFreqIndex, ()> {
-    match rate {
-        96000 => Ok(SampleFreqIndex::Freq96000),
-        88200 => Ok(SampleFreqIndex::Freq88200),
-        64000 => Ok(SampleFreqIndex::Freq64000),
-        48000 => Ok(SampleFreqIndex::Freq48000),
-        44100 => Ok(SampleFreqIndex::Freq44100),
-        32000 => Ok(SampleFreqIndex::Freq32000),
-        24000 => Ok(SampleFreqIndex::Freq24000),
-        22050 => Ok(SampleFreqIndex::Freq22050),
-        16000 => Ok(SampleFreqIndex::Freq16000),
-        12000 => Ok(SampleFreqIndex::Freq12000),
-        11025 => Ok(SampleFreqIndex::Freq11025),
-        8000 => Ok(SampleFreqIndex::Freq8000),
-        7350 => Ok(SampleFreqIndex::Freq7350),
-        _ => Err(()),
+/// Codec ID, pixel size and default frame duration (ns) of a `WebM` video entry.
+fn webm_video_info(entry: &MatroskaSpec) -> (Option<String>, u16, u16, Option<u64>) {
+    let MatroskaSpec::TrackEntry(Master::Full(children)) = entry else {
+        return (None, 0, 0, None);
+    };
+    let mut codec_id = None;
+    let mut width = 0;
+    let mut height = 0;
+    let mut default_duration = None;
+    for child in children {
+        match child {
+            MatroskaSpec::CodecID(id) => codec_id = Some(id.clone()),
+            MatroskaSpec::DefaultDuration(ns) => default_duration = Some(*ns),
+            MatroskaSpec::Video(Master::Full(video)) => {
+                for field in video {
+                    match field {
+                        MatroskaSpec::PixelWidth(value) => {
+                            width = u16::try_from(*value).unwrap_or(u16::MAX);
+                        }
+                        MatroskaSpec::PixelHeight(value) => {
+                            height = u16::try_from(*value).unwrap_or(u16::MAX);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
     }
+    (codec_id, width, height, default_duration)
 }
 
 /// A single coded frame, normalized so video (`WebM` or fragmented MP4) and audio
@@ -410,133 +458,6 @@ impl MatroskaTrack {
     }
 }
 
-#[allow(clippy::too_many_lines)] // Mirrors the ordered EBML header, track, cluster, and finalization pipeline.
-fn mux_matroska(
-    video_container: DownloadContainer,
-    video_path: &Path,
-    audio_container: DownloadContainer,
-    audio_path: &Path,
-    output_path: &Path,
-    cancelled: &AtomicBool,
-) -> Result<(), String> {
-    let (video_entry, mut video) =
-        open_track_source(video_container, video_path, 1, TrackKind::Video)?;
-    let (audio_entry, mut audio) =
-        open_track_source(audio_container, audio_path, 2, TrackKind::Audio)?;
-    let output = File::create(output_path)
-        .map_err(|error| format!("Could not create Matroska output: {error}"))?;
-    let mut writer = WebmWriter::new(BufWriter::new(output));
-
-    writer
-        .write(&MatroskaSpec::Ebml(Master::Full(vec![
-            MatroskaSpec::EbmlVersion(1),
-            MatroskaSpec::EbmlReadVersion(1),
-            MatroskaSpec::EbmlMaxIdLength(4),
-            MatroskaSpec::EbmlMaxSizeLength(8),
-            MatroskaSpec::DocType("matroska".to_string()),
-            MatroskaSpec::DocTypeVersion(4),
-            MatroskaSpec::DocTypeReadVersion(2),
-        ])))
-        .map_err(|error| format!("Could not write Matroska header: {error}"))?;
-    writer
-        .write_advanced(
-            &MatroskaSpec::Segment(Master::Start),
-            WriteOptions::is_unknown_sized_element(),
-        )
-        .map_err(|error| format!("Could not start Matroska segment: {error}"))?;
-    writer
-        .write(&MatroskaSpec::Info(Master::Full(vec![
-            MatroskaSpec::TimestampScale(1_000_000),
-            MatroskaSpec::MuxingApp("Flow Desktop".to_string()),
-            MatroskaSpec::WritingApp("Flow Desktop".to_string()),
-        ])))
-        .map_err(|error| format!("Could not write Matroska info: {error}"))?;
-    writer
-        .write(&MatroskaSpec::Tracks(Master::Full(vec![
-            video_entry,
-            audio_entry,
-        ])))
-        .map_err(|error| format!("Could not write Matroska tracks: {error}"))?;
-
-    let mut video_packet = video.next_packet()?;
-    let mut audio_packet = audio.next_packet()?;
-    let mut cluster_start_ms: Option<i64> = None;
-    while video_packet.is_some() || audio_packet.is_some() {
-        if cancelled.load(Ordering::Relaxed) {
-            return Err("Download cancelled".into());
-        }
-        let take_video = match (&video_packet, &audio_packet) {
-            (Some(video), Some(audio)) => video.timestamp_ns <= audio.timestamp_ns,
-            (Some(_), None) => true,
-            _ => false,
-        };
-        let (packet, output_track) = if take_video {
-            (video_packet.take().expect("video packet is present"), 1)
-        } else {
-            (audio_packet.take().expect("audio packet is present"), 2)
-        };
-        let timestamp_ms = i64::try_from(packet.timestamp_ns / 1_000_000)
-            .map_err(|_| "Matroska timestamp is outside the supported range".to_string())?
-            .max(0);
-        let should_rotate = match cluster_start_ms {
-            None => true,
-            Some(start) => {
-                let relative = timestamp_ms - start;
-                relative > i64::from(i16::MAX)
-                    || (output_track == 1 && packet.keyframe && relative >= 5_000)
-            }
-        };
-        if should_rotate {
-            if cluster_start_ms.is_some() {
-                writer
-                    .write(&MatroskaSpec::Cluster(Master::End))
-                    .map_err(|error| format!("Could not finish Matroska cluster: {error}"))?;
-            }
-            cluster_start_ms = Some(timestamp_ms);
-            writer
-                .write(&MatroskaSpec::Cluster(Master::Start))
-                .map_err(|error| format!("Could not start Matroska cluster: {error}"))?;
-            let timestamp = u64::try_from(timestamp_ms)
-                .map_err(|_| "Matroska cluster timestamp cannot be negative".to_string())?;
-            writer
-                .write(&MatroskaSpec::Timestamp(timestamp))
-                .map_err(|error| format!("Could not write Matroska cluster timestamp: {error}"))?;
-        }
-        let relative = timestamp_ms - cluster_start_ms.unwrap_or(timestamp_ms);
-        let relative = i16::try_from(relative)
-            .map_err(|_| "Matroska block timestamp exceeded its cluster range".to_string())?;
-        let block = SimpleBlock::new_uncheked(
-            packet.data.as_slice(),
-            output_track,
-            relative,
-            packet.invisible,
-            packet.lacing,
-            packet.discardable,
-            packet.keyframe,
-        );
-        writer
-            .write(&MatroskaSpec::from(block))
-            .map_err(|error| format!("Could not write Matroska block: {error}"))?;
-        if take_video {
-            video_packet = video.next_packet()?;
-        } else {
-            audio_packet = audio.next_packet()?;
-        }
-    }
-    if cluster_start_ms.is_some() {
-        writer
-            .write(&MatroskaSpec::Cluster(Master::End))
-            .map_err(|error| format!("Could not finish Matroska cluster: {error}"))?;
-    }
-    writer
-        .write(&MatroskaSpec::Segment(Master::End))
-        .map_err(|error| format!("Could not finish Matroska segment: {error}"))?;
-    writer
-        .into_inner()
-        .map_err(|error| format!("Could not flush Matroska output: {error}"))?;
-    Ok(())
-}
-
 fn read_matroska_track_entry(
     path: &Path,
     output_track: u64,
@@ -593,7 +514,7 @@ fn read_matroska_track_entry(
 }
 
 fn media_file_diagnostics(path: &Path) -> String {
-    let size = path.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+    let size = path.metadata().map_or(0, |metadata| metadata.len());
     let mut prefix = [0_u8; 32];
     let read = File::open(path)
         .and_then(|mut file| file.read(&mut prefix))
@@ -607,27 +528,33 @@ fn media_file_diagnostics(path: &Path) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{parse_aac_config, parse_avc_sps_pps};
-    use mp4::{AudioObjectType, ChannelConfig, SampleFreqIndex};
+pub(super) fn scratch_file(tag: &str, extension: &str) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    let dir = std::env::temp_dir().join(format!("flow-mux-{tag}-{}-{nanos}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    dir.join(format!("out.{extension}"))
+}
 
-    #[test]
-    fn extracts_sps_and_pps_from_avcc() {
-        // version, profile/compat/level, lengthSize, numSPS=1, [len=2]{67 42}, numPPS=1, [len=2]{68 ce}
-        let avcc = [
-            1, 0x64, 0x00, 0x1f, 0xff, 0xe1, 0x00, 0x02, 0x67, 0x42, 0x01, 0x00, 0x02, 0x68, 0xce,
-        ];
-        let (sps, pps) = parse_avc_sps_pps(&avcc).expect("avcC parses");
-        assert_eq!(sps, vec![0x67, 0x42]);
-        assert_eq!(pps, vec![0x68, 0xce]);
+#[cfg(test)]
+mod tests {
+    use super::{WriterSample, first_presentation_time};
+
+    fn sample(duration: u32, composition_offset: i32) -> WriterSample {
+        WriterSample {
+            size: 1,
+            duration,
+            composition_offset,
+            is_sync: true,
+        }
     }
 
     #[test]
-    fn reads_aac_lc_stereo_44100_config() {
-        // AAC-LC (objectType 2), samplingFrequencyIndex 4 (44100), channelConfig 2.
-        let config = parse_aac_config(&[0x12, 0x10], 44100, 2).expect("ASC parses");
-        assert_eq!(config.profile, AudioObjectType::AacLowComplexity);
-        assert_eq!(config.freq_index, SampleFreqIndex::Freq44100);
-        assert_eq!(config.chan_conf, ChannelConfig::Stereo);
+    fn b_frame_streams_start_at_their_first_presented_frame() {
+        let samples = [sample(1000, 2000), sample(1000, 4000), sample(1000, 0)];
+        assert_eq!(first_presentation_time(&samples), Some(2000));
+        assert_eq!(first_presentation_time(&[sample(1000, 0)]), None);
     }
 }

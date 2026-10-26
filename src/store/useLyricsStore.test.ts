@@ -114,3 +114,69 @@ describe("saved lyrics timing", () => {
     expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
   });
 });
+
+describe("lyrics source choice for downloaded songs", () => {
+  const words = Array.from({ length: 6 }, (_, i) => ({
+    time: 10000 + i * 5000,
+    text: `w${i}`,
+    words: [{ text: `w${i}`, startTime: 10000 + i * 5000, endTime: 12000 + i * 5000 }],
+  }));
+
+  it("offers the saved copy first when choosing a source", () => {
+    const req = request();
+    seedOfflineLyrics(req.videoId, timed);
+    answer = () => new Promise(() => {});
+    useLyricsStore.getState().load(req);
+    useLyricsStore.getState().browseCandidates();
+    const [first] = useLyricsStore.getState().candidates;
+    expect(first?.providerName).toBe("Downloaded");
+    expect(first?.synced).toBe(true);
+  });
+
+  it("keeps the saved copy once it is chosen, even over better online lyrics", async () => {
+    const req = request();
+    seedOfflineLyrics(req.videoId, timed);
+    answer = async () => ({ entries: words, provider: "BetterLyrics" });
+    useLyricsStore.getState().load(req);
+    await flush();
+    expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
+    useLyricsStore.getState().browseCandidates();
+    useLyricsStore.getState().applyCandidate(useLyricsStore.getState().candidates[0]!);
+    expect(useLyricsStore.getState().providerName).toBe("Downloaded");
+    useLyricsStore.getState().load(req);
+    await flush();
+    expect(useLyricsStore.getState().providerName).toBe("Downloaded");
+  });
+
+  it("goes online first once a provider is chosen, falling back to the saved copy", async () => {
+    const req = request();
+    seedOfflineLyrics(req.videoId, timed);
+    answer = () => new Promise(() => {});
+    useLyricsStore.getState().load(req);
+    useLyricsStore.getState().applyCandidate({ providerName: "LrcLib", entries: [{ time: 0, text: "Plain" }], synced: false });
+    answer = async () => ({ entries: [{ time: 0, text: "Plain" }], provider: "DiskCache" });
+    useLyricsStore.getState().load(req);
+    expect(useLyricsStore.getState().loading).toBe(true);
+    await flush();
+    expect(useLyricsStore.getState().providerName).toBe("DiskCache");
+    answer = async () => {
+      throw new Error("offline");
+    };
+    useLyricsStore.getState().load(req);
+    await flush();
+    expect(useLyricsStore.getState().providerName).toBe("Downloaded");
+  });
+
+  it("goes back to choosing automatically on refresh", async () => {
+    const req = request();
+    seedOfflineLyrics(req.videoId, timed);
+    answer = () => new Promise(() => {});
+    useLyricsStore.getState().load(req);
+    useLyricsStore.getState().browseCandidates();
+    useLyricsStore.getState().applyCandidate(useLyricsStore.getState().candidates[0]!);
+    answer = async () => ({ entries: words, provider: "BetterLyrics" });
+    useLyricsStore.getState().refresh();
+    await flush();
+    expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
+  });
+});

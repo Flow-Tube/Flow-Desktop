@@ -19,7 +19,7 @@ const NS_PER_SEC: i128 = 1_000_000_000;
 const NON_SYNC_FLAG: u32 = 0x0001_0000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Codec {
+pub(super) enum Codec {
     Av1,
     H264,
     Hevc,
@@ -52,7 +52,7 @@ impl Codec {
         }
     }
 
-    fn is_video(self) -> bool {
+    pub(super) fn is_video(self) -> bool {
         !matches!(self, Self::Aac)
     }
 }
@@ -71,6 +71,8 @@ struct SampleRef {
 struct TrackMeta {
     codec: Codec,
     codec_private: Option<Vec<u8>>,
+    sample_entry: Vec<u8>,
+    edit_media_time: Option<i64>,
     timescale: u32,
     width: u16,
     height: u16,
@@ -120,18 +122,18 @@ pub(super) struct ProgressiveSample {
 }
 
 /// A fragmented-MP4 track parsed for re-wrapping into a progressive (non-fragmented)
-/// MP4 — the path the `mp4` crate's `Mp4Reader` cannot handle. Carries the codec
-/// configuration and the full sample list in decode order; bytes are read on demand.
+/// MP4. Carries the sample description and the full sample list in decode order;
+/// bytes are read on demand.
 pub(super) struct ProgressiveTrack {
     file: File,
-    pub(super) is_h264: bool,
-    pub(super) is_aac: bool,
+    pub(super) codec: Codec,
     pub(super) timescale: u32,
     pub(super) width: u16,
     pub(super) height: u16,
-    pub(super) channels: u16,
-    pub(super) sample_rate: u32,
-    pub(super) codec_private: Option<Vec<u8>>,
+    /// The source's `stsd` entry box, header included, copied verbatim into the output.
+    pub(super) sample_entry: Vec<u8>,
+    /// The source edit list's media start, in track ticks (AAC priming, B-frame delay).
+    pub(super) edit_media_time: Option<i64>,
     pub(super) samples: Vec<ProgressiveSample>,
 }
 
@@ -178,14 +180,12 @@ pub(super) fn open_progressive(path: &Path, kind: TrackKind) -> Result<Progressi
         .collect();
     Ok(ProgressiveTrack {
         file,
-        is_h264: matches!(meta.codec, Codec::H264),
-        is_aac: matches!(meta.codec, Codec::Aac),
+        codec: meta.codec,
         timescale: meta.timescale,
         width: meta.width,
         height: meta.height,
-        channels: meta.channels,
-        sample_rate: meta.sample_rate,
-        codec_private: meta.codec_private,
+        sample_entry: meta.sample_entry,
+        edit_media_time: meta.edit_media_time,
         samples,
     })
 }
@@ -289,6 +289,8 @@ fn parse_metadata(file: &mut File, kind: TrackKind) -> Result<TrackMeta, String>
     Ok(TrackMeta {
         codec: config.entry.codec,
         codec_private: config.entry.codec_private,
+        sample_entry: config.entry.raw,
+        edit_media_time: config.edit_media_time,
         timescale: config.timescale,
         width: config.entry.width,
         height: config.entry.height,
@@ -300,6 +302,7 @@ fn parse_metadata(file: &mut File, kind: TrackKind) -> Result<TrackMeta, String>
 
 struct MoovConfig {
     entry: SampleEntryMeta,
+    edit_media_time: Option<i64>,
     track_id: u32,
     timescale: u32,
     defaults: FragmentDefaults,
@@ -326,8 +329,12 @@ fn parse_moov(moov: &[u8], label: &str) -> Result<MoovConfig, String> {
     let defaults = child(moov, b"mvex")
         .map(|mvex| trex_defaults(mvex, track_id))
         .unwrap_or_default();
+    let edit_media_time = child(trak, b"edts")
+        .and_then(|edts| child(edts, b"elst"))
+        .and_then(first_media_time);
     Ok(MoovConfig {
         entry,
+        edit_media_time,
         track_id,
         timescale,
         defaults,
@@ -369,6 +376,7 @@ fn parse_moof(
 
 struct SampleEntryMeta {
     codec: Codec,
+    raw: Vec<u8>,
     codec_private: Option<Vec<u8>>,
     width: u16,
     height: u16,
@@ -383,6 +391,8 @@ fn parse_sample_entry(stsd: &[u8], label: &str) -> Result<SampleEntryMeta, Strin
     let (fourcc, payload) = boxes(entries)
         .next()
         .ok_or_else(|| format!("The {label} MP4 has no sample description"))?;
+    let raw = raw_first_box(entries)
+        .ok_or_else(|| format!("The {label} MP4 has a truncated sample description"))?;
     let codec = Codec::from_fourcc(fourcc).ok_or_else(|| {
         format!(
             "The {label} MP4 uses an unsupported codec `{}`",
@@ -418,6 +428,7 @@ fn parse_sample_entry(stsd: &[u8], label: &str) -> Result<SampleEntryMeta, Strin
 
     Ok(SampleEntryMeta {
         codec,
+        raw,
         codec_private,
         width,
         height,
@@ -655,6 +666,34 @@ fn read_trun(
         *decode_time += u64::from(duration);
     }
     Ok(())
+}
+
+/// The first box in `data`, header included.
+fn raw_first_box(data: &[u8]) -> Option<Vec<u8>> {
+    let size = usize::try_from(u32::from_be_bytes(data.get(..4)?.try_into().ok()?)).ok()?;
+    (size >= 8).then(|| data.get(..size).map(<[u8]>::to_vec))?
+}
+
+/// The media start of the first non-empty edit in an `elst` box.
+fn first_media_time(elst: &[u8]) -> Option<i64> {
+    let version = *elst.first()?;
+    let count = be32(elst, 4).ok()?;
+    let mut offset = 8_usize;
+    for _ in 0..count {
+        let media_time = if version == 1 {
+            let value = i64::from_be_bytes(elst.get(offset + 8..offset + 16)?.try_into().ok()?);
+            offset += 20;
+            value
+        } else {
+            let value = i64::from(read_i32(elst, offset + 4).ok()?);
+            offset += 12;
+            value
+        };
+        if media_time >= 0 {
+            return Some(media_time);
+        }
+    }
+    None
 }
 
 fn parse_tkhd_track_id(tkhd: &[u8]) -> Option<u32> {

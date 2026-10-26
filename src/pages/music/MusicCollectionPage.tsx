@@ -11,7 +11,7 @@ import { MusicShelf } from '../../components/music/MusicShelf';
 import { useMusicCollection, type CollectionKind } from '../../lib/useMusicCollection';
 import { usePublishTitle } from '../../lib/usePublishTitle';
 import { useCollectionDownloadState } from '../../lib/useCollectionDownloads';
-import { useCollectionDownloadStore } from '../../store/useCollectionDownloadStore';
+import { useDownloadStore } from '../../store/useDownloadStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useUiStore } from '../../store/useUiStore';
@@ -78,7 +78,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
     useMusicCollection(kind, id);
   usePublishTitle(meta?.title);
 
-  const startAlbumDownload = useCollectionDownloadStore((s) => s.startAlbum);
+  const openCollectionDownload = useDownloadStore((s) => s.openCollection);
   const albumDownloadState = useCollectionDownloadState(kind === 'album' ? id : undefined, 'album');
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -143,15 +143,17 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
 
   const handleDownloadAlbum = () => {
     if (!id || songs.length === 0) return;
-    void startAlbumDownload(
-      {
+    openCollectionDownload({
+      kind: 'album',
+      meta: {
         collectionId: id,
         title: meta.title,
         author: meta.artistName || undefined,
         thumbnailUrl: meta.thumbnail ?? undefined,
+        year: meta.yearText ? Number.parseInt(meta.yearText, 10) || null : null,
       },
-      songs,
-    );
+      load: () => Promise.resolve(songs),
+    });
   };
 
   const handleToggleSave = () => {

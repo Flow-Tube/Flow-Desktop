@@ -24,7 +24,7 @@ import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
 import { youtubePlaylistUrl } from "../lib/youtubeUrl";
 import { copyText } from "../lib/clipboard";
 import { usePlayerStore } from "../store/usePlayerStore";
-import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
+import { useDownloadStore } from "../store/useDownloadStore";
 import { useUiStore } from "../store/useUiStore";
 import type { PlaylistSummary, VideoSummary } from "../types/video";
 
@@ -97,21 +97,21 @@ export function PlaylistDetailsPage({
   const leadVideo = videos[0];
   const heroThumbnailUrl = leadVideo?.thumbnailUrl ?? meta?.thumbnailUrl ?? null;
 
-  const startPlaylistDownload = useCollectionDownloadStore((state) => state.startPlaylist);
+  const openCollectionDownload = useDownloadStore((state) => state.openCollection);
   const downloadState = useCollectionDownloadState(meta?.id, "playlist");
 
   const handleDownloadPlaylist = async () => {
     if (!meta || videos.length === 0) return;
-    const allVideos = hasMore ? await loadAllVideos().catch(() => videos) : videos;
-    void startPlaylistDownload(
-      {
+    openCollectionDownload({
+      kind: "playlist",
+      meta: {
         collectionId: meta.id,
         title: meta.title,
         author: meta.channelName || undefined,
         thumbnailUrl: heroThumbnailUrl ?? meta.thumbnailUrl ?? undefined,
       },
-      allVideos,
-    );
+      load: () => (hasMore ? loadAllVideos().catch(() => videos) : Promise.resolve(videos)),
+    });
   };
 
   const handleReorder = async (nextVideos: VideoSummary[]) => {

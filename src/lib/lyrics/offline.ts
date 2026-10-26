@@ -1,10 +1,19 @@
 import type { LyricsEntry } from "./types";
 import { parseLyrics } from "./lyricsUtils";
+import { getString } from "../i18n/index";
 
 export interface OfflineLyrics {
   entries: LyricsEntry[];
   /** The file's `[offset:]` tag in ms; positive shows the lines sooner, as the sync offset does. */
   offsetMs: number;
+}
+
+/** The provider name lyrics saved with a download are shown under. */
+export const OFFLINE_LYRICS_PROVIDER = "Downloaded";
+
+/** A provider name as the lyrics UI shows it. */
+export function lyricsSourceLabel(providerName: string): string {
+  return providerName === OFFLINE_LYRICS_PROVIDER ? getString("lyrics_source_downloaded") : providerName;
 }
 
 const offline = new Map<string, OfflineLyrics>();

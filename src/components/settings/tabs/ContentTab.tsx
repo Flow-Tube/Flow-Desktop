@@ -22,7 +22,6 @@ export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
-  const [downloadDialogStyle, setDownloadDialogStyle] = usePreference(SETTINGS.DOWNLOAD_DIALOG_STYLE, 'FULL');
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);
   const [shortsShelf, setShortsShelf] = useBoolPref(SETTINGS.SHORTS_SHELF_ENABLED, true);
@@ -111,9 +110,6 @@ export function ContentTab() {
           <Select value={String(titleMaxLines)} onChange={(v) => setTitleMaxLines(Number(v))} disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_TITLE_MAX_LINES)} options={[
             { value: '0', label: getString('settings_option_unlimited') }, { value: '1', label: getString('settings_option_one_line') }, { value: '2', label: getString('settings_option_two_lines') }, { value: '3', label: getString('settings_option_three_lines') },
           ]} />
-        </SettingItem>
-        <SettingItem title={getString('settings_download_dialog')} description={getString('settings_download_dialog_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_DIALOG_STYLE)}>
-          <Select value={downloadDialogStyle} onChange={setDownloadDialogStyle} disabled={isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_DIALOG_STYLE)} options={[{ value: 'FULL', label: getString('settings_option_full') }, { value: 'COMPACT', label: getString('settings_option_compact') }]} />
         </SettingItem>
       </SettingsGroup>
 

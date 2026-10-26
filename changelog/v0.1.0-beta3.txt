@@ -32,7 +32,7 @@ MUSIC
 - The full player answers the same keys as Flow for Android: Space or K to play and pause, J, L and the arrow keys to seek, Up and Down for volume, M to mute, Shift+N and Shift+P to skip, 0 to 9 to jump through the song, S, R and Q for shuffle, repeat and the queue. Escape closes an open menu before the player.
 - The full player has its own volume button, the mouse wheel changes volume over either volume button, and Shift with the wheel seeks over the seek bar. Hovering Next shows the song that plays next, and the top shows what you are playing from.
 - The song menu in the player adds Start radio, Equalizer, Not interested and Don't recommend this artist.
-- New Immersive Artwork background for the full player: the cover fills the top, or the left side of a wide window, and fades into the player. The blurred backgrounds now load the cover through the same copy as the artwork, so they no longer stay black when the cover is slow.
+- New Immersive Artwork background for the full player: the cover fills the top, the left side of a wide window beside Up next or the lyrics, or the middle of one with that pane hidden, and fades into the player. The blurred backgrounds now load the cover through the same copy as the artwork, so they no longer stay black when the cover is slow.
 - "Watch video" in the player's song menu opens the song's official music video at the same moment and pauses the song. The video is matched the same way Flow for Android does, so live takes, remixes and audio uploads are skipped.
 - The full player's seek bar glides with the song instead of stepping, and dragging it seeks once when you let go instead of on every move. The page behind the full player stops drawing while it is covered.
 - Mood and genre pages keep their shelves with titles instead of one long grid, album cards start playing without loading the album first, and playlist cards show their song count instead of the word Playlist.
@@ -206,6 +206,8 @@ LYRICS
 - A new lyrics menu adjusts the timing, picks another source, edits, copies or saves the lyrics as an .lrc file, and sets their alignment.
 - Lyrics found for a song are kept as files in Flow's app data instead of browser storage, which could fill up and stop saving them. Settings shows how much space they take and can clear them. Lyrics saved by earlier versions move over on their own.
 - Downloaded songs get the timed lyrics the lyrics sources found, saved as a real .lrc file, instead of YouTube's plain text. A downloaded .lrc file's offset tag sets the starting timing.
+- A downloaded song's lyrics show offline even without an .lrc file, read from inside the song file.
+- Choose lyrics source lists the copy saved with the download first, next to the online sources. Picking it keeps it for that song with no online lookup; picking an online source looks online first and falls back to the saved copy. Refresh goes back to choosing automatically.
 
 PLAYLISTS
 - Playlist sorts do what they say: Date published sorts by when each video came out, and Date added follows when you actually added each video, newest or oldest first.
@@ -214,6 +216,36 @@ PLAYLISTS
 - Playlists whose id contains "VL" open correctly, playlist headers show their owner again, and changing the 4K, HD or subtitles search filter now runs the search again.
 - Long YouTube playlists load past their first 100 videos as you scroll, show their real title and video count, and download or save in full. Sorting a playlist by date or popularity reads the whole playlist first.
 - Searching inside a channel keeps returning results past the first page, and long comment threads keep their Show more replies button.
+
+DOWNLOADS
+- Videos now save as MP4 with AAC audio in every quality, VP9 and AV1 included, so they open in more players. A video with no AAC track still saves as MKV.
+- Downloaded videos carry their title, channel and YouTube link inside the file, plus the poster when Embed is chosen.
+- Saved videos start at once offline, keep sound and picture in step from the first frame, and are checked for a missing track or a wrong length before they count as done.
+- Every download carries a sharp cover inside the file: a 1200 px square for songs and the full 16:9 frame for videos. Flow keeps its own copy, so the artwork stays when you are offline.
+- Video downloads also store their description, release date, channel and category, looked up while the file downloads.
+- The artwork setting is now one switch, Also save a poster image next to the file, off by default.
+- Downloaded videos keep their chapters, so chapter skipping works in VLC, mpv and other players too.
+- Lyrics found after a song has downloaded are written into the file as well as the .lrc file.
+- Songs save as M4A files named Artist - Title, with their cover, artist, album, track number, year and lyrics inside. They play at their real length everywhere and seek at once.
+- Albums save as numbered songs inside an Artist - Album folder.
+- A new switch, Save lyrics as an .lrc file, keeps synced lyrics beside each song for desktop music players. Untimed lyrics no longer end up in .lrc files.
+- Videos that still save as MKV now carry their length, a seek index, title, channel, chapters and cover, so they seek at once and show their poster in media players.
+- Unfinished downloads pick up where they stopped after you quit or restart Flow, and leftover partial files are cleaned up.
+- Downloads get a fresh link when YouTube refuses an old one, stop retrying a dead connection after a few tries, and a failed download can be retried from where it stopped.
+- Pausing a download lets the next one in the queue start, and playlists and albums now save to the download folder you chose.
+- Downloading a song no longer replaces the video download of the same item, and replacing a download removes the old file.
+- Downloads keep their artwork offline on the Downloads page, in the library and in the player, from the cover Flow saved with them.
+- A downloaded video keeps its description, chapters and SponsorBlock segments when watched offline. Segments are fetched only when SponsorBlock is on and are kept with the download instead of in a separate file.
+- A redesigned video download dialog: choose video or audio only, filter by codec, see every quality with its size, pick a dubbed audio track and subtitles, rename the file, change the folder, and see what is saved inside the file.
+- A redesigned music download dialog shows the cover and credits, offers High quality or Data saver with sizes, shows whether lyrics were found, and lets you fix the title, artist and album before saving.
+- Albums and playlists ask before downloading, with the number of songs, length, size, the ones already saved and the folder.
+- Subtitles chosen for a download are saved beside the video as an .srt file and play in Flow offline.
+- New Downloads settings: preferred codec (Auto picks H.264 on a Mac, where VP9 videos do not play), music quality, subtitle language and how many downloads run at once. Video quality now defaults to 1080p, Auto means 1080p instead of the largest file, and the download dialog style setting is gone.
+- Download cards show the item's thumbnail or cover, the step it is on, and the speed and time left. Finished cards offer Play and Show in folder, failed ones Retry, and a finished card stays while the pointer is on it.
+- Several downloads, albums and playlists share one card that lists what is downloading, each with its artwork and progress.
+- Flow shows a system notification when a download finishes or fails while it is in the background; it can be turned off in Settings.
+- Download messages show the item's thumbnail, and the separate "Download started" message is gone.
+- Menus in the download dialog, such as subtitles and audio track, open above the dialog instead of stretching it.
 
 SETTINGS
 - Six new themes from Flow for Android: Deep Ocean, Gunmetal, Cosmic Void, Cyberpunk, Royal Gold and Cream Paper, each in light, dark and AMOLED.
@@ -226,6 +258,7 @@ UNDER THE HOOD
 - Updated the database layer, sync encryption libraries, cover-art tagging and random number generation to their current major versions.
 - Updated React, the video players (dash.js and hls.js), icons, translations and the build tools to their latest compatible releases.
 - Linux nightly builds package again. The updated bundler rejected the nightly version number for the RPM package, which stopped the AppImage and Debian builds from being published too.
+- Updated the WebM reader and the tagging library used for downloads to their latest versions.
 - On Windows, Flow keeps WebView2's default protections, including SmartScreen, and opens its hidden playback-token window with the same settings as the main window.
 
 SUPPORTED DEVICES

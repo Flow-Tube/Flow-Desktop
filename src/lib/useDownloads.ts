@@ -4,32 +4,69 @@ import { useDownloadsLibraryStore } from "../store/useDownloadsLibraryStore";
 import { useDownloadStore } from "../store/useDownloadStore";
 import type { DownloadProgress, DownloadRecord, DownloadStatus } from "./api/downloads";
 import type { SongItem } from "../types/music";
-import type { VideoSummary } from "../types/video";
+import type { VideoChapter, VideoDetails, VideoSummary } from "../types/video";
+
+function parseJson<T>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** The stored cover first, so downloads keep their artwork offline. */
+export function downloadArtwork(record: DownloadRecord): string | null {
+  return record.coverUrl ?? record.thumbnailUrl;
+}
 
 export function downloadRecordToVideo(record: DownloadRecord): VideoSummary {
   return {
     id: record.videoId ?? String(record.id),
     title: record.title,
     channelName: record.author ?? "",
-    thumbnailUrl: record.thumbnailUrl,
+    channelId: record.channelId,
+    thumbnailUrl: downloadArtwork(record),
     durationSeconds: record.durationSeconds,
   };
 }
 
 export function downloadRecordToSong(record: DownloadRecord): SongItem {
+  const artists = parseJson<string[]>(record.artistsJson, []);
+  const names = artists.length > 0 ? artists : record.author ? [record.author] : [];
   return {
     id: record.videoId ?? String(record.id),
     title: record.title,
-    artists: record.author ? [{ name: record.author, id: null }] : [],
-    album: null,
+    artists: names.map((name) => ({ name, id: null })),
+    album: record.album ? { name: record.album, id: record.albumId ?? "" } : null,
     duration: record.durationSeconds,
     musicVideoType: null,
-    thumbnail: record.thumbnailUrl ?? "",
+    thumbnail: downloadArtwork(record) ?? "",
     explicit: false,
     videoId: record.videoId,
     playlistId: null,
     params: null,
   };
+}
+
+/** What the watch page shows for a saved video, read from the library with no
+ *  network: description, date, channel and chapters. */
+export function downloadRecordToVideoDetails(record: DownloadRecord): VideoDetails {
+  return {
+    id: record.videoId ?? String(record.id),
+    title: record.title,
+    channelName: record.author ?? "",
+    channelId: record.channelId,
+    description: record.description,
+    thumbnailUrl: downloadArtwork(record),
+    durationSeconds: record.durationSeconds,
+    publishedText: record.releaseDate,
+    chapters: parseJson<VideoChapter[]>(record.chaptersJson, []),
+  };
+}
+
+export function downloadSponsorSegments<T>(record: DownloadRecord): T[] {
+  return parseJson<T[]>(record.sponsorblockJson, []);
 }
 
 const recordVideoId = (record: DownloadRecord): string => record.videoId ?? String(record.id);

@@ -9,7 +9,8 @@ import {
   removePlaylistFromLibrary,
   savePlaylistToLibrary,
 } from '../../lib/playlistLibrary';
-import { downloadPlaylist } from '../../lib/useCollectionDownloads';
+import { loadPlaylistDownload } from '../../lib/useCollectionDownloads';
+import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useUiStore } from '../../store/useUiStore';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
@@ -104,6 +105,7 @@ export function PlaylistCard({
   const [isSaved, setIsSaved] = useState(Boolean(isInLibrary));
   const cardRef = useRef<HTMLDivElement>(null);
   const showToast = useUiStore((state) => state.showToast);
+  const openCollectionDownload = useDownloadStore((state) => state.openCollection);
   const wash = useHoverWashColor(playlist.thumbnailUrl);
   const isProtected = Boolean(playlist.isProtected) || isProtectedPlaylistId(playlist.id);
 
@@ -206,13 +208,15 @@ export function PlaylistCard({
       onDownload(playlist);
       return;
     }
-    try {
-      showToast({ variant: 'success', message: `Downloading "${playlist.title}"` });
-      await downloadPlaylist(playlist);
-    } catch (error) {
-      console.error('Failed to download playlist', error);
-      showToast({ variant: 'error', message: `Could not download "${playlist.title}"` });
-    }
+    openCollectionDownload({
+      kind: 'playlist',
+      meta: {
+        collectionId: playlist.id,
+        title: playlist.title,
+        thumbnailUrl: playlist.thumbnailUrl ?? undefined,
+      },
+      load: async () => (await loadPlaylistDownload(playlist)).videos,
+    });
   };
 
   const runMenuAction = async (

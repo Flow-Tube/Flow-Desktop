@@ -2,6 +2,7 @@ import type { SongItem } from "../../types/music";
 import { useDownloadStore } from "../../store/useDownloadStore";
 import { saveDownloadLyrics } from "../api/lyrics";
 import { getLyrics, lyricsRequestFor } from "./lyricsHelper";
+import { OFFLINE_LYRICS_PROVIDER } from "./offline";
 import { lrcText } from "./lrcText";
 import { entriesAreSynced } from "./sync";
 
@@ -39,8 +40,8 @@ export function saveLyricsWithDownload(track: SongItem, downloadId: string): voi
   const request = lyricsRequestFor(track, track.duration ?? 0);
   void Promise.all([getLyrics(request).catch(() => null), whenFinished(downloadId)])
     .then(([result, finished]) => {
-      // "Downloaded" is the song's own saved file coming back; there is nothing to improve.
-      if (!finished || !result || result.provider === "Downloaded") return;
+      // The song's own saved file coming back; there is nothing to improve.
+      if (!finished || !result || result.provider === OFFLINE_LYRICS_PROVIDER) return;
       const synced = entriesAreSynced(result.entries);
       const text = lrcText(synced ? result.entries : [], result.entries.map((e) => e.text).join("\n"));
       return saveDownloadLyrics(request.videoId, text);

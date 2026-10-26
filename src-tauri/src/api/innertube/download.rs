@@ -27,7 +27,10 @@ pub struct DownloadableFormat {
     pub video_size_bytes: Option<u64>,
     pub audio_size_bytes: Option<u64>,
     pub estimated_size_bytes: Option<u64>,
+    /// Stream links stay in the backend; downloads resolve fresh ones when they run.
+    #[serde(skip)]
     pub video_url: String,
+    #[serde(skip)]
     pub audio_url: String,
 }
 

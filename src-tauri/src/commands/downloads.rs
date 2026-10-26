@@ -1,107 +1,65 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use futures_util::StreamExt;
-use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
-use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{Notify, Semaphore};
+use sqlx::SqlitePool;
+use tauri::{AppHandle, State};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
-use sqlx::SqlitePool;
-
 use crate::api::innertube::download::{
-    DownloadContainer, DownloadableFormat, container_from_mime, pair_downloadable_formats,
-    video_codec_name,
+    DownloadContainer, DownloadableFormat, pair_downloadable_formats,
 };
 use crate::db::download_collections::DownloadCollectionRecord;
+use crate::db::download_jobs::DownloadJobRow;
 use crate::db::downloads::DownloadRecord;
 use crate::errors::{AppError, ErrorResponse};
+use crate::models::music_stream::MusicAudioQuality;
 use crate::security::validation::validate_video_id;
 use crate::services::youtube_service::YoutubeService;
-use crate::streaming::proxy::{StreamSession, StreamSessionKind, StreamingManager};
+use crate::streaming::proxy::StreamingManager;
 
 mod cover;
+mod job;
 mod metadata;
 mod muxer;
+mod naming;
+mod progress;
 mod sidecars;
+mod source;
 pub mod tags;
+mod transfer;
 
-const DOWNLOAD_EVENT: &str = "download-progress";
-const MIN_PARALLEL_FILE_BYTES: u64 = 4 * 1024 * 1024;
-const COPY_BUFFER_BYTES: usize = 256 * 1024;
-const PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
+use job::DownloadJob;
+use progress::{DownloadProgress, DownloadStatus, ProgressEmitter};
+
 const MAX_ACTIVE_DOWNLOADS: usize = 3;
-const RETRY_DELAY_MAX_SECS: u64 = 30;
+/// Logs of this many recent downloads stay readable in the details view.
+const MAX_REMEMBERED_LOGS: usize = 100;
 
+/// The formats a video can be downloaded in. Only the choice travels back to
+/// `start_download`; links are resolved when the download runs.
 #[tauri::command]
 pub async fn get_download_formats(
     video_id: String,
     youtube_service: State<'_, YoutubeService>,
-    streaming_manager: State<'_, StreamingManager>,
 ) -> Result<Vec<DownloadableFormat>, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
-
     let stream_info = youtube_service
         .get_stream_info(&video_id, false)
         .await
         .map_err(ErrorResponse::from)?;
-    let dynamic_user_agent = stream_info
-        .expires_at
-        .split_once('|')
-        .map(|(_, user_agent)| user_agent)
-        .unwrap_or_default()
-        .to_string();
-    let mut formats = pair_downloadable_formats(&stream_info);
-    let proxy_port = streaming_manager.get_port();
-
-    for format in &mut formats {
-        let video_token = Uuid::new_v4().to_string();
-        streaming_manager.register_session(
-            video_token.clone(),
-            format.video_url.clone(),
-            container_mime_type(&format.video_mime_type),
-            dynamic_user_agent.clone(),
-        );
-        format.video_url = format!("http://127.0.0.1:{proxy_port}/stream/{video_token}");
-
-        let audio_user_agent = stream_info
-            .download_audio_tracks
-            .iter()
-            .find(|track| track.local_url == format.audio_url)
-            .and_then(|track| track.user_agent.clone())
-            .unwrap_or_else(|| dynamic_user_agent.clone());
-        let audio_token = Uuid::new_v4().to_string();
-        streaming_manager.register_session(
-            audio_token.clone(),
-            format.audio_url.clone(),
-            container_mime_type(&format.audio_mime_type),
-            audio_user_agent,
-        );
-        format.audio_url = format!("http://127.0.0.1:{proxy_port}/stream/{audio_token}");
-    }
-
-    Ok(formats)
-}
-
-fn container_mime_type(mime_type: &str) -> String {
-    mime_type
-        .split(';')
-        .next()
-        .unwrap_or("application/octet-stream")
-        .trim()
-        .to_string()
+    Ok(pair_downloadable_formats(&stream_info))
 }
 
 #[derive(Clone)]
 pub struct DownloadManager {
     registry: Arc<Mutex<DownloadRegistry>>,
     permits: Arc<Semaphore>,
+    /// Interrupted downloads are picked up once per run of the app.
+    restored: Arc<AtomicBool>,
 }
 
 impl Default for DownloadManager {
@@ -109,24 +67,123 @@ impl Default for DownloadManager {
         Self {
             registry: Arc::new(Mutex::new(DownloadRegistry::default())),
             permits: Arc::new(Semaphore::new(MAX_ACTIVE_DOWNLOADS)),
+            restored: Arc::new(AtomicBool::new(false)),
         }
     }
 }
 
 #[derive(Default)]
 struct DownloadRegistry {
+    /// Jobs that are running, waiting for a slot or paused.
     controls: HashMap<String, Arc<DownloadControl>>,
     reserved_paths: HashSet<PathBuf>,
+    logs: HashMap<String, Arc<Mutex<Vec<String>>>>,
+    log_order: VecDeque<String>,
+    /// The latest event of every unfinished download, for a window that opens later.
+    snapshots: HashMap<String, DownloadProgress>,
 }
 
-#[derive(Default)]
-struct DownloadControl {
+impl DownloadManager {
+    fn lock(&self) -> Result<MutexGuard<'_, DownloadRegistry>, ErrorResponse> {
+        self.registry
+            .lock()
+            .map_err(|_| download_error("Download manager is unavailable"))
+    }
+
+    fn logs_for(&self, id: &str) -> Arc<Mutex<Vec<String>>> {
+        let Ok(mut registry) = self.registry.lock() else {
+            return Arc::default();
+        };
+        if let Some(logs) = registry.logs.get(id) {
+            return logs.clone();
+        }
+        let logs: Arc<Mutex<Vec<String>>> = Arc::default();
+        registry.logs.insert(id.to_string(), logs.clone());
+        registry.log_order.push_back(id.to_string());
+        while registry.log_order.len() > MAX_REMEMBERED_LOGS {
+            if let Some(oldest) = registry.log_order.pop_front() {
+                registry.logs.remove(&oldest);
+            }
+        }
+        logs
+    }
+
+    fn remember(&self, progress: DownloadProgress) {
+        let Ok(mut registry) = self.registry.lock() else {
+            return;
+        };
+        if matches!(
+            progress.status,
+            DownloadStatus::Completed | DownloadStatus::Cancelled
+        ) {
+            registry.snapshots.remove(&progress.id);
+        } else {
+            registry.snapshots.insert(progress.id.clone(), progress);
+        }
+    }
+
+    fn forget(&self, id: &str) {
+        if let Ok(mut registry) = self.registry.lock() {
+            registry.snapshots.remove(id);
+        }
+    }
+
+    fn snapshots(&self) -> Vec<DownloadProgress> {
+        self.registry
+            .lock()
+            .map(|registry| registry.snapshots.values().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Takes a job off the running list once its task ends.
+    fn finish(&self, id: &str, file_path: &Path) {
+        if let Ok(mut registry) = self.registry.lock() {
+            registry.controls.remove(id);
+            registry.reserved_paths.remove(file_path);
+        }
+    }
+
+    fn control(&self, id: &str) -> Option<Arc<DownloadControl>> {
+        self.registry
+            .lock()
+            .ok()
+            .and_then(|registry| registry.controls.get(id).cloned())
+    }
+
+    /// Registers a job as running and returns its control, or `None` when it already is.
+    fn register(&self, id: &str, file_path: &Path) -> Option<Arc<DownloadControl>> {
+        let mut registry = self.registry.lock().ok()?;
+        if registry.controls.contains_key(id) {
+            return None;
+        }
+        let control = Arc::new(DownloadControl::new(self.permits.clone()));
+        registry.controls.insert(id.to_string(), control.clone());
+        registry.reserved_paths.insert(file_path.to_path_buf());
+        Some(control)
+    }
+}
+
+pub struct DownloadControl {
     cancelled: AtomicBool,
     paused: AtomicBool,
     changed: Notify,
+    permits: Arc<Semaphore>,
+    has_slot: AtomicBool,
+    slot: tokio::sync::Mutex<Option<OwnedSemaphorePermit>>,
 }
 
 impl DownloadControl {
+    fn new(permits: Arc<Semaphore>) -> Self {
+        Self {
+            cancelled: AtomicBool::new(false),
+            paused: AtomicBool::new(false),
+            changed: Notify::new(),
+            permits,
+            has_slot: AtomicBool::new(false),
+            slot: tokio::sync::Mutex::new(None),
+        }
+    }
+
     fn cancel(&self) {
         self.cancelled.store(true, Ordering::Relaxed);
         self.changed.notify_waiters();
@@ -136,22 +193,41 @@ impl DownloadControl {
         self.paused.store(paused, Ordering::Relaxed);
         self.changed.notify_waiters();
     }
+
+    fn holds_slot(&self) -> bool {
+        self.has_slot.load(Ordering::Relaxed)
+    }
+
+    /// Keeps `permit` unless another worker of the job already took a slot, in which
+    /// case it goes back; true when this permit became the job's slot.
+    async fn take_slot(&self, permit: OwnedSemaphorePermit) -> bool {
+        let mut slot = self.slot.lock().await;
+        if slot.is_some() {
+            return false;
+        }
+        *slot = Some(permit);
+        self.has_slot.store(true, Ordering::Relaxed);
+        true
+    }
+
+    /// Gives the slot back; true when this call is the one that held it.
+    async fn release_slot(&self) -> bool {
+        let released = self.slot.lock().await.take().is_some();
+        self.has_slot.store(false, Ordering::Relaxed);
+        released
+    }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartDownloadRequest {
-    pub source_url: Option<String>,
-    pub adaptive: Option<AdaptiveDownloadRequest>,
-    pub title: String,
+    pub video_id: String,
     pub media_kind: DownloadMediaKind,
+    pub title: String,
     pub quality_label: String,
     pub destination_directory: Option<String>,
     pub parallel: bool,
     pub threads: u8,
-    /// Source identifiers used to fetch companion files (poster, `SponsorBlock`, lyrics)
-    /// and to populate the persisted downloads library.
-    pub video_id: Option<String>,
     pub thumbnail_url: Option<String>,
     pub author: Option<String>,
     pub duration_seconds: Option<u64>,
@@ -163,16 +239,29 @@ pub struct StartDownloadRequest {
     /// date…). The kind, id and title come from the request itself.
     #[serde(default)]
     pub tags: Option<tags::DownloadTags>,
+    /// The video format chosen, for a video download.
+    #[serde(default)]
+    pub video: Option<VideoSelection>,
+    /// The audio quality chosen, for a song.
+    #[serde(default)]
+    pub music: Option<MusicSelection>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AdaptiveDownloadRequest {
-    pub video_url: String,
-    pub audio_url: String,
+pub struct VideoSelection {
+    pub format_id: String,
+    pub height: Option<u64>,
+    pub fps: Option<u64>,
+    pub video_codec: String,
     pub container: DownloadContainer,
-    pub video_mime_type: String,
-    pub audio_mime_type: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicSelection {
+    pub quality: MusicAudioQuality,
+    pub prefer_aac: bool,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -183,6 +272,16 @@ pub enum DownloadMediaKind {
     Audio,
 }
 
+impl DownloadMediaKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Video => "video",
+            Self::Music => "music",
+            Self::Audio => "audio",
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadStarted {
@@ -190,1807 +289,332 @@ pub struct DownloadStarted {
     pub file_path: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DownloadProgress {
-    id: String,
-    title: String,
-    media_kind: DownloadMediaKind,
-    quality_label: String,
-    file_path: String,
-    downloaded_bytes: u64,
-    total_bytes: Option<u64>,
-    status: DownloadStatus,
-    error: Option<String>,
-    error_kind: Option<String>,
-    logs: Vec<String>,
-    video_id: Option<String>,
-    thumbnail_url: Option<String>,
-    collection_db_id: Option<i64>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-enum DownloadStatus {
-    Queued,
-    Downloading,
-    Paused,
-    WaitingForNetwork,
-    Muxing,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-struct DownloadContext {
-    id: String,
-    title: String,
-    media_kind: DownloadMediaKind,
-    quality_label: String,
-    file_path: PathBuf,
-    temp_path: PathBuf,
-    session: Option<StreamSession>,
-    adaptive: Option<AdaptiveDownloadContext>,
-    parallel: bool,
-    threads: u8,
-    control: Arc<DownloadControl>,
-    video_id: Option<String>,
-    thumbnail_url: Option<String>,
-    author: Option<String>,
-    duration_seconds: Option<u64>,
-    collection_db_id: Option<i64>,
-    loudness_db: Option<f64>,
-    tags: tags::DownloadTags,
-    pool: SqlitePool,
-}
-
-struct AdaptiveSources {
-    video_session: StreamSession,
-    audio_session: StreamSession,
-    output_container: DownloadContainer,
-    video_mime_type: String,
-    audio_mime_type: String,
-}
-
-struct AdaptiveDownloadContext {
-    video_session: StreamSession,
-    audio_session: StreamSession,
-    container: DownloadContainer,
-    video_container: DownloadContainer,
-    audio_container: DownloadContainer,
-    video_mime_type: String,
-    audio_mime_type: String,
-    video_path: PathBuf,
-    audio_path: PathBuf,
-}
-
-struct MediaFileInspection {
-    size: u64,
-    prefix: Vec<u8>,
-    valid: bool,
-}
-
-#[derive(Clone)]
-struct ProgressEmitter {
-    app: AppHandle,
-    id: String,
-    title: String,
-    media_kind: DownloadMediaKind,
-    quality_label: String,
-    file_path: String,
-    downloaded: Arc<AtomicU64>,
-    last_emitted: Arc<AtomicU64>,
-    total: Option<u64>,
-    logs: Arc<Mutex<Vec<String>>>,
-    video_id: Option<String>,
-    thumbnail_url: Option<String>,
-    collection_db_id: Option<i64>,
-}
-
-impl ProgressEmitter {
-    fn emit(&self, status: DownloadStatus, error: Option<String>) {
-        // Terminal failures never cross the AppError->ErrorResponse boundary (they
-        // are emitted as events from a background task), so log them here or they
-        // would leave no trace in the persistent log / Diagnostics page.
-        let error_kind = match (&status, &error) {
-            (DownloadStatus::Failed, Some(message)) => {
-                tracing::warn!(id = %self.id, video_id = ?self.video_id, error = %message, "download_failed");
-                Some("download".to_string())
-            }
-            _ => None,
-        };
-        let _ = self.app.emit(
-            DOWNLOAD_EVENT,
-            DownloadProgress {
-                id: self.id.clone(),
-                title: self.title.clone(),
-                media_kind: self.media_kind,
-                quality_label: self.quality_label.clone(),
-                file_path: self.file_path.clone(),
-                downloaded_bytes: self.downloaded.load(Ordering::Relaxed),
-                total_bytes: self.total,
-                status,
-                error,
-                error_kind,
-                logs: self
-                    .logs
-                    .lock()
-                    .map(|logs| logs.clone())
-                    .unwrap_or_default(),
-                video_id: self.video_id.clone(),
-                thumbnail_url: self.thumbnail_url.clone(),
-                collection_db_id: self.collection_db_id,
-            },
-        );
-    }
-
-    fn log(&self, message: impl Into<String>) {
-        if let Ok(mut logs) = self.logs.lock() {
-            logs.push(message.into());
-            if logs.len() > 100 {
-                logs.remove(0);
-            }
-        }
-    }
-
-    fn emit_downloading(&self) {
-        let current = self.downloaded.load(Ordering::Relaxed);
-        let previous = self.last_emitted.load(Ordering::Relaxed);
-        if current.saturating_sub(previous) < PROGRESS_EMIT_BYTES {
-            return;
-        }
-        if self
-            .last_emitted
-            .compare_exchange(previous, current, Ordering::Relaxed, Ordering::Relaxed)
-            .is_ok()
-        {
-            self.emit(DownloadStatus::Downloading, None);
-        }
+fn planned_extension(request: &StartDownloadRequest) -> &'static str {
+    match (&request.video, &request.music) {
+        (Some(video), _) => match video.container {
+            DownloadContainer::Mp4 => "mp4",
+            DownloadContainer::Mkv => "mkv",
+        },
+        (None, Some(music)) if !music.prefer_aac => "webm",
+        _ => "m4a",
     }
 }
 
 #[tauri::command]
-#[allow(clippy::too_many_lines)] // Coordinates validation, path reservation, and task startup.
 pub async fn start_download(
-    request: StartDownloadRequest,
+    mut request: StartDownloadRequest,
     app: AppHandle,
     manager: State<'_, DownloadManager>,
-    streaming_manager: State<'_, StreamingManager>,
     pool: State<'_, SqlitePool>,
 ) -> Result<DownloadStarted, ErrorResponse> {
-    let download_manager = manager.inner().clone();
-    let streaming_manager = streaming_manager.inner().clone();
-    let pool = pool.inner().clone();
-    let StartDownloadRequest {
-        source_url,
-        adaptive,
-        title,
-        media_kind,
-        quality_label,
-        destination_directory,
-        parallel,
-        threads,
-        video_id,
-        thumbnail_url,
-        author,
-        duration_seconds,
-        collection_db_id,
-        loudness_db,
-        tags: request_tags,
-    } = request;
-    let title = title.trim().to_string();
-
-    if title.is_empty() || title.chars().count() > 240 {
+    validate_video_id(&request.video_id).map_err(ErrorResponse::from)?;
+    request.title = request.title.trim().to_string();
+    if request.title.is_empty() || request.title.chars().count() > 240 {
         return Err(ErrorResponse::from(AppError::Validation(
             "Download title must contain between 1 and 240 characters".into(),
         )));
     }
-
-    let (session, adaptive_sessions, extension) = match (source_url.as_deref(), adaptive) {
-        (Some(source_url), None) => {
-            let session = resolve_remote_stream_session(source_url, &streaming_manager)?;
-            let extension = extension_for_content_type(&session.content_type, media_kind);
-            (Some(session), None, extension)
-        }
-        (None, Some(adaptive)) if matches!(media_kind, DownloadMediaKind::Video) => {
-            let video_session =
-                resolve_remote_stream_session(&adaptive.video_url, &streaming_manager)?;
-            let audio_session =
-                resolve_remote_stream_session(&adaptive.audio_url, &streaming_manager)?;
-            let extension = match adaptive.container {
-                DownloadContainer::Mp4 => "mp4",
-                DownloadContainer::Mkv => "mkv",
-            };
-            (
+    let valid_choice = matches!(
+        (&request.video, &request.music, request.media_kind),
+        (Some(_), None, DownloadMediaKind::Video)
+            | (
                 None,
-                Some(AdaptiveSources {
-                    video_session,
-                    audio_session,
-                    output_container: adaptive.container,
-                    video_mime_type: adaptive.video_mime_type,
-                    audio_mime_type: adaptive.audio_mime_type,
-                }),
-                extension,
+                Some(_),
+                DownloadMediaKind::Music | DownloadMediaKind::Audio
             )
-        }
-        _ => {
-            return Err(ErrorResponse::from(AppError::Validation(
-                "Provide either one media stream or one adaptive video/audio pair".into(),
-            )));
-        }
-    };
+    );
+    if !valid_choice {
+        return Err(ErrorResponse::from(AppError::Validation(
+            "A download needs one video quality or one music quality".into(),
+        )));
+    }
 
-    let directory =
-        resolve_destination_directory(&app, media_kind, destination_directory.as_deref())?;
+    let directory = naming::resolve_destination_directory(
+        &app,
+        request.media_kind,
+        request.destination_directory.as_deref(),
+    )?;
     tokio::fs::create_dir_all(&directory)
         .await
         .map_err(|error| download_error(format!("Could not create download folder: {error}")))?;
 
-    let tags = request_download_tags(
-        request_tags,
-        media_kind,
-        video_id.as_deref(),
-        &title,
-        author.as_deref(),
-        thumbnail_url.as_deref(),
+    let tags = job::request_download_tags(&request);
+    let stem = naming::download_file_stem(
+        &request.title,
+        request.media_kind,
+        &tags,
+        request.collection_db_id.is_some(),
     );
-    let stem = download_file_stem(&title, media_kind, &tags, collection_db_id.is_some());
     let id = Uuid::new_v4().to_string();
-    let control = Arc::new(DownloadControl::default());
     let file_path = {
-        let mut registry = download_manager
-            .registry
-            .lock()
-            .map_err(|_| download_error("Download manager is unavailable"))?;
-        let path = available_file_path(&directory, &stem, extension, &registry.reserved_paths);
-        registry.reserved_paths.insert(path.clone());
-        registry.controls.insert(id.clone(), control.clone());
-        path
+        let registry = manager.lock()?;
+        naming::available_file_path(
+            &directory,
+            &stem,
+            planned_extension(&request),
+            &registry.reserved_paths,
+        )
     };
-    let temp_path = directory.join(format!(".{id}.flowpart"));
-    let adaptive_context = adaptive_sessions.map(|sources| AdaptiveDownloadContext {
-        video_session: sources.video_session,
-        audio_session: sources.audio_session,
-        container: sources.output_container,
-        video_container: container_from_mime(&sources.video_mime_type),
-        audio_container: container_from_mime(&sources.audio_mime_type),
-        video_mime_type: sources.video_mime_type,
-        audio_mime_type: sources.audio_mime_type,
-        video_path: directory.join(format!(".{id}.video.flowpart")),
-        audio_path: directory.join(format!(".{id}.audio.flowpart")),
-    });
-
-    if let Err(error) = tokio::fs::File::create(&temp_path).await {
-        let mut registry = download_manager
-            .registry
-            .lock()
-            .map_err(|_| download_error("Download manager is unavailable"))?;
-        registry.controls.remove(&id);
-        registry.reserved_paths.remove(&file_path);
-        return Err(download_error(format!(
-            "Could not create a temporary download file: {error}"
-        )));
+    let control = manager
+        .register(&id, &file_path)
+        .ok_or_else(|| download_error("Download manager is unavailable"))?;
+    let request_json = serde_json::to_string(&request)
+        .map_err(|error| download_error(format!("Could not save the download: {error}")))?;
+    if let Err(error) = crate::db::download_jobs::insert_job(
+        &pool,
+        &id,
+        &request_json,
+        &file_path.to_string_lossy(),
+    )
+    .await
+    {
+        manager.finish(&id, &file_path);
+        return Err(ErrorResponse::from(error));
     }
 
-    let context = DownloadContext {
+    let job = DownloadJob {
         id: id.clone(),
-        title: title.clone(),
-        media_kind,
-        quality_label,
+        request,
         file_path: file_path.clone(),
-        temp_path,
-        session,
-        adaptive: adaptive_context,
-        parallel,
-        threads: threads.clamp(1, 8),
-        control,
-        video_id,
-        thumbnail_url,
-        author,
-        duration_seconds,
-        collection_db_id,
-        loudness_db: loudness_db.filter(|db| db.is_finite()),
         tags,
-        pool,
+        control,
     };
-    let _ = app.emit(
-        DOWNLOAD_EVENT,
-        DownloadProgress {
-            id: id.clone(),
-            title,
-            media_kind,
-            quality_label: context.quality_label.clone(),
-            file_path: file_path.to_string_lossy().into_owned(),
-            downloaded_bytes: 0,
-            total_bytes: None,
-            status: DownloadStatus::Queued,
-            error: None,
-            error_kind: None,
-            logs: vec!["Download added to the queue".to_string()],
-            video_id: context.video_id.clone(),
-            thumbnail_url: context.thumbnail_url.clone(),
-            collection_db_id: context.collection_db_id,
-        },
-    );
-    let app_for_task = app.clone();
-    let manager_for_task = download_manager;
-    let task_id = id.clone();
-    let reserved_path = file_path.clone();
-    let permits = manager_for_task.permits.clone();
-    tauri::async_runtime::spawn(async move {
-        match permits.acquire_owned().await {
-            Ok(_permit) => run_download(context, app_for_task).await,
-            Err(error) => emit_terminal_error(
-                &context,
-                &app_for_task,
-                format!("Download queue stopped unexpectedly: {error}"),
-                "internal",
-            ),
-        }
-        if let Ok(mut registry) = manager_for_task.registry.lock() {
-            registry.controls.remove(&task_id);
-            registry.reserved_paths.remove(&reserved_path);
-        }
-    });
-
+    ProgressEmitter::new(&app, &manager, job.progress_info()).emit(DownloadStatus::Queued, None);
+    spawn_job(&app, &manager, &pool, job);
     Ok(DownloadStarted {
         id,
         file_path: file_path.to_string_lossy().into_owned(),
     })
 }
 
+fn spawn_job(app: &AppHandle, manager: &DownloadManager, pool: &SqlitePool, job: DownloadJob) {
+    tauri::async_runtime::spawn(job::run_job(
+        app.clone(),
+        manager.clone(),
+        pool.clone(),
+        job,
+    ));
+}
+
+/// Rebuilds a job from its saved row. `None` when another task is already running it.
+fn job_from_row(manager: &DownloadManager, row: &DownloadJobRow) -> Option<DownloadJob> {
+    let request: StartDownloadRequest = serde_json::from_str(&row.request_json).ok()?;
+    let file_path = PathBuf::from(&row.file_path);
+    let control = manager.register(&row.id, &file_path)?;
+    Some(DownloadJob {
+        id: row.id.clone(),
+        tags: job::request_download_tags(&request),
+        request,
+        file_path,
+        control,
+    })
+}
+
 #[tauri::command]
-#[allow(clippy::needless_pass_by_value)] // Tauri commands deserialize owned arguments and State.
-pub fn cancel_download(
+pub async fn cancel_download(
     id: String,
     manager: State<'_, DownloadManager>,
+    pool: State<'_, SqlitePool>,
 ) -> Result<bool, ErrorResponse> {
-    let registry = manager
-        .registry
-        .lock()
-        .map_err(|_| download_error("Download manager is unavailable"))?;
-    let Some(control) = registry.controls.get(&id) else {
+    if let Some(control) = manager.control(&id) {
+        control.cancel();
+        return Ok(true);
+    }
+    discard_idle_job(&id, &manager, &pool).await
+}
+
+/// Removes a failed download that is not running: its partial files, its row and
+/// its card.
+#[tauri::command]
+pub async fn discard_download(
+    id: String,
+    manager: State<'_, DownloadManager>,
+    pool: State<'_, SqlitePool>,
+) -> Result<bool, ErrorResponse> {
+    cancel_download(id, manager, pool).await
+}
+
+async fn discard_idle_job(
+    id: &str,
+    manager: &DownloadManager,
+    pool: &SqlitePool,
+) -> Result<bool, ErrorResponse> {
+    manager.forget(id);
+    let Some(row) = crate::db::download_jobs::job(pool, id)
+        .await
+        .map_err(ErrorResponse::from)?
+    else {
         return Ok(false);
     };
-    control.cancel();
+    if let Some(job) = job_from_row(manager, &row) {
+        job::remove_partial_files(&job).await;
+        manager.finish(&job.id, &job.file_path);
+    }
+    crate::db::download_jobs::delete_job(pool, id)
+        .await
+        .map_err(ErrorResponse::from)?;
     Ok(true)
 }
 
 #[tauri::command]
-#[allow(clippy::needless_pass_by_value)]
-pub fn pause_download(
+pub async fn pause_download(
     id: String,
     manager: State<'_, DownloadManager>,
+    pool: State<'_, SqlitePool>,
 ) -> Result<bool, ErrorResponse> {
-    set_download_paused(&id, true, manager.inner())
+    set_download_paused(&id, true, &manager, &pool).await
 }
 
 #[tauri::command]
-#[allow(clippy::needless_pass_by_value)]
-pub fn resume_download(
+pub async fn resume_download(
     id: String,
     manager: State<'_, DownloadManager>,
+    pool: State<'_, SqlitePool>,
 ) -> Result<bool, ErrorResponse> {
-    set_download_paused(&id, false, manager.inner())
+    set_download_paused(&id, false, &manager, &pool).await
 }
 
-fn set_download_paused(
+async fn set_download_paused(
     id: &str,
     paused: bool,
     manager: &DownloadManager,
+    pool: &SqlitePool,
 ) -> Result<bool, ErrorResponse> {
-    let registry = manager
-        .registry
-        .lock()
-        .map_err(|_| download_error("Download manager is unavailable"))?;
-    let Some(control) = registry.controls.get(id) else {
+    let Some(control) = manager.control(id) else {
         return Ok(false);
     };
     control.set_paused(paused);
+    let status = if paused { "paused" } else { "queued" };
+    crate::db::download_jobs::set_status(pool, id, status, None)
+        .await
+        .map_err(ErrorResponse::from)?;
     Ok(true)
 }
 
-fn resolve_stream_session(
-    source_url: &str,
-    streaming_manager: &StreamingManager,
-) -> Result<StreamSession, ErrorResponse> {
-    let url = reqwest::Url::parse(source_url)
-        .map_err(|_| download_error("Invalid download stream URL"))?;
-    if url.scheme() != "http"
-        || url.host_str() != Some("127.0.0.1")
-        || url.port() != Some(streaming_manager.get_port())
-    {
-        return Err(download_error(
-            "Downloads must use a stream resolved by Flow",
-        ));
-    }
-
-    let token = url
-        .path()
-        .strip_prefix("/stream/")
-        .filter(|token| !token.is_empty() && !token.contains('/'))
-        .ok_or_else(|| download_error("Invalid Flow stream token"))?;
-
-    streaming_manager
-        .get_session(token)
-        .ok_or_else(|| download_error("The media stream expired; reopen the download dialog"))
-}
-
-fn resolve_remote_stream_session(
-    source_url: &str,
-    streaming_manager: &StreamingManager,
-) -> Result<StreamSession, ErrorResponse> {
-    let session = resolve_stream_session(source_url, streaming_manager)?;
-    if !matches!(session.kind, StreamSessionKind::Remote { .. }) {
-        return Err(ErrorResponse::from(AppError::Validation(
-            "Only remote media streams can be downloaded".into(),
-        )));
-    }
-    Ok(session)
-}
-
-fn resolve_destination_directory(
-    app: &AppHandle,
-    media_kind: DownloadMediaKind,
-    custom_directory: Option<&str>,
-) -> Result<PathBuf, ErrorResponse> {
-    if let Some(custom) = custom_directory
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        let path = PathBuf::from(custom);
-        if !path.is_absolute() {
-            return Err(download_error(
-                "The custom download folder must be absolute",
-            ));
-        }
-        return Ok(path);
-    }
-
-    let base = match media_kind {
-        DownloadMediaKind::Video => app.path().video_dir(),
-        DownloadMediaKind::Music | DownloadMediaKind::Audio => app.path().audio_dir(),
-    }
-    .or_else(|_| app.path().download_dir())
-    .map_err(|error| download_error(format!("Could not resolve a download folder: {error}")))?;
-
-    Ok(base.join("Flow"))
-}
-
-fn extension_for_content_type(content_type: &str, media_kind: DownloadMediaKind) -> &'static str {
-    let content_type = content_type.to_ascii_lowercase();
-    if content_type.contains("webm") {
-        "webm"
-    } else if content_type.contains("ogg") || content_type.contains("opus") {
-        "ogg"
-    } else if content_type.contains("mpeg") && !matches!(media_kind, DownloadMediaKind::Video) {
-        "mp3"
-    } else if matches!(media_kind, DownloadMediaKind::Video) {
-        "mp4"
-    } else {
-        "m4a"
-    }
-}
-
-/// The file name (without extension): `Artist - Title` for a song, `NN - Title`
-/// inside an album, the title for everything else.
-fn download_file_stem(
-    title: &str,
-    media_kind: DownloadMediaKind,
-    tags: &tags::DownloadTags,
-    in_collection: bool,
-) -> String {
-    if matches!(media_kind, DownloadMediaKind::Video) {
-        return sanitize_file_stem(title);
-    }
-    if in_collection && let Some(number) = tags.track_number.filter(|number| *number > 0) {
-        let width = tags
-            .track_total
-            .unwrap_or(number)
-            .max(number)
-            .to_string()
-            .len()
-            .max(2);
-        return sanitize_file_stem(&format!("{number:0width$} - {title}"));
-    }
-    match tags.display_artist() {
-        Some(artist) if !title.to_lowercase().contains(&artist.to_lowercase()) => {
-            sanitize_file_stem(&format!("{artist} - {title}"))
-        }
-        _ => sanitize_file_stem(title),
-    }
-}
-
-/// Longest file-name stem in bytes: 255 minus room for " (99).ext" and a margin.
-const MAX_STEM_BYTES: usize = 239;
-
-fn sanitize_file_stem(title: &str) -> String {
-    let replaced = title
-        .chars()
-        .map(|character| match character {
-            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' | '\0'..='\u{1f}' | '\u{7f}' => {
-                '_'
-            }
-            _ => character,
-        })
-        .collect::<String>();
-    let mut value = replaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    value = value
-        .trim_start_matches(['.', ' '])
-        .trim_end_matches(['.', ' '])
-        .to_string();
-    if value.is_empty() {
-        value = "Flow download".to_string();
-    }
-    let reserved = [
-        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
-        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-    ];
-    if reserved.iter().any(|name| value.eq_ignore_ascii_case(name)) {
-        value.insert(0, '_');
-    }
-    let mut stem: String = value.chars().take(180).collect();
-    if stem.len() > MAX_STEM_BYTES {
-        let mut end = MAX_STEM_BYTES;
-        while !stem.is_char_boundary(end) {
-            end -= 1;
-        }
-        stem.truncate(end);
-        stem = stem.trim_end_matches(['.', ' ']).to_string();
-    }
-    stem
-}
-
-fn available_file_path(
-    directory: &Path,
-    stem: &str,
-    extension: &str,
-    reserved_paths: &HashSet<PathBuf>,
-) -> PathBuf {
-    let first = directory.join(format!("{stem}.{extension}"));
-    if !first.exists() && !reserved_paths.contains(&first) {
-        return first;
-    }
-    for index in 2..10_000 {
-        let candidate = directory.join(format!("{stem} ({index}).{extension}"));
-        if !candidate.exists() && !reserved_paths.contains(&candidate) {
-            return candidate;
-        }
-    }
-    directory.join(format!("{stem}-{}.{}", Uuid::new_v4(), extension))
-}
-
-async fn run_download(mut context: DownloadContext, app: AppHandle) {
-    if context.control.cancelled.load(Ordering::Relaxed) {
-        emit_cancelled(&context, &app);
-        return;
-    }
-    if let Some(adaptive) = context.adaptive.take() {
-        run_adaptive_download(context, adaptive, app).await;
-        return;
-    }
-
-    let Some(session) = context.session.as_ref() else {
-        emit_terminal_error(
-            &context,
-            &app,
-            "The download has no media stream".into(),
-            "streaming",
-        );
-        return;
-    };
-    let remote_url = match &session.kind {
-        StreamSessionKind::Remote { remote_url } => remote_url.clone(),
-        StreamSessionKind::Inline { .. } | StreamSessionKind::Local { .. } => return,
-    };
-    let client = match build_download_client(&session.user_agent) {
-        Ok(client) => client,
-        Err(error) => {
-            emit_terminal_error(
-                &context,
-                &app,
-                format!("Could not initialize download: {error}"),
-                "network",
-            );
-            return;
-        }
-    };
-
-    let total = probe_content_length(&client, &remote_url).await;
-    let downloaded = Arc::new(AtomicU64::new(0));
-    let emitter = ProgressEmitter {
-        app: app.clone(),
-        id: context.id.clone(),
-        title: context.title.clone(),
-        media_kind: context.media_kind,
-        quality_label: context.quality_label.clone(),
-        file_path: context.file_path.to_string_lossy().into_owned(),
-        downloaded: downloaded.clone(),
-        last_emitted: Arc::new(AtomicU64::new(0)),
-        total,
-        logs: Arc::new(Mutex::new(vec!["Download started".to_string()])),
-        video_id: context.video_id.clone(),
-        thumbnail_url: context.thumbnail_url.clone(),
-        collection_db_id: context.collection_db_id,
-    };
-    emitter.emit(DownloadStatus::Queued, None);
-    let metadata_task = spawn_metadata(&app, &context, &emitter);
-
-    let result = download_to_temp(&client, &remote_url, &context, &emitter, total, true).await;
-
-    match result {
-        Ok(()) if context.control.cancelled.load(Ordering::Relaxed) => {
-            cleanup_partial_files(&context).await;
-            emitter.emit(DownloadStatus::Cancelled, None);
-        }
-        Ok(()) => {
-            let prepared = metadata_task.await.unwrap_or_default();
-            let source = match package_song(&context, &prepared, &emitter).await {
-                Ok(source) => source,
-                Err(error) => {
-                    cleanup_partial_files(&context).await;
-                    emitter.emit(DownloadStatus::Failed, Some(error));
-                    return;
-                }
-            };
-            let cover_in_file = source != context.temp_path && prepared.cover.is_some();
-            if let Err(error) = finalize_download_file(&source, &context.file_path).await {
-                let _ = tokio::fs::remove_file(&source).await;
-                cleanup_partial_files(&context).await;
-                emitter.emit(DownloadStatus::Failed, Some(error));
-                return;
-            }
-            if let Ok(metadata) = tokio::fs::metadata(&context.file_path).await {
-                downloaded.store(metadata.len(), Ordering::Relaxed);
-            }
-            finish_download(&app, &context, &prepared, cover_in_file, None, &emitter).await;
-            emitter.log("Download completed successfully");
-            emitter.emit(DownloadStatus::Completed, None);
-        }
-        Err(error) => {
-            emitter.log(format!("Download failed: {error}"));
-            cleanup_partial_files(&context).await;
-            let status = if context.control.cancelled.load(Ordering::Relaxed) {
-                DownloadStatus::Cancelled
-            } else {
-                DownloadStatus::Failed
-            };
-            emitter.emit(
-                status,
-                (!matches!(status, DownloadStatus::Cancelled)).then_some(error),
-            );
-        }
-    }
-}
-
-#[allow(clippy::too_many_lines)] // Coordinates two downloads, muxing, cancellation, cleanup, and terminal events.
-async fn run_adaptive_download(
-    context: DownloadContext,
-    adaptive: AdaptiveDownloadContext,
+/// Starts a failed download again; it continues from its partial files.
+#[tauri::command]
+pub async fn retry_download(
+    id: String,
     app: AppHandle,
-) {
-    let video_url = match &adaptive.video_session.kind {
-        StreamSessionKind::Remote { remote_url } => remote_url.clone(),
-        StreamSessionKind::Inline { .. } | StreamSessionKind::Local { .. } => return,
-    };
-    let audio_url = match &adaptive.audio_session.kind {
-        StreamSessionKind::Remote { remote_url } => remote_url.clone(),
-        StreamSessionKind::Inline { .. } | StreamSessionKind::Local { .. } => return,
-    };
-    let video_client = match build_download_client(&adaptive.video_session.user_agent) {
-        Ok(client) => client,
-        Err(error) => {
-            emit_terminal_error(
-                &context,
-                &app,
-                format!("Could not initialize video download: {error}"),
-                "network",
-            );
-            return;
-        }
-    };
-    let audio_client = match build_download_client(&adaptive.audio_session.user_agent) {
-        Ok(client) => client,
-        Err(error) => {
-            emit_terminal_error(
-                &context,
-                &app,
-                format!("Could not initialize audio download: {error}"),
-                "network",
-            );
-            return;
-        }
-    };
-    let (video_total, audio_total) = tokio::join!(
-        probe_content_length(&video_client, &video_url),
-        probe_content_length(&audio_client, &audio_url)
-    );
-    let total = match (video_total, audio_total) {
-        (Some(video), Some(audio)) => video.checked_add(audio),
-        _ => None,
-    };
-    let downloaded = Arc::new(AtomicU64::new(0));
-    let emitter = ProgressEmitter {
-        app: app.clone(),
-        id: context.id.clone(),
-        title: context.title.clone(),
-        media_kind: context.media_kind,
-        quality_label: context.quality_label.clone(),
-        file_path: context.file_path.to_string_lossy().into_owned(),
-        downloaded: downloaded.clone(),
-        last_emitted: Arc::new(AtomicU64::new(0)),
-        total,
-        logs: Arc::new(Mutex::new(vec![
-            "Adaptive video and audio download started".to_string(),
-        ])),
-        video_id: context.video_id.clone(),
-        thumbnail_url: context.thumbnail_url.clone(),
-        collection_db_id: context.collection_db_id,
-    };
-    emitter.emit(DownloadStatus::Downloading, None);
-    let metadata_task = spawn_metadata(&app, &context, &emitter);
-
-    let video_context = child_download_context(&context, adaptive.video_path.clone());
-    let audio_context = child_download_context(&context, adaptive.audio_path.clone());
-    let video_emitter = emitter.clone();
-    let audio_emitter = emitter.clone();
-    let video_client_for_task = video_client.clone();
-    let audio_client_for_task = audio_client.clone();
-    let video_url_for_task = video_url.clone();
-    let audio_url_for_task = audio_url.clone();
-    let video_task = tokio::spawn(async move {
-        download_to_temp(
-            &video_client_for_task,
-            &video_url_for_task,
-            &video_context,
-            &video_emitter,
-            video_total,
-            false,
-        )
+    manager: State<'_, DownloadManager>,
+    pool: State<'_, SqlitePool>,
+) -> Result<bool, ErrorResponse> {
+    let Some(row) = crate::db::download_jobs::job(&pool, &id)
         .await
-    });
-    let audio_task = tokio::spawn(async move {
-        download_to_temp(
-            &audio_client_for_task,
-            &audio_url_for_task,
-            &audio_context,
-            &audio_emitter,
-            audio_total,
-            false,
-        )
+        .map_err(ErrorResponse::from)?
+    else {
+        return Ok(false);
+    };
+    let Some(job) = job_from_row(&manager, &row) else {
+        return Ok(false);
+    };
+    crate::db::download_jobs::set_status(&pool, &id, "queued", None)
         .await
-    });
-    let result = match tokio::try_join!(video_task, audio_task) {
-        Ok((video, audio)) => video.and(audio),
-        Err(error) => Err(format!(
-            "Adaptive download worker stopped unexpectedly: {error}"
-        )),
-    };
-    if let Err(error) = result {
-        emitter.log(format!("Adaptive track download failed: {error}"));
-        cleanup_adaptive_files(&context, &adaptive).await;
-        let status = if context.control.cancelled.load(Ordering::Relaxed) {
-            DownloadStatus::Cancelled
-        } else {
-            DownloadStatus::Failed
-        };
-        emitter.emit(
-            status,
-            (!matches!(status, DownloadStatus::Cancelled)).then_some(error),
-        );
-        return;
-    }
-    if context.control.cancelled.load(Ordering::Relaxed) {
-        cleanup_adaptive_files(&context, &adaptive).await;
-        emitter.emit(DownloadStatus::Cancelled, None);
-        return;
-    }
+        .map_err(ErrorResponse::from)?;
+    ProgressEmitter::new(&app, &manager, job.progress_info()).emit(DownloadStatus::Queued, None);
+    spawn_job(&app, &manager, &pool, job);
+    Ok(true)
+}
 
-    if let Err(error) = ensure_valid_adaptive_sources(
-        &context,
-        &adaptive,
-        &video_client,
-        &video_url,
-        video_total,
-        &audio_client,
-        &audio_url,
-        audio_total,
-        &emitter,
-    )
-    .await
-    {
-        emitter.log(format!(
-            "Adaptive source integrity recovery failed: {error}"
-        ));
-        emitter.log(format!(
-            "Forensic staging files preserved: video=`{}`, audio=`{}`",
-            adaptive.video_path.display(),
-            adaptive.audio_path.display()
-        ));
-        emitter.emit(DownloadStatus::Failed, Some(error));
-        return;
-    }
-
-    emitter.emit(DownloadStatus::Muxing, None);
-    let prepared = metadata_task.await.unwrap_or_default();
-    let metadata = muxer::EmbeddedMetadata {
-        tags: prepared.tags.clone(),
-        cover: prepared.cover.clone(),
-        chapters: prepared
-            .chapters
-            .iter()
-            .map(|chapter| muxer::EmbeddedChapter {
-                start_ms: chapter.start_seconds.saturating_mul(1000),
-                title: chapter.title.clone(),
-            })
-            .collect(),
-    };
-    emitter.log("Track downloads completed; starting native muxer");
-    let video_path = adaptive.video_path.clone();
-    let audio_path = adaptive.audio_path.clone();
-    let output_path = context.temp_path.clone();
-    let control = context.control.clone();
-    let output_container = adaptive.container;
-    let video_container = adaptive.video_container;
-    let audio_container = adaptive.audio_container;
-    let video_mime_type = adaptive.video_mime_type.clone();
-    let audio_mime_type = adaptive.audio_mime_type.clone();
-    let expectation = muxer::validate::OutputExpectation {
-        video: true,
-        audio: true,
-        duration_seconds: context
-            .duration_seconds
-            .map(|seconds| f64::from(u32::try_from(seconds).unwrap_or(u32::MAX))),
-    };
-    let mux_result = tokio::task::spawn_blocking(move || {
-        muxer::mux_adaptive_tracks(
-            output_container,
-            muxer::TrackInput {
-                path: &video_path,
-                container: video_container,
-                mime_type: &video_mime_type,
-            },
-            muxer::TrackInput {
-                path: &audio_path,
-                container: audio_container,
-                mime_type: &audio_mime_type,
-            },
-            &output_path,
-            Some(&metadata),
-            &control.cancelled,
-        )?;
-        match output_container {
-            DownloadContainer::Mp4 => muxer::validate::validate_mp4(&output_path, expectation),
-            DownloadContainer::Mkv => muxer::validate::validate_matroska(&output_path, expectation),
-        }
-    })
-    .await
-    .map_err(|error| format!("Media muxer stopped unexpectedly: {error}"))
-    .and_then(|result| result);
-
-    match mux_result {
-        Ok(()) if context.control.cancelled.load(Ordering::Relaxed) => {
-            cleanup_adaptive_files(&context, &adaptive).await;
-            emitter.emit(DownloadStatus::Cancelled, None);
-        }
-        Ok(()) => {
-            let _ = tokio::fs::remove_file(&adaptive.video_path).await;
-            let _ = tokio::fs::remove_file(&adaptive.audio_path).await;
-            if let Err(error) = finalize_download_file(&context.temp_path, &context.file_path).await
-            {
-                cleanup_adaptive_files(&context, &adaptive).await;
-                emitter.emit(DownloadStatus::Failed, Some(error));
-                return;
-            }
-            let video_codec = video_codec_name(&adaptive.video_mime_type);
-            let cover_in_file = prepared.cover.is_some();
-            finish_download(
-                &app,
-                &context,
-                &prepared,
-                cover_in_file,
-                Some(video_codec),
-                &emitter,
-            )
-            .await;
-            emitter.log("Download and native mux completed successfully");
-            emitter.emit(DownloadStatus::Completed, None);
-        }
-        Err(error) => {
-            emitter.log(format!("Muxer failed: {error}"));
-            let _ = tokio::fs::remove_file(&context.temp_path).await;
-            emitter.log(format!(
-                "Forensic staging files preserved after mux failure: video=`{}`, audio=`{}`",
-                adaptive.video_path.display(),
-                adaptive.audio_path.display()
-            ));
-            let status = if context.control.cancelled.load(Ordering::Relaxed) {
-                DownloadStatus::Cancelled
-            } else {
-                DownloadStatus::Failed
+/// Picks up downloads a previous run left unfinished (once per run) and returns the
+/// state of every unfinished download, so a window can show them straight away.
+#[tauri::command]
+pub async fn restore_downloads(
+    app: AppHandle,
+    manager: State<'_, DownloadManager>,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<DownloadProgress>, ErrorResponse> {
+    if !manager.restored.swap(true, Ordering::Relaxed) {
+        let rows = crate::db::download_jobs::list_jobs(&pool)
+            .await
+            .map_err(ErrorResponse::from)?;
+        remove_orphaned_partials(&app, &pool, &rows).await;
+        for row in &rows {
+            let Some(job) = job_from_row(&manager, row) else {
+                continue;
             };
-            emitter.emit(
-                status,
-                (!matches!(status, DownloadStatus::Cancelled)).then_some(error),
-            );
-        }
-    }
-}
-
-/// Turns a downloaded AAC song into a progressive, tagged M4A and returns the file to
-/// finalize. Other audio is kept as it arrived. A song whose length is wrong fails
-/// the download; a remux error keeps the original stream, which still plays.
-async fn package_song(
-    context: &DownloadContext,
-    prepared: &metadata::PreparedMetadata,
-    emitter: &ProgressEmitter,
-) -> Result<PathBuf, String> {
-    let is_m4a = context
-        .file_path
-        .extension()
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("m4a"));
-    if matches!(context.media_kind, DownloadMediaKind::Video) || !is_m4a {
-        return Ok(context.temp_path.clone());
-    }
-    emitter.emit(DownloadStatus::Muxing, None);
-    let input = context.temp_path.clone();
-    let output = PathBuf::from(format!("{}.m4a", context.temp_path.to_string_lossy()));
-    let metadata = muxer::EmbeddedMetadata {
-        tags: prepared.tags.clone(),
-        cover: prepared.cover.clone(),
-        chapters: Vec::new(),
-    };
-    let expectation = muxer::validate::OutputExpectation {
-        video: false,
-        audio: true,
-        duration_seconds: context
-            .duration_seconds
-            .map(|seconds| f64::from(u32::try_from(seconds).unwrap_or(u32::MAX))),
-    };
-    let control = context.control.clone();
-    let staged = output.clone();
-    let remuxed = tokio::task::spawn_blocking(move || {
-        muxer::remux_audio_to_m4a(&input, &staged, Some(&metadata), &control.cancelled)
-    })
-    .await
-    .map_err(|error| format!("Audio packaging stopped unexpectedly: {error}"))
-    .and_then(|result| result);
-    if let Err(error) = remuxed {
-        let _ = tokio::fs::remove_file(&output).await;
-        emitter.log(format!("Kept the song as it was downloaded: {error}"));
-        return Ok(context.temp_path.clone());
-    }
-    let checked = output.clone();
-    let valid =
-        tokio::task::spawn_blocking(move || muxer::validate::validate_mp4(&checked, expectation))
-            .await
-            .map_err(|error| format!("The song check stopped unexpectedly: {error}"))
-            .and_then(|result| result);
-    if let Err(error) = valid {
-        let _ = tokio::fs::remove_file(&output).await;
-        return Err(error);
-    }
-    let _ = tokio::fs::remove_file(&context.temp_path).await;
-    Ok(output)
-}
-
-fn child_download_context(context: &DownloadContext, temp_path: PathBuf) -> DownloadContext {
-    DownloadContext {
-        id: context.id.clone(),
-        title: context.title.clone(),
-        media_kind: context.media_kind,
-        quality_label: context.quality_label.clone(),
-        file_path: context.file_path.clone(),
-        temp_path,
-        session: None,
-        adaptive: None,
-        parallel: context.parallel,
-        threads: context.threads,
-        control: context.control.clone(),
-        video_id: None,
-        thumbnail_url: None,
-        author: None,
-        duration_seconds: None,
-        collection_db_id: None,
-        loudness_db: None,
-        tags: tags::DownloadTags::default(),
-        pool: context.pool.clone(),
-    }
-}
-
-fn build_download_client(user_agent: &str) -> Result<Client, reqwest::Error> {
-    Client::builder()
-        .connect_timeout(Duration::from_secs(15))
-        .read_timeout(Duration::from_secs(30))
-        .no_gzip()
-        .no_brotli()
-        .no_deflate()
-        .user_agent(user_agent)
-        .build()
-}
-
-async fn download_to_temp(
-    client: &Client,
-    remote_url: &str,
-    context: &DownloadContext,
-    emitter: &ProgressEmitter,
-    expected_total: Option<u64>,
-    reset_progress_on_fallback: bool,
-) -> Result<(), String> {
-    let use_parallel = context.parallel
-        && context.threads > 1
-        && expected_total.is_some_and(|bytes| bytes >= MIN_PARALLEL_FILE_BYTES);
-    let before = emitter.downloaded.load(Ordering::Relaxed);
-    let mut result = if use_parallel {
-        download_parallel(
-            client,
-            remote_url,
-            context,
-            emitter,
-            expected_total.unwrap_or(0),
-        )
-        .await
-    } else {
-        download_sequential(client, remote_url, context, emitter, expected_total).await
-    };
-    if result.is_err()
-        && use_parallel
-        && reset_progress_on_fallback
-        && !context.control.cancelled.load(Ordering::Relaxed)
-    {
-        cleanup_partial_files(context).await;
-        let after = emitter.downloaded.load(Ordering::Relaxed);
-        emitter
-            .downloaded
-            .fetch_sub(after.saturating_sub(before), Ordering::Relaxed);
-        if reset_progress_on_fallback {
-            emitter.last_emitted.store(before, Ordering::Relaxed);
-        }
-        result = download_sequential(client, remote_url, context, emitter, expected_total).await;
-    }
-    result
-}
-
-async fn probe_content_length(client: &Client, url: &str) -> Option<u64> {
-    if let Ok(response) = client.head(url).send().await
-        && response.status().is_success()
-        && let Some(length) = response
-            .headers()
-            .get(CONTENT_LENGTH)
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u64>().ok())
-    {
-        return Some(length);
-    }
-
-    let response = client
-        .get(url)
-        .header(RANGE, "bytes=0-0")
-        .send()
-        .await
-        .ok()?;
-    response
-        .headers()
-        .get(CONTENT_RANGE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.rsplit('/').next())
-        .and_then(|value| value.parse::<u64>().ok())
-}
-
-async fn download_sequential(
-    client: &Client,
-    url: &str,
-    context: &DownloadContext,
-    emitter: &ProgressEmitter,
-    expected_total: Option<u64>,
-) -> Result<(), String> {
-    emitter.emit(DownloadStatus::Downloading, None);
-    download_range_resumable(
-        client,
-        url,
-        &context.temp_path,
-        0,
-        expected_total.map(|total| total.saturating_sub(1)),
-        &context.control,
-        emitter,
-        "media stream",
-    )
-    .await
-}
-
-async fn download_parallel(
-    client: &Client,
-    url: &str,
-    context: &DownloadContext,
-    emitter: &ProgressEmitter,
-    total: u64,
-) -> Result<(), String> {
-    let worker_count = u64::from(context.threads).min(total.max(1));
-    let chunk_size = total.div_ceil(worker_count);
-    let mut tasks = tokio::task::JoinSet::new();
-    emitter.emit(DownloadStatus::Downloading, None);
-
-    for worker in 0..worker_count {
-        let start = worker * chunk_size;
-        if start >= total {
-            break;
-        }
-        let end = ((worker + 1) * chunk_size).min(total) - 1;
-        let part_path = part_path(&context.temp_path, worker);
-        let client = client.clone();
-        let url = url.to_string();
-        let control = context.control.clone();
-        let progress = emitter.clone();
-        tasks.spawn(async move {
-            download_range_resumable(
-                &client,
-                &url,
-                &part_path,
-                start,
-                Some(end),
-                &control,
-                &progress,
-                &format!("fragment {}", worker + 1),
-            )
-            .await
-        });
-    }
-
-    while let Some(result) = tasks.join_next().await {
-        result.map_err(|error| format!("Download worker stopped unexpectedly: {error}"))??;
-    }
-
-    let mut output = tokio::fs::File::create(&context.temp_path)
-        .await
-        .map_err(|error| format!("Could not assemble the download: {error}"))?;
-    let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
-    for worker in 0..worker_count {
-        let path = part_path(&context.temp_path, worker);
-        let mut part = tokio::fs::File::open(&path)
-            .await
-            .map_err(|error| format!("Could not read a download fragment: {error}"))?;
-        loop {
-            let read = part
-                .read(&mut buffer)
-                .await
-                .map_err(|error| format!("Could not read a download fragment: {error}"))?;
-            if read == 0 {
-                break;
-            }
-            output
-                .write_all(&buffer[..read])
-                .await
-                .map_err(|error| format!("Could not assemble the download: {error}"))?;
-        }
-        let _ = tokio::fs::remove_file(path).await;
-    }
-    output
-        .flush()
-        .await
-        .map_err(|error| format!("Could not flush the assembled download: {error}"))
-}
-
-#[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_lines)]
-async fn download_range_resumable(
-    client: &Client,
-    url: &str,
-    path: &Path,
-    range_start: u64,
-    range_end: Option<u64>,
-    control: &DownloadControl,
-    emitter: &ProgressEmitter,
-    label: &str,
-) -> Result<(), String> {
-    let expected_length = range_end.map(|end| end.saturating_sub(range_start) + 1);
-    let mut existing = tokio::fs::metadata(path)
-        .await
-        .map(|metadata| metadata.len())
-        .unwrap_or(0);
-    if expected_length.is_some_and(|expected| existing > expected) {
-        return Err(format!(
-            "The partial {label} is larger than its expected range ({existing} bytes)"
-        ));
-    }
-    if expected_length == Some(existing) {
-        return Ok(());
-    }
-    if existing > 0 {
-        emitter.downloaded.fetch_add(existing, Ordering::Relaxed);
-        emitter.log(format!(
-            "Resuming {label} from byte {}",
-            range_start + existing
-        ));
-    }
-
-    let mut retry = 0_u32;
-    loop {
-        wait_if_paused(control, emitter).await?;
-        let request_start = range_start + existing;
-        let range = range_end.map_or_else(
-            || format!("bytes={request_start}-"),
-            |end| format!("bytes={request_start}-{end}"),
-        );
-        let response = match client.get(url).header(RANGE, range.clone()).send().await {
-            Ok(response) => response,
-            Err(error) => {
-                retry = retry.saturating_add(1);
-                wait_for_retry(
-                    control,
-                    emitter,
-                    retry,
-                    format!("{label} request failed at byte {request_start}: {error}"),
-                )
-                .await?;
-                continue;
-            }
-        };
-
-        let status = response.status();
-        if status != StatusCode::PARTIAL_CONTENT
-            && !(status.is_success() && request_start == 0 && range_end.is_none())
-        {
-            if is_retryable_status(status) {
-                retry = retry.saturating_add(1);
-                wait_for_retry(
-                    control,
-                    emitter,
-                    retry,
-                    format!("{label} server returned HTTP {status} for {range}"),
-                )
-                .await?;
-                continue;
-            }
-            return Err(format!(
-                "{label} cannot resume: media server returned HTTP {status} for {range}"
-            ));
-        }
-        if status == StatusCode::PARTIAL_CONTENT {
-            let content_range = response
-                .headers()
-                .get(CONTENT_RANGE)
-                .and_then(|value| value.to_str().ok())
-                .ok_or_else(|| {
-                    format!("{label} response omitted Content-Range for requested {range}")
-                })?;
-            let (actual_start, actual_end, _) = parse_content_range(content_range).ok_or_else(|| {
-                format!(
-                    "{label} response returned malformed Content-Range `{content_range}` for requested {range}"
-                )
-            })?;
-            if actual_start != request_start
-                || range_end.is_some_and(|requested_end| actual_end > requested_end)
-            {
-                return Err(format!(
-                    "{label} response range mismatch: requested {range}, received `{content_range}`"
-                ));
-            }
-            if retry > 0 || request_start == 0 {
-                emitter.log(format!(
-                    "{label} accepted {range}; server returned `{content_range}`"
-                ));
-            }
-        }
-
-        let mut output = tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
-            .await
-            .map_err(|error| format!("Could not open partial {label}: {error}"))?;
-        let mut stream = response.bytes_stream();
-        let mut interrupted = None;
-        while let Some(chunk) = stream.next().await {
-            wait_if_paused(control, emitter).await?;
-            match chunk {
-                Ok(chunk) => {
-                    if existing == 0 {
-                        emitter.log(format!("{label} first bytes: {}", hex_preview(&chunk, 16)));
+            let emitter = ProgressEmitter::new(&app, &manager, job.progress_info());
+            match row.status.as_str() {
+                "failed" => {
+                    manager.finish(&job.id, &job.file_path);
+                    emitter.emit(DownloadStatus::Failed, row.error.clone());
+                }
+                status => {
+                    if status == "paused" {
+                        job.control.set_paused(true);
                     }
-                    output
-                        .write_all(&chunk)
-                        .await
-                        .map_err(|error| format!("Could not write {label}: {error}"))?;
-                    let chunk_len = chunk.len() as u64;
-                    existing = existing.saturating_add(chunk_len);
-                    emitter.downloaded.fetch_add(chunk_len, Ordering::Relaxed);
-                    emitter.emit_downloading();
-                }
-                Err(error) => {
-                    interrupted = Some(format!(
-                        "{label} stream interrupted at byte {}: {error}",
-                        range_start + existing
-                    ));
-                    break;
+                    emitter.emit(DownloadStatus::Queued, None);
+                    spawn_job(&app, &manager, &pool, job);
                 }
             }
         }
-        output
-            .flush()
-            .await
-            .map_err(|error| format!("Could not flush partial {label}: {error}"))?;
-
-        if expected_length.is_none() && interrupted.is_none() {
-            return Ok(());
-        }
-        if expected_length == Some(existing) {
-            return Ok(());
-        }
-        if expected_length.is_some_and(|expected| existing > expected) {
-            return Err(format!(
-                "{label} exceeded its expected size ({existing} bytes received)"
-            ));
-        }
-
-        retry = retry.saturating_add(1);
-        wait_for_retry(
-            control,
-            emitter,
-            retry,
-            interrupted.unwrap_or_else(|| {
-                format!(
-                    "{label} ended early at byte {}; reconnecting",
-                    range_start + existing
-                )
-            }),
-        )
-        .await?;
     }
+    Ok(manager.snapshots())
 }
 
-fn parse_content_range(value: &str) -> Option<(u64, u64, Option<u64>)> {
-    let value = value.strip_prefix("bytes ")?;
-    let (range, total) = value.split_once('/')?;
-    let (start, end) = range.split_once('-')?;
-    Some((
-        start.parse().ok()?,
-        end.parse().ok()?,
-        (total != "*").then(|| total.parse().ok()).flatten(),
-    ))
-}
-
-fn hex_preview(bytes: &[u8], limit: usize) -> String {
-    bytes
+/// Deletes hidden partial files that no saved download owns, left by a crash or by
+/// downloads from before jobs were saved.
+async fn remove_orphaned_partials(app: &AppHandle, pool: &SqlitePool, rows: &[DownloadJobRow]) {
+    let owned: HashSet<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+    let mut folders: HashSet<PathBuf> = rows
         .iter()
-        .take(limit)
-        .map(|byte| format!("{byte:02X}"))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn ensure_valid_adaptive_sources(
-    context: &DownloadContext,
-    adaptive: &AdaptiveDownloadContext,
-    video_client: &Client,
-    video_url: &str,
-    video_total: Option<u64>,
-    audio_client: &Client,
-    audio_url: &str,
-    audio_total: Option<u64>,
-    emitter: &ProgressEmitter,
-) -> Result<(), String> {
-    ensure_valid_adaptive_source(
-        context,
-        adaptive.video_container,
-        "video track",
-        &adaptive.video_path,
-        video_client,
-        video_url,
-        video_total,
-        emitter,
-    )
-    .await?;
-    ensure_valid_adaptive_source(
-        context,
-        adaptive.audio_container,
-        "audio track",
-        &adaptive.audio_path,
-        audio_client,
-        audio_url,
-        audio_total,
-        emitter,
-    )
-    .await
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn ensure_valid_adaptive_source(
-    context: &DownloadContext,
-    container: DownloadContainer,
-    label: &str,
-    path: &Path,
-    client: &Client,
-    url: &str,
-    total: Option<u64>,
-    emitter: &ProgressEmitter,
-) -> Result<(), String> {
-    let initial = inspect_media_file(path, container).await?;
-    emitter.log(format!(
-        "{label} integrity check: path=`{}`, size={} bytes, prefix={}, expected={}",
-        path.display(),
-        initial.size,
-        hex_preview(&initial.prefix, 16),
-        expected_container_signature(container)
-    ));
-    if initial.valid {
-        return Ok(());
-    }
-
-    emitter.log(format!(
-        "{label} failed its container signature check; deleting the staged file and retrying once with a single clean ranged stream"
-    ));
-    emitter.downloaded.fetch_sub(
-        initial.size.min(emitter.downloaded.load(Ordering::Relaxed)),
-        Ordering::Relaxed,
-    );
-    let repair_context = DownloadContext {
-        id: context.id.clone(),
-        title: context.title.clone(),
-        media_kind: context.media_kind,
-        quality_label: context.quality_label.clone(),
-        file_path: context.file_path.clone(),
-        temp_path: path.to_path_buf(),
-        session: None,
-        adaptive: None,
-        parallel: false,
-        threads: 1,
-        control: context.control.clone(),
-        video_id: None,
-        thumbnail_url: None,
-        author: None,
-        duration_seconds: None,
-        collection_db_id: None,
-        loudness_db: None,
-        tags: tags::DownloadTags::default(),
-        pool: context.pool.clone(),
-    };
-    cleanup_partial_files(&repair_context).await;
-    download_sequential(client, url, &repair_context, emitter, total).await?;
-
-    let repaired = inspect_media_file(path, container).await?;
-    emitter.log(format!(
-        "{label} recovery check: path=`{}`, size={} bytes, prefix={}, expected={}",
-        path.display(),
-        repaired.size,
-        hex_preview(&repaired.prefix, 16),
-        expected_container_signature(container)
-    ));
-    if repaired.valid {
-        Ok(())
-    } else {
-        Err(format!(
-            "{label} is not a valid {} source after a clean retry. File: `{}`. Size: {} bytes. Expected leading signature: {}. Actual first bytes: {}. The media origin returned bytes that do not match the selected container.",
-            match container {
-                DownloadContainer::Mp4 => "MP4",
-                DownloadContainer::Mkv => "WebM/Matroska",
-            },
-            path.display(),
-            repaired.size,
-            expected_container_signature(container),
-            hex_preview(&repaired.prefix, 32),
-        ))
-    }
-}
-
-async fn inspect_media_file(
-    path: &Path,
-    container: DownloadContainer,
-) -> Result<MediaFileInspection, String> {
-    let mut file = tokio::fs::File::open(path).await.map_err(|error| {
-        format!(
-            "Could not inspect staged media `{}`: {error}",
-            path.display()
-        )
-    })?;
-    let size = file
-        .metadata()
-        .await
-        .map_err(|error| {
-            format!(
-                "Could not read staged media size `{}`: {error}",
-                path.display()
-            )
-        })?
-        .len();
-    let mut prefix = vec![0_u8; 32];
-    let read = file.read(&mut prefix).await.map_err(|error| {
-        format!(
-            "Could not read staged media header `{}`: {error}",
-            path.display()
-        )
-    })?;
-    prefix.truncate(read);
-    let valid = has_container_signature(&prefix, container);
-    Ok(MediaFileInspection {
-        size,
-        prefix,
-        valid,
-    })
-}
-
-fn has_container_signature(prefix: &[u8], container: DownloadContainer) -> bool {
-    match container {
-        DownloadContainer::Mkv => prefix.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]),
-        DownloadContainer::Mp4 => prefix.get(4..8).is_some_and(|box_type| box_type == b"ftyp"),
-    }
-}
-
-fn expected_container_signature(container: DownloadContainer) -> &'static str {
-    match container {
-        DownloadContainer::Mkv => "1A 45 DF A3 (EBML)",
-        DownloadContainer::Mp4 => "bytes 4..8 = 66 74 79 70 (`ftyp`)",
-    }
-}
-
-fn is_retryable_status(status: StatusCode) -> bool {
-    status == StatusCode::REQUEST_TIMEOUT
-        || status == StatusCode::TOO_MANY_REQUESTS
-        || status.is_server_error()
-}
-
-async fn wait_if_paused(
-    control: &DownloadControl,
-    emitter: &ProgressEmitter,
-) -> Result<(), String> {
-    let mut announced = false;
-    while control.paused.load(Ordering::Relaxed) {
-        if control.cancelled.load(Ordering::Relaxed) {
-            return Err("Download cancelled".into());
+        .filter_map(|row| Path::new(&row.file_path).parent().map(Path::to_path_buf))
+        .collect();
+    for kind in [DownloadMediaKind::Video, DownloadMediaKind::Music] {
+        if let Ok(folder) = naming::resolve_destination_directory(app, kind, None) {
+            folders.insert(folder);
         }
-        if !announced {
-            emitter.log("Download paused by the user");
-            emitter.emit(DownloadStatus::Paused, None);
-            announced = true;
+    }
+    for key in ["download_location", "music_download_location"] {
+        if let Ok(Some(custom)) = crate::db::settings::get_setting(pool, key).await
+            && !custom.trim().is_empty()
+        {
+            folders.insert(PathBuf::from(custom.trim()));
         }
-        control.changed.notified().await;
     }
-    if control.cancelled.load(Ordering::Relaxed) {
-        return Err("Download cancelled".into());
+    if let Ok(collections) = crate::db::download_collections::list_collections(pool).await {
+        folders.extend(
+            collections
+                .into_iter()
+                .map(|collection| PathBuf::from(collection.folder_path)),
+        );
     }
-    if announced {
-        emitter.log("Download resumed");
-        emitter.emit(DownloadStatus::Downloading, None);
-    }
-    Ok(())
-}
-
-async fn wait_for_retry(
-    control: &DownloadControl,
-    emitter: &ProgressEmitter,
-    attempt: u32,
-    reason: String,
-) -> Result<(), String> {
-    let shift = attempt.saturating_sub(1).min(5);
-    let delay = (1_u64 << shift).min(RETRY_DELAY_MAX_SECS);
-    emitter.log(format!("{reason}; retrying in {delay}s"));
-    emitter.emit(DownloadStatus::WaitingForNetwork, Some(reason));
-    tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(delay)) => {}
-        () = control.changed.notified() => {}
-    }
-    wait_if_paused(control, emitter).await?;
-    emitter.emit(DownloadStatus::Downloading, None);
-    Ok(())
-}
-
-fn part_path(temp_path: &Path, worker: u64) -> PathBuf {
-    PathBuf::from(format!("{}.part{worker}", temp_path.to_string_lossy()))
-}
-
-async fn finalize_download_file(temp_path: &Path, file_path: &Path) -> Result<(), String> {
-    const MAX_ATTEMPTS: u32 = 12;
-    let mut attempt = 1;
-    loop {
-        match tokio::fs::rename(temp_path, file_path).await {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                if attempt >= MAX_ATTEMPTS || !is_transient_file_lock(&error) {
-                    return Err(format!("Could not finish the download: {error}"));
-                }
-                tokio::time::sleep(Duration::from_millis(150 * u64::from(attempt))).await;
-                attempt += 1;
+    for folder in folders {
+        let Ok(mut entries) = tokio::fs::read_dir(&folder).await else {
+            continue;
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if is_orphaned_partial(&name, &owned) {
+                let _ = tokio::fs::remove_file(entry.path()).await;
             }
         }
     }
 }
 
-fn is_transient_file_lock(error: &std::io::Error) -> bool {
-    // Windows: 32 = ERROR_SHARING_VIOLATION, 5 = ERROR_ACCESS_DENIED (a scanner holds the file).
-    matches!(error.raw_os_error(), Some(5 | 32))
-}
-
-/// The tags a request starts with: what the caller sent, plus the kind, id, title and
-/// channel the request itself names.
-fn request_download_tags(
-    sent: Option<tags::DownloadTags>,
-    media_kind: DownloadMediaKind,
-    video_id: Option<&str>,
-    title: &str,
-    author: Option<&str>,
-    thumbnail_url: Option<&str>,
-) -> tags::DownloadTags {
-    let mut tags = sent.unwrap_or_default();
-    tags.kind = match media_kind {
-        DownloadMediaKind::Video => tags::TagKind::Video,
-        DownloadMediaKind::Music | DownloadMediaKind::Audio => tags::TagKind::Music,
-    };
-    tags.video_id = video_id.unwrap_or_default().to_string();
-    tags.title = title.to_string();
-    if tags.channel_name.is_none() {
-        tags.channel_name = author
-            .map(ToOwned::to_owned)
-            .filter(|name| !name.is_empty());
+fn is_orphaned_partial(name: &str, owned: &HashSet<&str>) -> bool {
+    if !name.contains(".flowpart") {
+        return false;
     }
-    if tags.thumbnail_url.is_none() {
-        tags.thumbnail_url = thumbnail_url.map(ToOwned::to_owned);
+    if name.contains(".retag.flowpart") {
+        return true;
     }
-    tags.lyrics = None;
-    tags
-}
-
-/// Starts gathering tags and the cover alongside the transfer.
-fn spawn_metadata(
-    app: &AppHandle,
-    context: &DownloadContext,
-    emitter: &ProgressEmitter,
-) -> tokio::task::JoinHandle<metadata::PreparedMetadata> {
-    tokio::spawn(metadata::prepare(
-        app.clone(),
-        context.tags.clone(),
-        context.thumbnail_url.clone(),
-        emitter.clone(),
-    ))
-}
-
-/// Everything after the file has its final name: Flow's cover copy, companion
-/// files and the library row.
-async fn finish_download(
-    app: &AppHandle,
-    context: &DownloadContext,
-    prepared: &metadata::PreparedMetadata,
-    cover_in_file: bool,
-    video_codec: Option<&str>,
-    emitter: &ProgressEmitter,
-) {
-    let cover_path = match prepared.cover.as_deref() {
-        Some(cover) => sidecars::store_cover(app, &context.id, cover).await,
-        None => None,
+    let Some(rest) = name.strip_prefix('.') else {
+        return false;
     };
-    sidecars::write_sidecars(
-        &sidecars::FinishedFile {
-            media_kind: context.media_kind,
-            media_path: &context.file_path,
-            video_id: context.video_id.as_deref(),
-            cover: prepared.cover.as_deref(),
-            cover_in_file,
-        },
-        emitter,
-        &context.pool,
-    )
-    .await;
-    record_completed_download(context, prepared, cover_path, video_codec).await;
+    let id = rest.split('.').next().unwrap_or_default();
+    Uuid::parse_str(id).is_ok() && !owned.contains(id)
 }
 
-/// Persists a finished download into the library table so it shows on the Downloads
-/// page and marks its source as downloaded. Best-effort — a DB error never fails it.
-async fn record_completed_download(
-    context: &DownloadContext,
-    prepared: &metadata::PreparedMetadata,
-    cover_path: Option<String>,
-    video_codec: Option<&str>,
-) {
-    let file_size_bytes = tokio::fs::metadata(&context.file_path)
-        .await
-        .ok()
-        .and_then(|metadata| i64::try_from(metadata.len()).ok());
-    let media_kind = match context.media_kind {
-        DownloadMediaKind::Video => "video",
-        DownloadMediaKind::Music => "music",
-        DownloadMediaKind::Audio => "audio",
-    };
-    let tags = &prepared.tags;
-    let record = DownloadRecord {
-        id: None,
-        video_id: context.video_id.clone(),
-        title: context.title.clone(),
-        author: tags.display_artist().or_else(|| context.author.clone()),
-        media_kind: media_kind.to_string(),
-        file_path: context.file_path.to_string_lossy().into_owned(),
-        thumbnail_url: context.thumbnail_url.clone(),
-        duration_seconds: context
-            .duration_seconds
-            .and_then(|seconds| i64::try_from(seconds).ok()),
-        quality_label: Some(context.quality_label.clone()),
-        file_size_bytes,
-        collection_db_id: context.collection_db_id,
-        loudness_db: context.loudness_db,
-        created_at: String::new(),
-        cover_path,
-        artists_json: (!tags.artists.is_empty())
-            .then(|| serde_json::to_string(&tags.artists).ok())
-            .flatten(),
-        album: tags.album.clone(),
-        album_id: tags.album_id.clone(),
-        album_artist: tags.album_artist.clone(),
-        track_number: tags.track_number.map(i64::from),
-        track_total: tags.track_total.map(i64::from),
-        release_date: tags.release_date.clone(),
-        description: tags.description.clone(),
-        channel_id: tags.channel_id.clone(),
-        container: context
-            .file_path
-            .extension()
-            .map(|extension| extension.to_string_lossy().to_ascii_lowercase()),
-        video_codec: video_codec.map(ToOwned::to_owned),
-        chapters_json: (!prepared.chapters.is_empty())
-            .then(|| serde_json::to_string(&prepared.chapters).ok())
-            .flatten(),
-        sponsorblock_json: None,
-    };
-    if let Err(error) = crate::db::downloads::upsert_download(&context.pool, &record).await {
-        tracing::warn!(%error, "Failed to record completed download in the library");
-    }
-}
-
-async fn cleanup_partial_files(context: &DownloadContext) {
-    let _ = tokio::fs::remove_file(&context.temp_path).await;
-    for worker in 0..u64::from(context.threads) {
-        let _ = tokio::fs::remove_file(part_path(&context.temp_path, worker)).await;
-    }
-}
-
-async fn cleanup_adaptive_files(context: &DownloadContext, adaptive: &AdaptiveDownloadContext) {
-    cleanup_partial_files(context).await;
-    let video_context = child_download_context(context, adaptive.video_path.clone());
-    let audio_context = child_download_context(context, adaptive.audio_path.clone());
-    cleanup_partial_files(&video_context).await;
-    cleanup_partial_files(&audio_context).await;
-}
-
-fn emit_terminal_error(context: &DownloadContext, app: &AppHandle, error: String, kind: &str) {
-    tracing::warn!(id = %context.id, video_id = ?context.video_id, kind, error = %error, "download_failed");
-    let _ = app.emit(
-        DOWNLOAD_EVENT,
-        DownloadProgress {
-            id: context.id.clone(),
-            title: context.title.clone(),
-            media_kind: context.media_kind,
-            quality_label: context.quality_label.clone(),
-            file_path: context.file_path.to_string_lossy().into_owned(),
-            downloaded_bytes: 0,
-            total_bytes: None,
-            status: DownloadStatus::Failed,
-            error: Some(error.clone()),
-            error_kind: Some(kind.to_string()),
-            logs: vec![error],
-            video_id: context.video_id.clone(),
-            thumbnail_url: context.thumbnail_url.clone(),
-            collection_db_id: context.collection_db_id,
-        },
-    );
-}
-
-fn emit_cancelled(context: &DownloadContext, app: &AppHandle) {
-    let _ = app.emit(
-        DOWNLOAD_EVENT,
-        DownloadProgress {
-            id: context.id.clone(),
-            title: context.title.clone(),
-            media_kind: context.media_kind,
-            quality_label: context.quality_label.clone(),
-            file_path: context.file_path.to_string_lossy().into_owned(),
-            downloaded_bytes: 0,
-            total_bytes: None,
-            status: DownloadStatus::Cancelled,
-            error: None,
-            error_kind: None,
-            logs: vec!["Download cancelled while queued".to_string()],
-            video_id: context.video_id.clone(),
-            thumbnail_url: context.thumbnail_url.clone(),
-            collection_db_id: context.collection_db_id,
-        },
-    );
+#[tauri::command]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)] // Tauri commands deserialize owned arguments and State.
+pub fn get_download_logs(id: String, manager: State<'_, DownloadManager>) -> Vec<String> {
+    manager
+        .logs_for(&id)
+        .lock()
+        .map(|logs| logs.clone())
+        .unwrap_or_default()
 }
 
 fn download_error(message: impl Into<String>) -> ErrorResponse {
@@ -2097,11 +721,11 @@ pub async fn get_offline_stream(
 ) -> Result<OfflineStreamInfo, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
-    let record = crate::db::downloads::download_by_video_id(&pool, &video_id)
-        .await
-        .map_err(ErrorResponse::from)?
-        .filter(|record| media_kind_matches(&record.media_kind, media_kind))
-        .ok_or_else(|| download_error("No saved download for this item"))?;
+    let record =
+        crate::db::downloads::download_by_video_id(&pool, &video_id, media_kind_names(media_kind))
+            .await
+            .map_err(ErrorResponse::from)?
+            .ok_or_else(|| download_error("No saved download for this item"))?;
 
     if tokio::fs::metadata(&record.file_path).await.is_err() {
         return Err(download_error("The downloaded file is no longer available"));
@@ -2147,12 +771,11 @@ pub async fn get_offline_stream(
     })
 }
 
-fn media_kind_matches(stored: &str, requested: DownloadMediaKind) -> bool {
+/// The stored kinds that can play on a surface: a song is not a video.
+fn media_kind_names(requested: DownloadMediaKind) -> &'static [&'static str] {
     match requested {
-        DownloadMediaKind::Video => stored == "video",
-        DownloadMediaKind::Music | DownloadMediaKind::Audio => {
-            stored == "music" || stored == "audio"
-        }
+        DownloadMediaKind::Video => &["video"],
+        DownloadMediaKind::Music | DownloadMediaKind::Audio => &["music", "audio"],
     }
 }
 
@@ -2204,6 +827,9 @@ pub struct CreateCollectionRequest {
     pub author: Option<String>,
     pub thumbnail_url: Option<String>,
     pub total_count: i64,
+    /// The user's video or music download folder, when they chose one.
+    #[serde(default)]
+    pub destination_directory: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2267,14 +893,18 @@ pub async fn create_download_collection(
         });
     }
 
-    let base = resolve_destination_directory(&app, media_kind, None)?;
+    let base = naming::resolve_destination_directory(
+        &app,
+        media_kind,
+        request.destination_directory.as_deref(),
+    )?;
     let folder_name = match (&request.kind[..], request.author.as_deref()) {
         ("album", Some(artist)) if !artist.trim().is_empty() => {
             format!("{} - {title}", artist.trim())
         }
         _ => title.clone(),
     };
-    let folder = base.join(sanitize_file_stem(&folder_name));
+    let folder = base.join(naming::sanitize_file_stem(&folder_name));
     tokio::fs::create_dir_all(&folder)
         .await
         .map_err(|error| download_error(format!("Could not create collection folder: {error}")))?;
@@ -2370,102 +1000,40 @@ async fn remove_download_files(record: &DownloadRecord) {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        DownloadContainer, DownloadMediaKind, download_file_stem, extension_for_content_type,
-        has_container_signature, parse_content_range, sanitize_file_stem,
-    };
+    use super::{DownloadMediaKind, is_orphaned_partial, offline_content_type};
+    use std::collections::HashSet;
 
     #[test]
-    fn sanitizes_cross_platform_file_names() {
-        assert_eq!(sanitize_file_stem("A/B:C*D?"), "A_B_C_D_");
-        assert_eq!(sanitize_file_stem("CON"), "_CON");
-        assert_eq!(sanitize_file_stem("  title.  "), "title");
-        assert_eq!(sanitize_file_stem("..hidden   name"), "hidden name");
-        let long = "é".repeat(170);
-        let stem = sanitize_file_stem(&long);
-        assert!(stem.len() <= super::MAX_STEM_BYTES);
-        assert!(stem.chars().all(|character| character == 'é'));
-    }
-
-    #[test]
-    fn songs_are_named_by_artist_or_album_position() {
-        let tags = super::tags::DownloadTags {
-            artists: vec!["M83".into()],
-            track_number: Some(2),
-            track_total: Some(22),
-            ..super::tags::DownloadTags::default()
-        };
-        assert_eq!(
-            download_file_stem("Midnight City", DownloadMediaKind::Music, &tags, false),
-            "M83 - Midnight City"
-        );
-        assert_eq!(
-            download_file_stem("Midnight City", DownloadMediaKind::Music, &tags, true),
-            "02 - Midnight City"
-        );
-        assert_eq!(
-            download_file_stem(
-                "M83 - Midnight City",
-                DownloadMediaKind::Music,
-                &tags,
-                false
-            ),
-            "M83 - Midnight City"
-        );
-        assert_eq!(
-            download_file_stem("Midnight City", DownloadMediaKind::Video, &tags, false),
-            "Midnight City"
-        );
-        let long_album = super::tags::DownloadTags {
-            track_number: Some(7),
-            track_total: Some(120),
-            ..super::tags::DownloadTags::default()
-        };
-        assert_eq!(
-            download_file_stem("Song", DownloadMediaKind::Music, &long_album, true),
-            "007 - Song"
-        );
-    }
-
-    #[test]
-    fn preserves_the_source_container() {
-        assert_eq!(
-            extension_for_content_type("audio/webm; codecs=opus", DownloadMediaKind::Music),
-            "webm"
-        );
-        assert_eq!(
-            extension_for_content_type("audio/mp4; codecs=mp4a", DownloadMediaKind::Music),
-            "m4a"
-        );
-        assert_eq!(
-            extension_for_content_type("video/mp4", DownloadMediaKind::Video),
-            "mp4"
-        );
-    }
-
-    #[test]
-    fn parses_and_validates_http_content_ranges() {
-        assert_eq!(
-            parse_content_range("bytes 1048576-2097151/8388608"),
-            Some((1_048_576, 2_097_151, Some(8_388_608)))
-        );
-        assert_eq!(parse_content_range("bytes 0-99/*"), Some((0, 99, None)));
-        assert_eq!(parse_content_range("garbage"), None);
-    }
-
-    #[test]
-    fn recognizes_muxer_input_container_signatures() {
-        assert!(has_container_signature(
-            &[0x1A, 0x45, 0xDF, 0xA3, 0x9F],
-            DownloadContainer::Mkv
+    fn only_unowned_partials_are_orphans() {
+        let owned: HashSet<&str> = ["0b8f8d1e-1c47-4e43-9a4c-2f0f3f6f1a10"]
+            .into_iter()
+            .collect();
+        assert!(!is_orphaned_partial(
+            ".0b8f8d1e-1c47-4e43-9a4c-2f0f3f6f1a10.video.flowpart",
+            &owned
         ));
-        assert!(has_container_signature(
-            &[0, 0, 0, 24, b'f', b't', b'y', b'p'],
-            DownloadContainer::Mp4
+        assert!(is_orphaned_partial(
+            ".5d0c1f73-8b1a-4c4f-8e0f-1b2c3d4e5f60.flowpart.part2",
+            &owned
         ));
-        assert!(!has_container_signature(
-            &[0, 0, 0, 0, 0, 0, 0, 0],
-            DownloadContainer::Mkv
-        ));
+        assert!(is_orphaned_partial("Song.retag.flowpart", &owned));
+        assert!(!is_orphaned_partial(".hidden.flowpart", &owned));
+        assert!(!is_orphaned_partial("Song.m4a", &owned));
+    }
+
+    #[test]
+    fn offline_files_get_a_playable_type() {
+        assert_eq!(
+            offline_content_type("/a/b.m4a", DownloadMediaKind::Music),
+            "audio/mp4"
+        );
+        assert_eq!(
+            offline_content_type("/a/b.mkv", DownloadMediaKind::Video),
+            "video/webm"
+        );
+        assert_eq!(
+            offline_content_type("/a/b.mp4", DownloadMediaKind::Video),
+            "video/mp4"
+        );
     }
 }

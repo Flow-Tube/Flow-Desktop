@@ -127,10 +127,10 @@ pub async fn save_download_lyrics(
     if lrc.trim().is_empty() {
         return Ok(false);
     }
-    let Some(record) = crate::db::downloads::download_by_video_id(&pool, video_id.trim())
-        .await
-        .map_err(ErrorResponse::from)?
-        .filter(|record| record.media_kind == "music" || record.media_kind == "audio")
+    let Some(record) =
+        crate::db::downloads::download_by_video_id(&pool, video_id.trim(), &["music", "audio"])
+            .await
+            .map_err(ErrorResponse::from)?
     else {
         return Ok(false);
     };

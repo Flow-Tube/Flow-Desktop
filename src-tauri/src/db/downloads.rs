@@ -56,29 +56,34 @@ pub struct DownloadRecord {
 // are safe to pass through `AssertSqlSafe`.
 const SELECT_COLUMNS: &str = "id, video_id, title, author, media_kind, file_path, thumbnail_url, duration_seconds, quality_label, file_size_bytes, collection_db_id, loudness_db, created_at, cover_path, artists_json, album, album_id, album_artist, track_number, track_total, release_date, description, channel_id, container, video_codec, chapters_json, sponsorblock_json";
 
-/// Inserts a completed download, replacing any prior entry for the same `video_id`
-/// (re-downloading a video updates its library entry rather than duplicating it).
-pub async fn upsert_download(pool: &SqlitePool, record: &DownloadRecord) -> AppResult<()> {
+/// Inserts a completed download. An earlier download of the same item and kind in
+/// the same place (standalone, or the same collection) is replaced; the replaced
+/// rows are returned so their files can be removed. A video and its song version
+/// are different kinds and are kept side by side.
+pub async fn upsert_download(
+    pool: &SqlitePool,
+    record: &DownloadRecord,
+) -> AppResult<Vec<DownloadRecord>> {
+    let mut replaced = Vec::new();
     if let Some(video_id) = record.video_id.as_deref() {
-        match record.collection_db_id {
-            Some(collection_db_id) => {
-                sqlx::query("DELETE FROM downloads WHERE video_id = ? AND collection_db_id = ?")
-                    .bind(video_id)
-                    .bind(collection_db_id)
-                    .execute(pool)
-                    .await
-                    .map_err(AppError::from)?;
-            }
-            None => {
-                sqlx::query(
-                    "DELETE FROM downloads WHERE video_id = ? AND collection_db_id IS NULL",
-                )
-                .bind(video_id)
-                .execute(pool)
-                .await
-                .map_err(AppError::from)?;
-            }
-        }
+        let scope = "video_id = ? AND media_kind = ? AND collection_db_id IS ?";
+        let select = format!("SELECT {SELECT_COLUMNS} FROM downloads WHERE {scope}");
+        replaced = sqlx::query_as::<_, DownloadRecord>(AssertSqlSafe(select))
+            .bind(video_id)
+            .bind(&record.media_kind)
+            .bind(record.collection_db_id)
+            .fetch_all(pool)
+            .await
+            .map_err(AppError::from)?;
+        sqlx::query(AssertSqlSafe(format!(
+            "DELETE FROM downloads WHERE {scope}"
+        )))
+        .bind(video_id)
+        .bind(&record.media_kind)
+        .bind(record.collection_db_id)
+        .execute(pool)
+        .await
+        .map_err(AppError::from)?;
     }
 
     sqlx::query(
@@ -115,7 +120,7 @@ pub async fn upsert_download(pool: &SqlitePool, record: &DownloadRecord) -> AppR
     .await
     .map_err(AppError::from)?;
 
-    Ok(())
+    Ok(replaced)
 }
 
 pub async fn downloads_for_collection(
@@ -138,18 +143,22 @@ pub async fn list_downloads(pool: &SqlitePool) -> AppResult<Vec<DownloadRecord>>
         .map_err(AppError::from)
 }
 
-/// The saved download for a `video_id`, if any. There is at most one (upsert
-/// replaces by `video_id`); offline playback resolves the file path from it.
+/// The newest saved download of a `video_id` among `kinds`; offline playback
+/// resolves the file path from it.
 pub async fn download_by_video_id(
     pool: &SqlitePool,
     video_id: &str,
+    kinds: &[&str],
 ) -> AppResult<Option<DownloadRecord>> {
-    let query = format!("SELECT {SELECT_COLUMNS} FROM downloads WHERE video_id = ? LIMIT 1");
-    sqlx::query_as::<_, DownloadRecord>(AssertSqlSafe(query))
-        .bind(video_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(AppError::from)
+    let placeholders = vec!["?"; kinds.len().max(1)].join(", ");
+    let query = format!(
+        "SELECT {SELECT_COLUMNS} FROM downloads WHERE video_id = ? AND media_kind IN ({placeholders}) ORDER BY created_at DESC, id DESC LIMIT 1"
+    );
+    let mut statement = sqlx::query_as::<_, DownloadRecord>(AssertSqlSafe(query)).bind(video_id);
+    for kind in kinds {
+        statement = statement.bind(*kind);
+    }
+    statement.fetch_optional(pool).await.map_err(AppError::from)
 }
 
 pub async fn downloads_by_ids(pool: &SqlitePool, ids: &[i64]) -> AppResult<Vec<DownloadRecord>> {
@@ -223,6 +232,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_song_and_its_video_are_kept_side_by_side() {
+        let pool = pool().await;
+        upsert_download(&pool, &song(None)).await.unwrap();
+        let video = DownloadRecord {
+            media_kind: "video".into(),
+            file_path: "/videos/Song.mp4".into(),
+            ..song(None)
+        };
+        assert!(upsert_download(&pool, &video).await.unwrap().is_empty());
+        assert!(
+            download_by_video_id(&pool, "abc123def45", &["music"])
+                .await
+                .unwrap()
+                .is_some()
+        );
+        let again = DownloadRecord {
+            file_path: "/music/Song (2).m4a".into(),
+            ..song(None)
+        };
+        let replaced = upsert_download(&pool, &again).await.unwrap();
+        assert_eq!(replaced.len(), 1);
+        assert_eq!(replaced[0].file_path, "/music/Song.m4a");
+    }
+
+    #[tokio::test]
     async fn keeps_the_tags_a_song_was_saved_with() {
         let pool = pool().await;
         let record = DownloadRecord {
@@ -236,7 +270,7 @@ mod tests {
             ..song(None)
         };
         upsert_download(&pool, &record).await.unwrap();
-        let saved = download_by_video_id(&pool, "abc123def45")
+        let saved = download_by_video_id(&pool, "abc123def45", &["music"])
             .await
             .unwrap()
             .unwrap();
@@ -253,14 +287,14 @@ mod tests {
     async fn a_downloaded_song_keeps_its_loudness() {
         let pool = pool().await;
         upsert_download(&pool, &song(Some(4.5))).await.unwrap();
-        let saved = download_by_video_id(&pool, "abc123def45")
+        let saved = download_by_video_id(&pool, "abc123def45", &["music"])
             .await
             .unwrap()
             .unwrap();
         assert_eq!(saved.loudness_db, Some(4.5));
 
         upsert_download(&pool, &song(None)).await.unwrap();
-        let replaced = download_by_video_id(&pool, "abc123def45")
+        let replaced = download_by_video_id(&pool, "abc123def45", &["music"])
             .await
             .unwrap()
             .unwrap();

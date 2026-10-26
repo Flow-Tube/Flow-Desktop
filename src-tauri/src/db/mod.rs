@@ -4,6 +4,7 @@ use std::time::Duration;
 
 pub mod cache;
 pub mod download_collections;
+pub mod download_jobs;
 pub mod downloads;
 pub mod library;
 pub mod music_content;

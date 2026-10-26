@@ -3,7 +3,11 @@ import { CheckCircle2, Disc3, Download, Heart, Library, ListPlus, MoreVertical, 
 import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
 import { getString } from '../../lib/i18n/index';
 import { useActiveDownloadForVideo, useIsDownloaded } from '../../lib/useDownloads';
-import { downloadAlbum, useCollectionDownloadState } from '../../lib/useCollectionDownloads';
+import {
+  albumCollectionMeta,
+  loadAlbumSongs,
+  useCollectionDownloadState,
+} from '../../lib/useCollectionDownloads';
 import { upgradeAvatarUrl, upgradeMusicImageUrl } from '../../lib/thumbnails';
 import { extractDominantColorFromImage, useDominantColor } from '../../lib/useDominantColor';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
@@ -12,6 +16,7 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
 import { useUiStore } from '../../store/useUiStore';
+import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { youtubeMusicAlbumUrl, youtubeMusicWatchUrl } from '../../lib/youtubeUrl';
@@ -272,6 +277,7 @@ function SquareCard({
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const showToast = useUiStore((s) => s.showToast);
   const albumDownload = useCollectionDownloadState(albumBrowseId ?? undefined, "album");
+  const openCollectionDownload = useDownloadStore((s) => s.openCollection);
   const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 320));
   const wash = useHoverWashColor(washSrc);
   const menuActions: MusicMenuAction[] = isTrack
@@ -328,15 +334,13 @@ function SquareCard({
                 : getString('downloads_download_album'),
             icon:
               albumDownload.isComplete ? <CheckCircle2 size={16} /> : <Download size={16} />,
-            onSelect: async () => {
+            onSelect: () => {
               if (albumDownload.active) return;
-              try {
-                showToast({ variant: 'success', message: getString('download_started') });
-                await downloadAlbum(item);
-              } catch (error) {
-                console.error('Failed to download album', error);
-                showToast({ variant: 'error', message: getString('download_failed') });
-              }
+              openCollectionDownload({
+                kind: 'album',
+                meta: albumCollectionMeta(item),
+                load: () => loadAlbumSongs(item),
+              });
             },
           },
           {

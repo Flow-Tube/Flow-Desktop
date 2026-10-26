@@ -8,9 +8,26 @@ import { pickFolder } from '../../../lib/dialogs';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
+import { autoCodec } from '../../../lib/downloadOptions';
+import { IS_MACOS_RUNTIME } from '../../../lib/platform';
+
+/** Subtitle languages offered for downloads that skip the dialog. */
+const SUBTITLE_LANGUAGES = ['en', 'es', 'fr', 'de', 'pt', 'it', 'nl', 'ru', 'ar', 'hi', 'ja', 'ko', 'zh-Hans', 'tr'];
+
+function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames([navigator.language], { type: 'language' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
 
 export function DownloadsTab() {
-  const [downloadQuality, setDownloadQuality] = usePreference(SETTINGS.DEFAULT_DOWNLOAD_QUALITY, '720p');
+  const [downloadQuality, setDownloadQuality] = usePreference(SETTINGS.DEFAULT_DOWNLOAD_QUALITY, '1080p');
+  const [videoCodec, setVideoCodec] = usePreference(SETTINGS.DOWNLOAD_VIDEO_CODEC, 'Auto');
+  const [musicQuality, setMusicQuality] = usePreference(SETTINGS.DOWNLOAD_MUSIC_QUALITY, 'High');
+  const [subtitleLanguage, setSubtitleLanguage] = usePreference(SETTINGS.DOWNLOAD_SUBTITLE_LANGUAGE, '');
+  const [concurrency, setConcurrency] = useNumberPref(SETTINGS.DOWNLOAD_CONCURRENCY, 3);
   const [parallelDownload, setParallelDownload] = useBoolPref(SETTINGS.PARALLEL_DOWNLOAD_ENABLED, true);
   const [threads, setThreads] = useNumberPref(SETTINGS.DOWNLOAD_THREADS, 3);
   const [downloadPath, setDownloadPath] = usePreference(SETTINGS.DOWNLOAD_LOCATION, '');
@@ -41,9 +58,24 @@ export function DownloadsTab() {
             { value: '720p', label: '720p' }, { value: '480p', label: '480p' }, { value: '360p', label: '360p' },
           ]} />
         </SettingItem>
+        <SettingItem title={getString('settings_download_codec')} description={getString('settings_download_codec_desc')}>
+          <Select value={videoCodec} onChange={setVideoCodec} options={[
+            { value: 'Auto', label: getString('settings_download_codec_auto', autoCodec(IS_MACOS_RUNTIME)) },
+            { value: 'H.264', label: 'H.264' }, { value: 'VP9', label: 'VP9' }, { value: 'AV1', label: 'AV1' },
+          ]} />
+        </SettingItem>
+        <SettingItem title={getString('settings_download_music_quality')} description={getString('settings_download_music_quality_desc')}>
+          <Select value={musicQuality} onChange={setMusicQuality} options={[
+            { value: 'High', label: getString('download_quality_high') },
+            { value: 'Low', label: getString('download_quality_data_saver') },
+          ]} />
+        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_performance')}>
+        <SettingItem title={getString('settings_download_concurrency')} description={getString('settings_download_concurrency_desc')}>
+          <Select value={String(concurrency)} onChange={(v) => setConcurrency(Number(v))} options={[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))} />
+        </SettingItem>
         <SettingItem title={getString('settings_parallel_fragments')} description={getString('settings_parallel_fragments_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.PARALLEL_DOWNLOAD_ENABLED)}>
           <ToggleSwitch checked={parallelDownload} onChange={setParallelDownload} disabled={isSettingDisabledUntilWired(SETTINGS.PARALLEL_DOWNLOAD_ENABLED)} />
         </SettingItem>
@@ -61,6 +93,12 @@ export function DownloadsTab() {
         </SettingItem>
         <SettingItem title={getString('settings_download_lyrics_file')} description={getString('settings_download_lyrics_file_desc')}>
           <ToggleSwitch checked={lyricsFile} onChange={setLyricsFile} />
+        </SettingItem>
+        <SettingItem title={getString('settings_download_subtitles')} description={getString('settings_download_subtitles_desc')}>
+          <Select value={subtitleLanguage} onChange={setSubtitleLanguage} options={[
+            { value: '', label: getString('download_subtitles_off') },
+            ...SUBTITLE_LANGUAGES.map((code) => ({ value: code, label: languageName(code) })),
+          ]} />
         </SettingItem>
       </SettingsGroup>
 

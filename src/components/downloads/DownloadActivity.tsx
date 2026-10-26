@@ -21,6 +21,7 @@ import {
   type DownloadStatus,
 } from "../../lib/api/downloads";
 import { isTauriEnv } from "../../lib/api/env";
+import { useDownloadConcurrency } from "../../lib/useDownloadConcurrency";
 import { getString } from "../../lib/i18n/index";
 import { useDownloadStore } from "../../store/useDownloadStore";
 import { useDownloadsLibraryStore } from "../../store/useDownloadsLibraryStore";
@@ -283,6 +284,7 @@ export function DownloadActivity() {
   const openActivity = useDownloadStore((state) => state.openActivity);
   const runs = useCollectionDownloadStore((state) => state.runs);
   const dismissRun = useCollectionDownloadStore((state) => state.dismissRun);
+  useDownloadConcurrency();
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;

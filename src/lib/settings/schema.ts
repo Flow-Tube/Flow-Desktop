@@ -81,7 +81,6 @@ export const SETTINGS = {
 
   VIDEO_TITLE_MAX_LINES: "video_title_max_lines",
   GRID_COLUMNS: "grid_columns",
-  DOWNLOAD_DIALOG_STYLE: "download_dialog_style",
   HOME_FEED_ENABLED: "home_feed_enabled",
   SHOW_APP_LOGO_ICON: "show_app_logo_icon",
   SHORTS_SHELF_ENABLED: "shorts_shelf_enabled",
@@ -147,6 +146,10 @@ export const SETTINGS = {
   DOWNLOAD_LOCATION: "download_location",
   MUSIC_DOWNLOAD_LOCATION: "music_download_location",
   DOWNLOAD_POSTER_SIDECAR: "download_poster_sidecar",
+  DOWNLOAD_VIDEO_CODEC: "download_video_codec",
+  DOWNLOAD_MUSIC_QUALITY: "download_music_quality",
+  DOWNLOAD_SUBTITLE_LANGUAGE: "download_subtitle_language",
+  DOWNLOAD_CONCURRENCY: "download_concurrency",
   DOWNLOAD_LYRICS_FILE: "download_lyrics_file",
 
   AUTO_BACKUP_FREQUENCY: "auto_backup_frequency",
@@ -309,7 +312,6 @@ export const SETTING_DEFINITIONS = [
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
   num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),
-  str(SETTINGS.DOWNLOAD_DIALOG_STYLE, "content", "FULL", "wired", ["FULL", "COMPACT"]),
   bool(SETTINGS.HOME_FEED_ENABLED, "content", true, "wired"),
   bool(SETTINGS.SHOW_APP_LOGO_ICON, "content", true, "wired"),
   bool(SETTINGS.SHORTS_SHELF_ENABLED, "content", true, "wired"),
@@ -372,7 +374,11 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.PROXY_USERNAME, "network", "", "persisted-only", undefined, "visible", "private"),
   str(SETTINGS.PROXY_PASSWORD, "network", "", "persisted-only", undefined, "visible", "private"),
 
-  str(SETTINGS.DEFAULT_DOWNLOAD_QUALITY, "downloads", "720p", "wired", QUALITY_VALUES),
+  str(SETTINGS.DEFAULT_DOWNLOAD_QUALITY, "downloads", "1080p", "wired", QUALITY_VALUES),
+  str(SETTINGS.DOWNLOAD_VIDEO_CODEC, "downloads", "Auto", "wired", ["Auto", "H.264", "VP9", "AV1"]),
+  str(SETTINGS.DOWNLOAD_MUSIC_QUALITY, "downloads", "High", "wired", ["High", "Low"]),
+  str(SETTINGS.DOWNLOAD_SUBTITLE_LANGUAGE, "downloads", "", "wired"),
+  num(SETTINGS.DOWNLOAD_CONCURRENCY, "downloads", 3, "wired", 1, 5),
   bool(SETTINGS.PARALLEL_DOWNLOAD_ENABLED, "downloads", true, "wired"),
   num(SETTINGS.DOWNLOAD_THREADS, "downloads", 3, "wired", 1, 8),
   str(SETTINGS.DOWNLOAD_LOCATION, "downloads", "", "wired"),

@@ -149,6 +149,8 @@ PLAYER
 - One sleep timer now serves both the video and the music player, with Flow for Android's choices: 10 to 90 minutes, a custom time, End of song, and Quit Flow when it ends, which is remembered.
 - Music fades out over the last 20 seconds before the timer stops it, and the fade keeps going while Flow is in the background.
 - A Sleep timer button can be added next to Like in the full music player from Settings, Player.
+- Videos streamed through SABR no longer stop an hour after they started, and fetching fresh links gives them a new SABR session instead of the expired one.
+- A VPN or network change no longer pushes Flow's most reliable playback client to the back of the line for half an hour. Only a link refused within minutes of being issued counts against its client.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

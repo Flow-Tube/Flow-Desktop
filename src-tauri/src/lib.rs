@@ -51,6 +51,7 @@ use commands::downloads::{
     list_downloads, pause_download, restore_downloads, resume_download, retry_download,
     reveal_download, set_download_concurrency, show_download_notification, start_download,
 };
+use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
@@ -116,8 +117,8 @@ use commands::youtube::{
     get_post_comments, get_related_videos, get_return_youtube_dislike, get_sabr_debug_state,
     get_search_suggestions, get_sponsorblock_segments, get_stream_info,
     get_subscription_rotation_feed, get_subscription_rss_feed, get_video_category,
-    get_video_details, parse_subscription_export, resolve_channel_id, search_videos,
-    stream_subscription_rss_feed, submit_sponsorblock_segment,
+    get_video_details, get_video_metadata, parse_subscription_export, resolve_channel_id,
+    search_videos, stream_subscription_rss_feed, submit_sponsorblock_segment,
 };
 use services::discord_presence::DiscordPresence;
 use services::music_service::MusicService;
@@ -485,6 +486,7 @@ pub fn run() {
             get_related_videos,
             get_more_related_videos,
             get_video_category,
+            get_video_metadata,
             get_stream_info,
             get_channel_details,
             get_channel_page,
@@ -587,6 +589,7 @@ pub fn run() {
             clear_logs,
             logs_dir_path,
             reveal_logs_folder,
+            open_external,
             reset_visitor_identity,
             startup_render_ok,
             get_graphics_mode,

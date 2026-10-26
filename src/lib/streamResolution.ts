@@ -12,9 +12,9 @@ import type { StreamInfo } from "../types/video";
  * left plays immediately.
  */
 
-/** Resolved stream URLs stay valid for hours; the backend proxy session backing
- * them expires after an hour. A window far inside both bounds keeps a reuse from
- * ever handing the player a session the proxy has already dropped. */
+/** Resolved stream URLs and the backend proxy sessions backing them stay valid
+ * for hours. A short window still keeps a reused answer from carrying links that
+ * a network change has since made googlevideo refuse. */
 const STREAM_INFO_TTL_MS = 4 * 60_000;
 
 /** Nothing beyond the handful of videos around the current one is reopened. */

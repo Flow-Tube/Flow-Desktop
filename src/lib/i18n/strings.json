@@ -1599,6 +1599,8 @@
   "player_error_open_browser": "Open in browser",
   "player_error_logs_copied": "Diagnostics copied to clipboard",
   "player_error_logs_copy_failed": "Couldn't copy diagnostics",
+  "open_external_failed": "Couldn't open your browser",
+  "open_external_copy_link": "Copy link",
   "player_error_age_restricted_title": "Age-restricted content",
   "player_error_age_restricted_hint": "This video is only available to signed-in users who have verified their age, so it can't be played anonymously.",
   "player_error_private_title": "Private video",

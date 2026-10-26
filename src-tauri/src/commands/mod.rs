@@ -3,6 +3,7 @@ pub mod db;
 pub mod diagnostics;
 pub mod discord;
 pub mod downloads;
+pub mod external;
 pub mod files;
 pub mod home_feed;
 pub mod lyrics;

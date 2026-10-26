@@ -90,6 +90,7 @@ pub async fn get_download_formats(
 /// never from the caller.
 #[tauri::command]
 pub async fn reveal_download(
+    app: tauri::AppHandle,
     video_id: String,
     media_kind: DownloadMediaKind,
     pool: State<'_, SqlitePool>,
@@ -100,8 +101,9 @@ pub async fn reveal_download(
             .await
             .map_err(ErrorResponse::from)?
             .ok_or_else(|| download_error("No saved download for this item"))?;
-    tauri_plugin_opener::reveal_item_in_dir(&record.file_path)
-        .map_err(|error| download_error(format!("Could not show the file: {error}")))
+    super::external::reveal_file(&app, std::path::Path::new(&record.file_path))
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 /// A system notification for a download that ended while Flow was in the

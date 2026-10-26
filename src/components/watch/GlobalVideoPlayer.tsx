@@ -6,6 +6,7 @@ import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { SETTINGS } from "../../lib/settings/schema";
 import { FlowPlayerCore } from "./FlowPlayerCore";
+import { decideRouteChangePlayerAction } from "../../lib/watchRouteSync";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
 
 type PlayerBounds = {
@@ -45,7 +46,6 @@ export function GlobalVideoPlayer() {
   const navigate = useNavigate();
   const location = useLocation();
   const currentVideo = usePlayerStore((s) => s.currentVideo);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const videoPlayerMode = usePlayerStore((s) => s.videoPlayerMode);
   const isVideoFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
   const isVideoFullscreenTransitioning = usePlayerStore((s) => s.isVideoFullscreenTransitioning);
@@ -167,33 +167,21 @@ export function GlobalVideoPlayer() {
     if (previousPath === location.pathname) return;
     previousPathRef.current = location.pathname;
 
-    if (!currentVideo) return;
-
-    const prevWatchId = watchVideoIdFromPath(previousPath);
-    const nextWatchId = watchVideoIdFromPath(location.pathname);
-
-    if (nextWatchId === currentVideo.id) {
-      if (videoPlayerMode === "pip") expandVideoPlayer();
-      return;
-    }
-
-    if (nextWatchId === null && prevWatchId === currentVideo.id && videoPlayerMode === "watch") {
-      if (isPlaying && autoPipEnabled) {
-        enterVideoPip("auto");
-      } else {
-        dismissVideoPlayer();
-      }
-    }
-  }, [
-    location.pathname,
-    currentVideo,
-    videoPlayerMode,
-    isPlaying,
-    autoPipEnabled,
-    enterVideoPip,
-    expandVideoPlayer,
-    dismissVideoPlayer,
-  ]);
+    // The route renders in a transition, so values from this render can be a
+    // step behind the store; decide from the store as it is now.
+    const player = usePlayerStore.getState();
+    const action = decideRouteChangePlayerAction({
+      previousWatchId: watchVideoIdFromPath(previousPath),
+      nextWatchId: watchVideoIdFromPath(location.pathname),
+      currentVideoId: player.currentVideo?.id ?? null,
+      videoPlayerMode: player.videoPlayerMode,
+      isPlaying: player.isPlaying,
+      autoPipEnabled,
+    });
+    if (action === "expand") expandVideoPlayer();
+    else if (action === "enter-pip") enterVideoPip("auto");
+    else if (action === "dismiss") dismissVideoPlayer();
+  }, [location.pathname, autoPipEnabled, enterVideoPip, expandVideoPlayer, dismissVideoPlayer]);
 
   const expandFromFloating = useCallback(() => {
     if (!currentVideo) return;

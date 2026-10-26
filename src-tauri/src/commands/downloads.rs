@@ -824,11 +824,32 @@ async fn find_artwork_sidecar(media_path: &str) -> Option<(String, String)> {
     None
 }
 
-async fn read_lyrics_sidecar(media_path: &str) -> Option<String> {
+/// The lyrics saved with a song: the `.lrc` beside it (synced, and user-editable),
+/// else the lyrics tag inside the file, which every download since M4A songs carries.
+async fn read_saved_lyrics(media_path: &str) -> Option<String> {
     let path = Path::new(media_path).with_extension("lrc");
-    tokio::fs::read_to_string(path)
+    if let Some(text) = tokio::fs::read_to_string(path)
         .await
         .ok()
+        .filter(|text| !text.trim().is_empty())
+    {
+        return Some(text);
+    }
+    let media_path = PathBuf::from(media_path);
+    tokio::task::spawn_blocking(move || read_embedded_lyrics(&media_path))
+        .await
+        .ok()
+        .flatten()
+}
+
+fn read_embedded_lyrics(path: &Path) -> Option<String> {
+    use lofty::file::TaggedFileExt;
+    use lofty::prelude::ItemKey;
+
+    let tagged = lofty::probe::Probe::open(path).ok()?.read().ok()?;
+    let tag = tagged.primary_tag()?;
+    tag.get_string(ItemKey::Lyrics)
+        .map(str::to_owned)
         .filter(|text| !text.trim().is_empty())
 }
 
@@ -890,7 +911,7 @@ pub async fn get_offline_stream(
         url: format!("http://127.0.0.1:{port}/stream/{token}"),
         content_type,
         artwork_url,
-        lyrics: read_lyrics_sidecar(&record.file_path).await,
+        lyrics: read_saved_lyrics(&record.file_path).await,
         loudness_db: record.loudness_db,
         captions: offline_captions(&streaming_manager, &record),
     })

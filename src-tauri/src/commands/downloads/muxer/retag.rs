@@ -384,6 +384,20 @@ mod tests {
     }
 
     #[test]
+    fn offline_playback_reads_lyrics_from_the_tag() {
+        let path = tagged_song("lyr-read");
+        assert_eq!(
+            crate::commands::downloads::read_embedded_lyrics(&path),
+            None
+        );
+        set_mp4_lyrics(&path, "[00:01.00]Hello\n[00:02.50]World").expect("retags");
+        assert_eq!(
+            crate::commands::downloads::read_embedded_lyrics(&path).as_deref(),
+            Some("[00:01.00]Hello\n[00:02.50]World")
+        );
+    }
+
+    #[test]
     fn short_lyrics_fit_in_the_pad_without_moving_media() {
         let path = tagged_song("retag-fit");
         let before = std::fs::read(&path).expect("reads");

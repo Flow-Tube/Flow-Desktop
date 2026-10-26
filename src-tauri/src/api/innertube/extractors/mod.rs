@@ -1,5 +1,4 @@
 pub mod audio_preference;
-pub mod category;
 pub mod channel;
 pub mod comments;
 pub mod explore;
@@ -12,4 +11,5 @@ pub mod search;
 pub mod shorts;
 pub mod storyboard;
 pub mod subscription;
+pub mod video_metadata;
 pub mod watch_next;

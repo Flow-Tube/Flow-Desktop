@@ -9,7 +9,7 @@ use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoSummary};
+use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoMetadata, VideoSummary};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -365,6 +365,20 @@ pub async fn get_related_videos(
         .map_err(ErrorResponse::from)?;
     recommendation_service.note_related(&video_id, &related.items);
     Ok(related)
+}
+
+/// A listed video's length, views, upload date and category, from one small
+/// request that stays out of the playback caches.
+#[tauri::command]
+pub async fn get_video_metadata(
+    video_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<VideoMetadata, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_video_metadata(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 /// The video's category, for the recommendation engine. A small request of

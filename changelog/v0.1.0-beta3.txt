@@ -106,6 +106,7 @@ INTERFACE
 - Video cards show a verified tick next to channels, YouTube's own badges such as 4K, CC and New, a Members only label, and an Upcoming badge on premieres instead of a waiting count read as views.
 - A Short found in search or a channel opens in the Shorts player, and collaboration videos open the lead channel instead of none. Related cards show channel avatars.
 - A new Content language setting has YouTube write dates, view counts, labels and its translated titles in one of 75 languages. Upload dates are read in that language, so Home still knows how new each video is. Playback stays as it was.
+- Video cards on standard-resolution screens load a smaller thumbnail when the card is small enough for it, and switch to the sharper one in wide layouts. Playlist headers fall back to a sharp thumbnail when the largest one is missing.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

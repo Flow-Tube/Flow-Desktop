@@ -28,6 +28,7 @@ export function DownloadsTab() {
   const [musicQuality, setMusicQuality] = usePreference(SETTINGS.DOWNLOAD_MUSIC_QUALITY, 'High');
   const [subtitleLanguage, setSubtitleLanguage] = usePreference(SETTINGS.DOWNLOAD_SUBTITLE_LANGUAGE, '');
   const [concurrency, setConcurrency] = useNumberPref(SETTINGS.DOWNLOAD_CONCURRENCY, 3);
+  const [notifications, setNotifications] = useBoolPref(SETTINGS.DOWNLOAD_NOTIFICATIONS, true);
   const [parallelDownload, setParallelDownload] = useBoolPref(SETTINGS.PARALLEL_DOWNLOAD_ENABLED, true);
   const [threads, setThreads] = useNumberPref(SETTINGS.DOWNLOAD_THREADS, 3);
   const [downloadPath, setDownloadPath] = usePreference(SETTINGS.DOWNLOAD_LOCATION, '');
@@ -75,6 +76,9 @@ export function DownloadsTab() {
       <SettingsGroup title={getString('settings_group_performance')}>
         <SettingItem title={getString('settings_download_concurrency')} description={getString('settings_download_concurrency_desc')}>
           <Select value={String(concurrency)} onChange={(v) => setConcurrency(Number(v))} options={[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))} />
+        </SettingItem>
+        <SettingItem title={getString('settings_download_notifications')} description={getString('settings_download_notifications_desc')}>
+          <ToggleSwitch checked={notifications} onChange={setNotifications} />
         </SettingItem>
         <SettingItem title={getString('settings_parallel_fragments')} description={getString('settings_parallel_fragments_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.PARALLEL_DOWNLOAD_ENABLED)}>
           <ToggleSwitch checked={parallelDownload} onChange={setParallelDownload} disabled={isSettingDisabledUntilWired(SETTINGS.PARALLEL_DOWNLOAD_ENABLED)} />

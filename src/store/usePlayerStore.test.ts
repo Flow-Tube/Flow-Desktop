@@ -279,6 +279,19 @@ describe("shuffle", () => {
     usePlayerStore.getState().toggleShuffle();
     expect(ids()).toEqual(["a", "x", "b", "c"]);
   });
+
+  it("keeps a video added while shuffled as the current one, with the unplayed ones after it", () => {
+    const playlist = { id: "wl", title: "Watch Later", editable: true, reorderable: true };
+    usePlayerStore.getState().setQueue([video("a"), video("b"), video("c"), video("d")], 0, playlist);
+    usePlayerStore.getState().toggleShuffle();
+    usePlayerStore.getState().addToQueue(video("x"));
+    usePlayerStore.getState().playNext();
+    expect(usePlayerStore.getState().currentVideo?.id).toBe("x");
+
+    usePlayerStore.getState().toggleShuffle();
+    expect(ids()).toEqual(["a", "x", "b", "c", "d"]);
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+  });
 });
 
 describe("set queue", () => {

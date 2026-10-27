@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { CaptionTrack, RelatedContentItem, VideoDetails, VideoSummary } from "../types/video";
 import { prefetchStreamInfo } from "../lib/streamResolution";
-import { orderByIds } from "../lib/listOrder";
+import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
 
@@ -521,7 +521,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     // Matched by id so details filled in meanwhile survive; videos added while shuffled go last.
-    const restored = orderByIds([...played, ...rest], unshuffledQueue.map((item) => item.id));
+    const savedIds = new Set(unshuffledQueue.map((item) => item.id));
+    let restored = orderByIds([...played, ...rest], [...savedIds]);
+    if (currentVideo && !savedIds.has(currentVideo.id)) {
+      // Except the one playing now: sent last, it would leave every unplayed video behind it.
+      const anchor = played.slice(0, -1).reverse().find((item) => savedIds.has(item.id));
+      restored = moveAfterId(restored, currentVideo.id, anchor?.id ?? null);
+    }
     const restoredIndex = restored.findIndex((item) => item.id === currentVideo?.id);
     const pinAt = restoredIndex + 1;
     set({

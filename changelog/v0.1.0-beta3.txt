@@ -224,6 +224,7 @@ RECOMMENDATIONS
 - Home's related videos lane works again: dates on related cards such as "2d ago" are now understood, so those videos are no longer dropped as undated.
 - Shorts from channels you follow no longer slip into Home or between the videos in Subscriptions. Each upload's feed link says whether it is a Short, and an upload once known to be a Short stays one.
 - Subscriptions no longer opens each channel's Shorts tab to sort its uploads when the feed already says which ones are Shorts.
+- Flow remembers which videos are Shorts, from your subscriptions, searches, the Shorts feed and your history, and keeps them off Home even when another source offers one as a normal video.
 
 LYRICS
 - BetterLyrics no longer switches off for 10 minutes after a song it has not seen before, so word-by-word lyrics stop disappearing.

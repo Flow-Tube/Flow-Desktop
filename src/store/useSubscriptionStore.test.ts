@@ -107,3 +107,35 @@ describe("useSubscriptionStore unsubscribe tombstones", () => {
     expect(useSubscriptionStore.getState().subscriptions[0]?.subscribedAt).toBe(stamped);
   });
 });
+
+describe("useSubscriptionStore.restoreSubscription", () => {
+  beforeEach(() => {
+    settings.clear();
+    useSubscriptionStore.setState({ subscriptions: [], subscriptionGroups: [], loading: false });
+  });
+
+  it("puts the channel and its groups back, newer than the tombstone it left", async () => {
+    const store = useSubscriptionStore.getState();
+    await store.subscribe("UCx", "Cool", "https://example.com/a.jpg");
+    await store.updateSubscription("UCx", { subscriberCountText: "1.2M subscribers" });
+    await store.createSubscriptionGroup("Science", ["UCx"]);
+
+    const removed = await useSubscriptionStore.getState().unsubscribe("UCx");
+    expect(removed?.groupNames).toEqual(["Science"]);
+    const tombstoneAt = JSON.parse(settings.get("subscription_tombstones") ?? "{}").UCx as number;
+
+    await useSubscriptionStore.getState().restoreSubscription(removed!);
+    const { subscriptions, subscriptionGroups } = useSubscriptionStore.getState();
+
+    expect(subscriptions).toEqual([
+      expect.objectContaining({ id: "UCx", name: "Cool", avatarUrl: "https://example.com/a.jpg", subscriberCountText: "1.2M subscribers" }),
+    ]);
+    expect(subscriptions[0]?.subscribedAt).toBeGreaterThanOrEqual(tombstoneAt);
+    expect(subscriptionGroups[0]?.channelIds).toEqual(["UCx"]);
+    expect(JSON.parse(settings.get("subscription_tombstones") ?? "{}")).toEqual({});
+  });
+
+  it("returns nothing for a channel that was not followed", async () => {
+    expect(await useSubscriptionStore.getState().unsubscribe("UCnone")).toBeNull();
+  });
+});

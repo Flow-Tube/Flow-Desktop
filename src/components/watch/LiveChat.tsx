@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown, RotateCw } from "lucide-react";
+import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown, RotateCw, X } from "lucide-react";
 import { useLiveChat, type ChatView, type LiveChatState } from "../../lib/useLiveChat";
 import { useChatReplay } from "../../lib/useChatReplay";
 import { getString } from "../../lib/i18n/index";
@@ -130,29 +130,31 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
   );
 }
 
-function StreamChat({ videoId, view, onViewChange }: ChatPanelSource) {
+function StreamChat({ videoId, view, ...panel }: ChatPanelSource) {
   const chat = useLiveChat(videoId, true, view);
-  return <ChatPanel chat={chat} isReplay={false} view={view} onViewChange={onViewChange} />;
+  return <ChatPanel chat={chat} isReplay={false} view={view} {...panel} />;
 }
 
-function ReplayChat({ videoId, view, onViewChange }: ChatPanelSource) {
+function ReplayChat({ videoId, view, ...panel }: ChatPanelSource) {
   const chat = useChatReplay(videoId, true, view);
-  return <ChatPanel chat={chat} isReplay view={view} onViewChange={onViewChange} />;
+  return <ChatPanel chat={chat} isReplay view={view} {...panel} />;
 }
 
 interface ChatPanelSource {
   videoId: string;
   view: ChatView;
   onViewChange: (view: ChatView) => void;
+  fill?: boolean;
+  onClose?: () => void;
 }
 
 /** A live stream's chat, or a finished stream's chat replayed in step with the player. */
-export function LiveChat({ videoId, isReplay }: LiveChatProps) {
+export function LiveChat({ videoId, isReplay, fill, onClose }: LiveChatProps) {
   const [view, setView] = useState<ChatView>("top");
   return isReplay ? (
-    <ReplayChat videoId={videoId} view={view} onViewChange={setView} />
+    <ReplayChat videoId={videoId} view={view} onViewChange={setView} fill={fill} onClose={onClose} />
   ) : (
-    <StreamChat videoId={videoId} view={view} onViewChange={setView} />
+    <StreamChat videoId={videoId} view={view} onViewChange={setView} fill={fill} onClose={onClose} />
   );
 }
 
@@ -183,11 +185,15 @@ function ChatPanel({
   isReplay,
   view,
   onViewChange,
+  fill = false,
+  onClose,
 }: {
   chat: LiveChatState;
   isReplay: boolean;
   view: ChatView;
   onViewChange: (view: ChatView) => void;
+  fill?: boolean;
+  onClose?: () => void;
 }) {
   const { messages, loading, ended, canSwitchView, reconnect } = chat;
 
@@ -214,7 +220,11 @@ function ChatPanel({
   }, []);
 
   return (
-    <div className="flex h-[min(560px,70vh)] w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
+    <div
+      className={`flex w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low ${
+        fill ? "h-full" : "h-[min(560px,70vh)]"
+      }`}
+    >
       <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800 px-4 py-3">
         <Radio size={16} className="text-primary" />
         <h3 className="text-base font-medium text-chrome-neutral-200">
@@ -238,6 +248,16 @@ function ChatPanel({
                 {getString("live_badge")}
               </span>
             )
+          )}
+          {onClose && (
+            <button
+              type="button"
+              aria-label={getString("close")}
+              onClick={onClose}
+              className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100"
+            >
+              <X size={18} />
+            </button>
           )}
         </div>
       </div>

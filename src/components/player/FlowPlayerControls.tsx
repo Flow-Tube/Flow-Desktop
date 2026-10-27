@@ -5,10 +5,12 @@ import {
   Expand,
   ListVideo,
   Maximize2,
+  MessageSquareText,
   Minimize2,
   Pause,
   PictureInPicture2,
   Play,
+  ScrollText,
   Settings as SettingsIcon,
   SkipBack,
   SkipForward,
@@ -17,7 +19,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
+import { usePlayerStore, type FullscreenPanel, type PlaybackRate } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
@@ -187,7 +189,21 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     setIsChaptersPanelOpen,
     isQueuePanelOpen,
     setIsQueuePanelOpen,
+    fullscreenPanel,
+    setFullscreenPanel,
+    isLiveChatAvailable,
   } = usePlayerStore();
+
+  // In fullscreen the panel buttons drive the side panel beside the video instead of the sidebar.
+  const panelOpen = (panel: FullscreenPanel) =>
+    isFullscreen ? fullscreenPanel === panel : panel === "queue" ? isQueuePanelOpen : panel === "chapters" && isChaptersPanelOpen;
+  const togglePanel = (panel: FullscreenPanel) => {
+    if (isFullscreen) setFullscreenPanel(fullscreenPanel === panel ? null : panel);
+    else if (panel === "queue") setIsQueuePanelOpen(!isQueuePanelOpen);
+    else if (panel === "chapters") setIsChaptersPanelOpen(!isChaptersPanelOpen);
+  };
+  const panelButtonClass = (panel: FullscreenPanel) =>
+    cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", panelOpen(panel) && "bg-chrome-white/15 text-primary/90");
 
   const { sponsorBlockColors, sponsorBlockEnabled, sbSubmitEnabled } = useSettingsStore();
   const selectPlaybackRate = onSelectPlaybackRate ?? setPlaybackRate;
@@ -676,7 +692,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               <button
                 ref={chapterPillRef}
                 type="button"
-                onClick={() => setIsChaptersPanelOpen(!isChaptersPanelOpen)}
+                onClick={() => togglePanel("chapters")}
                 className="hidden items-center gap-1.5 text-xs font-medium text-chrome-white sm:text-sm bg-chrome-black/20 hover:bg-chrome-white/10 rounded-full px-2 py-1 transition-all select-none cursor-pointer active:scale-95 group/pill max-w-[150px] sm:max-w-[260px] truncate"
               >
                 <span className="chapter-title truncate"></span>
@@ -685,18 +701,40 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 bg-chrome-black/20 rounded-full px-1 py-1">
+              {isFullscreen && (
+                <button
+                  type="button"
+                  title={getString("player_panel_chapters")}
+                  aria-label={getString("player_panel_chapters")}
+                  aria-pressed={panelOpen("chapters")}
+                  onClick={() => togglePanel("chapters")}
+                  className={panelButtonClass("chapters")}
+                >
+                  <ScrollText size={19} />
+                </button>
+              )}
               <button
                 type="button"
                 title={getString("queue_title")}
                 aria-label={getString("queue_title")}
-                onClick={() => setIsQueuePanelOpen(!isQueuePanelOpen)}
-                className={cx(
-                  "grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10",
-                  isQueuePanelOpen && "bg-chrome-white/15 text-primary/90"
-                )}
+                aria-pressed={panelOpen("queue")}
+                onClick={() => togglePanel("queue")}
+                className={panelButtonClass("queue")}
               >
                 <ListVideo size={19} />
               </button>
+              {isFullscreen && isLiveChatAvailable && (
+                <button
+                  type="button"
+                  title={getString("live_chat_title")}
+                  aria-label={getString("live_chat_title")}
+                  aria-pressed={panelOpen("chat")}
+                  onClick={() => togglePanel("chat")}
+                  className={panelButtonClass("chat")}
+                >
+                  <MessageSquareText size={19} />
+                </button>
+              )}
               {sbSubmitEnabled && currentVideo && (
                 <button
                   type="button"

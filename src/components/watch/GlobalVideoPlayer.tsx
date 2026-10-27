@@ -9,6 +9,7 @@ import { FlowPlayerCore } from "./FlowPlayerCore";
 import { decideRouteChangePlayerAction } from "../../lib/watchRouteSync";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
 import { glideFrame } from "../../lib/theaterGlide";
+import { FullscreenPanelHost } from "./FullscreenPanelHost";
 
 type PlayerBounds = {
   top: number;
@@ -51,6 +52,7 @@ export function GlobalVideoPlayer() {
   const isVideoFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
   const isVideoFullscreenTransitioning = usePlayerStore((s) => s.isVideoFullscreenTransitioning);
   const isTheaterMode = usePlayerStore((s) => s.isTheaterMode);
+  const setFullscreenPanel = usePlayerStore((s) => s.setFullscreenPanel);
   const watchPageCache = usePlayerStore((s) => s.watchPageCache);
   const enterVideoPip = usePlayerStore((s) => s.enterVideoPip);
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
@@ -164,6 +166,11 @@ export function GlobalVideoPlayer() {
     };
   }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo?.id, location.pathname]);
 
+  // Every fullscreen starts with the whole picture; a panel opens only when asked for there.
+  useEffect(() => {
+    setFullscreenPanel(null);
+  }, [isVideoFullscreen, setFullscreenPanel]);
+
   // Runs in the same commit as the layout swap, before the slot tracker snaps the frame.
   const shownTheaterRef = useRef(isTheaterMode);
   useLayoutEffect(() => {
@@ -267,7 +274,7 @@ export function GlobalVideoPlayer() {
         ref={frameRef}
         className={
           isVideoFullscreen
-            ? "fixed z-[300] overflow-hidden bg-chrome-black"
+            ? "fixed z-[300] flex overflow-hidden bg-chrome-black"
             : isFloating
             ? "group fixed z-50 overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-black"
             : "fixed z-30 bg-chrome-black"
@@ -294,7 +301,8 @@ export function GlobalVideoPlayer() {
             </button>
           </div>
         )}
-        <div className="group h-full w-full">{playerNode}</div>
+        <div className={isVideoFullscreen ? "group h-full min-w-0 flex-1" : "group h-full w-full"}>{playerNode}</div>
+        {isVideoFullscreen && <FullscreenPanelHost />}
       </div>
 
       {isVideoFullscreenTransitioning && (

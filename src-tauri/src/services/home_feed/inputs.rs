@@ -111,6 +111,11 @@ impl Exclusions {
         &self.videos
     }
 
+    /// Shorts found after the inputs were read.
+    pub fn add_shorts(&mut self, shorts: HashSet<String>) {
+        self.shorts.extend(shorts);
+    }
+
     #[must_use]
     pub fn hides(&self, card: &Card) -> bool {
         self.videos.contains(card.id())

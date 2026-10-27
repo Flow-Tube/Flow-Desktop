@@ -1083,6 +1083,8 @@ pub async fn get_subscription_rotation_feed(
 /// few at a time on a slow link.
 const DURATION_FILL_CONCURRENCY: usize = 3;
 
+/// Fills in lengths, and marks the Shorts that a lookup told apart by their
+/// frame, remembering each one it checked.
 pub(crate) async fn populate_video_durations(
     videos: &mut [VideoSummary],
     youtube_service: &YoutubeService,
@@ -1112,7 +1114,7 @@ pub(crate) async fn populate_video_durations(
                     crate::db::cache::get_cached_video_summary(&pool, &video_id).await
                 {
                     if cached.duration_seconds.is_some() {
-                        return (video_id, cached.duration_seconds);
+                        return (video_id, cached.duration_seconds, None);
                     }
                 }
 
@@ -1133,16 +1135,20 @@ pub(crate) async fn populate_video_durations(
                     };
                     // Cache it for 7 days
                     let _ = crate::db::cache::cache_video_summary(&pool, &summary, 604800).await;
-                    (video_id, details.duration_seconds)
+                    (video_id, details.duration_seconds, details.is_short)
                 } else {
-                    (video_id, None)
+                    (video_id, None, None)
                 }
             }
         },
     )
     .await;
     let mut durations = std::collections::HashMap::new();
-    for (id, dur) in results {
+    let mut kinds = Vec::new();
+    for (id, dur, is_short) in results {
+        if let Some(is_short) = is_short {
+            kinds.push((id.clone(), is_short));
+        }
         if let Some(d) = dur {
             durations.insert(id, d);
         }
@@ -1155,6 +1161,17 @@ pub(crate) async fn populate_video_durations(
             }
         }
     }
+    let shorts: std::collections::HashSet<&str> = kinds
+        .iter()
+        .filter(|(_, is_short)| *is_short)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    for video in videos.iter_mut() {
+        video.is_short |= shorts.contains(video.id.as_str());
+    }
+    let _ =
+        crate::db::video_kind_checks::record(pool, &kinds, chrono::Utc::now().timestamp_millis())
+            .await;
 }
 
 fn dedupe_channel_ids(channel_ids: Vec<String>) -> Result<Vec<String>, ErrorResponse> {

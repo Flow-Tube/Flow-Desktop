@@ -11,6 +11,7 @@ pub(crate) mod channel_memory;
 pub mod chips;
 mod filters;
 pub(crate) mod inputs;
+mod kind_checks;
 mod lanes;
 mod load;
 mod mixer;

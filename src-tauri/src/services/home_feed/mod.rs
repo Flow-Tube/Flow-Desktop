@@ -78,6 +78,8 @@ struct Feed {
     loaded_at: u64,
     /// The viewer's video age limit this feed was built under.
     max_video_age_ms: Option<u64>,
+    /// Whether this feed was built leaving out videos already seen.
+    hides_seen: bool,
     subs_backlog: Vec<Card>,
     memory_quota: usize,
     related_picks: HashSet<String>,
@@ -159,22 +161,30 @@ impl HomeFeedService {
 
     /// Home opened: a feed from the last half hour comes back as it was; otherwise the feed as last
     /// shown (up to eight hours old) paints at once while a new one loads. A changed video age
-    /// limit drops what is now too old at once and builds the feed anew.
+    /// limit drops what is now too old at once and builds the feed anew, and so does turning on
+    /// "Hide videos you've already seen", which also never paints the last feed: it was all seen.
     pub async fn open(&self, app: &AppHandle) -> HomeSnapshot {
         let now = now_ms();
         let pool = app.state::<sqlx::SqlitePool>();
         let max_video_age_ms = inputs::max_video_age_ms(&pool).await;
+        let hides_seen = inputs::hides_seen_videos(&pool).await;
         let within_limit = |card: &Card| {
             max_video_age_ms.is_none_or(|max_age_ms| filters::is_within(card, now, max_age_ms))
         };
-        let limit_changed = self.inner.feed.lock().unwrap().max_video_age_ms != max_video_age_ms;
-        if limit_changed {
+        let choices_changed = {
+            let feed = self.inner.feed.lock().unwrap();
+            feed.max_video_age_ms != max_video_age_ms || feed.hides_seen != hides_seen
+        };
+        if choices_changed {
             self.inner.chip_results.lock().unwrap().clear();
         }
         {
             let mut feed = self.inner.feed.lock().unwrap();
-            if limit_changed {
+            if choices_changed {
                 feed.snapshot.cards.retain(within_limit);
+                if hides_seen {
+                    feed.snapshot.cards.clear();
+                }
                 feed.loaded_at = 0;
             }
             let fresh = !feed.snapshot.cards.is_empty()
@@ -183,7 +193,7 @@ impl HomeFeedService {
                 return feed.snapshot.clone();
             }
         }
-        if let Ok((mut cards, origins)) = cache::load_last_feed(&pool, now).await {
+        if !hides_seen && let Ok((mut cards, origins)) = cache::load_last_feed(&pool, now).await {
             cards.retain(within_limit);
             let mut feed = self.inner.feed.lock().unwrap();
             if feed.snapshot.cards.is_empty() && !cards.is_empty() {

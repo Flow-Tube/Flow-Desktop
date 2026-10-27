@@ -12,7 +12,7 @@ use super::filters::is_within;
 use super::seeds::{SeedInput, SeedSource};
 use crate::db::settings::get_setting;
 use crate::db::watch_history::{WatchHistoryRecord, get_watch_history};
-use crate::db::{known_shorts, library, unplayable_videos};
+use crate::db::{known_shorts, library, seen_videos, unplayable_videos};
 use crate::errors::AppResult;
 use crate::flow_neuro::gates::BlockedMatchers;
 use crate::flow_neuro::scoring::{CHANNEL_SUPPRESSION_DAYS, UserBrain};
@@ -26,6 +26,17 @@ const WATCHED_SHARE: f64 = 0.85;
 const WATCHED_UNKNOWN_LENGTH_SECONDS: i64 = 1800;
 /// Settings → Content, "Hide videos older than", in hours; 0 or unset is off.
 const MAX_VIDEO_AGE_SETTING: &str = "home_max_video_age";
+/// Settings → Content, "Hide videos you've already seen".
+const HIDE_SEEN_SETTING: &str = "hide_seen_videos";
+
+/// Whether the viewer chose never to be recommended a video they were already shown.
+pub async fn hides_seen_videos(pool: &SqlitePool) -> bool {
+    get_setting(pool, HIDE_SEEN_SETTING)
+        .await
+        .ok()
+        .flatten()
+        .is_some_and(|value| value == "true")
+}
 
 /// How old a video Home may show at most, by the viewer's choice; `None` when they made none.
 pub async fn max_video_age_ms(pool: &SqlitePool) -> Option<u64> {
@@ -79,13 +90,15 @@ impl Subscriptions {
 }
 
 /// What Home leaves out: what the viewer hid (videos, channels and topics, from the brain and the
-/// feed actions), videos known to be Shorts, videos that were refused for good, and videos older
-/// than the viewer wants to see.
+/// feed actions), videos known to be Shorts, videos that were refused for good, and, by the
+/// viewer's choice, videos older than a limit or already seen.
 pub struct Exclusions {
     videos: HashSet<String>,
     channels: HashSet<String>,
     shorts: HashSet<String>,
     unplayable: HashSet<String>,
+    /// Empty unless the viewer hides videos they were already shown.
+    seen: HashSet<String>,
     /// The oldest a video may be and the time it is measured from, when the viewer set a limit.
     age_limit: Option<(u64, u64)>,
     matchers: BlockedMatchers,
@@ -103,6 +116,7 @@ impl Exclusions {
         self.videos.contains(card.id())
             || self.shorts.contains(card.id())
             || self.unplayable.contains(card.id())
+            || self.seen.contains(card.id())
             || self
                 .age_limit
                 .is_some_and(|(max_age_ms, now_ms)| !is_within(card, now_ms, max_age_ms))
@@ -122,6 +136,7 @@ pub struct Inputs {
     pub likes: Vec<(VideoSummary, u64)>,
     pub saved: Vec<(VideoSummary, u64)>,
     pub max_video_age_ms: Option<u64>,
+    pub hides_seen_videos: bool,
 }
 
 impl Inputs {
@@ -166,12 +181,18 @@ impl Inputs {
         );
         let spec = brain.key_spec();
         let max_video_age_ms = max_video_age_ms(pool).await;
+        let hides_seen_videos = hides_seen_videos(pool).await;
         Ok(Self {
             exclusions: Exclusions {
                 videos,
                 channels,
                 shorts,
                 unplayable: unplayable_videos::all(pool).await?,
+                seen: if hides_seen_videos {
+                    seen_videos::all(pool).await?
+                } else {
+                    HashSet::new()
+                },
                 age_limit: max_video_age_ms.map(|max_age_ms| (max_age_ms, now_ms)),
                 matchers: BlockedMatchers::new(&brain.blocked_topics, &spec),
                 spec,
@@ -182,6 +203,7 @@ impl Inputs {
             saved: library::saved_videos(pool).await?,
             history,
             max_video_age_ms,
+            hides_seen_videos,
         })
     }
 
@@ -416,5 +438,32 @@ mod tests {
             .map(|age| limited.exclusions.hides(&card("v", "UC1", age)))
             .collect();
         assert_eq!(hidden, [false, true, true]);
+    }
+
+    #[tokio::test]
+    async fn seen_videos_are_hidden_only_when_the_viewer_turned_it_on() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        seen_videos::remember(&pool, &["shown".to_string()], 1_000)
+            .await
+            .unwrap();
+        let hides = |inputs: &Inputs| {
+            ["shown", "new"].map(|id| inputs.exclusions.hides(&card(id, "UC1", "1 day ago")))
+        };
+        let off = Inputs::load(&pool, &UserBrain::default(), 2_000)
+            .await
+            .unwrap();
+        assert_eq!(hides(&off), [false, false]);
+        crate::db::settings::set_setting(&pool, HIDE_SEEN_SETTING, "true")
+            .await
+            .unwrap();
+        let on = Inputs::load(&pool, &UserBrain::default(), 2_000)
+            .await
+            .unwrap();
+        assert_eq!(hides(&on), [true, false]);
     }
 }

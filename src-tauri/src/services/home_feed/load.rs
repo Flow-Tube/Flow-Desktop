@@ -175,7 +175,11 @@ impl HomeFeedService {
         self.inner
             .search_pages
             .set_upload_date(super::sources::upload_filter(inputs.max_video_age_ms));
-        self.inner.feed.lock().unwrap().max_video_age_ms = inputs.max_video_age_ms;
+        {
+            let mut feed = self.inner.feed.lock().unwrap();
+            feed.max_video_age_ms = inputs.max_video_age_ms;
+            feed.hides_seen = inputs.hides_seen_videos;
+        }
         let ((searches, searches_failed), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
             self.related_lane(&yt, &rec, &pool, &inputs, now)

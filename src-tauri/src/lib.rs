@@ -94,8 +94,9 @@ use commands::recommendation::{
     forget_remembered_channel, get_brain_snapshot, get_flow_persona, get_onboarding_status,
     get_recommendation_events, get_taste_overview, import_brain, learn_from_search,
     log_interaction, mark_not_interested, note_subscription, observe_channel_uploads,
-    record_feed_impressions, remove_preferred_topic, report_watch_progress, reset_brain,
-    resolve_hidden_channel_names, unblock_channel, unblock_topic,
+    record_feed_impressions, record_seen_videos, remove_preferred_topic, report_watch_progress,
+    reset_brain, resolve_hidden_channel_names, seen_video_ids_among, unblock_channel,
+    unblock_topic,
 };
 use commands::scrobble::{
     scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing,
@@ -556,6 +557,8 @@ pub fn run() {
             observe_channel_uploads,
             mark_not_interested,
             record_feed_impressions,
+            record_seen_videos,
+            seen_video_ids_among,
             commands::home_feed::home_feed_open,
             commands::home_feed::home_feed_refresh,
             commands::home_feed::home_feed_viewport,

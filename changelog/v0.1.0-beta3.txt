@@ -228,6 +228,7 @@ RECOMMENDATIONS
 - Related videos that open in the Shorts player are recognized as Shorts, so Home's related lane leaves them out too.
 - Home no longer suggests members-only videos or premieres that have not started yet, from any of its sources.
 - A video that fails to open because it is members-only, private, paid, age-restricted or blocked in your country stays off Home from then on, until it plays again. Subscriptions can hide these too with "Hide Videos That Can't Play" in Settings, Content.
+- New "Hide Videos Older Than" choice in Settings, Content, from 1 day to 1 year and off by default. Home then only recommends videos uploaded within that time, and its searches ask YouTube for recent uploads so the page still fills.
 
 LYRICS
 - BetterLyrics no longer switches off for 10 minutes after a song it has not seen before, so word-by-word lyrics stop disappearing.

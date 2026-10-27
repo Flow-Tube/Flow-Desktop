@@ -510,6 +510,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [cursorHidden, setCursorHidden] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
   const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
   const {
@@ -2222,7 +2223,7 @@ export const Player: React.FC<PlayerProps> = ({
           showVolumeFeedback(volume, !muted);
           break;
         case "escape":
-          if (isFullscreen) {
+          if (isFullscreen && !event.defaultPrevented) {
             event.preventDefault();
             toggleFullscreen();
           }
@@ -2657,6 +2658,8 @@ export const Player: React.FC<PlayerProps> = ({
         onRevealControls={revealControls}
         isCompact={isPipMode}
         canDragWindow={isPopOut}
+        settingsOpen={settingsOpen}
+        onCloseSettings={closeSettings}
       />
 
       {pendingQualitySwitch && (

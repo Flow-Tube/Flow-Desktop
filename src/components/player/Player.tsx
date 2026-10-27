@@ -2509,8 +2509,8 @@ export const Player: React.FC<PlayerProps> = ({
 
   const playerRootClasses = cx(
     isTheaterSurface
-      ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black flex items-center justify-center rounded-none overflow-hidden text-chrome-white outline-none shadow-none"
-      : "relative w-full aspect-video bg-chrome-black rounded-xl overflow-hidden text-chrome-white outline-none shadow-2xl",
+      ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black flex items-center justify-center rounded-none overflow-hidden text-chrome-white outline-none"
+      : "relative w-full aspect-video bg-chrome-black rounded-xl overflow-hidden text-chrome-white outline-none",
     isFullscreen && "rounded-none",
     className
   );

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -8,6 +8,7 @@ import { SETTINGS } from "../../lib/settings/schema";
 import { FlowPlayerCore } from "./FlowPlayerCore";
 import { decideRouteChangePlayerAction } from "../../lib/watchRouteSync";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
+import { glideFrame } from "../../lib/theaterGlide";
 
 type PlayerBounds = {
   top: number;
@@ -49,6 +50,7 @@ export function GlobalVideoPlayer() {
   const videoPlayerMode = usePlayerStore((s) => s.videoPlayerMode);
   const isVideoFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
   const isVideoFullscreenTransitioning = usePlayerStore((s) => s.isVideoFullscreenTransitioning);
+  const isTheaterMode = usePlayerStore((s) => s.isTheaterMode);
   const watchPageCache = usePlayerStore((s) => s.watchPageCache);
   const enterVideoPip = usePlayerStore((s) => s.enterVideoPip);
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
@@ -162,6 +164,24 @@ export function GlobalVideoPlayer() {
     };
   }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo?.id, location.pathname]);
 
+  // Runs in the same commit as the layout swap, before the slot tracker snaps the frame.
+  const shownTheaterRef = useRef(isTheaterMode);
+  useLayoutEffect(() => {
+    if (shownTheaterRef.current === isTheaterMode) return;
+    shownTheaterRef.current = isTheaterMode;
+    const frame = frameRef.current;
+    if (!frame || isFloating || isPoppedOut || isVideoFullscreen) return;
+    const from = frame.getBoundingClientRect();
+    const to = readSlotBounds();
+    if (!to || from.width <= 0) return;
+    frame.style.transform = `translate3d(${to.left}px, ${to.top}px, 0)`;
+    frame.style.width = `${to.width}px`;
+    frame.style.height = `${to.height}px`;
+    lastSlotBoundsRef.current = to;
+    setSlotBounds(to);
+    glideFrame(frame, { top: from.top, left: from.left, width: from.width, height: from.height }, to, isTheaterMode);
+  }, [isTheaterMode, isFloating, isPoppedOut, isVideoFullscreen]);
+
   useEffect(() => {
     const previousPath = previousPathRef.current;
     if (previousPath === location.pathname) return;
@@ -249,7 +269,7 @@ export function GlobalVideoPlayer() {
           isVideoFullscreen
             ? "fixed z-[300] overflow-hidden bg-chrome-black"
             : isFloating
-            ? "group fixed z-50 overflow-hidden rounded-xl bg-chrome-black shadow-2xl ring-1 ring-chrome-white/10"
+            ? "group fixed z-50 overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-black"
             : "fixed z-30 bg-chrome-black"
         }
         style={frameStyle}

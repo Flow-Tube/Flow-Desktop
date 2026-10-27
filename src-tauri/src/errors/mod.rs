@@ -90,6 +90,23 @@ pub enum AppError {
     Internal(String),
 }
 
+impl AppError {
+    /// A refusal that belongs to the video, so it will not play for this viewer however often it is
+    /// tried. A catch-all `ContentNotAvailable` is left out: it also covers failures that pass.
+    #[must_use]
+    pub fn is_lasting_refusal(&self) -> bool {
+        matches!(
+            self,
+            AppError::AgeRestricted(_)
+                | AppError::PrivateContent(_)
+                | AppError::PaidContent(_)
+                | AppError::MembersOnly(_)
+                | AppError::GeographicRestriction(_)
+                | AppError::AccountTerminated(_)
+        )
+    }
+}
+
 // Preserve the underlying cause when propagating common library errors with `?`,
 // instead of hand-writing `.map_err(|e| AppError::X(e.to_string()))` at every
 // call site. The formatted message keeps the source's own text so the boundary
@@ -226,6 +243,15 @@ mod tests {
             let response: ErrorResponse = error.into();
             assert_eq!(response.kind, expected_kind);
         }
+    }
+
+    #[test]
+    fn only_refusals_about_the_video_are_lasting() {
+        assert!(AppError::MembersOnly("m".into()).is_lasting_refusal());
+        assert!(AppError::GeographicRestriction("g".into()).is_lasting_refusal());
+        assert!(!AppError::BotCheckRequired("b".into()).is_lasting_refusal());
+        assert!(!AppError::ContentNotAvailable("c".into()).is_lasting_refusal());
+        assert!(!AppError::Network("n".into()).is_lasting_refusal());
     }
 
     #[test]

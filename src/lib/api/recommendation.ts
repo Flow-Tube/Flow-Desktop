@@ -124,6 +124,18 @@ export async function markNotInterested(
   });
 }
 
+/** Cards seen beside a video, kept only for "Hide videos you've already seen". */
+export async function recordSeenVideos(ids: string[]): Promise<void> {
+  if (isDeepFlowCurrentlyActive() || !(await isTauriEnv())) return;
+  return invokeBackend<void>("record_seen_videos", { ids });
+}
+
+/** Which of these videos were already seen in a recommendation list. */
+export async function seenVideoIdsAmong(ids: string[]): Promise<string[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<string[]>("seen_video_ids_among", { ids });
+}
+
 export async function recordFeedImpressions(
   videos: VideoSummary[],
 ): Promise<void> {

@@ -775,6 +775,8 @@
   "settings_related_videos_desc": "Show related video recommendations",
   "settings_hide_watched": "Hide Watched",
   "settings_hide_watched_desc": "Hide videos you have already watched",
+  "settings_hide_seen": "Hide Videos You've Already Seen",
+  "settings_hide_seen_desc": "Never recommend a video again once its card was on screen on Home or beside a video",
   "settings_disable_shorts_player": "Disable Shorts Player",
   "settings_disable_shorts_player_desc": "Open Shorts in the standard player",
   "settings_shorts_playback_mode": "Shorts Playback Mode",

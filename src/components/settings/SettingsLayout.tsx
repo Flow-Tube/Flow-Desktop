@@ -11,6 +11,7 @@ import {
   Palette,
   Music2,
 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { getString } from '../../lib/i18n/index';
 import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
 
@@ -50,7 +51,11 @@ interface SettingsLayoutProps {
 }
 
 export function SettingsLayout({ children }: SettingsLayoutProps) {
-  const [activeTab, setActiveTab] = useState<SettingsCategory>('appearance');
+  // Other screens can open a section directly, such as the subscribe menu opening Content.
+  const requested = (useLocation().state as { settingsCategory?: SettingsCategory } | null)?.settingsCategory;
+  const [activeTab, setActiveTab] = useState<SettingsCategory>(
+    requested && categories.some((cat) => cat.id === requested) ? requested : 'appearance',
+  );
   const paneRef = useRef<HTMLDivElement>(null);
   usePageEnterMotion(paneRef, activeTab, true);
 

@@ -10,6 +10,8 @@ import { useLikesStore } from "./store/useLikesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
+import { useSubscriptionStore } from "./store/useSubscriptionStore";
+import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
 import { useStartupHealth } from "./lib/useStartupHealth";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
@@ -106,6 +108,9 @@ function App() {
     void useDownloadsLibraryStore.getState().load();
     void useDownloadCollectionsLibraryStore.getState().load();
     void useWatchLaterStore.getState().load();
+    // Every subscribe button reads these, so they load once here rather than once per button.
+    void useSubscriptionStore.getState().loadSubscriptions();
+    void useNotificationStore.getState().loadChannelPreferences();
   }, []);
 
   // Check onboarding state from sqlite db setting

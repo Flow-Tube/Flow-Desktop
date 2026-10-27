@@ -303,6 +303,27 @@
   transform-origin: top;
 }
 
+/* The bell swings once, from its top, when notifications for a channel turn on. */
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  32% { transform: rotate(-12deg); }
+  50% { transform: rotate(8deg); }
+  68% { transform: rotate(-5deg); }
+  84% { transform: rotate(2deg); }
+}
+
+.animate-bell-ring {
+  animation: bell-ring 700ms var(--motion-ease);
+  transform-origin: 50% 8%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bell-ring {
+    animation: none;
+  }
+}
+
 .animate-player-seek {
   animation: player-seek-pop 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, BellOff, Check, ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, Trash2, Upload, User } from "lucide-react";
+import { BellOff, BellRing, Check, ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, Trash2, Upload, User } from "lucide-react";
 import { parseSubscriptionExport } from "../lib/api/youtube";
 import { bootstrapFromSubscriptions } from "../lib/api/recommendation";
 import { SETTINGS } from "../lib/settings/schema";
@@ -469,7 +469,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                                 className={notifOn ? "text-[var(--color-primary)]" : "text-chrome-neutral-400"}
                                 onClick={() => setChannelNotification(channel.id, !notifOn)}
                               >
-                                {notifOn ? <Bell size={16} /> : <BellOff size={16} />}
+                                {notifOn ? <BellRing size={16} /> : <BellOff size={16} />}
                               </Button>
                             );
                           })()}

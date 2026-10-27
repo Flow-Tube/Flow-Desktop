@@ -116,6 +116,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "shorts_shelf_enabled",
     "home_shorts_shelf_enabled",
     "continue_watching_enabled",
+    "home_max_video_age",
     "show_related_videos",
     "disable_shorts_player",
     "shorts_navigation_enabled",

@@ -42,6 +42,7 @@ export function ContentTab() {
   const [subsShowVideos, setSubsShowVideos] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS, true);
   const [subsShowShorts, setSubsShowShorts] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_SHORTS, true);
   const [subsShowLive, setSubsShowLive] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_LIVE, true);
+  const [homeMaxVideoAge, setHomeMaxVideoAge] = usePreference(SETTINGS.HOME_MAX_VIDEO_AGE, '0');
   const [subsHideUnplayable, setSubsHideUnplayable] = useBoolPref(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS, false);
   const [notificationsEnabled, setNotificationsEnabled] = useBoolPref(SETTINGS.NOTIFICATIONS_ENABLED, true);
   const [notificationInterval, setNotificationInterval] = usePreference(SETTINGS.NOTIFICATION_CHECK_INTERVAL, '360');
@@ -120,6 +121,17 @@ export function ContentTab() {
         <SettingItem title={getString('settings_shorts_shelf')} description={getString('settings_shorts_shelf_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_SHELF_ENABLED)}><ToggleSwitch checked={shortsShelf} onChange={setShortsShelf} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_SHELF_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_home_shorts_shelf')} description={getString('settings_home_shorts_shelf_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_SHORTS_SHELF_ENABLED)}><ToggleSwitch checked={homeShortsShelf} onChange={setHomeShortsShelf} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_SHORTS_SHELF_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_continue_watching')} description={getString('settings_continue_watching_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.CONTINUE_WATCHING_ENABLED)}><ToggleSwitch checked={continueWatching} onChange={setContinueWatching} disabled={isSettingDisabledUntilWired(SETTINGS.CONTINUE_WATCHING_ENABLED)} /></SettingItem>
+        <SettingItem title={getString('settings_home_max_age')} description={getString('settings_home_max_age_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_MAX_VIDEO_AGE)}>
+          <Select value={homeMaxVideoAge} onChange={setHomeMaxVideoAge} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_MAX_VIDEO_AGE)} options={[
+            { value: '0', label: getString('settings_home_max_age_off') },
+            { value: '24', label: getString('settings_home_max_age_1d') },
+            { value: '72', label: getString('settings_home_max_age_3d') },
+            { value: '168', label: getString('settings_home_max_age_1w') },
+            { value: '720', label: getString('settings_home_max_age_1m') },
+            { value: '4320', label: getString('settings_home_max_age_6m') },
+            { value: '8760', label: getString('settings_home_max_age_1y') },
+          ]} />
+        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_content')}>

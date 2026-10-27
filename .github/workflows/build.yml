@@ -65,6 +65,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          # PRs restore main's caches; saving from every branch overflows the
+          # repo's 10 GB and evicts main's.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -144,6 +147,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -262,6 +266,7 @@ jobs:
           # Per runner image: build scripts compiled against 24.04's glibc
           # can't run on 22.04.
           shared-key: nightly-${{ matrix.target }}-${{ matrix.runner }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile

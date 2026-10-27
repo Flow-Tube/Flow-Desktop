@@ -110,6 +110,7 @@ INTERFACE
 - Searches are remembered on this computer and shown when you click the empty search box, with a button to remove one or clear them all. Deep Flow keeps searches out of it unless history is allowed there. Ctrl K shows as Cmd K on macOS.
 - A maximized or fullscreen window no longer shows a resize cursor along its edges.
 - The collapsed side rail shows icons only, with each name in a tooltip, a little more room between them, and Sync, Extensions and Support at the bottom. Opening or closing it now slides smoothly and pushes the page instead of swapping at once. The top bar button shows a panel open or close icon to match.
+- Moving to another page, or another Settings section, fades the new one in with a small rise instead of swapping it at once. The top bar, side rail and players stay still, and the watch page only fades.
 - The menu on the watch and settings pages slides in and out, sits right under the top bar on macOS, closes when you leave the page or press Escape, and moves keyboard focus into the menu.
 - Artist, album and playlist headers, the music player background, playlist cards and blocked-video cards draw their soft artwork once instead of blurring it on every repaint. Player menus and overlays use solid backgrounds instead of blurring what is behind them.
 - The home feed keeps loading new videos as you scroll instead of stopping after a few pages. Each search now continues to its next page of results instead of repeating the first one.

@@ -9,9 +9,9 @@ use sqlx::SqlitePool;
 use super::card::Card;
 use super::channel_memory::Watch;
 use super::seeds::{SeedInput, SeedSource};
-use crate::db::library;
 use crate::db::settings::get_setting;
 use crate::db::watch_history::{WatchHistoryRecord, get_watch_history};
+use crate::db::{known_shorts, library};
 use crate::errors::AppResult;
 use crate::flow_neuro::gates::BlockedMatchers;
 use crate::flow_neuro::scoring::{CHANNEL_SUPPRESSION_DAYS, UserBrain};
@@ -63,10 +63,12 @@ impl Subscriptions {
     }
 }
 
-/// What the viewer hid: videos, channels and topics, from the brain and the feed actions.
+/// What Home leaves out: what the viewer hid (videos, channels and topics, from the brain and the
+/// feed actions) and videos known to be Shorts.
 pub struct Exclusions {
     videos: HashSet<String>,
     channels: HashSet<String>,
+    shorts: HashSet<String>,
     matchers: BlockedMatchers,
     spec: crate::flow_neuro::keyspec::KeySpec,
 }
@@ -80,6 +82,7 @@ impl Exclusions {
     #[must_use]
     pub fn hides(&self, card: &Card) -> bool {
         self.videos.contains(card.id())
+            || self.shorts.contains(card.id())
             || self.channels.contains(card.channel_id())
             || self
                 .matchers
@@ -130,11 +133,19 @@ impl Inputs {
         );
         let mut videos: HashSet<String> = brain.suppressed_video_ids.keys().cloned().collect();
         videos.extend(actions.dismissed);
+        let mut shorts = known_shorts::all(pool).await?;
+        shorts.extend(
+            history
+                .iter()
+                .filter(|record| record.is_short_video())
+                .map(|record| record.video_id.clone()),
+        );
         let spec = brain.key_spec();
         Ok(Self {
             exclusions: Exclusions {
                 videos,
                 channels,
+                shorts,
                 matchers: BlockedMatchers::new(&brain.blocked_topics, &spec),
                 spec,
             },
@@ -303,4 +314,48 @@ pub(crate) async fn subscriptions(pool: &SqlitePool) -> AppResult<Subscriptions>
         out.names.insert(id, name);
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::home_feed::filters::tests::card;
+
+    #[tokio::test]
+    async fn known_shorts_and_shorts_in_history_are_left_out() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        known_shorts::remember(&pool, &["seen-in-rss".to_string()], 1_000)
+            .await
+            .unwrap();
+        crate::db::watch_history::upsert_watch_record(
+            &pool,
+            &WatchHistoryRecord {
+                id: None,
+                video_id: "swiped".into(),
+                title: "A Short".into(),
+                channel_name: Some("Chan".into()),
+                channel_id: Some("UC1".into()),
+                watch_date: "2026-10-27T12:00:00Z".into(),
+                watch_duration_seconds: 5,
+                total_duration_seconds: Some(150),
+                is_music: false,
+                is_short: true,
+            },
+        )
+        .await
+        .unwrap();
+        let inputs = Inputs::load(&pool, &UserBrain::default(), 2_000)
+            .await
+            .unwrap();
+        let hidden: Vec<bool> = ["seen-in-rss", "swiped", "video"]
+            .iter()
+            .map(|id| inputs.exclusions.hides(&card(id, "UC2", "1 day ago")))
+            .collect();
+        assert_eq!(hidden, [true, true, false]);
+    }
 }

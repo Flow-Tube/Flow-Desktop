@@ -225,6 +225,19 @@ impl HomeFeedService {
             seed_titles_of(&lanes.related, &related_seeds, &mix),
             query_of,
         );
+        // Shorts run to three minutes, so a card this long that no source called a Short is the
+        // one place a Short could still get through.
+        tracing::info!(
+            cards = laid_out.len(),
+            short_length_unflagged = laid_out
+                .iter()
+                .filter(|c| c
+                    .video
+                    .duration_seconds
+                    .is_some_and(|seconds| (61..=180).contains(&seconds)))
+                .count(),
+            "Home feed built"
+        );
         let paint = Paint {
             cards: &laid_out,
             origins: &origins,

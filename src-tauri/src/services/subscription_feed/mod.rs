@@ -252,6 +252,10 @@ pub async fn finish_feed(
         populate_video_durations(&mut feed[..fill], yt, pool),
     );
     reels::mark(&mut feed, &verdicts);
+    let known = crate::db::known_shorts::all(pool).await.unwrap_or_default();
+    for video in &mut feed {
+        video.is_short |= known.contains(&video.id);
+    }
     guess_shorts(&mut feed, unclassified, &verdicts);
     tracing::info!(
         videos = feed.len(),

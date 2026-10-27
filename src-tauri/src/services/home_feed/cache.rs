@@ -326,7 +326,12 @@ pub async fn merge_subscription_uploads(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(())
+    let shorts: Vec<String> = cards
+        .iter()
+        .filter(|c| c.video.is_short)
+        .map(|c| c.id().to_string())
+        .collect();
+    crate::db::known_shorts::remember(pool, &shorts, ms(now_ms)).await
 }
 
 /// When the store last took an RSS refresh; 0 when never.

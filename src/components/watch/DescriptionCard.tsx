@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatCount } from "../../lib/utils";
 import { getString } from "../../lib/i18n/index";
+import { hasTextSelection } from "../../lib/textSelection";
 import { LinkedText } from "./LinkedText";
 import { DescriptionExtras } from "./DescriptionExtras";
 import type { DescriptionCardProps } from "./types";
@@ -20,7 +21,9 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
 
   return (
     <div
-      onClick={() => setExpanded((value) => !value)}
+      onClick={() => {
+        if (!hasTextSelection()) setExpanded((value) => !value);
+      }}
       className="cursor-pointer rounded-xl bg-surface-container-low p-4 text-sm transition-colors hover:bg-surface-container"
     >
       <div className="flex items-center gap-2 font-medium text-chrome-neutral-200">
@@ -32,7 +35,7 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
         )}
       </div>
 
-      <div className={`mt-2 whitespace-pre-wrap text-chrome-neutral-300 ${expanded ? "" : "line-clamp-3"}`}>
+      <div className={`mt-2 select-text whitespace-pre-wrap text-chrome-neutral-300 ${expanded ? "" : "line-clamp-3"}`}>
         {description ? (
           <LinkedText text={description} rich={videoData?.descriptionRich} />
         ) : (

@@ -3,6 +3,7 @@ import { Loader2, Radio, ShieldCheck, BadgeCheck, ArrowDown, RotateCw } from "lu
 import { useLiveChat, type ChatView, type LiveChatState } from "../../lib/useLiveChat";
 import { useChatReplay } from "../../lib/useChatReplay";
 import { getString } from "../../lib/i18n/index";
+import { selectionTouches } from "../../lib/textSelection";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
 import type { LiveChatMessage, LiveChatSegment } from "../../types/video";
 import type { LiveChatProps } from "./types";
@@ -193,9 +194,10 @@ function ChatPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
-  // Keep the view glued to the newest message unless the user has scrolled up to read history.
+  // Keep the view glued to the newest message unless the user has scrolled up to read history
+  // or is highlighting a message, which a jump would drag out from under the pointer.
   useLayoutEffect(() => {
-    if (pinned && listRef.current) {
+    if (pinned && listRef.current && !selectionTouches(listRef.current)) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages, pinned]);
@@ -241,7 +243,7 @@ function ChatPanel({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div ref={listRef} className="hide-scrollbar h-full space-y-2.5 overflow-y-auto px-3 py-3">
+        <div ref={listRef} className="hide-scrollbar h-full select-text space-y-2.5 overflow-y-auto px-3 py-3">
           {loading && messages.length === 0 ? (
             <div className="flex items-center gap-2 px-1 py-2 text-sm text-chrome-neutral-500">
               <Loader2 size={16} className="animate-spin" />

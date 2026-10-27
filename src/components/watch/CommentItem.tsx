@@ -86,7 +86,7 @@ export function CommentItem({ comment, reply = false }: { comment: Comment; repl
         </div>
         <CommentText
           comment={comment}
-          className={`mt-1 text-chrome-neutral-200 ${reply ? "font-normal" : "text-sm"}`}
+          className={`mt-1 select-text text-chrome-neutral-200 ${reply ? "font-normal" : "text-sm"}`}
         />
         {(likes || comment.isHearted) && (
           <div className={`mt-2 flex items-center gap-3 text-chrome-neutral-400 ${reply ? "text-[10px]" : "text-xs"}`}>

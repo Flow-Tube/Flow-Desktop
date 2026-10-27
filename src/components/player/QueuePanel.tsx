@@ -53,12 +53,11 @@ interface QueueRowProps {
   index: number;
   isCurrent: boolean;
   isManual: boolean;
-  canReorder: boolean;
   onPlay: (index: number) => void;
   onRemove: (index: number) => void;
 }
 
-function QueueRow({ video, index, isCurrent, isManual, canReorder, onPlay, onRemove }: QueueRowProps) {
+function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: QueueRowProps) {
   const toSrc = useProxyImageSrc();
   const {
     attributes,
@@ -68,7 +67,7 @@ function QueueRow({ video, index, isCurrent, isManual, canReorder, onPlay, onRem
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: video.id, disabled: !canReorder });
+  } = useSortable({ id: video.id });
 
   const style = sortableRowStyle(transform, transition);
 
@@ -80,18 +79,16 @@ function QueueRow({ video, index, isCurrent, isManual, canReorder, onPlay, onRem
         isCurrent ? "bg-surface-container" : "hover:bg-surface-container-high"
       } ${isDragging ? "opacity-80" : ""}`}
     >
-      {canReorder ? (
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          aria-label={getString("reorder_item", video.title)}
-          className="shrink-0 cursor-grab rounded-md p-1 text-chrome-neutral-500 transition-colors hover:text-chrome-neutral-300 active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <GripHorizontal size={18} strokeWidth={2.5} />
-        </button>
-      ) : null}
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        aria-label={getString("reorder_item", video.title)}
+        className="shrink-0 cursor-grab rounded-md p-1 text-chrome-neutral-500 transition-colors hover:text-chrome-neutral-300 active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <GripHorizontal size={18} strokeWidth={2.5} />
+      </button>
 
       <button
         type="button"
@@ -174,9 +171,8 @@ export function QueuePanel() {
   const playlistPosition = queue.slice(0, currentIndex + 1).filter(isPlaylistItem).length;
   const playlistLength = queue.filter(isPlaylistItem).length;
 
-  // A playlist can only be dragged while the move is saved to it (Manual order, shuffle off).
+  // Any queue can be dragged; the move is saved to the playlist only in Manual order with shuffle off.
   const canReorderPlaylist = Boolean(playlistContext?.reorderable) && !isShuffle;
-  const showReorder = !playlistContext || canReorderPlaylist;
 
   const sensors = useListDragSensors();
   const sortableIds = useMemo(() => queue.map((item) => item.id), [queue]);
@@ -276,16 +272,14 @@ export function QueuePanel() {
           <Shuffle size={15} />
           {getString("shuffle")}
         </button>
-        {!playlistContext ? (
-          <button
-            type="button"
-            onClick={clearUpcoming}
-            disabled={upcomingCount === 0}
-            className="ml-auto rounded-full px-3 py-2 text-xs font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {getString("queue_clear_upcoming")}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={clearUpcoming}
+          disabled={upcomingCount === 0}
+          className="ml-auto rounded-full px-3 py-2 text-xs font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {getString("queue_clear_upcoming")}
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -310,7 +304,6 @@ export function QueuePanel() {
                     index={index}
                     isCurrent={index === currentIndex}
                     isManual={manualQueueIds.has(video.id)}
-                    canReorder={showReorder}
                     onPlay={playQueueItem}
                     onRemove={handleRemove}
                   />

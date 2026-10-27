@@ -52,9 +52,14 @@ impl Card {
         self.video.is_short || is_known_short(self.video.duration_seconds)
     }
 
-    /// Not a Short, and of known length unless live (Android `filterValid`).
+    /// Playable now: not a Short, not members-only, not a premiere still to come, and of known
+    /// length unless live (Android `filterValid`, plus the members-only and upcoming checks its
+    /// lanes make one by one).
     pub fn is_valid(&self) -> bool {
-        !self.is_short() && (self.video.duration_seconds.unwrap_or(0) > 0 || self.video.is_live)
+        !self.is_short()
+            && !self.video.is_members_only
+            && !self.video.is_upcoming
+            && (self.video.duration_seconds.unwrap_or(0) > 0 || self.video.is_live)
     }
 
     /// How long ago it was published, when known.
@@ -84,5 +89,25 @@ mod tests {
         assert_eq!(age_of("1 year ago"), Some(365 * DAY_MS));
         assert_eq!(age_of("2d ago"), Some(2 * DAY_MS));
         assert_eq!(age_of("Premieres soon"), None);
+    }
+
+    #[test]
+    fn members_only_and_upcoming_videos_are_not_shown() {
+        let card = |edit: fn(&mut VideoSummary)| {
+            let mut video = VideoSummary {
+                id: "v".into(),
+                duration_seconds: Some(600),
+                ..VideoSummary::default()
+            };
+            edit(&mut video);
+            Card {
+                video,
+                published_at_ms: 0,
+            }
+        };
+        assert!(card(|_| {}).is_valid());
+        assert!(!card(|video| video.is_members_only = true).is_valid());
+        assert!(!card(|video| video.is_upcoming = true).is_valid());
+        assert!(!card(|video| video.is_short = true).is_valid());
     }
 }

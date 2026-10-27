@@ -124,6 +124,8 @@ INTERFACE
 - Shorts fill the window's height on large screens instead of stopping at 850 pixels, and still fit beside the comments on narrow or portrait windows. Long channel names get the full width, with Subscribe moved under the name.
 - Video titles, descriptions, comments, live chat, channel names and About pages, posts, the song title in the music player and the Diagnostics log can now be selected and copied with Ctrl+C or Cmd+C.
 - Right-clicking selected text offers Copy and Search Flow for it. Selecting part of a description no longer opens or closes it.
+- The Subscribe button eases between Subscribe and Subscribed, shows a ringing bell when the channel's notifications are on and rings it once when they turn on. Its menu offers All or None, and says so when notifications are off for every channel in Settings.
+- Unsubscribing shows a toast with Undo, which brings the channel back with its groups.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

@@ -208,7 +208,8 @@ jobs:
             args: --target aarch64-unknown-linux-gnu --bundles appimage
           - name: macOS Intel
             slug: macos-x64
-            runner: macos-15-intel
+            # Cross-compiles x86_64 on Apple Silicon, as Tauri's own CI guide does.
+            runner: macos-15
             target: x86_64-apple-darwin
             args: --target x86_64-apple-darwin --bundles dmg
           - name: macOS Apple Silicon

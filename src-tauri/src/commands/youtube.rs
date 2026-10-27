@@ -323,6 +323,7 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
 pub async fn search_videos(
     request: SearchVideosRequest,
     youtube_service: State<'_, YoutubeService>,
+    pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<SearchVideosResponse, ErrorResponse> {
     if let Some(page_token) = request.page_token.as_deref() {
         validate_page_token(page_token).map_err(ErrorResponse::from)?;
@@ -330,10 +331,19 @@ pub async fn search_videos(
         validate_search_query(&request.query).map_err(ErrorResponse::from)?;
     }
 
-    youtube_service
+    let response = youtube_service
         .search_videos(request)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    let shorts: Vec<String> = response
+        .shorts
+        .iter()
+        .map(|short| short.id.clone())
+        .collect();
+    let _ =
+        crate::db::known_shorts::remember(&pool, &shorts, chrono::Utc::now().timestamp_millis())
+            .await;
+    Ok(response)
 }
 
 #[tauri::command]

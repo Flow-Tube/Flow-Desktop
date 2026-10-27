@@ -69,6 +69,8 @@ export function playExitGhost(node: HTMLElement) {
     margin: "0",
     pointerEvents: "none",
     animation: "none",
+    // Above everything, including the fullscreen player: it is gone in a tenth of a second.
+    zIndex: "2147483647",
     transformOrigin: origin,
   });
   document.body.appendChild(ghost);

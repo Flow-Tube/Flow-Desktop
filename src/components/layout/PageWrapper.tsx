@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useUiStore } from '../../store/useUiStore';
 import { ScrollContainerContext } from '../../lib/useScrollContainer';
+import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
 import { SIDEBAR_MENU_BUTTON_ID } from './Topbar';
 
 export function PageWrapper() {
@@ -25,6 +26,8 @@ export function PageWrapper() {
   const isHistoryPage = location.pathname === '/history';
 
   const mainRef = useRef<HTMLElement>(null);
+  // The watch page only fades: its player is a separate frame that follows the page's slot.
+  usePageEnterMotion(mainRef, location.pathname, !isWatchPage);
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, left: 0 });
   }, [location.pathname, location.search]);

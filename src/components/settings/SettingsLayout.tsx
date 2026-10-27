@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   PlayCircle,
   LayoutGrid,
@@ -12,6 +12,7 @@ import {
   Music2,
 } from 'lucide-react';
 import { getString } from '../../lib/i18n/index';
+import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
 
 export type SettingsCategory =
   | 'appearance'
@@ -50,6 +51,8 @@ interface SettingsLayoutProps {
 
 export function SettingsLayout({ children }: SettingsLayoutProps) {
   const [activeTab, setActiveTab] = useState<SettingsCategory>('appearance');
+  const paneRef = useRef<HTMLDivElement>(null);
+  usePageEnterMotion(paneRef, activeTab, true);
 
   return (
     <div className="mx-auto w-full h-[calc(100vh-64px)] flex">
@@ -71,7 +74,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
         ))}
       </nav>
 
-      <div className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
+      <div ref={paneRef} className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
         {children(activeTab)}
       </div>
     </div>

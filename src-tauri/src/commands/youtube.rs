@@ -1152,8 +1152,14 @@ pub async fn get_subscription_rss_feed(
     let mut uploads =
         subscription_feed::fetch_channels(&youtube_service, &unique_channel_ids).await;
     subscription_feed::sort_and_dedupe(&mut uploads.videos);
-    let videos =
-        subscription_feed::finish_feed(&youtube_service, &pool, uploads.videos, limit).await;
+    let videos = subscription_feed::finish_feed(
+        &youtube_service,
+        &pool,
+        uploads.videos,
+        &uploads.unclassified,
+        limit,
+    )
+    .await;
     let total = unique_channel_ids.len();
     Ok(SubscriptionRssFeed {
         videos,
@@ -1185,6 +1191,7 @@ pub async fn stream_subscription_rss_feed(
         uploads.channels.extend(found.channels);
         uploads.videos.extend(found.videos);
         uploads.failed_channel_ids.extend(found.failed_channel_ids);
+        uploads.unclassified.extend(found.unclassified);
         processed = (processed + batch.len()).min(total);
         subscription_feed::sort_and_dedupe(&mut uploads.videos);
         let _ = on_event.send(SubscriptionRssFeed {
@@ -1196,8 +1203,14 @@ pub async fn stream_subscription_rss_feed(
         });
     }
 
-    let videos =
-        subscription_feed::finish_feed(&youtube_service, &pool, uploads.videos, limit).await;
+    let videos = subscription_feed::finish_feed(
+        &youtube_service,
+        &pool,
+        uploads.videos,
+        &uploads.unclassified,
+        limit,
+    )
+    .await;
     let _ = on_event.send(SubscriptionRssFeed {
         videos,
         channels: uploads.channels,

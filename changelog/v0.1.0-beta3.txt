@@ -222,6 +222,8 @@ RECOMMENDATIONS
 - "Not interested" or a thumbs-down on a video stops Home showing uploads from that channel until you watch it again. Your taste lists the channels Home picks uploads from, and you can forget one or all of them.
 - A sync no longer brings back entries this device already trimmed from its recommendation profile, and the profile is not saved over a merge while it runs.
 - Home's related videos lane works again: dates on related cards such as "2d ago" are now understood, so those videos are no longer dropped as undated.
+- Shorts from channels you follow no longer slip into Home or between the videos in Subscriptions. Each upload's feed link says whether it is a Short, and an upload once known to be a Short stays one.
+- Subscriptions no longer opens each channel's Shorts tab to sort its uploads when the feed already says which ones are Shorts.
 
 LYRICS
 - BetterLyrics no longer switches off for 10 minutes after a song it has not seen before, so word-by-word lyrics stop disappearing.

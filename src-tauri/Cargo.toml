@@ -131,3 +131,10 @@ panic = "abort"
 codegen-units = 1
 lto = true
 strip = "symbols"
+
+# CI nightlies and PR builds: thin LTO keeps most of the speed of the release
+# profile at a fraction of the link time. Tagged releases still use [profile.release].
+[profile.nightly]
+inherits = "release"
+lto = "thin"
+codegen-units = 16

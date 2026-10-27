@@ -175,6 +175,8 @@ PLAYER
 - Long Press Speed has an Off choice that turns hold-to-speed-up off in the player, the pop-out window and Shorts.
 - Leaving the page of a paused video shrinks it into the mini player, still paused, instead of closing it, the same as a playing video.
 - The quality switch notice and the loading spinner over the video are smaller and quieter, and a late time update from the previous video can no longer land on the next one.
+- The queue panel names the playlist you are playing, shows your place in it and links back to it. During a playlist, Add to queue plays the video next, and with nothing playing it starts the video in the mini player.
+- Turning shuffle off puts the queue back in its original order. Queue rows drag to reorder in any queue. Removing a video in the queue also removes it from Watch Later or your own playlist, with Undo, and drags in Manual order are saved to the playlist.
 
 SYNC
 - Syncing with a phone works in every direction again: the desktop handles collections it doesn't know yet, like Notes on newer Android builds, files each collection by name, and no longer hangs when it scans a phone's send code.

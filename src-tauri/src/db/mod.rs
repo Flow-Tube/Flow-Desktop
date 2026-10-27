@@ -6,6 +6,7 @@ pub mod cache;
 pub mod download_collections;
 pub mod download_jobs;
 pub mod downloads;
+pub mod known_shorts;
 pub mod library;
 pub mod music_content;
 pub mod music_home;

@@ -412,3 +412,27 @@ describe("restore queue item", () => {
     expect(ids()).toEqual(["a", "b"]);
   });
 });
+
+describe("fullscreen side panel", () => {
+  it("opens the matching sidebar panel too, so it is still open after fullscreen", () => {
+    usePlayerStore.getState().setFullscreenPanel("queue");
+    expect(usePlayerStore.getState()).toMatchObject({ fullscreenPanel: "queue", isQueuePanelOpen: true, isChaptersPanelOpen: false });
+
+    usePlayerStore.getState().setFullscreenPanel("chapters");
+    expect(usePlayerStore.getState()).toMatchObject({ fullscreenPanel: "chapters", isQueuePanelOpen: false, isChaptersPanelOpen: true });
+  });
+
+  it("closes when its panel is closed from inside it", () => {
+    usePlayerStore.getState().setFullscreenPanel("chapters");
+    usePlayerStore.getState().setIsChaptersPanelOpen(false);
+    expect(usePlayerStore.getState().fullscreenPanel).toBeNull();
+  });
+
+  it("shows chat without touching the sidebar panels", () => {
+    usePlayerStore.getState().setIsQueuePanelOpen(true);
+    usePlayerStore.getState().setFullscreenPanel("chat");
+    expect(usePlayerStore.getState()).toMatchObject({ fullscreenPanel: "chat", isQueuePanelOpen: true });
+    usePlayerStore.getState().setFullscreenPanel(null);
+    usePlayerStore.getState().setIsQueuePanelOpen(false);
+  });
+});

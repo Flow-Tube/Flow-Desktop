@@ -99,12 +99,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Same runner and target as a nightly leg, so each restores that
+          # leg's cache from main.
           - name: Windows x64
             runner: windows-2025
+            target: x86_64-pc-windows-msvc
           - name: Linux x64
             runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
           - name: macOS ARM64
             runner: macos-15
+            target: aarch64-apple-darwin
 
     runs-on: ${{ matrix.runner }}
 
@@ -147,13 +152,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          shared-key: nightly-${{ matrix.target }}-${{ matrix.runner }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Compile desktop application
-        run: pnpm tauri build --no-bundle
+        run: pnpm tauri build --target ${{ matrix.target }} --no-bundle -- --profile nightly
 
   nightly-package:
     name: Nightly (${{ matrix.name }})

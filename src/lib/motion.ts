@@ -14,6 +14,7 @@ const FALLBACK_MS = {
 
 export type MotionToken = keyof typeof FALLBACK_MS;
 
+export const MOTION_EASE = "cubic-bezier(0.2, 0, 0, 1)";
 export const MOTION_EASE_EXIT = "cubic-bezier(0.3, 0, 1, 1)";
 
 /** framer-motion transitions matching the menu tokens. */

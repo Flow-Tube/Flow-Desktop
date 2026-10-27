@@ -14,6 +14,7 @@ pub mod music_queue;
 pub mod neuro_stores;
 pub mod notifications;
 pub mod recommendations;
+pub mod seen_videos;
 pub mod settings;
 pub mod unplayable_videos;
 pub mod watch_history;

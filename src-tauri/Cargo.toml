@@ -93,7 +93,7 @@ local-ip-address = "0.6"
 # so the system attributes notifications to "Flow" instead of PowerShell.
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.8"
-windows-registry = "0.6"
+windows-registry = "0.100"
 # Core Audio and the process snapshot name Flow's WebView2 audio in the volume mixer.
 windows = { version = "0.62", features = [
   "Win32_UI_Shell",

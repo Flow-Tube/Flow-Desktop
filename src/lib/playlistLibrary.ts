@@ -242,6 +242,17 @@ export const removeVideoFromStoredPlaylist = (playlistId: string, videoId: strin
       : tracks,
   );
 
+/** Puts a removed track back after the one it followed, or last when that one is gone too. */
+export const restoreStoredPlaylistTrack = (
+  playlistId: string,
+  track: VideoSummary,
+  afterId: string | null,
+) => updateStoredPlaylistTracks(playlistId, (tracks) =>
+  tracks.some((current) => current.id === track.id)
+    ? tracks
+    : moveAfterId([...tracks, track], track.id, afterId),
+);
+
 /** Move one track to sit right after another (or first, when `afterId` is null). */
 export const moveStoredPlaylistTrack = (
   playlistId: string,

@@ -391,3 +391,24 @@ describe("add to queue", () => {
     expect(usePlayerStore.getState().manualQueueIds.has("x")).toBe(false);
   });
 });
+
+describe("restore queue item", () => {
+  const ids = () => usePlayerStore.getState().queue.map((item) => item.id);
+
+  it("puts a removed video back at its old place and keeps the current video", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b"), video("c")], 1);
+    usePlayerStore.getState().removeFromQueue(0);
+
+    usePlayerStore.getState().restoreQueueItem(video("a"), 0);
+    expect(ids()).toEqual(["a", "b", "c"]);
+    expect(usePlayerStore.getState().currentIndex).toBe(1);
+    expect(usePlayerStore.getState().currentVideo?.id).toBe("b");
+  });
+
+  it("does not add a video that is already queued", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b")], 0);
+
+    usePlayerStore.getState().restoreQueueItem(video("b"), 0);
+    expect(ids()).toEqual(["a", "b"]);
+  });
+});

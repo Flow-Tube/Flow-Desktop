@@ -146,6 +146,8 @@ interface PlayerState {
   ) => void;
   addToQueue: (video: VideoSummary) => QueueAddResult;
   removeFromQueue: (index: number) => void;
+  /** Puts a removed video back at its old place, for Undo. */
+  restoreQueueItem: (video: VideoSummary, index: number) => void;
   moveQueueItem: (fromIndex: number, toIndex: number) => void;
   playQueueItem: (index: number) => void;
   playNext: (allowAutoplayFallback?: boolean) => VideoSummary | null;
@@ -372,6 +374,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentIndex: newIndex,
       currentVideo: newQueue[newIndex] || null,
       manualQueueIds: nextManual,
+    });
+  },
+
+  restoreQueueItem: (video, index) => {
+    const { queue, currentIndex } = get();
+    if (queue.some((item) => item.id === video.id)) return;
+    const at = Math.max(0, Math.min(index, queue.length));
+    set({
+      queue: [...queue.slice(0, at), video, ...queue.slice(at)],
+      currentIndex: at <= currentIndex ? currentIndex + 1 : currentIndex,
     });
   },
 

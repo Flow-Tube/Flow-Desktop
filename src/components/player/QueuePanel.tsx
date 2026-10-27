@@ -22,11 +22,8 @@ import { useNavigate } from "react-router-dom";
 
 import { getString } from "../../lib/i18n/index";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
-import {
-  WATCH_LATER_PLAYLIST_ID,
-  moveStoredPlaylistTrack,
-  removeVideoFromStoredPlaylist,
-} from "../../lib/playlistLibrary";
+import { WATCH_LATER_PLAYLIST_ID, moveStoredPlaylistTrack } from "../../lib/playlistLibrary";
+import { removeVideoFromQueuePlaylist } from "../../lib/queuePlaylistEdits";
 import { resolveDragMove, sortableRowStyle, useListDragSensors } from "../../lib/sortableList";
 import { usePlayerStore, type RepeatMode } from "../../store/usePlayerStore";
 import type { VideoSummary } from "../../types/video";
@@ -204,9 +201,7 @@ export function QueuePanel() {
     const removed = queue[index];
     removeFromQueue(index);
     if (removed && playlistContext?.editable && isPlaylistItem(removed)) {
-      removeVideoFromStoredPlaylist(playlistContext.id, removed.id).catch((error) => {
-        console.warn("Failed to remove video from stored playlist", error);
-      });
+      void removeVideoFromQueuePlaylist(playlistContext, removed, index);
     }
   };
 

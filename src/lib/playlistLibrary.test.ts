@@ -23,6 +23,7 @@ import {
   getStoredPlaylistById,
   moveStoredPlaylistTrack,
   removeVideoFromStoredPlaylist,
+  restoreStoredPlaylistTrack,
   savePlaylistToLibrary,
   updateStoredPlaylistTracks,
 } from "./playlistLibrary";
@@ -132,6 +133,29 @@ describe("removeVideoFromStoredPlaylist", () => {
   it("does not write when the video is not in the playlist", async () => {
     await removeVideoFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, "gone");
     expect(setSetting).not.toHaveBeenCalled();
+  });
+});
+
+describe("restoreStoredPlaylistTrack", () => {
+  beforeEach(seedLibrary);
+
+  it("puts a track back after the one it followed, or first", async () => {
+    await removeVideoFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, "b");
+    await restoreStoredPlaylistTrack(WATCH_LATER_PLAYLIST_ID, video("b"), "a");
+    expect(await storedIds()).toEqual(["a", "b", "c"]);
+
+    await removeVideoFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, "a");
+    await restoreStoredPlaylistTrack(WATCH_LATER_PLAYLIST_ID, video("a"), null);
+    expect(await storedIds()).toEqual(["a", "b", "c"]);
+  });
+
+  it("puts it last when the track it followed is gone, and never twice", async () => {
+    await removeVideoFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, "b");
+    await restoreStoredPlaylistTrack(WATCH_LATER_PLAYLIST_ID, video("b"), "gone");
+    expect(await storedIds()).toEqual(["a", "c", "b"]);
+
+    await restoreStoredPlaylistTrack(WATCH_LATER_PLAYLIST_ID, video("b"), "a");
+    expect(await storedIds()).toEqual(["a", "c", "b"]);
   });
 });
 

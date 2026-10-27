@@ -476,7 +476,7 @@
   "theme_file_status_unreadable": "Flow can't read this file",
   "theme_file_keeping_last": "Showing the last version of the file that loaded.",
   "theme_file_ignored": "Not a colour, so Flow's default is used: %s",
-  "theme_file_removed_remote": "Removed %s remote loads. Theme files can't load anything from the internet.",
+  "theme_file_removed_remote": "Remote loads removed: %s. Theme files can't load anything from the internet.",
   "theme_variant_from_file": "The theme file picks light or dark with --flow-scheme.",
   "theme_presets": "Built-in themes",
   "theme_presets_description": "Curated palettes inspired by Flow for Android, Mihon, and Terax.",

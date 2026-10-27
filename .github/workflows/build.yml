@@ -279,7 +279,9 @@ jobs:
           # Read at compile time; without them Last.fm sign-in stays off in the build.
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
-        run: pnpm tauri build ${{ matrix.args }} --config src-tauri/tauri.nightly.generated.json
+        # [profile.nightly] trades fat LTO for thin LTO; tagged releases keep
+        # [profile.release].
+        run: pnpm tauri build ${{ matrix.args }} --config src-tauri/tauri.nightly.generated.json -- --profile nightly
 
       - name: Log the bundled media stack versions
         if: matrix.appimage
@@ -291,18 +293,18 @@ jobs:
         if: matrix.appimage
         shell: bash
         run: |
-          appimage="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -n1)"
+          appimage="$(ls src-tauri/target/${{ matrix.target }}/nightly/bundle/appimage/*.AppImage | head -n1)"
           bash scripts/postprocess-appimage.sh "$appimage" "${{ matrix.appimage }}"
 
       - name: Report package sizes
-        run: node scripts/report-bundle-sizes.mjs src-tauri/target/${{ matrix.target }}/release/bundle
+        run: node scripts/report-bundle-sizes.mjs src-tauri/target/${{ matrix.target }}/nightly/bundle
 
       - name: Upload Windows nightly installer
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-${{ github.run_number }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          path: src-tauri/target/${{ matrix.target }}/nightly/bundle/nsis/*.exe
           if-no-files-found: error
           retention-days: 14
 
@@ -311,7 +313,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-${{ github.run_number }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          path: src-tauri/target/${{ matrix.target }}/nightly/bundle/dmg/*.dmg
           if-no-files-found: error
           retention-days: 14
 
@@ -320,7 +322,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-appimage-${{ github.run_number }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+          path: src-tauri/target/${{ matrix.target }}/nightly/bundle/appimage/*.AppImage
           if-no-files-found: error
           retention-days: 14
 
@@ -329,7 +331,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-deb-${{ github.run_number }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+          path: src-tauri/target/${{ matrix.target }}/nightly/bundle/deb/*.deb
           if-no-files-found: error
           retention-days: 14
 
@@ -338,7 +340,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Flow-nightly-${{ matrix.slug }}-rpm-${{ github.run_number }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+          path: src-tauri/target/${{ matrix.target }}/nightly/bundle/rpm/*.rpm
           if-no-files-found: error
           retention-days: 14
 

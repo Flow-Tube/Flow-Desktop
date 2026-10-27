@@ -7,7 +7,8 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    - cron: "17 3 * * *"
+    # Weekly, inside the 7-day cache eviction and 14-day artifact retention.
+    - cron: "17 3 * * 1"
 
 concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}

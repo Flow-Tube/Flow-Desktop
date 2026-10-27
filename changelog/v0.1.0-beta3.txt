@@ -120,6 +120,8 @@ INTERFACE
 - Video cards on standard-resolution screens load a smaller thumbnail when the card is small enough for it, and switch to the sharper one in wide layouts. Playlist headers fall back to a sharp thumbnail when the largest one is missing.
 - Open Collective is now the main way to support Flow, ahead of Patreon, on the Support page, in Settings > About and in the occasional support reminder. Open Collective lists every contribution and expense publicly.
 - Shorts fill the window's height on large screens instead of stopping at 850 pixels, and still fit beside the comments on narrow or portrait windows. Long channel names get the full width, with Subscribe moved under the name.
+- Video titles, descriptions, comments, live chat, channel names and About pages, posts, the song title in the music player and the Diagnostics log can now be selected and copied with Ctrl+C or Cmd+C.
+- Right-clicking selected text offers Copy and Search Flow for it. Selecting part of a description no longer opens or closes it.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

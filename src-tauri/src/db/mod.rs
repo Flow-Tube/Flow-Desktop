@@ -17,6 +17,7 @@ pub mod recommendations;
 pub mod seen_videos;
 pub mod settings;
 pub mod unplayable_videos;
+pub mod video_kind_checks;
 pub mod watch_history;
 
 use sqlx::{

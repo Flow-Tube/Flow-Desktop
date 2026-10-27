@@ -232,6 +232,9 @@ RECOMMENDATIONS
 - A video that fails to open because it is members-only, private, paid, age-restricted or blocked in your country stays off Home from then on, until it plays again. Subscriptions can hide these too with "Hide Videos That Can't Play" in Settings, Content.
 - New "Hide Videos Older Than" choice in Settings, Content, from 1 day to 1 year and off by default. Home then only recommends videos uploaded within that time, and its searches ask YouTube for recent uploads so the page still fills.
 - New "Hide Videos You've Already Seen" switch in Settings, Content, off by default. When on, a video whose card was on screen on Home, in a chip or beside a video is never recommended there again.
+- Shorts from channels you follow no longer show on Home for the first minutes after it opens. A Short found once Home is on screen is taken out at once, and the saved feed Home opens with leaves out known Shorts and videos that can't play.
+- Recent uploads that run up to three minutes are checked once for a portrait or square frame, the shape YouTube gives every Short, so Shorts saved before the feed link fix are found too.
+- Subscriptions no longer opens with a copy of the feed saved before Shorts were told apart.
 
 LYRICS
 - BetterLyrics no longer switches off for 10 minutes after a song it has not seen before, so word-by-word lyrics stop disappearing.

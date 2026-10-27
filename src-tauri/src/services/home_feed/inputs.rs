@@ -8,6 +8,7 @@ use sqlx::SqlitePool;
 
 use super::card::Card;
 use super::channel_memory::Watch;
+use super::filters::is_within;
 use super::seeds::{SeedInput, SeedSource};
 use crate::db::settings::get_setting;
 use crate::db::watch_history::{WatchHistoryRecord, get_watch_history};
@@ -23,6 +24,20 @@ const LONG_TERM_HISTORY_MAX: usize = 200;
 /// Mostly watched: Home does not suggest it again.
 const WATCHED_SHARE: f64 = 0.85;
 const WATCHED_UNKNOWN_LENGTH_SECONDS: i64 = 1800;
+/// Settings → Content, "Hide videos older than", in hours; 0 or unset is off.
+const MAX_VIDEO_AGE_SETTING: &str = "home_max_video_age";
+
+/// How old a video Home may show at most, by the viewer's choice; `None` when they made none.
+pub async fn max_video_age_ms(pool: &SqlitePool) -> Option<u64> {
+    let hours: u64 = get_setting(pool, MAX_VIDEO_AGE_SETTING)
+        .await
+        .ok()
+        .flatten()?
+        .trim()
+        .parse()
+        .ok()?;
+    (hours > 0).then(|| hours.saturating_mul(3_600_000))
+}
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -64,12 +79,15 @@ impl Subscriptions {
 }
 
 /// What Home leaves out: what the viewer hid (videos, channels and topics, from the brain and the
-/// feed actions), videos known to be Shorts and videos that were refused for good.
+/// feed actions), videos known to be Shorts, videos that were refused for good, and videos older
+/// than the viewer wants to see.
 pub struct Exclusions {
     videos: HashSet<String>,
     channels: HashSet<String>,
     shorts: HashSet<String>,
     unplayable: HashSet<String>,
+    /// The oldest a video may be and the time it is measured from, when the viewer set a limit.
+    age_limit: Option<(u64, u64)>,
     matchers: BlockedMatchers,
     spec: crate::flow_neuro::keyspec::KeySpec,
 }
@@ -85,6 +103,9 @@ impl Exclusions {
         self.videos.contains(card.id())
             || self.shorts.contains(card.id())
             || self.unplayable.contains(card.id())
+            || self
+                .age_limit
+                .is_some_and(|(max_age_ms, now_ms)| !is_within(card, now_ms, max_age_ms))
             || self.channels.contains(card.channel_id())
             || self
                 .matchers
@@ -100,6 +121,7 @@ pub struct Inputs {
     pub history: Vec<WatchHistoryRecord>,
     pub likes: Vec<(VideoSummary, u64)>,
     pub saved: Vec<(VideoSummary, u64)>,
+    pub max_video_age_ms: Option<u64>,
 }
 
 impl Inputs {
@@ -143,12 +165,14 @@ impl Inputs {
                 .map(|record| record.video_id.clone()),
         );
         let spec = brain.key_spec();
+        let max_video_age_ms = max_video_age_ms(pool).await;
         Ok(Self {
             exclusions: Exclusions {
                 videos,
                 channels,
                 shorts,
                 unplayable: unplayable_videos::all(pool).await?,
+                age_limit: max_video_age_ms.map(|max_age_ms| (max_age_ms, now_ms)),
                 matchers: BlockedMatchers::new(&brain.blocked_topics, &spec),
                 spec,
             },
@@ -157,6 +181,7 @@ impl Inputs {
             likes: library::liked_videos(pool).await?,
             saved: library::saved_videos(pool).await?,
             history,
+            max_video_age_ms,
         })
     }
 
@@ -363,5 +388,33 @@ mod tests {
             .map(|id| inputs.exclusions.hides(&card(id, "UC2", "1 day ago")))
             .collect();
         assert_eq!(hidden, [true, true, true, false]);
+    }
+
+    #[tokio::test]
+    async fn a_video_age_limit_hides_older_and_undated_videos() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let day = 86_400_000;
+        let now = 30 * day;
+        let off = Inputs::load(&pool, &UserBrain::default(), now)
+            .await
+            .unwrap();
+        assert!(!off.exclusions.hides(&card("old", "UC1", "2 weeks ago")));
+        crate::db::settings::set_setting(&pool, MAX_VIDEO_AGE_SETTING, "72")
+            .await
+            .unwrap();
+        let limited = Inputs::load(&pool, &UserBrain::default(), now)
+            .await
+            .unwrap();
+        assert_eq!(limited.max_video_age_ms, Some(3 * day));
+        let hidden: Vec<bool> = ["2 days ago", "2 weeks ago", ""]
+            .iter()
+            .map(|age| limited.exclusions.hides(&card("v", "UC1", age)))
+            .collect();
+        assert_eq!(hidden, [false, true, true]);
     }
 }

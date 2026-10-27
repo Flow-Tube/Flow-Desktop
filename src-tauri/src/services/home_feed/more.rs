@@ -184,6 +184,9 @@ impl HomeFeedService {
         let Ok(inputs) = Inputs::load(&pool, &brain, now).await else {
             return (Outcome::Failed, held);
         };
+        self.inner
+            .search_pages
+            .set_upload_date(super::sources::upload_filter(inputs.max_video_age_ms));
         let taste = TasteProfile::of(&brain, &classify_persona(&brain));
         let followed = inputs.subscriptions.ids();
         let mut attempt = Attempt::start(&feed_cards, held.unwrap_or_default());

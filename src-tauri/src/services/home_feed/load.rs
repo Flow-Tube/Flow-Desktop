@@ -172,6 +172,10 @@ impl HomeFeedService {
             self.settle_without_feed(app, generation, Some(LOCAL_DATA_FAILED));
             return;
         };
+        self.inner
+            .search_pages
+            .set_upload_date(super::sources::upload_filter(inputs.max_video_age_ms));
+        self.inner.feed.lock().unwrap().max_video_age_ms = inputs.max_video_age_ms;
         let ((searches, searches_failed), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
             self.related_lane(&yt, &rec, &pool, &inputs, now)

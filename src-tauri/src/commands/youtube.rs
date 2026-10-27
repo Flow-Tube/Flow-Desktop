@@ -339,6 +339,13 @@ pub async fn search_videos(
         .shorts
         .iter()
         .map(|short| short.id.clone())
+        .chain(
+            response
+                .items
+                .iter()
+                .filter(|video| video.is_short)
+                .map(|video| video.id.clone()),
+        )
         .collect();
     let _ =
         crate::db::known_shorts::remember(&pool, &shorts, chrono::Utc::now().timestamp_millis())

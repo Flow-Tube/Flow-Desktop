@@ -252,6 +252,13 @@ impl RelatedLists {
                 .collect(),
             _ => Vec::new(),
         };
+        let shorts: Vec<String> = fetched
+            .iter()
+            .filter(|card: &&Card| card.video.is_short)
+            .map(|card| card.id().to_string())
+            .collect();
+        let now = i64::try_from(now_ms).unwrap_or(i64::MAX);
+        let _ = crate::db::known_shorts::remember(pool, &shorts, now).await;
         // A timeout returns nothing; caching that would blank the seed's lane for the whole TTL.
         if !fetched.is_empty() {
             self.memory

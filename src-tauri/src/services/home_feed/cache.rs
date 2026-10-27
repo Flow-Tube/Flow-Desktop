@@ -279,7 +279,8 @@ pub async fn subscription_channel_names(pool: &SqlitePool) -> AppResult<Vec<(Str
     .await?)
 }
 
-/// Merges uploads into the store; a known length is never replaced by an unknown one.
+/// Merges uploads into the store; a known length is never replaced by an unknown one, and an
+/// upload once known to be a Short stays one.
 pub async fn merge_subscription_uploads(
     pool: &SqlitePool,
     cards: &[Card],
@@ -299,10 +300,11 @@ pub async fn merge_subscription_uploads(
                 .fetch_optional(&mut *tx)
                 .await?;
         let mut merged = card.clone();
-        if let Some(old) = existing.and_then(|(json,)| serde_json::from_str::<Card>(&json).ok())
-            && merged.video.duration_seconds.unwrap_or(0) == 0
-        {
-            merged.video.duration_seconds = old.video.duration_seconds;
+        if let Some(old) = existing.and_then(|(json,)| serde_json::from_str::<Card>(&json).ok()) {
+            if merged.video.duration_seconds.unwrap_or(0) == 0 {
+                merged.video.duration_seconds = old.video.duration_seconds;
+            }
+            merged.video.is_short |= old.video.is_short;
         }
         sqlx::query(
             "INSERT OR REPLACE INTO subscription_uploads (video_id, channel_id, published_at, card, updated_at)
@@ -405,5 +407,22 @@ mod tests {
             .unwrap();
         let stored = subscription_uploads(&pool).await.unwrap();
         assert_eq!(stored[0].video.duration_seconds, Some(600));
+    }
+
+    #[tokio::test]
+    async fn a_short_stays_a_short_after_a_merge_that_did_not_know() {
+        let pool = pool().await;
+        let mut short = card("s", "UC1", "");
+        short.published_at_ms = 500;
+        short.video.is_short = true;
+        merge_subscription_uploads(&pool, &[short.clone()], 1_000)
+            .await
+            .unwrap();
+        short.video.is_short = false;
+        merge_subscription_uploads(&pool, &[short], 2_000)
+            .await
+            .unwrap();
+        let stored = subscription_uploads(&pool).await.unwrap();
+        assert!(stored[0].video.is_short);
     }
 }

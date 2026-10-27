@@ -124,6 +124,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "music_navigation_enabled",
     "categories_nav_tab_enabled",
     "subscription_refresh_on_startup",
+    "hide_unplayable_subscriptions",
     "show_region_picker_in_explore",
     "deep_flow_expire_hours",
     "deep_flow_save_history",

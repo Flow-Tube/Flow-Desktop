@@ -430,14 +430,28 @@ pub async fn get_stream_info(
     refresh: Option<bool>,
     youtube_service: State<'_, YoutubeService>,
     streaming_manager: State<'_, StreamingManager>,
+    pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<StreamInfo, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
     let refresh = refresh.unwrap_or(false);
-    let mut stream_info = youtube_service
-        .get_stream_info(&video_id, refresh)
-        .await
-        .map_err(ErrorResponse::from)?;
+    // Feeds stop offering a video refused for good, and offer it again once it plays.
+    let mut stream_info = match youtube_service.get_stream_info(&video_id, refresh).await {
+        Ok(info) => {
+            let _ = crate::db::unplayable_videos::clear(&pool, &video_id).await;
+            info
+        }
+        Err(error) => {
+            let lasting = error.is_lasting_refusal();
+            let response = ErrorResponse::from(error);
+            if lasting {
+                let now = chrono::Utc::now().timestamp_millis();
+                let _ =
+                    crate::db::unplayable_videos::mark(&pool, &video_id, &response.kind, now).await;
+            }
+            return Err(response);
+        }
+    };
 
     let token = uuid::Uuid::new_v4().to_string();
 
@@ -1156,6 +1170,17 @@ fn dedupe_channel_ids(channel_ids: Vec<String>) -> Result<Vec<String>, ErrorResp
 }
 
 const SUBSCRIPTION_RSS_BATCH_SIZE: usize = 50;
+
+/// Videos that were refused for good when they were opened, for Subscriptions to hide.
+#[tauri::command]
+pub async fn get_unplayable_video_ids(
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<Vec<String>, ErrorResponse> {
+    let ids = crate::db::unplayable_videos::all(&pool)
+        .await
+        .map_err(ErrorResponse::from)?;
+    Ok(ids.into_iter().collect())
+}
 
 #[tauri::command]
 pub async fn get_subscription_rss_feed(

@@ -11,7 +11,7 @@ use super::channel_memory::Watch;
 use super::seeds::{SeedInput, SeedSource};
 use crate::db::settings::get_setting;
 use crate::db::watch_history::{WatchHistoryRecord, get_watch_history};
-use crate::db::{known_shorts, library};
+use crate::db::{known_shorts, library, unplayable_videos};
 use crate::errors::AppResult;
 use crate::flow_neuro::gates::BlockedMatchers;
 use crate::flow_neuro::scoring::{CHANNEL_SUPPRESSION_DAYS, UserBrain};
@@ -64,11 +64,12 @@ impl Subscriptions {
 }
 
 /// What Home leaves out: what the viewer hid (videos, channels and topics, from the brain and the
-/// feed actions) and videos known to be Shorts.
+/// feed actions), videos known to be Shorts and videos that were refused for good.
 pub struct Exclusions {
     videos: HashSet<String>,
     channels: HashSet<String>,
     shorts: HashSet<String>,
+    unplayable: HashSet<String>,
     matchers: BlockedMatchers,
     spec: crate::flow_neuro::keyspec::KeySpec,
 }
@@ -83,6 +84,7 @@ impl Exclusions {
     pub fn hides(&self, card: &Card) -> bool {
         self.videos.contains(card.id())
             || self.shorts.contains(card.id())
+            || self.unplayable.contains(card.id())
             || self.channels.contains(card.channel_id())
             || self
                 .matchers
@@ -146,6 +148,7 @@ impl Inputs {
                 videos,
                 channels,
                 shorts,
+                unplayable: unplayable_videos::all(pool).await?,
                 matchers: BlockedMatchers::new(&brain.blocked_topics, &spec),
                 spec,
             },
@@ -322,7 +325,7 @@ mod tests {
     use crate::services::home_feed::filters::tests::card;
 
     #[tokio::test]
-    async fn known_shorts_and_shorts_in_history_are_left_out() {
+    async fn shorts_and_videos_refused_for_good_are_left_out() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -330,6 +333,9 @@ mod tests {
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
         known_shorts::remember(&pool, &["seen-in-rss".to_string()], 1_000)
+            .await
+            .unwrap();
+        unplayable_videos::mark(&pool, "members", "membersOnly", 1_000)
             .await
             .unwrap();
         crate::db::watch_history::upsert_watch_record(
@@ -352,10 +358,10 @@ mod tests {
         let inputs = Inputs::load(&pool, &UserBrain::default(), 2_000)
             .await
             .unwrap();
-        let hidden: Vec<bool> = ["seen-in-rss", "swiped", "video"]
+        let hidden: Vec<bool> = ["seen-in-rss", "swiped", "members", "video"]
             .iter()
             .map(|id| inputs.exclusions.hides(&card(id, "UC2", "1 day ago")))
             .collect();
-        assert_eq!(hidden, [true, true, false]);
+        assert_eq!(hidden, [true, true, true, false]);
     }
 }

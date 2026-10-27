@@ -137,6 +137,7 @@ PLAYER
 - Drag subtitles anywhere on the player for the current video. Clicking them still pauses, seeks or opens the menu as before.
 - Theater mode is lighter: the color glow around the video is drawn without a blur filter, samples the video less often, and can be turned off with the new Ambient mode setting. It is off on Linux, where it cost the most.
 - The player follows the page while you scroll without re-laying out the window, and scrolling a menu or side panel no longer moves it.
+- Theater mode now glides: the player grows into its new place and back, its corners squaring as it goes, while the page below fades in. Comments, live chat and the side panels keep their place instead of loading again. If a computer is too slow for the glide, the player fades instead.
 - The seek bar and time stop redrawing every frame while the video is paused or the controls are hidden.
 - Web playback clients send their playback token where YouTube reads it, videos behind a content warning get their related videos and autoplay back, live streams show how many are watching, and hidden like counts no longer read "I like this".
 - Flow keeps one anonymous YouTube identity for up to a week instead of a new one every launch, and gets a new one at most twice in six hours after a bot check. Diagnostics can reset it.

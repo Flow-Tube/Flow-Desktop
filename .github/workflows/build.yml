@@ -93,7 +93,6 @@ jobs:
   platform-build:
     name: Compile (${{ matrix.name }})
     if: github.event_name == 'pull_request'
-    needs: quality
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -164,7 +163,6 @@ jobs:
   nightly-package:
     name: Nightly (${{ matrix.name }})
     if: github.event_name != 'pull_request'
-    needs: quality
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -356,7 +354,6 @@ jobs:
   flatpak-sources:
     name: Nightly (Linux x64 Flatpak sources)
     if: github.event_name != 'pull_request'
-    needs: quality
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Prototype: drop continue-on-error here and in nightly-flatpak before the

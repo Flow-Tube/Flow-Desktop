@@ -70,6 +70,7 @@ import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
 import { ThemeController } from "./lib/useTheme";
+import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
 import type { CSSProperties } from "react";
@@ -153,6 +154,7 @@ function App() {
   return (
     <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
       <ThemeController />
+      <SelectionMenu />
       <TitleBar />
       <div data-app-content className="relative min-h-0 flex-1">
       <Routes>

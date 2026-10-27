@@ -259,11 +259,38 @@
   }
 }
 
-/* Card menus open from where they were asked for, quickly enough to never be waited on. */
+/*
+  Shared motion. Enters use the side rail's curve; exits accelerate away and are always
+  shorter than the enter, so nothing that is closing seems to linger. Scripted motion
+  reads these same tokens (src/lib/motion.ts).
+*/
+:root {
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  --motion-menu-in: 150ms;
+  --motion-menu-out: 100ms;
+  --motion-pane: 180ms;
+  --motion-page: 200ms;
+  --motion-layout: 320ms;
+  --motion-panel: 360ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-menu-in: 0ms;
+    --motion-menu-out: 0ms;
+    --motion-pane: 0ms;
+    --motion-page: 0ms;
+    --motion-layout: 0ms;
+    --motion-panel: 0ms;
+  }
+}
+
+/* Menus grow from the corner nearest the button that opened them; the menu sets that origin. */
 @keyframes menu-pop-in {
   from {
     opacity: 0;
-    transform: translateY(-4px) scale(0.98);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
@@ -272,14 +299,8 @@
 }
 
 .animate-menu-in {
-  animation: menu-pop-in 120ms cubic-bezier(0.2, 0, 0, 1);
+  animation: menu-pop-in var(--motion-menu-in) var(--motion-ease);
   transform-origin: top;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-menu-in {
-    animation: none;
-  }
 }
 
 .animate-player-seek {

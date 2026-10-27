@@ -85,6 +85,8 @@ pub struct RelatedContentItem {
     pub is_verified: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_members_only: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_short: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub badges: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

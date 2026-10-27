@@ -155,6 +155,8 @@ PLAYER
 - A new Remote signature fallback setting in Network, off by default, lets Flow ask PipePipe's public decoder to unlock the TV app's streams when the usual sources stop working.
 - The watch page loads its details, related videos, first comments and chat from one YouTube request instead of four, and no longer loads the whole channel page just for its avatar and subscriber count.
 - Chapters come from YouTube with their thumbnails, including the ones YouTube generates, and a description with stray timestamps no longer turns into fake chapters.
+- In fullscreen, chapters with the transcript, the queue and live chat open as a panel on the right. The video narrows to make room instead of being covered, and Escape closes the panel before it leaves fullscreen.
+- A chapters or queue panel opened in fullscreen is still open when you leave it, and the transcript no longer loads again when the panel moves.
 - Collaborations show every channel, each with its own subscribe button, and the watch page shows hashtags, badges like Unlisted, the artist badge and more related videos on request.
 - Finished live streams replay their chat in step with the video, live chat can switch between Top and All messages, and autoplay starts with the video YouTube itself would play next.
 - Links in descriptions and comments open in the app when they point at YouTube: videos, playlists and channels open directly, hashtags search, timestamps seek, and other links open in the browser.

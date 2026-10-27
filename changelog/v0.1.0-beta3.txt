@@ -292,6 +292,8 @@ SETTINGS
 - Custom themes can be exported one at a time or all together, and imported from a file made on the desktop or on Flow for Android. An imported theme never replaces one you already have.
 - The music player background now syncs between desktops. Skip silence no longer syncs in from Flow for Android, where it showed as on with no way to turn it off.
 - The integrations page, the artist Radio button and the audio language names are now translatable.
+- New Theme file option under Settings > Appearance. Flow reads custom.css from its settings folder and reloads it whenever it changes, so a desktop shell or template tool can restyle Flow as the system colours change.
+- The file sets colours with --flow-* variables, picks light or dark with --flow-scheme, and can hold extra CSS. A starter file lists every colour. Remote images, imports and fonts in the file are ignored.
 
 UNDER THE HOOD
 - Updated Tauri to 2.12 and its plugins (updater, deep links, dialogs, notifications and others), with the app and its web side kept on matching versions.

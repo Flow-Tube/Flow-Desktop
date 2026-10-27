@@ -18,6 +18,7 @@ import { FeedFailedNotice } from "../components/subscriptions/FeedFailedNotice";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { ShortsShelf } from "../components/shelf/ShortsShelf";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
+import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
 import { upgradeAvatarUrl } from "../lib/thumbnails";
 import { useProxiedImageUrl } from "../lib/useProxiedImageUrl";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
@@ -91,6 +92,8 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const showSubscriptionLive = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_LIVE] !== "false");
   const hideWatchedVideos = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_WATCHED_VIDEOS] === "true");
   const isHidden = useFeedHiddenFilter({ hideWatched: hideWatchedVideos });
+  const hideUnplayable = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS] === "true");
+  const unplayableIds = useUnplayableVideoIds(hideUnplayable);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
   const [selectedGroupName, setSelectedGroupName] = useState<string | null>(null);
@@ -221,7 +224,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
 
   const filteredVideos = useMemo(() => {
     return videos.filter((video) => {
-      if (isHidden(video)) return false;
+      if (isHidden(video) || unplayableIds.has(video.id)) return false;
 
       const matchesSearch = !query
         || video.title.toLowerCase().includes(query)
@@ -232,7 +235,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
 
       return matchesSearch && matchesChannel && matchesGroup;
     });
-  }, [isHidden, query, selectedChannelId, selectedGroup, videos]);
+  }, [isHidden, query, selectedChannelId, selectedGroup, unplayableIds, videos]);
 
 
   const isLiveVideo = (video: VideoSummary) => {

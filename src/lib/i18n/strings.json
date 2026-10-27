@@ -798,6 +798,8 @@
   "settings_show_videos": "Show Videos",
   "settings_show_shorts": "Show Shorts",
   "settings_show_live": "Show Live Streams",
+  "settings_hide_unplayable": "Hide Videos That Can't Play",
+  "settings_hide_unplayable_desc": "Hide members-only, private and region-blocked videos once one fails to open",
   "settings_group_region": "Region",
   "settings_region_picker": "Region Picker",
   "settings_region_picker_desc": "Show globe icon in Explore header",

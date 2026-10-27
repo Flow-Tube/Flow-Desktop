@@ -70,6 +70,7 @@ AUDIO
 - An optional crossfade, off by default, fades the next song in over 1 to 12 seconds. Consecutive tracks from the same album and repeat-one keep their gapless joins.
 - The equalizer now also applies to videos, including the pop-out player, and opens from the video settings menu. Shorts are left as they are.
 - Videos only go through audio processing once the equalizer changes the sound, and only after a short silent self-test shows it works. Where it does not, as on some Linux setups, videos keep playing normally and the menu says the equalizer is not available.
+- On Windows, the volume mixer now lists Flow by its own name and icon instead of "Microsoft Edge WebView2", including after you switch to another output device.
 
 MACOS
 - Flow uses the native macOS window controls and titlebar again. Closing the window hides it and keeps playback and downloads running until you quit, and clicking the Dock icon brings it back.

@@ -610,6 +610,31 @@
   scrollbar-width: none;
 }
 
+/*
+  A Short fills its slide's height, but its 9:16 width must still fit beside the
+  two side columns and an open side panel, or a tall narrow window clips it.
+  `--short-sides` is both 260/280px columns plus the row's gaps and padding. The
+  floor keeps the video usable on a small window; the side panel narrows instead.
+*/
+.short-stage {
+  container-type: size;
+  --short-sides: 616px;
+}
+
+@media (width >= 64rem) {
+  .short-stage {
+    --short-sides: 672px;
+  }
+}
+
+.short-frame {
+  height: clamp(
+    min(100%, 360px),
+    calc((100cqw - var(--short-sides) - var(--short-panel, 0px)) * 16 / 9),
+    100%
+  );
+}
+
 #flow-player-root[data-fullscreen="true"] {
   width: 100% !important;
   height: 100% !important;

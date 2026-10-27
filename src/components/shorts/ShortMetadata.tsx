@@ -34,7 +34,8 @@ export function ShortMetadata({
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
         <button
           type="button"
-          aria-label={channelName}
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={openChannel}
           className="row-span-2"
         >

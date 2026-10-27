@@ -16,6 +16,7 @@ pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;
 pub mod sync;
+pub mod theme;
 pub mod tray;
 pub mod window;
 pub mod youtube;

@@ -10,6 +10,7 @@ pub mod shorts_engine;
 pub mod shorts_service;
 pub mod subscription_feed;
 pub mod taste_service;
+pub mod theme_file;
 #[cfg(windows)]
 pub mod win_mixer;
 #[cfg(windows)]

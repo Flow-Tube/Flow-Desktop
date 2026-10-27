@@ -415,6 +415,7 @@ pub fn run() {
             app.manage(DownloadManager::default());
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
+            app.manage(commands::theme::ThemeFileWatch::default());
             app.manage(DiscordPresence::new());
             app.manage(services::music_tray::MusicTray::default());
 
@@ -606,6 +607,10 @@ pub fn run() {
             updates_supported,
             set_player_fullscreen,
             commands::window::set_window_background,
+            commands::theme::theme_file_state,
+            commands::theme::create_theme_file,
+            commands::theme::reveal_theme_file,
+            commands::theme::watch_theme_file,
             // --- Pop-out (picture-in-picture) player window ---
             open_pip_window,
             pip_session,

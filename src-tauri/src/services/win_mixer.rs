@@ -3,7 +3,9 @@
 //! The webview plays sound from its own `msedgewebview2.exe` child process, so the mixer
 //! shows it under Edge's name and icon (`MicrosoftEdge/WebView2Feedback#2236`). This
 //! watches the audio sessions on every output device and renames the ones whose process
-//! descends from Flow's.
+//! is a WebView2 process descended from Flow's.
+//!
+//! Ported from Drapondur/ChangeVolumeMixerForWebView (MIT License, Copyright (c) 2023 Drapondur).
 #![cfg(windows)]
 // The `#[implement]` expansion trips these.
 #![allow(clippy::inline_always, clippy::ref_as_ptr)]
@@ -155,7 +157,7 @@ fn label_if_ours(session: &IAudioSessionControl, label: &Label) -> Result<()> {
 }
 
 fn descends_from_flow(pid: u32) -> bool {
-    let parents = parent_pids();
+    let parents = webview_parent_pids();
     let flow = std::process::id();
     let mut current = pid;
     // Bounded in case a reused process id makes a loop.
@@ -169,7 +171,8 @@ fn descends_from_flow(pid: u32) -> bool {
     false
 }
 
-fn parent_pids() -> HashMap<u32, u32> {
+/// Only WebView2's processes, because a browser Flow starts to open a link is its child too.
+fn webview_parent_pids() -> HashMap<u32, u32> {
     let mut parents = HashMap::new();
     let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }) else {
         return parents;
@@ -181,11 +184,18 @@ fn parent_pids() -> HashMap<u32, u32> {
     };
     let mut found = unsafe { Process32FirstW(snapshot, &raw mut entry) };
     while found.is_ok() {
-        parents.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+        if is_webview(&entry.szExeFile) {
+            parents.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+        }
         found = unsafe { Process32NextW(snapshot, &raw mut entry) };
     }
     let _ = unsafe { CloseHandle(snapshot) };
     parents
+}
+
+fn is_webview(exe: &[u16]) -> bool {
+    let len = exe.iter().position(|&unit| unit == 0).unwrap_or(exe.len());
+    String::from_utf16_lossy(&exe[..len]).eq_ignore_ascii_case("msedgewebview2.exe")
 }
 
 #[implement(IAudioSessionNotification)]

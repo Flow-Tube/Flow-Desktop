@@ -137,6 +137,8 @@ PLAYER
 - Subtitles look and behave like YouTube's: auto-generated captions roll up two lines as words are spoken, and manual captions keep all their lines.
 - Subtitles scale with the player, with a size setting from 50% to 400% in Settings, Subtitle Style or the + and - keys. Saved subtitle sizes and positions from older builds reset to the defaults.
 - Drag subtitles anywhere on the player for the current video. Clicking them still pauses, seeks or opens the menu as before.
+- The player's settings menu and right-click menu close when you click the video, the control bar or anywhere else, or press Escape, and that click no longer pauses the video. Only one of them is open at a time.
+- Both menus have a cleaner look and open and close quickly without bouncing. The settings menu eases its height and slides between its pages, and the right-click menu opens at the cursor. Their labels can now be translated.
 - Theater mode is lighter: the color glow around the video is drawn without a blur filter, samples the video less often, and can be turned off with the new Ambient mode setting. It is off on Linux, where it cost the most.
 - The player follows the page while you scroll without re-laying out the window, and scrolling a menu or side panel no longer moves it.
 - Theater mode now glides: the player grows into its new place and back, its corners squaring as it goes, while the page below fades in. Comments, live chat and the side panels keep their place instead of loading again. If a computer is too slow for the glide, the player fades instead.

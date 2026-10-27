@@ -89,7 +89,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
         aria-label={header?.title}
         onKeyDown={onKeyDown}
         onClick={(event) => event.stopPropagation()}
-        className="animate-menu-in w-72 overflow-hidden rounded-lg border border-chrome-neutral-800 bg-surface-container-high p-1.5 text-sm text-chrome-neutral-200 outline-none"
+        className="w-72 overflow-hidden rounded-lg border border-chrome-neutral-800 bg-surface-container-high p-1.5 text-sm text-chrome-neutral-200 outline-none"
       >
         {header ? (
           <div className="flex items-center gap-3 px-1.5 pb-2.5 pt-1">

@@ -4,7 +4,7 @@ use tracing::warn;
 
 use crate::db::{settings, watch_history};
 use crate::errors::AppResult;
-use crate::flow_neuro::key_migration::{spell_from_titles, to_key_spec_2};
+use crate::flow_neuro::key_migration::{spell_from_titles, to_key_spec_2, to_key_spec_3};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::maintenance::migrate;
 use crate::flow_neuro::scoring::UserBrain;
@@ -63,6 +63,10 @@ pub async fn settle_brain(pool: &SqlitePool, brain: &mut UserBrain) -> AppResult
         let titles = watch_history::recent_video_titles(pool, SPELLING_TITLES).await?;
         spell_from_titles(brain, &titles);
         tracing::info!("[FlowNeuro] brain converted to key spec 2");
+        changed = true;
+    }
+    if to_key_spec_3(brain) {
+        tracing::info!("[FlowNeuro] brain converted to key spec 3");
         changed = true;
     }
     // Sync carries the higher of two devices' schema numbers, so the schema cannot say whether

@@ -1,4 +1,4 @@
-//! The brain across key specs: the desktop advertises key spec 2 and its key language, sends its
+//! The brain across key specs: the desktop advertises its key spec and key language, sends its
 //! brain only to a peer that writes keys the same way, and reads a peer's older spellings (or its
 //! own merged state from before key spec 2) into the keys they mean, counting nothing twice.
 
@@ -11,7 +11,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
 use common::bind_loopback;
-use flow_desktop_lib::flow_neuro::keyspec::KeySpec;
+use flow_desktop_lib::flow_neuro::keyspec::{KeySpec, VERSION};
 use flow_desktop_lib::sync::apply::apply_payload;
 use flow_desktop_lib::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, GCounter, Hlc, Lww, RejectionSignalWire,
@@ -37,7 +37,7 @@ const PEER: &str = "dpeer";
 fn the_brain_capability_names_its_key_spec_and_language() {
     let caps = serde_json::to_value(desktop_capabilities("en")).unwrap();
     let brain = &caps["collections"]["flow_neuro_brain"];
-    assert_eq!(brain["keySpec"], 2);
+    assert_eq!(brain["keySpec"], 3);
     assert_eq!(brain["keyLanguage"], "en");
     // Collections without topic keys say so the way Android does: spec 0, no language.
     assert_eq!(caps["collections"]["likes"]["keySpec"], 0);
@@ -151,9 +151,11 @@ async fn offered_to(their_caps: CapabilitiesFrame) -> Vec<String> {
 #[tokio::test]
 async fn the_brain_goes_only_to_a_peer_that_writes_topic_keys_the_same_way() {
     assert_eq!(offered_to(peer_caps(0, "")).await, ["likes"]);
-    assert_eq!(offered_to(peer_caps(2, "es")).await, ["likes"]);
+    assert_eq!(offered_to(peer_caps(3, "es")).await, ["likes"]);
+    // A peer still on key spec 2 would file Simplified Chinese keys beside its Traditional ones.
+    assert_eq!(offered_to(peer_caps(2, "en")).await, ["likes"]);
     assert_eq!(
-        offered_to(peer_caps(2, "en")).await,
+        offered_to(peer_caps(3, "en")).await,
         ["flow_neuro_brain", "likes"]
     );
 }
@@ -320,12 +322,12 @@ async fn a_key_spec_2_snapshot_merges_into_the_keys_already_here() {
     expected.sort();
     assert_eq!(topics(&brain), expected);
     assert_eq!(brain["idf_word_frequency"]["guitar"], 8);
-    assert_eq!(brain["key_spec"], 2);
+    assert_eq!(brain["key_spec"], VERSION);
     // The old local spelling labels the stem it became.
     assert_eq!(brain["display_forms"][&restor]["form"], "Restoring");
 
     let merged = get(&pool, "sync_neuro_merged").await;
-    assert_eq!(merged["key_spec"], 2);
+    assert_eq!(merged["key_spec"], VERSION);
     assert_eq!(merged["key_language"], "en");
 }
 
@@ -384,4 +386,28 @@ async fn merged_state_from_before_key_spec_2_is_read_without_counting_twice() {
     apply(&pool, &peer_snapshot(&[], &[("guitar", 6)], 6), "r2").await;
     let again = get(&pool, "user_neuro_brain").await;
     assert_eq!(again["idf_word_frequency"]["guitar"], 15);
+}
+
+#[tokio::test]
+async fn traditional_keys_from_a_key_spec_2_peer_join_their_simplified_ones() {
+    let pool = memory_pool().await;
+    put(
+        &pool,
+        "user_neuro_brain",
+        &json!({ "language_profile": "en", "key_language": "en", "key_spec": 3,
+                 "global_vector": { "topics": { "机器学习": 0.3 } },
+                 "idf_word_frequency": { "机器学习": 2 }, "idf_total_documents": 2 }),
+    )
+    .await;
+
+    apply(
+        &pool,
+        &peer_snapshot(&[("機器學習", 0.6)], &[("機器學習", 4)], 4),
+        "r1",
+    )
+    .await;
+
+    let brain = get(&pool, "user_neuro_brain").await;
+    assert_eq!(topics(&brain), ["机器学习"]);
+    assert_eq!(brain["key_spec"], VERSION);
 }

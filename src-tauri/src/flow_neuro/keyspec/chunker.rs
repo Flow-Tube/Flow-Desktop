@@ -4,19 +4,29 @@
 
 use super::KeySpec;
 use super::chars::{is_digit, utf16_len};
-use super::tables::{DERIVED, format_of, tables};
-use super::text::{fold, is_topic_sized, is_word_char, words};
+use super::tables::{DERIVED, format_of, run_breaks, tables};
+use super::text::{
+    HanFold, Piece, fold_with, is_han, is_kana, is_topic_sized, is_word_char, pieces,
+};
 
 const JOINERS: [char; 3] = ['-', '.', '&'];
 const KEEP_SUFFIX: [char; 2] = ['+', '#'];
 
+/// The longest merged Han run, in characters.
+const MAX_MERGED_CHARS: usize = 5;
+
 /// A title read by the key spec: its chunks of keyed words, the "word number" model pairs it
-/// names ("pixel 10") and the formats it announces, in reading order.
+/// names ("pixel 10") and the formats it announces, in reading order. `merged` holds the runs of
+/// Han characters the word breaker left single ("周杰伦"), candidates until
+/// [`super::phrases::is_merged_run`] promotes one, and `singles` those single characters, which
+/// count toward document frequency.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Chunks {
     pub chunks: Vec<Vec<String>>,
     pub model_pairs: Vec<String>,
     pub formats: Vec<String>,
+    pub merged: Vec<String>,
+    pub singles: Vec<String>,
 }
 
 /// A run of [`Chunks::words`] inside one chunk, from word `from` up to but not including `to`.
@@ -92,8 +102,10 @@ impl Item {
     }
 }
 
-pub(crate) fn chunk(spec: &KeySpec, text: &str) -> Chunks {
-    let pieces = words(&fold(text));
+pub(crate) fn chunk(spec: &KeySpec, text: &str, han: HanFold) -> Chunks {
+    let folded = fold_with(text, han);
+    let spans = pieces(&folded);
+    let pieces: Vec<String> = spans.iter().map(|span| span.text.clone()).collect();
     let is_stop_word = spec.stop_words_for(&pieces);
     let mut items = Vec::new();
     for piece in &pieces {
@@ -120,7 +132,108 @@ pub(crate) fn chunk(spec: &KeySpec, text: &str) -> Chunks {
         }
     }
     close(&mut out, &mut current);
+    if han != HanFold::None {
+        merge_han_runs(&folded, &spans, &is_stop_word, han, &mut out);
+    }
     out
+}
+
+/// Stage 6 for Chinese: Han characters the breaker left single join into one candidate with the
+/// single characters beside them, the word before them, or (after a lone character) the word after
+/// it, split at the language's break characters. A run is 2 to [`MAX_MERGED_CHARS`] characters and
+/// holds no stop or format word; a format word inside one still counts as a format.
+fn merge_han_runs(
+    folded: &str,
+    spans: &[Piece],
+    is_stop_word: &impl Fn(&str) -> bool,
+    han: HanFold,
+    out: &mut Chunks,
+) {
+    if !folded.chars().any(is_han) {
+        return;
+    }
+    let language = if han == HanFold::UnlessKana && folded.chars().any(is_kana) {
+        "ja"
+    } else {
+        "zh"
+    };
+    let Some(breaks) = run_breaks(language) else {
+        return;
+    };
+    let valid = |candidate: &[char]| {
+        (2..=MAX_MERGED_CHARS).contains(&candidate.len())
+            && (2..=candidate.len()).all(|length| {
+                candidate.windows(length).all(|part| {
+                    let part: String = part.iter().collect();
+                    !is_stop_word(&part) && format_of(&part).is_none()
+                })
+            })
+    };
+    let mut keys: Vec<String> = Vec::new();
+    let flush = |group: &mut Vec<Vec<char>>, out: &mut Chunks, keys: &mut Vec<String>| {
+        let mut i = 0;
+        while i < group.len() {
+            if group[i].len() != 1 {
+                i += 1;
+                continue;
+            }
+            let mut end = i;
+            while end < group.len() && group[end].len() == 1 {
+                end += 1;
+            }
+            let run: Vec<char> = group[i..end].iter().flatten().copied().collect();
+            let prefix: &[char] = match i.checked_sub(1).map(|p| &group[p]) {
+                Some(word) if word.len() >= 2 => word,
+                _ => &[],
+            };
+            let suffix: &[char] = match group.get(end) {
+                Some(word) if run.len() == 1 && word.len() >= 2 => word,
+                _ => &[],
+            };
+            for single in &group[i..end] {
+                add(&mut out.singles, single.iter().collect());
+            }
+            for length in 2..=run.len() {
+                for part in run.windows(length) {
+                    let part: String = part.iter().collect();
+                    if let Some(format) = format_of(&part) {
+                        add(&mut out.formats, format.to_string());
+                    }
+                }
+            }
+            if valid(&run) {
+                add(keys, run.iter().collect());
+            }
+            if !prefix.is_empty() {
+                let joined: Vec<char> = prefix.iter().chain(&run).copied().collect();
+                if valid(&joined) {
+                    add(keys, joined.iter().collect());
+                }
+            }
+            if !suffix.is_empty() {
+                let joined: Vec<char> = run.iter().chain(suffix).copied().collect();
+                if valid(&joined) {
+                    add(keys, joined.iter().collect());
+                }
+            }
+            i = end;
+        }
+        group.clear();
+    };
+    let mut group: Vec<Vec<char>> = Vec::new();
+    for span in spans {
+        let chars: Vec<char> = span.text.chars().collect();
+        let all_han = chars.iter().all(|c| is_han(*c));
+        let is_break = chars.len() == 1 && breaks.contains(&chars[0]);
+        if !all_han || !span.joined || is_break {
+            flush(&mut group, out, &mut keys);
+        }
+        if all_han && !is_break {
+            group.push(chars);
+        }
+    }
+    flush(&mut group, out, &mut keys);
+    out.merged = keys;
 }
 
 fn close(out: &mut Chunks, current: &mut Vec<String>) {
@@ -312,4 +425,10 @@ fn is_year(text: &str) -> bool {
     bytes.len() == 4
         && (bytes.starts_with(b"19") || bytes.starts_with(b"20"))
         && bytes[2..].iter().all(u8::is_ascii_digit)
+}
+
+fn add(list: &mut Vec<String>, item: String) {
+    if !list.contains(&item) {
+        list.push(item);
+    }
 }

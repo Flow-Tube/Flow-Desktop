@@ -9,7 +9,6 @@ use std::collections::{HashMap, HashSet};
 use crate::flow_neuro::display_forms::label;
 use crate::flow_neuro::features::{is_noise_topic, pick_keys};
 use crate::flow_neuro::keyspec::KeySpec;
-use crate::flow_neuro::keyspec::text::fold;
 use crate::flow_neuro::scoring::{
     DEVELOPING_TOPIC_THRESHOLD, TIME_BUCKET_CONFIDENT_EVENTS, UserBrain, strip_domain_tag,
 };
@@ -41,7 +40,7 @@ fn blocked_keys(brain: &UserBrain, spec: &KeySpec) -> HashSet<String> {
     let mut blocked: HashSet<String> = brain
         .blocked_topics
         .iter()
-        .map(|topic| spec.key_of(fold(topic).trim()))
+        .map(|topic| spec.key_of(spec.fold(topic).trim()))
         .collect();
     let picked = pick_keys(brain);
     let phrase_words: Vec<String> = blocked

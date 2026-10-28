@@ -4,7 +4,11 @@ import { SETTINGS } from "../settings/schema";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { activeTab, useTabsStore } from "../../store/useTabsStore";
 import { readSavedWatchProgress } from "../useVideoStream";
-import { currentEntry } from "./tabHistory";
+import { createEntry, currentEntry, type TabHistory } from "./tabHistory";
+import { createTabId } from "./tabList";
+import { IS_MAIN_WINDOW } from "../appWindow";
+import { takeAppWindowSession } from "../api/appWindow";
+import { primeStreamInfo } from "../streamResolution";
 import { parseTabSession, restoreTabSession, serializeTabSession } from "./tabSession";
 import { playerSnapshot } from "./tabPlayback";
 import { watchVideoIdFromPath } from "../watchRouteSync";
@@ -32,15 +36,37 @@ function save(): void {
   );
 }
 
+/** An extra window starts on the page it was opened for, with a moved video picking up where it was. */
+async function bootExtraWindow(): Promise<void> {
+  const session = await takeAppWindowSession().catch(() => null);
+  if (!session) return;
+  const tab: TabHistory = { id: createTabId(), entries: [createEntry(session.route)], index: 0 };
+  useTabsStore.getState().restoreTabs({ tabs: [tab], activeId: tab.id, parked: {}, titles: {} });
+
+  const handoff = session.handoff;
+  const video = handoff?.queue[handoff.currentIndex];
+  if (!handoff || !video) return;
+  if (handoff.stream) primeStreamInfo(video.id, handoff.stream.info, handoff.stream.resolvedAt);
+  const player = usePlayerStore.getState();
+  player.setQueue(handoff.queue, handoff.currentIndex, handoff.playlistContext);
+  player.setPipHandoff(video.id, handoff.positionSeconds, handoff.playing);
+  useTabsStore.getState().setPlayerTab(tab.id);
+}
+
 /**
- * Brings back the tabs from the last run, then keeps saving them. Nothing
- * starts playing: a restored video page opens paused where it was left.
- * Returns false until the saved tabs are in place, so no page loads twice.
+ * Brings back the main window's tabs from the last run, then keeps saving
+ * them; an extra window instead opens on the page it was given. Nothing starts
+ * playing on restore: a video page opens paused where it was left. Returns
+ * false until the tabs are in place, so no page loads twice.
  */
 export function useTabSession(): boolean {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (!IS_MAIN_WINDOW) {
+      void bootExtraWindow().finally(() => setReady(true));
+      return;
+    }
     let cancelled = false;
     void getSetting(SETTINGS.TAB_SESSION)
       .catch(() => null)
@@ -70,7 +96,7 @@ export function useTabSession(): boolean {
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !IS_MAIN_WINDOW) return;
     let timer: number | undefined;
     const schedule = () => {
       window.clearTimeout(timer);

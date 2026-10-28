@@ -77,6 +77,8 @@ import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
 import { useTabShortcuts } from "./lib/tabs/useTabShortcuts";
 import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
 import { useTabSession } from "./lib/tabs/useTabSession";
+import { useCrossWindowSync } from "./lib/useCrossWindowSync";
+import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
@@ -105,8 +107,10 @@ function App() {
   useTabShortcuts();
   useActiveTabTitle();
   const tabsRestored = useTabSession();
+  useCrossWindowSync();
 
-  const [loadingOnboarding, setLoadingOnboarding] = useState(true);
+  // Onboarding belongs to the main window; an extra window only exists once it is done.
+  const [loadingOnboarding, setLoadingOnboarding] = useState(IS_MAIN_WINDOW);
 
   useEffect(() => {
     void useFeedActionsStore.getState().load();
@@ -125,6 +129,7 @@ function App() {
 
   // Check onboarding state from sqlite db setting
   useEffect(() => {
+    if (!IS_MAIN_WINDOW) return;
     const checkOnboarding = async () => {
       try {
         const completed = await getOnboardingStatus();
@@ -277,26 +282,31 @@ function App() {
       </div>
       <GlobalVideoPlayer />
       <PipWindowController />
-      <GlobalMusicAudio />
-      <LayoutGroup>
-        <GlobalMusicDock />
-        <MusicOverlay />
-      </LayoutGroup>
+      {/* Music, deep links, the updater and other once-per-app jobs run in the main window only. */}
+      {IS_MAIN_WINDOW && (
+        <>
+          <GlobalMusicAudio />
+          <LayoutGroup>
+            <GlobalMusicDock />
+            <MusicOverlay />
+          </LayoutGroup>
+          <DeepFlowController />
+          <DeepLinkController />
+          <MusicTrayController />
+          <ScrobbleController />
+        </>
+      )}
       <EqualizerDialog />
       <AddToAlbumModal />
       <AddTracksToAlbumModal />
       <AddToPlaylistModal />
-      <DeepFlowController />
-      <DeepLinkController />
       <DiscordPresenceController />
-      <MusicTrayController />
-      <ScrobbleController />
       <LayoutGroup id="downloads">
         <DownloadDialog />
         <DownloadActivity />
       </LayoutGroup>
-      <DonationPromptHost enabled={location.pathname !== "/onboarding"} />
-      <UpdateManager enabled={location.pathname !== "/onboarding"} />
+      <DonationPromptHost enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
+      <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <ToastHost />
     </div>
   );

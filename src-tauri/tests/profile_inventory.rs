@@ -286,3 +286,18 @@ fn device_tables_go_through_the_device_pool() {
     }
     assert!(problems.is_empty(), "{problems:#?}");
 }
+
+#[test]
+fn device_settings_in_the_inventory_are_routed_as_device_keys() {
+    use flow_desktop_lib::profiles::device_keys::is_device_key;
+    let wrong: Vec<String> = inventory()
+        .into_iter()
+        .filter(|((kind, _), _)| kind == "setting")
+        .filter(|((_, name), scope)| (scope == "DEVICE") != is_device_key(name))
+        .map(|((_, name), scope)| format!("{name} is {scope}"))
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "inventory and device_keys.rs disagree: {wrong:?}"
+    );
+}

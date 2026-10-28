@@ -1,6 +1,7 @@
 //! Profiles: one install holds up to five, each with its own database, identity and web storage.
 //! Exactly one profile is loaded per process; switching restarts the app.
 
+pub mod device_keys;
 pub mod registry;
 
 use std::path::{Path, PathBuf};

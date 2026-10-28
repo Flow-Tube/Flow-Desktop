@@ -870,6 +870,107 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// Every table and setting of a new profile's database, as one searchable string.
+    async fn dump(dir: &Path) -> String {
+        let pool = SqlitePool::connect(&format!(
+            "sqlite://{}",
+            dir.join("flow-desktop.sqlite").display()
+        ))
+        .await
+        .unwrap();
+        let tables: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '_sqlx_migrations'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let mut out = String::new();
+        for table in tables {
+            let columns: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT name FROM pragma_table_info('{table}')"
+            )))
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            let row = columns
+                .iter()
+                .map(|column| format!("coalesce(CAST(\"{column}\" AS TEXT), '')"))
+                .collect::<Vec<_>>()
+                .join(" || '|' || ");
+            let rows: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+                "SELECT {row} FROM \"{table}\""
+            )))
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            out.push_str(&rows.join("\n"));
+        }
+        pool.close().await;
+        out
+    }
+
+    #[tokio::test]
+    async fn nothing_personal_reaches_a_new_profile_unless_copied() {
+        let (dir, service, pool) = setup().await;
+        for statement in [
+            "INSERT INTO watch_history (video_id, title, channel_name, watch_date, watch_duration_seconds, total_duration_seconds) VALUES ('zzleakHistory', 't', 'c', '2025-01-01', 1, 2)",
+            "INSERT INTO notifications (video_id, title, channel_id, channel_name, created_at) VALUES ('zzleakNotify', 't', 'UC', 'c', 1)",
+            "INSERT INTO settings (key, value) VALUES ('flow_search', 'zzleakSearch'), ('user_playlists', 'zzleakPlaylist'), ('saved_albums', 'zzleakAlbum'), ('blocked_reveal_pin', 'zzleakPin'), ('sync_neuro_merged', 'zzleakSync')",
+            "UPDATE settings SET value = 'zzleakLikes' WHERE key = 'liked_items'",
+        ] {
+            sqlx::query(sqlx::AssertSqlSafe(statement))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let fresh = service
+            .create(&pool, request("Fresh", CopyParts::default()))
+            .await
+            .unwrap();
+        let fresh_dump = dump(&dir.join("profiles").join(&fresh.id)).await;
+        for marker in ["zzleak", "ocean", "/media", "{brain}", "[1]"] {
+            assert!(
+                !fresh_dump.contains(marker),
+                "{marker} reached a fresh profile"
+            );
+        }
+
+        let settings = [
+            "theme_id",
+            "liked_items",
+            "user_playlists",
+            "blocked_reveal_pin",
+            "download_location",
+        ]
+        .map(String::from)
+        .to_vec();
+        let copied = service
+            .create(
+                &pool,
+                request(
+                    "Copied",
+                    CopyParts {
+                        settings,
+                        subscriptions: true,
+                        recommendations: true,
+                    },
+                ),
+            )
+            .await
+            .unwrap();
+        let copied_dump = dump(&dir.join("profiles").join(&copied.id)).await;
+        for marker in ["ocean", "[1]", "{brain}"] {
+            assert!(copied_dump.contains(marker), "{marker} should be copied");
+        }
+        for marker in ["zzleak", "/media"] {
+            assert!(
+                !copied_dump.contains(marker),
+                "{marker} must never be copied"
+            );
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[tokio::test]
     async fn the_limit_counts_default() {
         let (dir, service, pool) = setup().await;

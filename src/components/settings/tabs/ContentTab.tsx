@@ -35,6 +35,7 @@ export function ContentTab() {
   const [blockedMode, setBlockedMode] = usePreference(SETTINGS.BLOCKED_CONTENT_MODE, 'blur');
   const [disableShorts, setDisableShorts] = useBoolPref(SETTINGS.DISABLE_SHORTS_PLAYER, false);
   const [shortsNav, setShortsNav] = useBoolPref(SETTINGS.SHORTS_NAVIGATION_ENABLED, true);
+  const [tabsOn, setTabsOn] = useBoolPref(SETTINGS.TABS_ENABLED, false);
   const [shortsPlaybackMode, setShortsPlaybackMode] = usePreference(SETTINGS.SHORTS_PLAYBACK_MODE, 'loop');
   const [shortsAutoScrollSeconds, setShortsAutoScrollSeconds] = useNumberPref(SETTINGS.SHORTS_AUTO_SCROLL_SECONDS, 10);
   const [musicNav, setMusicNav] = useBoolPref(SETTINGS.MUSIC_NAVIGATION_ENABLED, true);
@@ -167,6 +168,7 @@ export function ContentTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_nav_tabs')}>
+        <SettingItem title={getString('settings_tabs_enabled')} description={getString('settings_tabs_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)}><ToggleSwitch checked={tabsOn} onChange={setTabsOn} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_shorts_tab')} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)}><ToggleSwitch checked={shortsNav} onChange={setShortsNav} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_music_tab')} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)}><ToggleSwitch checked={musicNav} onChange={setMusicNav} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_categories_tab')} description={getString('settings_categories_tab_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)}><ToggleSwitch checked={categoriesTab} onChange={setCategoriesTab} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)} /></SettingItem>

@@ -845,6 +845,8 @@
   "settings_music_tab": "Music Tab",
   "settings_categories_tab": "Categories Tab",
   "settings_categories_tab_desc": "Add an Explore/Categories tab",
+  "settings_tabs_enabled": "Open pages in tabs",
+  "settings_tabs_enabled_desc": "Keep several pages open in the side rail, like browser tabs. Middle-click a video or link to open it in a new tab. Turning this off keeps only the tab you are on.",
   "settings_group_notifications": "Notifications",
   "settings_notifications_enabled": "Subscription Notifications",
   "settings_notifications_enabled_desc": "Notify me when subscribed channels upload new videos",

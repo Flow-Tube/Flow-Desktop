@@ -416,7 +416,7 @@ pub fn run() {
             let scrobbler = Arc::new(scrobble::scrobbler::Scrobbler::new(
                 pool.clone(),
                 Arc::new(scrobble::credentials::ProfileScoped::new(
-                    scrobble::credentials::Keychain,
+                    scrobble::credentials::keychain(),
                     &active_profile,
                 )),
             ));

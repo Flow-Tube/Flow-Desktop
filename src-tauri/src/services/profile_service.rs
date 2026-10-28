@@ -11,7 +11,8 @@ use tokio::sync::Mutex;
 use crate::errors::{AppError, AppResult};
 use crate::profiles::registry::{self, Profile, ProfileAvatar, RegistryState};
 use crate::profiles::{ActiveProfile, device_keys, local_state, photos};
-use crate::scrobble::credentials::{self, Keychain, ProfileScoped};
+use crate::scrobble::credentials::{self, ProfileScoped};
+use crate::security::keychain::Keychain;
 
 /// Library rows a new profile can take: channels and groups (contract part SUBSCRIPTIONS).
 const SUBSCRIPTION_KEYS: [&str; 3] = [
@@ -604,7 +605,7 @@ fn keychain_for(id: &str) -> ProfileScoped<Keychain> {
         after_switch: false,
         default_name: String::new(),
     };
-    ProfileScoped::new(Keychain, &owner)
+    ProfileScoped::new(credentials::keychain(), &owner)
 }
 
 fn forget_in_keychain(id: &str) -> bool {

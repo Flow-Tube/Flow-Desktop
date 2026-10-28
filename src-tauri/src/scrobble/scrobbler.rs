@@ -12,13 +12,14 @@ use tokio::sync::{Mutex, Notify};
 
 use super::SignInError;
 use super::audioscrobbler::{self, Client, Keys};
-use super::credentials::{self, CredentialError, CredentialStore, Credentials, OwnKey};
+use super::credentials::{self, Credentials, OwnKey};
 use super::index::{self, Index};
 use super::listenbrainz;
 use super::models::{Account, ScrobbleEntry, SendOutcome, Service};
 use super::queue::{self, Table};
 use super::rules::{self, TrackInfo};
 use crate::errors::{AppError, AppResult};
+use crate::security::keychain::{CredentialError, CredentialStore};
 
 const LAST_FM: Client = Client::new(audioscrobbler::LASTFM_URL);
 const LIBRE_FM: Client = Client::new(audioscrobbler::LIBREFM_URL);
@@ -480,7 +481,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use super::*;
-    use crate::scrobble::credentials::memory::MemoryStore;
+    use crate::security::keychain::memory::MemoryStore;
     use sqlx::sqlite::SqlitePoolOptions;
 
     /// Counts reads, and can refuse them as a denied macOS prompt does.

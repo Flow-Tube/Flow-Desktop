@@ -9,6 +9,7 @@ table	sync_identity	DEVICE	-	The sync device id; stays in Default's file where o
 table	sync_peers	DEFAULT_ONLY	sync	Only Default syncs
 table	sync_log	DEFAULT_ONLY	sync	Only Default syncs
 table	sync_changes	DEFAULT_ONLY	sync	Only Default syncs; local edits are not recorded elsewhere
+table	sync2_sent	DEFAULT_ONLY	sync	Only Default syncs; the FLOW-SYNC/2 upload ledger
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log

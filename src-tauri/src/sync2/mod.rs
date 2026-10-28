@@ -3,6 +3,7 @@
 
 #![allow(clippy::must_use_candidate)]
 
+pub mod batches;
 pub mod blob;
 pub mod curve;
 pub mod device;

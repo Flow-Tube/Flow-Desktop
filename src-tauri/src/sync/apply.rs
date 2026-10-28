@@ -174,7 +174,14 @@ async fn apply_watch_history(
     device_id: &str,
     ndjson: &[u8],
 ) -> Result<ApplyStats, SyncError> {
-    let incoming = parse_ndjson::<WatchHistoryRecord>(ndjson)?;
+    // The desktop keeps no thumbnail, so one sent along can't make a record differ.
+    let incoming: Vec<WatchHistoryRecord> = parse_ndjson::<WatchHistoryRecord>(ndjson)?
+        .into_iter()
+        .map(|record| WatchHistoryRecord {
+            thumbnail_url: None,
+            ..record
+        })
+        .collect();
 
     let rows: Vec<WatchRow> = sqlx::query_as::<_, WatchRow>(WATCH_SELECT)
         .fetch_all(&mut **tx)

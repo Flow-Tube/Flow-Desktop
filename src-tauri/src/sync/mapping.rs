@@ -287,10 +287,17 @@ impl WatchRow {
             duration_seconds: self.total_duration_seconds.map(|t| t.max(0) as u64),
             is_music: self.is_music,
             is_short: self.is_short,
+            thumbnail_url: None,
             hlc,
             deleted: false,
         }
     }
+}
+
+/// The standard thumbnail of a video, which every video has.
+#[must_use]
+pub fn video_thumbnail(video_id: &str) -> String {
+    format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg")
 }
 
 /// The DB column values for a canonical record, ready to bind into an INSERT.

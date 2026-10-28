@@ -70,6 +70,7 @@ fn wh(
         duration_seconds: Some(dur),
         is_music: false,
         is_short: false,
+        thumbnail_url: None,
         hlc: hlc.parse().unwrap(),
         deleted,
     }
@@ -841,4 +842,30 @@ async fn re_applying_a_channel_payload_is_a_no_op() {
 
     assert_eq!(read_setting(&pool, "subscriptions").await, after_first);
     assert_eq!(live_ids(&pool).await, vec!["UCx".to_string()]);
+}
+
+#[tokio::test]
+async fn history_goes_out_with_a_thumbnail_that_never_reads_as_a_change() {
+    let pool = memory_pool().await;
+    seed(&pool).await;
+    let out =
+        flow_desktop_lib::sync::export::export_collections(&pool, OUR, &[Collection::WatchHistory])
+            .await
+            .unwrap();
+    let sent: Vec<WatchHistoryRecord> = String::from_utf8(out[0].ndjson.clone())
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        sent[0].thumbnail_url.as_deref(),
+        Some("https://i.ytimg.com/vi/v1/hqdefault.jpg")
+    );
+
+    // The same records coming back, thumbnails and all, change nothing here.
+    let back = apply_payload(&pool, OUR, PEER, &[staged(&sent, "hash-back")])
+        .await
+        .unwrap();
+    let stat = &back.stats[0];
+    assert_eq!((stat.added, stat.updated, stat.tombstoned), (0, 0, 0));
 }

@@ -10,6 +10,7 @@ use flow_desktop_lib::sync2::curve::verify;
 use flow_desktop_lib::sync2::kdf::tag;
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::server::{ServerStore, StoreError};
+use flow_desktop_lib::sync2::store::Store;
 use serde_json::{Value, json};
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};

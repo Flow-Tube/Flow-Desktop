@@ -19,6 +19,7 @@ use flow_desktop_lib::sync2::recovery::recovery_keys;
 use flow_desktop_lib::sync2::roster::{Op, Role, apply_entry};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::ServerStore;
+use flow_desktop_lib::sync2::store::Store;
 use flow_desktop_lib::sync2::wrap::{unwrap_epoch_key, wrap_epoch_key};
 
 #[tokio::test]

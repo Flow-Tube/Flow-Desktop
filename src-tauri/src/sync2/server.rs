@@ -16,6 +16,7 @@ use super::curve::sign;
 use super::kdf::tag;
 use super::keys::MemberSecrets;
 use super::roster::{Entry, parse_entry};
+use super::store::Store;
 use crate::sync::qr::is_local_ip;
 
 /// Refresh a token this long before it expires.
@@ -244,67 +245,6 @@ impl ServerStore {
         unreachable!("the loop returns on its second pass")
     }
 
-    pub async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
-        let response = self
-            .authorized(Method::GET, &format!("v1/roster?after={after}"), None)
-            .await?;
-        let value = decode(response).await?;
-        let entries = value["entries"].as_array().ok_or(StoreError::Malformed)?;
-        Ok(entries
-            .iter()
-            .map(parse_entry)
-            .collect::<std::result::Result<_, _>>()?)
-    }
-
-    pub async fn append_roster(
-        &self,
-        head: &str,
-        entry: &Entry,
-        wraps: &BTreeMap<String, String>,
-        chain: Option<&str>,
-    ) -> Result<Appended> {
-        let mut value = json!({ "entry": entry, "wraps": wraps });
-        if let Some(chain) = chain {
-            value["chain"] = json!(chain);
-        }
-        let body = Body::Append {
-            value,
-            head: head.to_owned(),
-        };
-        let response = self
-            .authorized(Method::POST, "v1/roster", Some(body))
-            .await?;
-        if response.status() == StatusCode::CONFLICT {
-            let value: Value = response.json().await.map_err(|_| StoreError::Malformed)?;
-            let head = value["head"]
-                .as_str()
-                .ok_or(StoreError::Malformed)?
-                .to_owned();
-            return Ok(Appended::Conflict { head });
-        }
-        decode_empty(response).await.map(|()| Appended::Done)
-    }
-
-    pub async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
-            .await
-    }
-
-    pub async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
-        let response = self
-            .authorized(
-                Method::PUT,
-                &format!("v1/objects/{path}"),
-                Some(Body::Bytes(bytes)),
-            )
-            .await?;
-        decode_empty(response).await
-    }
-
-    pub async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        self.get_bytes(&format!("v1/objects/{path}")).await
-    }
-
     pub async fn delete_object(&self, path: &str) -> Result<()> {
         let response = self
             .authorized(Method::DELETE, &format!("v1/objects/{path}"), None)
@@ -313,21 +253,6 @@ impl ServerStore {
             return Ok(());
         }
         decode_empty(response).await
-    }
-
-    /// Objects that arrived after `cursor`, and the cursor to pass next time.
-    pub async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
-        let response = self
-            .authorized(Method::GET, &format!("v1/changes?after={cursor}"), None)
-            .await?;
-        let value = decode(response).await?;
-        let objects =
-            serde_json::from_value(value["objects"].clone()).map_err(|_| StoreError::Malformed)?;
-        let next = value["cursor"]
-            .as_str()
-            .and_then(|c| c.parse().ok())
-            .ok_or(StoreError::Malformed)?;
-        Ok((objects, next))
     }
 
     /// Creates the group on an unclaimed server with the operator's admin token.
@@ -361,6 +286,79 @@ impl ServerStore {
                 .map_err(StoreError::Network)?
                 .to_vec(),
         ))
+    }
+}
+
+impl Store for ServerStore {
+    async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
+        let response = self
+            .authorized(Method::GET, &format!("v1/roster?after={after}"), None)
+            .await?;
+        let value = decode(response).await?;
+        let entries = value["entries"].as_array().ok_or(StoreError::Malformed)?;
+        Ok(entries
+            .iter()
+            .map(parse_entry)
+            .collect::<std::result::Result<_, _>>()?)
+    }
+    async fn append_roster(
+        &self,
+        head: &str,
+        entry: &Entry,
+        wraps: &BTreeMap<String, String>,
+        chain: Option<&str>,
+    ) -> Result<Appended> {
+        let mut value = json!({ "entry": entry, "wraps": wraps });
+        if let Some(chain) = chain {
+            value["chain"] = json!(chain);
+        }
+        let body = Body::Append {
+            value,
+            head: head.to_owned(),
+        };
+        let response = self
+            .authorized(Method::POST, "v1/roster", Some(body))
+            .await?;
+        if response.status() == StatusCode::CONFLICT {
+            let value: Value = response.json().await.map_err(|_| StoreError::Malformed)?;
+            let head = value["head"]
+                .as_str()
+                .ok_or(StoreError::Malformed)?
+                .to_owned();
+            return Ok(Appended::Conflict { head });
+        }
+        decode_empty(response).await.map(|()| Appended::Done)
+    }
+    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
+        self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
+            .await
+    }
+    async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+        let response = self
+            .authorized(
+                Method::PUT,
+                &format!("v1/objects/{path}"),
+                Some(Body::Bytes(bytes)),
+            )
+            .await?;
+        decode_empty(response).await
+    }
+    async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        self.get_bytes(&format!("v1/objects/{path}")).await
+    }
+    /// Objects that arrived after `cursor`, and the cursor to pass next time.
+    async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
+        let response = self
+            .authorized(Method::GET, &format!("v1/changes?after={cursor}"), None)
+            .await?;
+        let value = decode(response).await?;
+        let objects =
+            serde_json::from_value(value["objects"].clone()).map_err(|_| StoreError::Malformed)?;
+        let next = value["cursor"]
+            .as_str()
+            .and_then(|c| c.parse().ok())
+            .ok_or(StoreError::Malformed)?;
+        Ok((objects, next))
     }
 }
 

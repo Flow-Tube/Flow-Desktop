@@ -7,6 +7,7 @@ pub mod batches;
 pub mod blob;
 pub mod curve;
 pub mod device;
+pub mod engine;
 pub mod entries;
 pub mod envelope;
 pub mod epoch;
@@ -22,6 +23,8 @@ pub mod recovery;
 pub mod roster;
 pub mod sealed;
 pub mod server;
+pub mod state;
+pub mod store;
 pub mod wrap;
 
 pub use error::{Error, Result};

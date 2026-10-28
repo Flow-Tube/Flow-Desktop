@@ -11,7 +11,6 @@ import { toggleDeepFlow } from '../../lib/deepFlow';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 import { activeTab, useTabsStore } from '../../store/useTabsStore';
 import { ProfileMenuButton } from '../profiles/ProfileMenuButton';
-import { PROFILES_UI_ENABLED } from '../../lib/profiles/flag';
 
 /** PageWrapper returns focus here when Escape closes the drawer. */
 export const SIDEBAR_MENU_BUTTON_ID = 'sidebar-menu-button';
@@ -105,7 +104,7 @@ export function Topbar() {
         <IconButton onClick={() => navigate('/settings')} title={getString('settings_title')} aria-label={getString('settings_title')}>
           <Settings />
         </IconButton>
-        {PROFILES_UI_ENABLED && <ProfileMenuButton />}
+        <ProfileMenuButton />
       </div>
     </header>
   );

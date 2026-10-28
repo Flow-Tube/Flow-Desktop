@@ -6,6 +6,13 @@ STATUS: PRE-RELEASE
 ABOUT
 Flow Desktop is a privacy-first YouTube and YouTube Music client - no account, no ads, no analytics, no telemetry. It is the desktop companion to Flow for Android.
 
+PROFILES
+- Up to five profiles on one computer, each with its own recommendations, history, library and settings, so a study profile and a gaming profile never mix. Downloads are shared.
+- Switch from your avatar in the top bar or in Settings > Profiles. Switching restarts Flow, and the new profile opens in its own theme.
+- A new profile starts fresh with a short setup, or copies your settings, subscriptions or recommendations. Profiles are not locked: anyone using the computer can switch.
+- Only the Default profile syncs with your phone. A master backup now holds every profile and restores them all.
+- The recommendation engine's profile is now called your taste profile.
+
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.

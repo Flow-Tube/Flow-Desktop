@@ -15,6 +15,25 @@
   --color-on-surface-variant: var(--color-on-surface-variant-val);
   --color-error: #F44336;
 
+  /* Profile colours: Flow for Android's eight seeds keep their hue and take the tones of
+     ProfileColors.kt (light: container 90, content 10; dark: container 30, content 90). */
+  --color-profile-blue-container: var(--profile-blue-container-val);
+  --color-profile-blue-content: var(--profile-blue-content-val);
+  --color-profile-teal-container: var(--profile-teal-container-val);
+  --color-profile-teal-content: var(--profile-teal-content-val);
+  --color-profile-green-container: var(--profile-green-container-val);
+  --color-profile-green-content: var(--profile-green-content-val);
+  --color-profile-amber-container: var(--profile-amber-container-val);
+  --color-profile-amber-content: var(--profile-amber-content-val);
+  --color-profile-orange-container: var(--profile-orange-container-val);
+  --color-profile-orange-content: var(--profile-orange-content-val);
+  --color-profile-red-container: var(--profile-red-container-val);
+  --color-profile-red-content: var(--profile-red-content-val);
+  --color-profile-pink-container: var(--profile-pink-container-val);
+  --color-profile-pink-content: var(--profile-pink-content-val);
+  --color-profile-purple-container: var(--profile-purple-container-val);
+  --color-profile-purple-content: var(--profile-purple-content-val);
+
   /* --- Chrome palette (custom-themes migration) ---
      Mirrors Tailwind's default palette exactly (oklch values copied from
      tailwindcss/theme.css) so swapping a literal `zinc-800`-style class for
@@ -111,6 +130,45 @@
       --color-on-surface-variant-val: #B8B8B8;
       --color-on-primary-val: #FFFFFF;
     }
+  }
+
+  /* Dark tones by default (dark and amoled), light tones once a light theme applies. */
+  :root {
+    --profile-blue-container-val: #0043A4;
+    --profile-blue-content-val: #BEDDFF;
+    --profile-teal-container-val: #005448;
+    --profile-teal-content-val: #8BF5E4;
+    --profile-green-container-val: #005500;
+    --profile-green-content-val: #9BF897;
+    --profile-amber-container-val: #6F3B00;
+    --profile-amber-content-val: #FFD443;
+    --profile-orange-container-val: #8E1700;
+    --profile-orange-content-val: #FFBC5D;
+    --profile-red-container-val: #990013;
+    --profile-red-content-val: #FFB0A2;
+    --profile-pink-container-val: #95004A;
+    --profile-pink-content-val: #FFB2E6;
+    --profile-purple-container-val: #533197;
+    --profile-purple-content-val: #FCCCFF;
+  }
+
+  :root[data-theme-variant="light"] {
+    --profile-blue-container-val: #BEDDFF;
+    --profile-blue-content-val: #001B6F;
+    --profile-teal-container-val: #8BF5E4;
+    --profile-teal-content-val: #00281D;
+    --profile-green-container-val: #9BF897;
+    --profile-green-content-val: #002900;
+    --profile-amber-container-val: #FFD443;
+    --profile-amber-content-val: #430C00;
+    --profile-orange-container-val: #FFBC5D;
+    --profile-orange-content-val: #590000;
+    --profile-red-container-val: #FFB0A2;
+    --profile-red-content-val: #5F0000;
+    --profile-pink-container-val: #FFB2E6;
+    --profile-pink-content-val: #5B001F;
+    --profile-purple-container-val: #FCCCFF;
+    --profile-purple-content-val: #180263;
   }
 
   body {

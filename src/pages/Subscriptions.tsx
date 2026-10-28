@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BellOff, BellRing, Check, ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, Trash2, Upload, User } from "lucide-react";
+import { BellOff, BellRing, ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, Trash2, Upload, User } from "lucide-react";
 import { parseSubscriptionExport } from "../lib/api/youtube";
 import { bootstrapFromSubscriptions } from "../lib/api/recommendation";
 import { SETTINGS } from "../lib/settings/schema";
@@ -23,6 +23,7 @@ import { upgradeAvatarUrl } from "../lib/thumbnails";
 import { useProxiedImageUrl } from "../lib/useProxiedImageUrl";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { ShortVideoSummary, VideoSummary } from "../types/video";
+import { Checkbox } from "../components/ui/Checkbox";
 
 interface SubscriptionsProps {
   onPlay: (video: VideoSummary) => void;
@@ -729,21 +730,12 @@ function GroupsModal({
                 const initial = channel.name.charAt(0).toUpperCase();
 
                 return (
-                  <label
+                  <Checkbox
                     key={channel.id}
-                    className="flex cursor-pointer items-center gap-3 px-3 py-2 transition-colors duration-200 ease-out hover:bg-surface-container"
+                    checked={selected}
+                    onChange={() => toggleChannel(channel.id)}
+                    className="px-3 py-2 transition-colors duration-200 ease-out hover:bg-surface-container"
                   >
-                    <input
-                      type="checkbox"
-                      checked={selected}
-                      onChange={() => toggleChannel(channel.id)}
-                      className="peer sr-only"
-                    />
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-chrome-neutral-700 bg-surface-container transition-colors duration-200 ease-out peer-checked:border-[var(--color-primary)] peer-checked:bg-[var(--color-primary)]">
-                      {selected ? (
-                        <Check size={14} className="text-[var(--color-on-primary)]" />
-                      ) : null}
-                    </span>
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-high text-xs font-semibold text-chrome-neutral-300">
                       {avatarUrl ? (
                         <ChannelAvatarImage src={avatarUrl} name={channel.name} />
@@ -757,7 +749,7 @@ function GroupsModal({
                         {channel.subscriberCountText || getString("subscriptions_subscribers_unavailable")}
                       </span>
                     </span>
-                  </label>
+                  </Checkbox>
                 );
               })}
             </div>

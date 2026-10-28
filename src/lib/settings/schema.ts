@@ -112,6 +112,7 @@ export const SETTINGS = {
   CONTENT_LANGUAGE: "content_language",
   DEEP_FLOW_ACTIVE: "deep_flow_active",
   DEEP_FLOW_ACTIVATED_AT: "deep_flow_activated_at",
+  TAB_SESSION: "tab_session",
   DEEP_FLOW_EXPIRE_HOURS: "deep_flow_expire_hours",
   DEEP_FLOW_SAVE_HISTORY: "deep_flow_save_history",
 
@@ -349,6 +350,7 @@ export const SETTING_DEFINITIONS = [
   // on the restoring device (its paired activated_at timestamp is internal too).
   bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired", "internal"),
   num(SETTINGS.DEEP_FLOW_ACTIVATED_AT, "content", 0, "wired", 0, undefined, "internal"),
+  json(SETTINGS.TAB_SESSION, "content", "null", "wired", "internal", "internal"),
   str(SETTINGS.DEEP_FLOW_EXPIRE_HOURS, "content", "4", "wired", ["0", "1", "2", "4", "6", "8", "12", "24"]),
   bool(SETTINGS.DEEP_FLOW_SAVE_HISTORY, "content", false, "wired"),
 

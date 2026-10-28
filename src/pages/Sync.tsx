@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Send,
   ShieldCheck,
+  UserRound,
   X,
 } from "lucide-react";
 
@@ -22,6 +23,10 @@ import { useSyncStore } from "../store/useSyncStore";
 import { SYNC_COLLECTIONS, type ManifestInfo, type StatInfo } from "../lib/api/sync";
 import { getString, type StringKey } from "../lib/i18n/index";
 import { looksLikeAddress, syncErrorMessage } from "../lib/syncErrors";
+import type { Profile } from "../lib/api/profiles";
+import { profileDisplayName } from "../lib/profiles/display";
+import { profileErrorMessage } from "../lib/profiles/profileErrors";
+import { useProfilesStore } from "../store/useProfilesStore";
 
 // --------------------------------------------------------------------------------------------
 // Collection display strings (resolved from i18n — no hardcoded copy in the view)
@@ -556,14 +561,51 @@ function MessageScreen({ icon, title, message }: { icon: React.ReactNode; title:
 // Page
 // --------------------------------------------------------------------------------------------
 
+/** Only Default syncs (FLOW-SYNC/1 carries no profile), so other profiles offer the switch. */
+function DefaultOnlyScreen({ defaultProfile }: { defaultProfile: Profile }) {
+  const switchTo = useProfilesStore((state) => state.switchTo);
+  const switching = useProfilesStore((state) => state.switchingTo !== null);
+  const [error, setError] = useState<string | null>(null);
+  const name = profileDisplayName(defaultProfile);
+  const onSwitch = () => {
+    setError(null);
+    switchTo(defaultProfile).catch((reason: unknown) => setError(profileErrorMessage(reason, "profiles_switch_failed")));
+  };
+  return (
+    <CenteredCard>
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high text-chrome-neutral-300">
+        <UserRound className="h-6 w-6" />
+      </div>
+      <h2 className="text-base font-medium text-chrome-neutral-100">{getString("sync_default_only_title", name)}</h2>
+      <p className="text-sm text-chrome-neutral-400">{getString("sync_default_only_body")}</p>
+      {error && <p className="text-sm text-chrome-red-400">{error}</p>}
+      <Button variant="primary" onClick={onSwitch} disabled={switching} className="px-6">
+        {switching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {getString("sync_default_only_action", name)}
+      </Button>
+    </CenteredCard>
+  );
+}
+
 export default function Sync() {
   const { status, error, init } = useSyncStore();
+  const profiles = useProfilesStore((state) => state.view);
+  const loadProfiles = useProfilesStore((state) => state.load);
 
   useEffect(() => {
     void init();
-  }, [init]);
+    void loadProfiles();
+  }, [init, loadProfiles]);
+
+  const defaultProfile =
+    profiles && profiles.activeId !== profiles.defaultId
+      ? profiles.profiles.find((profile) => profile.id === profiles.defaultId)
+      : undefined;
 
   const { screenKey, body } = useMemo(() => {
+    if (defaultProfile) {
+      return { screenKey: "defaultOnly", body: <DefaultOnlyScreen defaultProfile={defaultProfile} /> };
+    }
     switch (status.phase) {
       case "hosting":
         return { screenKey: "pairing", body: <PairingState /> };
@@ -613,7 +655,7 @@ export default function Sync() {
       default:
         return { screenKey: "setup", body: <SetupState /> };
     }
-  }, [status, error]);
+  }, [status, error, defaultProfile]);
 
   return (
     <div className="w-full px-6 py-8">

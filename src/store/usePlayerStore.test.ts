@@ -196,8 +196,8 @@ describe("shuffle", () => {
     usePlayerStore.getState().toggleShuffle();
     expect(usePlayerStore.getState().isShuffle).toBe(true);
     expect(usePlayerStore.getState().unshuffledQueue).toEqual(items);
-    // A random shuffle can land on the original order, so force a change.
-    usePlayerStore.getState().moveQueueItem(4, 1);
+    // A random shuffle can land on the original order; swap two upcoming videos when it does.
+    if (ids().join() === "a,b,c,d,e") usePlayerStore.getState().moveQueueItem(1, 2);
     expect(ids()).not.toEqual(["a", "b", "c", "d", "e"]);
 
     usePlayerStore.getState().toggleShuffle();

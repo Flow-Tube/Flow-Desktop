@@ -335,6 +335,7 @@ UNDER THE HOOD
 - On Windows, Flow keeps WebView2's default protections, including SmartScreen, and opens its hidden playback-token window with the same settings as the main window.
 - Removed unused code from the SABR streaming engine and MusicBrain, which clears 21 build warnings.
 - Nightly builds and pull request checks finish faster. They use a lighter link-time optimization than releases, the Intel Mac build runs on Apple Silicon, and the builds no longer wait for the test job. Release builds are unchanged.
+- Fixed a player test that failed about one run in 24, because a random shuffle could still end in the original order.
 
 SUPPORTED DEVICES
 - Windows 10/11 (x64 and ARM64)

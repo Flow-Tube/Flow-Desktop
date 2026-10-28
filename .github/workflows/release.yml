@@ -25,6 +25,7 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       is_prerelease: ${{ steps.release.outputs.is_prerelease }}
       notes: ${{ steps.changelog.outputs.notes }}
+      app_notes: ${{ steps.changelog.outputs.app_notes }}
 
     steps:
       - name: Check out repository
@@ -57,32 +58,25 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve changelog notes
+      # The GitHub body is markdown with the support message; the updater's
+      # latest.json gets plain text, because the update dialog prints it as is.
+      - name: Build release notes
         id: changelog
         shell: bash
         run: |
+          set -euo pipefail
           tag="${{ steps.release.outputs.tag }}"
 
-          # Prefer the changelog that matches the released tag; otherwise fall
-          # back to the newest changelog file by semantic version.
-          file="changelog/${tag}.txt"
-          if [[ ! -f "$file" ]]; then
-            file="$(ls -1 changelog/v*.txt 2>/dev/null | sort -V | tail -n1 || true)"
-          fi
-
-          if [[ -n "$file" && -f "$file" ]]; then
-            echo "Using changelog file: $file"
-          else
-            echo "No changelog file found; using a generic release note."
-          fi
+          node scripts/release-notes.mjs "$tag" > release-notes.md
+          node scripts/release-notes.mjs "$tag" --app > app-notes.txt
+          cat release-notes.md
 
           {
             echo "notes<<CHANGELOG_EOF"
-            if [[ -n "$file" && -f "$file" ]]; then
-              cat "$file"
-            else
-              echo "Download the installer for your operating system and architecture below."
-            fi
+            cat release-notes.md
+            echo "CHANGELOG_EOF"
+            echo "app_notes<<CHANGELOG_EOF"
+            cat app-notes.txt
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -350,9 +344,10 @@ jobs:
           path: appimage-sig
           merge-multiple: true
 
-      - name: Patch latest.json with the re-signed AppImage signatures
+      - name: Patch latest.json with the re-signed AppImage signatures and app notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
         shell: bash
         run: |
           set -euo pipefail
@@ -373,5 +368,9 @@ jobs:
             ' latest.json > latest.json.tmp
             mv latest.json.tmp latest.json
           done
+
+          # tauri-action copied the markdown release body into notes.
+          jq --arg notes "$APP_NOTES" '.notes = $notes' latest.json > latest.json.tmp
+          mv latest.json.tmp latest.json
 
           gh release upload "$tag" latest.json --clobber --repo "$GITHUB_REPOSITORY"

@@ -30,6 +30,12 @@ describe("tabShortcutForKey", () => {
     expect(tabShortcutForKey(press("Tab", { ctrlKey: true, shiftKey: true }), false)).toEqual({ kind: "cycle", step: -1 });
   });
 
+  it("opens a window with Cmd+Shift+N on macOS and Ctrl+Shift+N elsewhere", () => {
+    expect(tabShortcutForKey(press("N", { metaKey: true, shiftKey: true }), true)).toEqual({ kind: "new-window" });
+    expect(tabShortcutForKey(press("n", { ctrlKey: true, shiftKey: true }), false)).toEqual({ kind: "new-window" });
+    expect(tabShortcutForKey(press("n", { ctrlKey: true }), false)).toBeNull();
+  });
+
   it("leaves other keys alone", () => {
     expect(tabShortcutForKey(press("t"), false)).toBeNull();
     expect(tabShortcutForKey(press("t", { ctrlKey: true, shiftKey: true }), false)).toBeNull();

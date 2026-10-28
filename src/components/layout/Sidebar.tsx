@@ -9,6 +9,7 @@ import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
 import { SectionHeader, SubscriptionsNav } from './SidebarSections';
 import { SidebarTabs } from './SidebarTabs';
 import { getString } from '../../lib/i18n/index';
+import { openInNewTab } from '../../lib/openTarget';
 import { SETTINGS } from '../../lib/settings/schema';
 
 type SidebarProps = {
@@ -71,11 +72,11 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
       {/* Always 240 px wide, so labels never rewrap while the rail opens and closes. */}
       <div className="flex min-h-0 w-60 flex-1 flex-col overflow-y-auto overflow-x-hidden py-2">
         <nav className="flex flex-col gap-1.5">
-          <SidebarItem to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} collapsed={collapsed} />
-          <SidebarItem to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} collapsed={collapsed} />
-          {showShortsNav && <SidebarItem to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} collapsed={collapsed} />}
-          {showCategoriesNav && <SidebarItem to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} collapsed={collapsed} />}
-          {showMusicNav && <SidebarItem to="/music" {...navIconPair('music')} label={getString('sidebar_music')} onClick={closeOverlay} collapsed={collapsed} />}
+          <SidebarItem onOpenInNewTab={openInNewTab} to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} collapsed={collapsed} />
+          <SidebarItem onOpenInNewTab={openInNewTab} to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} collapsed={collapsed} />
+          {showShortsNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} collapsed={collapsed} />}
+          {showCategoriesNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} collapsed={collapsed} />}
+          {showMusicNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/music" {...navIconPair('music')} label={getString('sidebar_music')} onClick={closeOverlay} collapsed={collapsed} />}
         </nav>
 
         <SidebarTabs collapsed={collapsed} onNavigate={closeOverlay} />
@@ -83,8 +84,8 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
         {/* The rail's two icons and the full sections share one spot and cross-fade. */}
         <div className="grid">
           <nav className="sidebar-when-collapsed flex flex-col gap-1.5 [grid-area:1/1]">
-            <SidebarItem to="/subscriptions" {...navIconPair('subscriptions')} label={getString('sidebar_subscriptions')} collapsed={collapsed} />
-            <SidebarItem to="/library" {...navIconPair('you')} label={getString('sidebar_you')} collapsed={collapsed} />
+            <SidebarItem onOpenInNewTab={openInNewTab} to="/subscriptions" {...navIconPair('subscriptions')} label={getString('sidebar_subscriptions')} collapsed={collapsed} />
+            <SidebarItem onOpenInNewTab={openInNewTab} to="/library" {...navIconPair('you')} label={getString('sidebar_you')} collapsed={collapsed} />
           </nav>
 
           <div className="sidebar-when-expanded [grid-area:1/1]">
@@ -112,13 +113,13 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
             <section>
               <SectionHeader label={getString('sidebar_you')} to="/library" onClick={closeOverlay} />
               <nav className="mt-1 flex flex-col gap-1.5">
-                <SidebarItem to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
-                <SidebarItem to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
-                <SidebarItem to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
-                <SidebarItem to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
-                <SidebarItem to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
-                <SidebarItem to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
-                <SidebarItem to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
               </nav>
             </section>
           </div>
@@ -129,13 +130,13 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
           <div className="sidebar-when-expanded">
             {divider}
             <nav className="mb-1.5 flex flex-col">
-              <SidebarItem to="/settings" {...navIconPair('settings')} label={getString('settings_title')} onClick={closeOverlay} />
+              <SidebarItem onOpenInNewTab={openInNewTab} to="/settings" {...navIconPair('settings')} label={getString('settings_title')} onClick={closeOverlay} />
             </nav>
           </div>
           <nav className="flex flex-col gap-1.5">
-            <SidebarItem to="/sync" {...navIconPair('sync')} label={getString('sidebar_sync')} onClick={closeOverlay} collapsed={collapsed} />
-            <SidebarItem to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} collapsed={collapsed} />
-            <SidebarItem to="/support" {...navIconPair('support')} label={getString('sidebar_support')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem onOpenInNewTab={openInNewTab} to="/sync" {...navIconPair('sync')} label={getString('sidebar_sync')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem onOpenInNewTab={openInNewTab} to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem onOpenInNewTab={openInNewTab} to="/support" {...navIconPair('support')} label={getString('sidebar_support')} onClick={closeOverlay} collapsed={collapsed} />
           </nav>
         </div>
       </div>

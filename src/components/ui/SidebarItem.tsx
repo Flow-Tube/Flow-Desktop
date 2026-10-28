@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { RailTooltip } from './RailTooltip';
+import { wantsBackgroundTab } from '../../lib/clickIntent';
 
 type SidebarItemProps = {
   icon: ReactNode;
@@ -13,6 +14,8 @@ type SidebarItemProps = {
   rightElement?: ReactNode;
   /** Icon only, with the label as a tooltip. */
   collapsed?: boolean;
+  /** Middle-click or Cmd/Ctrl-click on a link: open its page in a background tab. */
+  onOpenInNewTab?: (to: string) => void;
 };
 
 const baseClasses =
@@ -42,6 +45,7 @@ export function SidebarItem({
   onClick,
   rightElement,
   collapsed = false,
+  onOpenInNewTab,
 }: SidebarItemProps) {
   const [tooltipAnchor, setTooltipAnchor] = useState<DOMRect | null>(null);
   const tooltipHandlers = collapsed
@@ -61,9 +65,22 @@ export function SidebarItem({
         <NavLink
           to={to}
           end={end}
-          onClick={() => {
+          onClick={(event) => {
             setTooltipAnchor(null);
+            if (onOpenInNewTab && wantsBackgroundTab(event)) {
+              event.preventDefault();
+              onOpenInNewTab(to);
+              return;
+            }
             onClick?.();
+          }}
+          onMouseDown={(event) => {
+            if (onOpenInNewTab && event.button === 1) event.preventDefault();
+          }}
+          onAuxClick={(event) => {
+            if (!onOpenInNewTab || event.button !== 1) return;
+            event.preventDefault();
+            onOpenInNewTab(to);
           }}
           className={({ isActive: navActive }) => `${baseClasses} ${(isActive ?? navActive) ? activeClasses : idleClasses}`}
           {...tooltipHandlers}

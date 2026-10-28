@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import type { SubscribedChannel } from '../../store/useSubscriptionStore';
 import { SidebarItem } from '../ui/SidebarItem';
 import { getString } from '../../lib/i18n/index';
+import { openInNewTab } from '../../lib/openTarget';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
@@ -123,6 +124,7 @@ export function SubscriptionsNav({
             }
             label={channel.name}
             onClick={closeOverlay}
+            onOpenInNewTab={openInNewTab}
           />
         ))}
       </div>

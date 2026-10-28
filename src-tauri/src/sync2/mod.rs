@@ -12,9 +12,11 @@ pub mod error;
 pub mod kdf;
 pub mod keys;
 pub mod lan;
+pub mod meta;
 pub mod pairing;
 pub mod payload;
 pub mod recovery;
+pub mod roster;
 pub mod sealed;
 pub mod wrap;
 

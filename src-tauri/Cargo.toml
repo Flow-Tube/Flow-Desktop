@@ -83,6 +83,7 @@ x25519-dalek = { version = "3", features = ["static_secrets"] }
 hpke = { version = "0.15", default-features = false, features = ["alloc", "aes", "x25519", "getrandom"] }
 bip39 = "3"
 subtle = "2"
+hex = "0.4"
 # Scrobbling: Last.fm's api_sig is an MD5 digest, and session keys and tokens live in the OS
 # keychain (macOS Keychain, Windows Credential Manager, the Secret Service on Linux).
 md-5 = "0.11"
@@ -145,5 +146,3 @@ inherits = "release"
 lto = "thin"
 codegen-units = 16
 
-[dev-dependencies]
-hex = "0.4"

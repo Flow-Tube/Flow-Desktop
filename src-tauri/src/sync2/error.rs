@@ -32,6 +32,22 @@ pub enum Error {
     KeyCommitment,
     #[error("invalid X25519 key agreement")]
     X25519,
+    #[error("malformed roster entry")]
+    RosterFormat,
+    #[error("roster entry does not follow the head")]
+    RosterChain,
+    #[error("roster entry breaks the rules for its operation")]
+    RosterOp,
+    #[error("roster entry signer may not sign it")]
+    RosterSigner,
+    #[error("roster entry signature does not verify")]
+    RosterSignature,
+    #[error("roster entry adds an invalid or reused key")]
+    RosterKey,
+    #[error("roster entry starts the wrong epoch")]
+    RosterEpoch,
+    #[error("roster entry names the wrong devices")]
+    RosterMeta,
 }
 
 impl Error {
@@ -52,6 +68,14 @@ impl Error {
             Self::BlobHash => "blob-hash",
             Self::KeyCommitment => "key-commitment",
             Self::X25519 => "x25519",
+            Self::RosterFormat => "roster-format",
+            Self::RosterChain => "roster-chain",
+            Self::RosterOp => "roster-op",
+            Self::RosterSigner => "roster-signer",
+            Self::RosterSignature => "roster-signature",
+            Self::RosterKey => "roster-key",
+            Self::RosterEpoch => "roster-epoch",
+            Self::RosterMeta => "roster-meta",
         }
     }
 }

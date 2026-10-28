@@ -1,0 +1,817 @@
+{
+  "group": "c7b32e0bfef5029f39df8c85e80ad015",
+  "epochKeys": [
+    "8128e933453fa0274765a77c7e2d1771524aaacbc321a7c8bbc31dd812e27094",
+    "d500eca318c9be36678211e053a712a47693a17a34ea7b511ee816f6b2fc499f",
+    "a930b56512aad8428a68d5c9459dc9bd94e60280f3da5d169774b1674b4257b3",
+    "c655b5c864e9cec9eaaa5697801ddc656c20f80926247805c9a981f278ea8482"
+  ],
+  "entries": [
+    {
+      "v": 2,
+      "group": "c7b32e0bfef5029f39df8c85e80ad015",
+      "seq": 0,
+      "prev": "0000000000000000000000000000000000000000000000000000000000000000",
+      "op": "genesis",
+      "signer": "d8576f2de42861ceb8030cc722b4c669",
+      "add": [
+        {
+          "did": "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "sig": "by4Yw7OBPe3UpK140o__v77yq8CgCsiFsUsYQC75SXQ",
+          "kem": "N1G_1X4dByMXibJPa-IRXu-ehhvJFJC9maHuB_3eY3M",
+          "role": "recovery"
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "sig": "gjP8I2qE2SU1PzZrXX7Fs-V3OA4OggiSM7USzIiuZ4E",
+          "kem": "7fg2q0UlcTTBLW4OZiVfo_u_qXFWBhw15aQRVa84szY",
+          "role": "device"
+        }
+      ],
+      "epoch": {
+        "n": 0,
+        "kc": "bGlxYXhhlpHTXXtu9GCB-lFSAVin5JR-_98cld_8YC4",
+        "to": [
+          "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "d8576f2de42861ceb8030cc722b4c669"
+        ]
+      },
+      "meta": {
+        "d8576f2de42861ceb8030cc722b4c669": "-8JksoX3CrSF8lJZa3oTHEkZ5BajNSK2IkgFzODYEWns5Sw5-4UuR1shEk_KcWOJ9e0xfDH3XFrdqMKMGqTMLDGzfinJEIBMI8FWfyfngs617zu_Rbj3QNZfz-5CtSitw5P1wpMSvXw01K3iYOQ7e6P7CCPqim0OOjz4C3zrFMRkxn9ZgIMvYP3xHSo38CgQsMRP1S4sxwIizOdqC1HZ0ozSfxTuTi7TBzQKamrZgL3S28QQOaDuAKgxLB1HKcJvG5RRcrsAApUfZZh-lJPnIuKJwwAI1cD3eSbwo_8Om1hn7YEUCpZS-trhuhLsXt_0BGzEwaVwfWEEFNPLy_YXzpJ5SnX89-eD0kdaOhC2KP1Wgfrxfb7vgh9pgS7cPiJj2DSE-0kRxUWNvyu3w77EeYsvUmLjVAh0234Jiom6zU7UNzVLMTxe17z7acCJb09f"
+      },
+      "sigs": {
+        "d8576f2de42861ceb8030cc722b4c669": "TOXTITRPQ9uk28NzOImSo4gDSaDqRyS03VnY80E6O2PuWHeodn14Ymz3qz1_lt2oWLDhLmu39wpaXEdt17JoCg",
+        "ab6095990ebaaf36d4c49e86fc3a65c3": "39mYmvr8C95IyHuII8lVzyDRZHxeyc34Ob4AsYQFjAWCjRNH_9KSgRPlTu145Ar_cr9qFI9fm2zrHgvhakjNDA"
+      }
+    },
+    {
+      "v": 2,
+      "group": "c7b32e0bfef5029f39df8c85e80ad015",
+      "seq": 1,
+      "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+      "op": "add",
+      "signer": "d8576f2de42861ceb8030cc722b4c669",
+      "add": [
+        {
+          "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+          "sig": "RoFBqY6WZpFpJzbLGZlGQ35pXBEoC9SN7-tPU82F9Qo",
+          "kem": "U3xVnbvJ5azzjhijsUH76iYCfQfvlM2MAAIDvkRwDms",
+          "role": "device"
+        }
+      ],
+      "meta": {
+        "894e311b2b2058e3bcc2ef3bde8ec864": "O89MHvlFgpad6KrI_U2oKnVZPumhp79oNfQFSejzuEuhCufz9J_oGsdraSMUcuGbYORFzv1x4i2Rurdf3HDuDeD5FZZpqoiVZP1L-K7ZZEkn-D1hM2vhXZJYaIRYD34BjzwhQ1FDSfpPs17sw4ZILUr73eu-bWMziHb_Eu_rHdQosuLugj20_lwcnnOTlYJ18Tag85PgNJ-IkZzjFFOzAwMoWeTq4zbs7W5nQNrjLTjKEFa2fBKSAE_TzNzJCXW8FKsA1jEH6-O_xftJ8ag2C6kEEX4hqntY8TaBMftGs9J5mpTsPYCFNK3AhBHds0XSHzyT6cJEjPVyKdfDb8djjSeLnws1RPuuXhLULdgFFY0KcuI_tgCmgRcGCpiMgOuLcsAR6nAbaB5H2CQSfMaWPgYkVHNO-9HPsdn_fXIV6HVzOLZ9IvIfCclL7ae5kW-o"
+      },
+      "sigs": {
+        "d8576f2de42861ceb8030cc722b4c669": "NO9Bj8TNuJUm_oernRD3JY5IsUkW3eovU1f8SXXPaUJdMIoKKCZGOyEJYEYewGUqI7iAAyTrVcIv1fl15zuPAg",
+        "894e311b2b2058e3bcc2ef3bde8ec864": "ZuI3T4XPnc0OTY1DSAntEBfNMKM6YsGV9DeC6_Y2HuLFFrCd2wmrBlQC-aRjnvsnnCWNstqTpZJ_Fg51te2fCQ"
+      }
+    },
+    {
+      "v": 2,
+      "group": "c7b32e0bfef5029f39df8c85e80ad015",
+      "seq": 2,
+      "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+      "op": "rename",
+      "signer": "894e311b2b2058e3bcc2ef3bde8ec864",
+      "meta": {
+        "894e311b2b2058e3bcc2ef3bde8ec864": "t9i_7Bq87EauNX3Z9Y_dHqX8fS0caq2cFJ2sKKNqi7P_SL1msQiA-BV7IehD2cJlwGHr_Zj2sq0ABbfrY9Lf22PekpjfjfZeIpUu9W8odkDLAu6WsAnnLNpIwF0GHKa9SiHIgXLVYhA46cSmIycBireedPbDmWMsGTb06ygxKrWKKJyhZ94X8NHuTzp6Lm9P22NqpGrFSTIIHULHTYpkdvZBecY_jmXXtVQczuscF9jMtGtscXnuMDbpE5hwHG3ZGwTX4dW4EmyeJ8ue0LTqzYIElsmb1vFxqMPxxigXUHppiawYRFc6tJEwOquwnHz4JH--HlN4q1abxIBFFTQkkMoKV6Bnx__Y-ZivDlfZQIZVjfoNE62fDuZ1mXTRd0KuOFA6scFhPaltX-NYA4dhY4zOGdsWyBtGt4TvXYfuQt1VMc3y119MzBNDa4cnuf1n"
+      },
+      "sigs": {
+        "894e311b2b2058e3bcc2ef3bde8ec864": "Op--ET8CoK0qXgtTyK3DQhmwv8WekojzkMSlGqge4oipQpg0m7NK9bGEoLauoilYw557_05B5QJ2dLz9haB0Cw"
+      }
+    },
+    {
+      "v": 2,
+      "group": "c7b32e0bfef5029f39df8c85e80ad015",
+      "seq": 3,
+      "prev": "0e5b594484bd2ebaab96a73f99d60765daef4a7d3a9f8517faf938d494c61da6",
+      "op": "remove",
+      "signer": "d8576f2de42861ceb8030cc722b4c669",
+      "remove": [
+        "894e311b2b2058e3bcc2ef3bde8ec864"
+      ],
+      "epoch": {
+        "n": 1,
+        "kc": "hflIRaJHZvjexkOj0Bg1h3Mo7P-a5u5RCa26kA_Cmjw",
+        "to": [
+          "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "d8576f2de42861ceb8030cc722b4c669"
+        ]
+      },
+      "sigs": {
+        "d8576f2de42861ceb8030cc722b4c669": "xFPVSH-QyKYdXTr0WPFxecT-P61-sypfyBXjD-pWX7PG5-pG71rxhOvhavEkNh8llvcGfyXwtkTLmGPw4EHMCg"
+      }
+    },
+    {
+      "v": 2,
+      "group": "c7b32e0bfef5029f39df8c85e80ad015",
+      "seq": 4,
+      "prev": "1d4cea5a42780fc331504eee5a84dc9b6a7126e67125794973316b6de1328bcb",
+      "op": "restore",
+      "signer": "ab6095990ebaaf36d4c49e86fc3a65c3",
+      "add": [
+        {
+          "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+          "sig": "Pv9XrxPpjXsHr8QrMZKgC1ZO9Q2cOgBPCr7P22C3MWY",
+          "kem": "bmiQy52XcNEUqT_nj29df8adxbK84jlUCWdacit50FA",
+          "role": "device"
+        }
+      ],
+      "epoch": {
+        "n": 2,
+        "kc": "WRJKGZWeU1A7r1YRuLm2QGCmRzf-hQsCWljFiRDgOoU",
+        "to": [
+          "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "addf195306ed8f3c4d02642d8b6ebd6a",
+          "d8576f2de42861ceb8030cc722b4c669"
+        ]
+      },
+      "meta": {
+        "addf195306ed8f3c4d02642d8b6ebd6a": "1N5kk1fLxQjAJZH_BeWz09cjehkSJWQlZnFVe8vvErV_y4EfhcQBbQJVFEpqLlbY6R9faXRj1K4YF1K0bvUyKP30VKfVMAmpyBSQ-IxtFfSyaYNPqKo56B28wwpfbA-h5L_4WujnXGQNsrQKtJBeA73E_OSZt_1LsjooNqQgjWt2pT2xaaYmMflWiV1uIN24JMF-cW-87fgVrJiC3ypu3E_bygTKrz8OguriIZMQeWkxTixWOnP3xcA-jelTQKWJy03LoTnOGKzFbvWBR7h6Pqf8BGe-CGimYTGcJ6q54yxz_Up3yi8xjcIZ3_KUEa0FcpWPRXfwGYEkPWneWqmN8u4zsH35I4TtrxW-rr5XQuiB-xVKRie_SMtLPbbkLy52KNpcYt7-EqvNe4d6xu13b_hwkeahnUEQWQFK8tPkLMizythbOgSJE1O_iUkEwDpn"
+      },
+      "sigs": {
+        "ab6095990ebaaf36d4c49e86fc3a65c3": "lTHmkHtJPd-hpdOP-CzZ4VqLPZ_JIhvSsRVbN1yyjlrcOhuRnzvgnJzANmQLsCO4L3p-uFqnKvMWBmqI5uVWAQ",
+        "addf195306ed8f3c4d02642d8b6ebd6a": "RwiYPggK9M91Yg31Uy_TObEjTvUJmIpvAW9o4WbP8OoAPcxYUrCSSXFExJEEB6gHi4vp-5Uglvv2_Sj7PNWpCA"
+      }
+    },
+    {
+      "v": 2,
+      "group": "c7b32e0bfef5029f39df8c85e80ad015",
+      "seq": 5,
+      "prev": "d8971d456d1a531c52456e6eb73aa17c730a52155e876c8440939b6087167463",
+      "op": "recovery",
+      "signer": "addf195306ed8f3c4d02642d8b6ebd6a",
+      "remove": [
+        "ab6095990ebaaf36d4c49e86fc3a65c3"
+      ],
+      "add": [
+        {
+          "did": "6e1946f855d4d7de61c0d3e3e4491cae",
+          "sig": "Vf_aa5oQPKegF8I5KW-kJQA1A8SmYzefeeQZXBCarWw",
+          "kem": "LanAutNDQmnqurSUmasEyIqWkeRw-aJYeD46qlmcrT4",
+          "role": "recovery"
+        }
+      ],
+      "epoch": {
+        "n": 3,
+        "kc": "SlggvDBQuBPp4WBOoGkZN-ILRYImCegBwITbtQlw3a0",
+        "to": [
+          "6e1946f855d4d7de61c0d3e3e4491cae",
+          "addf195306ed8f3c4d02642d8b6ebd6a",
+          "d8576f2de42861ceb8030cc722b4c669"
+        ]
+      },
+      "sigs": {
+        "addf195306ed8f3c4d02642d8b6ebd6a": "P5GLu-TnPoH1pcap_X18pKcysw_19-QZOI3paEqJKIO9xReoSCOWzYXyS9IqKj0Pmlk6EL17bSk6d646QXhmBg",
+        "6e1946f855d4d7de61c0d3e3e4491cae": "KLVYQlx9ZYBPPHkG_YfsIFjunP9S7calrxdNDBFIohqc7zbsWDkn1AK09bnuNCYC__WA6t_Z7cAUWnSZN6RRAQ"
+      }
+    }
+  ],
+  "meta": [
+    {
+      "seq": 0,
+      "did": "d8576f2de42861ceb8030cc722b4c669",
+      "epoch": 0,
+      "content": "{\"app\":\"app-pixel\",\"name\":\"Pixel\",\"platform\":\"android\"}"
+    },
+    {
+      "seq": 1,
+      "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+      "epoch": 0,
+      "content": "{\"app\":\"app-desktop\",\"name\":\"Desktop\",\"platform\":\"macos\"}"
+    },
+    {
+      "seq": 2,
+      "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+      "epoch": 0,
+      "content": "{\"app\":\"app-studio\",\"name\":\"Studio\",\"platform\":\"macos\"}"
+    },
+    {
+      "seq": 4,
+      "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+      "epoch": 2,
+      "content": "{\"app\":\"app-television\",\"name\":\"Television\",\"platform\":\"android-tv\"}"
+    }
+  ],
+  "states": [
+    {
+      "seq": 0,
+      "head": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+      "epoch": 0,
+      "members": [
+        {
+          "did": "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "role": "recovery",
+          "used": false
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "role": "device",
+          "used": false
+        }
+      ]
+    },
+    {
+      "seq": 1,
+      "head": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+      "epoch": 0,
+      "members": [
+        {
+          "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+          "role": "device",
+          "used": false
+        },
+        {
+          "did": "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "role": "recovery",
+          "used": false
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "role": "device",
+          "used": false
+        }
+      ]
+    },
+    {
+      "seq": 2,
+      "head": "0e5b594484bd2ebaab96a73f99d60765daef4a7d3a9f8517faf938d494c61da6",
+      "epoch": 0,
+      "members": [
+        {
+          "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+          "role": "device",
+          "used": false
+        },
+        {
+          "did": "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "role": "recovery",
+          "used": false
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "role": "device",
+          "used": false
+        }
+      ]
+    },
+    {
+      "seq": 3,
+      "head": "1d4cea5a42780fc331504eee5a84dc9b6a7126e67125794973316b6de1328bcb",
+      "epoch": 1,
+      "members": [
+        {
+          "did": "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "role": "recovery",
+          "used": false
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "role": "device",
+          "used": false
+        }
+      ]
+    },
+    {
+      "seq": 4,
+      "head": "d8971d456d1a531c52456e6eb73aa17c730a52155e876c8440939b6087167463",
+      "epoch": 2,
+      "members": [
+        {
+          "did": "ab6095990ebaaf36d4c49e86fc3a65c3",
+          "role": "recovery",
+          "used": true
+        },
+        {
+          "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+          "role": "device",
+          "used": false
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "role": "device",
+          "used": false
+        }
+      ]
+    },
+    {
+      "seq": 5,
+      "head": "f298f34c516ab3d8b953ac92936ae564c48fd9ad6d853fbf9fba261eefea4b28",
+      "epoch": 3,
+      "members": [
+        {
+          "did": "6e1946f855d4d7de61c0d3e3e4491cae",
+          "role": "recovery",
+          "used": false
+        },
+        {
+          "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+          "role": "device",
+          "used": false
+        },
+        {
+          "did": "d8576f2de42861ceb8030cc722b4c669",
+          "role": "device",
+          "used": false
+        }
+      ]
+    }
+  ],
+  "negatives": [
+    {
+      "name": "bad-signature",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 1,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "add",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "add": [
+          {
+            "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+            "sig": "RoFBqY6WZpFpJzbLGZlGQ35pXBEoC9SN7-tPU82F9Qo",
+            "kem": "U3xVnbvJ5azzjhijsUH76iYCfQfvlM2MAAIDvkRwDms",
+            "role": "device"
+          }
+        ],
+        "meta": {
+          "894e311b2b2058e3bcc2ef3bde8ec864": "O89MHvlFgpad6KrI_U2oKnVZPumhp79oNfQFSejzuEuhCufz9J_oGsdraSMUcuGbYORFzv1x4i2Rurdf3HDuDeD5FZZpqoiVZP1L-K7ZZEkn-D1hM2vhXZJYaIRYD34BjzwhQ1FDSfpPs17sw4ZILUr73eu-bWMziHb_Eu_rHdQosuLugj20_lwcnnOTlYJ18Tag85PgNJ-IkZzjFFOzAwMoWeTq4zbs7W5nQNrjLTjKEFa2fBKSAE_TzNzJCXW8FKsA1jEH6-O_xftJ8ag2C6kEEX4hqntY8TaBMftGs9J5mpTsPYCFNK3AhBHds0XSHzyT6cJEjPVyKdfDb8djjSeLnws1RPuuXhLULdgFFY0KcuI_tgCmgRcGCpiMgOuLcsAR6nAbaB5H2CQSfMaWPgYkVHNO-9HPsdn_fXIV6HVzOLZ9IvIfCclL7ae5kW-o"
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "ZuI3T4XPnc0OTY1DSAntEBfNMKM6YsGV9DeC6_Y2HuLFFrCd2wmrBlQC-aRjnvsnnCWNstqTpZJ_Fg51te2fCQ",
+          "894e311b2b2058e3bcc2ef3bde8ec864": "ZuI3T4XPnc0OTY1DSAntEBfNMKM6YsGV9DeC6_Y2HuLFFrCd2wmrBlQC-aRjnvsnnCWNstqTpZJ_Fg51te2fCQ"
+        }
+      },
+      "error": "roster-signature"
+    },
+    {
+      "name": "missing-reverse-signature",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 1,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "add",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "add": [
+          {
+            "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+            "sig": "RoFBqY6WZpFpJzbLGZlGQ35pXBEoC9SN7-tPU82F9Qo",
+            "kem": "U3xVnbvJ5azzjhijsUH76iYCfQfvlM2MAAIDvkRwDms",
+            "role": "device"
+          }
+        ],
+        "meta": {
+          "894e311b2b2058e3bcc2ef3bde8ec864": "O89MHvlFgpad6KrI_U2oKnVZPumhp79oNfQFSejzuEuhCufz9J_oGsdraSMUcuGbYORFzv1x4i2Rurdf3HDuDeD5FZZpqoiVZP1L-K7ZZEkn-D1hM2vhXZJYaIRYD34BjzwhQ1FDSfpPs17sw4ZILUr73eu-bWMziHb_Eu_rHdQosuLugj20_lwcnnOTlYJ18Tag85PgNJ-IkZzjFFOzAwMoWeTq4zbs7W5nQNrjLTjKEFa2fBKSAE_TzNzJCXW8FKsA1jEH6-O_xftJ8ag2C6kEEX4hqntY8TaBMftGs9J5mpTsPYCFNK3AhBHds0XSHzyT6cJEjPVyKdfDb8djjSeLnws1RPuuXhLULdgFFY0KcuI_tgCmgRcGCpiMgOuLcsAR6nAbaB5H2CQSfMaWPgYkVHNO-9HPsdn_fXIV6HVzOLZ9IvIfCclL7ae5kW-o"
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "NO9Bj8TNuJUm_oernRD3JY5IsUkW3eovU1f8SXXPaUJdMIoKKCZGOyEJYEYewGUqI7iAAyTrVcIv1fl15zuPAg"
+        }
+      },
+      "error": "roster-signature"
+    },
+    {
+      "name": "unknown-field",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 1,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "add",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "add": [
+          {
+            "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+            "sig": "RoFBqY6WZpFpJzbLGZlGQ35pXBEoC9SN7-tPU82F9Qo",
+            "kem": "U3xVnbvJ5azzjhijsUH76iYCfQfvlM2MAAIDvkRwDms",
+            "role": "device"
+          }
+        ],
+        "meta": {
+          "894e311b2b2058e3bcc2ef3bde8ec864": "O89MHvlFgpad6KrI_U2oKnVZPumhp79oNfQFSejzuEuhCufz9J_oGsdraSMUcuGbYORFzv1x4i2Rurdf3HDuDeD5FZZpqoiVZP1L-K7ZZEkn-D1hM2vhXZJYaIRYD34BjzwhQ1FDSfpPs17sw4ZILUr73eu-bWMziHb_Eu_rHdQosuLugj20_lwcnnOTlYJ18Tag85PgNJ-IkZzjFFOzAwMoWeTq4zbs7W5nQNrjLTjKEFa2fBKSAE_TzNzJCXW8FKsA1jEH6-O_xftJ8ag2C6kEEX4hqntY8TaBMftGs9J5mpTsPYCFNK3AhBHds0XSHzyT6cJEjPVyKdfDb8djjSeLnws1RPuuXhLULdgFFY0KcuI_tgCmgRcGCpiMgOuLcsAR6nAbaB5H2CQSfMaWPgYkVHNO-9HPsdn_fXIV6HVzOLZ9IvIfCclL7ae5kW-o"
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "NO9Bj8TNuJUm_oernRD3JY5IsUkW3eovU1f8SXXPaUJdMIoKKCZGOyEJYEYewGUqI7iAAyTrVcIv1fl15zuPAg",
+          "894e311b2b2058e3bcc2ef3bde8ec864": "ZuI3T4XPnc0OTY1DSAntEBfNMKM6YsGV9DeC6_Y2HuLFFrCd2wmrBlQC-aRjnvsnnCWNstqTpZJ_Fg51te2fCQ"
+        },
+        "extra": 1
+      },
+      "error": "roster-format"
+    },
+    {
+      "name": "wrong-seq",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 5,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "rename",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "meta": {
+          "d8576f2de42861ceb8030cc722b4c669": "-8JksoX3CrSF8lJZa3oTHEkZ5BajNSK2IkgFzODYEWns5Sw5-4UuR1shEk_KcWOJ9e0xfDH3XFrdqMKMGqTMLDGzfinJEIBMI8FWfyfngs617zu_Rbj3QNZfz-5CtSitw5P1wpMSvXw01K3iYOQ7e6P7CCPqim0OOjz4C3zrFMRkxn9ZgIMvYP3xHSo38CgQsMRP1S4sxwIizOdqC1HZ0ozSfxTuTi7TBzQKamrZgL3S28QQOaDuAKgxLB1HKcJvG5RRcrsAApUfZZh-lJPnIuKJwwAI1cD3eSbwo_8Om1hn7YEUCpZS-trhuhLsXt_0BGzEwaVwfWEEFNPLy_YXzpJ5SnX89-eD0kdaOhC2KP1Wgfrxfb7vgh9pgS7cPiJj2DSE-0kRxUWNvyu3w77EeYsvUmLjVAh0234Jiom6zU7UNzVLMTxe17z7acCJb09f"
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "TrnnQkIbLV8L-eGx0bm-OPDpeLHGCKl9qIV3uEILR5ptUedznGxt8pBGCoubzUn2_bc2xUM8CFjm6Chk6Ym6CA"
+        }
+      },
+      "error": "roster-chain"
+    },
+    {
+      "name": "truncated-chain",
+      "base": 2,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 3,
+        "prev": "0e5b594484bd2ebaab96a73f99d60765daef4a7d3a9f8517faf938d494c61da6",
+        "op": "remove",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "remove": [
+          "894e311b2b2058e3bcc2ef3bde8ec864"
+        ],
+        "epoch": {
+          "n": 1,
+          "kc": "hflIRaJHZvjexkOj0Bg1h3Mo7P-a5u5RCa26kA_Cmjw",
+          "to": [
+            "ab6095990ebaaf36d4c49e86fc3a65c3",
+            "d8576f2de42861ceb8030cc722b4c669"
+          ]
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "xFPVSH-QyKYdXTr0WPFxecT-P61-sypfyBXjD-pWX7PG5-pG71rxhOvhavEkNh8llvcGfyXwtkTLmGPw4EHMCg"
+        }
+      },
+      "error": "roster-chain"
+    },
+    {
+      "name": "removed-signer",
+      "base": 4,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 4,
+        "prev": "1d4cea5a42780fc331504eee5a84dc9b6a7126e67125794973316b6de1328bcb",
+        "op": "rename",
+        "signer": "894e311b2b2058e3bcc2ef3bde8ec864",
+        "meta": {
+          "d8576f2de42861ceb8030cc722b4c669": "AA"
+        },
+        "sigs": {
+          "894e311b2b2058e3bcc2ef3bde8ec864": "8ufvmj8UMdLzhWJ1iHROXDRIrhgLme4X0h8p3n7ItBRpSE_Z1NVj-a71IDrPXOMAPJpgZk6fpHOIPeF0U85tAg"
+        }
+      },
+      "error": "roster-signer"
+    },
+    {
+      "name": "weak-key",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 1,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "add",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "add": [
+          {
+            "did": "12d741eb89c62523d288f7352b7d6b9e",
+            "sig": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "kem": "bmiQy52XcNEUqT_nj29df8adxbK84jlUCWdacit50FA",
+            "role": "device"
+          }
+        ],
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "JPktCqPVMxPqkyi9sMwB2DPryj1sw4MjuwmuGdpWFiPLXJaz_hv8nkzNY0K-dM4ZgHnZeKcYqLIgwkJFA83hBA"
+        }
+      },
+      "error": "roster-key"
+    },
+    {
+      "name": "readd-removed-device",
+      "base": 4,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 4,
+        "prev": "1d4cea5a42780fc331504eee5a84dc9b6a7126e67125794973316b6de1328bcb",
+        "op": "add",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "add": [
+          {
+            "did": "894e311b2b2058e3bcc2ef3bde8ec864",
+            "sig": "RoFBqY6WZpFpJzbLGZlGQ35pXBEoC9SN7-tPU82F9Qo",
+            "kem": "U3xVnbvJ5azzjhijsUH76iYCfQfvlM2MAAIDvkRwDms",
+            "role": "device"
+          }
+        ],
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "97iYevscDkm9bdArQDQAEBUm-XANuualGfu_7YfMLKPVrAzByDio0YpOif6a4KYnj675ep78njC6axewYoxJBw",
+          "894e311b2b2058e3bcc2ef3bde8ec864": "UkrvJR0bDXXMhu16q2tH5rKq0xCIEsTdcsjWqpa_CHqQVa9efaUdOXjhACiYVabeOQ4KFl_56iLli9CeBg0ACw"
+        }
+      },
+      "error": "roster-key"
+    },
+    {
+      "name": "epoch-missing-member",
+      "base": 3,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 3,
+        "prev": "0e5b594484bd2ebaab96a73f99d60765daef4a7d3a9f8517faf938d494c61da6",
+        "op": "remove",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "remove": [
+          "894e311b2b2058e3bcc2ef3bde8ec864"
+        ],
+        "epoch": {
+          "n": 1,
+          "kc": "hflIRaJHZvjexkOj0Bg1h3Mo7P-a5u5RCa26kA_Cmjw",
+          "to": [
+            "d8576f2de42861ceb8030cc722b4c669"
+          ]
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "bptwAUsgbraLVo-P3twGd4iSYsWjQ_AhEkUOJx4C_xg49EapDsqecUa6L3q1e42N4QMrBW3hFF0axqDVK4BjDw"
+        }
+      },
+      "error": "roster-epoch"
+    },
+    {
+      "name": "epoch-skipped",
+      "base": 3,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 3,
+        "prev": "0e5b594484bd2ebaab96a73f99d60765daef4a7d3a9f8517faf938d494c61da6",
+        "op": "remove",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "remove": [
+          "894e311b2b2058e3bcc2ef3bde8ec864"
+        ],
+        "epoch": {
+          "n": 2,
+          "kc": "hflIRaJHZvjexkOj0Bg1h3Mo7P-a5u5RCa26kA_Cmjw",
+          "to": [
+            "ab6095990ebaaf36d4c49e86fc3a65c3",
+            "d8576f2de42861ceb8030cc722b4c669"
+          ]
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "XP0hPat1eTBpsU4ZsIbtX9PKqbeGxUna7MYC7SQ3jQRPcILdsIvyq1e_R8X9knCu-SkRwcuYcl7hUSfub_voAA"
+        }
+      },
+      "error": "roster-epoch"
+    },
+    {
+      "name": "remove-self",
+      "base": 3,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 3,
+        "prev": "0e5b594484bd2ebaab96a73f99d60765daef4a7d3a9f8517faf938d494c61da6",
+        "op": "remove",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "remove": [
+          "d8576f2de42861ceb8030cc722b4c669"
+        ],
+        "epoch": {
+          "n": 1,
+          "kc": "hflIRaJHZvjexkOj0Bg1h3Mo7P-a5u5RCa26kA_Cmjw",
+          "to": [
+            "894e311b2b2058e3bcc2ef3bde8ec864",
+            "ab6095990ebaaf36d4c49e86fc3a65c3"
+          ]
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "hMShZ2Rj0NH8-G27w25Vj5SXe0LOPcWrOmL3ijUqHSzAHhSz3V5lNwr_zA9sLx7AIpbdf0DLAMZrNu4tuK-lDg"
+        }
+      },
+      "error": "roster-op"
+    },
+    {
+      "name": "rename-recovery",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 1,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "rename",
+        "signer": "d8576f2de42861ceb8030cc722b4c669",
+        "meta": {
+          "ab6095990ebaaf36d4c49e86fc3a65c3": "AA"
+        },
+        "sigs": {
+          "d8576f2de42861ceb8030cc722b4c669": "FpUOYpCtKQO2ja6prQx1hwC53fRj73pSzKmoCM2d6sLaeNDfMoVNX_XgLl3THCTnE9PVoBN0wxmBJ3_dX87XDA"
+        }
+      },
+      "error": "roster-meta"
+    },
+    {
+      "name": "add-by-non-member",
+      "base": 1,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 1,
+        "prev": "59aee14f0422222a940a2b1cd69c965f5d66d4c247a4499417a9a251b08c277b",
+        "op": "add",
+        "signer": "addf195306ed8f3c4d02642d8b6ebd6a",
+        "add": [
+          {
+            "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+            "sig": "Pv9XrxPpjXsHr8QrMZKgC1ZO9Q2cOgBPCr7P22C3MWY",
+            "kem": "bmiQy52XcNEUqT_nj29df8adxbK84jlUCWdacit50FA",
+            "role": "device"
+          }
+        ],
+        "sigs": {
+          "addf195306ed8f3c4d02642d8b6ebd6a": "Vc06x3kE2vv6lhkGzudVd4szxejiGG1MJO6rLhJKxsPrUWipiflFgyk7wgTHLs46XowNendVo9_On8-BxnNPCw"
+        }
+      },
+      "error": "roster-signer"
+    },
+    {
+      "name": "recovery-used-twice",
+      "base": 5,
+      "entry": {
+        "v": 2,
+        "group": "c7b32e0bfef5029f39df8c85e80ad015",
+        "seq": 5,
+        "prev": "d8971d456d1a531c52456e6eb73aa17c730a52155e876c8440939b6087167463",
+        "op": "restore",
+        "signer": "ab6095990ebaaf36d4c49e86fc3a65c3",
+        "add": [
+          {
+            "did": "1edce5f29fbda5bba7ada194b0a578c6",
+            "sig": "Th_jHGzavQp1iIx6qxwuS1J_Ms7HIV9mnkzA6HMZYmo",
+            "kem": "NtwOMHr8aB4JyJKAYgxrq4BKNlggTDiRHk7tpPxLTyM",
+            "role": "device"
+          }
+        ],
+        "epoch": {
+          "n": 3,
+          "kc": "SlggvDBQuBPp4WBOoGkZN-ILRYImCegBwITbtQlw3a0",
+          "to": [
+            "1edce5f29fbda5bba7ada194b0a578c6",
+            "ab6095990ebaaf36d4c49e86fc3a65c3",
+            "addf195306ed8f3c4d02642d8b6ebd6a",
+            "d8576f2de42861ceb8030cc722b4c669"
+          ]
+        },
+        "sigs": {
+          "ab6095990ebaaf36d4c49e86fc3a65c3": "wF2wyGOwb4dipM91Fhg-5C_16Y4WXNnxSVYTGaVsydnKFxwLIIPe5wVCUSNzsdK1-G-pTuxFeBoiJwFqx7ymAA",
+          "1edce5f29fbda5bba7ada194b0a578c6": "GnUvpUXJOgM11GI_pJRxlg1nGosrOYvSTiNNePShaAMAymZAoWSqh0ubZDhHysz2pRctbEeUcP7yNf3BVQCpBA"
+        }
+      },
+      "error": "roster-signer"
+    }
+  ],
+  "forks": [
+    {
+      "base": 2,
+      "candidates": [
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "add",
+          "signer": "d8576f2de42861ceb8030cc722b4c669",
+          "add": [
+            {
+              "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+              "sig": "Pv9XrxPpjXsHr8QrMZKgC1ZO9Q2cOgBPCr7P22C3MWY",
+              "kem": "bmiQy52XcNEUqT_nj29df8adxbK84jlUCWdacit50FA",
+              "role": "device"
+            }
+          ],
+          "sigs": {
+            "d8576f2de42861ceb8030cc722b4c669": "ksRuJFzXxv2Q_9JoH-HTDk4V3gpG1x9IbIyjFB18nxAIR9aQYYK8mMxO7DiS5bHMgsXFFSxqI_Ml_RPoM1RlDA",
+            "addf195306ed8f3c4d02642d8b6ebd6a": "aZnm2fwg6OEe4XbvtT-9xHc_UY3l5G65YNxq65TIzgr6VE_obgknPwvSUlMVMIj70_QDKVA2g0V7ezsGlVqvCA"
+          }
+        },
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "remove",
+          "signer": "d8576f2de42861ceb8030cc722b4c669",
+          "remove": [
+            "894e311b2b2058e3bcc2ef3bde8ec864"
+          ],
+          "epoch": {
+            "n": 1,
+            "kc": "hflIRaJHZvjexkOj0Bg1h3Mo7P-a5u5RCa26kA_Cmjw",
+            "to": [
+              "ab6095990ebaaf36d4c49e86fc3a65c3",
+              "d8576f2de42861ceb8030cc722b4c669"
+            ]
+          },
+          "sigs": {
+            "d8576f2de42861ceb8030cc722b4c669": "CQcDdCWJ-M6_Irht1bbnuAvXGlXW6jx1WdDzdwEzshN0y3oRUvjOGjhFh5TdA1In2Va5MMb5O_HBxP86loY1Ag"
+          }
+        },
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "rename",
+          "signer": "894e311b2b2058e3bcc2ef3bde8ec864",
+          "meta": {
+            "d8576f2de42861ceb8030cc722b4c669": "FCtwxdcA89_iVkiNEDuDVXEvJguSTCiqNvSwusrJ1Z_pZJSwyns0ENo0XHgvRtXs8l8GpQyCKfrmbQaDWALOV5CduoejKKall9KIZQ2Ax3M4IMCPSpzdUEYqwmK48I8iQmb2l5qUKr3sGfv2AO79eSKq6Ex-tnu-COsJ18cZeO2PauaOWAvRrTE98HqJYq5P0rqynKFPIGs7JgZYJmzUCVsV9a7sb1BUNL5DkYgdvoZVkT5hgnsRH-hl9wqcQq3kDAfVhdqwKm-gFtPZceXVakW5WEJygBLfVTUlsASSvHBU8BxFtC--M_OmHLj4Xo4QhxQ2_L81e8LSWsJ-J5SaWQCpzU4Au-imeBRXRBzfuuAMmxnXWZzJ1HvhMdR86ZtnGS5yybQWCj2TDtbCoEYZfupmjABhD1kV4MWbc19dTEfOK84egT2kFhZ-Y1tHCrYA"
+          },
+          "sigs": {
+            "894e311b2b2058e3bcc2ef3bde8ec864": "8ebCBlN5kvNv4h1LtOHUC48_tW5YFqCCE_X2Ak8XTbjhRPqMbnVhs6DJSF7g7clmfp3iCdiwlONS5qFXLoZJCQ"
+          }
+        }
+      ],
+      "winner": "f94d85d356ee9bc9b36b8ad87bcad37da24619900ebaa2016927cc37b1874f54"
+    },
+    {
+      "base": 2,
+      "candidates": [
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "rename",
+          "signer": "894e311b2b2058e3bcc2ef3bde8ec864",
+          "meta": {
+            "d8576f2de42861ceb8030cc722b4c669": "FCtwxdcA89_iVkiNEDuDVXEvJguSTCiqNvSwusrJ1Z_pZJSwyns0ENo0XHgvRtXs8l8GpQyCKfrmbQaDWALOV5CduoejKKall9KIZQ2Ax3M4IMCPSpzdUEYqwmK48I8iQmb2l5qUKr3sGfv2AO79eSKq6Ex-tnu-COsJ18cZeO2PauaOWAvRrTE98HqJYq5P0rqynKFPIGs7JgZYJmzUCVsV9a7sb1BUNL5DkYgdvoZVkT5hgnsRH-hl9wqcQq3kDAfVhdqwKm-gFtPZceXVakW5WEJygBLfVTUlsASSvHBU8BxFtC--M_OmHLj4Xo4QhxQ2_L81e8LSWsJ-J5SaWQCpzU4Au-imeBRXRBzfuuAMmxnXWZzJ1HvhMdR86ZtnGS5yybQWCj2TDtbCoEYZfupmjABhD1kV4MWbc19dTEfOK84egT2kFhZ-Y1tHCrYA"
+          },
+          "sigs": {
+            "894e311b2b2058e3bcc2ef3bde8ec864": "8ebCBlN5kvNv4h1LtOHUC48_tW5YFqCCE_X2Ak8XTbjhRPqMbnVhs6DJSF7g7clmfp3iCdiwlONS5qFXLoZJCQ"
+          }
+        },
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "add",
+          "signer": "d8576f2de42861ceb8030cc722b4c669",
+          "add": [
+            {
+              "did": "addf195306ed8f3c4d02642d8b6ebd6a",
+              "sig": "Pv9XrxPpjXsHr8QrMZKgC1ZO9Q2cOgBPCr7P22C3MWY",
+              "kem": "bmiQy52XcNEUqT_nj29df8adxbK84jlUCWdacit50FA",
+              "role": "device"
+            }
+          ],
+          "sigs": {
+            "d8576f2de42861ceb8030cc722b4c669": "ksRuJFzXxv2Q_9JoH-HTDk4V3gpG1x9IbIyjFB18nxAIR9aQYYK8mMxO7DiS5bHMgsXFFSxqI_Ml_RPoM1RlDA",
+            "addf195306ed8f3c4d02642d8b6ebd6a": "aZnm2fwg6OEe4XbvtT-9xHc_UY3l5G65YNxq65TIzgr6VE_obgknPwvSUlMVMIj70_QDKVA2g0V7ezsGlVqvCA"
+          }
+        }
+      ],
+      "winner": "4b1cbadeedc3abe9505b281ff36755dd312f5959e0d5efa4c2abfd283bc33edb"
+    },
+    {
+      "base": 2,
+      "candidates": [
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "rename",
+          "signer": "894e311b2b2058e3bcc2ef3bde8ec864",
+          "meta": {
+            "d8576f2de42861ceb8030cc722b4c669": "FCtwxdcA89_iVkiNEDuDVXEvJguSTCiqNvSwusrJ1Z_pZJSwyns0ENo0XHgvRtXs8l8GpQyCKfrmbQaDWALOV5CduoejKKall9KIZQ2Ax3M4IMCPSpzdUEYqwmK48I8iQmb2l5qUKr3sGfv2AO79eSKq6Ex-tnu-COsJ18cZeO2PauaOWAvRrTE98HqJYq5P0rqynKFPIGs7JgZYJmzUCVsV9a7sb1BUNL5DkYgdvoZVkT5hgnsRH-hl9wqcQq3kDAfVhdqwKm-gFtPZceXVakW5WEJygBLfVTUlsASSvHBU8BxFtC--M_OmHLj4Xo4QhxQ2_L81e8LSWsJ-J5SaWQCpzU4Au-imeBRXRBzfuuAMmxnXWZzJ1HvhMdR86ZtnGS5yybQWCj2TDtbCoEYZfupmjABhD1kV4MWbc19dTEfOK84egT2kFhZ-Y1tHCrYA"
+          },
+          "sigs": {
+            "894e311b2b2058e3bcc2ef3bde8ec864": "8ebCBlN5kvNv4h1LtOHUC48_tW5YFqCCE_X2Ak8XTbjhRPqMbnVhs6DJSF7g7clmfp3iCdiwlONS5qFXLoZJCQ"
+          }
+        },
+        {
+          "v": 2,
+          "group": "c7b32e0bfef5029f39df8c85e80ad015",
+          "seq": 2,
+          "prev": "e292a5a9d4a8894f95dc9f2e55532428cb6f26e0dbf826f63c0dc6427d829f94",
+          "op": "rename",
+          "signer": "d8576f2de42861ceb8030cc722b4c669",
+          "meta": {
+            "894e311b2b2058e3bcc2ef3bde8ec864": "41w47AehmgxPl1e-vhgDOzW11XK0FbPG6jL4zUfcSFqos_PoXfK9M8QCTVJu5vuwN1aXznTZIAGfQpcvBSABx6dJaIbqYlogMVNHGhEn3wzFGDAyGNJpioJpPeihyaIjZXUJh9CforqEI_XYDhcR7cJ31XouwC97j7u4PxvBDJhX4HvqyKcM2nWaYxrqqJK3HkcCtlHuF9zyW835hJU9mMalq-B_AqH3cE42Iu1lO3UQa21_FkWAu_K0Pc6Z5fSMWgwpd8i-hyLSZoL77B0yk5GEN2FgyDlR7Sgw84MODy5uB3epfrN8gzCsiXjdJ0Dzs5nZjR1DfO-cMmTLf08Ta9H36qZdV_5J2CWpaqYyCNDzSJ2QkYaO8T-UaSnyCI293wwghw9ZM7MmQ9oonU85MDENJUt216h9BfyfwSI3O53xLA1KFN3uWVjMpfUFiCjK"
+          },
+          "sigs": {
+            "d8576f2de42861ceb8030cc722b4c669": "spx_VSCTt3TSqlzPBbuo_YZ5ELZ2aqin7idn6q3pOV5Bx8TzVrpUc81l2_kTWvVIybTjUfC8ETzfKf83_xYeBw"
+          }
+        }
+      ],
+      "winner": "67bc5ce8f9ec7621790a4d5b097b4c0d9fe3b04dc782b4bfc8151f2875436e59"
+    }
+  ]
+}

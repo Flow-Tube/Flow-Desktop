@@ -141,7 +141,8 @@ fn dispatch(app: &AppHandle, url: String) {
         let _ = window.show();
         let _ = window.set_focus();
     }
-    if let Err(err) = app.emit("handoff://url", url) {
+    // Only the main window routes handoffs; a broadcast would play it in every window.
+    if let Err(err) = app.emit_to("main", "handoff://url", url) {
         warn!("failed to emit handoff event: {err}");
     }
 }

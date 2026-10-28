@@ -86,8 +86,8 @@ use commands::notifications::{
 #[cfg(not(target_os = "macos"))]
 use commands::pip::PIP_WINDOW_LABEL;
 use commands::pip::{
-    PipState, close_pip_window, focus_main_window, open_pip_window, pip_session, pip_window_ready,
-    set_pip_always_on_top,
+    PipState, close_pip_window, focus_main_window, focus_pip_source_window, open_pip_window,
+    pip_session, pip_window_ready, set_pip_always_on_top,
 };
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
@@ -440,6 +440,7 @@ pub fn run() {
             app.manage(AppWindowState::default());
             app.manage(commands::theme::ThemeFileWatch::default());
             app.manage(DiscordPresence::new());
+            app.manage(commands::discord::DiscordPresenceOwner::default());
             app.manage(services::music_tray::MusicTray::default());
 
             // Initialize and manage streaming proxy
@@ -649,6 +650,7 @@ pub fn run() {
             set_pip_always_on_top,
             pip_window_ready,
             focus_main_window,
+            focus_pip_source_window,
             // --- Shorts feed ---
             get_shorts_feed,
             load_more_shorts,

@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
+use crate::commands::pip::{PIP_WINDOW_LABEL, PipState};
 use crate::errors::{AppError, ErrorResponse};
 use crate::security::validation::validate_app_route;
 
@@ -133,6 +134,15 @@ pub fn open_app_window_with<R: Runtime>(
         if matches!(event, WindowEvent::Destroyed) {
             if let Some(state) = handle.try_state::<AppWindowState>() {
                 let _ = state.take(&closed_label);
+            }
+            // A pop-out has nowhere to hand its video back to once its window is gone.
+            let pip_source = handle
+                .try_state::<PipState>()
+                .and_then(|state| state.source_window());
+            if pip_source.as_deref() == Some(closed_label.as_str())
+                && let Some(pip) = handle.get_webview_window(PIP_WINDOW_LABEL)
+            {
+                let _ = pip.destroy();
             }
             quit_if_only_hidden_main_remains(&handle, &closed_label);
         }

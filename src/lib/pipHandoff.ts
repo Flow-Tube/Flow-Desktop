@@ -3,6 +3,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { logToBackend } from "./diagnostics";
+import { CURRENT_WINDOW_LABEL } from "./appWindow";
 import { SETTINGS } from "./settings/schema";
 import { readStreamInfoEntry } from "./streamResolution";
 import {
@@ -97,6 +98,8 @@ export async function openPopoutPlayer(): Promise<boolean> {
       stream: cachedStream ? { info: cachedStream.info, resolvedAt: cachedStream.resolvedAt } : null,
       silentUntilTakeover,
     });
+    // Only one pop-out exists; another window that had it loses it to this one.
+    void emit(PIP_EVENTS.claimed, { source: CURRENT_WINDOW_LABEL }).catch(() => {});
   } catch (error) {
     void logToBackend("warn", "pop-out player window failed to open", {
       videoId: video.id,

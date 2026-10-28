@@ -14,6 +14,7 @@ import {
 } from "./api/pip";
 import { dismissPopoutPlayer, openPopoutPlayer } from "./pipHandoff";
 import { watchVideoIdFromPath } from "./watchRouteSync";
+import { CURRENT_WINDOW_LABEL } from "./appWindow";
 
 /** Long enough for a minimize to settle before the window state is read. */
 const MINIMIZE_DEBOUNCE_MS = 150;
@@ -39,9 +40,17 @@ export function usePipController() {
   navigateRef.current = navigate;
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
+  const lostPopoutRef = useRef(false);
 
   useEffect(() => {
     const subscriptions = [
+      listen<{ source: string }>(PIP_EVENTS.claimed, ({ payload }) => {
+        // Another window's video replaced ours in the pop-out, so ours has ended.
+        const store = usePlayerStore.getState();
+        if (payload.source === CURRENT_WINDOW_LABEL || store.videoPlayerMode !== "window") return;
+        lostPopoutRef.current = true;
+        store.dismissVideoPlayer();
+      }),
       listen<PipProgressPayload>(PIP_EVENTS.progress, ({ payload }) => {
         const store = usePlayerStore.getState();
         if (store.videoPlayerMode !== "window") return;
@@ -111,7 +120,9 @@ export function usePipController() {
       if (mode === previousMode) return;
       const left = previousMode === "window";
       previousMode = mode;
-      if (left) void dismissPopoutPlayer();
+      // A pop-out another window took over is not ours to close.
+      if (left && !lostPopoutRef.current) void dismissPopoutPlayer();
+      lostPopoutRef.current = false;
     });
   }, []);
 

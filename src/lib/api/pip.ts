@@ -83,6 +83,8 @@ export const PIP_EVENTS = {
   /** Pop-out → main: decoding has started, the swap can happen now. */
   ready: "flow:pip-ready",
   takeover: "flow:pip-takeover",
+  /** App window → other app windows: this one now owns the pop-out. */
+  claimed: "flow:pip-claimed",
 } as const;
 
 export function openPipWindow(session: PipSession): Promise<void> {
@@ -107,4 +109,9 @@ export function markPipWindowReady(): Promise<void> {
 
 export function focusMainWindow(): Promise<void> {
   return invokeBackend("focus_main_window");
+}
+
+/** Raises the window the pop-out's video came from. */
+export function focusPipSourceWindow(): Promise<void> {
+  return invokeBackend("focus_pip_source_window");
 }

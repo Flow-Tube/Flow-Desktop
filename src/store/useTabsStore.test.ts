@@ -15,6 +15,7 @@ describe("useTabsStore navigation", () => {
       cause: "history",
       playerTabId: null,
       parked: {},
+      titles: {},
     });
   });
 
@@ -54,6 +55,7 @@ describe("useTabsStore tabs", () => {
       cause: "history",
       playerTabId: null,
       parked: {},
+      titles: {},
     });
   });
 
@@ -95,5 +97,46 @@ describe("useTabsStore tabs", () => {
     useTabsStore.getState().activateTab(other);
     expect(useTabsStore.getState().cause).toBe("tab");
     expect(useTabsStore.getState().action).toBe(NavigationType.Pop);
+  });
+});
+
+describe("useTabsStore titles and copies", () => {
+  beforeEach(() => {
+    useTabsStore.setState({
+      tabs: [{ id: "tab-1", entries: [createEntry("/"), createEntry("/feed")], index: 1 }],
+      activeId: "tab-1",
+      action: NavigationType.Pop,
+      cause: "history",
+      playerTabId: null,
+      parked: {},
+      titles: {},
+    });
+  });
+
+  it("duplicates a tab's whole list in the background, with fresh keys and its title", () => {
+    const source = useTabsStore.getState().tabs[0]!;
+    useTabsStore.getState().setTabTitle("tab-1", source.entries[1]!.key, "FlowNeuro");
+    useTabsStore.getState().duplicateTab("tab-1");
+    const state = useTabsStore.getState();
+    const copy = state.tabs[1]!;
+    expect(state.activeId).toBe("tab-1");
+    expect(copy.entries.map((entry) => entry.pathname)).toEqual(["/", "/feed"]);
+    expect(copy.index).toBe(1);
+    expect(copy.entries[1]!.key).not.toBe(source.entries[1]!.key);
+    expect(state.titles[copy.id]).toEqual({ key: copy.entries[1]!.key, text: "FlowNeuro" });
+  });
+
+  it("keeps the same title object when nothing changed", () => {
+    useTabsStore.getState().setTabTitle("tab-1", "k", "Home");
+    const before = useTabsStore.getState().titles;
+    useTabsStore.getState().setTabTitle("tab-1", "k", "Home");
+    expect(useTabsStore.getState().titles).toBe(before);
+  });
+
+  it("drops a closed tab's title", () => {
+    const other = useTabsStore.getState().openTab("/music");
+    useTabsStore.getState().setTabTitle(other, "k", "Music");
+    useTabsStore.getState().closeTab(other);
+    expect(useTabsStore.getState().titles).toEqual({});
   });
 });

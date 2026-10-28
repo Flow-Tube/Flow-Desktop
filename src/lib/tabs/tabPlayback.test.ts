@@ -7,7 +7,7 @@ vi.mock("../streamResolution", () => ({ prefetchStreamInfo: vi.fn() }));
 const { usePlayerStore } = await import("../../store/usePlayerStore");
 const { activeTab, useTabsStore } = await import("../../store/useTabsStore");
 const { createEntry } = await import("./tabHistory");
-const { closeTabWithPlayback, expandPlayerInOwnerTab, installTabPlaybackSync, switchToTab } = await import("./tabPlayback");
+const { closeOtherTabs, closeTabWithPlayback, expandPlayerInOwnerTab, installTabPlaybackSync, switchToTab } = await import("./tabPlayback");
 
 const video = (id: string): VideoSummary => ({ id, title: id, channelName: "Flow" });
 const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
@@ -36,6 +36,7 @@ beforeEach(() => {
     cause: "history",
     playerTabId: null,
     parked: {},
+    titles: {},
   });
   uninstall = installTabPlaybackSync();
 });
@@ -103,6 +104,15 @@ describe("tab playback", () => {
     expect(usePlayerStore.getState().currentVideo).toBeNull();
     expect(tabs().tabs.map((tab) => tab.id)).toEqual(["b"]);
     expect(tabs().activeId).toBe("b");
+  });
+
+  it("closes every other tab, and the video when it belonged to one of them", async () => {
+    playFromCard("p");
+    await flush();
+    closeOtherTabs("b");
+    expect(tabs().tabs.map((tab) => tab.id)).toEqual(["b"]);
+    expect(tabs().activeId).toBe("b");
+    expect(usePlayerStore.getState().currentVideo).toBeNull();
   });
 
   it("never closes the last tab", () => {

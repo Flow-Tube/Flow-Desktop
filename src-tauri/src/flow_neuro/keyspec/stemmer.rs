@@ -28,7 +28,7 @@ pub fn is_unstemmed(word: &str) -> bool {
     DERIVED.unstemmed.contains(word)
 }
 
-/// `word`, already folded and lemmatized, as a key spec 2 key under `key_language`.
+/// `word`, already folded and lemmatized, as a key under `key_language`.
 #[must_use]
 pub fn key(word: &str, key_language: &str) -> String {
     // Android has no first character to read a script from in an empty word; it stays as written.

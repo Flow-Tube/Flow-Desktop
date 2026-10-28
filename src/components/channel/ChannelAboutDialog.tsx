@@ -92,7 +92,7 @@ export function ChannelAboutDialog({ channel, open, onClose }: ChannelAboutDialo
           {description && (
             <LinkedText
               text={description}
-              className="whitespace-pre-wrap text-sm leading-relaxed text-chrome-neutral-300"
+              className="select-text whitespace-pre-wrap text-sm leading-relaxed text-chrome-neutral-300"
             />
           )}
 
@@ -119,7 +119,7 @@ export function ChannelAboutDialog({ channel, open, onClose }: ChannelAboutDialo
               <h3 className="mb-2 text-sm font-semibold text-chrome-neutral-200">
                 {getString("channel_about_details")}
               </h3>
-              <ul className="space-y-2.5">
+              <ul className="select-text space-y-2.5">
                 {facts.map(({ icon: Icon, text }) => (
                   <li key={text} className="flex items-center gap-3 text-sm text-chrome-neutral-300">
                     <Icon size={18} className="shrink-0 text-chrome-neutral-500" />

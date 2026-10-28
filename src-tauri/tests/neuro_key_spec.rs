@@ -1,4 +1,4 @@
-//! Key spec 2 against Flow for Android: its golden cases (`fixtures/neuro/key_spec_golden.json`,
+//! Key spec 3 against Flow for Android: its golden cases (`fixtures/neuro/key_spec_golden.json`,
 //! byte-identical to Android's) and ports of `NeuroKeySpecTest`, `BrainKeyRekeyTest`'s key
 //! function and `NeuroPhraseLearningTest`'s phrase test.
 
@@ -39,10 +39,18 @@ fn every_golden_case_reads_as_the_spec_says() {
             .collect();
         let pairs = strings(&case["modelPairs"]);
         let formats = strings(&case["formats"]);
-        if chunks.chunks != expected || chunks.model_pairs != pairs || chunks.formats != formats {
+        // Chinese cases also name the merged Han runs and the single characters.
+        let merged = case.get("merged").map(strings);
+        let singles = case.get("singles").map(strings);
+        if chunks.chunks != expected
+            || chunks.model_pairs != pairs
+            || chunks.formats != formats
+            || merged.as_ref().is_some_and(|m| *m != chunks.merged)
+            || singles.as_ref().is_some_and(|s| *s != chunks.singles)
+        {
             failures.push(format!(
-                "{input}: {:?} {:?} {:?}, expected {expected:?} {pairs:?} {formats:?}",
-                chunks.chunks, chunks.model_pairs, chunks.formats
+                "{input}: {:?} {:?} {:?} {:?} {:?}, expected {expected:?} {pairs:?} {formats:?} {merged:?} {singles:?}",
+                chunks.chunks, chunks.model_pairs, chunks.formats, chunks.merged, chunks.singles
             ));
         }
     }
@@ -181,7 +189,9 @@ fn unspaced_scripts_split_into_dictionary_words() {
 
     let chinese = words("吉他教学零基础入门");
     assert!(chinese.contains(&"吉他".to_string()), "{chinese:?}");
-    assert!(chinese.contains(&"教学".to_string()), "{chinese:?}");
+    // Key spec 3 reads "教学" as the tutorial format, never a topic.
+    assert!(!chinese.contains(&"教学".to_string()), "{chinese:?}");
+    assert_eq!(spec.chunk("吉他教学零基础入门").formats, ["tutorial"]);
 
     let japanese = words("ギターの弾き方を初心者向けに解説");
     assert!(japanese.contains(&"ギター".to_string()), "{japanese:?}");
@@ -197,4 +207,87 @@ fn unspaced_scripts_split_into_dictionary_words() {
     let spaced = words("Pixel 10 Pro camera test");
     assert!(spaced.contains(&"pixel".to_string()), "{spaced:?}");
     assert!(spaced.contains(&"camera".to_string()), "{spaced:?}");
+}
+
+// Android NeuroHanRunsTest.
+#[test]
+fn traditional_characters_read_as_simplified_ones() {
+    use flow_desktop_lib::flow_neuro::keyspec::text::fold;
+    assert_eq!(fold("機器學習"), "机器学习");
+    let spec = KeySpec::default();
+    assert_eq!(
+        spec.chunk("英語學習 如何學好英文").chunks,
+        spec.chunk("英语学习 如何学好英文").chunks
+    );
+}
+
+#[test]
+fn text_with_kana_is_japanese_and_its_kanji_stay() {
+    use flow_desktop_lib::flow_neuro::keyspec::text::fold;
+    assert_eq!(fold("宮崎駿 ジブリ"), "宮崎駿 ジブリ");
+    assert_eq!(fold("宮崎駿"), "宫崎骏");
+}
+
+#[test]
+fn the_fold_table_maps_one_character_to_one_that_maps_no_further() {
+    use flow_desktop_lib::flow_neuro::keyspec::text::fold;
+    let table = include_str!("../resources/neuro/fold/hant-hans.txt");
+    let lines: Vec<&str> = table
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .collect();
+    let traditional: std::collections::HashSet<char> = lines
+        .iter()
+        .filter_map(|line| line.chars().next())
+        .collect();
+    assert!(lines.len() >= 2000);
+    for line in lines {
+        let chars: Vec<char> = line.chars().collect();
+        assert_eq!(chars.len(), 2, "{line}");
+        assert!(!traditional.contains(&chars[1]), "{line}");
+        assert_eq!(fold(&chars[0].to_string()), chars[1].to_string(), "{line}");
+    }
+}
+
+#[test]
+fn single_han_characters_merge_into_one_candidate() {
+    let spec = KeySpec::default();
+    let merged = |title: &str| spec.chunk(title).merged;
+    assert_eq!(merged("【4K】周杰倫 演唱會 完整版"), ["周杰伦", "演唱会"]);
+    assert_eq!(merged("李永樂老師 講解 相對論"), ["李永乐", "相对论"]);
+    assert!(
+        !spec
+            .chunk("周杰倫 演唱會")
+            .chunks
+            .contains(&vec!["周杰伦".to_string()])
+    );
+    assert_eq!(merged("老高與小茉"), ["老高", "小茉"]);
+    assert_eq!(merged("周杰倫的新歌"), ["周杰伦"]);
+    assert!(merged("iPhone 17 Pro 開箱評測").is_empty());
+    assert!(merged("周杰倫周杰倫").is_empty(), "at most five characters");
+    assert_eq!(merged("周杰"), ["周杰"]);
+    assert!(
+        merged("周 杰 倫").is_empty(),
+        "characters apart are not one run"
+    );
+    assert!(merged("周，杰，倫").is_empty());
+}
+
+#[test]
+fn japanese_and_earlier_specs_merge_nothing() {
+    use flow_desktop_lib::flow_neuro::keyspec::tables::run_breaks;
+    let spec = KeySpec::default();
+    assert!(spec.chunk("大谷翔平 ホームラン 50号").merged.is_empty());
+    assert!(run_breaks("ja").is_none());
+    let spec_2 = spec.at_version(2);
+    assert!(spec_2.chunk("周杰倫 演唱會").merged.is_empty());
+    assert_eq!(spec_2.chunk("英語學習").chunks, [["英語", "學習"]]);
+}
+
+#[test]
+fn japanese_stop_lists_keep_their_kanji() {
+    let stop = KeySpec::stop_list("ja");
+    for word in ["私達", "貴方", "貴方方"] {
+        assert!(stop.contains(word), "{word}");
+    }
 }

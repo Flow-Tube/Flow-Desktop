@@ -100,6 +100,13 @@ export function registerMediaSessionClient(name: MediaSessionOwner, client: Medi
   };
 }
 
+let claimListener: (() => void) | null = null;
+
+/** Told whenever a player here starts, so other Flow windows can pause theirs. */
+export function setMediaSessionClaimListener(listener: (() => void) | null): void {
+  claimListener = listener;
+}
+
 /** A player started: it takes the OS controls and the other one pauses. */
 export function claimMediaSession(name: MediaSessionOwner): void {
   const client = clients.get(name);
@@ -109,6 +116,14 @@ export function claimMediaSession(name: MediaSessionOwner): void {
   }
   owner = name;
   apply(client);
+  claimListener?.();
+}
+
+/** Another window started playing: everything here pauses. */
+export function pauseAllMediaSessionClients(): void {
+  for (const client of clients.values()) {
+    if (client.isPlaying()) client.pause();
+  }
 }
 
 /**

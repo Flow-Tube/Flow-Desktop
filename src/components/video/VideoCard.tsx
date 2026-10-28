@@ -36,6 +36,8 @@ import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publis
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
 import { collaboratorsByline } from "../../lib/collaborators";
+import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
+import { openActions } from '../common/openActions';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -143,10 +145,13 @@ function VideoCardComponent({
   const isLiveVideo = !!video.isLive || liveFromStore;
   const publishedText = formatPublishedText(video);
   // A Short known from its card opens in the Shorts player, whatever the list.
-  const play = useCallback(() => {
+  const route = routeForVideo(video);
+  const play = useCallback((event?: React.MouseEvent) => {
+    if (openedInBackgroundTab(event, route)) return;
     if (video.isShort && !isChannel) navigate(`/shorts/${video.id}`);
     else onPlay(video);
-  }, [video, isChannel, navigate, onPlay]);
+  }, [video, isChannel, navigate, onPlay, route]);
+  const tabClickProps = useMemo(() => backgroundTabClickProps(route), [route]);
 
   useEffect(() => {
     if (video.isLive) markLive(video.id);
@@ -449,6 +454,7 @@ function VideoCardComponent({
         onSelect: () => onRemoveFromContinueWatching(video.id),
       }]
       : []),
+    ...openActions(route),
     {
       id: "channel",
       label: getString("video_view_channel"),
@@ -556,6 +562,7 @@ function VideoCardComponent({
         <div
           className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-surface-container"
           onClick={play}
+          {...tabClickProps}
         >
           {displayThumbnail ? (
             <img
@@ -586,6 +593,7 @@ function VideoCardComponent({
         <div className="flex min-w-0 flex-1 flex-col">
           <h3
             onClick={play}
+          {...tabClickProps}
             style={titleClampStyle}
             className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary"
           >
@@ -659,6 +667,7 @@ function VideoCardComponent({
         <div
           className="relative aspect-video w-40 shrink-0 cursor-pointer overflow-hidden rounded-xl bg-chrome-zinc-900 sm:w-48"
           onClick={play}
+          {...tabClickProps}
         >
           {displayThumbnail ? (
             <img
@@ -690,6 +699,7 @@ function VideoCardComponent({
         <div className="flex min-w-0 flex-1 flex-col">
           <h3
             onClick={play}
+          {...tabClickProps}
             style={titleClampStyle}
             className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
           >
@@ -747,6 +757,7 @@ function VideoCardComponent({
       <div
         className="relative w-full aspect-video rounded-xl overflow-hidden bg-chrome-zinc-900 cursor-pointer"
         onClick={play}
+          {...tabClickProps}
       >
         {displayThumbnail ? (
           <img
@@ -826,6 +837,7 @@ function VideoCardComponent({
         <div className="flex flex-col flex-1 min-w-0">
           <h3
             onClick={play}
+          {...tabClickProps}
             style={titleClampStyle}
             className="text-chrome-zinc-100 text-sm font-medium leading-snug cursor-pointer hover:text-[var(--color-primary)] transition-colors"
           >

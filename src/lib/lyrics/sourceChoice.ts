@@ -1,3 +1,4 @@
+import { profileStorage } from "../storage/profileStorage";
 /**
  * Which lyrics a downloaded song shows when the user picked one in "Choose lyrics source":
  * the copy saved with the download, or the online providers. Songs without a choice show the
@@ -15,7 +16,7 @@ function load(): Map<string, LyricsSourceChoice> {
   if (choices) return choices;
   choices = new Map();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = profileStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : null;
     if (parsed && typeof parsed === "object") {
       for (const [videoId, choice] of Object.entries(parsed)) {
@@ -30,7 +31,7 @@ function load(): Map<string, LyricsSourceChoice> {
 
 function save(map: Map<string, LyricsSourceChoice>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(map)));
+    profileStorage.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(map)));
   } catch {
     // The choice still holds for this session.
   }

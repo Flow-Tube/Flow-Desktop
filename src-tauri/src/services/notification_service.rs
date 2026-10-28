@@ -84,9 +84,11 @@ async fn check_channel(
         return Ok(None);
     };
 
-    let (feed_name, videos) = parse_rss_feed(&sub.id, &xml);
+    let feed = parse_rss_feed(&sub.id, &xml);
+    let feed_name = feed.channel_name;
     // A premiere is announced when it airs, and members-only uploads cannot be played.
-    let Some((_, latest)) = videos
+    let Some((_, latest)) = feed
+        .videos
         .into_iter()
         .filter(|(_, video)| !video.is_members_only && !video.is_upcoming)
         .max_by_key(|(sort_key, _)| *sort_key)

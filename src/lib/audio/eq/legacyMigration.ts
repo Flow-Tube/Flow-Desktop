@@ -1,6 +1,7 @@
 import { GraphicEq, roundTo } from "./limits";
 import type { EqState } from "./models";
 import { defaultEqState, sanitizeState } from "./stateOps";
+import { profileStorage } from "../../storage/profileStorage";
 
 /** Where the first desktop equalizer kept its switch and ten gains, beside the music volume. */
 export const LEGACY_MUSIC_CONFIG_KEY = "flow_music_player";
@@ -37,7 +38,7 @@ export function migrateLegacyEq(config: LegacyEqConfig | null): EqState | null {
 /** The legacy fields as the old store saved them, or null when there are none. */
 export function readLegacyEqConfig(): LegacyEqConfig | null {
   try {
-    const saved = localStorage.getItem(LEGACY_MUSIC_CONFIG_KEY);
+    const saved = profileStorage.getItem(LEGACY_MUSIC_CONFIG_KEY);
     if (!saved) return null;
     const parsed: unknown = JSON.parse(saved);
     return typeof parsed === "object" && parsed !== null ? (parsed as LegacyEqConfig) : null;

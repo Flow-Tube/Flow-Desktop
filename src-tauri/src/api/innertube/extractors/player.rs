@@ -86,6 +86,8 @@ const PLAYER_CLIENT_LADDER: &[&clients::YouTubeClient] = &[
 /// served only over SABR, so the web clients are asked too (Flow for Android's
 /// `SabrRoutingPolicy`).
 const SABR_UPGRADE_FLOOR: u64 = 720;
+/// The longest a portrait or square upload runs and is still made a Short.
+const SHORT_FRAME_MAX_SECONDS: u64 = 180;
 /// How long a playable direct answer waits on that upgrade before it is used
 /// as it is: the upgrade mints a token and may fetch the player script first.
 const SABR_UPGRADE_BUDGET: Duration = Duration::from_secs(3);
@@ -285,6 +287,26 @@ fn max_video_height(streaming_data: &Value) -> u64 {
         .filter_map(quality_height)
         .max()
         .unwrap_or(0)
+}
+
+/// Whether a video is a Short, from its frame: every upload of three minutes or
+/// less that is portrait or square is made a Short, and `VISIONOS` says nothing
+/// else about it. `None` when no video format gives its size.
+fn is_short_by_frame(streaming_data: &Value, duration_seconds: Option<u64>) -> Option<bool> {
+    let (width, height) = ["formats", "adaptiveFormats"]
+        .iter()
+        .filter_map(|key| streaming_data[*key].as_array())
+        .flatten()
+        .filter(|format| {
+            format["mimeType"]
+                .as_str()
+                .is_some_and(|mime| mime.starts_with("video/"))
+        })
+        .find_map(|format| Some((format["width"].as_u64()?, format["height"].as_u64()?)))?;
+    if height < width {
+        return Some(false);
+    }
+    duration_seconds.map(|seconds| seconds <= SHORT_FRAME_MAX_SECONDS)
 }
 
 fn quality_height(format: &Value) -> Option<u64> {
@@ -1737,11 +1759,13 @@ impl InnertubeClient {
 
         check_playability_status(&response["playabilityStatus"])?;
         let details = &response["videoDetails"];
+        let duration_seconds = details["lengthSeconds"]
+            .as_str()
+            .and_then(|seconds| seconds.parse().ok());
         Ok(VideoBasics {
             channel_id: details["channelId"].as_str().map(ToOwned::to_owned),
-            duration_seconds: details["lengthSeconds"]
-                .as_str()
-                .and_then(|seconds| seconds.parse().ok()),
+            duration_seconds,
+            is_short: is_short_by_frame(&response["streamingData"], duration_seconds),
         })
     }
 
@@ -2733,6 +2757,25 @@ mod remote_signing {
         });
         assert_eq!(max_video_height(&streaming), 1080);
         assert_eq!(max_video_height(&Value::Null), 0);
+    }
+
+    #[test]
+    fn a_short_is_portrait_or_square_and_three_minutes_at_most() {
+        let frame = |width: u64, height: u64| {
+            json!({ "adaptiveFormats": [
+                { "mimeType": "audio/mp4" },
+                { "mimeType": "video/mp4", "width": width, "height": height }
+            ]})
+        };
+        assert_eq!(is_short_by_frame(&frame(1080, 1920), Some(170)), Some(true));
+        assert_eq!(is_short_by_frame(&frame(720, 720), Some(45)), Some(true));
+        assert_eq!(is_short_by_frame(&frame(1920, 1080), Some(45)), Some(false));
+        assert_eq!(
+            is_short_by_frame(&frame(1080, 1920), Some(181)),
+            Some(false)
+        );
+        assert_eq!(is_short_by_frame(&frame(1080, 1920), None), None);
+        assert_eq!(is_short_by_frame(&Value::Null, Some(45)), None);
     }
 
     #[test]

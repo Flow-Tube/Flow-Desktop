@@ -124,9 +124,45 @@ pub fn validate_external_url(url: &str) -> AppResult<()> {
     }
 }
 
+/// A page inside Flow that a new window opens on: an app path such as
+/// `/watch/<id>`, never a URL that could point the window somewhere else.
+pub fn validate_app_route(route: &str) -> AppResult<()> {
+    let valid = route.len() <= 2048
+        && route.starts_with('/')
+        && !route.starts_with("//")
+        && !route.contains('\\')
+        && !route.chars().any(char::is_control);
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::Validation("Invalid page for a new window".into()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::validate_external_url;
+    use super::{validate_app_route, validate_external_url};
+
+    #[test]
+    fn app_routes_stay_inside_flow() {
+        assert!(validate_app_route("/").is_ok());
+        assert!(validate_app_route("/watch/dQw4w9WgXcQ?t=42").is_ok());
+        assert!(validate_app_route("/search?q=lofi%20beats").is_ok());
+        for route in [
+            "",
+            "watch/abc",
+            "//evil.example",
+            "/\\evil.example",
+            "https://evil.example",
+            "/watch/a\nb",
+        ] {
+            assert!(
+                validate_app_route(route).is_err(),
+                "{route:?} should be rejected"
+            );
+        }
+        assert!(validate_app_route(&format!("/{}", "a".repeat(2048))).is_err());
+    }
 
     #[test]
     fn web_and_mail_links_open() {

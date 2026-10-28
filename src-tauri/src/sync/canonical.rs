@@ -329,6 +329,9 @@ pub struct WatchHistoryRecord {
     pub duration_seconds: Option<u64>,
     pub is_music: bool,
     pub is_short: bool,
+    /// Sent so the other device can show the video; the desktop draws it from the video id and
+    /// keeps none.
+    pub thumbnail_url: Option<String>,
     pub hlc: Hlc,
     /// Tombstone — a deleted record is shipped, never silently omitted.
     pub deleted: bool,

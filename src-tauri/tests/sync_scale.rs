@@ -56,6 +56,7 @@ fn record(i: usize) -> WatchHistoryRecord {
         duration_seconds: Some(120 + (i as u64 % 600)),
         is_music: i % 7 == 0,
         is_short: false,
+        thumbnail_url: None,
         hlc: Hlc::new(1_700_000_000_000 + i as u64, 0, "scale-dev"),
         deleted: false,
     }

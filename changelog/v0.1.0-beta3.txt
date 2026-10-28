@@ -127,6 +127,10 @@ INTERFACE
 - The Subscribe button eases between Subscribe and Subscribed, shows a ringing bell when the channel's notifications are on and rings it once when they turn on. Its menu offers All or None, and says so when notifications are off for every channel in Settings.
 - Unsubscribing shows a toast with Undo, which brings the channel back with its groups.
 
+TABS AND WINDOWS
+- Going Back returns to where you were on the page, such as halfway down Home, instead of the top.
+- The mouse side buttons, Alt+Left and Alt+Right (and Cmd+[ and Cmd+] on a Mac) go back and forward. The Back and Forward buttons dim when there is nowhere to go.
+
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.
 - Stable volume now works: it plays YouTube's stable-volume audio, which evens out loud and quiet parts, on videos that have it. A new Normalize volume across videos setting turns down videos mastered louder than YouTube's target.

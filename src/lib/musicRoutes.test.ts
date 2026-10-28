@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { musicSeeAllRoute } from './musicRoutes';
+import { isMusicRoute, musicSeeAllRoute } from './musicRoutes';
 import type { YTItem } from '../types/music';
 
 const song: YTItem = {
@@ -24,5 +24,15 @@ describe('musicSeeAllRoute', () => {
   it('sends other browse endpoints to the generic grid', () => {
     const route = musicSeeAllRoute('FEmusic_moods_and_genres_category', 'x', 'Chill');
     expect(route).toBe('/music/browse?browseId=FEmusic_moods_and_genres_category&params=x&title=Chill');
+  });
+});
+
+describe('isMusicRoute', () => {
+  it('matches the Music pages only', () => {
+    expect(isMusicRoute('/music')).toBe(true);
+    expect(isMusicRoute('/music/album/MPRE1')).toBe(true);
+    expect(isMusicRoute('/music?tab=library')).toBe(true);
+    expect(isMusicRoute('/musical')).toBe(false);
+    expect(isMusicRoute('/watch/abc')).toBe(false);
   });
 });

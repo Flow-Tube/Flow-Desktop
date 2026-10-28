@@ -443,17 +443,29 @@ async fn apply_settings(
         collection_key: Collection::Settings.key().to_string(),
         ..Default::default()
     };
+    let mut sb_changed: Vec<&SettingEntry> = Vec::new();
     for rec in &merged {
         match local_map.get(&rec.key) {
-            Some(existing) if existing == rec => stat.skipped += 1,
-            Some(_) => {
-                write_setting_value(tx, rec).await?;
-                stat.updated += 1;
+            Some(existing) if existing == rec => {
+                stat.skipped += 1;
+                continue;
             }
-            None => {
-                write_setting_value(tx, rec).await?;
-                stat.added += 1;
-            }
+            Some(_) => stat.updated += 1,
+            None => stat.added += 1,
+        }
+        if settings_map::is_sb_action(&rec.key) {
+            sb_changed.push(rec);
+        } else {
+            write_setting_value(tx, rec).await?;
+        }
+    }
+    // The nine SponsorBlock actions share one desktop setting, written once with the newest stamp.
+    if let Some(newest) = sb_changed.iter().map(|rec| rec.hlc.physical_ms).max() {
+        let current = get_setting(tx, settings_map::SB_ACTIONS_KEY).await?;
+        if let Some((key, value)) =
+            settings_map::sb_actions_from_wire(current.as_deref(), sb_changed)
+        {
+            write_setting(tx, key, &value, newest).await?;
         }
     }
     Ok(stat)
@@ -708,7 +720,16 @@ async fn write_setting_value(
     let Some((desktop_key, value)) = settings_map::from_wire(&entry.key, &entry.value) else {
         return Ok(());
     };
-    let updated = mapping::ms_to_iso(entry.hlc.physical_ms);
+    write_setting(tx, desktop_key, &value, entry.hlc.physical_ms).await
+}
+
+async fn write_setting(
+    tx: &mut Transaction<'_, Sqlite>,
+    desktop_key: &str,
+    value: &str,
+    changed_ms: u64,
+) -> Result<(), SyncError> {
+    let updated = mapping::ms_to_iso(changed_ms);
     sqlx::query(
         "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",

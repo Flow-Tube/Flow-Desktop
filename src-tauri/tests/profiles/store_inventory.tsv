@@ -58,6 +58,7 @@ setting	hide_seen_videos	PROFILE	settings	Home preference
 setting	notifications_enabled	PROFILE	settings	New-upload alerts
 setting	notif_check_interval_minutes	PROFILE	settings	Android twin subscription_check_interval_minutes is per profile
 setting	stable_volume_enabled	PROFILE	settings	Playback preference
+setting	sponsorblock_categories	PROFILE	settings	SponsorBlock preference
 setting	sponsorblock_enabled	PROFILE	settings	SponsorBlock preference
 setting	sponsorblock_server	PROFILE	settings	SponsorBlock preference
 setting	sync_neuro_merged	DEFAULT_ONLY	sync	FlowNeuro CRDT state

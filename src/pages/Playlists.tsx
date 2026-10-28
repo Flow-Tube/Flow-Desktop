@@ -8,6 +8,7 @@ import { CategoryChips } from "../components/layout/CategoryChips";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { Select } from "../components/ui/Select";
 import { useGridStyle } from "../lib/useGridColumns";
+import { confirmPlaylistRemoval } from "../lib/confirmPlaylistRemoval";
 import {
   getPlaylistTimestamp,
   loadStoredPlaylists,
@@ -141,7 +142,8 @@ export const Playlists: React.FC<PlaylistsProps> = ({ onPlay: _onPlay }) => {
   };
 
   const handleRemoveFromLibrary = async (playlist: PlaylistSummary) => {
-    if (!confirm("Remove this playlist from your library?")) return false;
+    const owned = playlists.find((stored) => stored.id === playlist.id)?.source === "Owned";
+    if (!await confirmPlaylistRemoval(playlist, owned)) return false;
 
     const updated = await removePlaylistFromLibrary(playlist.id);
     setPlaylists(updated);

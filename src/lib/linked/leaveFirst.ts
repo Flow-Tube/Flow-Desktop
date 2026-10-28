@@ -1,3 +1,4 @@
+import { CircleAlert } from "lucide-react";
 import { isTauriEnv } from "../api/env";
 import { normalizeBackendError } from "../api/errors";
 import { forgetGroup, getLinkedStatus, leaveGroup } from "../api/linked";
@@ -12,10 +13,13 @@ import { syncErrorMessage } from "../syncErrors";
 export async function forgetAfterFailedLeave(error: unknown): Promise<boolean> {
   const { kind, message } = normalizeBackendError(error);
   const reason = syncErrorMessage(kind, message);
-  const confirmed = await confirmAction(
-    `${getString("linked_leave_failed", reason)}\n\n${getString("linked_forget_anyway_body")}`,
-    getString("linked_forget_anyway"),
-  );
+  const confirmed = await confirmAction({
+    title: getString("linked_leave_failed_title"),
+    message: `${reason}\n\n${getString("linked_forget_anyway_body")}`,
+    icon: CircleAlert,
+    confirmLabel: getString("linked_forget_anyway"),
+    destructive: true,
+  });
   if (confirmed) await forgetGroup();
   return confirmed;
 }

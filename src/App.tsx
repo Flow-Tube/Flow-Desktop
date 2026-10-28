@@ -77,6 +77,7 @@ import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
 import { useTabShortcuts } from "./lib/tabs/useTabShortcuts";
 import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
 import { useTabSession } from "./lib/tabs/useTabSession";
+import { useSingleTabWhenOff } from "./lib/tabs/useSingleTabWhenOff";
 import { useCrossWindowSync } from "./lib/useCrossWindowSync";
 import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
@@ -107,6 +108,7 @@ function App() {
   useTabShortcuts();
   useActiveTabTitle();
   const tabsRestored = useTabSession();
+  useSingleTabWhenOff();
   useCrossWindowSync();
 
   // Onboarding belongs to the main window; an extra window only exists once it is done.

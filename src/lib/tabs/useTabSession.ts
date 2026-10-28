@@ -54,8 +54,8 @@ async function bootExtraWindow(): Promise<void> {
 }
 
 /**
- * Brings back the main window's tabs from the last run, then keeps saving
- * them; an extra window instead opens on the page it was given. Nothing starts
+ * Brings back the main window's tabs from the last run when tabs are on, then
+ * keeps saving them; an extra window instead opens on the page it was given. Nothing starts
  * playing on restore: a video page opens paused where it was left. Returns
  * false until the tabs are in place, so no page loads twice.
  */
@@ -68,11 +68,13 @@ export function useTabSession(): boolean {
       return;
     }
     let cancelled = false;
-    void getSetting(SETTINGS.TAB_SESSION)
-      .catch(() => null)
-      .then((raw) => {
+    // Read here rather than from the settings store, which has not loaded yet. The
+    // session is saved with tabs off too, so turning them on never brings back an old one.
+    void Promise.all([getSetting(SETTINGS.TABS_ENABLED), getSetting(SETTINGS.TAB_SESSION)])
+      .catch(() => [null, null])
+      .then(([enabled, raw]) => {
         if (cancelled) return;
-        const session = parseTabSession(raw);
+        const session = enabled === "true" ? parseTabSession(raw) : null;
         if (session) {
           const tabs = useTabsStore.getState();
           tabs.restoreTabs(restoreTabSession(session));

@@ -48,6 +48,8 @@ interface TabsState {
   duplicateTab: (id: string) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
+  /** Drops every other tab; a video still in the player then belongs to this one. */
+  keepOnlyTab: (id: string) => void;
   setPlayerTab: (id: string | null) => void;
   park: (id: string, video: ParkedVideo) => void;
   unpark: (id: string) => void;
@@ -167,6 +169,20 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       titles: withoutKey(current.titles, id),
       playerTabId: current.playerTabId === id ? null : current.playerTabId,
       ...(current.activeId === id ? { activeId: neighbor.id, action: NavigationType.Pop, cause: "tab" as const } : {}),
+    });
+  },
+
+  keepOnlyTab: (id) => {
+    const current = get();
+    const tab = current.tabs.find((candidate) => candidate.id === id);
+    if (!tab) return;
+    const title = current.titles[id];
+    set({
+      tabs: [tab],
+      activeId: id,
+      parked: {},
+      titles: title ? { [id]: title } : {},
+      playerTabId: current.playerTabId ? id : null,
     });
   },
 

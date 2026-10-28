@@ -3,13 +3,14 @@ import { useTabsStore } from "../../store/useTabsStore";
 import { IS_MACOS_RUNTIME } from "../platform";
 import { closeTabWithPlayback, switchToTab } from "./tabPlayback";
 import { tabShortcutForKey } from "./tabShortcuts";
+import { tabsEnabled } from "./tabsEnabled";
 import { openInNewWindow } from "../openTarget";
 
 export function useTabShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      const shortcut = tabShortcutForKey(event, IS_MACOS_RUNTIME);
+      const shortcut = tabShortcutForKey(event, IS_MACOS_RUNTIME, tabsEnabled());
       if (!shortcut) return;
       const { tabs, activeId, openTab } = useTabsStore.getState();
       const at = tabs.findIndex((tab) => tab.id === activeId);

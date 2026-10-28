@@ -12,7 +12,13 @@ export type TabShortcut =
  * Browser tab and window keys. The primary modifier is Cmd on macOS and Ctrl elsewhere;
  * Ctrl+Tab cycles on every platform, as in browsers.
  */
-export function tabShortcutForKey(event: HistoryKey, isMac: boolean): TabShortcut | null {
+export function tabShortcutForKey(event: HistoryKey, isMac: boolean, tabsOn: boolean): TabShortcut | null {
+  const shortcut = shortcutForKey(event, isMac);
+  // With tabs off, Cmd+W and the rest keep their usual meaning; only the new-window key stays.
+  return tabsOn || shortcut?.kind === "new-window" ? shortcut : null;
+}
+
+function shortcutForKey(event: HistoryKey, isMac: boolean): TabShortcut | null {
   if (event.altKey) return null;
   if (event.ctrlKey && !event.metaKey && event.key === "Tab") return { kind: "cycle", step: event.shiftKey ? -1 : 1 };
 

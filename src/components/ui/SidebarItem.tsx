@@ -14,8 +14,8 @@ type SidebarItemProps = {
   rightElement?: ReactNode;
   /** Icon only, with the label as a tooltip. */
   collapsed?: boolean;
-  /** Middle-click or Cmd/Ctrl-click on a link: open its page in a background tab. */
-  onOpenInNewTab?: (to: string) => void;
+  /** Middle-click or Cmd/Ctrl-click on a link: open its page in a background tab. Returns false when none opened. */
+  onOpenInNewTab?: (to: string) => boolean;
 };
 
 const baseClasses =
@@ -67,20 +67,14 @@ export function SidebarItem({
           end={end}
           onClick={(event) => {
             setTooltipAnchor(null);
-            if (onOpenInNewTab && wantsBackgroundTab(event)) {
+            if (onOpenInNewTab && wantsBackgroundTab(event) && onOpenInNewTab(to)) {
               event.preventDefault();
-              onOpenInNewTab(to);
               return;
             }
             onClick?.();
           }}
-          onMouseDown={(event) => {
-            if (onOpenInNewTab && event.button === 1) event.preventDefault();
-          }}
           onAuxClick={(event) => {
-            if (!onOpenInNewTab || event.button !== 1) return;
-            event.preventDefault();
-            onOpenInNewTab(to);
+            if (event.button === 1 && onOpenInNewTab?.(to)) event.preventDefault();
           }}
           className={({ isActive: navActive }) => `${baseClasses} ${(isActive ?? navActive) ? activeClasses : idleClasses}`}
           {...tooltipHandlers}

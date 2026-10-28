@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { readStreamInfoEntry } from "./streamResolution";
 import { wantsBackgroundTab } from "./clickIntent";
+import { tabsEnabled } from "./tabs/tabsEnabled";
 import { openAppWindow, type WindowVideoHandoff } from "./api/appWindow";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { activeTab, useTabsStore, type ParkedVideo } from "../store/useTabsStore";
@@ -16,8 +17,11 @@ export function routeForVideo(video: Pick<VideoSummary, "id" | "isShort">): stri
   return video.isShort ? `/shorts/${video.id}` : `/watch/${video.id}`;
 }
 
-export function openInNewTab(route: string): void {
+/** Opens `route` in a background tab; false, and nothing opened, while tabs are off. */
+export function openInNewTab(route: string): boolean {
+  if (!tabsEnabled()) return false;
   useTabsStore.getState().openTab(route);
+  return true;
 }
 
 export async function openInNewWindow(route: string, handoff: WindowVideoHandoff | null = null): Promise<boolean> {
@@ -89,22 +93,20 @@ export async function moveTabToNewWindow(tabId: string): Promise<void> {
 export function backgroundTabClickProps(route: string) {
   return {
     onMouseDown: (event: ReactMouseEvent) => {
-      if (event.button === 1) event.preventDefault();
+      if (event.button === 1 && tabsEnabled()) event.preventDefault();
     },
     onAuxClick: (event: ReactMouseEvent) => {
-      if (event.button !== 1) return;
+      if (event.button !== 1 || !openInNewTab(route)) return;
       event.preventDefault();
       event.stopPropagation();
-      openInNewTab(route);
     },
   };
 }
 
 /** For a card's click handler: true when the click asked for a background tab and got one. */
 export function openedInBackgroundTab(event: ReactMouseEvent | undefined, route: string): boolean {
-  if (!event || !wantsBackgroundTab(event)) return false;
+  if (!event || !wantsBackgroundTab(event) || !openInNewTab(route)) return false;
   event.preventDefault();
   event.stopPropagation();
-  openInNewTab(route);
   return true;
 }

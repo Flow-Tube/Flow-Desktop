@@ -1,5 +1,5 @@
 //! apply-pipeline tests. Exercise the full atomic apply against an in-memory SQLite DB:
-//! merge-on-apply, the `sync_log` idempotency guard, tombstone deletes, and transactional rollback
+//! merge-on-apply, merging a resent payload again, tombstone deletes, and transactional rollback
 //! (a bad payload must leave the database completely untouched).
 
 use sqlx::SqlitePool;
@@ -148,7 +148,7 @@ async fn apply_merges_progress_updates_metadata_and_inserts_new_rows() {
 }
 
 #[tokio::test]
-async fn re_applying_the_same_payload_is_a_no_op() {
+async fn re_applying_the_same_payload_changes_nothing_here() {
     let pool = memory_pool().await;
     seed(&pool).await;
 
@@ -158,12 +158,12 @@ async fn re_applying_the_same_payload_is_a_no_op() {
         .unwrap();
     assert_eq!(first.stats[0].updated, 1);
 
-    // Same payload hash again -> the sync_log guard short-circuits the whole collection.
+    // The same payload merges again and finds nothing to change.
     let second = apply_payload(&pool, OUR, PEER, &[staged(&recs, "hash-1")])
         .await
         .unwrap();
-    assert_eq!(second.stats[0].updated, 0);
-    assert_eq!(second.stats[0].skipped, 1, "guarded as already applied");
+    let stat = &second.stats[0];
+    assert_eq!((stat.added, stat.updated, stat.tombstoned), (0, 0, 0));
 
     assert_eq!(
         watch_duration(&pool, "v1").await,
@@ -171,6 +171,28 @@ async fn re_applying_the_same_payload_is_a_no_op() {
         "no double-apply"
     );
     assert_eq!(row_count(&pool).await, 2);
+}
+
+#[tokio::test]
+async fn a_payload_seen_before_restores_rows_lost_since() {
+    let pool = memory_pool().await;
+    seed(&pool).await;
+
+    let recs = [wh("v3", "t3", 0.5, 100, "200:0:dpeer", false)];
+    apply_payload(&pool, OUR, PEER, &[staged(&recs, "hash-1")])
+        .await
+        .unwrap();
+    // Lost without a tombstone, as a backup restore or a reset loses it.
+    sqlx::query("DELETE FROM watch_history WHERE video_id = 'v3'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let again = apply_payload(&pool, OUR, PEER, &[staged(&recs, "hash-1")])
+        .await
+        .unwrap();
+    assert_eq!(again.stats[0].added, 1);
+    assert_eq!(watch_duration(&pool, "v3").await, Some(50));
 }
 
 #[tokio::test]

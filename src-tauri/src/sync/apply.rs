@@ -76,15 +76,21 @@ pub async fn apply_payload(
     for sc in staged {
         let key = sc.collection.key();
 
-        // Idempotency guard: identical (peer, collection, payload) is applied at most once.
-        let already: Option<i64> = sqlx::query_scalar(
+        // A brain payload is applied at most once per (peer, payload). Data collections merge
+        // again: the merges are idempotent, and a payload seen before still restores rows this
+        // device lost since (a backup restore, a reset), which skipping it never could.
+        let already: Option<i64> = if !is_brain(sc.collection) {
+            None
+        } else {
+            sqlx::query_scalar(
             "SELECT 1 FROM sync_log WHERE peer_device_id = ? AND collection = ? AND payload_hash = ? LIMIT 1",
         )
         .bind(peer_device_id)
         .bind(key)
         .bind(&sc.hash)
         .fetch_optional(&mut *tx)
-        .await?;
+        .await?
+        };
         if already.is_some() {
             stats.push(ApplyStats {
                 collection_key: key.to_string(),
@@ -154,6 +160,13 @@ pub async fn apply_payload(
 
     tx.commit().await?;
     Ok(ApplyReport { stats, backup })
+}
+
+fn is_brain(collection: Collection) -> bool {
+    matches!(
+        collection,
+        Collection::FlowNeuroBrain | Collection::MusicBrain
+    )
 }
 
 async fn apply_watch_history(

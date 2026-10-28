@@ -411,3 +411,32 @@ async fn traditional_keys_from_a_key_spec_2_peer_join_their_simplified_ones() {
     assert_eq!(topics(&brain), ["机器学习"]);
     assert_eq!(brain["key_spec"], VERSION);
 }
+
+#[test]
+fn a_brain_held_back_says_why() {
+    use flow_desktop_lib::sync::protocol::{Withheld, WithheldReason, withheld};
+    let ours = desktop_capabilities("en");
+    let brain = |reason| {
+        vec![Withheld {
+            collection: Collection::FlowNeuroBrain,
+            reason,
+        }]
+    };
+    assert_eq!(
+        withheld(&ours, &peer_caps(2, "en")),
+        brain(WithheldReason::PeerOlder)
+    );
+    assert_eq!(
+        withheld(&ours, &peer_caps(0, "")),
+        brain(WithheldReason::PeerOlder)
+    );
+    assert_eq!(
+        withheld(&ours, &peer_caps(4, "en")),
+        brain(WithheldReason::PeerNewer)
+    );
+    assert_eq!(
+        withheld(&ours, &peer_caps(3, "es")),
+        brain(WithheldReason::KeyLanguage)
+    );
+    assert!(withheld(&ours, &peer_caps(3, "en")).is_empty());
+}

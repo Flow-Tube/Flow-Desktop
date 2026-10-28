@@ -37,6 +37,14 @@ export interface StatInfo {
   tombstoned: number;
 }
 
+/** Why a collection stayed on both devices (backend `WithheldReason`). */
+export type WithheldReason = "peerOlder" | "peerNewer" | "keyLanguage";
+
+export interface WithheldInfo {
+  collection: string;
+  reason: WithheldReason;
+}
+
 export interface SyncStatus {
   phase: SyncPhase;
   role?: SyncRole | null;
@@ -48,6 +56,10 @@ export interface SyncStatus {
   consentKind?: ConsentKind | null;
   manifests?: ManifestInfo[] | null;
   stats?: StatInfo[] | null;
+  /** For `completed`: whether this device sent or received. */
+  direction?: "sent" | "received" | null;
+  /** For `completed`: collections neither device sent, because they read topics differently. */
+  withheld?: WithheldInfo[] | null;
   expiresAt?: number | null;
   deviceName?: string | null;
 }

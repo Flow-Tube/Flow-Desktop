@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   Camera,
   Check,
+  Info,
   Loader2,
   MonitorSmartphone,
   QrCode,
@@ -20,7 +21,13 @@ import { CopyConnectionData, NotConnectingHint } from "../components/sync/Pairin
 import { Button } from "../components/ui/Button";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { useSyncStore } from "../store/useSyncStore";
-import { SYNC_COLLECTIONS, type ManifestInfo, type StatInfo } from "../lib/api/sync";
+import {
+  SYNC_COLLECTIONS,
+  type ManifestInfo,
+  type StatInfo,
+  type WithheldInfo,
+  type WithheldReason,
+} from "../lib/api/sync";
 import { getString, type StringKey } from "../lib/i18n/index";
 import { looksLikeAddress, syncErrorMessage } from "../lib/syncErrors";
 import type { Profile } from "../lib/api/profiles";
@@ -516,22 +523,44 @@ function SendingVerifyScreen() {
   );
 }
 
+const WITHHELD_STRINGS: Record<WithheldReason, StringKey> = {
+  peerNewer: "sync_withheld_peer_newer",
+  peerOlder: "sync_withheld_peer_older",
+  keyLanguage: "sync_withheld_key_language",
+};
+
+function WithheldNotes({ withheld }: { withheld: WithheldInfo[] }) {
+  return (
+    <ul className="flex w-full flex-col gap-2 text-left">
+      {withheld.map((item) => (
+        <li
+          key={item.collection}
+          className="flex items-start gap-2 rounded-lg border border-chrome-neutral-800 bg-surface-container-low px-3 py-2.5 text-sm text-chrome-neutral-300"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-chrome-neutral-400" />
+          <span>{getString(WITHHELD_STRINGS[item.reason], collectionTitle(item.collection))}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CompletedScreen() {
   const { status, reset } = useSyncStore();
-  const isClient = status.role === "client";
   return (
     <CenteredCard>
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chrome-green-500/15 text-chrome-green-400">
         <Check className="h-6 w-6" />
       </div>
       <h2 className="text-base font-medium text-chrome-neutral-100">{getString("sync_complete_title")}</h2>
-      {isClient && status.stats ? (
+      {status.direction === "received" && status.stats ? (
         <div className="w-full text-left">
           <StatsTable stats={status.stats} />
         </div>
       ) : (
         <p className="text-sm text-chrome-neutral-400">{getString("sync_complete_sent")}</p>
       )}
+      {status.withheld && status.withheld.length > 0 && <WithheldNotes withheld={status.withheld} />}
       <button
         type="button"
         onClick={() => void reset()}

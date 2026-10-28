@@ -33,9 +33,9 @@ use crate::sync::codec;
 use crate::sync::crypto::SessionCipher;
 use crate::sync::error::SyncError;
 use crate::sync::frames::{
-    ApplyResultFrame, CapabilitiesFrame, ChunkAckFrame, ChunkHeader, CompleteFrame, ConsentFrame,
-    ErrorFrame, FrameType, HelloAckFrame, HelloFrame, ManifestEntry, ManifestFrame, SelectionFrame,
-    collection_from_key,
+    ApplyResultFrame, CapabilitiesFrame, Capability, ChunkAckFrame, ChunkHeader, CompleteFrame,
+    ConsentFrame, ErrorFrame, FrameType, HelloAckFrame, HelloFrame, ManifestEntry, ManifestFrame,
+    SelectionFrame, collection_from_key,
 };
 use crate::sync::transport::WsChannel;
 
@@ -72,6 +72,7 @@ pub struct StagedCollection {
 pub struct ReceivedPayload<R> {
     pub peer: HelloFrame,
     pub applied: R,
+    pub withheld: Vec<Withheld>,
 }
 
 /// What a receiver's apply step returns: the counts reported to the sender in `APPLY_RESULT`, plus
@@ -83,6 +84,26 @@ pub type ApplyOutput<R> = Result<(ApplyResultFrame, R), SyncError>;
 pub struct SendOutcome {
     pub peer: HelloFrame,
     pub results: ApplyResultFrame,
+    pub withheld: Vec<Withheld>,
+}
+
+/// Why a collection of topic keys stayed on each device: the other one writes its keys another way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WithheldReason {
+    /// The other device is on an older key spec, or names none.
+    PeerOlder,
+    /// The other device is on a newer key spec than this one.
+    PeerNewer,
+    /// Both are on this key spec, with keys stemmed for different languages.
+    KeyLanguage,
+}
+
+/// A collection both devices keep that neither sent the other.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Withheld {
+    pub collection: Collection,
+    pub reason: WithheldReason,
 }
 
 #[derive(Debug, Clone)]
@@ -239,13 +260,48 @@ fn sends(ours: &CapabilitiesFrame, theirs: &CapabilitiesFrame, c: Collection) ->
     let Some(peer) = theirs.collections.get(c.key()) else {
         return false;
     };
-    let reads_our_keys = match ours.collections.get(c.key()) {
-        Some(local) if local.key_spec > 0 => {
-            peer.key_spec == local.key_spec && peer.key_language == local.key_language
-        }
-        _ => true,
-    };
+    let reads_our_keys = ours
+        .collections
+        .get(c.key())
+        .is_none_or(|local| key_mismatch(local, peer).is_none());
     produces(ours, c) && peer.consume && reads_our_keys
+}
+
+fn key_mismatch(local: &Capability, peer: &Capability) -> Option<WithheldReason> {
+    if local.key_spec <= 0 {
+        None
+    } else if peer.key_spec < local.key_spec {
+        Some(WithheldReason::PeerOlder)
+    } else if peer.key_spec > local.key_spec {
+        Some(WithheldReason::PeerNewer)
+    } else if peer.key_language != local.key_language {
+        Some(WithheldReason::KeyLanguage)
+    } else {
+        None
+    }
+}
+
+/// The collections either device could send the other that stay home, because the two write their
+/// topic keys differently. Android applies the same rule, so neither side sends them.
+#[must_use]
+pub fn withheld(ours: &CapabilitiesFrame, theirs: &CapabilitiesFrame) -> Vec<Withheld> {
+    Collection::ALL
+        .into_iter()
+        .filter_map(|collection| {
+            let local = ours.collections.get(collection.key())?;
+            let peer = theirs.collections.get(collection.key())?;
+            let travels = (local.produce && peer.consume) || (peer.produce && local.consume);
+            let reason = key_mismatch(local, peer).filter(|_| travels)?;
+            tracing::info!(
+                target: "flow::sync::protocol",
+                collection = collection.key(), ?reason,
+                our_key_spec = local.key_spec, peer_key_spec = peer.key_spec,
+                our_key_language = %local.key_language, peer_key_language = %peer.key_language,
+                "collection held back: topic keys written another way"
+            );
+            Some(Withheld { collection, reason })
+        })
+        .collect()
 }
 
 struct Prepared {
@@ -597,6 +653,7 @@ where
     Ok(HostOutcome::Completed(SendOutcome {
         peer: peer_hello,
         results,
+        withheld: withheld(our_caps, their_caps),
     }))
 }
 
@@ -622,8 +679,16 @@ where
     tracing::info!(target: "flow::sync::protocol", role = "receiver", "session started, sending HELLO");
     let result = async {
         let host_hello = handshake_client(&mut peer, &our_hello).await?;
-        let _their_caps = exchange_caps(&mut peer, &our_caps, "receiver").await?;
-        recv_data(&mut peer, host_hello, &our_caps, allow_merge, apply).await
+        let their_caps = exchange_caps(&mut peer, &our_caps, "receiver").await?;
+        recv_data(
+            &mut peer,
+            host_hello,
+            &our_caps,
+            &their_caps,
+            allow_merge,
+            apply,
+        )
+        .await
     }
     .await;
     peer.finish(result).await
@@ -651,8 +716,16 @@ where
     tracing::info!(target: "flow::sync::protocol", role = "host-receiver", "session started, awaiting HELLO");
     let result = async {
         let client_hello = handshake_host(&mut peer, &our_hello, sas_confirm_required).await?;
-        let _their_caps = exchange_caps(&mut peer, &our_caps, "host-receiver").await?;
-        recv_data(&mut peer, client_hello, &our_caps, allow_merge, apply).await
+        let their_caps = exchange_caps(&mut peer, &our_caps, "host-receiver").await?;
+        recv_data(
+            &mut peer,
+            client_hello,
+            &our_caps,
+            &their_caps,
+            allow_merge,
+            apply,
+        )
+        .await
     }
     .await;
     peer.finish(result).await
@@ -665,6 +738,7 @@ async fn recv_data<S, F, Fut, A, AFut, R>(
     peer: &mut FramedPeer<S>,
     peer_hello: HelloFrame,
     our_caps: &CapabilitiesFrame,
+    their_caps: &CapabilitiesFrame,
     allow_merge: F,
     apply: A,
 ) -> Result<ClientOutcome<R>, SyncError>
@@ -718,6 +792,7 @@ where
     Ok(ClientOutcome::Completed(ReceivedPayload {
         peer: peer_hello,
         applied,
+        withheld: withheld(our_caps, their_caps),
     }))
 }
 

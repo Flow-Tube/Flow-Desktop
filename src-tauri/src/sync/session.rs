@@ -42,8 +42,8 @@ use crate::sync::frames::{
 };
 use crate::sync::ledger;
 use crate::sync::protocol::{
-    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection,
-    run_client_sender, run_host_receiver, run_receiver, run_sender,
+    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection, Withheld,
+    WithheldReason, run_client_sender, run_host_receiver, run_receiver, run_sender,
 };
 use crate::sync::qr::QrPayload;
 use crate::sync::transport;
@@ -100,6 +100,26 @@ pub struct StatInfo {
     pub tombstoned: u64,
 }
 
+/// A collection that stayed on both devices, and why (see [`crate::sync::protocol::withheld`]).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithheldInfo {
+    pub collection: String,
+    pub reason: WithheldReason,
+}
+
+fn withheld_info(withheld: &[Withheld]) -> Option<Vec<WithheldInfo>> {
+    (!withheld.is_empty()).then(|| {
+        withheld
+            .iter()
+            .map(|w| WithheldInfo {
+                collection: w.collection.key().to_string(),
+                reason: w.reason,
+            })
+            .collect()
+    })
+}
+
 /// A flat status snapshot the UI renders directly. `phase` drives the screen; the optional fields
 /// carry whatever that phase needs.
 #[derive(Debug, Clone, Serialize)]
@@ -119,6 +139,10 @@ pub struct SyncStatus {
     pub consent_kind: Option<String>,
     pub manifests: Option<Vec<ManifestInfo>>,
     pub stats: Option<Vec<StatInfo>>,
+    /// For `completed`: `sent` or `received`, whichever this device did.
+    pub direction: Option<String>,
+    /// For `completed`: collections neither device sent, because they key topics differently.
+    pub withheld: Option<Vec<WithheldInfo>>,
     pub expires_at: Option<u64>,
     pub device_name: Option<String>,
 }
@@ -135,6 +159,8 @@ impl SyncStatus {
             consent_kind: None,
             manifests: None,
             stats: None,
+            direction: None,
+            withheld: None,
             expires_at: None,
             device_name: None,
         }
@@ -1052,6 +1078,8 @@ async fn finish_receive(
                 role: Some(role.to_string()),
                 peer: Some(peer_info(&received.peer)),
                 stats: Some(stats),
+                direction: Some("received".into()),
+                withheld: withheld_info(&received.withheld),
                 ..SyncStatus::idle()
             },
         )
@@ -1096,6 +1124,8 @@ async fn finish_send(
                         role: Some(role.to_string()),
                         peer: Some(peer_info(&send.peer)),
                         stats: Some(stats),
+                        direction: Some("sent".into()),
+                        withheld: withheld_info(&send.withheld),
                         ..SyncStatus::idle()
                     },
                 )

@@ -19,6 +19,8 @@ import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
+import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
+import { openActions } from '../common/openActions';
 
 interface PlaylistCardProps {
   playlist: PlaylistSummary & {
@@ -217,6 +219,7 @@ export function PlaylistCard({
     });
   };
 
+  const playlistRoute = `/playlist/${playlist.id}`;
   const menuActions: MediaMenuAction[] = [
     ...(isProtected
       ? []
@@ -242,8 +245,9 @@ export function PlaylistCard({
       label: getString('playlist_card_view_full'),
       icon: <ListVideo size={16} />,
       group: 'go',
-      onSelect: () => navigate(`/playlist/${playlist.id}`),
+      onSelect: () => navigate(playlistRoute),
     },
+    ...openActions(playlistRoute),
   ];
 
   const renderMenu = () => {
@@ -265,13 +269,15 @@ export function PlaylistCard({
       className={`group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`}
       onMouseEnter={wash.onMouseEnter}
       onMouseLeave={wash.onMouseLeave}
-      onClick={() => {
+      onClick={(event) => {
         if (onClick) {
           onClick(playlist);
           return;
         }
-        navigate(`/playlist/${playlist.id}`);
+        if (openedInBackgroundTab(event, playlistRoute)) return;
+        navigate(playlistRoute);
       }}
+      {...(onClick ? {} : backgroundTabClickProps(playlistRoute))}
       onContextMenu={handleContextMenu}
     >
       <ColorWash active={wash.isHovered} color={wash.color} alpha={0.2} bleed={6} />

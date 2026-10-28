@@ -279,6 +279,7 @@ pub fn run() {
     }
 
     builder
+        .plugin(profiles::webview_plugin(&active_profile))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())

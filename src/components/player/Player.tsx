@@ -1583,6 +1583,9 @@ export const Player: React.FC<PlayerProps> = ({
         capabilities: {
           useMediaCapabilitiesApi: false,
         },
+        // dash.js otherwise keeps these in localStorage, which every profile shares.
+        lastBitrateCachingInfo: { enabled: false },
+        lastMediaSettingsCachingInfo: { enabled: false },
         abr: {
           autoSwitchBitrate: {
             video: false,

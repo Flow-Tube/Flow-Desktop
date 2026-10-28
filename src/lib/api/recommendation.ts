@@ -2,6 +2,7 @@ import type { VideoSummary } from "../../types/video";
 import { isDeepFlowCurrentlyActive } from "../deepFlow";
 import { isTauriEnv } from "./env";
 import { invokeBackend } from "./errors";
+import { profileStorage } from "../storage/profileStorage";
 
 export interface PersonaDetails {
   name: string;
@@ -150,8 +151,8 @@ export async function recordFeedImpressions(
 export async function completeOnboarding(preferred: string[]): Promise<void> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Setting onboarding complete in local storage.");
-    localStorage.setItem("mock_setting_onboarded", "true");
-    localStorage.setItem("mock_setting_preferred_topics", JSON.stringify(preferred));
+    profileStorage.setItem("mock_setting_onboarded", "true");
+    profileStorage.setItem("mock_setting_preferred_topics", JSON.stringify(preferred));
     return;
   }
   return invokeBackend<void>("complete_onboarding", { topics: preferred });
@@ -159,7 +160,7 @@ export async function completeOnboarding(preferred: string[]): Promise<void> {
 
 export async function getOnboardingStatus(): Promise<boolean> {
   if (!(await isTauriEnv())) {
-    const status = localStorage.getItem("mock_setting_onboarded") === "true";
+    const status = profileStorage.getItem("mock_setting_onboarded") === "true";
     console.log("[FlowNeuro Mock Onboarding Status Check]", status);
     return status;
   }
@@ -168,7 +169,7 @@ export async function getOnboardingStatus(): Promise<boolean> {
 
 export async function getFlowPersona(): Promise<PersonaDetails> {
   if (!(await isTauriEnv())) {
-    const preferred = localStorage.getItem("mock_setting_preferred_topics");
+    const preferred = profileStorage.getItem("mock_setting_preferred_topics");
     const topics: string[] = preferred ? JSON.parse(preferred) : [];
     
     if (topics.some((t) => ["Coding", "Technology", "Programming"].includes(t))) {
@@ -302,7 +303,7 @@ export async function getBrainSnapshot(forceRefresh?: boolean): Promise<UserBrai
   }
 
   if (!(await isTauriEnv())) {
-    const preferred = localStorage.getItem("mock_setting_preferred_topics");
+    const preferred = profileStorage.getItem("mock_setting_preferred_topics");
     const brain = emptyBrain();
     brain.preferred_topics = preferred ? JSON.parse(preferred) : [];
     brainCache = brain;
@@ -414,7 +415,7 @@ export async function addPreferredTopic(topic: string): Promise<void> {
       );
       brainCache.global_vector.topics[trimmed] = 0.5;
     }
-    localStorage.setItem(
+    profileStorage.setItem(
       "mock_setting_preferred_topics",
       JSON.stringify(brainCache?.preferred_topics ?? [trimmed]),
     );
@@ -433,7 +434,7 @@ export async function removePreferredTopic(topic: string): Promise<void> {
       brainCache.preferred_topics = brainCache.preferred_topics.filter(
         (t) => t.toLowerCase() !== normalized,
       );
-      localStorage.setItem("mock_setting_preferred_topics", JSON.stringify(brainCache.preferred_topics));
+      profileStorage.setItem("mock_setting_preferred_topics", JSON.stringify(brainCache.preferred_topics));
     }
     return;
   }
@@ -466,8 +467,8 @@ export async function blockChannel(channelId: string, channelName?: string): Pro
 export async function resetBrain(): Promise<void> {
   if (!(await isTauriEnv())) {
     console.log(`[FlowNeuro Mock] Resetting brain`);
-    localStorage.removeItem("mock_setting_onboarded");
-    localStorage.removeItem("mock_setting_preferred_topics");
+    profileStorage.removeItem("mock_setting_onboarded");
+    profileStorage.removeItem("mock_setting_preferred_topics");
     brainCache = null;
     return;
   }

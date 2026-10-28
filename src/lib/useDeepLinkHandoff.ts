@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { listen } from "@tauri-apps/api/event";
+import { sessionStore } from "./storage/profileStorage";
 
 import { getVideoDetails } from "./api/youtube";
 import { getMusicQueue } from "./api/music";
@@ -214,8 +215,8 @@ export function useDeepLinkHandoff() {
     // download dialog. sessionStorage is cleared on a real relaunch, so the next
     // genuine cold start is still handled.
     const COLD_START_KEY = "flow_handoff_cold_start_done";
-    if (!sessionStorage.getItem(COLD_START_KEY)) {
-      sessionStorage.setItem(COLD_START_KEY, "1");
+    if (!sessionStore.getItem(COLD_START_KEY)) {
+      sessionStore.setItem(COLD_START_KEY, "1");
       void getCurrent()
         .then((urls) => {
           const url = latest(urls);

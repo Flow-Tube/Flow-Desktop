@@ -153,6 +153,7 @@ pub async fn open_pip_window<R: Runtime>(
             .maximizable(false)
             .decorations(false)
             .always_on_top(always_on_top)
+            .general_autofill_enabled(false)
             // Painted before the webview has anything to show, so the pop-out
             // never flashes white over whatever the user is working in.
             .background_color(Color(0, 0, 0, 255));

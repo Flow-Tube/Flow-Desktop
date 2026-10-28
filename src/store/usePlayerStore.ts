@@ -4,6 +4,7 @@ import { prefetchStreamInfo } from "../lib/streamResolution";
 import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
+import { profileStorage } from "../lib/storage/profileStorage";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
 
@@ -65,7 +66,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 
 const getSavedSubtitleStyle = (): SubtitleStyle => {
   try {
-    const saved = localStorage.getItem("flow_subtitle_style");
+    const saved = profileStorage.getItem("flow_subtitle_style");
     if (saved) {
       // A style saved by an older build lacks the newer fields; they take the defaults.
       return { ...DEFAULT_SUBTITLE_STYLE, ...JSON.parse(saved) };
@@ -78,7 +79,7 @@ const getSavedSubtitleStyle = (): SubtitleStyle => {
 
 const getSavedTheaterMode = (): boolean => {
   try {
-    return localStorage.getItem("flow_theater_mode") === "true";
+    return profileStorage.getItem("flow_theater_mode") === "true";
   } catch (e) {
     console.error("Failed to load saved theater mode", e);
   }
@@ -699,7 +700,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setIsTheaterMode: (isTheaterMode) => {
-    localStorage.setItem("flow_theater_mode", String(isTheaterMode));
+    profileStorage.setItem("flow_theater_mode", String(isTheaterMode));
     set({ isTheaterMode });
   },
   setSponsorBlockSegments: (sponsorBlockSegments) => set({ sponsorBlockSegments }),
@@ -724,7 +725,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {
-    localStorage.setItem("flow_subtitle_style", JSON.stringify(style));
+    profileStorage.setItem("flow_subtitle_style", JSON.stringify(style));
     set({ subtitleStyle: style });
   },
 }));

@@ -1,5 +1,12 @@
 import type { VideoPlayerMode } from "../store/usePlayerStore";
 
+const WATCH_ROUTE_RE = /^\/watch\/([^/?#]+)/;
+
+export function watchVideoIdFromPath(pathname: string): string | null {
+  const match = pathname.match(WATCH_ROUTE_RE);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 export type WatchRouteSyncAction =
   | { kind: "none" }
   | { kind: "play-queued"; index: number }
@@ -41,6 +48,8 @@ export interface RouteChangePlayerInput {
   currentVideoId: string | null;
   videoPlayerMode: VideoPlayerMode;
   autoPipEnabled: boolean;
+  /** Switching tabs leaves the video running in the mini player, whatever the setting says. */
+  tabSwitch: boolean;
 }
 
 /** What the player does when the route moves, from the store as it is now. */
@@ -51,5 +60,5 @@ export function decideRouteChangePlayerAction(input: RouteChangePlayerInput): Ro
   if (nextWatchId !== null || input.previousWatchId !== currentVideoId || input.videoPlayerMode !== "watch") {
     return "none";
   }
-  return input.autoPipEnabled ? "enter-pip" : "dismiss";
+  return input.autoPipEnabled || input.tabSwitch ? "enter-pip" : "dismiss";
 }

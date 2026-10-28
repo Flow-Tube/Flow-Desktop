@@ -6,7 +6,9 @@ import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { SETTINGS } from "../../lib/settings/schema";
 import { FlowPlayerCore } from "./FlowPlayerCore";
-import { decideRouteChangePlayerAction } from "../../lib/watchRouteSync";
+import { decideRouteChangePlayerAction, watchVideoIdFromPath } from "../../lib/watchRouteSync";
+import { expandPlayerInOwnerTab } from "../../lib/tabs/tabPlayback";
+import { useTabsStore } from "../../store/useTabsStore";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
 import { glideFrame } from "../../lib/theaterGlide";
 import { FullscreenPanelHost } from "./FullscreenPanelHost";
@@ -17,13 +19,6 @@ type PlayerBounds = {
   width: number;
   height: number;
 };
-
-const WATCH_ROUTE_RE = /^\/watch\/([^/?#]+)/;
-
-function watchVideoIdFromPath(pathname: string) {
-  const match = pathname.match(WATCH_ROUTE_RE);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
-}
 
 function readSlotBounds(): PlayerBounds | null {
   const slot = document.querySelector<HTMLElement>("[data-flow-watch-player-slot='true']");
@@ -203,6 +198,7 @@ export function GlobalVideoPlayer() {
       currentVideoId: player.currentVideo?.id ?? null,
       videoPlayerMode: player.videoPlayerMode,
       autoPipEnabled,
+      tabSwitch: useTabsStore.getState().cause === "tab",
     });
     if (action === "expand") expandVideoPlayer();
     else if (action === "enter-pip") enterVideoPip("auto");
@@ -210,7 +206,7 @@ export function GlobalVideoPlayer() {
   }, [location.pathname, autoPipEnabled, enterVideoPip, expandVideoPlayer, dismissVideoPlayer]);
 
   const expandFromFloating = useCallback(() => {
-    if (!currentVideo) return;
+    if (!currentVideo || expandPlayerInOwnerTab()) return;
     expandVideoPlayer();
     navigate(`/watch/${currentVideo.id}`);
   }, [currentVideo, expandVideoPlayer, navigate]);

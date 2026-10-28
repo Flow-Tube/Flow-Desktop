@@ -73,6 +73,7 @@ import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
 import { ThemeController } from "./lib/useTheme";
 import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
+import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
@@ -97,6 +98,7 @@ function App() {
   useStartupHealth();
   useImageProxyBootstrap();
   useTabHistoryShortcuts();
+  useEffect(installTabPlaybackSync, []);
 
   const [loadingOnboarding, setLoadingOnboarding] = useState(true);
 

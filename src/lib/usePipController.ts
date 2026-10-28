@@ -13,16 +13,10 @@ import {
   type PipVideoChangedPayload,
 } from "./api/pip";
 import { dismissPopoutPlayer, openPopoutPlayer } from "./pipHandoff";
+import { watchVideoIdFromPath } from "./watchRouteSync";
 
 /** Long enough for a minimize to settle before the window state is read. */
 const MINIMIZE_DEBOUNCE_MS = 150;
-
-const WATCH_ROUTE_RE = /^\/watch\/([^/?#]+)/;
-
-function watchRouteVideoId(pathname: string): string | null {
-  const match = pathname.match(WATCH_ROUTE_RE);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
-}
 
 /**
  * The main window's half of the pop-out player handoff: it mirrors what the
@@ -70,7 +64,7 @@ export function usePipController() {
         // ends instead.
         const shouldReturnPlayback =
           payload.expand ||
-          (watchRouteVideoId(pathnameRef.current) === payload.videoId &&
+          (watchVideoIdFromPath(pathnameRef.current) === payload.videoId &&
             !(await getCurrentWindow()
               .isMinimized()
               .catch(() => false)));

@@ -85,7 +85,7 @@ const getSavedTheaterMode = (): boolean => {
   return false;
 };
 
-interface PlayerState {
+export interface PlayerState {
   currentVideo: VideoSummary | null;
   isPlaying: boolean;
   volume: number;

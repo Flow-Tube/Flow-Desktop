@@ -5,6 +5,7 @@
 
 pub mod blob;
 pub mod curve;
+pub mod device;
 pub mod envelope;
 pub mod epoch;
 pub mod error;

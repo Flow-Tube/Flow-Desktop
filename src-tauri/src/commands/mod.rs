@@ -1,3 +1,4 @@
+pub mod app_window;
 pub mod backup;
 pub mod db;
 pub mod diagnostics;

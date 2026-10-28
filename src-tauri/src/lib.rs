@@ -33,6 +33,7 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use api::innertube::InnertubeClient;
+use commands::app_window::{AppWindowSession, AppWindowState, app_window_session, open_app_window};
 use commands::backup::{export_backup_data, import_backup_data};
 use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_watch_record,
@@ -216,7 +217,26 @@ pub fn run() {
     // spawning a duplicate; we just raise the window here.
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // The desktop file's "New window" action launches Flow again with this flag.
+            if argv.iter().any(|arg| arg == "--new-window") {
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let opener = handle.get_webview_window("main");
+                    let session = AppWindowSession {
+                        route: "/".into(),
+                        handoff: None,
+                    };
+                    if let Err(error) = commands::app_window::open_app_window_with(
+                        &handle,
+                        opener.as_ref(),
+                        session,
+                    ) {
+                        tracing::warn!(error = ?error, "Could not open a window for --new-window");
+                    }
+                });
+                return;
+            }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
@@ -230,9 +250,11 @@ pub fn run() {
         let window_state_flags = tauri_plugin_window_state::StateFlags::SIZE
             | tauri_plugin_window_state::StateFlags::POSITION
             | tauri_plugin_window_state::StateFlags::MAXIMIZED;
+        // Only the main window's place is remembered; extra windows cascade from their opener.
         builder = builder.plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(window_state_flags)
+                .with_filter(|label| label == "main")
                 .build(),
         );
 
@@ -415,6 +437,7 @@ pub fn run() {
             app.manage(DownloadManager::default());
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
+            app.manage(AppWindowState::default());
             app.manage(commands::theme::ThemeFileWatch::default());
             app.manage(DiscordPresence::new());
             app.manage(services::music_tray::MusicTray::default());
@@ -469,12 +492,18 @@ pub fn run() {
                 web_process::watch(&main_window);
             }
 
-            // Other platforms quit with the main window, including the pop-out.
+            // Other platforms quit with the main window, including the pop-out,
+            // unless another Flow window is still open: then it only hides.
             #[cfg(not(target_os = "macos"))]
             if let Some(main_window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
+                let main = main_window.clone();
                 main_window.on_window_event(move |event| {
-                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        if commands::app_window::hide_main_instead_of_closing(&main) {
+                            api.prevent_close();
+                            return;
+                        }
                         if let Some(pip) = handle.get_webview_window(PIP_WINDOW_LABEL) {
                             let _ = pip.destroy();
                         }
@@ -613,6 +642,8 @@ pub fn run() {
             commands::theme::watch_theme_file,
             // --- Pop-out (picture-in-picture) player window ---
             open_pip_window,
+            open_app_window,
+            app_window_session,
             pip_session,
             close_pip_window,
             set_pip_always_on_top,

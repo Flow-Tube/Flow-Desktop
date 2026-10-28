@@ -1,6 +1,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { Download, Plus, Upload } from "lucide-react";
 import { CustomThemeEditor } from "../../theme/CustomThemeEditor";
+import { ThemeFileSection } from "../../theme/ThemeFileSection";
 import { ThemePreview } from "../../theme/ThemePreview";
 import { Button } from "../../ui/Button";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
@@ -14,6 +15,7 @@ import {
   createCustomTheme,
   type CustomThemeDefinition,
 } from "../../../lib/themes";
+import { THEME_FILE_ID } from "../../../lib/themeFile";
 import { useTheme } from "../../../lib/useTheme";
 import { useThemeTransfer } from "../../../lib/useThemeTransfer";
 import { IS_LINUX_RUNTIME } from "../../../lib/platform";
@@ -32,6 +34,7 @@ export function AppearanceTab() {
   const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
   const { exportThemes, importThemes } = useThemeTransfer();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const usingThemeFile = themeId === THEME_FILE_ID;
 
   const handleImportFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -88,11 +91,13 @@ export function AppearanceTab() {
       <section className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
         <div>
           <h2 className="text-base font-medium text-chrome-neutral-200">{getString("theme_variant")}</h2>
-          <p className="mt-1 text-sm text-chrome-neutral-400">{getString("theme_variant_description")}</p>
+          <p className="mt-1 text-sm text-chrome-neutral-400">
+            {getString(usingThemeFile ? "theme_variant_from_file" : "theme_variant_description")}
+          </p>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {THEME_VARIANTS.map((item) => (
-            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)}>
+            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)} disabled={usingThemeFile}>
               {getString(`theme_variant_${item}` as Parameters<typeof getString>[0])}
             </Button>
           ))}
@@ -108,6 +113,8 @@ export function AppearanceTab() {
       </section>
 
       {IS_LINUX_RUNTIME && <GraphicsCompatibilitySection />}
+
+      <ThemeFileSection />
 
       <section className="mt-8">
         <div className="flex items-end justify-between gap-4">

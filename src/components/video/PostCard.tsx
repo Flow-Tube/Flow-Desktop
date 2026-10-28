@@ -69,7 +69,7 @@ export function PostCard({ post }: PostCardProps) {
           {post.textContent && (
             <LinkedText
               text={post.textContent}
-              className="mb-3 block whitespace-pre-wrap text-sm font-medium leading-relaxed text-chrome-zinc-100"
+              className="mb-3 block select-text whitespace-pre-wrap text-sm font-medium leading-relaxed text-chrome-zinc-100"
             />
           )}
 

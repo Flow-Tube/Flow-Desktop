@@ -76,15 +76,21 @@ pub async fn apply_payload(
     for sc in staged {
         let key = sc.collection.key();
 
-        // Idempotency guard: identical (peer, collection, payload) is applied at most once.
-        let already: Option<i64> = sqlx::query_scalar(
+        // A brain payload is applied at most once per (peer, payload). Data collections merge
+        // again: the merges are idempotent, and a payload seen before still restores rows this
+        // device lost since (a backup restore, a reset), which skipping it never could.
+        let already: Option<i64> = if !is_brain(sc.collection) {
+            None
+        } else {
+            sqlx::query_scalar(
             "SELECT 1 FROM sync_log WHERE peer_device_id = ? AND collection = ? AND payload_hash = ? LIMIT 1",
         )
         .bind(peer_device_id)
         .bind(key)
         .bind(&sc.hash)
         .fetch_optional(&mut *tx)
-        .await?;
+        .await?
+        };
         if already.is_some() {
             stats.push(ApplyStats {
                 collection_key: key.to_string(),
@@ -156,12 +162,26 @@ pub async fn apply_payload(
     Ok(ApplyReport { stats, backup })
 }
 
+fn is_brain(collection: Collection) -> bool {
+    matches!(
+        collection,
+        Collection::FlowNeuroBrain | Collection::MusicBrain
+    )
+}
+
 async fn apply_watch_history(
     tx: &mut Transaction<'_, Sqlite>,
     device_id: &str,
     ndjson: &[u8],
 ) -> Result<ApplyStats, SyncError> {
-    let incoming = parse_ndjson::<WatchHistoryRecord>(ndjson)?;
+    // The desktop keeps no thumbnail, so one sent along can't make a record differ.
+    let incoming: Vec<WatchHistoryRecord> = parse_ndjson::<WatchHistoryRecord>(ndjson)?
+        .into_iter()
+        .map(|record| WatchHistoryRecord {
+            thumbnail_url: None,
+            ..record
+        })
+        .collect();
 
     let rows: Vec<WatchRow> = sqlx::query_as::<_, WatchRow>(WATCH_SELECT)
         .fetch_all(&mut **tx)
@@ -430,17 +450,29 @@ async fn apply_settings(
         collection_key: Collection::Settings.key().to_string(),
         ..Default::default()
     };
+    let mut sb_changed: Vec<&SettingEntry> = Vec::new();
     for rec in &merged {
         match local_map.get(&rec.key) {
-            Some(existing) if existing == rec => stat.skipped += 1,
-            Some(_) => {
-                write_setting_value(tx, rec).await?;
-                stat.updated += 1;
+            Some(existing) if existing == rec => {
+                stat.skipped += 1;
+                continue;
             }
-            None => {
-                write_setting_value(tx, rec).await?;
-                stat.added += 1;
-            }
+            Some(_) => stat.updated += 1,
+            None => stat.added += 1,
+        }
+        if settings_map::is_sb_action(&rec.key) {
+            sb_changed.push(rec);
+        } else {
+            write_setting_value(tx, rec).await?;
+        }
+    }
+    // The nine SponsorBlock actions share one desktop setting, written once with the newest stamp.
+    if let Some(newest) = sb_changed.iter().map(|rec| rec.hlc.physical_ms).max() {
+        let current = get_setting(tx, settings_map::SB_ACTIONS_KEY).await?;
+        if let Some((key, value)) =
+            settings_map::sb_actions_from_wire(current.as_deref(), sb_changed)
+        {
+            write_setting(tx, key, &value, newest).await?;
         }
     }
     Ok(stat)
@@ -695,7 +727,16 @@ async fn write_setting_value(
     let Some((desktop_key, value)) = settings_map::from_wire(&entry.key, &entry.value) else {
         return Ok(());
     };
-    let updated = mapping::ms_to_iso(entry.hlc.physical_ms);
+    write_setting(tx, desktop_key, &value, entry.hlc.physical_ms).await
+}
+
+async fn write_setting(
+    tx: &mut Transaction<'_, Sqlite>,
+    desktop_key: &str,
+    value: &str,
+    changed_ms: u64,
+) -> Result<(), SyncError> {
+    let updated = mapping::ms_to_iso(changed_ms);
     sqlx::query(
         "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",

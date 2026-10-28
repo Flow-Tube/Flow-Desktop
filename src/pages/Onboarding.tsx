@@ -1,14 +1,30 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { completeOnboarding } from "../lib/api/recommendation";
 import { Logo } from "../components/common/Logo";
 import InterestsStep from "../components/onboarding/InterestsStep";
 import ChannelsStep from "../components/onboarding/ChannelsStep";
 import ImportStep from "../components/onboarding/ImportStep";
+import { getString } from "../lib/i18n/index";
+import { profileDisplayName } from "../lib/profiles/display";
+import { useProfilesStore } from "../store/useProfilesStore";
+import { useSubscriptionStore } from "../store/useSubscriptionStore";
 
 export const Onboarding: React.FC = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
+  // A new profile that copied subscriptions has nothing to import.
+  const [lastStep] = useState(() => (useSubscriptionStore.getState().subscriptions.length > 0 ? 1 : 2));
+  const profiles = useProfilesStore((state) => state.view);
+  const loadProfiles = useProfilesStore((state) => state.load);
+  const settingUp =
+    profiles && profiles.activeId !== profiles.defaultId
+      ? profiles.profiles.find((profile) => profile.id === profiles.activeId)
+      : undefined;
+
+  useEffect(() => {
+    void loadProfiles();
+  }, [loadProfiles]);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
 
   const handleTopicToggle = (topic: string) => {
@@ -22,7 +38,7 @@ export const Onboarding: React.FC = () => {
   const canAdvance = currentStep === 0 ? selectedTopics.length >= 3 : true;
 
   const handleNext = async () => {
-    if (currentStep < 2) {
+    if (currentStep < lastStep) {
       setCurrentStep(currentStep + 1);
     } else {
       try {
@@ -53,7 +69,7 @@ export const Onboarding: React.FC = () => {
     }
   };
 
-  const progressPercentage = ((currentStep + 1) / 3) * 100;
+  const progressPercentage = ((currentStep + 1) / (lastStep + 1)) * 100;
 
   return (
     <div className="w-full h-full overflow-hidden flex flex-col bg-surface font-sans relative">
@@ -66,8 +82,11 @@ export const Onboarding: React.FC = () => {
       </div>
 
       {/* Header with Logo */}
-      <div className="absolute top-0 left-0 p-8 z-40">
+      <div className="absolute top-0 left-0 z-40 flex items-center gap-4 p-8">
         <Logo size={40} showText={true} />
+        {settingUp && (
+          <span className="text-sm text-chrome-neutral-400">{getString("profiles_setting_up", profileDisplayName(settingUp))}</span>
+        )}
       </div>
 
       {/* Scrollable Content Area */}
@@ -84,7 +103,7 @@ export const Onboarding: React.FC = () => {
             <ChannelsStep selectedTopics={selectedTopics} />
           )}
 
-          {currentStep === 2 && (
+          {currentStep === 2 && lastStep === 2 && (
             <ImportStep />
           )}
         </div>
@@ -99,27 +118,27 @@ export const Onboarding: React.FC = () => {
                 className="text-chrome-neutral-500 hover:text-chrome-neutral-300 font-semibold text-sm transition-colors cursor-pointer flex items-center gap-2"
                 onClick={handleBack}
               >
-                <span>&larr;</span> Back
+                <span>&larr;</span> {getString("onboarding_back")}
               </button>
             )}
             <button
               className="text-chrome-neutral-500 hover:text-chrome-neutral-300 font-semibold text-sm transition-colors cursor-pointer"
               onClick={handleSkip}
             >
-              Skip Setup
+              {getString("onboarding_skip")}
             </button>
           </div>
           
           <button
             className={`px-8 py-3 rounded-full font-bold text-sm transition-all duration-300 ${
               canAdvance 
-                ? "bg-primary text-chrome-white hover:bg-primary shadow-lg shadow-primary/20 active:scale-95 cursor-pointer" 
+                ? "bg-primary text-chrome-white hover:bg-primary active:scale-95 cursor-pointer" 
                 : "bg-chrome-neutral-800 text-chrome-neutral-500 opacity-50 cursor-not-allowed"
             }`}
             disabled={!canAdvance}
             onClick={handleNext}
           >
-            {currentStep === 2 ? "Finish Setup" : "Continue"}
+            {getString(currentStep === lastStep ? "onboarding_finish" : "onboarding_continue")}
           </button>
         </div>
       </div>

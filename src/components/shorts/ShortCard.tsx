@@ -29,6 +29,8 @@ import { youtubeShortsUrl } from "../../lib/youtubeUrl";
 import { copyText } from "../../lib/clipboard";
 import { useProxyImageSrc } from "../../lib/useImageProxy";
 import type { ShortVideoSummary, VideoSummary } from "../../types/video";
+import { backgroundTabClickProps, openedInBackgroundTab } from "../../lib/openTarget";
+import { openActions } from "../common/openActions";
 
 interface ShortCardProps {
   short: ShortVideoSummary;
@@ -77,7 +79,9 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
     };
   }, [short.id]);
 
-  const playShort = () => {
+  const shortRoute = disableShortsPlayer ? `/watch/${short.id}` : `/shorts/${short.id}`;
+  const playShort = (event: React.MouseEvent) => {
+    if (openedInBackgroundTab(event, shortRoute)) return;
     // Resolution starts on the click rather than after the route has changed and
     // the player has mounted; the surface that plays it joins this request.
     prefetchStreamInfo(short.id);
@@ -181,7 +185,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
         isShelf ? "w-[140px] sm:w-[176px]" : "w-full",
       ].join(" ")}
     >
-      <button type="button" onClick={playShort} className="flex w-full flex-col gap-2 text-left">
+      <button type="button" onClick={playShort} {...backgroundTabClickProps(shortRoute)} className="flex w-full flex-col gap-2 text-left">
         <span className="relative block aspect-[9/16] w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container">
           {short.thumbnailUrl && (
             <img
@@ -250,6 +254,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
               group: "quick",
               onSelect: downloadShort,
             },
+            ...openActions(shortRoute),
             {
               id: "copy-link",
               label: getString("shorts_menu_copy_link"),

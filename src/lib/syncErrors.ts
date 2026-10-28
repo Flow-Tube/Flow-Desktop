@@ -22,6 +22,9 @@ export function syncErrorMessage(kind: string | null | undefined, detail: string
   if (kind === "syncPeerError") {
     return getString("sync_error_peer", detail ?? "");
   }
+  if (kind === "syncNotDefaultProfile") {
+    return getString("sync_error_not_default_profile", detail?.trim() || getString("profiles_default_name"));
+  }
   const key = kind ? SYNC_ERROR_KEYS[kind] : undefined;
   if (key) return getString(key);
   return detail || getString("sync_failed_body");

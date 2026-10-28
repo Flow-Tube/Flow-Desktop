@@ -12,7 +12,8 @@
         "maximized": true,
         "decorations": true,
         "titleBarStyle": "Transparent",
-        "additionalBrowserArgs": "--autoplay-policy=no-user-gesture-required"
+        "additionalBrowserArgs": "--autoplay-policy=no-user-gesture-required",
+        "generalAutofillEnabled": false
       }
     ]
   }

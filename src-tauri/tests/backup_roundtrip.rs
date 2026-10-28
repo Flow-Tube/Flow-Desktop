@@ -217,3 +217,42 @@ async fn channel_list_import_unions_by_id_and_keeps_local_entries() {
     assert!(!subs.contains("Backup Name"));
     assert!(subs.contains("UCnew"));
 }
+
+/// A profiles-era master keeps Default's data at the top level, so today's importer restores
+/// Default and ignores the other profiles' sections.
+#[tokio::test]
+async fn a_master_with_profiles_restores_default_only_in_the_old_importer() {
+    let default_db = memory_pool().await;
+    seed(&default_db).await;
+    let other_db = memory_pool().await;
+    sqlx::query(
+        "INSERT INTO watch_history
+            (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds,
+             total_duration_seconds, is_music, is_short, updated_hlc)
+         VALUES ('other', 'only in Study', 'chan', 'UCchan', '2025-01-02T00:00:00+00:00',
+                 10, 20, 0, 0, '200:0:dlocal')",
+    )
+    .execute(&other_db)
+    .await
+    .unwrap();
+
+    let default_part = export_backup(&default_db, "MASTER").await.unwrap();
+    let other_part = export_backup(&other_db, "MASTER").await.unwrap();
+    let master = serde_json::json!({
+        "schemaVersion": 2,
+        "scope": "MASTER",
+        "settings": {},
+        "collections": default_part.collections,
+        "manifest": { "format": "flow-master", "version": 1, "defaultId": "d", "profiles": [], "included": ["d", "study"] },
+        "profiles": { "study": { "settings": {}, "collections": other_part.collections } },
+        "profile_avatars": {},
+    });
+
+    let fresh = memory_pool().await;
+    import_backup(&fresh, &master).await.unwrap();
+    let ids: Vec<String> = sqlx::query_scalar("SELECT video_id FROM watch_history")
+        .fetch_all(&fresh)
+        .await
+        .unwrap();
+    assert_eq!(ids, ["v1"]);
+}

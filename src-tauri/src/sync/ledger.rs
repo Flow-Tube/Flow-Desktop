@@ -11,6 +11,8 @@ use crate::sync::identity;
 
 /// Return this device's stable id, creating (and persisting) it on first call.
 pub async fn get_or_create_device_id(pool: &SqlitePool) -> Result<String, SyncError> {
+    // The device id is shared by every profile; it lives in Default's database.
+    let pool = crate::db::device::pool(pool);
     if let Some(id) = sqlx::query_scalar::<_, String>("SELECT device_id FROM sync_identity LIMIT 1")
         .fetch_optional(pool)
         .await?
@@ -32,6 +34,7 @@ pub async fn get_or_create_device_id(pool: &SqlitePool) -> Result<String, SyncEr
 
 /// The persisted device name (falls back to a generated default if unset).
 pub async fn device_name(pool: &SqlitePool) -> Result<String, SyncError> {
+    let pool = crate::db::device::pool(pool);
     let name = sqlx::query_scalar::<_, String>("SELECT device_name FROM sync_identity LIMIT 1")
         .fetch_optional(pool)
         .await?;

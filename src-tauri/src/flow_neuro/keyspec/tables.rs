@@ -1,5 +1,6 @@
-//! The tables key spec 2 reads titles by, from Android's `key_spec_tables.json`, its stop lists and
-//! its unstemmed word list, mirrored byte for byte under `resources/neuro`.
+//! The tables the key spec reads titles by, from Android's `key_spec_tables.json`, its stop lists,
+//! its merged-run break characters and its unstemmed word list, mirrored byte for byte under
+//! `resources/neuro`.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
@@ -7,7 +8,7 @@ use std::sync::LazyLock;
 use serde::Deserialize;
 
 use super::chars::trim;
-use super::text::fold;
+use super::text::{HanFold, fold_with};
 
 const TABLES_JSON: &str = include_str!("../../../resources/neuro/key_spec_tables.json");
 
@@ -118,7 +119,9 @@ static STOP_LISTS: LazyLock<HashMap<&'static str, HashSet<String>>> = LazyLock::
         .iter()
         .filter(|(language, _)| tables().stop_list_languages.contains(*language))
         .map(|(language, text)| {
-            let words = content_lines(text).map(|line| fold(trim(line))).collect();
+            let words = content_lines(text)
+                .map(|line| fold_with(trim(line), list_fold(language)))
+                .collect();
             (*language, words)
         })
         .collect()
@@ -128,4 +131,45 @@ static STOP_LISTS: LazyLock<HashMap<&'static str, HashSet<String>>> = LazyLock::
 #[must_use]
 pub fn raw_stop_list(language: &str) -> Option<&'static HashSet<String>> {
     STOP_LISTS.get(language)
+}
+
+/// How a language's lists fold Han: only the `zh` lists fold; `ja` and `ko` keep their kanji and
+/// hanja (Android `NeuroLanguages.listFold`).
+#[must_use]
+pub fn list_fold(language: &str) -> HanFold {
+    if language == "zh" {
+        HanFold::UnlessKana
+    } else {
+        HanFold::None
+    }
+}
+
+const RUN_BREAK_FILES: [(&str, &str); 1] = [(
+    "zh",
+    include_str!("../../../resources/neuro/runbreak/zh.txt"),
+)];
+
+static RUN_BREAKS: LazyLock<HashMap<&'static str, HashSet<char>>> = LazyLock::new(|| {
+    RUN_BREAK_FILES
+        .iter()
+        .map(|(language, text)| {
+            let breaks = content_lines(text)
+                .filter_map(|line| {
+                    let folded = fold_with(trim(line), list_fold(language));
+                    let mut chars = folded.chars();
+                    match (chars.next(), chars.next()) {
+                        (Some(c), None) => Some(c),
+                        _ => None,
+                    }
+                })
+                .collect();
+            (*language, breaks)
+        })
+        .collect()
+});
+
+/// The characters that end a merged Han run in `language`; none means its runs never merge.
+#[must_use]
+pub fn run_breaks(language: &str) -> Option<&'static HashSet<char>> {
+    RUN_BREAKS.get(language).filter(|breaks| !breaks.is_empty())
 }

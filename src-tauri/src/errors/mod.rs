@@ -69,6 +69,34 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    /// A sixth profile was asked for; carries the limit.
+    #[error("You can have up to {0} profiles")]
+    ProfileLimit(usize),
+
+    /// A profile name that is blank, too long or already used; carries `blank`, `tooLong` or
+    /// `taken`.
+    #[error("{0}")]
+    ProfileName(&'static str),
+
+    #[error("Profile not found: {0}")]
+    ProfileNotFound(String),
+
+    /// Default and the profile in use can't be deleted.
+    #[error("Profile in use: {0}")]
+    ProfileInUse(String),
+
+    /// A picture that can't become a profile photo (unreadable, or larger than 15 MB).
+    #[error("{0}")]
+    ProfilePhotoInvalid(String),
+
+    /// A switch can't start now; carries `syncRunning`, `switching` or `alreadyActive`.
+    #[error("{0}")]
+    ProfileSwitchRefused(&'static str),
+
+    /// The new profile couldn't be filled from the current one; nothing was created.
+    #[error("Couldn't copy into the new profile: {0}")]
+    ProfileCopyFailed(String),
+
     #[error("Streaming error: {0}")]
     #[allow(dead_code)]
     Streaming(String),
@@ -88,6 +116,23 @@ pub enum AppError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+}
+
+impl AppError {
+    /// A refusal that belongs to the video, so it will not play for this viewer however often it is
+    /// tried. A catch-all `ContentNotAvailable` is left out: it also covers failures that pass.
+    #[must_use]
+    pub fn is_lasting_refusal(&self) -> bool {
+        matches!(
+            self,
+            AppError::AgeRestricted(_)
+                | AppError::PrivateContent(_)
+                | AppError::PaidContent(_)
+                | AppError::MembersOnly(_)
+                | AppError::GeographicRestriction(_)
+                | AppError::AccountTerminated(_)
+        )
+    }
 }
 
 // Preserve the underlying cause when propagating common library errors with `?`,
@@ -155,6 +200,13 @@ impl From<AppError> for ErrorResponse {
             AppError::ScrobbleSignInRejected(_) => "scrobbleSignInRejected",
             AppError::ScrobbleKeyMissing(_) => "scrobbleKeyMissing",
             AppError::Keychain(_) => "keychain",
+            AppError::ProfileLimit(_) => "profileLimit",
+            AppError::ProfileName(_) => "profileName",
+            AppError::ProfileNotFound(_) => "profileNotFound",
+            AppError::ProfileInUse(_) => "profileInUse",
+            AppError::ProfileCopyFailed(_) => "profileCopyFailed",
+            AppError::ProfileSwitchRefused(_) => "profileSwitchRefused",
+            AppError::ProfilePhotoInvalid(_) => "profilePhotoInvalid",
             AppError::Streaming(_) => "streaming",
             AppError::MediaDecode(_) => "mediaDecode",
             AppError::StreamExpired(_) => "streamExpired",
@@ -220,12 +272,30 @@ mod tests {
                 "scrobbleKeyMissing",
             ),
             (AppError::Keychain("c".into()), "keychain"),
+            (AppError::ProfileLimit(5), "profileLimit"),
+            (AppError::ProfileName("taken"), "profileName"),
+            (AppError::ProfileNotFound("p".into()), "profileNotFound"),
+            (AppError::ProfileInUse("p".into()), "profileInUse"),
+            (AppError::ProfileCopyFailed("p".into()), "profileCopyFailed"),
+            (
+                AppError::ProfileSwitchRefused("switching"),
+                "profileSwitchRefused",
+            ),
             (AppError::Internal("i".into()), "internal"),
         ];
         for (error, expected_kind) in cases {
             let response: ErrorResponse = error.into();
             assert_eq!(response.kind, expected_kind);
         }
+    }
+
+    #[test]
+    fn only_refusals_about_the_video_are_lasting() {
+        assert!(AppError::MembersOnly("m".into()).is_lasting_refusal());
+        assert!(AppError::GeographicRestriction("g".into()).is_lasting_refusal());
+        assert!(!AppError::BotCheckRequired("b".into()).is_lasting_refusal());
+        assert!(!AppError::ContentNotAvailable("c".into()).is_lasting_refusal());
+        assert!(!AppError::Network("n".into()).is_lasting_refusal());
     }
 
     #[test]

@@ -6,12 +6,14 @@ import {
   ArrowDownToLine,
   Camera,
   Check,
+  Info,
   Loader2,
   MonitorSmartphone,
   QrCode,
   RotateCcw,
   Send,
   ShieldCheck,
+  UserRound,
   X,
 } from "lucide-react";
 
@@ -19,9 +21,19 @@ import { CopyConnectionData, NotConnectingHint } from "../components/sync/Pairin
 import { Button } from "../components/ui/Button";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { useSyncStore } from "../store/useSyncStore";
-import { SYNC_COLLECTIONS, type ManifestInfo, type StatInfo } from "../lib/api/sync";
+import {
+  SYNC_COLLECTIONS,
+  type ManifestInfo,
+  type StatInfo,
+  type WithheldInfo,
+  type WithheldReason,
+} from "../lib/api/sync";
 import { getString, type StringKey } from "../lib/i18n/index";
 import { looksLikeAddress, syncErrorMessage } from "../lib/syncErrors";
+import type { Profile } from "../lib/api/profiles";
+import { profileDisplayName } from "../lib/profiles/display";
+import { profileErrorMessage } from "../lib/profiles/profileErrors";
+import { useProfilesStore } from "../store/useProfilesStore";
 
 // --------------------------------------------------------------------------------------------
 // Collection display strings (resolved from i18n — no hardcoded copy in the view)
@@ -511,22 +523,44 @@ function SendingVerifyScreen() {
   );
 }
 
+const WITHHELD_STRINGS: Record<WithheldReason, StringKey> = {
+  peerNewer: "sync_withheld_peer_newer",
+  peerOlder: "sync_withheld_peer_older",
+  keyLanguage: "sync_withheld_key_language",
+};
+
+function WithheldNotes({ withheld }: { withheld: WithheldInfo[] }) {
+  return (
+    <ul className="flex w-full flex-col gap-2 text-left">
+      {withheld.map((item) => (
+        <li
+          key={item.collection}
+          className="flex items-start gap-2 rounded-lg border border-chrome-neutral-800 bg-surface-container-low px-3 py-2.5 text-sm text-chrome-neutral-300"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-chrome-neutral-400" />
+          <span>{getString(WITHHELD_STRINGS[item.reason], collectionTitle(item.collection))}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CompletedScreen() {
   const { status, reset } = useSyncStore();
-  const isClient = status.role === "client";
   return (
     <CenteredCard>
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-chrome-green-500/15 text-chrome-green-400">
         <Check className="h-6 w-6" />
       </div>
       <h2 className="text-base font-medium text-chrome-neutral-100">{getString("sync_complete_title")}</h2>
-      {isClient && status.stats ? (
+      {status.direction === "received" && status.stats ? (
         <div className="w-full text-left">
           <StatsTable stats={status.stats} />
         </div>
       ) : (
         <p className="text-sm text-chrome-neutral-400">{getString("sync_complete_sent")}</p>
       )}
+      {status.withheld && status.withheld.length > 0 && <WithheldNotes withheld={status.withheld} />}
       <button
         type="button"
         onClick={() => void reset()}
@@ -556,14 +590,51 @@ function MessageScreen({ icon, title, message }: { icon: React.ReactNode; title:
 // Page
 // --------------------------------------------------------------------------------------------
 
+/** Only Default syncs (FLOW-SYNC/1 carries no profile), so other profiles offer the switch. */
+function DefaultOnlyScreen({ defaultProfile }: { defaultProfile: Profile }) {
+  const switchTo = useProfilesStore((state) => state.switchTo);
+  const switching = useProfilesStore((state) => state.switchingTo !== null);
+  const [error, setError] = useState<string | null>(null);
+  const name = profileDisplayName(defaultProfile);
+  const onSwitch = () => {
+    setError(null);
+    switchTo(defaultProfile).catch((reason: unknown) => setError(profileErrorMessage(reason, "profiles_switch_failed")));
+  };
+  return (
+    <CenteredCard>
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high text-chrome-neutral-300">
+        <UserRound className="h-6 w-6" />
+      </div>
+      <h2 className="text-base font-medium text-chrome-neutral-100">{getString("sync_default_only_title", name)}</h2>
+      <p className="text-sm text-chrome-neutral-400">{getString("sync_default_only_body")}</p>
+      {error && <p className="text-sm text-chrome-red-400">{error}</p>}
+      <Button variant="primary" onClick={onSwitch} disabled={switching} className="px-6">
+        {switching ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {getString("sync_default_only_action", name)}
+      </Button>
+    </CenteredCard>
+  );
+}
+
 export default function Sync() {
   const { status, error, init } = useSyncStore();
+  const profiles = useProfilesStore((state) => state.view);
+  const loadProfiles = useProfilesStore((state) => state.load);
 
   useEffect(() => {
     void init();
-  }, [init]);
+    void loadProfiles();
+  }, [init, loadProfiles]);
+
+  const defaultProfile =
+    profiles && profiles.activeId !== profiles.defaultId
+      ? profiles.profiles.find((profile) => profile.id === profiles.defaultId)
+      : undefined;
 
   const { screenKey, body } = useMemo(() => {
+    if (defaultProfile) {
+      return { screenKey: "defaultOnly", body: <DefaultOnlyScreen defaultProfile={defaultProfile} /> };
+    }
     switch (status.phase) {
       case "hosting":
         return { screenKey: "pairing", body: <PairingState /> };
@@ -613,7 +684,7 @@ export default function Sync() {
       default:
         return { screenKey: "setup", body: <SetupState /> };
     }
-  }, [status, error]);
+  }, [status, error, defaultProfile]);
 
   return (
     <div className="w-full px-6 py-8">

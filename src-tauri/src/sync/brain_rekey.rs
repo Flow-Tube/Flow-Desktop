@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::flow_neuro::key_migration::{link_ends, respelled, to_key_spec_2};
+use crate::flow_neuro::key_migration::{link_ends, respelled, to_key_spec_2, to_key_spec_3};
 use crate::flow_neuro::keyspec::{self, KeySpec};
 use crate::flow_neuro::language::system_language;
 use crate::flow_neuro::scoring::UserBrain;
@@ -20,7 +20,7 @@ use crate::sync::canonical::{
 use crate::sync::merge::MergedFlowNeuroBrain;
 
 /// Reads the local brain, the merged state and the baseline by one key spec before they meet: the
-/// stored brain converts to key spec 2 if no load has converted it yet, and the merged state and
+/// stored brain converts to the current key spec if no load has converted it yet, and the merged state and
 /// the baseline are read again when they were written in another spec or key language. Returns the
 /// reader for the peer's snapshots.
 pub fn align_flow(
@@ -31,6 +31,7 @@ pub fn align_flow(
     let spec = if let Some(brain) = base {
         brain.settle_languages(&system_language());
         to_key_spec_2(brain);
+        to_key_spec_3(brain);
         brain.key_spec()
     } else {
         let language = system_language();

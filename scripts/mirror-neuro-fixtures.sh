@@ -11,7 +11,7 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 resources="$android/app/src/main/resources/neuro"
 fixtures="$android/app/src/test/resources/neuro"
 
-for dir in freq keys stop topical; do
+for dir in fold freq keys runbreak stop topical; do
   mkdir -p "$here/src-tauri/resources/neuro/$dir"
   cp "$resources/$dir/"* "$here/src-tauri/resources/neuro/$dir/"
 done

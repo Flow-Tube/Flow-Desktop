@@ -68,6 +68,7 @@ fn watch_history_merge_obeys_crdt_laws() {
                     duration_seconds: Some(200),
                     is_music: r.random_bool(0.5),
                     is_short: r.random_bool(0.3),
+                    thumbnail_url: None,
                     hlc: hlc(&mut r),
                     deleted: r.random_bool(0.2),
                 });

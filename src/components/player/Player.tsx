@@ -510,6 +510,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [cursorHidden, setCursorHidden] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
   const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
   const {
@@ -1582,6 +1583,9 @@ export const Player: React.FC<PlayerProps> = ({
         capabilities: {
           useMediaCapabilitiesApi: false,
         },
+        // dash.js otherwise keeps these in localStorage, which every profile shares.
+        lastBitrateCachingInfo: { enabled: false },
+        lastMediaSettingsCachingInfo: { enabled: false },
         abr: {
           autoSwitchBitrate: {
             video: false,
@@ -2222,7 +2226,7 @@ export const Player: React.FC<PlayerProps> = ({
           showVolumeFeedback(volume, !muted);
           break;
         case "escape":
-          if (isFullscreen) {
+          if (isFullscreen && !event.defaultPrevented) {
             event.preventDefault();
             toggleFullscreen();
           }
@@ -2509,8 +2513,8 @@ export const Player: React.FC<PlayerProps> = ({
 
   const playerRootClasses = cx(
     isTheaterSurface
-      ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black flex items-center justify-center rounded-none overflow-hidden text-chrome-white outline-none shadow-none"
-      : "relative w-full aspect-video bg-chrome-black rounded-xl overflow-hidden text-chrome-white outline-none shadow-2xl",
+      ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black flex items-center justify-center rounded-none overflow-hidden text-chrome-white outline-none"
+      : "relative w-full aspect-video bg-chrome-black rounded-xl overflow-hidden text-chrome-white outline-none",
     isFullscreen && "rounded-none",
     className
   );
@@ -2657,6 +2661,8 @@ export const Player: React.FC<PlayerProps> = ({
         onRevealControls={revealControls}
         isCompact={isPipMode}
         canDragWindow={isPopOut}
+        settingsOpen={settingsOpen}
+        onCloseSettings={closeSettings}
       />
 
       {pendingQualitySwitch && (

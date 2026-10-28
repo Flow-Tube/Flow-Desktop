@@ -20,7 +20,7 @@ use super::seeds::{GraphCandidate, SeedInput, SeedSource, merge_candidates};
 use super::sources::{
     channel_uploads, refresh_subscription_store, rotating_window, subscription_window_size,
 };
-use super::{HomeFeedService, cache, channel_memory, neighbours, now_ms};
+use super::{HomeFeedService, cache, channel_memory, kind_checks, neighbours, now_ms};
 use crate::flow_neuro::scoring::classify_persona;
 use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
@@ -172,6 +172,14 @@ impl HomeFeedService {
             self.settle_without_feed(app, generation, Some(LOCAL_DATA_FAILED));
             return;
         };
+        self.inner
+            .search_pages
+            .set_upload_date(super::sources::upload_filter(inputs.max_video_age_ms));
+        {
+            let mut feed = self.inner.feed.lock().unwrap();
+            feed.max_video_age_ms = inputs.max_video_age_ms;
+            feed.hides_seen = inputs.hides_seen_videos;
+        }
         let ((searches, searches_failed), (related_seeds, related)) = tokio::join!(
             self.search_all(&yt, &wave1, now),
             self.related_lane(&yt, &rec, &pool, &inputs, now)
@@ -224,6 +232,19 @@ impl HomeFeedService {
             &neighbour_list,
             seed_titles_of(&lanes.related, &related_seeds, &mix),
             query_of,
+        );
+        // Shorts run to three minutes, so a card this long that no source called a Short is the
+        // one place a Short could still get through.
+        tracing::info!(
+            cards = laid_out.len(),
+            short_length_unflagged = laid_out
+                .iter()
+                .filter(|c| c
+                    .video
+                    .duration_seconds
+                    .is_some_and(|seconds| (61..=180).contains(&seconds)))
+                .count(),
+            "Home feed built"
         );
         let paint = Paint {
             cards: &laid_out,
@@ -424,15 +445,20 @@ impl HomeFeedService {
         });
     }
 
-    async fn after_paint(&self, app: &AppHandle, after: AfterPaint) {
+    async fn after_paint(&self, app: &AppHandle, mut after: AfterPaint) {
         let yt = app.state::<YoutubeService>();
         let rec = app.state::<RecommendationService>();
         let pool = app.state::<SqlitePool>();
         let followed = after.inputs.subscriptions.ids();
         // A newer load replaces this one, and its late work with it.
-        let current = || self.generation() == after.generation;
-        self.saved_interest(app, &yt, &rec, &pool, &after, &followed)
+        let generation = after.generation;
+        let current = || self.generation() == generation;
+        self.drop_late_shorts(app, &yt, &pool, &mut after, &followed)
             .await;
+        if current() {
+            self.saved_interest(app, &yt, &rec, &pool, &after, &followed)
+                .await;
+        }
         if current() {
             self.wave2(app, &yt, &rec, &after, &followed).await;
         }
@@ -597,6 +623,55 @@ impl HomeFeedService {
         self.append(app, after.generation, picks, &origins);
     }
 
+    /// The feed was built from the subscription store before its refresh, so a stored upload found
+    /// to be a Short only now (by its RSS link or its frame) leaves the feed at once, wherever it
+    /// is, and the feed is saved again without it. Later lanes leave it out too.
+    async fn drop_late_shorts(
+        &self,
+        app: &AppHandle,
+        yt: &YoutubeService,
+        pool: &SqlitePool,
+        after: &mut AfterPaint,
+        followed: &HashSet<String>,
+    ) {
+        if !followed.is_empty() {
+            let now = now_ms();
+            // The store is local; its RSS refresh runs at most twice an hour.
+            if now.saturating_sub(
+                cache::subscription_store_updated_at(pool)
+                    .await
+                    .unwrap_or(0),
+            ) > SUBSCRIPTION_STORE_REFRESH_MS
+            {
+                refresh_subscription_store(yt, pool, &followed_channels(followed), now).await;
+            }
+            kind_checks::check_stored_uploads(yt, pool, now).await;
+        }
+        let Ok(shorts) = crate::db::known_shorts::all(pool).await else {
+            return;
+        };
+        let mut saved = None;
+        let on_screen = self
+            .snapshot()
+            .cards
+            .iter()
+            .any(|c| shorts.contains(c.id()));
+        if on_screen {
+            self.update(app, after.generation, |feed| {
+                feed.snapshot.cards.retain(|c| !shorts.contains(c.id()));
+                saved = Some((
+                    feed.snapshot.cards.clone(),
+                    feed.snapshot.origins.clone(),
+                    feed.loaded_at,
+                ));
+            });
+        }
+        if let Some((cards, origins, loaded_at)) = saved {
+            let _ = cache::save_last_feed(pool, &cards, &origins, loaded_at).await;
+        }
+        after.inputs.exclusions.add_shorts(shorts);
+    }
+
     async fn subscription_top_up(
         &self,
         app: &AppHandle,
@@ -610,21 +685,7 @@ impl HomeFeedService {
             return;
         }
         let now = now_ms();
-        let mut channels: Vec<String> = followed
-            .iter()
-            .filter(|c| c.starts_with("UC"))
-            .cloned()
-            .collect();
-        channels.sort();
-        // The store is local; its RSS refresh runs at most twice an hour.
-        if now.saturating_sub(
-            cache::subscription_store_updated_at(pool)
-                .await
-                .unwrap_or(0),
-        ) > SUBSCRIPTION_STORE_REFRESH_MS
-        {
-            refresh_subscription_store(yt, pool, &channels, now).await;
-        }
+        let channels = followed_channels(followed);
         let window = self.top_up_window(&channels, &after.store, now);
         let uploads: Vec<Card> =
             crate::api::http::bounded_join(window, TOP_UP_CONCURRENCY, |channel| async move {
@@ -1054,6 +1115,17 @@ pub(super) struct AfterPaint {
     remembered: Vec<channel_memory::Remembered>,
     memory_entries: channel_memory::State,
     neighbour_store: HashMap<String, neighbours::Stored>,
+}
+
+/// Followed channels with an uploads feed, in a stable order for the rotating window.
+fn followed_channels(followed: &HashSet<String>) -> Vec<String> {
+    let mut channels: Vec<String> = followed
+        .iter()
+        .filter(|c| c.starts_with("UC"))
+        .cloned()
+        .collect();
+    channels.sort();
+    channels
 }
 
 /// Videos the viewer hid never open a related lane.

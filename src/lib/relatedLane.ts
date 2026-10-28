@@ -24,6 +24,7 @@ export function relatedItemToVideoSummary(item: RelatedContentItem): VideoSummar
     isUpcoming: item.isUpcoming,
     isVerified: item.isVerified,
     isMembersOnly: item.isMembersOnly,
+    isShort: item.isShort,
     badges: item.badges,
     collaborators: item.collaborators,
   };

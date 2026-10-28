@@ -11,7 +11,9 @@ use crate::flow_neuro::feature_tables::feature_tables;
 use crate::flow_neuro::keyed_lists::{KeyedLists, keyed_lists};
 use crate::flow_neuro::keyspec::Chunks;
 use crate::flow_neuro::keyspec::tables::{format_of, tables};
-use crate::flow_neuro::keyspec::text::{fold, is_topic_sized, is_word_char, words};
+use crate::flow_neuro::keyspec::text::{
+    HanFold, fold, fold_with, is_topic_sized, is_word_char, words,
+};
 use crate::flow_neuro::keyspec::{KeySpec, normalize_lemma, phrases};
 use crate::flow_neuro::scoring::{
     BIGRAM_PRIORITY_WEIGHT, CHANNEL_KEYWORD_WEIGHT, CHANNEL_PROFILE_BLEND_WEIGHT,
@@ -65,23 +67,24 @@ pub fn extract_features_with_prior(
     let lists = keyed_lists(spec);
     let never_alone = &tables().never_alone;
     let weight = |key: &str, base: f64| calculate_idf_weight(key, base, idf);
+    let tags = topic_tags(video.description);
+    let han = han_fold_of(video.title, video.channel_name, &tags, spec);
 
     // Only a channel name's topic words count: "Linus Tech Tips" is about tech, not "linus".
     let mut topics: HashMap<String, f64> = HashMap::new();
-    for word in channel_topics(video.channel_name, spec) {
+    for word in channel_topics_folded(video.channel_name, spec, han) {
         let value = weight(&word, CHANNEL_KEYWORD_WEIGHT);
         topics.insert(word, value);
     }
 
-    let tags = topic_tags(video.description);
-    let context = context_words(video, &tags);
+    let context = context_words(video, &tags, han);
     let tag_chunks: Vec<Chunks> = tags
         .iter()
         .take(TAG_MAX_INGEST)
-        .map(|tag| spec.chunk(tag))
+        .map(|tag| spec.chunk_with(tag, han))
         .collect();
     let tag_phrase_keys: HashSet<String> = tag_chunks.iter().flat_map(tag_phrases).collect();
-    let title = spec.chunk(video.title);
+    let title = spec.chunk_with(video.title, han);
     let formats: HashSet<String> = title
         .formats
         .iter()
@@ -99,6 +102,12 @@ pub fn extract_features_with_prior(
             claimed.extend((run.from..run.to).map(|index| (run.chunk, index)));
         }
     }
+    // A merged Han run is a key once the viewer's counts or a tag say so; its characters stay.
+    for run in &title.merged {
+        if phrases::is_merged_run(run, idf) || tag_phrase_keys.contains(run) {
+            topics.insert(run.clone(), weight(run, BIGRAM_PRIORITY_WEIGHT));
+        }
+    }
     for (chunk_index, chunk) in title.chunks.iter().enumerate() {
         for (index, word) in chunk.iter().enumerate() {
             if claimed.contains(&(chunk_index, index)) || never_alone.contains(word) {
@@ -110,7 +119,7 @@ pub fn extract_features_with_prior(
         }
     }
 
-    for (word, value) in description_keywords(video.description, spec, idf) {
+    for (word, value) in description_keywords(video.description, spec, idf, han) {
         *topics.entry(disambiguate(&word, &context)).or_insert(0.0) += value;
     }
 
@@ -119,10 +128,11 @@ pub fn extract_features_with_prior(
             .description
             .map(|text| {
                 let head: Vec<&str> = text.lines().take(DESCRIPTION_TAKE_LINES).collect();
-                spec.chunk(&head.join(" ")).words()
+                spec.chunk_with(&head.join(" "), han).words()
             })
             .unwrap_or_default();
-        for (key, value) in process_tags(&tags, &title.words(), &description_words, spec, idf) {
+        for (key, value) in process_tags(&tags, &title.words(), &description_words, spec, idf, han)
+        {
             *topics.entry(key).or_insert(0.0) += value;
         }
     }
@@ -169,9 +179,30 @@ fn utf16_len(text: &str) -> usize {
     text.encode_utf16().count()
 }
 
+/// One Han fold for every field of a video, decided by its title, channel name and hashtags (the
+/// tags a desktop video has).
+fn han_fold_of(title: &str, channel_name: &str, tags: &[String], spec: &KeySpec) -> HanFold {
+    spec.han_fold_of(
+        title,
+        channel_name,
+        tags.iter().take(TAG_MAX_INGEST).map(String::as_str),
+    )
+}
+
+/// The Han fold of a video, for reading its title outside [`extract_features`].
+#[must_use]
+pub fn video_han_fold(
+    title: &str,
+    channel_name: &str,
+    description: Option<&str>,
+    spec: &KeySpec,
+) -> HanFold {
+    han_fold_of(title, channel_name, &topic_tags(description), spec)
+}
+
 /// Folded words of `text` stripped of edge punctuation, longer than `min` UTF-16 units.
-fn plain_words(text: &str, min: usize) -> impl Iterator<Item = String> + '_ {
-    let folded = fold(text);
+fn plain_words(text: &str, min: usize, han: HanFold) -> impl Iterator<Item = String> + '_ {
+    let folded = fold_with(text, han);
     ascii_whitespace_split(&folded)
         .map(|word| {
             word.trim_matches(|c: char| !c.is_alphanumeric())
@@ -184,15 +215,15 @@ fn plain_words(text: &str, min: usize) -> impl Iterator<Item = String> + '_ {
 
 /// The words a polysemous word is read against: the title, the channel name, the description's
 /// first lines and the tags (Android `buildContextWordList`).
-fn context_words(video: &VideoText, tags: &[String]) -> Vec<String> {
-    let mut context: Vec<String> = plain_words(video.title, 1).collect();
-    context.extend(name_words(video.channel_name));
+fn context_words(video: &VideoText, tags: &[String], han: HanFold) -> Vec<String> {
+    let mut context: Vec<String> = plain_words(video.title, 1, han).collect();
+    context.extend(name_words(video.channel_name, han));
     if let Some(description) = video.description.filter(|text| !text.trim().is_empty()) {
         let head: Vec<&str> = description.lines().take(3).collect();
-        context.extend(plain_words(&head.join(" "), 2));
+        context.extend(plain_words(&head.join(" "), 2, han));
     }
     for tag in tags.iter().take(TAG_MAX_INGEST) {
-        context.extend(plain_words(tag, 1));
+        context.extend(plain_words(tag, 1, han));
     }
     context
 }
@@ -291,6 +322,7 @@ fn process_tags(
     description_words: &[String],
     spec: &KeySpec,
     idf: &IdfSnapshot,
+    han: HanFold,
 ) -> HashMap<String, f64> {
     let key_tables = tables();
     let spam = &feature_tables().tag_spam_words;
@@ -298,14 +330,14 @@ fn process_tags(
     let mut context: Vec<String> = tags
         .iter()
         .take(TAG_MAX_INGEST)
-        .flat_map(|tag| plain_words(tag, 1).collect::<Vec<_>>())
+        .flat_map(|tag| plain_words(tag, 1, han).collect::<Vec<_>>())
         .collect();
     context.extend(title_words.iter().cloned());
     context.extend(description_words.iter().cloned());
 
     let mut result: HashMap<String, f64> = HashMap::new();
     for raw in tags.iter().take(TAG_MAX_INGEST) {
-        let cleaned = fold(raw).trim().to_string();
+        let cleaned = fold_with(raw, han).trim().to_string();
         let length = utf16_len(&cleaned);
         if (length < TAG_MIN_LENGTH && !key_tables.short_topics.contains(&cleaned))
             || length > TAG_MAX_LENGTH
@@ -315,7 +347,7 @@ fn process_tags(
         {
             continue;
         }
-        let chunked = spec.chunk(&cleaned);
+        let chunked = spec.chunk_with(&cleaned, han);
         let tokens = chunked.words();
         if tokens.is_empty() {
             continue;
@@ -352,6 +384,7 @@ fn description_keywords(
     description: Option<&str>,
     spec: &KeySpec,
     idf: &IdfSnapshot,
+    han: HanFold,
 ) -> Vec<(String, f64)> {
     let Some(description) = description.filter(|text| !text.trim().is_empty()) else {
         return Vec::new();
@@ -371,7 +404,7 @@ fn description_keywords(
                     .any(|pattern| lower.contains(pattern.as_str()))
                 && !lower.contains("http")
                 && !lower.trim_start().starts_with('#')
-                && (utf16_len(trimmed) <= 5 || trimmed != trimmed.to_uppercase())
+                && (utf16_len(trimmed) <= 5 || !is_shouted(line))
         })
         .take(DESCRIPTION_TAKE_LINES)
         .collect();
@@ -381,7 +414,7 @@ fn description_keywords(
     }
     let mut weights: Vec<(String, f64)> = Vec::new();
     for word in spec
-        .chunk(&content)
+        .chunk_with(&content, han)
         .words()
         .into_iter()
         .take(DESCRIPTION_TAKE_WORDS)
@@ -393,6 +426,23 @@ fn description_keywords(
         }
     }
     weights
+}
+
+/// An all-caps line ("SUBSCRIBE NOW") or one with no letters at all. Chinese, Japanese and Thai
+/// have no case, so their letters count against the capitals: "【MV】周杰倫 新歌" is not shouting.
+fn is_shouted(line: &str) -> bool {
+    let mut capitals = 0;
+    let mut uncased = 0;
+    for c in line.chars() {
+        if c.is_lowercase() {
+            return false;
+        } else if c.is_uppercase() {
+            capitals += 1;
+        } else if c.is_alphabetic() {
+            uncased += 1;
+        }
+    }
+    capitals >= uncased
 }
 
 /// Whether a run of title words is an interest: a phrase the engine knows, or a pair the viewer's
@@ -412,15 +462,19 @@ pub fn plant_filter<'a>(
     idf: &'a IdfSnapshot,
     spec: &KeySpec,
     own_documents: i32,
+    han: HanFold,
 ) -> impl Fn(&str) -> bool + 'a {
     let lists = keyed_lists(spec);
-    let title_chunks = spec.chunk(title);
+    let title_chunks = spec.chunk_with(title, han);
     let title_words: HashSet<String> = title_chunks.words().into_iter().collect();
     let description_words: HashSet<String> = description
         .filter(|text| !text.trim().is_empty())
         .map(|text| {
             let head: Vec<&str> = text.lines().take(DESCRIPTION_TAKE_LINES).collect();
-            spec.chunk(&head.join(" ")).words().into_iter().collect()
+            spec.chunk_with(&head.join(" "), han)
+                .words()
+                .into_iter()
+                .collect()
         })
         .unwrap_or_default();
     let mut confirmed: HashSet<String> = title_words
@@ -459,8 +513,12 @@ static CHANNEL_TOPIC_WORDS: LazyLock<HashSet<String>> = LazyLock::new(|| {
 /// nothing.
 #[must_use]
 pub fn channel_topics(name: &str, spec: &KeySpec) -> Vec<String> {
+    channel_topics_folded(name, spec, spec.default_han())
+}
+
+fn channel_topics_folded(name: &str, spec: &KeySpec, han: HanFold) -> Vec<String> {
     let is_topic = |word: &str| CHANNEL_TOPIC_WORDS.contains(word);
-    let name_words = name_words(name);
+    let name_words = name_words(name, han);
     let mut topics: Vec<String> = Vec::new();
     for word in &name_words {
         let lower = word.to_lowercase();
@@ -483,23 +541,31 @@ pub fn channel_topics(name: &str, spec: &KeySpec) -> Vec<String> {
 }
 
 /// Words of a channel name; scripts written without spaces are split by the word breaker.
-fn name_words(name: &str) -> Vec<String> {
-    words(&fold(name))
+fn name_words(name: &str, han: HanFold) -> Vec<String> {
+    words(&fold_with(name, han))
         .into_iter()
         .map(|word| word.trim_matches(|c: char| !is_word_char(c)).to_string())
         .filter(|word| utf16_len(word) > 1)
         .collect()
 }
 
-/// What one video counts toward document frequency: its keys, and every word, run and model pair
-/// of its title, so a pair can prove to be a phrase.
+/// What one video counts toward document frequency: its keys, and every word, run, model pair,
+/// merged Han run and single Han character of its title, so a pair or a run can prove to be a
+/// phrase.
 #[must_use]
-pub fn document_terms(title: &str, vector: &ContentVector, spec: &KeySpec) -> HashSet<String> {
-    let chunks = spec.chunk(title);
+pub fn document_terms(
+    title: &str,
+    vector: &ContentVector,
+    spec: &KeySpec,
+    han: HanFold,
+) -> HashSet<String> {
+    let chunks = spec.chunk_with(title, han);
     let mut terms: HashSet<String> = vector.topics.keys().cloned().collect();
     terms.extend(chunks.words());
     terms.extend(chunks.runs().into_iter().map(|run| run.key));
     terms.extend(chunks.model_pairs);
+    terms.extend(chunks.merged);
+    terms.extend(chunks.singles);
     terms
 }
 
@@ -745,7 +811,12 @@ mod tests {
     fn a_document_counts_every_word_and_run_of_its_title() {
         let spec = KeySpec::default();
         let vector = read("Restoring Vintage Guitars", &no_counts());
-        let terms = document_terms("Restoring Vintage Guitars", &vector, &spec);
+        let terms = document_terms(
+            "Restoring Vintage Guitars",
+            &vector,
+            &spec,
+            spec.default_han(),
+        );
         assert!(terms.contains("guitar"));
         assert!(terms.iter().any(|term| term.ends_with(" guitar")));
     }
@@ -776,7 +847,195 @@ mod tests {
     }
 
     #[test]
-    fn a_chinese_channel_name_keeps_its_topic_word() {
-        assert_eq!(channel_topics("央視新聞", &KeySpec::default()), ["新聞"]);
+    fn a_chinese_channel_name_gives_its_simplified_topic() {
+        let spec = KeySpec::default();
+        assert_eq!(channel_topics("央視新聞", &spec), ["新闻"]);
+        assert_eq!(channel_topics("TVBS新聞", &spec), ["新闻"]);
+        assert_eq!(channel_topics("阿滴英文", &spec), ["英文"]);
+        assert_eq!(channel_topics("英文教室 科技", &spec), ["英文", "科技"]);
+    }
+
+    fn video<'a>(
+        title: &'a str,
+        channel_name: &'a str,
+        description: Option<&'a str>,
+    ) -> VideoText<'a> {
+        VideoText {
+            title,
+            channel_name,
+            description,
+            duration_seconds: Some(600),
+            is_live: false,
+            is_short: false,
+        }
+    }
+
+    fn terms_of(video: &VideoText, idf: &IdfSnapshot) -> HashSet<String> {
+        let spec = KeySpec::default();
+        let vector = extract_features(
+            video,
+            &TopicReader {
+                spec: spec.clone(),
+                idf,
+            },
+        );
+        let han = video_han_fold(video.title, video.channel_name, video.description, &spec);
+        document_terms(video.title, &vector, &spec, han)
+    }
+
+    fn idf_of(titles: &[&str]) -> IdfSnapshot {
+        let mut counts: HashMap<String, i32> = HashMap::new();
+        for title in titles {
+            for term in terms_of(&video(title, "", None), &no_counts()) {
+                *counts.entry(term).or_insert(0) += 1;
+            }
+        }
+        IdfSnapshot {
+            word_frequencies: counts,
+            total_documents: i32::try_from(titles.len()).unwrap(),
+        }
+    }
+
+    // Android NeuroHanRunsTest.
+    #[test]
+    fn a_merged_run_is_a_key_once_it_keeps_appearing() {
+        let others: Vec<String> = (0..9).map(|i| format!("Tech review number {i}")).collect();
+        let mut twice: Vec<&str> = vec!["周杰倫 新歌", "周杰倫 最新作品"];
+        twice.extend(others.iter().map(String::as_str));
+        let mut thrice: Vec<&str> = vec!["周杰倫 新歌", "周杰倫 最新作品", "周杰倫 演唱會"];
+        thrice.extend(others.iter().map(String::as_str));
+
+        assert!(
+            !read("周杰倫 新歌", &no_counts())
+                .topics
+                .contains_key("周杰伦")
+        );
+        assert!(
+            !read("周杰倫 新歌", &idf_of(&twice))
+                .topics
+                .contains_key("周杰伦")
+        );
+        assert!(
+            read("周杰倫 新歌", &idf_of(&thrice))
+                .topics
+                .contains_key("周杰伦")
+        );
+    }
+
+    #[test]
+    fn a_run_whose_characters_mostly_stand_apart_is_not_a_key() {
+        let mut titles = vec!["大小"; 3];
+        titles.extend(vec!["大 小 号"; 12]);
+        let others: Vec<String> = (0..5).map(|i| format!("other {i}")).collect();
+        titles.extend(others.iter().map(String::as_str));
+        assert!(!phrases::is_merged_run("大小", &idf_of(&titles)));
+    }
+
+    #[test]
+    fn the_characters_of_a_run_count_toward_document_frequency() {
+        let terms = terms_of(&video("周杰倫 演唱會", "", None), &no_counts());
+        for term in ["周杰伦", "周", "杰", "伦"] {
+            assert!(terms.contains(term), "{term} in {terms:?}");
+        }
+    }
+
+    // Android NeuroHanFoldDecisionTest: one fold per video.
+    #[test]
+    fn a_video_with_kana_anywhere_keeps_han_as_written() {
+        let title = "鬼滅 無限城編 予告";
+        let spec = KeySpec::default();
+        assert_eq!(
+            video_han_fold(title, "アニメ公式", None, &spec),
+            HanFold::None
+        );
+        assert_eq!(
+            video_han_fold(title, "", Some("#アニメ #新作"), &spec),
+            HanFold::None
+        );
+        let terms = terms_of(&video(title, "アニメ公式", None), &no_counts());
+        assert!(terms.contains("無限"), "{terms:?}");
+        assert!(!terms.contains("无限"), "{terms:?}");
+
+        assert_eq!(
+            video_han_fold(title, "央視新聞", None, &spec),
+            HanFold::Always
+        );
+        assert!(terms_of(&video(title, "央視新聞", None), &no_counts()).contains("无限"));
+    }
+
+    #[test]
+    fn description_keywords_follow_the_video() {
+        let description = format!(
+            "intro: 無限城編の予告です。機器學習 演唱會 周杰倫 的最新消息和內容介紹都在這裡。{}",
+            "詳細は概要欄をご覧ください。".repeat(2)
+        );
+        let spec = KeySpec::default();
+        let keys = |han| -> Vec<String> {
+            description_keywords(Some(&description), &spec, &no_counts(), han)
+                .into_iter()
+                .map(|(key, _)| key)
+                .collect()
+        };
+        let folded = keys(video_han_fold("機器學習 演唱會", "央視新聞", None, &spec));
+        let kept = keys(video_han_fold("機器學習 演唱會", "アニメ公式", None, &spec));
+        assert!(folded.iter().any(|key| key.contains('学')), "{folded:?}");
+        assert!(!kept.iter().any(|key| key.contains('学')), "{kept:?}");
+        assert!(kept.iter().any(|key| key.contains('學')), "{kept:?}");
+    }
+
+    #[test]
+    fn a_japanese_viewer_folds_nothing() {
+        let japanese = KeySpec::new("ja", "ja");
+        assert!(!japanese.han_folds());
+        assert_eq!(japanese.fold("鬼滅"), "鬼滅");
+        assert!(japanese.chunk("周杰倫 演唱會").merged.is_empty());
+        assert_eq!(
+            video_han_fold("機器學習", "", None, &japanese),
+            HanFold::None
+        );
+        assert_eq!(KeySpec::default().fold("鬼滅"), "鬼灭");
+    }
+
+    // Android NeuroDescriptionKeywordsTest (#1400).
+    fn description_words(description: &str) -> Vec<String> {
+        let spec = KeySpec::default();
+        description_keywords(Some(description), &spec, &no_counts(), spec.default_han())
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect()
+    }
+
+    #[test]
+    fn descriptions_in_scripts_without_case_give_keywords() {
+        assert!(
+            description_words("周杰倫 演唱會 台北小巨蛋 現場完整收錄 精彩片段一次看")
+                .contains(&"台北".to_string())
+        );
+        assert!(
+            !description_words("今日は東京で一番美味しいラーメン屋さんを紹介します").is_empty()
+        );
+        assert!(
+            description_words("【MV】周杰倫 演唱會 台北小巨蛋 現場完整收錄")
+                .contains(&"台北".to_string())
+        );
+    }
+
+    #[test]
+    fn a_shouted_line_and_a_bare_line_are_still_skipped() {
+        let found = description_words(
+            "SUBSCRIBE NOW FOR MORE VIDEOS\nLearning guitar chords for beginners today",
+        );
+        assert!(found.contains(&"guitar".to_string()), "{found:?}");
+        assert!(
+            !found.iter().any(|word| word.starts_with("subscrib")),
+            "{found:?}"
+        );
+
+        let mut lines = vec![
+            "━━━━━━━━━━━━━━━━━━━━";
+            DESCRIPTION_TAKE_LINES
+        ];
+        lines.push("Learning guitar chords for beginners today");
+        assert!(description_words(&lines.join("\n")).contains(&"guitar".to_string()));
     }
 }

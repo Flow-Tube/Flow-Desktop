@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::flow_neuro::keyspec::KeySpec;
-use crate::flow_neuro::keyspec::text::fold;
+use crate::flow_neuro::keyspec::tables::list_fold;
+use crate::flow_neuro::keyspec::text::fold_with;
 use crate::flow_neuro::scoring::strip_domain_tag;
 
 /// Words at or below this Zipf frequency are fully specific; at or above `HIGH_ZIPF`, as generic
@@ -23,8 +24,9 @@ macro_rules! freq_files {
     };
 }
 
-const FREQ_FILES: [(&str, &str); 16] = freq_files!(
+const FREQ_FILES: [(&str, &str); 17] = freq_files!(
     "ar", "cs", "de", "en", "es", "et", "fa", "fr", "id", "it", "pl", "pt", "ru", "tr", "uk", "vi",
+    "zh",
 );
 
 fn words(language: &str) -> impl Iterator<Item = (String, i32)> {
@@ -34,7 +36,10 @@ fn words(language: &str) -> impl Iterator<Item = (String, i32)> {
         .flat_map(|(_, text)| text.lines())
         .filter_map(|line| {
             let (word, zipf) = line.rsplit_once(' ')?;
-            Some((fold(word), zipf.trim().parse().ok()?))
+            Some((
+                fold_with(word, list_fold(language)),
+                zipf.trim().parse().ok()?,
+            ))
         })
 }
 
@@ -138,5 +143,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    // Android NeuroSpecificityTest.
+    #[test]
+    fn chinese_words_every_subject_uses_are_not_specific() {
+        let table = Specificity::build(&KeySpec::new("zh", "zh"));
+        for word in ["新闻", "电影", "音乐", "游戏", "时候"] {
+            assert!(table.of(word) < 0.5, "{word}: {}", table.of(word));
+        }
+        assert!((table.of("台积电") - 1.0).abs() < 1e-9);
     }
 }

@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::flow_neuro::features::{
-    TopicReader, VideoText, document_terms, extract_features, pick_keys,
+    TopicReader, VideoText, document_terms, extract_features, pick_keys, video_han_fold,
 };
 use crate::flow_neuro::scoring::{
     AFFINITY_MAX, CHANNEL_EMA_ALPHA, CHANNEL_EMA_DECAY, ESTABLISHED_TOPIC_THRESHOLD, IdfSnapshot,
@@ -183,7 +183,8 @@ pub fn bootstrap_from_history(brain: &mut UserBrain, videos: Vec<ImportedVideo>)
         learn_imported_links_and_evidence(brain, &vector, &video.video_id, &channel_id, now_ms);
 
         if brain.counted_documents.insert(&video.video_id) {
-            for term in document_terms(&video.title, &vector, &spec) {
+            let han = video_han_fold(&video.title, &video.channel_name, None, &spec);
+            for term in document_terms(&video.title, &vector, &spec, han) {
                 *brain.idf_word_frequency.entry(term).or_insert(0) += 1;
             }
             brain.idf_total_documents += 1;

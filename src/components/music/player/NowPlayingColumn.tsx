@@ -89,7 +89,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
           <div className="min-w-0">
             <h1
               title={track.title}
-              className={`line-clamp-1 font-bold tracking-tight text-chrome-neutral-100 ${compact ? "text-2xl" : "text-3xl lg:text-5xl"}`}
+              className={`line-clamp-1 select-text font-bold tracking-tight text-chrome-neutral-100 ${compact ? "text-2xl" : "text-3xl lg:text-5xl"}`}
             >
               {track.title}
             </h1>

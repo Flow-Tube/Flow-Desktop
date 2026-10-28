@@ -38,6 +38,10 @@ pub enum SyncError {
     NoPeer,
     #[error("a sync session is already active")]
     Busy,
+    /// Only the Default profile syncs. Displays Default's name (blank until renamed), which the
+    /// frontend puts into "Switch to … to sync".
+    #[error("{0}")]
+    NotDefaultProfile(String),
     #[error("couldn't save the received data: {0}")]
     Apply(String),
 }
@@ -52,6 +56,7 @@ impl SyncError {
             SyncError::Expired => "syncExpired",
             SyncError::NoPeer => "syncNoPeer",
             SyncError::Busy => "syncBusy",
+            SyncError::NotDefaultProfile(_) => "syncNotDefaultProfile",
             SyncError::Transport(_) | SyncError::Io(_) => "syncUnreachable",
             SyncError::ConnectionClosed => "syncPeerClosed",
             SyncError::Timeout(_) => "syncTimeout",
@@ -90,7 +95,8 @@ impl SyncError {
             | SyncError::Qr(_)
             | SyncError::Expired
             | SyncError::NoPeer
-            | SyncError::Busy => None,
+            | SyncError::Busy
+            | SyncError::NotDefaultProfile(_) => None,
         }
     }
 }

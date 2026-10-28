@@ -41,7 +41,7 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
               )}
             </div>
 
-            <div className="mt-4 space-y-1 pb-2 text-center md:mt-0 md:text-left">
+            <div className="mt-4 select-text space-y-1 pb-2 text-center md:mt-0 md:text-left">
               <h1 className="flex items-center justify-center gap-2 text-4xl font-bold tracking-tight text-chrome-neutral-100 md:justify-start">
                 {channelInfo.name}
                 {channelInfo.verified && (

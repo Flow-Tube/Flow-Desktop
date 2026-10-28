@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useExitGhost } from "../../lib/useExitGhost";
 
 export interface MenuAnchor {
   top: number;
@@ -52,8 +53,22 @@ export function AnchoredPortalMenu({
     }
     top = Math.max(VIEWPORT_MARGIN, Math.min(top, vh - height - VIEWPORT_MARGIN));
 
-    setStyle({ position: "fixed", top, left, visibility: "visible" });
+    // Grows from the corner nearest the button: the side it was anchored by, and above when flipped.
+    const vertical = top < anchor.top ? "bottom" : "top";
+    const horizontal = anchor.right != null ? "right" : "left";
+    setStyle({ position: "fixed", top, left, visibility: "visible", transformOrigin: `${vertical} ${horizontal}` });
   }, [anchor.top, anchor.left, anchor.right, anchor.flipBottom]);
+
+  useExitGhost(ref);
+
+  // Closing by keyboard hands focus back to whatever opened the menu, not to the page body.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const menu = ref.current;
+    return () => {
+      if (opener?.isConnected && menu?.contains(document.activeElement)) opener.focus({ preventScroll: true });
+    };
+  }, []);
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -89,7 +104,7 @@ export function AnchoredPortalMenu({
       style={style}
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
-      className={className}
+      className={className ? `animate-menu-in ${className}` : "animate-menu-in"}
     >
       {children}
     </div>,

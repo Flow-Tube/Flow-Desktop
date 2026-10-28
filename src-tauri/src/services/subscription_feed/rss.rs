@@ -1,7 +1,8 @@
 //! A channel's uploads feed: the one place it is fetched and parsed. RSS gives
-//! exact dates, views and descriptions but no length and no kind, so Shorts are
-//! marked elsewhere ([`super::reels`]).
+//! exact dates, views, descriptions and each upload's kind (its link opens the
+//! Shorts player or the watch page), but no length.
 
+use std::collections::HashSet;
 use std::time::Duration;
 
 use reqwest::StatusCode;
@@ -95,19 +96,36 @@ pub fn is_members_only_title(title: &str) -> bool {
         .any(|marker| title.contains(marker))
 }
 
-/// The feed's channel name and its uploads, each with its publish time in
-/// seconds for sorting.
+/// Whether an entry's link opens the Shorts player, or `None` when it names neither player.
+fn is_short_link(entry: &str) -> Option<bool> {
+    let href = xml_attr(entry, "<link", "href")?;
+    let path = href.split_once("youtube.com/")?.1;
+    if path.starts_with("shorts/") {
+        Some(true)
+    } else if path.starts_with("watch") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+/// A channel's feed: its name and uploads, each upload with its publish time in seconds.
+#[derive(Debug, Default)]
+pub struct RssFeed {
+    pub channel_name: Option<String>,
+    pub videos: Vec<(i64, VideoSummary)>,
+    /// Uploads whose link names no player, so whether they are Shorts is unknown.
+    pub unclassified: HashSet<String>,
+}
+
 #[must_use]
-pub fn parse_rss_feed(channel_id: &str, xml: &str) -> (Option<String>, Vec<(i64, VideoSummary)>) {
+pub fn parse_rss_feed(channel_id: &str, xml: &str) -> RssFeed {
     parse_rss_feed_at(channel_id, xml, chrono::Utc::now())
 }
 
-fn parse_rss_feed_at(
-    channel_id: &str,
-    xml: &str,
-    now: chrono::DateTime<chrono::Utc>,
-) -> (Option<String>, Vec<(i64, VideoSummary)>) {
+fn parse_rss_feed_at(channel_id: &str, xml: &str, now: chrono::DateTime<chrono::Utc>) -> RssFeed {
     let channel_name = xml_text(xml, "name");
+    let mut unclassified = HashSet::new();
     let videos = xml
         .split("<entry>")
         .skip(1)
@@ -126,6 +144,10 @@ fn parse_rss_feed_at(
             let snippet = xml_text(entry, "media:description")
                 .filter(|text| !text.is_empty())
                 .map(|text| text.chars().take(SNIPPET_CHARS).collect());
+            let is_short = is_short_link(entry);
+            if is_short.is_none() {
+                unclassified.insert(video_id.clone());
+            }
 
             Some((
                 published.map_or(0, |date| date.timestamp()),
@@ -148,6 +170,7 @@ fn parse_rss_feed_at(
                         .filter(|_| is_upcoming)
                         .and_then(|date| u64::try_from(date.timestamp_millis()).ok()),
                     is_members_only: is_members_only_title(&title),
+                    is_short: is_short.unwrap_or(false),
                     snippet,
                     channel_name: channel_name
                         .clone()
@@ -161,7 +184,11 @@ fn parse_rss_feed_at(
         })
         .collect();
 
-    (channel_name, videos)
+    RssFeed {
+        channel_name,
+        videos,
+        unclassified,
+    }
 }
 
 /// How long to wait before the one retry, or `None` when the failure will not
@@ -252,13 +279,14 @@ mod tests {
 
     fn entry(id: &str, title: &str, published: &str, views: u64) -> String {
         format!(
-            "<entry><yt:videoId>{id}</yt:videoId><title>{title}</title><published>{published}</published>\
+            "<entry><yt:videoId>{id}</yt:videoId><title>{title}</title>\
+             <link rel=\"alternate\" href=\"https://www.youtube.com/watch?v={id}\"/><published>{published}</published>\
              <media:group><media:description>About {id}</media:description>\
              <media:community><media:statistics views=\"{views}\"/></media:community></media:group></entry>"
         )
     }
 
-    fn parse(entries: &[String]) -> Vec<VideoSummary> {
+    fn parse_feed(entries: &[String]) -> RssFeed {
         let xml = format!(
             "<feed><author><name>Chan</name></author>{}</feed>",
             entries.join("")
@@ -267,10 +295,27 @@ mod tests {
             .unwrap()
             .with_timezone(&chrono::Utc);
         parse_rss_feed_at("UCx", &xml, now)
-            .1
+    }
+
+    fn parse(entries: &[String]) -> Vec<VideoSummary> {
+        parse_feed(entries)
+            .videos
             .into_iter()
             .map(|(_, video)| video)
             .collect()
+    }
+
+    #[test]
+    fn the_link_tells_a_short_from_a_video() {
+        let short =
+            entry("s", "Clip", "2026-10-19T12:00:00+00:00", 5).replace("watch?v=s", "shorts/s");
+        let unlinked = entry("u", "Odd", "2026-10-19T12:00:00+00:00", 5)
+            .replace("https://www.youtube.com/watch?v=u", "https://example.com/u");
+        let video = entry("v", "Talk", "2026-10-19T12:00:00+00:00", 5);
+        let feed = parse_feed(&[short, unlinked, video]);
+        let kinds: Vec<bool> = feed.videos.iter().map(|(_, v)| v.is_short).collect();
+        assert_eq!(kinds, [true, false, false]);
+        assert_eq!(feed.unclassified, HashSet::from(["u".to_string()]));
     }
 
     #[test]
@@ -323,8 +368,13 @@ mod tests {
             eprintln!("skipped: {} is missing", path.display());
             return;
         };
-        let (name, videos) = parse_rss_feed("UCXuqSBlHAE6Xw-yeJA0Tunw", &xml);
+        let RssFeed {
+            channel_name: name,
+            videos,
+            unclassified,
+        } = parse_rss_feed("UCXuqSBlHAE6Xw-yeJA0Tunw", &xml);
         assert_eq!(name.as_deref(), Some("Linus Tech Tips"));
+        assert!(unclassified.is_empty());
         assert_eq!(videos.len(), 15);
         assert!(
             videos

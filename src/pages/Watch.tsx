@@ -11,22 +11,20 @@ import { useDownloadedVideoRecord, downloadRecordToVideo, downloadSponsorSegment
 import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
 import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { useRelatedLane } from "../lib/useRelatedLane";
+import { useUnseenFilter } from "../lib/useUnseenFilter";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { decideWatchRouteSync } from "../lib/watchRouteSync";
 import { setSetting } from "../lib/api/db";
-import { seekToTime } from "../lib/playerSeek";
-import { Chapters } from "../components/player/chapters";
-import { QueuePanel } from "../components/player/QueuePanel";
 import {
   WatchLayout,
   WatchMetadata,
   DescriptionCard,
   RelatedVideos,
-  LiveChat,
   WatchPageSkeleton,
   WatchErrorState,
 } from "../components/watch";
 import { WatchPlayerSlot } from "../components/watch/WatchPlayerSlot";
+import { WatchSidePanels } from "../components/watch/WatchSidePanels";
 import type { RelatedContentItem, VideoSummary } from "../types/video";
 import { SETTINGS } from "../lib/settings/schema";
 
@@ -47,17 +45,14 @@ export function Watch() {
   const setDearrowData = usePlayerStore((s) => s.setDearrowData);
   const setRydData = usePlayerStore((s) => s.setRydData);
   const setSponsorBlockSegments = usePlayerStore((s) => s.setSponsorBlockSegments);
-  const isChaptersPanelOpen = usePlayerStore((s) => s.isChaptersPanelOpen);
-  const setIsChaptersPanelOpen = usePlayerStore((s) => s.setIsChaptersPanelOpen);
-  const isQueuePanelOpen = usePlayerStore((s) => s.isQueuePanelOpen);
   const setAutoplayCandidates = usePlayerStore((s) => s.setAutoplayCandidates);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const captions = usePlayerStore((s) => s.captions);
 
   const { loadSubscriptions } = useSubscriptionStore();
   const commentsEnabled = useAppSettingsStore((state) => state.values[SETTINGS.COMMENTS_ENABLED] !== "false");
   const relatedVideosEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_RELATED_VIDEOS] !== "false");
   const liveChatEnabled = useAppSettingsStore((state) => state.values[SETTINGS.LIVE_CHAT_ENABLED] !== "false");
+  const hideSeenVideos = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_SEEN_VIDEOS] === "true");
 
   const [pageError, setPageError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -181,15 +176,24 @@ export function Watch() {
   }, [videoId, playbackSettled, retryNonce, setDearrowData, setRydData, loadSettings, offlineRecord]);
 
   const isHidden = useFeedHiddenFilter();
+  const relatedVideoIds = useMemo(
+    () =>
+      relatedLane.items
+        .filter((item) => !item.itemType || item.itemType === "video")
+        .map((item) => item.videoId || item.id),
+    [relatedLane.items],
+  );
+  const unseen = useUnseenFilter(videoId ?? "", relatedVideoIds, hideSeenVideos);
   // The watch page bypassed the feed block filter, so blocked/suppressed channels resurfaced
   // in related content and autoplay. Filter them here (reactively, so a mid-watch block applies).
   const visibleRelated = useMemo(
     () =>
       relatedLane.items.filter((item) => {
         if (item.itemType && item.itemType !== "video") return true; // keep playlists / mixes
-        return !isHidden({ id: item.videoId || item.id, channelId: item.channelId } as VideoSummary);
+        const id = item.videoId || item.id;
+        return unseen.isShown(id) && !isHidden({ id, channelId: item.channelId } as VideoSummary);
       }),
-    [relatedLane.items, isHidden],
+    [relatedLane.items, isHidden, unseen],
   );
   const autoplayVideoId = offlineRecord ? null : videoDetails?.autoplayVideoId;
   useEffect(() => {
@@ -272,34 +276,22 @@ export function Watch() {
       ) : null}
       sidebar={
         <>
-          {(videoDetails?.isLive || videoDetails?.hasChatReplay) && liveChatEnabled && (
-            <LiveChat videoId={videoId} isReplay={!videoDetails.isLive} />
-          )}
-
-          {isQueuePanelOpen && (
-            <div className="h-[min(720px,calc(100vh-140px))] min-h-[450px] w-full shrink-0">
-              <QueuePanel />
-            </div>
-          )}
-
-          {isChaptersPanelOpen && (
-            <div className="h-[min(720px,calc(100vh-140px))] min-h-[450px] w-full shrink-0">
-              <Chapters
-                chapters={videoDetails?.chapters || []}
-                autoChapters={videoDetails?.autoChapters ?? false}
-                captions={captions}
-                videoId={videoId}
-                onClose={() => setIsChaptersPanelOpen(false)}
-                videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl || undefined}
-                seekTo={seekToTime}
-              />
-            </div>
-          )}
+          <WatchSidePanels
+            videoId={videoId}
+            chat={
+              (videoDetails?.isLive || videoDetails?.hasChatReplay) && liveChatEnabled
+                ? { isReplay: !videoDetails.isLive }
+                : null
+            }
+            chapters={videoDetails?.chapters || []}
+            autoChapters={videoDetails?.autoChapters ?? false}
+            videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl || undefined}
+          />
 
           {relatedVideosEnabled && (
             <RelatedVideos
               items={visibleRelated}
-              loading={relatedLane.loading}
+              loading={relatedLane.loading || unseen.waiting}
               hasMore={relatedLane.hasMore}
               loadingMore={relatedLane.loadingMore}
               onLoadMore={relatedLane.loadMore}

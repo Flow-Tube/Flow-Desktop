@@ -40,3 +40,30 @@ pub fn is_phrase(bigram: &str, idf: &IdfSnapshot) -> bool {
     }
     npmi(bigram, idf).is_some_and(|value| value >= MIN_NPMI)
 }
+
+/// A merged run's documents must reach this share of its rarest character's.
+pub const MIN_MERGED_SHARE: f64 = 0.5;
+
+/// Whether a merged Han run is a key by the viewer's own counts: seen in [`MIN_COUNT`] videos, and
+/// in at least [`MIN_MERGED_SHARE`] of the videos its rarest character appears in, so characters
+/// that mostly stand apart never make one.
+#[must_use]
+pub fn is_merged_run(run: &str, idf: &IdfSnapshot) -> bool {
+    if idf.total_documents < MIN_DOCUMENTS {
+        return false;
+    }
+    let Some(&joint) = idf.word_frequencies.get(run) else {
+        return false;
+    };
+    if joint < MIN_COUNT {
+        return false;
+    }
+    let Some(rarest) = run
+        .chars()
+        .filter_map(|c| idf.word_frequencies.get(&c.to_string()).copied())
+        .min()
+    else {
+        return false;
+    };
+    f64::from(joint) >= MIN_MERGED_SHARE * f64::from(rarest.max(joint))
+}

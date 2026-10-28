@@ -11,6 +11,7 @@ pub(crate) mod channel_memory;
 pub mod chips;
 mod filters;
 pub(crate) mod inputs;
+mod kind_checks;
 mod lanes;
 mod load;
 mod mixer;
@@ -76,6 +77,10 @@ pub struct HomeSnapshot {
 struct Feed {
     snapshot: HomeSnapshot,
     loaded_at: u64,
+    /// The viewer's video age limit this feed was built under.
+    max_video_age_ms: Option<u64>,
+    /// Whether this feed was built leaving out videos already seen.
+    hides_seen: bool,
     subs_backlog: Vec<Card>,
     memory_quota: usize,
     related_picks: HashSet<String>,
@@ -156,23 +161,53 @@ impl HomeFeedService {
     }
 
     /// Home opened: a feed from the last half hour comes back as it was; otherwise the feed as last
-    /// shown (up to eight hours old) paints at once while a new one loads.
+    /// shown (up to eight hours old) paints at once while a new one loads. Either leaves out what
+    /// is known by now to be a Short or to never play. A changed video age limit drops what is now
+    /// too old at once and builds the feed anew, and so does turning on "Hide videos you've already
+    /// seen", which also never paints the last feed: it was all seen.
     pub async fn open(&self, app: &AppHandle) -> HomeSnapshot {
         let now = now_ms();
-        {
+        let pool = app.state::<sqlx::SqlitePool>();
+        let max_video_age_ms = inputs::max_video_age_ms(&pool).await;
+        let hides_seen = inputs::hides_seen_videos(&pool).await;
+        let shorts = crate::db::known_shorts::all(&pool)
+            .await
+            .unwrap_or_default();
+        let unplayable = crate::db::unplayable_videos::all(&pool)
+            .await
+            .unwrap_or_default();
+        let within_limit = |card: &Card| {
+            max_video_age_ms.is_none_or(|max_age_ms| filters::is_within(card, now, max_age_ms))
+        };
+        let showable = |card: &Card| {
+            within_limit(card) && !shorts.contains(card.id()) && !unplayable.contains(card.id())
+        };
+        let choices_changed = {
             let feed = self.inner.feed.lock().unwrap();
+            feed.max_video_age_ms != max_video_age_ms || feed.hides_seen != hides_seen
+        };
+        if choices_changed {
+            self.inner.chip_results.lock().unwrap().clear();
+        }
+        {
+            let mut feed = self.inner.feed.lock().unwrap();
+            feed.snapshot.cards.retain(showable);
+            if choices_changed {
+                if hides_seen {
+                    feed.snapshot.cards.clear();
+                }
+                feed.loaded_at = 0;
+            }
             let fresh = !feed.snapshot.cards.is_empty()
                 && now.saturating_sub(feed.loaded_at) < FRESH_FEED_MS;
             if fresh || feed.snapshot.loading {
                 return feed.snapshot.clone();
             }
         }
-        let pool = app.state::<sqlx::SqlitePool>();
-        if let Ok((cards, origins)) = cache::load_last_feed(&pool, now).await
-            && !cards.is_empty()
-        {
+        if !hides_seen && let Ok((mut cards, origins)) = cache::load_last_feed(&pool, now).await {
+            cards.retain(showable);
             let mut feed = self.inner.feed.lock().unwrap();
-            if feed.snapshot.cards.is_empty() {
+            if feed.snapshot.cards.is_empty() && !cards.is_empty() {
                 feed.snapshot.cards = cards;
                 feed.snapshot.origins = origins;
             }

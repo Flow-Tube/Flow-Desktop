@@ -9,9 +9,11 @@ import { DownloadsTab } from '../components/settings/tabs/DownloadsTab';
 import { DataTab } from '../components/settings/tabs/DataTab';
 import { AboutTab } from '../components/settings/tabs/AboutTab';
 import { AppearanceTab } from '../components/settings/tabs/AppearanceTab';
+import { ProfilesTab } from '../components/settings/tabs/ProfilesTab';
 
 const tabComponents: Record<SettingsCategory, React.FC> = {
   appearance: AppearanceTab,
+  profiles: ProfilesTab,
   player: PlayerTab,
   music: MusicTab,
   content: ContentTab,

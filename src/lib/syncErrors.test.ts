@@ -12,6 +12,10 @@ describe("syncErrorMessage", () => {
 
   it("shows the peer's own words for an error the other device reported", () => {
     expect(syncErrorMessage("syncPeerError", "disk full")).toBe(getString("sync_error_peer", "disk full"));
+    expect(syncErrorMessage("syncNotDefaultProfile", "Home")).toBe(getString("sync_error_not_default_profile", "Home"));
+    expect(syncErrorMessage("syncNotDefaultProfile", "")).toBe(
+      getString("sync_error_not_default_profile", getString("profiles_default_name")),
+    );
   });
 
   it("falls back to the backend text for an unknown kind", () => {

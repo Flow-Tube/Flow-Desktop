@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use crate::errors::{AppError, ErrorResponse};
 
-const MAX_BACKUP_BYTES: usize = 25 * 1024 * 1024;
+// A master backup carries every profile, each with its whole history.
+const MAX_BACKUP_BYTES: usize = 200 * 1024 * 1024;
 const MAX_LYRICS_BYTES: usize = 1024 * 1024;
 
 /// A path the user picked in a save dialog, checked for its extension, size and folder.

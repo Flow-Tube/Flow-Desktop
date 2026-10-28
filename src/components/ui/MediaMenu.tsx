@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Check, Info } from "lucide-react";
 import { AnchoredPortalMenu, type MenuAnchor } from "./AnchoredPortalMenu";
+import { moveMenuFocus } from "./menuFocus";
 
 /** Where an action sits: a tile in the top row, or a row in one of the groups below it. */
 export type MediaMenuGroup = "quick" | "library" | "go" | "feed";
@@ -44,20 +45,6 @@ type MediaMenuProps = {
   className?: string;
 };
 
-function moveFocus(container: HTMLElement, key: string) {
-  const items = [...container.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-  if (items.length === 0) return false;
-  const index = items.indexOf(document.activeElement as HTMLElement);
-  const next = key === "Home"
-    ? 0
-    : key === "End"
-      ? items.length - 1
-      : key === "ArrowDown" || key === "ArrowRight"
-        ? (index + 1) % items.length
-        : (index - 1 + items.length) % items.length;
-  items[next]?.focus();
-  return true;
-}
 
 export function MediaMenu({ anchor, onClose, actions, header, note, className = "z-50" }: MediaMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -76,8 +63,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-    if (moveFocus(event.currentTarget, event.key)) event.preventDefault();
+    if (moveMenuFocus(event.currentTarget, event.key)) event.preventDefault();
   };
 
   return (

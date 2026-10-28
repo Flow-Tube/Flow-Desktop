@@ -13,11 +13,18 @@ import {
 } from "../lib/api/profiles";
 import { normalizeBackendError } from "../lib/api/errors";
 import { SETTING_DEFINITIONS } from "../lib/settings/schema";
-import { copyKeysToProfile, removeProfileKeys } from "../lib/storage/profileStorage";
+import { copyKeysToProfile, removeProfileKeys, setProfileKey } from "../lib/storage/profileStorage";
 import { switchProfile, type PrepareSwitchPayload } from "../lib/profiles/switchProfile";
+import { BOOT_THEME_KEY, defaultBootTheme } from "../lib/profiles/bootTheme";
 
 /** Web-storage preferences that travel with "Copy settings". */
-const COPIED_UI_KEYS = ["flow_subtitle_style", "flow_theater_mode", "flow_sidebar_expanded", "flow_sidebar_subs_collapsed"];
+const COPIED_UI_KEYS = [
+  "flow_subtitle_style",
+  "flow_theater_mode",
+  "flow_sidebar_expanded",
+  "flow_sidebar_subs_collapsed",
+  BOOT_THEME_KEY,
+];
 
 export interface CopyChoice {
   settings: boolean;
@@ -73,6 +80,7 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
   create: async (draft, choice) => {
     const profile = await createProfile({ ...draft, copy: copyParts(choice) });
     if (choice.settings) copyKeysToProfile(profile.id, COPIED_UI_KEYS);
+    else setProfileKey(profile.id, BOOT_THEME_KEY, defaultBootTheme());
     await get().load();
     return profile;
   },

@@ -54,4 +54,13 @@ describe("useProfilesStore", () => {
     );
     expect(localStorage.getItem("p:new:flow_theater_mode")).toBe("true");
   });
+
+  it("opens a fresh profile in the default theme", async () => {
+    vi.mocked(api.createProfile).mockResolvedValue({ ...study, id: "fresh" });
+    await useProfilesStore.getState().create(
+      { name: "Fresh", colorKey: "", avatar },
+      { settings: false, subscriptions: false, recommendations: false },
+    );
+    expect(JSON.parse(localStorage.getItem("p:fresh:flow_boot_theme") ?? "{}").variant).toBe("dark");
+  });
 });

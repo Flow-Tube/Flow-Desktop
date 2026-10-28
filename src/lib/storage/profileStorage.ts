@@ -56,8 +56,13 @@ export const profileStorage = {
 export function copyKeysToProfile(profileId: string, keys: readonly string[]): void {
   for (const key of keys) {
     const value = profileStorage.getItem(key);
-    if (value !== null) window.localStorage.setItem(profilePrefix(profileId) + key, value);
+    if (value !== null) setProfileKey(profileId, key, value);
   }
+}
+
+/** Writes a key for a profile other than Default (a new one, while creating it). */
+export function setProfileKey(profileId: string, key: string, value: string): void {
+  window.localStorage.setItem(profilePrefix(profileId) + key, value);
 }
 
 /** Drops a deleted profile's keys. Default's bare keys are never touched here. */

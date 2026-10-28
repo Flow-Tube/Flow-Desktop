@@ -21,7 +21,7 @@ import {
   validateSettingsBackup,
   type BackupCollections,
 } from "../lib/settings/backup";
-import { SETTINGS, type SettingKey } from "../lib/settings/schema";
+import { SETTINGS, SETTING_SCOPES, type SettingKey } from "../lib/settings/schema";
 import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
 import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../store/useLikesStore";
 import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
@@ -33,6 +33,7 @@ import { confirmAction } from "../lib/dialogs";
 import { profileDisplayName } from "../lib/profiles/display";
 import { useProfilesStore } from "../store/useProfilesStore";
 import { useUiStore } from "../store/useUiStore";
+import { activeProfile } from "../lib/storage/profileStorage";
 
 interface ParseChannelResult { id: string; name: string; }
 interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
@@ -214,8 +215,13 @@ export const ImportData: React.FC = () => {
         }
 
         const settingsBackup = isJson && backupData ? validateSettingsBackup(backupData) : null;
+        // Device settings (folders, proxy, quality, region) belong to the whole computer: only
+        // Default restores them, so restoring into another profile can't change them.
+        const restoresDeviceSettings = activeProfile().isDefault;
         const settingsEntries = settingsBackup
-          ? Object.entries(settingsBackup.settings) as [SettingKey, string][]
+          ? (Object.entries(settingsBackup.settings) as [SettingKey, string][]).filter(
+              ([key]) => restoresDeviceSettings || SETTING_SCOPES[key] !== "device",
+            )
           : [];
         if (importSettings && settingsEntries.length > 0) {
           setStatusMessage(getString("import_importing_settings", settingsEntries.length));

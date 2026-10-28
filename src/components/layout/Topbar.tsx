@@ -26,6 +26,7 @@ export function Topbar() {
   const showAppLogo = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_APP_LOGO_ICON] !== 'false');
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
   const canGoBack = useTabsStore((state) => activeTab(state).index > 0);
+  const tabCount = useTabsStore((state) => state.tabs.length);
   const canGoForward = useTabsStore((state) => {
     const tab = activeTab(state);
     return tab.index < tab.entries.length - 1;
@@ -43,6 +44,17 @@ export function Topbar() {
         >
           {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
         </IconButton>
+        {usesDrawer && tabCount > 1 && (
+          <IconButton
+            aria-label={getString('tabs_show', tabCount)}
+            title={getString('tabs_show', tabCount)}
+            onClick={toggleWatchSidebar}
+          >
+            <span className="grid h-5 w-5 place-items-center rounded-md border-[1.5px] border-current font-mono text-[11px] font-semibold leading-none">
+              {tabCount > 99 ? '99+' : tabCount}
+            </span>
+          </IconButton>
+        )}
         {showAppLogo && (
           <div className="cursor-pointer" onClick={() => navigate('/')}>
             <Logo size={36} showText={true} />

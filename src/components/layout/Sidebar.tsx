@@ -7,6 +7,7 @@ import { SidebarItem } from '../ui/SidebarItem';
 import { SidebarNavIcon, type SidebarNavIconName } from '../ui/SidebarNavIcon';
 import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
 import { SectionHeader, SubscriptionsNav } from './SidebarSections';
+import { SidebarTabs } from './SidebarTabs';
 import { getString } from '../../lib/i18n/index';
 import { SETTINGS } from '../../lib/settings/schema';
 
@@ -76,6 +77,8 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
           {showCategoriesNav && <SidebarItem to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} collapsed={collapsed} />}
           {showMusicNav && <SidebarItem to="/music" {...navIconPair('music')} label={getString('sidebar_music')} onClick={closeOverlay} collapsed={collapsed} />}
         </nav>
+
+        <SidebarTabs collapsed={collapsed} onNavigate={closeOverlay} />
 
         {/* The rail's two icons and the full sections share one spot and cross-fade. */}
         <div className="grid">

@@ -74,6 +74,9 @@ import { UpdateManager } from "./components/updater/UpdateManager";
 import { ThemeController } from "./lib/useTheme";
 import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
 import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
+import { useTabShortcuts } from "./lib/tabs/useTabShortcuts";
+import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
+import { useTabSession } from "./lib/tabs/useTabSession";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
@@ -99,6 +102,9 @@ function App() {
   useImageProxyBootstrap();
   useTabHistoryShortcuts();
   useEffect(installTabPlaybackSync, []);
+  useTabShortcuts();
+  useActiveTabTitle();
+  const tabsRestored = useTabSession();
 
   const [loadingOnboarding, setLoadingOnboarding] = useState(true);
 
@@ -148,7 +154,7 @@ function App() {
     addToQueue(video);
   }, [addToQueue]);
 
-  if (loadingOnboarding) {
+  if (loadingOnboarding || !tabsRestored) {
     return (
       <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
         <ThemeController />

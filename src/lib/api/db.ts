@@ -1,6 +1,7 @@
 import type { WatchHistoryRecord } from "../../types/db";
 import { isTauriEnv } from "./env";
 import { invokeBackend } from "./errors";
+import { announceSettingWrite } from "../windowEvents";
 
 export async function getWatchHistory(
   limit: number,
@@ -85,5 +86,6 @@ export async function setSetting(key: string, value: string): Promise<void> {
     localStorage.setItem(`mock_setting_${key}`, value);
     return;
   }
-  return invokeBackend<void>("set_setting", { key, value });
+  await invokeBackend<void>("set_setting", { key, value });
+  announceSettingWrite(key);
 }

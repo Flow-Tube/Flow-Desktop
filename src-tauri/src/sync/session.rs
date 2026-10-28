@@ -879,7 +879,7 @@ async fn client_send_session(
 
     // Send the freshest data: flush resident brains before exporting.
     flush_brains(app).await;
-    let selection = producible_collections();
+    let selection = Collection::ALL.to_vec();
     let mut outgoing = export::export_collections(&pool, &device_id, &selection).await?;
     enrich_outgoing_albums(app, &mut outgoing).await;
 
@@ -1138,12 +1138,4 @@ async fn finish_send(
         }
     }
     Ok(())
-}
-
-/// Every collection this desktop can produce (all except subscriptions, which has no table).
-fn producible_collections() -> Vec<Collection> {
-    Collection::ALL
-        .into_iter()
-        .filter(|c| !matches!(c, Collection::Subscriptions))
-        .collect()
 }

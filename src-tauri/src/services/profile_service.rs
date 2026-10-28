@@ -68,6 +68,24 @@ pub struct NewProfile {
     pub copy: CopyParts,
 }
 
+/// The `manifest` of a master backup (Android's `MasterManifest`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MasterManifest {
+    pub default_id: String,
+    pub profiles: Vec<Profile>,
+    pub included: Vec<String>,
+}
+
+/// Where one profile of a master backup goes on this computer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreTarget {
+    pub backup_id: String,
+    pub local_id: String,
+    pub running: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfilesView {
@@ -280,6 +298,76 @@ impl ProfileService {
 
     pub fn is_switching(&self) -> bool {
         self.switching.lock().expect("switch lock").is_some()
+    }
+
+    /// Adds the backup's profiles to this computer, as Android does: the backup's Default is this
+    /// Default, other profiles keep their ids, an existing profile keeps its name and takes the
+    /// backup's look only with a photo, and a restore that would pass the limit changes nothing.
+    /// The active profile never changes. Returns where each profile's data goes.
+    pub async fn restore_master(
+        &self,
+        manifest: MasterManifest,
+        avatars: std::collections::HashMap<String, String>,
+    ) -> AppResult<Vec<RestoreTarget>> {
+        use base64::Engine;
+        let _edit = self.edits.lock().await;
+        let mut state = self.load()?;
+        let local_default = state.default_id().to_string();
+        let running = self.running_id(&state);
+        let included: Vec<Profile> = manifest
+            .profiles
+            .into_iter()
+            .filter(|profile| {
+                registry::is_safe_id(&profile.id) && manifest.included.contains(&profile.id)
+            })
+            .collect();
+        let missing = included
+            .iter()
+            .filter(|profile| profile.id != manifest.default_id)
+            .filter(|profile| state.profiles.iter().all(|local| local.id != profile.id))
+            .count();
+        if state.profiles.len() + missing > registry::MAX_PROFILES {
+            return Err(AppError::ProfileLimit(registry::MAX_PROFILES));
+        }
+
+        let mut targets = Vec::new();
+        for mut profile in included {
+            let local_id = if profile.id == manifest.default_id {
+                local_default.clone()
+            } else {
+                profile.id.clone()
+            };
+            let photo = avatars
+                .get(&profile.id)
+                .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok())
+                .and_then(|bytes| photos::encode(&bytes).ok());
+            if local_id != local_default {
+                if let Some(webp) = &photo {
+                    photos::save(&self.app_data_dir, &local_id, webp)?;
+                    profile.avatar.photo_version = registry::now_ms();
+                } else if profile.avatar.kind == "photo" {
+                    profile.avatar = ProfileAvatar {
+                        emoji: profile.avatar.emoji.clone(),
+                        ..ProfileAvatar::default()
+                    };
+                }
+                match state.profiles.iter_mut().find(|local| local.id == local_id) {
+                    Some(local) if photo.is_some() => {
+                        local.color_key = profile.color_key.clone();
+                        local.avatar = profile.avatar.clone();
+                    }
+                    Some(_) => {}
+                    None => state.profiles.push(profile.clone()),
+                }
+            }
+            targets.push(RestoreTarget {
+                backup_id: profile.id,
+                running: local_id == running,
+                local_id,
+            });
+        }
+        self.save(&state)?;
+        Ok(targets)
     }
 
     /// The running profile's id (Default's id when the registry couldn't be read at start).
@@ -712,6 +800,73 @@ mod tests {
             Some("flow://watch?v=b")
         );
         assert_eq!(service.take_held_link(), None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_master_restore_maps_default_keeps_ids_and_respects_the_limit() {
+        let (dir, service, pool) = setup().await;
+        let existing = service
+            .create(&pool, request("Study", CopyParts::default()))
+            .await
+            .unwrap();
+        let backup_profile = |id: &str, name: &str| {
+            let mut profile = Profile::new(id.into(), 1);
+            profile.name = name.into();
+            profile.color_key = "red".into();
+            profile
+        };
+        let manifest = MasterManifest {
+            default_id: "backup-default".into(),
+            profiles: vec![
+                backup_profile("backup-default", "Home"),
+                backup_profile(&existing.id, "Renamed in backup"),
+                backup_profile("gaming", "Gaming"),
+                backup_profile("not-included", "Skip"),
+            ],
+            included: vec![
+                "backup-default".into(),
+                existing.id.clone(),
+                "gaming".into(),
+            ],
+        };
+        let targets = service
+            .restore_master(manifest, Default::default())
+            .await
+            .unwrap();
+        let view = service.list().unwrap();
+        assert_eq!(targets[0].local_id, view.default_id);
+        assert!(targets[0].running);
+        assert_eq!(targets[1].local_id, existing.id);
+        assert_eq!(targets[2].local_id, "gaming");
+        assert_eq!(view.profiles.len(), 3);
+        let default = view
+            .profiles
+            .iter()
+            .find(|profile| profile.id == view.default_id)
+            .unwrap();
+        assert_eq!(default.name, "", "Default's look is never restored");
+        assert_eq!(
+            view.profiles
+                .iter()
+                .find(|p| p.id == existing.id)
+                .unwrap()
+                .name,
+            "Study"
+        );
+
+        let too_many = MasterManifest {
+            default_id: "d".into(),
+            profiles: (0..3)
+                .map(|index| backup_profile(&format!("extra{index}"), "X"))
+                .collect(),
+            included: (0..3).map(|index| format!("extra{index}")).collect(),
+        };
+        assert!(matches!(
+            service.restore_master(too_many, Default::default()).await,
+            Err(AppError::ProfileLimit(5))
+        ));
+        assert_eq!(service.list().unwrap().profiles.len(), 3, "nothing changed");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

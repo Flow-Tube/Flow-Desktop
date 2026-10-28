@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::errors::{AppError, ErrorResponse};
 use crate::music_brain::store::MusicBrainStore;
-use crate::services::profile_service::ProfileService;
+use crate::services::profile_service::{MasterManifest, ProfileService, RestoreTarget};
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::apply;
 use crate::sync::canonical::{
@@ -415,6 +415,52 @@ pub async fn export_profile_backup(
     .await;
     closed.close().await;
     part.map_err(sync_err)
+}
+
+/// Adds a master backup's profiles to the registry; see `ProfileService::restore_master`.
+#[tauri::command]
+pub async fn profiles_restore_master(
+    manifest: MasterManifest,
+    avatars: std::collections::HashMap<String, String>,
+    profiles: State<'_, ProfileService>,
+) -> Result<Vec<RestoreTarget>, ErrorResponse> {
+    profiles
+        .restore_master(manifest, avatars)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// Restores one profile's part of a master backup into that profile while it isn't running.
+/// Settings arrive already validated by the frontend; device settings only land in Default.
+#[tauri::command]
+pub async fn import_profile_backup(
+    id: String,
+    payload: Value,
+    settings: std::collections::HashMap<String, String>,
+    profiles: State<'_, ProfileService>,
+) -> Result<ImportSummary, ErrorResponse> {
+    if id == profiles.running_profile_id().map_err(ErrorResponse::from)? {
+        return Err(AppError::Validation(
+            "the running profile restores through import_backup_data".into(),
+        )
+        .into());
+    }
+    let (closed, is_default) = profiles
+        .open_closed(&id)
+        .await
+        .map_err(ErrorResponse::from)?;
+    let restored = async {
+        let summary = import_backup(&closed, &payload).await?;
+        for (key, value) in &settings {
+            if is_default || !crate::profiles::device_keys::is_device_key(key) {
+                set_setting_value(&closed, key, value).await?;
+            }
+        }
+        Ok::<_, SyncError>(summary)
+    }
+    .await;
+    closed.close().await;
+    restored.map_err(sync_err)
 }
 
 #[tauri::command]

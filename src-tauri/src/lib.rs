@@ -36,7 +36,10 @@ use tauri::Manager;
 
 use api::innertube::InnertubeClient;
 use commands::app_window::{AppWindowSession, AppWindowState, app_window_session, open_app_window};
-use commands::backup::{export_backup_data, export_profile_backup, import_backup_data};
+use commands::backup::{
+    export_backup_data, export_profile_backup, import_backup_data, import_profile_backup,
+    profiles_restore_master,
+};
 use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_watch_record,
     get_music_history, get_setting, get_watch_history, set_setting,
@@ -621,6 +624,8 @@ pub fn run() {
             save_download_lyrics,
             export_backup_data,
             export_profile_backup,
+            import_profile_backup,
+            profiles_restore_master,
             import_backup_data,
             get_download_formats,
             start_download,

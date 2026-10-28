@@ -136,6 +136,8 @@ TABS AND WINDOWS
 - On video and settings pages, a tab button with the count sits next to the menu button and opens the tabs.
 - Cmd+T (Ctrl+T on Windows and Linux) opens a tab, Cmd+W closes it, Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Cmd+1 to Cmd+9 jump to one.
 - Tabs come back the next time Flow starts. A video page reopens paused where you left it.
+- Flow can have more than one window. On Linux, the launcher's New window action (or running flow --new-window) opens one instead of only showing "Flow is ready".
+- On Windows and Linux, closing the main window while another Flow window is open hides it, so music and downloads keep going; Flow quits when its last window closes.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

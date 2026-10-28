@@ -280,7 +280,7 @@ impl ProfileService {
     }
 
     /// Removes an inactive, non-default profile and everything it owns, right away.
-    pub async fn delete(&self, id: &str) -> AppResult<()> {
+    pub async fn delete(&self, pool: &SqlitePool, id: &str) -> AppResult<()> {
         let _edit = self.edits.lock().await;
         let mut state = self.load()?;
         if state.profiles.iter().all(|profile| profile.id != id) {
@@ -309,6 +309,10 @@ impl ProfileService {
             tracing::warn!(profile = %id, %error, "could not remove a deleted profile's photo");
         }
         self.forget_keychain_item(id.to_string()).await;
+        let owned = crate::profiles::collection_owners::prefix_of(id);
+        if let Err(error) = crate::db::download_collections::delete_owned_by(pool, &owned).await {
+            tracing::warn!(profile = %id, %error, "could not forget a deleted profile's download collections");
+        }
         tracing::info!(profile = %id, "profile deleted");
         Ok(())
     }
@@ -594,7 +598,7 @@ mod tests {
                 "case {index}"
             );
             if index < 4 {
-                service.delete(&profile.id).await.unwrap();
+                service.delete(&pool, &profile.id).await.unwrap();
             }
         }
         std::fs::remove_dir_all(dir).unwrap();
@@ -628,7 +632,7 @@ mod tests {
             Err(AppError::ProfileSwitchRefused("switching"))
         ));
         assert!(matches!(
-            service.delete(&study.id).await,
+            service.delete(&pool, &study.id).await,
             Err(AppError::ProfileInUse(_))
         ));
         service.finish_switch(&study.id).await.unwrap();
@@ -725,19 +729,34 @@ mod tests {
             .unwrap();
         let view = service.list().unwrap();
         assert!(matches!(
-            service.delete(&view.default_id).await.unwrap_err(),
+            service.delete(&pool, &view.default_id).await.unwrap_err(),
             AppError::ProfileInUse(_)
         ));
         assert!(matches!(
-            service.delete(&view.active_id).await.unwrap_err(),
+            service.delete(&pool, &view.active_id).await.unwrap_err(),
             AppError::ProfileInUse(_)
         ));
         assert!(matches!(
-            service.delete("../x").await.unwrap_err(),
+            service.delete(&pool, "../x").await.unwrap_err(),
             AppError::ProfileNotFound(_)
         ));
 
-        service.delete(&a.id).await.unwrap();
+        for owner in [&a.id, &b.id] {
+            sqlx::query(
+                "INSERT INTO download_collections (collection_id, kind, title, folder_path, total_count) VALUES (?, 'playlist', 't', '/f', 1)",
+            )
+            .bind(format!("{owner}:playlist-1"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+        service.delete(&pool, &a.id).await.unwrap();
+        let left: Vec<String> =
+            sqlx::query_scalar("SELECT collection_id FROM download_collections")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(left, [format!("{}:playlist-1", b.id)]);
         assert!(!dir.join("profiles").join(&a.id).exists());
         assert!(
             dir.join("profiles")

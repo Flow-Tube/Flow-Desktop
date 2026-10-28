@@ -162,3 +162,30 @@ pub async fn delete_collections(pool: &SqlitePool, ids: &[i64]) -> AppResult<()>
     statement.execute(pool).await.map_err(AppError::from)?;
     Ok(())
 }
+
+/// Forgets a deleted profile's own collections. Their files stay, as ordinary downloads.
+pub async fn delete_owned_by(pool: &SqlitePool, owner_prefix: &str) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
+    let mut tx = pool.begin().await.map_err(AppError::from)?;
+    let ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM download_collections WHERE substr(collection_id, 1, ?) = ?",
+    )
+    .bind(i64::try_from(owner_prefix.len()).unwrap_or(i64::MAX))
+    .bind(owner_prefix)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(AppError::from)?;
+    for id in ids {
+        sqlx::query("UPDATE downloads SET collection_db_id = NULL WHERE collection_db_id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        sqlx::query("DELETE FROM download_collections WHERE id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+    }
+    tx.commit().await.map_err(AppError::from)
+}

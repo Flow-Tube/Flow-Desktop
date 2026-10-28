@@ -3,7 +3,7 @@ use std::sync::Arc;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, State};
 
-use crate::errors::{AppResult, ErrorResponse};
+use crate::errors::ErrorResponse;
 use crate::music_brain::store::MusicBrainStore;
 use crate::profiles::registry::{Profile, ProfileAvatar};
 use crate::services::profile_service::{NewProfile, ProfileService, ProfilesView};
@@ -63,10 +63,13 @@ pub async fn profiles_set_look(
 #[tauri::command]
 pub async fn profiles_delete(
     id: String,
+    pool: State<'_, SqlitePool>,
     service: State<'_, ProfileService>,
 ) -> Result<(), ErrorResponse> {
-    let result: AppResult<()> = service.delete(&id).await;
-    result.map_err(ErrorResponse::from)
+    service
+        .delete(&pool, &id)
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]

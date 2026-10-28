@@ -130,6 +130,7 @@ INTERFACE
 TABS AND WINDOWS
 - Going Back returns to where you were on the page, such as halfway down Home, instead of the top.
 - The mouse side buttons, Alt+Left and Alt+Right (and Cmd+[ and Cmd+] on a Mac) go back and forward. The Back and Forward buttons dim when there is nowhere to go.
+- Tabs are optional and off by default. Turn on Settings > Content & UI > Open pages in tabs to use them; turning it off again keeps only the tab you are on. The tab shortcuts, Open in new tab and middle-click tabs only work while it is on.
 - Each tab keeps its own video. Switching away from a tab that is playing keeps the video going in the mini player, and the mini player's expand button takes you back to that tab.
 - Opening a video in another tab pauses the first one where it was; going back to its tab picks it up from that spot.
 - Open tabs show in the side rail, under Music, once there are two or more. Each row shows the page's picture and name; middle-click closes a tab, and right-click offers New tab, Duplicate, Close other tabs and Close.

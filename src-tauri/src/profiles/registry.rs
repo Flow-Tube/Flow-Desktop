@@ -10,6 +10,13 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub const FILE_NAME: &str = "profiles_registry.json";
+/// Default included.
+pub const MAX_PROFILES: usize = 5;
+/// Counted in UTF-16 units, as Android's text field does.
+pub const NAME_MAX_UNITS: usize = 24;
+pub const COLOR_KEYS: [&str; 8] = [
+    "blue", "teal", "green", "amber", "orange", "red", "pink", "purple",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -164,6 +171,14 @@ pub fn save(dir: &Path, state: &RegistryState) -> std::io::Result<()> {
         file.sync_all()?;
     }
     fs::rename(&temp, &target)
+}
+
+/// Reads the registry without repairing it; startup already completed it.
+pub fn load(dir: &Path) -> std::io::Result<RegistryState> {
+    let raw = fs::read_to_string(dir.join(FILE_NAME))?;
+    decode(&raw)
+        .map(|state| state.completed(now_ms()))
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
 }
 
 pub enum Loaded {

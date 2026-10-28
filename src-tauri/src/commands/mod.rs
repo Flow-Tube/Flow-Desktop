@@ -13,6 +13,7 @@ pub mod music_brain;
 pub mod music_queue;
 pub mod notifications;
 pub mod pip;
+pub mod profiles;
 pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;

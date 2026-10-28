@@ -69,6 +69,26 @@ pub enum AppError {
     #[error("Keychain error: {0}")]
     Keychain(String),
 
+    /// A sixth profile was asked for; carries the limit.
+    #[error("You can have up to {0} profiles")]
+    ProfileLimit(usize),
+
+    /// A profile name that is blank, too long or already used; carries `blank`, `tooLong` or
+    /// `taken`.
+    #[error("{0}")]
+    ProfileName(&'static str),
+
+    #[error("Profile not found: {0}")]
+    ProfileNotFound(String),
+
+    /// Default and the profile in use can't be deleted.
+    #[error("Profile in use: {0}")]
+    ProfileInUse(String),
+
+    /// The new profile couldn't be filled from the current one; nothing was created.
+    #[error("Couldn't copy into the new profile: {0}")]
+    ProfileCopyFailed(String),
+
     #[error("Streaming error: {0}")]
     #[allow(dead_code)]
     Streaming(String),
@@ -172,6 +192,11 @@ impl From<AppError> for ErrorResponse {
             AppError::ScrobbleSignInRejected(_) => "scrobbleSignInRejected",
             AppError::ScrobbleKeyMissing(_) => "scrobbleKeyMissing",
             AppError::Keychain(_) => "keychain",
+            AppError::ProfileLimit(_) => "profileLimit",
+            AppError::ProfileName(_) => "profileName",
+            AppError::ProfileNotFound(_) => "profileNotFound",
+            AppError::ProfileInUse(_) => "profileInUse",
+            AppError::ProfileCopyFailed(_) => "profileCopyFailed",
             AppError::Streaming(_) => "streaming",
             AppError::MediaDecode(_) => "mediaDecode",
             AppError::StreamExpired(_) => "streamExpired",
@@ -237,6 +262,11 @@ mod tests {
                 "scrobbleKeyMissing",
             ),
             (AppError::Keychain("c".into()), "keychain"),
+            (AppError::ProfileLimit(5), "profileLimit"),
+            (AppError::ProfileName("taken"), "profileName"),
+            (AppError::ProfileNotFound("p".into()), "profileNotFound"),
+            (AppError::ProfileInUse("p".into()), "profileInUse"),
+            (AppError::ProfileCopyFailed("p".into()), "profileCopyFailed"),
             (AppError::Internal("i".into()), "internal"),
         ];
         for (error, expected_kind) in cases {

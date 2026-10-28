@@ -90,6 +90,9 @@ use commands::pip::{
     PipState, close_pip_window, focus_main_window, focus_pip_source_window, open_pip_window,
     pip_session, pip_window_ready, set_pip_always_on_top,
 };
+use commands::profiles::{
+    profiles_create, profiles_delete, profiles_list, profiles_rename, profiles_set_look,
+};
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
     bootstrap_from_subscriptions, clear_channel_memory, complete_onboarding, end_watch_session,
@@ -318,6 +321,14 @@ pub fn run() {
                 );
             }
             app.manage(active_profile.clone());
+            app.manage(services::profile_service::ProfileService::new(
+                app_data_dir.clone(),
+                active_profile.clone(),
+            ));
+            let retry_dir = app_data_dir.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                services::profile_service::retry_keychain_deletes(&retry_dir);
+            });
 
             // Report which Linux GPU/Wayland workaround tier this launch applied,
             // so it appears in bug reports. `prior_failed_boots > 0` means the
@@ -583,6 +594,11 @@ pub fn run() {
             clear_watch_history,
             get_setting,
             set_setting,
+            profiles_list,
+            profiles_create,
+            profiles_rename,
+            profiles_set_look,
+            profiles_delete,
             write_backup_file,
             write_lyrics_file,
             get_cached_lyrics,

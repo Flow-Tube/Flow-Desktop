@@ -52,6 +52,22 @@ export const profileStorage = {
   },
 };
 
+/** Copies some of the active profile's keys into another profile (used when creating one). */
+export function copyKeysToProfile(profileId: string, keys: readonly string[]): void {
+  for (const key of keys) {
+    const value = profileStorage.getItem(key);
+    if (value !== null) window.localStorage.setItem(profilePrefix(profileId) + key, value);
+  }
+}
+
+/** Drops a deleted profile's keys. Default's bare keys are never touched here. */
+export function removeProfileKeys(profileId: string): void {
+  const prefix = profilePrefix(profileId);
+  for (const key of Object.keys(window.localStorage)) {
+    if (key.startsWith(prefix)) window.localStorage.removeItem(key);
+  }
+}
+
 // Session storage dies with the process, so a profile switch (a restart) clears it anyway.
 export const sessionStore = {
   getItem(key: string): string | null {

@@ -2,6 +2,7 @@
 //! Exactly one profile is loaded per process; switching restarts the app.
 
 pub mod device_keys;
+pub mod local_state;
 pub mod registry;
 
 use std::path::{Path, PathBuf};

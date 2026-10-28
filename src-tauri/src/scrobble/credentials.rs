@@ -104,6 +104,11 @@ pub fn save(store: &dyn CredentialStore, credentials: &Credentials) -> Result<()
     store.write(CREDENTIALS_ENTRY, &value)
 }
 
+/// Removes the item, for a deleted profile.
+pub fn forget(store: &dyn CredentialStore) -> Result<(), CredentialError> {
+    store.remove(CREDENTIALS_ENTRY)
+}
+
 fn legacy_entries() -> impl Iterator<Item = &'static str> {
     Service::ALL
         .into_iter()

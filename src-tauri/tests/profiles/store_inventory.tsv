@@ -99,3 +99,5 @@ setting	feed_actions_state_v1	PROFILE	private	Dismissed videos, blocked channels
 setting	homeSubsRotationCursor	PROFILE	private	Home subscriptions rotation cursor
 file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
 dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder
+file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
+file	profile_avatars	DEVICE	-	Profile photos, <id>.webp

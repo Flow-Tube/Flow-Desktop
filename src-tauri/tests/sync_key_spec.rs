@@ -440,3 +440,107 @@ fn a_brain_held_back_says_why() {
     );
     assert!(withheld(&ours, &peer_caps(3, "en")).is_empty());
 }
+
+/// Runs a desktop sender holding `outgoing` against a receiver advertising `their_caps`; returns
+/// the sender's outcome and what the receiver staged.
+async fn send_to(
+    their_caps: CapabilitiesFrame,
+    outgoing: Vec<OutgoingCollection>,
+) -> (
+    flow_desktop_lib::sync::protocol::HostOutcome,
+    Vec<StagedCollection>,
+) {
+    let master = generate_master_secret();
+    let sid = generate_session_id();
+    let (listener, port) = bind_loopback().await;
+    let chosen: Vec<Collection> = outgoing.iter().map(|o| o.collection).collect();
+
+    let host_master = master.clone();
+    let host = tokio::spawn(async move {
+        let ch = transport::accept(&listener).await.unwrap();
+        run_sender(
+            ch,
+            SessionCipher::new(&host_master, sid, Role::Host),
+            hello("desktop"),
+            desktop_capabilities("en"),
+            outgoing,
+            chosen,
+            false,
+            || async {},
+        )
+        .await
+        .unwrap()
+    });
+
+    let ch = transport::connect("127.0.0.1", port).await.unwrap();
+    let received = run_receiver(
+        ch,
+        SessionCipher::new(&master, sid, Role::Client),
+        hello("phone"),
+        their_caps,
+        |_, _| async { true },
+        stage_only,
+    )
+    .await
+    .unwrap();
+    let staged = match received {
+        flow_desktop_lib::sync::protocol::ClientOutcome::Completed(payload) => payload.applied,
+        flow_desktop_lib::sync::protocol::ClientOutcome::Declined => Vec::new(),
+    };
+    (host.await.unwrap(), staged)
+}
+
+#[tokio::test]
+async fn a_spec_2_desktop_brain_reaches_a_spec_3_phone_in_simplified_keys() {
+    use flow_desktop_lib::sync::export::export_collections;
+    use flow_desktop_lib::sync::protocol::{HostOutcome, WithheldReason};
+
+    let pool = memory_pool().await;
+    put(
+        &pool,
+        "user_neuro_brain",
+        &json!({ "language_profile": "en", "key_language": "en", "key_spec": 2,
+                 "global_vector": { "topics": { "機器學習": 0.4, "guitar": 0.3 } },
+                 "idf_word_frequency": { "機器學習": 3, "guitar": 2 }, "idf_total_documents": 3 }),
+    )
+    .await;
+    let outgoing = export_collections(&pool, OUR, &[Collection::FlowNeuroBrain])
+        .await
+        .unwrap();
+
+    // A phone on key spec 3 gets the brain, keyed the way it keys titles.
+    let (outcome, staged) = send_to(peer_caps(3, "en"), outgoing.clone()).await;
+    let HostOutcome::Completed(sent) = outcome else {
+        panic!("the phone accepted");
+    };
+    assert!(sent.withheld.is_empty());
+    let brain = staged
+        .iter()
+        .find(|c| c.collection == Collection::FlowNeuroBrain)
+        .expect("the brain went to the phone");
+    let snapshots: Vec<FlowNeuroBrainSnapshot> = String::from_utf8(brain.ndjson.clone())
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let topics: Vec<&String> = snapshots
+        .iter()
+        .flat_map(|s| s.vectors.global_vector.topics.keys())
+        .collect();
+    assert!(topics.iter().any(|t| *t == "机器学习"), "{topics:?}");
+    assert!(!topics.iter().any(|t| *t == "機器學習"), "{topics:?}");
+    assert!(topics.iter().any(|t| *t == "guitar"), "{topics:?}");
+
+    // A phone still on key spec 2 gets none, and the desktop says why.
+    let (outcome, staged) = send_to(peer_caps(2, "en"), outgoing).await;
+    let HostOutcome::Completed(sent) = outcome else {
+        panic!("the phone accepted");
+    };
+    assert!(
+        staged
+            .iter()
+            .all(|c| c.collection != Collection::FlowNeuroBrain)
+    );
+    assert_eq!(sent.withheld.len(), 1);
+    assert_eq!(sent.withheld[0].reason, WithheldReason::PeerOlder);
+}

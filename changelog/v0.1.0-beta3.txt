@@ -141,6 +141,8 @@ TABS AND WINDOWS
 - Windows stay in step: a like, subscription, playlist change, block or setting changed in one shows up in the others.
 - Starting a video in one window pauses whatever plays in the others. Music plays only in the main window: a song or Music page opened in another window opens there.
 - The pop-out player returns its video to the window it came from, and Discord keeps showing what plays in one window when another pauses.
+- Video, Short, playlist and channel menus have Open in new tab and Open in new window. Middle-click, or Cmd-click (Ctrl-click on Windows and Linux), on a card or a side rail link opens it in a background tab.
+- The player's right-click menu and a tab's menu have Move to a new window, which carries the video over at the same second. Cmd+Shift+N (Ctrl+Shift+N) opens a new window.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

@@ -230,3 +230,59 @@ fn inventory_files_still_exist() {
         .collect();
     assert!(stale.is_empty(), "remove stale dir_site rows: {stale:?}");
 }
+
+/// Rows every profile shares are only touched by these modules, and every function in them
+/// starts by taking Default's pool from `db::device`.
+#[test]
+fn device_tables_go_through_the_device_pool() {
+    let owners = [
+        "src/db/downloads.rs",
+        "src/db/download_collections.rs",
+        "src/db/download_jobs.rs",
+        "src/sync/ledger.rs",
+    ];
+    let tables = [
+        "downloads",
+        "download_collections",
+        "download_jobs",
+        "sync_identity",
+    ];
+    let mut problems = Vec::new();
+    for (path, source) in rust_sources() {
+        let code = non_test(&source);
+        let mentions = |table: &str| {
+            ["FROM ", "INTO ", "UPDATE ", "JOIN "].iter().any(|verb| {
+                code.contains(&format!("{verb}{table} "))
+                    || code.contains(&format!("{verb}{table}\n"))
+            })
+        };
+        let touched: Vec<&str> = tables
+            .iter()
+            .copied()
+            .filter(|table| mentions(table))
+            .collect();
+        if touched.is_empty() {
+            continue;
+        }
+        if !owners.contains(&path.as_str()) {
+            problems.push(format!("{path} queries {touched:?}"));
+            continue;
+        }
+        for chunk in code.split("pub async fn ").skip(1) {
+            let body = chunk.split_once('{').map_or("", |(_, body)| body);
+            let name: String = chunk
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            let touches_device = tables
+                .iter()
+                .any(|table| body.split("\npub ").next().unwrap_or("").contains(table));
+            if touches_device && !body.trim_start().contains("crate::db::device::pool(pool)") {
+                problems.push(format!(
+                    "{path}::{name} must start with crate::db::device::pool(pool)"
+                ));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "{problems:#?}");
+}

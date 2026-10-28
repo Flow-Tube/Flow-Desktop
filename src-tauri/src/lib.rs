@@ -374,15 +374,11 @@ pub fn run() {
             });
 
             // Initialize SQLite database
-            let pool = tauri::async_runtime::block_on(async {
-                db::initialize_database(app_data_dir).await
-            })
-            .map_err(|error| {
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    error.to_string(),
-                ))
-            })?;
+            let pool = tauri::async_runtime::block_on(profiles::open_database(
+                &app_data_dir,
+                &active_profile,
+            ))
+            .map_err(|error| Box::new(std::io::Error::new(std::io::ErrorKind::Other, error)))?;
 
             for key in commands::db::BACKEND_SETTINGS {
                 let value = tauri::async_runtime::block_on(db::settings::get_setting(&pool, key))

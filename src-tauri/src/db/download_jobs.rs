@@ -19,6 +19,7 @@ pub async fn insert_job(
     request_json: &str,
     file_path: &str,
 ) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query(
         "INSERT OR REPLACE INTO download_jobs (id, request_json, file_path, status) VALUES (?, ?, ?, 'queued')",
     )
@@ -37,6 +38,7 @@ pub async fn set_status(
     status: &str,
     error: Option<&str>,
 ) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query(
         "UPDATE download_jobs SET status = ?, error = ?, updated_at = datetime('now') WHERE id = ?",
     )
@@ -50,6 +52,7 @@ pub async fn set_status(
 }
 
 pub async fn delete_job(pool: &SqlitePool, id: &str) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query("DELETE FROM download_jobs WHERE id = ?")
         .bind(id)
         .execute(pool)
@@ -59,6 +62,7 @@ pub async fn delete_job(pool: &SqlitePool, id: &str) -> AppResult<()> {
 }
 
 pub async fn job(pool: &SqlitePool, id: &str) -> AppResult<Option<DownloadJobRow>> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query_as::<_, DownloadJobRow>(
         "SELECT id, request_json, file_path, status, error FROM download_jobs WHERE id = ?",
     )
@@ -69,6 +73,7 @@ pub async fn job(pool: &SqlitePool, id: &str) -> AppResult<Option<DownloadJobRow
 }
 
 pub async fn list_jobs(pool: &SqlitePool) -> AppResult<Vec<DownloadJobRow>> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query_as::<_, DownloadJobRow>(
         "SELECT id, request_json, file_path, status, error FROM download_jobs ORDER BY created_at, id",
     )

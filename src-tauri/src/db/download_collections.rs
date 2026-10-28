@@ -37,6 +37,7 @@ pub async fn insert_collection(
     pool: &SqlitePool,
     record: &DownloadCollectionRecord,
 ) -> AppResult<i64> {
+    let pool = crate::db::device::pool(pool);
     let result = sqlx::query(
         "INSERT INTO download_collections (collection_id, kind, title, author, thumbnail_url, folder_path, total_count)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -61,6 +62,7 @@ pub async fn find_collection(
     collection_id: &str,
     kind: &str,
 ) -> AppResult<Option<DownloadCollectionRecord>> {
+    let pool = crate::db::device::pool(pool);
     let query = format!(
         "SELECT {SELECT_COLUMNS} FROM download_collections WHERE collection_id = ? AND kind = ? LIMIT 1"
     );
@@ -73,6 +75,7 @@ pub async fn find_collection(
 }
 
 pub async fn set_total_count(pool: &SqlitePool, id: i64, total_count: i64) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query("UPDATE download_collections SET total_count = ? WHERE id = ?")
         .bind(total_count)
         .bind(id)
@@ -84,6 +87,7 @@ pub async fn set_total_count(pool: &SqlitePool, id: i64, total_count: i64) -> Ap
 
 /// All collections with their live downloaded-item counts, newest first.
 pub async fn list_collections(pool: &SqlitePool) -> AppResult<Vec<DownloadCollectionRecord>> {
+    let pool = crate::db::device::pool(pool);
     let query = format!(
         "SELECT {SELECT_COLUMNS},
             (SELECT COUNT(*) FROM downloads d WHERE d.collection_db_id = c.id) AS downloaded_count
@@ -100,6 +104,7 @@ pub async fn collections_by_ids(
     pool: &SqlitePool,
     ids: &[i64],
 ) -> AppResult<Vec<DownloadCollectionRecord>> {
+    let pool = crate::db::device::pool(pool);
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -115,6 +120,7 @@ pub async fn collections_by_ids(
 
 /// The video ids already saved for a collection, used to skip re-downloading them.
 pub async fn collection_video_ids(pool: &SqlitePool, id: i64) -> AppResult<Vec<String>> {
+    let pool = crate::db::device::pool(pool);
     use sqlx::Row;
     let rows = sqlx::query(
         "SELECT DISTINCT video_id FROM downloads WHERE collection_db_id = ? AND video_id IS NOT NULL",
@@ -128,6 +134,7 @@ pub async fn collection_video_ids(pool: &SqlitePool, id: i64) -> AppResult<Vec<S
 
 /// Removes the `downloads` rows that belong to the given collections.
 pub async fn delete_collection_items(pool: &SqlitePool, ids: &[i64]) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     if ids.is_empty() {
         return Ok(());
     }
@@ -142,6 +149,7 @@ pub async fn delete_collection_items(pool: &SqlitePool, ids: &[i64]) -> AppResul
 }
 
 pub async fn delete_collections(pool: &SqlitePool, ids: &[i64]) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     if ids.is_empty() {
         return Ok(());
     }

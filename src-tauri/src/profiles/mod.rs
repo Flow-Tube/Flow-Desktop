@@ -37,6 +37,23 @@ impl ActiveProfile {
     }
 }
 
+/// Opens the active profile's database. Outside Default, Default's database is opened too, for
+/// the rows every profile shares (`db::device`).
+pub async fn open_database(
+    app_data_dir: &Path,
+    active: &ActiveProfile,
+) -> Result<sqlx::SqlitePool, String> {
+    if !active.is_default {
+        let device = crate::db::open_device_database(app_data_dir.to_path_buf())
+            .await
+            .map_err(|error| error.to_string())?;
+        crate::db::device::install(device);
+    }
+    crate::db::initialize_database(active.root(app_data_dir))
+        .await
+        .map_err(|error| error.to_string())
+}
+
 /// Tauri's `app_data_dir()` rule, available before the app is built.
 pub fn app_data_dir(identifier: &str) -> Option<PathBuf> {
     dirs::data_dir().map(|dir| dir.join(identifier))

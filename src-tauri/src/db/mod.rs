@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 pub mod cache;
+pub mod device;
 pub mod download_collections;
 pub mod download_jobs;
 pub mod downloads;
@@ -27,10 +28,32 @@ use sqlx::{
 
 use crate::errors::{AppError, AppResult};
 
-pub async fn initialize_database(app_data_dir: PathBuf) -> AppResult<SqlitePool> {
-    std::fs::create_dir_all(&app_data_dir).map_err(AppError::from)?;
+/// Opens the active profile's database in `dir` (Default's is the app data folder itself).
+pub async fn initialize_database(dir: PathBuf) -> AppResult<SqlitePool> {
+    let pool = open_migrated(dir, 10).await?;
 
-    let db_path = app_data_dir.join("flow-desktop.sqlite");
+    if let Err(error) = sqlx::query("PRAGMA optimize;").execute(&pool).await {
+        tracing::warn!(%error, "PRAGMA optimize after migrations failed");
+    }
+
+    // Bound the recommendation event log so it cannot grow without limit across sessions.
+    if let Err(error) = recommendations::prune_recommendation_events(&pool, 2000).await {
+        tracing::warn!(%error, "Failed to prune recommendation events");
+    }
+
+    Ok(pool)
+}
+
+/// Opens Default's database for the rows every profile shares (see [`device`]), without
+/// touching Default's own data.
+pub async fn open_device_database(app_data_dir: PathBuf) -> AppResult<SqlitePool> {
+    open_migrated(app_data_dir, 2).await
+}
+
+async fn open_migrated(dir: PathBuf, max_connections: u32) -> AppResult<SqlitePool> {
+    std::fs::create_dir_all(&dir).map_err(AppError::from)?;
+
+    let db_path = dir.join("flow-desktop.sqlite");
     let database_url = format!("sqlite://{}", db_path.to_string_lossy());
 
     // Ensure SQLite database file is created if it does not exist
@@ -53,7 +76,7 @@ pub async fn initialize_database(app_data_dir: PathBuf) -> AppResult<SqlitePool>
 
     // 2. Build the optimized Connection Pool
     let pool = SqlitePoolOptions::new()
-        .max_connections(10)
+        .max_connections(max_connections)
         .min_connections(1)
         .idle_timeout(Duration::from_secs(90))
         .connect_with(connection_options)
@@ -77,15 +100,6 @@ pub async fn initialize_database(app_data_dir: PathBuf) -> AppResult<SqlitePool>
         .run(&pool)
         .await
         .map_err(|error| AppError::Internal(format!("DB migration failed: {error}")))?;
-
-    if let Err(error) = sqlx::query("PRAGMA optimize;").execute(&pool).await {
-        tracing::warn!(%error, "PRAGMA optimize after migrations failed");
-    }
-
-    // Bound the recommendation event log so it cannot grow without limit across sessions.
-    if let Err(error) = recommendations::prune_recommendation_events(&pool, 2000).await {
-        tracing::warn!(%error, "Failed to prune recommendation events");
-    }
 
     Ok(pool)
 }

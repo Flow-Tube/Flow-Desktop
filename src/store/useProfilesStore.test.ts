@@ -5,6 +5,7 @@ vi.mock("../lib/api/profiles", () => ({
   createProfile: vi.fn(),
   renameProfile: vi.fn(),
   setProfileLook: vi.fn(),
+  setProfilePhoto: vi.fn(),
   deleteProfile: vi.fn(),
 }));
 
@@ -13,7 +14,7 @@ import { copyParts, useProfilesStore } from "./useProfilesStore";
 
 const avatar = { kind: "initial", emoji: "", photoVersion: 0 };
 const study = { id: "study", name: "Study", colorKey: "teal", avatar, createdAt: 1, splashTone: "" };
-const view = { profiles: [study], defaultId: "d", activeId: "d", maxProfiles: 5 };
+const view = { profiles: [study], photos: {}, defaultId: "d", activeId: "d", maxProfiles: 5 };
 
 beforeEach(() => {
   vi.mocked(api.listProfiles).mockResolvedValue(view);

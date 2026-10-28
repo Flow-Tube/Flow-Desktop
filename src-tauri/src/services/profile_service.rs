@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::errors::{AppError, AppResult};
 use crate::profiles::registry::{self, Profile, ProfileAvatar, RegistryState};
-use crate::profiles::{ActiveProfile, device_keys, local_state};
+use crate::profiles::{ActiveProfile, device_keys, local_state, photos};
 use crate::scrobble::credentials::{self, Keychain, ProfileScoped};
 
 /// Library rows a new profile can take: channels and groups (contract part SUBSCRIPTIONS).
@@ -72,6 +72,8 @@ pub struct NewProfile {
 #[serde(rename_all = "camelCase")]
 pub struct ProfilesView {
     pub profiles: Vec<Profile>,
+    /// `data:` URLs of the photo avatars, by profile id.
+    pub photos: std::collections::HashMap<String, String>,
     pub default_id: String,
     pub active_id: String,
     pub max_profiles: usize,
@@ -113,7 +115,17 @@ impl ProfileService {
 
     pub fn list(&self) -> AppResult<ProfilesView> {
         let state = self.load()?;
+        let photos = state
+            .profiles
+            .iter()
+            .filter(|profile| profile.avatar.kind == "photo")
+            .filter_map(|profile| {
+                photos::data_url(&self.app_data_dir, &profile.id)
+                    .map(|url| (profile.id.clone(), url))
+            })
+            .collect();
         Ok(ProfilesView {
+            photos,
             default_id: state.default_id().to_string(),
             // The process runs as one profile for its whole life, even if the registry already
             // names the next one during a switch.
@@ -205,8 +217,36 @@ impl ProfileService {
         if profile.avatar.kind == "photo" && avatar.kind == "photo" {
             avatar.photo_version = photo_version;
         }
+        let drops_photo = profile.avatar.kind == "photo" && avatar.kind != "photo";
         profile.color_key = color_key;
         profile.avatar = avatar;
+        let updated = profile.clone();
+        self.save(&state)?;
+        if drops_photo && let Err(error) = photos::remove(&self.app_data_dir, id) {
+            tracing::warn!(profile = %id, %error, "could not remove a profile photo");
+        }
+        Ok(updated)
+    }
+
+    /// Makes a picture the profile's avatar.
+    pub async fn set_photo(&self, id: &str, source: PathBuf) -> AppResult<Profile> {
+        let size = tokio::fs::metadata(&source).await?.len();
+        if size > photos::MAX_INPUT_BYTES {
+            return Err(AppError::ProfilePhotoInvalid("tooLarge".into()));
+        }
+        let bytes = tokio::fs::read(&source).await?;
+        let webp = tokio::task::spawn_blocking(move || photos::encode(&bytes))
+            .await
+            .map_err(|error| AppError::Internal(error.to_string()))??;
+        let _edit = self.edits.lock().await;
+        let mut state = self.load()?;
+        let profile = find_mut(&mut state, id)?;
+        photos::save(&self.app_data_dir, id, &webp)?;
+        profile.avatar = ProfileAvatar {
+            kind: "photo".into(),
+            emoji: profile.avatar.emoji.clone(),
+            photo_version: registry::now_ms(),
+        };
         let updated = profile.clone();
         self.save(&state)?;
         Ok(updated)
@@ -301,11 +341,7 @@ impl ProfileService {
         if let Err(error) = remove_dir_if_present(&dir) {
             tracing::warn!(profile = %id, %error, "could not remove a deleted profile's folder");
         }
-        let photo = self
-            .app_data_dir
-            .join("profile_avatars")
-            .join(format!("{id}.webp"));
-        if let Err(error) = remove_file_if_present(&photo) {
+        if let Err(error) = photos::remove(&self.app_data_dir, id) {
             tracing::warn!(profile = %id, %error, "could not remove a deleted profile's photo");
         }
         self.forget_keychain_item(id.to_string()).await;
@@ -448,13 +484,6 @@ async fn copy_settings(source: &SqlitePool, target: &SqlitePool, keys: &[String]
 
 fn remove_dir_if_present(dir: &Path) -> std::io::Result<()> {
     match std::fs::remove_dir_all(dir) {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
-        _ => Ok(()),
-    }
-}
-
-fn remove_file_if_present(path: &Path) -> std::io::Result<()> {
-    match std::fs::remove_file(path) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
         _ => Ok(()),
     }

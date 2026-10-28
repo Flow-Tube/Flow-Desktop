@@ -122,3 +122,16 @@ pub fn profiles_hold_link(url: String, service: State<'_, ProfileService>) -> bo
 pub fn profiles_take_held_link(service: State<'_, ProfileService>) -> Option<String> {
     service.take_held_link()
 }
+
+/// Makes the picture at `path` (chosen in the system file dialog) the profile's avatar.
+#[tauri::command]
+pub async fn profiles_set_photo(
+    id: String,
+    path: String,
+    service: State<'_, ProfileService>,
+) -> Result<Profile, ErrorResponse> {
+    service
+        .set_photo(&id, path.into())
+        .await
+        .map_err(ErrorResponse::from)
+}

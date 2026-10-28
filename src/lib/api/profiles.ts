@@ -21,6 +21,8 @@ export interface Profile {
 
 export interface ProfilesView {
   profiles: Profile[];
+  /** `data:` URLs of photo avatars, by profile id. */
+  photos: Record<string, string>;
   defaultId: string;
   activeId: string;
   maxProfiles: number;
@@ -89,4 +91,9 @@ export function holdLinkForNextProfile(url: string): Promise<boolean> {
 /** The link the previous process held during its switch, once. */
 export function takeHeldLink(): Promise<string | null> {
   return invokeBackend<string | null>("profiles_take_held_link");
+}
+
+/** Makes the picture at `path` the profile's avatar (256 px square). */
+export function setProfilePhoto(id: string, path: string): Promise<Profile> {
+  return invokeBackend<Profile>("profiles_set_photo", { id, path });
 }

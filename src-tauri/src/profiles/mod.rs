@@ -4,6 +4,7 @@
 pub mod collection_owners;
 pub mod device_keys;
 pub mod local_state;
+pub mod photos;
 pub mod registry;
 
 use std::path::{Path, PathBuf};

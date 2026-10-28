@@ -5,6 +5,7 @@ import {
   listProfiles,
   renameProfile,
   setProfileLook,
+  setProfilePhoto,
   type CopyParts,
   type NewProfile,
   type Profile,
@@ -52,6 +53,7 @@ interface ProfilesState {
   create: (draft: Omit<NewProfile, "copy">, choice: CopyChoice) => Promise<Profile>;
   rename: (id: string, name: string) => Promise<void>;
   setLook: (id: string, colorKey: string, avatar: ProfileAvatar) => Promise<void>;
+  setPhoto: (id: string, path: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   /** The profile a switch is heading to, while this window waits for the restart. */
   switchingTo: Profile | null;
@@ -100,6 +102,11 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
 
   setLook: async (id, colorKey, avatar) => {
     set({ view: replaceProfile(get().view, await setProfileLook(id, colorKey, avatar)) });
+  },
+
+  setPhoto: async (id, path) => {
+    await setProfilePhoto(id, path);
+    await get().load();
   },
 
   remove: async (id) => {

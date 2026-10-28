@@ -85,6 +85,10 @@ pub enum AppError {
     #[error("Profile in use: {0}")]
     ProfileInUse(String),
 
+    /// A picture that can't become a profile photo (unreadable, or larger than 15 MB).
+    #[error("{0}")]
+    ProfilePhotoInvalid(String),
+
     /// A switch can't start now; carries `syncRunning`, `switching` or `alreadyActive`.
     #[error("{0}")]
     ProfileSwitchRefused(&'static str),
@@ -202,6 +206,7 @@ impl From<AppError> for ErrorResponse {
             AppError::ProfileInUse(_) => "profileInUse",
             AppError::ProfileCopyFailed(_) => "profileCopyFailed",
             AppError::ProfileSwitchRefused(_) => "profileSwitchRefused",
+            AppError::ProfilePhotoInvalid(_) => "profilePhotoInvalid",
             AppError::Streaming(_) => "streaming",
             AppError::MediaDecode(_) => "mediaDecode",
             AppError::StreamExpired(_) => "streamExpired",

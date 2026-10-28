@@ -10,13 +10,16 @@ import {
   Info,
   Palette,
   Music2,
+  UsersRound,
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { getString } from '../../lib/i18n/index';
 import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
+import { PROFILES_UI_ENABLED } from '../../lib/profiles/flag';
 
 export type SettingsCategory =
   | 'appearance'
+  | 'profiles'
   | 'player'
   | 'music'
   | 'content'
@@ -35,6 +38,9 @@ interface CategoryDef {
 
 const categories: CategoryDef[] = [
   { id: 'appearance', labelKey: 'settings_appearance', icon: <Palette size={18} /> },
+  ...(PROFILES_UI_ENABLED
+    ? [{ id: 'profiles' as const, labelKey: 'settings_profiles' as const, icon: <UsersRound size={18} /> }]
+    : []),
   { id: 'player', labelKey: 'settings_player', icon: <PlayCircle size={18} /> },
   { id: 'music', labelKey: 'settings_music', icon: <Music2 size={18} /> },
   { id: 'content', labelKey: 'settings_content_ui', icon: <LayoutGrid size={18} /> },

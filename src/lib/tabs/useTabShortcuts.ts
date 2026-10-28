@@ -3,6 +3,7 @@ import { useTabsStore } from "../../store/useTabsStore";
 import { IS_MACOS_RUNTIME } from "../platform";
 import { closeTabWithPlayback, switchToTab } from "./tabPlayback";
 import { tabShortcutForKey } from "./tabShortcuts";
+import { openInNewWindow } from "../openTarget";
 
 export function useTabShortcuts(): void {
   useEffect(() => {
@@ -15,6 +16,8 @@ export function useTabShortcuts(): void {
 
       if (shortcut.kind === "new") {
         openTab("/", { activate: true });
+      } else if (shortcut.kind === "new-window") {
+        void openInNewWindow("/");
       } else if (shortcut.kind === "close") {
         // The last tab stays; the key still must not reach the window's own close.
         closeTabWithPlayback(activeId);

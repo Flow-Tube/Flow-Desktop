@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  AppWindow,
   Bug,
   FastForward,
   Info,
@@ -21,6 +22,8 @@ import { LONG_PRESS_MS, shouldStartWindowDrag } from "../../../lib/pointerGestur
 import { startWindowDrag } from "../../../lib/api/pip";
 import { StatsForNerds } from "../StatsForNerds";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
+import { isPopOutWindow } from "../../../lib/api/pip";
+import { moveVideoToNewWindow } from "../../../lib/openTarget";
 import {
   PLAYER_VIDEO_LAYER_ATTR,
   classifyPlayerPress,
@@ -356,6 +359,10 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         action: onToggleLoop,
       },
       { label: getString("player_menu_miniplayer"), icon: <PictureInPicture2 size={18} />, action: togglePictureInPicture },
+      // The pop-out player is already a window of its own.
+      ...(isPopOutWindow()
+        ? []
+        : [{ label: getString("move_to_new_window"), icon: <AppWindow size={18} />, action: moveVideoToNewWindow }]),
     ],
     [
       { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },

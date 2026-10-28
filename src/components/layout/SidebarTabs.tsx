@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Plus, Search, X, XCircle } from 'lucide-react';
+import { AppWindow, Copy, Plus, Search, X, XCircle } from 'lucide-react';
 import { useTabsStore, type ParkedVideo, type TabTitle } from '../../store/useTabsStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { currentEntry, type TabHistory } from '../../lib/tabs/tabHistory';
 import { tabIconFor, type TabIcon } from '../../lib/tabs/tabPage';
 import { closeOtherTabs, closeTabWithPlayback, switchToTab } from '../../lib/tabs/tabPlayback';
+import { moveTabToNewWindow } from '../../lib/openTarget';
 import { sectionTitleKey } from '../../lib/useResolvedWindowTitle';
 import { watchVideoIdFromPath } from '../../lib/watchRouteSync';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
@@ -152,6 +153,7 @@ export function SidebarTabs({ collapsed, onNavigate }: { collapsed: boolean; onN
         >
           <TabMenuRow icon={<Plus size={16} />} label={getString('tabs_new')} onSelect={() => { closeMenu(); newTab(); }} />
           <TabMenuRow icon={<Copy size={16} />} label={getString('tabs_duplicate')} onSelect={() => { closeMenu(); duplicateTab(menu.tabId); }} />
+          <TabMenuRow icon={<AppWindow size={16} />} label={getString('move_to_new_window')} onSelect={() => { closeMenu(); void moveTabToNewWindow(menu.tabId); }} />
           <TabMenuRow icon={<XCircle size={16} />} label={getString('tabs_close_others')} onSelect={() => { closeMenu(); closeOtherTabs(menu.tabId); }} />
           <TabMenuRow icon={<X size={16} />} label={getString('tabs_close')} onSelect={() => { closeMenu(); closeTabWithPlayback(menu.tabId); }} />
         </AnchoredPortalMenu>

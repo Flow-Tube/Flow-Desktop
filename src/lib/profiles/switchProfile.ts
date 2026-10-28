@@ -85,3 +85,15 @@ export async function answerPrepareSwitch(payload: PrepareSwitchPayload): Promis
   await runBeforeProfileSwitch();
   await emit(SWITCH_READY_EVENT, { token: payload.token, label: CURRENT_WINDOW_LABEL } satisfies SwitchReadyPayload);
 }
+
+/** The profile the previous process was switching to, read once by this process's loading
+ *  screen, then cleared. */
+export function takeSwitchingTo(): Profile | null {
+  try {
+    const raw = profileStorage.getItem(SWITCHING_TO_KEY, "device");
+    profileStorage.removeItem(SWITCHING_TO_KEY, "device");
+    return raw ? (JSON.parse(raw) as Profile) : null;
+  } catch {
+    return null;
+  }
+}

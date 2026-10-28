@@ -22,7 +22,7 @@ vi.mock("../api/profiles", () => ({
 vi.mock("./beforeSwitch", () => ({ runBeforeProfileSwitch: vi.fn(async () => calls.push("save")) }));
 
 import * as profilesApi from "../api/profiles";
-import { switchProfile, SWITCHING_TO_KEY } from "./switchProfile";
+import { switchProfile, SWITCHING_TO_KEY, takeSwitchingTo } from "./switchProfile";
 
 const study = {
   id: "study",
@@ -57,5 +57,11 @@ describe("switchProfile", () => {
     await expect(switchProfile(study)).rejects.toThrow("disk full");
     expect(calls[calls.length - 1]).toBe("cancel");
     expect(localStorage.getItem(SWITCHING_TO_KEY)).toBeNull();
+  });
+
+  it("hands the target to the next process's loading screen once", () => {
+    localStorage.setItem(SWITCHING_TO_KEY, JSON.stringify(study));
+    expect(takeSwitchingTo()?.id).toBe("study");
+    expect(takeSwitchingTo()).toBeNull();
   });
 });

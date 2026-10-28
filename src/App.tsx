@@ -19,6 +19,9 @@ import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
 import type { VideoSummary } from "./types/video";
 import { useProfileSwitchListener } from "./lib/profiles/useProfileSwitchListener";
 import { markSwitching } from "./store/useProfilesStore";
+import { ProfileSwitchOverlay } from "./components/profiles/ProfileSwitchOverlay";
+import { ProfileSwitchPanel } from "./components/profiles/ProfileSwitchPanel";
+import { takeSwitchingTo } from "./lib/profiles/switchProfile";
 
 import { PageWrapper } from "./components/layout/PageWrapper";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -116,6 +119,8 @@ function App() {
 
   // Onboarding belongs to the main window; an extra window only exists once it is done.
   const [loadingOnboarding, setLoadingOnboarding] = useState(IS_MAIN_WINDOW);
+  // A switch restarts the app; keep its "Switching to …" up until this profile is ready.
+  const [arrivedFrom] = useState(() => (IS_MAIN_WINDOW ? takeSwitchingTo() : null));
 
   useEffect(() => {
     void useFeedActionsStore.getState().load();
@@ -170,7 +175,11 @@ function App() {
         <ThemeController />
         <TitleBar />
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          {arrivedFrom ? (
+            <ProfileSwitchPanel profile={arrivedFrom} />
+          ) : (
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          )}
         </div>
       </div>
     );
@@ -312,6 +321,7 @@ function App() {
       </LayoutGroup>
       <DonationPromptHost enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
+      <ProfileSwitchOverlay />
       <ToastHost />
     </div>
   );

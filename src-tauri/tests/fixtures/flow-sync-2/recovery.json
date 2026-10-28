@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "secret": "25910dfe6b3e2309deed56e7afaac1e986d041be7717e4244415b127021224f9",
+      "words": "cereal mask legend stool timber lumber knife print tray later race spread home camp what title tomorrow captain air girl ice animal negative casino",
+      "name": "recovery",
+      "sigSeed": "f5e298a6ddbb045f4d7ee7f09f71801cf0f33bf2839f6acc3b2e83018687172e",
+      "kemSecret": "ef8f02c9f46d833129b028c6b707a6f864d37cde8b1035671e1a7e8bc92733b6",
+      "sigPublic": "6f2e18c3b3813dedd4a4ad78d28fffbfbef2abc0a00ac885b14b18402ef94974",
+      "kemPublic": "3751bfd57e1d07231789b24f6be2115eef9e861bc91490bd99a1ee07fdde6373",
+      "did": "ab6095990ebaaf36d4c49e86fc3a65c3"
+    }
+  ],
+  "invalidWords": [
+    "mask cereal legend stool timber lumber knife print tray later race spread home camp what title tomorrow captain air girl ice animal negative casino",
+    "cereal mask legend stool timber lumber knife print tray later race spread home camp what title tomorrow captain air girl ice animal negative"
+  ]
+}

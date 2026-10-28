@@ -109,6 +109,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -337,6 +343,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
+name = "bip39"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4559bb9225f8401dcea601cf8dc9ed81ea0dadd9cf7755fdefdd93ef7961e19e"
+dependencies = [
+ "bitcoin_hashes",
+ "serde",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -350,6 +367,15 @@ name = "bit-vec"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
+
+[[package]]
+name = "bitcoin_hashes"
+version = "0.14.101"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bca4c7abb40c8817d77403c880988cfd484f23ab2365726afb2f798363e2c4a2"
+dependencies = [
+ "hex-conservative",
+]
 
 [[package]]
 name = "bitflags"
@@ -933,6 +959,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "curve25519-dalek"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5eed333089e2e1c1ac8c6c0398e5e2497b4c9926ca6d0365ed1e099afa5bc23"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.1",
+ "curve25519-dalek-derive",
+ "digest 0.11.3",
+ "fiat-crypto",
+ "rustc_version",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1161,7 +1214,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1322,6 +1375,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29fcf32e6c73d1079f83ab4d782de2d81620346a5f38c6237a86a22f8368980a"
+dependencies = [
+ "signature",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ebaa1a2bf1290ab3bfe5a7b771d050ebffab2711c19a81691c683a5144a25de"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519",
+ "sha2 0.11.1",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1415,7 +1490,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1464,6 +1539,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fiat-crypto"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64cd1e32ddd350061ae6edb1b082d7c54915b5c672c389143b9a63403a109f24"
+
+[[package]]
 name = "field-offset"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1507,13 +1588,17 @@ dependencies = [
  "aes-gcm",
  "async-trait",
  "base64 0.23.1",
+ "bip39",
  "chrono",
  "dirs",
  "discord-rich-presence",
+ "ed25519-dalek",
  "flate2",
  "futures-util",
+ "hex",
  "hkdf",
  "hmac",
+ "hpke",
  "icu_properties",
  "icu_segmenter",
  "image",
@@ -1531,6 +1616,7 @@ dependencies = [
  "sha2 0.11.1",
  "snowstem",
  "sqlx",
+ "subtle",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",
@@ -1556,6 +1642,7 @@ dependencies = [
  "windows",
  "windows-core",
  "windows-registry 0.100.0",
+ "x25519-dalek",
  "zeroize",
 ]
 
@@ -2144,6 +2231,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hex-conservative"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db3fef046dca3ca91ee1408a8c1b80ab777e80a4d308d1bf4e7adb3fcb047e08"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
 name = "hkdf"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2159,6 +2255,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
 dependencies = [
  "digest 0.11.3",
+]
+
+[[package]]
+name = "hpke"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f512e325a1a71bf3273fb9b7fc9e5d96dac136fb4a95d0e6637001b12ea3e09"
+dependencies = [
+ "aead",
+ "aes-gcm",
+ "curve25519-dalek",
+ "getrandom 0.4.3",
+ "hkdf",
+ "hybrid-array",
+ "rand_core 0.10.1",
+ "sha2 0.11.1",
+ "subtle",
+ "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]
@@ -3079,7 +3194,7 @@ dependencies = [
  "png",
  "serde",
  "thiserror 2.0.21",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3185,7 +3300,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3962,7 +4077,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4233,7 +4348,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4291,7 +4406,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4700,6 +4815,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "signature"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28d567dcbaf0049cb8ac2608a76cd95ff9e4412e1899d389ee400918ca7537f5"
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4755,7 +4876,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5677,10 +5798,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6112,7 +6233,7 @@ dependencies = [
  "png",
  "serde",
  "thiserror 2.0.21",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6163,7 +6284,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6570,7 +6691,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6591,7 +6712,7 @@ dependencies = [
  "objc2-foundation",
  "objc2-quartz-core",
  "raw-window-handle",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
  "windows-version",
 ]
 
@@ -7020,7 +7141,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
 dependencies = [
  "cfg-if",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7098,6 +7219,17 @@ dependencies = [
  "libc",
  "once_cell",
  "pkg-config",
+]
+
+[[package]]
+name = "x25519-dalek"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7e8131a03190127fb2263afc72b322ecadae46b6ff8c6f399ff5d02f5559af6"
+dependencies = [
+ "curve25519-dalek",
+ "rand_core 0.10.1",
+ "zeroize",
 ]
 
 [[package]]

@@ -25,6 +25,7 @@ mod security;
 mod services;
 mod streaming;
 pub mod sync;
+pub mod sync2;
 mod update_support;
 #[cfg(any(target_os = "linux", test))]
 mod web_process;

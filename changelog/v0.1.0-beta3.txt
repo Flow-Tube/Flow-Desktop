@@ -138,6 +138,9 @@ TABS AND WINDOWS
 - Tabs come back the next time Flow starts. A video page reopens paused where you left it.
 - Flow can have more than one window. On Linux, the launcher's New window action (or running flow --new-window) opens one instead of only showing "Flow is ready".
 - On Windows and Linux, closing the main window while another Flow window is open hides it, so music and downloads keep going; Flow quits when its last window closes.
+- Windows stay in step: a like, subscription, playlist change, block or setting changed in one shows up in the others.
+- Starting a video in one window pauses whatever plays in the others. Music plays only in the main window: a song or Music page opened in another window opens there.
+- The pop-out player returns its video to the window it came from, and Discord keeps showing what plays in one window when another pauses.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

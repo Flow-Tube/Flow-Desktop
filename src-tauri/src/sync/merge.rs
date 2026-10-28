@@ -175,6 +175,13 @@ fn merge_one_watch(a: &WatchHistoryRecord, b: &WatchHistoryRecord) -> WatchHisto
         progress: a.progress.max(b.progress),
         is_music: a.is_music || b.is_music,
         is_short: a.is_short || b.is_short,
+        // As Android does: the newer record's picture, else whichever side has one.
+        thumbnail_url: hi
+            .thumbnail_url
+            .clone()
+            .filter(|url| !url.is_empty())
+            .or_else(|| a.thumbnail_url.clone().filter(|url| !url.is_empty()))
+            .or_else(|| b.thumbnail_url.clone().filter(|url| !url.is_empty())),
         deleted: hi.deleted,
         hlc: Hlc::max(&a.hlc, &b.hlc),
     }

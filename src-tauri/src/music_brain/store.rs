@@ -147,7 +147,6 @@ impl MusicBrainStore {
             track_id: track_id.to_string(),
             artist_key: artist_key.to_string(),
             genre: genre.map(str::to_string),
-            percent_played: next,
             is_explicit_like,
             title: title.map(str::to_string),
             artist_display: artist_display.map(str::to_string),

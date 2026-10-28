@@ -56,6 +56,10 @@ export interface LiveChatProps {
   videoId: string;
   /** A finished stream: its chat is replayed in step with the player. */
   isReplay?: boolean;
+  /** Fills its container's height, as the fullscreen side panel, instead of a fixed card height. */
+  fill?: boolean;
+  /** Shows a close button in the header. */
+  onClose?: () => void;
 }
 
 export interface WatchErrorStateProps {

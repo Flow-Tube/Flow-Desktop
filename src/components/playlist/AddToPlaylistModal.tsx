@@ -5,9 +5,12 @@ import { Button } from "../ui/Button";
 import {
   addVideoToStoredPlaylist,
   createStoredPlaylist,
+  isProtectedPlaylistId,
   loadStoredPlaylists,
   PLAYLIST_LIBRARY_UPDATED_EVENT,
+  removeVideoFromWatchLater,
   storedPlaylistToCardSummary,
+  updateStoredPlaylistTracks,
   WATCH_LATER_PLAYLIST_ID,
   type StoredPlaylist,
 } from "../../lib/playlistLibrary";
@@ -15,6 +18,7 @@ import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlaylistModalStore } from "../../store/usePlaylistModalStore";
 import { useUiStore } from "../../store/useUiStore";
 import { noteVideoSaved } from "../../lib/videoSaved";
+import { showSaveFailedToast, showSaveToast, type SaveDestination } from "../../lib/saveToast";
 
 function PlaylistChoiceCard({
   fallbackThumbnailUrl,
@@ -103,37 +107,53 @@ export function AddToPlaylistModal() {
     closeAddToPlaylist();
   };
 
-  const handleAdd = async (playlistId: string) => {
-    try {
-      const updated = await addVideoToStoredPlaylist(playlistId, addTarget);
-      if (!updated) throw new Error("Playlist not found");
-      noteVideoSaved(addTarget);
+  const item = { title: addTarget.title, image: addTarget.thumbnailUrl, shape: "landscape" as const };
+  const video = addTarget;
 
-      showToast({
-        variant: "success",
-        message: getString("video_added_to_playlist"),
+  const destinationFor = (playlistId: string, name: string): SaveDestination => (
+    isProtectedPlaylistId(playlistId) ? { kind: "watchLater" } : { kind: "playlist", id: playlistId, name }
+  );
+
+  const undoAdd = (playlistId: string) => (
+    isProtectedPlaylistId(playlistId)
+      ? removeVideoFromWatchLater(video.id)
+      : updateStoredPlaylistTracks(playlistId, (tracks) => tracks.filter((track) => track.id !== video.id))
+  );
+
+  const handleAdd = async (playlistId: string) => {
+    const playlist = playlists.find((stored) => stored.id === playlistId);
+    const destination = destinationFor(playlistId, playlist?.name ?? "");
+    const alreadyThere = !!playlist?.tracks.some((track) => track.id === video.id);
+    try {
+      const updated = await addVideoToStoredPlaylist(playlistId, video);
+      if (!updated) throw new Error("Playlist not found");
+      noteVideoSaved(video);
+
+      showSaveToast({
+        destination,
+        item,
+        undo: alreadyThere ? undefined : () => undoAdd(playlistId),
       });
       close();
     } catch (error) {
       console.error("Failed to add video to playlist", error);
-      showToast({
-        variant: "error",
-        message: getString("video_add_to_playlist_failed"),
-      });
+      showSaveFailedToast({ destination, item, retry: () => handleAdd(playlistId) });
     }
   };
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!newName.trim()) return;
+    const name = newName.trim();
+    if (!name) return;
 
     try {
-      const playlist = await createStoredPlaylist(newName);
-      await addVideoToStoredPlaylist(playlist.id, addTarget);
-      noteVideoSaved(addTarget);
-      showToast({
-        variant: "success",
-        message: getString("video_added_to_playlist"),
+      const playlist = await createStoredPlaylist(name);
+      await addVideoToStoredPlaylist(playlist.id, video);
+      noteVideoSaved(video);
+      showSaveToast({
+        destination: destinationFor(playlist.id, playlist.name),
+        item,
+        undo: () => undoAdd(playlist.id),
       });
       close();
     } catch (error) {

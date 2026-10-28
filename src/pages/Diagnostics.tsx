@@ -155,7 +155,7 @@ export const Diagnostics: React.FC = () => {
       {logsDir && (
         <p className="text-xs text-chrome-neutral-500">
           {getString("diagnostics_folder_label")}{" "}
-          <code className="rounded bg-chrome-black/40 px-1.5 py-0.5 font-mono text-chrome-neutral-400">
+          <code className="select-text rounded bg-chrome-black/40 px-1.5 py-0.5 font-mono text-chrome-neutral-400">
             {logsDir}
           </code>
         </p>
@@ -173,7 +173,7 @@ export const Diagnostics: React.FC = () => {
           ) : error ? (
             <p className="text-sm text-chrome-red-400">{error}</p>
           ) : hasLogs ? (
-            <pre className="whitespace-pre font-mono text-xs leading-relaxed text-chrome-neutral-300">
+            <pre className="select-text whitespace-pre font-mono text-xs leading-relaxed text-chrome-neutral-300">
               {text}
             </pre>
           ) : (

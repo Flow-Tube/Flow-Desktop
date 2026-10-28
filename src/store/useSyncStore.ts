@@ -4,7 +4,6 @@ import {
   cancelSync,
   getSyncDeviceInfo,
   getSyncStatus,
-  onSyncRefresh,
   onSyncStatus,
   respondSyncConsent,
   scanSyncJoin,
@@ -17,47 +16,12 @@ import {
 import { getBackendErrorMessage, normalizeBackendError } from "../lib/api/errors";
 import { syncErrorMessage } from "../lib/syncErrors";
 import { isTauriEnv } from "../lib/api/env";
-import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "./useLikesStore";
-import { useAppSettingsStore } from "./useAppSettingsStore";
-import { useAlbumLibraryStore } from "./useAlbumLibraryStore";
-import { useSubscriptionStore } from "./useSubscriptionStore";
-import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "../lib/playlistLibrary";
 
 const IDLE_STATUS: SyncStatus = { phase: "idle" };
 
 function describeSyncError(error: unknown): string {
   const { kind, message } = normalizeBackendError(error);
   return syncErrorMessage(kind, message);
-}
-
-/// Reload the Zustand-cached frontend stores after a merge wrote the DB directly.
-async function applyRefresh(collections: string[]) {
-  try {
-    if (collections.includes("likes")) {
-      useLikesStore.setState({ loaded: false });
-      await useLikesStore.getState().load();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(LIKES_LIBRARY_UPDATED_EVENT));
-      }
-    }
-    if (collections.includes("settings")) {
-      await useAppSettingsStore.getState().loadSettings();
-    }
-    if (collections.includes("playlists")) {
-      await useAlbumLibraryStore.getState().load();
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
-      }
-    }
-    if (collections.includes("subscribed_channels")) {
-      await useSubscriptionStore.getState().loadSubscriptions();
-    }
-    if (collections.includes("subscriptions")) {
-      await useSubscriptionStore.getState().loadSubscriptionGroups();
-    }
-  } catch (error) {
-    console.warn("Failed to refresh local stores after sync", error);
-  }
 }
 
 interface SyncState {
@@ -101,9 +65,6 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         patch.error = syncErrorMessage(status.errorKind, status.message);
       }
       set(patch);
-    });
-    await onSyncRefresh((collections) => {
-      void applyRefresh(collections);
     });
 
     try {

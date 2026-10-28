@@ -4,7 +4,7 @@ import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { useUiStore } from "../store/useUiStore";
 import { classifyPlayerError, type PlayerErrorInfo } from "./playerError";
 import { copyPlayerReport } from "./playerDiagnostics";
-import { openExternal } from "./openExternal";
+import { openExternalOrOfferCopy } from "./openExternal";
 import { youtubeMusicWatchUrl } from "./youtubeUrl";
 import { getString } from "./i18n/index";
 
@@ -59,7 +59,7 @@ export function useMusicPlayerError(): MusicPlayerErrorActions {
   }, [errorInfo, videoId, currentTrack, watchUrl, showToast]);
 
   const onOpenInBrowser = useCallback(() => {
-    if (watchUrl) void openExternal(watchUrl);
+    if (watchUrl) void openExternalOrOfferCopy(watchUrl);
   }, [watchUrl]);
 
   return { errorInfo, onRetry, onCopyLogs, onOpenInBrowser };

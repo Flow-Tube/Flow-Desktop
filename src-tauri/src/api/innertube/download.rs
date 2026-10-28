@@ -27,7 +27,10 @@ pub struct DownloadableFormat {
     pub video_size_bytes: Option<u64>,
     pub audio_size_bytes: Option<u64>,
     pub estimated_size_bytes: Option<u64>,
+    /// Stream links stay in the backend; downloads resolve fresh ones when they run.
+    #[serde(skip)]
     pub video_url: String,
+    #[serde(skip)]
     pub audio_url: String,
 }
 
@@ -50,7 +53,94 @@ enum AudioCodec {
     Unknown,
 }
 
+/// One audio track a video can be downloaded with: the original, or a dub.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadAudioOption {
+    /// Stays the same across fresh stream links; passed back to pick this track.
+    pub key: String,
+    pub label: String,
+    pub language_code: Option<String>,
+    pub is_default: bool,
+    pub codec: String,
+    pub bitrate: Option<u64>,
+    pub size_bytes: Option<u64>,
+}
+
+/// A track's identity without its itag: `en.4-140` and `en.4-251` are one track.
+fn track_key(track: &AudioTrack) -> &str {
+    track
+        .id
+        .rsplit_once('-')
+        .map_or(track.id.as_str(), |(key, _)| key)
+}
+
+/// Every audio track on offer, each in its best MP4-friendly form.
+#[must_use]
+pub fn download_audio_options(stream_info: &StreamInfo) -> Vec<DownloadAudioOption> {
+    let mut options: Vec<DownloadAudioOption> = Vec::new();
+    for codec in [AudioCodec::Aac, AudioCodec::Opus] {
+        let mut tracks: Vec<&AudioTrack> = stream_info
+            .download_audio_tracks
+            .iter()
+            .filter(|track| {
+                !track.local_url.is_empty()
+                    && track
+                        .mime_type
+                        .as_deref()
+                        .is_some_and(|mime| audio_codec(mime) == codec)
+            })
+            .collect();
+        tracks.sort_by_key(|track| std::cmp::Reverse(track.bitrate.unwrap_or(0)));
+        for track in tracks {
+            let key = track_key(track);
+            if options.iter().any(|option| option.key == key) {
+                continue;
+            }
+            options.push(DownloadAudioOption {
+                key: key.to_string(),
+                label: track.label.clone(),
+                language_code: track.language_code.clone(),
+                is_default: track.is_default,
+                codec: audio_codec_label(codec).to_string(),
+                bitrate: track.bitrate,
+                size_bytes: track
+                    .content_length
+                    .or_else(|| estimate_size(track.bitrate, track.approx_duration_ms)),
+            });
+        }
+    }
+    options.sort_by_key(|option| std::cmp::Reverse(option.is_default));
+    options
+}
+
+#[must_use]
 pub fn pair_downloadable_formats(stream_info: &StreamInfo) -> Vec<DownloadableFormat> {
+    pair_downloadable_formats_with(stream_info, None)
+}
+
+/// The formats a video can be saved in, each paired with `audio_key`'s track when it
+/// is offered, otherwise with the default track.
+#[must_use]
+pub fn pair_downloadable_formats_with(
+    stream_info: &StreamInfo,
+    audio_key: Option<&str>,
+) -> Vec<DownloadableFormat> {
+    let chosen: Vec<AudioTrack> = audio_key
+        .map(|key| {
+            stream_info
+                .download_audio_tracks
+                .iter()
+                .filter(|track| track_key(track) == key)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    let audio_tracks = if chosen.is_empty() {
+        &stream_info.download_audio_tracks
+    } else {
+        &chosen
+    };
     let mut formats = stream_info
         .variants
         .iter()
@@ -60,7 +150,7 @@ pub fn pair_downloadable_formats(stream_info: &StreamInfo) -> Vec<DownloadableFo
                 && video.delivery_method == "adaptive"
                 && !video.local_url.is_empty()
         })
-        .filter_map(|video| pair_video_with_audio(video, &stream_info.download_audio_tracks))
+        .filter_map(|video| pair_video_with_audio(video, audio_tracks))
         .collect::<Vec<_>>();
 
     formats.sort_by(|left, right| {
@@ -93,9 +183,9 @@ fn pair_video_with_audio(
 ) -> Option<DownloadableFormat> {
     let video_mime_type = video.mime_type.as_deref()?;
     let video_codec = video_codec(video_mime_type);
-    let container = output_container(video_codec)?;
     let audio = select_compatible_audio(video_codec, audio_tracks)?;
     let audio_mime_type = audio.mime_type.as_deref()?;
+    let container = output_container(video_codec, audio_codec(audio_mime_type))?;
     let duration_ms = video.approx_duration_ms.or(audio.approx_duration_ms);
     let video_size_bytes = video
         .content_length
@@ -129,29 +219,33 @@ fn pair_video_with_audio(
     })
 }
 
+/// Every video codec MP4 can hold is paired with AAC, so the download is a tagged MP4
+/// that plays everywhere. Opus is never put in MP4 (players misread its pre-skip), so
+/// VP8, or a video with no AAC track at all, pairs with Opus and becomes MKV.
 fn select_compatible_audio(
     video_codec: VideoCodec,
     audio_tracks: &[AudioTrack],
 ) -> Option<&AudioTrack> {
-    // H.264 stays paired with AAC so it muxes natively into MP4. Every other codec
-    // pairs with Opus and muxes into Matroska, which keeps the Matroska path demuxing
-    // MP4 *video* only (AV1/HEVC ship as fMP4) and never an MP4 audio track.
-    let preferred_codec = match video_codec {
-        VideoCodec::H264 => AudioCodec::Aac,
-        VideoCodec::Hevc | VideoCodec::Vp8 | VideoCodec::Vp9 | VideoCodec::Av1 => AudioCodec::Opus,
+    let preferred: &[AudioCodec] = match video_codec {
+        VideoCodec::H264 | VideoCodec::Hevc | VideoCodec::Vp9 | VideoCodec::Av1 => {
+            &[AudioCodec::Aac, AudioCodec::Opus]
+        }
+        VideoCodec::Vp8 => &[AudioCodec::Opus],
         VideoCodec::Unknown => return None,
     };
 
-    audio_tracks
-        .iter()
-        .filter(|audio| {
-            !audio.local_url.is_empty()
-                && audio
-                    .mime_type
-                    .as_deref()
-                    .is_some_and(|mime| audio_codec(mime) == preferred_codec)
-        })
-        .max_by_key(|audio| (audio.is_default, audio.bitrate.unwrap_or(0)))
+    preferred.iter().find_map(|wanted| {
+        audio_tracks
+            .iter()
+            .filter(|audio| {
+                !audio.local_url.is_empty()
+                    && audio
+                        .mime_type
+                        .as_deref()
+                        .is_some_and(|mime| audio_codec(mime) == *wanted)
+            })
+            .max_by_key(|audio| (audio.is_default, audio.bitrate.unwrap_or(0)))
+    })
 }
 
 fn video_codec(mime_type: &str) -> VideoCodec {
@@ -175,6 +269,12 @@ fn video_codec(mime_type: &str) -> VideoCodec {
     }
 }
 
+/// "H.264", "VP9", "AV1"… for a video mime type.
+#[must_use]
+pub fn video_codec_name(mime_type: &str) -> &'static str {
+    video_codec_label(video_codec(mime_type))
+}
+
 fn audio_codec(mime_type: &str) -> AudioCodec {
     let value = mime_type.to_ascii_lowercase();
     if value.contains("opus") {
@@ -190,13 +290,14 @@ fn audio_codec(mime_type: &str) -> AudioCodec {
     }
 }
 
-fn output_container(codec: VideoCodec) -> Option<DownloadContainer> {
-    match codec {
-        VideoCodec::H264 => Some(DownloadContainer::Mp4),
-        VideoCodec::Hevc | VideoCodec::Vp8 | VideoCodec::Vp9 | VideoCodec::Av1 => {
-            Some(DownloadContainer::Mkv)
-        }
-        VideoCodec::Unknown => None,
+fn output_container(video: VideoCodec, audio: AudioCodec) -> Option<DownloadContainer> {
+    match (video, audio) {
+        (VideoCodec::Unknown, _) => None,
+        (
+            VideoCodec::H264 | VideoCodec::Hevc | VideoCodec::Vp9 | VideoCodec::Av1,
+            AudioCodec::Aac,
+        ) => Some(DownloadContainer::Mp4),
+        _ => Some(DownloadContainer::Mkv),
     }
 }
 
@@ -245,5 +346,65 @@ fn codec_rank(codec: &str) -> u8 {
         "VP8" => 3,
         "HEVC" => 4,
         _ => 5,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AudioCodec, DownloadContainer, VideoCodec, output_container, select_compatible_audio,
+    };
+    use crate::models::video::AudioTrack;
+
+    fn track(id: &str, mime: &str, bitrate: u64) -> AudioTrack {
+        AudioTrack {
+            id: id.into(),
+            label: String::new(),
+            language_code: None,
+            audio_track_type: None,
+            local_url: format!("http://127.0.0.1/{id}"),
+            mime_type: Some(mime.into()),
+            bitrate: Some(bitrate),
+            content_length: None,
+            is_default: true,
+            available: true,
+            init_range_start: None,
+            init_range_end: None,
+            index_range_start: None,
+            index_range_end: None,
+            approx_duration_ms: None,
+            user_agent: None,
+        }
+    }
+
+    #[test]
+    fn vp9_and_av1_pair_with_aac_into_mp4() {
+        let tracks = [
+            track("251", r#"audio/webm; codecs="opus""#, 150_000),
+            track("140", r#"audio/mp4; codecs="mp4a.40.2""#, 130_000),
+        ];
+        for codec in [VideoCodec::Vp9, VideoCodec::Av1, VideoCodec::H264] {
+            let audio = select_compatible_audio(codec, &tracks).expect("audio");
+            assert_eq!(audio.id, "140");
+            assert_eq!(
+                output_container(codec, AudioCodec::Aac),
+                Some(DownloadContainer::Mp4)
+            );
+        }
+    }
+
+    #[test]
+    fn falls_back_to_opus_in_mkv_without_aac() {
+        let tracks = [track("251", r#"audio/webm; codecs="opus""#, 150_000)];
+        let audio = select_compatible_audio(VideoCodec::Vp9, &tracks).expect("audio");
+        assert_eq!(audio.id, "251");
+        assert_eq!(
+            output_container(VideoCodec::Vp9, AudioCodec::Opus),
+            Some(DownloadContainer::Mkv)
+        );
+        assert_eq!(
+            output_container(VideoCodec::Vp8, AudioCodec::Opus),
+            Some(DownloadContainer::Mkv)
+        );
     }
 }

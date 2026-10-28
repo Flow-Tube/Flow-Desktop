@@ -51,13 +51,15 @@ export function useGridStyle({ density = 'video', gapRem = 1 }: GridStyleOptions
  * the resolved track list knows the real count, so anything that has to line up
  * with a row boundary (a shelf slotted into the feed) has to measure it.
  *
- * Returns 0 until the first measurement lands.
+ * Also returns the used track width in whole px, for cards that size their
+ * images to it. Both are 0 until the first measurement lands.
  */
 export function useResolvedGridColumns(
   ref: RefObject<HTMLElement | null>,
   style: CSSProperties,
-): number {
+): { columns: number; trackWidth: number } {
   const [columns, setColumns] = useState(0);
+  const [trackWidth, setTrackWidth] = useState(0);
 
   // Layout effect, not a passive one: the count decides where a row break goes,
   // and correcting that after paint would visibly reshuffle the feed.
@@ -81,9 +83,10 @@ export function useResolvedGridColumns(
         overshooting every card that has not been rendered yet, so the scrollbar
         shrinks continuously as you scroll and cards correct themselves.
       */
-      const trackWidth = Number.parseFloat(widths[0] ?? '');
-      if (Number.isFinite(trackWidth) && trackWidth > 0) {
-        element.style.setProperty('--flow-grid-track-w', `${trackWidth}px`);
+      const width = Number.parseFloat(widths[0] ?? '');
+      if (Number.isFinite(width) && width > 0) {
+        element.style.setProperty('--flow-grid-track-w', `${width}px`);
+        setTrackWidth(Math.round(width));
       }
     };
 
@@ -117,5 +120,5 @@ export function useResolvedGridColumns(
     // without changing the element's size — the observer alone would miss it.
   }, [ref, style]);
 
-  return columns;
+  return { columns, trackWidth };
 }

@@ -7,14 +7,19 @@ export const IMPRESSION_ATTRIBUTE = "data-impression-id";
 
 /**
  * Watches the cards inside `containerRef` and counts each one that stays at least half on
- * screen for half a second. Only cards actually rendered can count, so capped or prefetched
- * videos never do.
+ * screen for half a second, through `onSeen`. Only cards actually rendered can count, so capped
+ * or prefetched videos never do.
  */
 export function useFeedImpressions(
   containerRef: RefObject<HTMLElement | null>,
   videos: VideoSummary[],
   enabled: boolean,
+  onSeen: (video: VideoSummary) => void = noteImpression,
 ) {
+  const onSeenRef = useRef(onSeen);
+  useEffect(() => {
+    onSeenRef.current = onSeen;
+  }, [onSeen]);
   const videosRef = useRef(new Map<string, VideoSummary>());
   const observerRef = useRef<IntersectionObserver | null>(null);
   const observedRef = useRef(new Set<Element>());
@@ -44,7 +49,7 @@ export function useFeedImpressions(
               timers.delete(target);
               const id = target.getAttribute(IMPRESSION_ATTRIBUTE);
               const video = id ? videosRef.current.get(id) : undefined;
-              if (video) noteImpression(video);
+              if (video) onSeenRef.current(video);
             }, IMPRESSION_DWELL_MS),
           );
         }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { getVideoDetails } from "./api/youtube";
 import { usePlayerStore } from "../store/usePlayerStore";
+import { downloadRecordToVideoDetails } from "./useDownloads";
+import type { DownloadRecord } from "./api/downloads";
 import type { VideoDetails } from "../types/video";
 
 const pending = new Map<string, Promise<VideoDetails>>();
@@ -15,10 +17,23 @@ function requestDetails(videoId: string) {
   return request;
 }
 
-export function useWatchVideoDetails(videoId: string | undefined, enabled: boolean, retryNonce: number) {
+/** A saved video's details come from its library row, so the page and the player
+ *  get the description and chapters without the network. */
+export function useWatchVideoDetails(
+  videoId: string | undefined,
+  enabled: boolean,
+  retryNonce: number,
+  offlineRecord?: DownloadRecord,
+) {
   const [result, setResult] = useState<VideoDetails | null>(null);
 
   useEffect(() => {
+    if (videoId && offlineRecord) {
+      const details = downloadRecordToVideoDetails(offlineRecord);
+      setResult(details);
+      usePlayerStore.getState().setWatchPageCache(videoId, { videoDetails: details });
+      return;
+    }
     const cache = usePlayerStore.getState().watchPageCache;
     const cached = cache && cache.videoId === videoId ? cache.videoDetails : null;
     setResult(cached ?? null);
@@ -32,7 +47,7 @@ export function useWatchVideoDetails(videoId: string | undefined, enabled: boole
       // Optional metadata cannot clear the queue or tear down working playback.
     });
     return () => { cancelled = true; };
-  }, [videoId, enabled, retryNonce]);
+  }, [videoId, enabled, retryNonce, offlineRecord]);
 
   return result?.id === videoId ? result : null;
 }

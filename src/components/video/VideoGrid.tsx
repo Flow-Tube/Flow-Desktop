@@ -5,6 +5,7 @@ import { SkeletonLoader } from '../ui/SkeletonLoader';
 import { useGridStyle, useResolvedGridColumns } from '../../lib/useGridColumns';
 import { IMPRESSION_ATTRIBUTE, useFeedImpressions } from '../../lib/useFeedImpressions';
 import { GRID_INDEX_ATTRIBUTE, useLastVisibleCard } from '../../lib/useLastVisibleCard';
+import { thumbnailNeedsHighRes } from '../../lib/thumbnails';
 
 interface VideoGridProps {
   videos?: VideoSummary[];
@@ -60,7 +61,9 @@ function VideoGridComponent({
   useFeedImpressions(gridRef, videos, trackImpressions && !loading);
   useLastVisibleCard(gridRef, loading ? 0 : videos.length, onLastVisibleIndex);
   const gridStyle = useGridStyle();
-  const columns = useResolvedGridColumns(gridRef, gridStyle);
+  const { columns, trackWidth } = useResolvedGridColumns(gridRef, gridStyle);
+  // Few columns or a wide window can stretch a card past `hqdefault` even on a 1× screen.
+  const highResThumbnails = trackWidth > 0 ? thumbnailNeedsHighRes(trackWidth) : undefined;
   const gridClass = "flow-grid gap-y-8 pb-8";
 
   /*
@@ -104,6 +107,7 @@ function VideoGridComponent({
               variant={variant}
               hideChannelAvatar={hideChannelAvatar}
               reason={getReason?.(video)}
+              highResThumbnail={highResThumbnails}
             />
           </div>
           {insertAfterIndex === index ? (

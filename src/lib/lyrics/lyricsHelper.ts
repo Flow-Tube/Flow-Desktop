@@ -5,7 +5,7 @@ import { filterCreditLines, normalizeEntries, stripWordTimings } from "./lyricsU
 import { cleanArtist, cleanTitle } from "./matching";
 import { entriesAreSynced, hasWordSync, hasReasonableTimestamps } from "./sync";
 import * as cache from "./cache";
-import { getOfflineLyrics } from "./offline";
+import { getOfflineLyrics, OFFLINE_LYRICS_PROVIDER } from "./offline";
 import { InFlightRuns } from "./inFlight";
 import { getSettingValue } from "../../store/useAppSettingsStore";
 import { SETTINGS } from "../settings/schema";
@@ -187,7 +187,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   // Last resort: the lyrics saved with the download. Not cached, so a later attempt with a working
   // connection can still find a synced version.
   const offline = getOfflineLyrics(videoId);
-  return offline ? { entries: offline.entries, provider: "Downloaded" } : null;
+  return offline ? { entries: offline.entries, provider: OFFLINE_LYRICS_PROVIDER } : null;
 }
 
 /**

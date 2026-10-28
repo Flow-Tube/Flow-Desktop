@@ -25,6 +25,7 @@ export function useTrackBlockActions(track: SongItem | null): MusicMenuAction[] 
       id: 'not-interested',
       label: getString('music_not_interested'),
       icon: <EyeOff size={16} />,
+      group: 'feed',
       onSelect: async () => {
         await notInterested(track);
         showToast({ variant: 'success', message: getString('music_not_interested_toast') });
@@ -37,6 +38,7 @@ export function useTrackBlockActions(track: SongItem | null): MusicMenuAction[] 
       id: 'block-artist',
       label: getString('music_dont_recommend_artist').replace('{artist}', artistName),
       icon: <Ban size={16} />,
+      group: 'feed',
       onSelect: async () => {
         await blockArtist({ id: primary?.id ?? null, name: artistName });
         showToast({

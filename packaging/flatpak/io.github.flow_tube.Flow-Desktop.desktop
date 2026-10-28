@@ -8,8 +8,12 @@ Name=Flow
 Terminal=false
 Type=Application
 MimeType=x-scheme-handler/flow;
-Actions=safe-graphics;
+Actions=new-window;safe-graphics;
 
 [Desktop Action safe-graphics]
 Name=Start with safe graphics
 Exec=flow --safe-graphics
+
+[Desktop Action new-window]
+Name=New window
+Exec=flow --new-window

@@ -6,6 +6,7 @@ import { getString } from "./i18n/index";
 import { useFeedActionsStore } from "../store/useFeedActionsStore";
 import { useLikesStore } from "../store/useLikesStore";
 import { useUiStore } from "../store/useUiStore";
+import { showSaveFailedToast, showSaveToast } from "./saveToast";
 import type { VideoSummary } from "../types/video";
 
 export type ReactionState = "none" | "liked" | "disliked";
@@ -48,17 +49,19 @@ export function useVideoReactions(video: VideoSummary | null, videoMeta: Reactio
     if (!video) return;
     const next: ReactionState = likedInLibrary ? "none" : "liked";
     setState(next);
-    void toggleVideoLike({
-      ...video,
-      channelId,
-    }).then((nowLiked) => {
-      showToast({
-        variant: "success",
-        message: getString(nowLiked ? "liked_added_toast" : "liked_removed_toast"),
+    const likedVideo = { ...video, channelId };
+    const item = { title: video.title, image: video.thumbnailUrl, shape: "landscape" as const };
+    void toggleVideoLike(likedVideo).then((nowLiked) => {
+      showSaveToast({
+        destination: { kind: "likes" },
+        item,
+        removed: !nowLiked,
+        undo: () => toggleVideoLike(likedVideo),
       });
     }).catch((err) => {
       console.warn("Failed to update likes", err);
-      showToast({ variant: "error", message: getString("liked_update_failed") });
+      setState(likedInLibrary ? "liked" : "none");
+      showSaveFailedToast({ destination: { kind: "likes" }, item, removed: likedInLibrary });
     });
     // Music played in the video player never teaches the video engine.
     if (next !== "liked" || isMusicVideo(video)) return;

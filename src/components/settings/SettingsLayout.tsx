@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   PlayCircle,
   LayoutGrid,
@@ -10,11 +10,15 @@ import {
   Info,
   Palette,
   Music2,
+  UsersRound,
 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { getString } from '../../lib/i18n/index';
+import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
 
 export type SettingsCategory =
   | 'appearance'
+  | 'profiles'
   | 'player'
   | 'music'
   | 'content'
@@ -33,6 +37,7 @@ interface CategoryDef {
 
 const categories: CategoryDef[] = [
   { id: 'appearance', labelKey: 'settings_appearance', icon: <Palette size={18} /> },
+  { id: 'profiles', labelKey: 'settings_profiles', icon: <UsersRound size={18} /> },
   { id: 'player', labelKey: 'settings_player', icon: <PlayCircle size={18} /> },
   { id: 'music', labelKey: 'settings_music', icon: <Music2 size={18} /> },
   { id: 'content', labelKey: 'settings_content_ui', icon: <LayoutGrid size={18} /> },
@@ -49,7 +54,13 @@ interface SettingsLayoutProps {
 }
 
 export function SettingsLayout({ children }: SettingsLayoutProps) {
-  const [activeTab, setActiveTab] = useState<SettingsCategory>('appearance');
+  // Other screens can open a section directly, such as the subscribe menu opening Content.
+  const requested = (useLocation().state as { settingsCategory?: SettingsCategory } | null)?.settingsCategory;
+  const [activeTab, setActiveTab] = useState<SettingsCategory>(
+    requested && categories.some((cat) => cat.id === requested) ? requested : 'appearance',
+  );
+  const paneRef = useRef<HTMLDivElement>(null);
+  usePageEnterMotion(paneRef, activeTab, true);
 
   return (
     <div className="mx-auto w-full h-[calc(100vh-64px)] flex">
@@ -71,7 +82,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
         ))}
       </nav>
 
-      <div className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
+      <div ref={paneRef} className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
         {children(activeTab)}
       </div>
     </div>

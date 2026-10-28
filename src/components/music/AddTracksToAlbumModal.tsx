@@ -6,7 +6,9 @@ import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { useDebounce } from "../../lib/useDebounce";
 import { searchMusicTyped } from "../../lib/api/music";
-import { useAlbumLibraryStore } from "../../store/useAlbumLibraryStore";
+import { albumDetailPath, useAlbumLibraryStore } from "../../store/useAlbumLibraryStore";
+import { showSaveToast } from "../../lib/saveToast";
+import { songToastItem } from "../../lib/songLikeToast";
 import { useUiStore } from "../../store/useUiStore";
 import type { SongItem, YTItem } from "../../types/music";
 
@@ -69,6 +71,7 @@ export function AddTracksToAlbumModal() {
     s.searchAlbumId ? s.albums.find((a) => a.id === s.searchAlbumId) : undefined,
   );
   const addTrack = useAlbumLibraryStore((s) => s.addTrack);
+  const removeTrack = useAlbumLibraryStore((s) => s.removeTrack);
   const close = useAlbumLibraryStore((s) => s.closeTrackSearch);
   const showToast = useUiStore((s) => s.showToast);
 
@@ -120,7 +123,15 @@ export function AddTracksToAlbumModal() {
 
   const handleAdd = async (song: SongItem) => {
     await addTrack(albumId, song);
-    showToast({ variant: "success", message: getString("album_added_toast") });
+    if (!album) {
+      showToast({ variant: "success", message: getString("album_added_toast") });
+      return;
+    }
+    showSaveToast({
+      destination: { kind: "album", path: albumDetailPath(album), name: album.title },
+      item: songToastItem(song),
+      undo: () => removeTrack(albumId, songVideoId(song)),
+    });
   };
 
   return (

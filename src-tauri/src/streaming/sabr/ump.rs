@@ -87,6 +87,7 @@ pub fn read_varint(buf: &[u8]) -> Option<(u32, usize)> {
 }
 
 // Encode a value as a YouTube-style UMP varint and append it to `out`.
+#[cfg(test)]
 pub fn write_varint(out: &mut Vec<u8>, value: u32) {
     // Each branch's threshold is the exclusive max the width can represent:
     //   2 bytes: (b0&0x3F)+64*b1            => < 64*256
@@ -154,10 +155,6 @@ impl UmpParser {
 
     pub fn push(&mut self, data: &[u8]) {
         self.buffer.extend_from_slice(data);
-    }
-
-    pub fn buffered_len(&self) -> usize {
-        self.buffer.len()
     }
 
     pub fn next_part(&mut self) -> Option<UmpPart> {

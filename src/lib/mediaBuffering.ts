@@ -53,3 +53,18 @@ export function hasMediaPlaybackProgressed(
   if (!Number.isFinite(bufferingStartedAt) || !Number.isFinite(currentTime)) return false;
   return currentTime - bufferingStartedAt > MIN_PROGRESS_SECONDS;
 }
+
+/** `HTMLMediaElement.HAVE_METADATA` — the new source has answered. */
+const HAVE_METADATA = 1;
+
+/** How long a source swap may wait for the new source to answer. */
+export const SOURCE_SWITCH_TIMEOUT_MS = 30_000;
+
+/**
+ * Whether a source swap has hung. A swap pauses the element until the new
+ * source's metadata arrives, and a paused element never counts as buffering, so
+ * the stall watchdog cannot see a source that never answers.
+ */
+export function hasSourceSwitchTimedOut(startedAt: number, now: number, readyState: number): boolean {
+  return readyState < HAVE_METADATA && now - startedAt >= SOURCE_SWITCH_TIMEOUT_MS;
+}

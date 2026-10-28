@@ -22,7 +22,6 @@ export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
-  const [downloadDialogStyle, setDownloadDialogStyle] = usePreference(SETTINGS.DOWNLOAD_DIALOG_STYLE, 'FULL');
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);
   const [shortsShelf, setShortsShelf] = useBoolPref(SETTINGS.SHORTS_SHELF_ENABLED, true);
@@ -32,9 +31,11 @@ export function ContentTab() {
   const [relatedVideos, setRelatedVideos] = useBoolPref(SETTINGS.SHOW_RELATED_VIDEOS, true);
   const [liveChat, setLiveChat] = useBoolPref(SETTINGS.LIVE_CHAT_ENABLED, true);
   const [hideWatched, setHideWatched] = useBoolPref(SETTINGS.HIDE_WATCHED_VIDEOS, false);
+  const [hideSeen, setHideSeen] = useBoolPref(SETTINGS.HIDE_SEEN_VIDEOS, false);
   const [blockedMode, setBlockedMode] = usePreference(SETTINGS.BLOCKED_CONTENT_MODE, 'blur');
   const [disableShorts, setDisableShorts] = useBoolPref(SETTINGS.DISABLE_SHORTS_PLAYER, false);
   const [shortsNav, setShortsNav] = useBoolPref(SETTINGS.SHORTS_NAVIGATION_ENABLED, true);
+  const [tabsOn, setTabsOn] = useBoolPref(SETTINGS.TABS_ENABLED, false);
   const [shortsPlaybackMode, setShortsPlaybackMode] = usePreference(SETTINGS.SHORTS_PLAYBACK_MODE, 'loop');
   const [shortsAutoScrollSeconds, setShortsAutoScrollSeconds] = useNumberPref(SETTINGS.SHORTS_AUTO_SCROLL_SECONDS, 10);
   const [musicNav, setMusicNav] = useBoolPref(SETTINGS.MUSIC_NAVIGATION_ENABLED, true);
@@ -43,6 +44,8 @@ export function ContentTab() {
   const [subsShowVideos, setSubsShowVideos] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS, true);
   const [subsShowShorts, setSubsShowShorts] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_SHORTS, true);
   const [subsShowLive, setSubsShowLive] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_LIVE, true);
+  const [homeMaxVideoAge, setHomeMaxVideoAge] = usePreference(SETTINGS.HOME_MAX_VIDEO_AGE, '0');
+  const [subsHideUnplayable, setSubsHideUnplayable] = useBoolPref(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS, false);
   const [notificationsEnabled, setNotificationsEnabled] = useBoolPref(SETTINGS.NOTIFICATIONS_ENABLED, true);
   const [notificationInterval, setNotificationInterval] = usePreference(SETTINGS.NOTIFICATION_CHECK_INTERVAL, '360');
   const [regionPicker, setRegionPicker] = useBoolPref(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, true);
@@ -112,9 +115,6 @@ export function ContentTab() {
             { value: '0', label: getString('settings_option_unlimited') }, { value: '1', label: getString('settings_option_one_line') }, { value: '2', label: getString('settings_option_two_lines') }, { value: '3', label: getString('settings_option_three_lines') },
           ]} />
         </SettingItem>
-        <SettingItem title={getString('settings_download_dialog')} description={getString('settings_download_dialog_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_DIALOG_STYLE)}>
-          <Select value={downloadDialogStyle} onChange={setDownloadDialogStyle} disabled={isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_DIALOG_STYLE)} options={[{ value: 'FULL', label: getString('settings_option_full') }, { value: 'COMPACT', label: getString('settings_option_compact') }]} />
-        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_feed')}>
@@ -123,6 +123,17 @@ export function ContentTab() {
         <SettingItem title={getString('settings_shorts_shelf')} description={getString('settings_shorts_shelf_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_SHELF_ENABLED)}><ToggleSwitch checked={shortsShelf} onChange={setShortsShelf} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_SHELF_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_home_shorts_shelf')} description={getString('settings_home_shorts_shelf_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_SHORTS_SHELF_ENABLED)}><ToggleSwitch checked={homeShortsShelf} onChange={setHomeShortsShelf} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_SHORTS_SHELF_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_continue_watching')} description={getString('settings_continue_watching_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.CONTINUE_WATCHING_ENABLED)}><ToggleSwitch checked={continueWatching} onChange={setContinueWatching} disabled={isSettingDisabledUntilWired(SETTINGS.CONTINUE_WATCHING_ENABLED)} /></SettingItem>
+        <SettingItem title={getString('settings_home_max_age')} description={getString('settings_home_max_age_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_MAX_VIDEO_AGE)}>
+          <Select value={homeMaxVideoAge} onChange={setHomeMaxVideoAge} disabled={isSettingDisabledUntilWired(SETTINGS.HOME_MAX_VIDEO_AGE)} options={[
+            { value: '0', label: getString('settings_home_max_age_off') },
+            { value: '24', label: getString('settings_home_max_age_1d') },
+            { value: '72', label: getString('settings_home_max_age_3d') },
+            { value: '168', label: getString('settings_home_max_age_1w') },
+            { value: '720', label: getString('settings_home_max_age_1m') },
+            { value: '4320', label: getString('settings_home_max_age_6m') },
+            { value: '8760', label: getString('settings_home_max_age_1y') },
+          ]} />
+        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_content')}>
@@ -130,6 +141,7 @@ export function ContentTab() {
         <SettingItem title={getString('settings_related_videos')} description={getString('settings_related_videos_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)}><ToggleSwitch checked={relatedVideos} onChange={setRelatedVideos} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_live_chat')} description={getString('settings_live_chat_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)}><ToggleSwitch checked={liveChat} onChange={setLiveChat} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched')} description={getString('settings_hide_watched_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)}><ToggleSwitch checked={hideWatched} onChange={setHideWatched} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)} /></SettingItem>
+        <SettingItem title={getString('settings_hide_seen')} description={getString('settings_hide_seen_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_SEEN_VIDEOS)}><ToggleSwitch checked={hideSeen} onChange={setHideSeen} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_SEEN_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_blocked_mode')} description={getString('settings_blocked_mode_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.BLOCKED_CONTENT_MODE)}>
           <Select value={blockedMode} onChange={setBlockedMode} disabled={isSettingDisabledUntilWired(SETTINGS.BLOCKED_CONTENT_MODE)} options={[
             { value: 'blur', label: getString('settings_blocked_mode_blur') },
@@ -156,6 +168,7 @@ export function ContentTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_nav_tabs')}>
+        <SettingItem title={getString('settings_tabs_enabled')} description={getString('settings_tabs_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)}><ToggleSwitch checked={tabsOn} onChange={setTabsOn} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_shorts_tab')} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)}><ToggleSwitch checked={shortsNav} onChange={setShortsNav} disabled={isSettingDisabledUntilWired(SETTINGS.SHORTS_NAVIGATION_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_music_tab')} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)}><ToggleSwitch checked={musicNav} onChange={setMusicNav} disabled={isSettingDisabledUntilWired(SETTINGS.MUSIC_NAVIGATION_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_categories_tab')} description={getString('settings_categories_tab_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)}><ToggleSwitch checked={categoriesTab} onChange={setCategoriesTab} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)} /></SettingItem>
@@ -166,6 +179,7 @@ export function ContentTab() {
         <SettingItem title={getString('settings_show_videos')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS)}><ToggleSwitch checked={subsShowVideos} onChange={setSubsShowVideos} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_show_shorts')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_SHORTS)}><ToggleSwitch checked={subsShowShorts} onChange={setSubsShowShorts} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_SHORTS)} /></SettingItem>
         <SettingItem title={getString('settings_show_live')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_LIVE)}><ToggleSwitch checked={subsShowLive} onChange={setSubsShowLive} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_LIVE)} /></SettingItem>
+        <SettingItem title={getString('settings_hide_unplayable')} description={getString('settings_hide_unplayable_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS)}><ToggleSwitch checked={subsHideUnplayable} onChange={setSubsHideUnplayable} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS)} /></SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_notifications')}>

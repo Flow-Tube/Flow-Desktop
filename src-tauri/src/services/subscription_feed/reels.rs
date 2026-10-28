@@ -98,11 +98,12 @@ pub async fn reel_ids(yt: &YoutubeService, channel_id: &str) -> Option<HashSet<S
     Some(ids)
 }
 
-/// Marks the Shorts of every channel whose tab is known; other channels keep what they had.
+/// Marks the Shorts found on their channel's tab. The tab is one page of the newest, so an upload
+/// missing from it is not shown to be a video and keeps what it had.
 pub fn mark(videos: &mut [VideoSummary], verdicts: &HashMap<String, HashSet<String>>) {
     for video in videos {
         if let Some(ids) = video.channel_id.as_ref().and_then(|id| verdicts.get(id)) {
-            video.is_short = ids.contains(&video.id);
+            video.is_short |= ids.contains(&video.id);
         }
     }
 }
@@ -177,13 +178,12 @@ mod tests {
     }
 
     #[test]
-    fn a_known_channel_marks_its_shorts_and_unmarks_the_rest() {
-        let mut videos = vec![video("s1", "A"), video("v1", "A"), video("x", "B")];
+    fn a_known_channel_marks_its_shorts_and_never_unmarks_older_ones() {
+        let mut videos = vec![video("s1", "A"), video("old", "A"), video("x", "B")];
         videos[1].is_short = true;
         let verdicts = HashMap::from([("A".to_string(), HashSet::from(["s1".to_string()]))]);
         mark(&mut videos, &verdicts);
-        assert!(videos[0].is_short);
-        assert!(!videos[1].is_short);
-        assert!(!videos[2].is_short);
+        let kinds: Vec<bool> = videos.iter().map(|video| video.is_short).collect();
+        assert_eq!(kinds, [true, true, false]);
     }
 }

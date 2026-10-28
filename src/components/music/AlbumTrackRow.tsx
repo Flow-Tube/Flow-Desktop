@@ -13,7 +13,7 @@ import { shareLink } from '../../lib/clipboard';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { useLikesStore } from '../../store/useLikesStore';
-import { useUiStore } from '../../store/useUiStore';
+import { toggleSongLikeWithToast } from '../../lib/songLikeToast';
 import type { SongItem } from '../../types/music';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { ExplicitBadge } from './ExplicitBadge';
@@ -51,8 +51,6 @@ function useSongLike(track: SongItem) {
   const likedItems = useLikesStore((s) => s.items);
   const loaded = useLikesStore((s) => s.loaded);
   const load = useLikesStore((s) => s.load);
-  const toggleSong = useLikesStore((s) => s.toggleSong);
-  const showToast = useUiStore((s) => s.showToast);
   const trackId = videoIdOf(track);
 
   useEffect(() => {
@@ -61,18 +59,7 @@ function useSongLike(track: SongItem) {
 
   const liked = likedItems.some((item) => item.kind === 'music' && item.id === trackId);
 
-  const toggle = async () => {
-    try {
-      const nowLiked = await toggleSong(track);
-      showToast({
-        variant: 'success',
-        message: getString(nowLiked ? 'liked_added_toast' : 'liked_removed_toast'),
-      });
-    } catch (error) {
-      console.warn('Failed to update song like', error);
-      showToast({ variant: 'error', message: getString('liked_update_failed') });
-    }
-  };
+  const toggle = () => toggleSongLikeWithToast(track, liked);
 
   return { liked, toggle };
 }
@@ -146,31 +133,36 @@ export function AlbumTrackRow({
   const isHighlighted = isHovered || showEq;
   const activeColor = dominantColor ?? preloadedColor;
   const menuActions: MusicMenuAction[] = [
-    ...radioActions,
-    {
-      id: 'add-to-queue',
-      label: getString('music_add_to_queue'),
-      icon: <ListPlus size={16} />,
-      onSelect: () => onAddToQueue(track),
-    },
     {
       id: 'play-next',
       label: getString('music_play_next'),
+      tileLabel: getString('menu_tile_play_next'),
       icon: <Play size={16} />,
+      group: 'quick',
       onSelect: () => playNextInQueue(track),
     },
-    ...navActions,
+    {
+      id: 'add-to-queue',
+      label: getString('music_add_to_queue'),
+      tileLabel: getString('menu_tile_queue'),
+      icon: <ListPlus size={16} />,
+      group: 'quick',
+      onSelect: () => onAddToQueue(track),
+    },
+    ...radioActions,
+    ...downloadActions,
     {
       id: 'add-to-album',
       label: getString('music_add_to_album'),
       icon: <Disc3 size={16} />,
+      group: 'library',
       onSelect: () => openAddToAlbum(track),
     },
-    ...downloadActions,
     {
       id: 'share',
       label: getString('music_share'),
       icon: <Share2 size={16} />,
+      group: 'library',
       onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
     ...(onRemove
@@ -179,10 +171,13 @@ export function AlbumTrackRow({
             id: 'remove-from-album',
             label: getString('album_remove_track'),
             icon: <Trash2 size={16} />,
+            group: 'library',
+            danger: true,
             onSelect: () => onRemove(track),
           },
         ] as MusicMenuAction[])
       : []),
+    ...navActions,
     ...blockActions,
   ];
   const resolveColor = (img?: HTMLImageElement) => {

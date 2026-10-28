@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ recordFeedImpressions: vi.fn() }));
+const api = vi.hoisted(() => ({ recordFeedImpressions: vi.fn(), recordSeenVideos: vi.fn() }));
 vi.mock("./api/recommendation", () => api);
 
-import { noteImpression, resetImpressionsForTest } from "./feedImpressions";
+import { noteImpression, noteSeen, resetImpressionsForTest } from "./feedImpressions";
 
 const card = (id: string) => ({ id, title: id, channelName: "c" });
 
@@ -35,5 +35,24 @@ describe("noteImpression", () => {
     noteImpression(card("a"));
     await vi.runAllTimersAsync();
     expect(api.recordFeedImpressions).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("noteSeen", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetImpressionsForTest();
+    api.recordFeedImpressions.mockReset().mockResolvedValue(undefined);
+    api.recordSeenVideos.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("records ids for the seen list without teaching the ranker", async () => {
+    noteSeen(card("r1"));
+    noteSeen(card("r2"));
+    noteSeen(card("r1"));
+    await vi.runAllTimersAsync();
+    expect(api.recordSeenVideos).toHaveBeenCalledWith(["r1", "r2"]);
+    expect(api.recordFeedImpressions).not.toHaveBeenCalled();
   });
 });

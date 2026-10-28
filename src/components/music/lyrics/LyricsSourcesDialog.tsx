@@ -2,6 +2,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 
 import type { LyricsCandidate } from "../../../lib/lyrics/lyricsHelper";
 import { getString } from "../../../lib/i18n/index";
+import { lyricsSourceLabel, OFFLINE_LYRICS_PROVIDER } from "../../../lib/lyrics/offline";
 import { LyricsDialog } from "./LyricsDialog";
 
 const preview = (candidate: LyricsCandidate): string =>
@@ -47,7 +48,14 @@ export function LyricsSourcesDialog({
                 >
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-chrome-neutral-100">{candidate.providerName}</span>
+                      <span className="text-sm font-semibold text-chrome-neutral-100">
+                        {lyricsSourceLabel(candidate.providerName)}
+                      </span>
+                      {candidate.providerName === OFFLINE_LYRICS_PROVIDER && (
+                        <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-medium text-chrome-neutral-300">
+                          {getString("lyrics_offline_badge")}
+                        </span>
+                      )}
                       {candidate.synced && (
                         <span className="rounded-full bg-surface-container px-2 py-0.5 text-[11px] font-medium text-[var(--color-primary)]">
                           {getString("lyrics_synced_badge")}
@@ -59,7 +67,7 @@ export function LyricsSourcesDialog({
                   {current && (
                     <CheckCircle2
                       className="h-5 w-5 shrink-0 text-[var(--color-primary)]"
-                      aria-label={getString("lyrics_current_source", candidate.providerName)}
+                      aria-label={getString("lyrics_current_source", lyricsSourceLabel(candidate.providerName))}
                     />
                   )}
                 </button>

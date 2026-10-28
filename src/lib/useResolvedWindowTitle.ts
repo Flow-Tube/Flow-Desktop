@@ -29,6 +29,11 @@ const STATIC_TITLES: Record<string, string> = {
   "/sponsorblock": "extensions",
 };
 
+/** The translation key of a section page's label, such as Home or History; null for content pages. */
+export function sectionTitleKey(pathname: string): string | null {
+  return STATIC_TITLES[pathname] ?? (pathname.startsWith("/shorts") ? "shorts" : null);
+}
+
 type ResolvedTitle = { text: string; section: boolean };
 
 export function useResolvedWindowTitle(): ResolvedTitle {
@@ -69,9 +74,8 @@ export function useResolvedWindowTitle(): ResolvedTitle {
     if (override) return { text: override, section: false };
 
     // Static section labels.
-    const label = STATIC_TITLES[pathname];
+    const label = sectionTitleKey(pathname);
     if (label) return { text: t(label), section: true };
-    if (pathname.startsWith("/shorts")) return { text: t("shorts"), section: true };
 
     // Dynamic routes before their page has published a title yet — stay blank.
     return { text: "", section: false };

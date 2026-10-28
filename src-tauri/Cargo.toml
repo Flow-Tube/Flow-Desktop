@@ -1,6 +1,6 @@
 [package]
 name = "flow"
-version = "0.1.0-beta2"
+version = "0.1.0-beta3"
 description = "Privacy-first YouTube and YouTube Music desktop companion to Flow for Android, powered by the native local FlowNeuro recommendation engine"
 authors = ["A-EDev"]
 edition = "2024"
@@ -40,6 +40,7 @@ discord-rich-presence = "1.1"
 sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "7"
 
 # Error Handling & Observability
 thiserror = "2"
@@ -52,11 +53,12 @@ tracing-appender = "0.2"
 
 # HTTP Client
 reqwest = { version = "0.13.3", features = ["stream", "json", "form", "brotli", "gzip", "rustls"] }
-mp4 = "0.14"
-webm-iterable = "0.6.2"
+webm-iterable = "0.7.1"
 
 # Cover-art embedding for downloaded music/audio (MP4 covr, ID3 APIC, Vorbis pictures).
-lofty = "0.24"
+lofty = "0.25.4"
+# Cropping and re-encoding download covers (decoders for what the image CDNs serve, JPEG out).
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 # SABR streaming protocol (self-contained protobuf/UMP codec, no external toolchain)
 base64 = "0.23"
@@ -93,7 +95,16 @@ local-ip-address = "0.6"
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.8"
 windows-registry = "0.6"
-windows = { version = "0.62", features = ["Win32_UI_Shell"] }
+# Core Audio and the process snapshot name Flow's WebView2 audio in the volume mixer.
+windows = { version = "0.62", features = [
+  "Win32_UI_Shell",
+  "Win32_Media_Audio",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_System_Diagnostics_ToolHelp",
+] }
+windows-core = "0.62"
 
 # Single-instance: forward a second `flow://` launch to the running window
 # instead of spawning a duplicate. The "deep-link" feature makes it hand the
@@ -121,3 +132,10 @@ panic = "abort"
 codegen-units = 1
 lto = true
 strip = "symbols"
+
+# CI nightlies and PR builds: thin LTO keeps most of the speed of the release
+# profile at a fraction of the link time. Tagged releases still use [profile.release].
+[profile.nightly]
+inherits = "release"
+lto = "thin"
+codegen-units = 16

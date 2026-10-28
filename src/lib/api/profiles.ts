@@ -1,0 +1,99 @@
+import { invokeBackend } from "./errors";
+
+// Mirrors the registry records in src-tauri/src/profiles/registry.rs (Android's JSON shape).
+export type ProfileColorKey = "blue" | "teal" | "green" | "amber" | "orange" | "red" | "pink" | "purple";
+export type ProfileAvatarKind = "initial" | "emoji" | "photo";
+
+export interface ProfileAvatar {
+  kind: ProfileAvatarKind | string;
+  emoji: string;
+  photoVersion: number;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  colorKey: ProfileColorKey | "" | string;
+  avatar: ProfileAvatar;
+  createdAt: number;
+  splashTone: string;
+}
+
+export interface ProfilesView {
+  profiles: Profile[];
+  /** `data:` URLs of photo avatars, by profile id. */
+  photos: Record<string, string>;
+  defaultId: string;
+  activeId: string;
+  maxProfiles: number;
+}
+
+export interface CopyParts {
+  /** Profile setting keys to copy into the new profile. */
+  settings: string[];
+  subscriptions: boolean;
+  recommendations: boolean;
+}
+
+export interface NewProfile {
+  name: string;
+  colorKey: string;
+  avatar: ProfileAvatar;
+  copy: CopyParts;
+}
+
+export const PROFILE_COLOR_KEYS: readonly ProfileColorKey[] = [
+  "blue", "teal", "green", "amber", "orange", "red", "pink", "purple",
+];
+
+/** Counted in UTF-16 units, as on Android. */
+export const PROFILE_NAME_MAX_LENGTH = 24;
+
+export function listProfiles(): Promise<ProfilesView> {
+  return invokeBackend<ProfilesView>("profiles_list");
+}
+
+export function createProfile(request: NewProfile): Promise<Profile> {
+  return invokeBackend<Profile>("profiles_create", { request });
+}
+
+export function renameProfile(id: string, name: string): Promise<Profile> {
+  return invokeBackend<Profile>("profiles_rename", { id, name });
+}
+
+export function setProfileLook(id: string, colorKey: string, avatar: ProfileAvatar): Promise<Profile> {
+  return invokeBackend<Profile>("profiles_set_look", { id, colorKey, avatar });
+}
+
+export function deleteProfile(id: string): Promise<void> {
+  return invokeBackend<void>("profiles_delete", { id });
+}
+
+/** Commits to a switch; refused while sync runs or another switch is under way. */
+export function prepareProfileSwitch(id: string): Promise<void> {
+  return invokeBackend<void>("profiles_prepare_switch", { id });
+}
+
+export function cancelProfileSwitch(): Promise<void> {
+  return invokeBackend<void>("profiles_cancel_switch");
+}
+
+/** Makes the profile active and restarts Flow into it. */
+export function finishProfileSwitch(id: string): Promise<void> {
+  return invokeBackend<void>("profiles_switch", { id });
+}
+
+/** Keeps a link for the next process while a switch is under way; false if none is. */
+export function holdLinkForNextProfile(url: string): Promise<boolean> {
+  return invokeBackend<boolean>("profiles_hold_link", { url });
+}
+
+/** The link the previous process held during its switch, once. */
+export function takeHeldLink(): Promise<string | null> {
+  return invokeBackend<string | null>("profiles_take_held_link");
+}
+
+/** Makes the picture at `path` the profile's avatar (256 px square). */
+export function setProfilePhoto(id: string, path: string): Promise<Profile> {
+  return invokeBackend<Profile>("profiles_set_photo", { id, path });
+}

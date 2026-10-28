@@ -59,6 +59,8 @@ export interface RelatedContentItem {
   isUpcoming?: boolean;
   isVerified?: boolean;
   isMembersOnly?: boolean;
+  /** A video card that opens the Shorts player. */
+  isShort?: boolean;
   badges?: string[];
   collaborators?: Collaborator[];
 }
@@ -119,6 +121,19 @@ export interface HeatmapMarker {
 export interface RelatedPage {
   items: RelatedContentItem[];
   continuation?: string | null;
+}
+
+/** What a listed video is, from one small request that stays out of playback's way. */
+export interface VideoMetadata {
+  title: string;
+  channelName: string;
+  channelId?: string | null;
+  durationSeconds?: number | null;
+  viewCount?: number | null;
+  /** The upload time, exact, in epoch milliseconds. */
+  publishedAtMs?: number | null;
+  isLive: boolean;
+  category?: string | null;
 }
 
 export interface VideoDetails {
@@ -335,6 +350,18 @@ export interface SearchChannel {
 export interface SearchShelf {
   title: string;
   videos: VideoSummary[];
+}
+
+/** One autocomplete row; well-known people, places and things carry a knowledge card. */
+export interface SearchSuggestion {
+  text: string;
+  entity: SuggestionEntity | null;
+}
+
+export interface SuggestionEntity {
+  title: string;
+  description: string | null;
+  image: string | null;
 }
 
 /** YouTube's spelling correction: results already shown for `query`, or only suggested. */

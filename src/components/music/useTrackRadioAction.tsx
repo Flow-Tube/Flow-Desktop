@@ -15,6 +15,8 @@ export function useTrackRadioAction(track: SongItem | null): MusicMenuAction[] {
       id: 'start-radio',
       label: getString('music_start_radio'),
       icon: <Radio size={16} />,
+      group: 'quick',
+      tileLabel: getString('menu_tile_radio'),
       onSelect: () => void startRadio(track),
     },
   ];

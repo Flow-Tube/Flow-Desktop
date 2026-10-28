@@ -46,10 +46,12 @@ const progress = (id: string, status: DownloadProgress["status"]): DownloadProgr
   status,
   error: null,
   errorKind: null,
-  logs: [],
   videoId: track.videoId,
   thumbnailUrl: null,
   collectionDbId: null,
+  artist: null,
+  bytesPerSecond: null,
+  etaSeconds: null,
 });
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));

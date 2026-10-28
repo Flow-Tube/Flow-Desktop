@@ -1,12 +1,17 @@
 import { create } from "zustand";
+import { profileStorage } from "../lib/storage/profileStorage";
 
 export type ActiveTab = "home" | "search" | "subscriptions" | "history" | "playlists" | "settings";
 export type ToastVariant = "success" | "error" | "info";
 
-/** A button on the toast, such as Undo; pressing it also dismisses the toast. */
+export type ToastImageShape = "landscape" | "square" | "portrait";
+
+/** A button on the toast, such as Undo or View; pressing it also dismisses the toast. */
 export interface ToastAction {
   label: string;
-  onSelect: () => void;
+  onSelect?: () => void;
+  /** A route to open, such as the list the item was saved to. */
+  to?: string;
 }
 
 export interface ToastState {
@@ -15,7 +20,10 @@ export interface ToastState {
   message: string;
   variant: ToastVariant;
   durationMs: number;
-  action?: ToastAction;
+  actions: ToastAction[];
+  /** A thumbnail or cover shown at the start of the toast. */
+  image?: string | null;
+  imageShape?: ToastImageShape;
 }
 
 export interface ShowToastOptions {
@@ -23,12 +31,22 @@ export interface ShowToastOptions {
   message: string;
   variant?: ToastVariant;
   durationMs?: number;
-  action?: ToastAction;
+  /** At most two; the last one is drawn as the main action. */
+  actions?: ToastAction[];
+  image?: string | null;
+  imageShape?: ToastImageShape;
 }
+
+/** Long enough to reach a button, which is also why hovering pauses the timer. */
+export const TOAST_DURATION_MS = 3000;
+export const TOAST_WITH_ACTIONS_DURATION_MS = 5000;
+const MAX_TOAST_ACTIONS = 2;
+
+let nextToastId = 0;
 
 const getSavedSidebarExpanded = () => {
   try {
-    const saved = localStorage.getItem("flow_sidebar_expanded");
+    const saved = profileStorage.getItem("flow_sidebar_expanded");
     return saved === null ? true : saved === "true";
   } catch (error) {
     console.warn("Failed to load saved sidebar state", error);
@@ -38,7 +56,7 @@ const getSavedSidebarExpanded = () => {
 
 const saveSidebarExpanded = (expanded: boolean) => {
   try {
-    localStorage.setItem("flow_sidebar_expanded", String(expanded));
+    profileStorage.setItem("flow_sidebar_expanded", String(expanded));
   } catch (error) {
     console.warn("Failed to save sidebar state", error);
   }
@@ -46,7 +64,7 @@ const saveSidebarExpanded = (expanded: boolean) => {
 
 const getSavedSubsSectionCollapsed = () => {
   try {
-    return localStorage.getItem("flow_sidebar_subs_collapsed") === "true";
+    return profileStorage.getItem("flow_sidebar_subs_collapsed") === "true";
   } catch (error) {
     console.warn("Failed to load saved subscriptions section state", error);
     return false;
@@ -55,7 +73,7 @@ const getSavedSubsSectionCollapsed = () => {
 
 const saveSubsSectionCollapsed = (collapsed: boolean) => {
   try {
-    localStorage.setItem("flow_sidebar_subs_collapsed", String(collapsed));
+    profileStorage.setItem("flow_sidebar_subs_collapsed", String(collapsed));
   } catch (error) {
     console.warn("Failed to save subscriptions section state", error);
   }
@@ -74,7 +92,8 @@ interface UiState {
   setIsSearching: (isSearching: boolean) => void;
   setWatchSidebarOpen: (open: boolean) => void;
   showToast: (toast: ShowToastOptions) => void;
-  dismissToast: () => void;
+  /** With an id, only dismisses that toast, so a toast on its way out cannot close a newer one. */
+  dismissToast: (id?: number) => void;
   toggleSidebar: () => void;
   toggleWatchSidebar: () => void;
   toggleSubsSection: () => void;
@@ -93,17 +112,19 @@ export const useUiStore = create<UiState>((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setIsSearching: (isSearching) => set({ isSearching }),
   setWatchSidebarOpen: (isWatchSidebarOpen) => set({ isWatchSidebarOpen }),
-  showToast: ({ title, message, variant = "info", durationMs = 2400, action }) => set({
+  showToast: ({ title, message, variant = "info", durationMs, actions = [], image, imageShape }) => set({
     toast: {
-      id: Date.now(),
+      id: ++nextToastId,
       title,
       message,
       variant,
-      durationMs,
-      action,
+      durationMs: durationMs ?? (actions.length > 0 ? TOAST_WITH_ACTIONS_DURATION_MS : TOAST_DURATION_MS),
+      actions: actions.slice(-MAX_TOAST_ACTIONS),
+      image,
+      imageShape,
     },
   }),
-  dismissToast: () => set({ toast: null }),
+  dismissToast: (id) => set((state) => (id === undefined || state.toast?.id === id ? { toast: null } : state)),
   toggleSubsSection: () => set((state) => {
     const isSubsSectionCollapsed = !state.isSubsSectionCollapsed;
     saveSubsSectionCollapsed(isSubsSectionCollapsed);

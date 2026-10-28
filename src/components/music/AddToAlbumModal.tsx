@@ -4,7 +4,10 @@ import { getString } from "../../lib/i18n/index";
 import { Button } from "../ui/Button";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
-import { useAlbumLibraryStore, type StoredAlbum } from "../../store/useAlbumLibraryStore";
+import { albumDetailPath, useAlbumLibraryStore, type StoredAlbum } from "../../store/useAlbumLibraryStore";
+import { songVideoId } from "../../lib/useLikes";
+import { showSaveToast } from "../../lib/saveToast";
+import { songToastItem } from "../../lib/songLikeToast";
 import { useUiStore } from "../../store/useUiStore";
 
 function AlbumRowArt({ album }: { album: StoredAlbum }) {
@@ -31,6 +34,7 @@ export function AddToAlbumModal() {
   const addTarget = useAlbumLibraryStore((s) => s.addTarget);
   const albums = useAlbumLibraryStore((s) => s.albums);
   const addTrack = useAlbumLibraryStore((s) => s.addTrack);
+  const removeTrack = useAlbumLibraryStore((s) => s.removeTrack);
   const createAlbum = useAlbumLibraryStore((s) => s.createAlbum);
   const closeAddToAlbum = useAlbumLibraryStore((s) => s.closeAddToAlbum);
   const showToast = useUiStore((s) => s.showToast);
@@ -48,9 +52,23 @@ export function AddToAlbumModal() {
     closeAddToAlbum();
   };
 
+  const track = addTarget;
+  const trackId = songVideoId(track);
+
+  const announce = (album: StoredAlbum, alreadyThere: boolean) => {
+    showSaveToast({
+      destination: { kind: "album", path: albumDetailPath(album), name: album.title },
+      item: songToastItem(track),
+      undo: alreadyThere ? undefined : () => removeTrack(album.id, trackId),
+    });
+  };
+
   const handleAdd = async (albumId: string) => {
-    await addTrack(albumId, addTarget);
-    showToast({ variant: "success", message: getString("album_added_toast") });
+    const album = ownedAlbums.find((owned) => owned.id === albumId);
+    const alreadyThere = !!(album?.tracks ?? []).some((existing) => songVideoId(existing) === trackId);
+    await addTrack(albumId, track);
+    if (album) announce(album, alreadyThere);
+    else showToast({ variant: "success", message: getString("album_added_toast") });
     close();
   };
 
@@ -58,8 +76,8 @@ export function AddToAlbumModal() {
     event.preventDefault();
     if (!newName.trim()) return;
     const album = await createAlbum(newName);
-    await addTrack(album.id, addTarget);
-    showToast({ variant: "success", message: getString("album_added_toast") });
+    await addTrack(album.id, track);
+    announce(album, false);
     close();
   };
 

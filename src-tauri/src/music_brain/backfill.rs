@@ -53,7 +53,6 @@ pub async fn backfill_if_needed(pool: &SqlitePool, brain: &mut MusicBrain) -> Ap
             track_id: row.video_id.clone(),
             artist_key: artist_key.clone(),
             genre: None,
-            percent_played: pct,
             is_explicit_like: false,
             title: Some(row.title.clone()),
             artist_display,

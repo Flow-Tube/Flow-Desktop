@@ -154,7 +154,6 @@ mod tests {
             track_id: track.to_string(),
             artist_key: artist.to_string(),
             genre: None,
-            percent_played: 1.0,
             is_explicit_like: false,
             title: Some(format!("{display} song")),
             artist_display: Some(display.to_string()),

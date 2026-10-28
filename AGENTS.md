@@ -81,7 +81,7 @@ Rules:
 1. Always pull the latest changes from `main` before starting work to minimize merge conflicts.
 2. Commit messages should be clear and follow the format: `type(scope): short description` (e.g. `fix(sync): resolve concurrent like conflict`). Scope is optional.
 3. Follow current Tauri 2 / React 19 / Rust best practices — when unsure, check official docs rather than guessing; model training data lags fast-moving frameworks like Tauri.
-4. DO NOT edit or renumber existing files in `src-tauri/migrations/` without explicit instruction. Schema changes are additive: add a new numbered migration (next is `0013_...`).
+4. DO NOT edit or renumber existing files in `src-tauri/migrations/` without explicit instruction. Schema changes are additive: add a new numbered migration (next is `0029_...`) that only adds tables or nullable/defaulted columns, so an older build can still open a database a newer one has migrated.
 5. DO NOT bump the app version in any file (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`) — `scripts/verify-release-version.mjs` requires all three to match, and version bumps are done manually by the project owner.
 6. Keep files small and focused; split large components/hooks by responsibility rather than letting them grow.
 7. Before writing new logic, search the codebase (and `graphify query`) for existing logic that already does the job — reuse or extend rather than duplicate.

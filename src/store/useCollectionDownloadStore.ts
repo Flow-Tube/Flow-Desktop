@@ -7,13 +7,15 @@ import {
   type DownloadStarted,
 } from "../lib/api/downloads";
 import { startMusicDownload, startVideoDownload } from "../lib/downloadActions";
+import { SETTINGS } from "../lib/settings/schema";
+import { getString } from "../lib/i18n/index";
+import { notifyDownloadInBackground } from "../lib/downloadNotifications";
 import { useAppSettingsStore } from "./useAppSettingsStore";
 import { useDownloadCollectionsLibraryStore } from "./useDownloadCollectionsLibraryStore";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 
-const CONCURRENCY = 3;
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 export interface CollectionMeta {
@@ -21,6 +23,8 @@ export interface CollectionMeta {
   title: string;
   author?: string;
   thumbnailUrl?: string;
+  /** An album's release year, written into each song. */
+  year?: number | null;
 }
 
 export interface CollectionRun {
@@ -36,10 +40,17 @@ export interface CollectionRun {
   active: boolean;
 }
 
+/** Choices made in the album and playlist sheet. */
+export interface CollectionOptions {
+  /** A base folder instead of the download folder from Settings. */
+  destinationDirectory?: string;
+  musicQuality?: "High" | "Low";
+}
+
 interface CollectionDownloadState {
   runs: Record<number, CollectionRun>;
-  startPlaylist: (meta: CollectionMeta, videos: VideoSummary[]) => Promise<void>;
-  startAlbum: (meta: CollectionMeta, songs: SongItem[]) => Promise<void>;
+  startPlaylist: (meta: CollectionMeta, videos: VideoSummary[], options?: CollectionOptions) => Promise<void>;
+  startAlbum: (meta: CollectionMeta, songs: SongItem[], options?: CollectionOptions) => Promise<void>;
   handleProgress: (progress: DownloadProgress) => void;
   dismissRun: (dbId: number) => void;
 }
@@ -57,6 +68,7 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
   async function runCollection<T>(
     kind: DownloadCollectionKind,
     meta: CollectionMeta,
+    options: CollectionOptions,
     items: T[],
     idOf: (item: T) => string,
     start: (item: T, folderPath: string, dbId: number) => Promise<DownloadStarted | null>,
@@ -72,6 +84,10 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
         author: meta.author,
         thumbnailUrl: meta.thumbnailUrl,
         totalCount: items.length,
+        destinationDirectory:
+          options.destinationDirectory
+          || settings()[kind === "album" ? SETTINGS.MUSIC_DOWNLOAD_LOCATION : SETTINGS.DOWNLOAD_LOCATION]
+          || undefined,
       });
     } catch (error) {
       console.error("Failed to create the download collection", error);
@@ -122,7 +138,11 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
     };
 
     await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, queue.length) }, () => worker()),
+      // As many workers as downloads may run at once; the backend queue holds the rest.
+      Array.from(
+        { length: Math.min(Number(settings()[SETTINGS.DOWNLOAD_CONCURRENCY] ?? 3) || 3, queue.length) },
+        () => worker(),
+      ),
     );
 
     set((state) => {
@@ -130,33 +150,44 @@ export const useCollectionDownloadStore = create<CollectionDownloadState>((set) 
       if (!run) return {};
       return { runs: { ...state.runs, [dbId]: { ...run, active: false } } };
     });
+    notifyDownloadInBackground(getString("download_notification_collection", meta.title), meta.author ?? "");
     void useDownloadCollectionsLibraryStore.getState().load();
     void useDownloadsLibraryStore.getState().load();
   }
 
   const settings = () => useAppSettingsStore.getState().values;
+  const withQuality = (values: Record<string, string>, quality: CollectionOptions["musicQuality"]) =>
+    quality ? { ...values, [SETTINGS.DOWNLOAD_MUSIC_QUALITY]: quality } : values;
 
   return {
     runs: {},
 
-    startPlaylist: (meta, videos) =>
+    startPlaylist: (meta, videos, options = {}) =>
       runCollection(
         "playlist",
         meta,
+        options,
         videos,
         (video) => video.id,
         (video, folderPath, dbId) =>
           startVideoDownload(video, settings(), { destinationDirectory: folderPath, collectionDbId: dbId }),
       ),
 
-    startAlbum: (meta, songs) =>
+    startAlbum: (meta, songs, options = {}) =>
       runCollection(
         "album",
         meta,
+        options,
         songs,
         (song) => song.videoId ?? song.id,
         (song, folderPath, dbId) =>
-          startMusicDownload(song, settings(), { destinationDirectory: folderPath, collectionDbId: dbId }),
+          startMusicDownload(song, withQuality(settings(), options.musicQuality), {
+            destinationDirectory: folderPath,
+            collectionDbId: dbId,
+            position: { number: songs.indexOf(song) + 1, total: songs.length },
+            albumArtist: meta.author,
+            releaseYear: meta.year,
+          }),
       ),
 
     dismissRun: (dbId) =>

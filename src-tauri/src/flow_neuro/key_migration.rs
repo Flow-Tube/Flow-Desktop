@@ -1,5 +1,6 @@
 //! Brings a brain to key spec 2 once (Android `NeuroKeyMigration.toKeySpec2`, plus the schema 18
-//! pass a desktop brain never had), and reads keys again after every sync merge
+//! pass a desktop brain never had), then to key spec 3 (`toKeySpec3`, Traditional Chinese keys
+//! folded to Simplified), and reads keys again after every sync merge
 //! (`NeuroKeyMigration.afterSync`). Keys written differently are read again and merged: "guitars"
 //! joins "guitar", "lo-fi" joins "lofi". Records that meet keep the stronger one, so a merge never
 //! counts anything twice; document frequency sums, since two spellings were two counts of one word.
@@ -23,12 +24,13 @@ const KEPT_PAIR_WEIGHT: f64 = 0.30;
 const ONBOARDING_EDGE: f64 = 0.3;
 const TOPIC_EVIDENCE_MAX_SCORE: f64 = 50.0;
 
-/// Converts a brain written before key spec 2, once. Returns whether it converted.
+/// Converts a brain written before key spec 2, once, reading it the way key spec 2 did. Returns
+/// whether it converted.
 pub fn to_key_spec_2(brain: &mut UserBrain) -> bool {
-    if brain.key_spec >= keyspec::VERSION {
+    if brain.key_spec >= 2 {
         return false;
     }
-    let spec = brain.key_spec();
+    let spec = brain.key_spec().at_version(2);
     let mut rekey = Rekey::new(&spec, HashMap::new());
     let mut forms = merged_forms(&brain.display_forms, &mut rekey);
     for (stemmed, before) in spelled_before(&weighted_keys(brain), &spec) {
@@ -50,6 +52,47 @@ pub fn to_key_spec_2(brain: &mut UserBrain) -> bool {
         .collect();
 
     rekey_brain(brain, &spec, TopicEvidence::merged_with, Pass::Migration);
+    brain.display_forms = forms;
+    brain.key_spec = 2;
+    true
+}
+
+/// Converts a key spec 2 brain to key spec 3, once: Traditional Chinese keys fold into their
+/// Simplified ones and keep the Traditional spelling to display. A Japanese viewer's kanji stay.
+/// Returns whether it converted.
+pub fn to_key_spec_3(brain: &mut UserBrain) -> bool {
+    if brain.key_spec >= keyspec::VERSION {
+        return false;
+    }
+    let spec = brain.key_spec();
+    let mut rekey = Rekey::new(&spec, HashMap::new());
+    let mut forms = merged_forms(&brain.display_forms, &mut rekey);
+    let bases: HashSet<String> = weighted_keys(brain)
+        .into_keys()
+        .map(|key| strip_domain_tag(&key))
+        .collect();
+    for base in bases {
+        let Some(folded) = single(rekey.keys_for(&base)) else {
+            continue;
+        };
+        if folded != base && !forms.contains_key(&folded) {
+            forms.insert(
+                folded,
+                DisplayForm {
+                    form: base,
+                    votes: 1,
+                },
+            );
+        }
+    }
+    brain.idf_word_frequency = rekey.merged(&brain.idf_word_frequency, |a, b| a + b);
+    brain.blocked_topics = brain
+        .blocked_topics
+        .iter()
+        .map(|topic| single(rekey.keys_for(topic)).unwrap_or_else(|| topic.clone()))
+        .collect();
+
+    rekey_brain(brain, &spec, TopicEvidence::merged_with, Pass::Refold);
     brain.display_forms = forms;
     brain.key_spec = keyspec::VERSION;
     true
@@ -160,6 +203,8 @@ pub fn spelled_before<'a>(
 enum Pass {
     /// Once: chance pairs leave the brain, onboarding links stay.
     Migration,
+    /// Once, to key spec 3: keys fold, every pair and link stays.
+    Refold,
     /// After every merge: no pair is judged again, Android's onboarding links go.
     AfterSync,
 }
@@ -536,7 +581,54 @@ mod tests {
         assert_eq!(brain.rejection_patterns.len(), 2);
         assert_eq!(brain.display_forms[&restor].form, "Restoring");
         assert!(!brain.display_forms.contains_key("guitar"));
+        assert_eq!(brain.key_spec, 2);
+        assert!(to_key_spec_3(&mut brain));
         assert_eq!(brain.key_spec, keyspec::VERSION);
+        assert_eq!(brain.global_vector.topics.get("guitar"), Some(&0.5));
+    }
+
+    fn spec_2_brain(language: &str, topics: &serde_json::Value) -> UserBrain {
+        let mut brain: UserBrain = serde_json::from_value(serde_json::json!({
+            "key_spec": 2,
+            "global_vector": {
+                "topics": topics,
+                "duration": 0.5, "pacing": 0.5, "complexity": 0.5, "is_live": 0.0
+            },
+            "idf_word_frequency": { "機器學習": 3, "机器学习": 4 },
+            "blocked_topics": ["新聞"]
+        }))
+        .unwrap();
+        brain.settle_languages(language);
+        brain
+    }
+
+    // Android NeuroHanRunsTest: a stored brain's Traditional keys.
+    #[test]
+    fn traditional_keys_fold_into_simplified_ones_and_keep_their_spelling() {
+        let mut brain = spec_2_brain(
+            "en",
+            &serde_json::json!({ "機器學習": 0.4, "机器学习": 0.2, "python": 0.3 }),
+        );
+        assert!(to_key_spec_3(&mut brain));
+
+        let topics = &brain.global_vector.topics;
+        assert_eq!(topics.get("机器学习"), Some(&0.4));
+        assert!(topics.contains_key("python"));
+        assert!(!topics.contains_key("機器學習"));
+        assert_eq!(brain.idf_word_frequency.get("机器学习"), Some(&7));
+        assert_eq!(
+            crate::flow_neuro::display_forms::label(&brain.display_forms, "机器学习"),
+            "機器學習"
+        );
+        assert_eq!(brain.blocked_topics, HashSet::from(["新闻".to_string()]));
+        assert!(!to_key_spec_3(&mut brain), "once");
+    }
+
+    #[test]
+    fn a_japanese_viewer_keeps_their_kanji_keys() {
+        let mut brain = spec_2_brain("ja", &serde_json::json!({ "宮崎駿": 0.4 }));
+        to_key_spec_3(&mut brain);
+        assert!(brain.global_vector.topics.contains_key("宮崎駿"));
     }
 
     #[test]

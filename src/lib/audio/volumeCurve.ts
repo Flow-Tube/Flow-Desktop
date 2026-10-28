@@ -1,3 +1,4 @@
+import { profileStorage } from "../storage/profileStorage";
 /**
  * The music volume slider is a position, not a gain: hearing is logarithmic, so a straight gain
  * crowds every audible change into the bottom of the slider. Squaring spreads it evenly (half
@@ -20,13 +21,13 @@ const MARKER_KEY = "flow_music_volume_curve";
  */
 export function migrateSavedMusicVolume(): void {
   try {
-    if (localStorage.getItem(MARKER_KEY)) return;
-    localStorage.setItem(MARKER_KEY, "perceptual");
-    const saved = localStorage.getItem(CONFIG_KEY);
+    if (profileStorage.getItem(MARKER_KEY)) return;
+    profileStorage.setItem(MARKER_KEY, "perceptual");
+    const saved = profileStorage.getItem(CONFIG_KEY);
     if (!saved) return;
     const config = JSON.parse(saved) as { volume?: unknown };
     if (typeof config.volume !== "number" || !Number.isFinite(config.volume)) return;
-    localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, volume: volumePosition(config.volume) }));
+    profileStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, volume: volumePosition(config.volume) }));
   } catch {
     // Unreadable storage: the store falls back to its defaults anyway.
   }

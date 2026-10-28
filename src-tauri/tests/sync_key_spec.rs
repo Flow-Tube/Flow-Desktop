@@ -1,4 +1,4 @@
-//! The brain across key specs: the desktop advertises key spec 2 and its key language, sends its
+//! The brain across key specs: the desktop advertises its key spec and key language, sends its
 //! brain only to a peer that writes keys the same way, and reads a peer's older spellings (or its
 //! own merged state from before key spec 2) into the keys they mean, counting nothing twice.
 
@@ -11,7 +11,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
 use common::bind_loopback;
-use flow_desktop_lib::flow_neuro::keyspec::KeySpec;
+use flow_desktop_lib::flow_neuro::keyspec::{KeySpec, VERSION};
 use flow_desktop_lib::sync::apply::apply_payload;
 use flow_desktop_lib::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, GCounter, Hlc, Lww, RejectionSignalWire,
@@ -37,7 +37,7 @@ const PEER: &str = "dpeer";
 fn the_brain_capability_names_its_key_spec_and_language() {
     let caps = serde_json::to_value(desktop_capabilities("en")).unwrap();
     let brain = &caps["collections"]["flow_neuro_brain"];
-    assert_eq!(brain["keySpec"], 2);
+    assert_eq!(brain["keySpec"], 3);
     assert_eq!(brain["keyLanguage"], "en");
     // Collections without topic keys say so the way Android does: spec 0, no language.
     assert_eq!(caps["collections"]["likes"]["keySpec"], 0);
@@ -151,9 +151,11 @@ async fn offered_to(their_caps: CapabilitiesFrame) -> Vec<String> {
 #[tokio::test]
 async fn the_brain_goes_only_to_a_peer_that_writes_topic_keys_the_same_way() {
     assert_eq!(offered_to(peer_caps(0, "")).await, ["likes"]);
-    assert_eq!(offered_to(peer_caps(2, "es")).await, ["likes"]);
+    assert_eq!(offered_to(peer_caps(3, "es")).await, ["likes"]);
+    // A peer still on key spec 2 would file Simplified Chinese keys beside its Traditional ones.
+    assert_eq!(offered_to(peer_caps(2, "en")).await, ["likes"]);
     assert_eq!(
-        offered_to(peer_caps(2, "en")).await,
+        offered_to(peer_caps(3, "en")).await,
         ["flow_neuro_brain", "likes"]
     );
 }
@@ -320,12 +322,12 @@ async fn a_key_spec_2_snapshot_merges_into_the_keys_already_here() {
     expected.sort();
     assert_eq!(topics(&brain), expected);
     assert_eq!(brain["idf_word_frequency"]["guitar"], 8);
-    assert_eq!(brain["key_spec"], 2);
+    assert_eq!(brain["key_spec"], VERSION);
     // The old local spelling labels the stem it became.
     assert_eq!(brain["display_forms"][&restor]["form"], "Restoring");
 
     let merged = get(&pool, "sync_neuro_merged").await;
-    assert_eq!(merged["key_spec"], 2);
+    assert_eq!(merged["key_spec"], VERSION);
     assert_eq!(merged["key_language"], "en");
 }
 
@@ -384,4 +386,161 @@ async fn merged_state_from_before_key_spec_2_is_read_without_counting_twice() {
     apply(&pool, &peer_snapshot(&[], &[("guitar", 6)], 6), "r2").await;
     let again = get(&pool, "user_neuro_brain").await;
     assert_eq!(again["idf_word_frequency"]["guitar"], 15);
+}
+
+#[tokio::test]
+async fn traditional_keys_from_a_key_spec_2_peer_join_their_simplified_ones() {
+    let pool = memory_pool().await;
+    put(
+        &pool,
+        "user_neuro_brain",
+        &json!({ "language_profile": "en", "key_language": "en", "key_spec": 3,
+                 "global_vector": { "topics": { "机器学习": 0.3 } },
+                 "idf_word_frequency": { "机器学习": 2 }, "idf_total_documents": 2 }),
+    )
+    .await;
+
+    apply(
+        &pool,
+        &peer_snapshot(&[("機器學習", 0.6)], &[("機器學習", 4)], 4),
+        "r1",
+    )
+    .await;
+
+    let brain = get(&pool, "user_neuro_brain").await;
+    assert_eq!(topics(&brain), ["机器学习"]);
+    assert_eq!(brain["key_spec"], VERSION);
+}
+
+#[test]
+fn a_brain_held_back_says_why() {
+    use flow_desktop_lib::sync::protocol::{Withheld, WithheldReason, withheld};
+    let ours = desktop_capabilities("en");
+    let brain = |reason| {
+        vec![Withheld {
+            collection: Collection::FlowNeuroBrain,
+            reason,
+        }]
+    };
+    assert_eq!(
+        withheld(&ours, &peer_caps(2, "en")),
+        brain(WithheldReason::PeerOlder)
+    );
+    assert_eq!(
+        withheld(&ours, &peer_caps(0, "")),
+        brain(WithheldReason::PeerOlder)
+    );
+    assert_eq!(
+        withheld(&ours, &peer_caps(4, "en")),
+        brain(WithheldReason::PeerNewer)
+    );
+    assert_eq!(
+        withheld(&ours, &peer_caps(3, "es")),
+        brain(WithheldReason::KeyLanguage)
+    );
+    assert!(withheld(&ours, &peer_caps(3, "en")).is_empty());
+}
+
+/// Runs a desktop sender holding `outgoing` against a receiver advertising `their_caps`; returns
+/// the sender's outcome and what the receiver staged.
+async fn send_to(
+    their_caps: CapabilitiesFrame,
+    outgoing: Vec<OutgoingCollection>,
+) -> (
+    flow_desktop_lib::sync::protocol::HostOutcome,
+    Vec<StagedCollection>,
+) {
+    let master = generate_master_secret();
+    let sid = generate_session_id();
+    let (listener, port) = bind_loopback().await;
+    let chosen: Vec<Collection> = outgoing.iter().map(|o| o.collection).collect();
+
+    let host_master = master.clone();
+    let host = tokio::spawn(async move {
+        let ch = transport::accept(&listener).await.unwrap();
+        run_sender(
+            ch,
+            SessionCipher::new(&host_master, sid, Role::Host),
+            hello("desktop"),
+            desktop_capabilities("en"),
+            outgoing,
+            chosen,
+            false,
+            || async {},
+        )
+        .await
+        .unwrap()
+    });
+
+    let ch = transport::connect("127.0.0.1", port).await.unwrap();
+    let received = run_receiver(
+        ch,
+        SessionCipher::new(&master, sid, Role::Client),
+        hello("phone"),
+        their_caps,
+        |_, _| async { true },
+        stage_only,
+    )
+    .await
+    .unwrap();
+    let staged = match received {
+        flow_desktop_lib::sync::protocol::ClientOutcome::Completed(payload) => payload.applied,
+        flow_desktop_lib::sync::protocol::ClientOutcome::Declined => Vec::new(),
+    };
+    (host.await.unwrap(), staged)
+}
+
+#[tokio::test]
+async fn a_spec_2_desktop_brain_reaches_a_spec_3_phone_in_simplified_keys() {
+    use flow_desktop_lib::sync::export::export_collections;
+    use flow_desktop_lib::sync::protocol::{HostOutcome, WithheldReason};
+
+    let pool = memory_pool().await;
+    put(
+        &pool,
+        "user_neuro_brain",
+        &json!({ "language_profile": "en", "key_language": "en", "key_spec": 2,
+                 "global_vector": { "topics": { "機器學習": 0.4, "guitar": 0.3 } },
+                 "idf_word_frequency": { "機器學習": 3, "guitar": 2 }, "idf_total_documents": 3 }),
+    )
+    .await;
+    let outgoing = export_collections(&pool, OUR, &[Collection::FlowNeuroBrain])
+        .await
+        .unwrap();
+
+    // A phone on key spec 3 gets the brain, keyed the way it keys titles.
+    let (outcome, staged) = send_to(peer_caps(3, "en"), outgoing.clone()).await;
+    let HostOutcome::Completed(sent) = outcome else {
+        panic!("the phone accepted");
+    };
+    assert!(sent.withheld.is_empty());
+    let brain = staged
+        .iter()
+        .find(|c| c.collection == Collection::FlowNeuroBrain)
+        .expect("the brain went to the phone");
+    let snapshots: Vec<FlowNeuroBrainSnapshot> = String::from_utf8(brain.ndjson.clone())
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let topics: Vec<&String> = snapshots
+        .iter()
+        .flat_map(|s| s.vectors.global_vector.topics.keys())
+        .collect();
+    assert!(topics.iter().any(|t| *t == "机器学习"), "{topics:?}");
+    assert!(!topics.iter().any(|t| *t == "機器學習"), "{topics:?}");
+    assert!(topics.iter().any(|t| *t == "guitar"), "{topics:?}");
+
+    // A phone still on key spec 2 gets none, and the desktop says why.
+    let (outcome, staged) = send_to(peer_caps(2, "en"), outgoing).await;
+    let HostOutcome::Completed(sent) = outcome else {
+        panic!("the phone accepted");
+    };
+    assert!(
+        staged
+            .iter()
+            .all(|c| c.collection != Collection::FlowNeuroBrain)
+    );
+    assert_eq!(sent.withheld.len(), 1);
+    assert_eq!(sent.withheld[0].reason, WithheldReason::PeerOlder);
 }

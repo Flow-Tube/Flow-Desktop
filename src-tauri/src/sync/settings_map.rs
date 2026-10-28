@@ -4,7 +4,8 @@
 //! …) with typed values, so a shared setting is renamed and typed on the way out and mapped back
 //! on the way in. Settings only the desktop has travel under a `desktop.` prefix, which Android
 //! ignores and another desktop maps back. Older desktop builds sent raw desktop keys, which are
-//! still accepted.
+//! still accepted. The SponsorBlock actions, one JSON setting here, travel as Android's nine
+//! per-category settings.
 //!
 //! `default_video_codec` is deliberately not synced: an AV1 or VP9 preference that suits one device
 //! freezes video on a desktop or phone without that hardware decoder. `skip_silence` stays out
@@ -116,6 +117,8 @@ const DESKTOP_ONLY: &[&str] = &[
     "shorts_shelf_enabled",
     "home_shorts_shelf_enabled",
     "continue_watching_enabled",
+    "home_max_video_age",
+    "hide_seen_videos",
     "show_related_videos",
     "disable_shorts_player",
     "shorts_navigation_enabled",
@@ -124,12 +127,35 @@ const DESKTOP_ONLY: &[&str] = &[
     "music_navigation_enabled",
     "categories_nav_tab_enabled",
     "subscription_refresh_on_startup",
+    "hide_unplayable_subscriptions",
     "show_region_picker_in_explore",
     "deep_flow_expire_hours",
     "deep_flow_save_history",
     "sponsorblock_server",
     "sponsorblock_colors",
-    "sponsorblock_categories",
+];
+
+/// The desktop keeps every SponsorBlock category's action in one JSON setting; Android keeps one
+/// setting per category (`sponsorblock_action_<category>`), which both apps read.
+pub const SB_ACTIONS_KEY: &str = "sponsorblock_categories";
+const SB_ACTION_PREFIX: &str = "sponsorblock_action_";
+const SB_CATEGORIES: [&str; 9] = [
+    "sponsor",
+    "intro",
+    "outro",
+    "selfpromo",
+    "interaction",
+    "music_offtopic",
+    "filler",
+    "preview",
+    "exclusive_access",
+];
+/// Desktop action to Android's `SponsorBlockAction` name.
+const SB_ACTIONS: [(&str, &str); 4] = [
+    ("skip", "SKIP"),
+    ("mute", "MUTE"),
+    ("notify", "SHOW_TOAST"),
+    ("ignore", "IGNORE"),
 ];
 
 const DESKTOP_PREFIX: &str = "desktop.";
@@ -140,22 +166,88 @@ pub fn desktop_keys() -> impl Iterator<Item = &'static str> {
         .iter()
         .map(|s| s.desktop)
         .chain(DESKTOP_ONLY.iter().copied())
+        .chain(std::iter::once(SB_ACTIONS_KEY))
 }
 
-/// The wire entry for a stored desktop setting, stamped with the time the row last changed.
+/// The wire entries for a stored desktop setting, stamped with the time the row last changed: one
+/// for most settings, one per category for the SponsorBlock actions.
 #[must_use]
 pub fn local_entry(
     desktop_key: &str,
     stored: &str,
     updated_at: &str,
     device_id: &str,
-) -> Option<SettingEntry> {
-    let (key, value) = to_wire(desktop_key, stored)?;
-    Some(SettingEntry {
+) -> Vec<SettingEntry> {
+    let hlc = Hlc::new(iso_to_ms(updated_at), 0, device_id);
+    let entry = |(key, value): (String, Value)| SettingEntry {
         key,
         value,
-        hlc: Hlc::new(iso_to_ms(updated_at), 0, device_id),
-    })
+        hlc: hlc.clone(),
+    };
+    if desktop_key == SB_ACTIONS_KEY {
+        return sb_actions_to_wire(stored).into_iter().map(entry).collect();
+    }
+    to_wire(desktop_key, stored)
+        .map(entry)
+        .into_iter()
+        .collect()
+}
+
+/// Whether a wire key is one of Android's per-category SponsorBlock actions.
+#[must_use]
+pub fn is_sb_action(wire_key: &str) -> bool {
+    wire_key
+        .strip_prefix(SB_ACTION_PREFIX)
+        .is_some_and(|category| SB_CATEGORIES.contains(&category))
+}
+
+/// The desktop's stored SponsorBlock actions as Android's per-category settings. Categories with
+/// no action, or one Android doesn't have, are left out.
+fn sb_actions_to_wire(stored: &str) -> Vec<(String, Value)> {
+    let Ok(Value::Object(actions)) = serde_json::from_str::<Value>(stored) else {
+        return Vec::new();
+    };
+    SB_CATEGORIES
+        .iter()
+        .filter_map(|category| {
+            let action = actions.get(*category)?.as_str()?;
+            let (_, android) = SB_ACTIONS.iter().find(|(desktop, _)| *desktop == action)?;
+            Some((
+                format!("{SB_ACTION_PREFIX}{category}"),
+                Value::String((*android).to_string()),
+            ))
+        })
+        .collect()
+}
+
+/// The desktop's SponsorBlock actions setting, with the categories of `incoming` wire entries
+/// written over `current`. `None` when no entry names a known category and action.
+#[must_use]
+pub fn sb_actions_from_wire<'a>(
+    current: Option<&str>,
+    incoming: impl IntoIterator<Item = &'a SettingEntry>,
+) -> Option<(&'static str, String)> {
+    let mut actions = match current.map(serde_json::from_str::<Value>) {
+        Some(Ok(Value::Object(map))) => map,
+        _ => serde_json::Map::new(),
+    };
+    let mut changed = false;
+    for entry in incoming {
+        let Some(category) = entry.key.strip_prefix(SB_ACTION_PREFIX) else {
+            continue;
+        };
+        let desktop = entry.value.as_str().and_then(|android| {
+            SB_ACTIONS
+                .iter()
+                .find(|(_, name)| *name == android)
+                .map(|(desktop, _)| *desktop)
+        });
+        if let Some(desktop) = desktop.filter(|_| SB_CATEGORIES.contains(&category)) {
+            actions.insert(category.to_string(), Value::String(desktop.to_string()));
+            changed = true;
+        }
+    }
+    changed.then(|| (SB_ACTIONS_KEY, Value::Object(actions).to_string()))
 }
 
 /// The wire key and typed value for a stored desktop setting. `None` for a key that doesn't sync.
@@ -176,6 +268,9 @@ pub fn to_wire(desktop_key: &str, stored: &str) -> Option<(String, Value)> {
 /// names older desktop builds sent. `None` for anything this desktop doesn't sync.
 #[must_use]
 pub fn normalize_wire_key(key: &str) -> Option<String> {
+    if is_sb_action(key) {
+        return Some(key.to_string());
+    }
     if let Some(s) = SHARED
         .iter()
         .find(|s| s.canonical == key || s.desktop == key)

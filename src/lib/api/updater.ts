@@ -1,3 +1,4 @@
+import { relaunchFlow } from "./process";
 import { isTauriEnv } from "./env";
 import { invokeBackend } from "./errors";
 import { parseUpdateSupport, type UpdateSupport } from "../updateSupport";
@@ -74,6 +75,5 @@ export async function downloadAndInstallUpdate(
 /** Relaunches the app into the freshly installed build. */
 export async function relaunchApp(): Promise<void> {
   if (!(await isTauriEnv())) return;
-  const { relaunch } = await import("@tauri-apps/plugin-process");
-  await relaunch();
+  await relaunchFlow();
 }

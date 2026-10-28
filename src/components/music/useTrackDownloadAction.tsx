@@ -28,11 +28,18 @@ export function useTrackDownloadAction(track: SongItem | null): MusicMenuAction[
         id: 'download',
         label: getString('music_remove_download'),
         icon: <Trash2 size={16} />,
+        group: 'library',
+        danger: true,
         onSelect: async () => {
           const record = findDownloadedRecord(trackId, 'audio');
           if (!record) return;
           await removeDownloads([record.id]);
-          showToast({ variant: 'success', message: getString('music_download_removed_toast') });
+          showToast({
+            variant: 'success',
+            message: getString('music_download_removed_toast'),
+            image: track.thumbnail,
+            imageShape: 'square',
+          });
         },
       },
     ];
@@ -43,6 +50,8 @@ export function useTrackDownloadAction(track: SongItem | null): MusicMenuAction[
       id: 'download',
       label: active ? getString('downloads_downloading') : getString('music_download'),
       icon: active ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />,
+      group: 'quick',
+      tileLabel: getString('menu_tile_download'),
       onSelect: () => openMusicDownload(track),
     },
   ];

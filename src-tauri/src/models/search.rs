@@ -61,6 +61,24 @@ pub struct SearchCorrection {
     pub applied: bool,
 }
 
+/// One autocomplete row: the query to search, and for well-known people, places and
+/// things, the knowledge-panel card that comes with it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSuggestion {
+    pub text: String,
+    pub entity: Option<SuggestionEntity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestionEntity {
+    pub title: String,
+    /// A short line such as "Finnish-American software engineer".
+    pub description: Option<String>,
+    pub image: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchVideosResponse {

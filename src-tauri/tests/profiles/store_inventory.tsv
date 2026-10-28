@@ -1,0 +1,104 @@
+# Every place Flow Desktop keeps data, and who owns it once there are profiles.
+# kind	name	scope	class	reason
+# scope: DEVICE (one per install), PROFILE (one per profile), CACHE (disposable), DEFAULT_ONLY (sync state), DEAD (unused)
+# class: settings | library | private | identity | sync | - (Android StoreScope classes)
+table	downloads	DEVICE	-	Downloads are shared by every profile; read from Default's file
+table	download_collections	DEVICE	-	Downloads are shared; own playlists outside Default carry a <profileId>: prefix
+table	download_jobs	DEVICE	-	The orphan-partial sweep deletes .flowpart files no job in the open database owns
+table	sync_identity	DEVICE	-	The sync device id; stays in Default's file where older builds read it
+table	sync_peers	DEFAULT_ONLY	sync	Only Default syncs
+table	sync_log	DEFAULT_ONLY	sync	Only Default syncs
+table	sync_changes	DEFAULT_ONLY	sync	Only Default syncs; local edits are not recorded elsewhere
+table	watch_history	PROFILE	library	Video and music history (is_music)
+table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
+table	recommendation_events	PROFILE	private	FlowNeuro event log
+table	seen_videos	PROFILE	private	Cards this viewer has seen
+table	neuro_channel_categories	PROFILE	private	FlowNeuro v4 side store
+table	neuro_cowatch_sources	PROFILE	private	FlowNeuro v4 side store
+table	neuro_content_topics	PROFILE	private	FlowNeuro v4 side store
+table	home_feed_cache	PROFILE	private	Ranked Home output for this profile
+table	home_channel_memory	PROFILE	private	Channels watched without subscribing
+table	home_neighbour_channels	PROFILE	private	FlowNeuro v5 neighbour channels
+table	subscription_watermarks	PROFILE	private	A shared watermark would swallow another profile's alerts
+table	music_queue_state	PROFILE	private	Last music queue
+table	music_resume_positions	PROFILE	private	Long-track resume points
+table	scrobble_queue	PROFILE	private	Pending scrobbles for this profile's accounts
+table	scrobble_loves	PROFILE	private	Pending loves for this profile's accounts
+table	scrobble_accounts	PROFILE	private	Mirror of this profile's keychain entry
+table	scrobble_keychain_state	PROFILE	private	Mirror of this profile's keychain entry
+table	subscription_uploads	CACHE	private	Read unfiltered on Home, so it must stay in the profile's file
+table	music_home_typed_cache	CACHE	private	YouTube Music home for this profile
+table	music_content_cache	CACHE	private	Joined with watch_history; stays beside it
+table	music_content_entities	CACHE	private	Joined with watch_history; stays beside it
+table	music_content_edges	CACHE	private	Joined with watch_history; stays beside it
+table	video_cache	CACHE	-	Public video metadata; kept in each profile's file
+table	dearrow_cache	CACHE	-	Public crowd data; kept in each profile's file
+table	known_shorts	CACHE	-	Fact about a video; kept in each profile's file
+table	unplayable_videos	CACHE	-	Fact about a video; kept in each profile's file
+table	video_kind_checks	CACHE	-	Fact about a video; kept in each profile's file
+table	music_home_sections	DEAD	-	No code reads or writes it
+table	music_home_chips	DEAD	-	No code reads or writes it
+table	settings	PROFILE	settings	Mixed table: device keys are routed to Default's file by key
+setting	user_neuro_brain	PROFILE	private	FlowNeuro brain
+setting	user_neuro_brain_before_v14	PROFILE	private	Pre-migration copy, written for any brain that lacks one
+setting	user_music_brain	PROFILE	private	MusicBrain
+setting	music_brain_backfilled	PROFILE	private	Follows user_music_brain
+setting	liked_items	PROFILE	library	Likes
+setting	user_playlists	PROFILE	library	Playlists
+setting	saved_albums	PROFILE	library	Saved albums
+setting	subscription_groups	PROFILE	library	Channel groups
+setting	subscriptions	PROFILE	library	Subscribed channels
+setting	subscription_tombstones	PROFILE	library	Unsubscribe tombstones
+setting	subscription_notifications	PROFILE	library	Per-channel alert opt-in
+setting	subscription_channels	PROFILE	library	Backup wire alias of subscriptions, never stored
+setting	blocked_channel_names	PROFILE	private	Names of blocked channels
+setting	home_channel_memory_cleared_at	PROFILE	private	Home channel memory reset time
+setting	home_max_video_age	PROFILE	settings	Home preference
+setting	hide_seen_videos	PROFILE	settings	Home preference
+setting	notifications_enabled	PROFILE	settings	New-upload alerts
+setting	notif_check_interval_minutes	PROFILE	settings	Android twin subscription_check_interval_minutes is per profile
+setting	stable_volume_enabled	PROFILE	settings	Playback preference
+setting	sponsorblock_categories	PROFILE	settings	SponsorBlock preference
+setting	sponsorblock_enabled	PROFILE	settings	SponsorBlock preference
+setting	sponsorblock_server	PROFILE	settings	SponsorBlock preference
+setting	sync_neuro_merged	DEFAULT_ONLY	sync	FlowNeuro CRDT state
+setting	sync_music_merged	DEFAULT_ONLY	sync	MusicBrain CRDT state
+setting	sync_neuro_baseline	DEFAULT_ONLY	sync	FlowNeuro CRDT baseline
+setting	sync_music_baseline	DEFAULT_ONLY	sync	MusicBrain CRDT baseline
+setting	sync_last_backup	DEFAULT_ONLY	sync	Pre-apply snapshot of the last sync
+setting	sync_device_id	DEAD	-	Unused constant; the id lives in sync_identity
+setting	remote_signature_fallback	DEVICE	-	Network
+setting	content_language	DEVICE	-	Language and region
+setting	download_location	DEVICE	-	Downloads
+setting	music_download_location	DEVICE	-	Downloads
+setting	download_poster_sidecar	DEVICE	-	Downloads
+setting	download_lyrics_file	DEVICE	-	Downloads
+file	flow-desktop.sqlite	PROFILE	library	Default at the app data root, others under profiles/<id>/
+file	visitor_identity.json	PROFILE	identity	One YouTube visitor identity per profile
+file	logs	DEVICE	-	Diagnostics and logs are device-wide
+file	lyrics	CACHE	-	Shared content cache keyed by video id
+file	download_covers	DEVICE	-	Belongs to download rows
+file	download_subtitles	DEVICE	-	Belongs to download rows
+file	custom.css	DEVICE	-	Shared theme library; the chosen theme is per profile
+file	.window-state.json	DEVICE	-	Window size and position
+file	startup_state.json	DEVICE	-	Linux startup tiers, read before any profile is known
+file	toast_logo	DEVICE	-	Windows notification logo
+keychain	CREDENTIALS	PROFILE	private	Scrobbling credentials; CREDENTIALS@<id> outside Default
+keychain	LASTFM	DEFAULT_ONLY	private	Legacy entry migrated into Default's CREDENTIALS
+keychain	LIBREFM	DEFAULT_ONLY	private	Legacy entry migrated into Default's CREDENTIALS
+keychain	LISTENBRAINZ	DEFAULT_ONLY	private	Legacy entry migrated into Default's CREDENTIALS
+keychain	LASTFM_OWN_KEY	DEFAULT_ONLY	private	Legacy entry migrated into Default's CREDENTIALS
+dir_site	src/commands/diagnostics.rs	DEVICE	-	Logs folder
+dir_site	src/commands/downloads/sidecars.rs	DEVICE	-	download_covers
+dir_site	src/commands/downloads/subtitles.rs	DEVICE	-	download_subtitles
+dir_site	src/commands/lyrics.rs	CACHE	-	lyrics cache
+dir_site	src/commands/theme.rs	DEVICE	-	custom.css
+dir_site	src/lib.rs	PROFILE	-	Logs, visitor identity and the database
+dir_site	src/linux_startup.rs	DEVICE	-	startup_state.json
+dir_site	src/services/win_notify.rs	DEVICE	-	toast logo
+setting	feed_actions_state_v1	PROFILE	private	Dismissed videos, blocked channels and keywords
+setting	homeSubsRotationCursor	PROFILE	private	Home subscriptions rotation cursor
+file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
+dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder
+file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
+file	profile_avatars	DEVICE	-	Profile photos, <id>.webp

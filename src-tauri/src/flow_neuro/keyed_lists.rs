@@ -73,7 +73,7 @@ const POLYSEMOUS_WORDS: [&str; 51] = [
 ];
 
 /// Subjects too broad for one rejected video to say the viewer dislikes them.
-const REJECTION_BROAD_TOPICS: [&str; 21] = [
+const REJECTION_BROAD_TOPICS: [&str; 29] = [
     "music",
     "game",
     "video",
@@ -95,6 +95,15 @@ const REJECTION_BROAD_TOPICS: [&str; 21] = [
     "build",
     "design",
     "travel",
+    // Simplified Chinese keys.
+    "新闻",
+    "音乐",
+    "游戏",
+    "科技",
+    "电影",
+    "教育",
+    "美食",
+    "旅游",
 ];
 
 /// What a music-led profile's keys hold.

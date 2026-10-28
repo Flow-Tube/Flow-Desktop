@@ -1,6 +1,7 @@
 import { getString, type StringKey } from "./i18n/index";
 import { parseToTimestamp } from "./publishedDate";
 import type { VideoSummary } from "../types/video";
+import { profileStorage } from "./storage/profileStorage";
 
 // Mirrors Flow-Android's PlaylistSorting.
 
@@ -39,7 +40,7 @@ export const resolvePlaylistSortOrder = (
 
 const loadPlaylistSortOrders = (): Record<string, string> => {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(SORT_ORDERS_STORAGE_KEY) ?? "{}");
+    const parsed: unknown = JSON.parse(profileStorage.getItem(SORT_ORDERS_STORAGE_KEY) ?? "{}");
     return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
   } catch {
     return {};
@@ -52,7 +53,7 @@ export const loadPlaylistSortOrder = (playlistId: string): string | null =>
 
 export const savePlaylistSortOrder = (playlistId: string, order: PlaylistSortOrder) => {
   try {
-    localStorage.setItem(
+    profileStorage.setItem(
       SORT_ORDERS_STORAGE_KEY,
       JSON.stringify({ ...loadPlaylistSortOrders(), [playlistId]: order }),
     );

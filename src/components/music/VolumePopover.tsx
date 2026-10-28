@@ -3,6 +3,7 @@ import { Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { getString } from "../../lib/i18n/index";
+import { MENU_ENTER_TRANSITION, MENU_EXIT_TRANSITION } from "../../lib/motion";
 import { Slider } from "../ui/Slider";
 
 export function VolumePopover({ open }: { open: boolean }) {
@@ -18,10 +19,9 @@ export function VolumePopover({ open }: { open: boolean }) {
       {open && (
         <motion.div
           key="vol-popover"
-          initial={{ opacity: 0, y: 10, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.97 }}
-          transition={{ type: "spring", stiffness: 420, damping: 34, mass: 0.8 }}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
+          exit={{ opacity: 0, scale: 0.98, transition: MENU_EXIT_TRANSITION }}
           style={{ transformOrigin: "bottom center" }}
           className="flex w-60 items-center gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-3"
         >

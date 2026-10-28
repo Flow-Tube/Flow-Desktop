@@ -37,12 +37,9 @@ impl PbWriter {
         self.buf
     }
 
+    #[cfg(test)]
     pub fn as_slice(&self) -> &[u8] {
         &self.buf
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
     }
 
     // Encode a base-128 varint (LEB128, unsigned).
@@ -84,10 +81,6 @@ impl PbWriter {
 
     pub fn write_uint64(&mut self, field: u32, value: u64) {
         self.write_varint_field(field, value);
-    }
-
-    pub fn write_uint32(&mut self, field: u32, value: u32) {
-        self.write_varint_field(field, u64::from(value));
     }
 
     pub fn write_bool(&mut self, field: u32, value: bool) {
@@ -146,6 +139,7 @@ impl PbField<'_> {
     pub fn as_bool(&self) -> bool {
         self.varint != 0
     }
+    #[cfg(test)]
     pub fn as_f32(&self) -> f32 {
         f32::from_bits(self.varint as u32)
     }

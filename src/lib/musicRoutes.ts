@@ -1,5 +1,10 @@
 import type { YTItem } from '../types/music';
 
+/** Whether `path` is one of the Music pages, which only the main window shows. */
+export function isMusicRoute(path: string): boolean {
+  return path === '/music' || path.startsWith('/music/') || path.startsWith('/music?');
+}
+
 /**
  * Destination for a shelf's "see all" endpoint, chosen by browse-id page type:
  * albums, playlists and artists have dedicated pages; everything else (moods,

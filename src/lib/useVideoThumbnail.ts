@@ -15,5 +15,5 @@ export function useVideoThumbnail(
     [videoId, fallbackUrl, quality],
   );
 
-  return useImageFallback([sources.primary, sources.fallback]);
+  return useImageFallback(sources);
 }

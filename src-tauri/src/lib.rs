@@ -19,6 +19,7 @@ mod macos_window;
 pub mod models;
 mod music_brain;
 pub mod profiles;
+mod relaunch;
 mod scrobble;
 mod security;
 mod services;
@@ -90,6 +91,7 @@ use commands::pip::{
     PipState, close_pip_window, focus_main_window, focus_pip_source_window, open_pip_window,
     pip_session, pip_window_ready, set_pip_always_on_top,
 };
+use commands::process::relaunch_app;
 use commands::profiles::{
     profiles_create, profiles_delete, profiles_list, profiles_rename, profiles_set_look,
 };
@@ -199,6 +201,7 @@ pub fn run() {
     // key their crash sentinel to the real bundle identifier. Must run before any
     // GTK/WebKitGTK init (which happens in `.build()` below).
     let context = tauri::generate_context!();
+    relaunch::capture_launch_env();
 
     // The profile must be known before the builder registers anything that opens a store.
     let (active_profile, profile_warning) =
@@ -599,6 +602,7 @@ pub fn run() {
             profiles_rename,
             profiles_set_look,
             profiles_delete,
+            relaunch_app,
             write_backup_file,
             write_lyrics_file,
             get_cached_lyrics,
@@ -799,6 +803,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 macos_window::reopen(app_handle);
+            }
+
+            if let tauri::RunEvent::Exit = event {
+                relaunch::on_exit(&app_handle.env());
             }
 
             // Flush the resident brain to disk on shutdown so the debounce window is never lost.

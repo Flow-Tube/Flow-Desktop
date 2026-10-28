@@ -1670,6 +1670,8 @@
   "sync_error_invalid_address": "This code points outside your local network, so Flow won't connect to it. Only use codes shown by your own devices.",
   "sync_error_no_peer": "No device connected before the code expired. Check that both devices are on the same Wi-Fi and that a firewall isn't blocking Flow, then try again.",
   "sync_error_busy": "A sync is already running. Finish or cancel it first.",
+  "sync_error_not_default_profile": "Switch to %1$s to sync. Other profiles stay on this computer only.",
+  "profiles_default_name": "Default",
   "sync_error_unreachable": "Couldn't reach the other device. Check that both devices are on the same Wi-Fi and that a VPN or firewall isn't blocking the connection.",
   "sync_error_peer_closed": "The other device closed the connection. Check it for a message, then try again.",
   "sync_error_timeout": "The other device stopped responding. Keep Flow open on both devices and try again.",

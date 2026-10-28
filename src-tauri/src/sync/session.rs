@@ -192,19 +192,41 @@ impl Default for SyncStatus {
 
 pub struct SyncManager {
     inner: Mutex<Inner>,
+    profile: SyncProfile,
 }
 
-impl Default for SyncManager {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Which profile this process runs as, as far as sync cares. Fixed for the process.
+#[derive(Debug, Clone)]
+pub struct SyncProfile {
+    /// Only the Default profile syncs (FLOW-SYNC/1 carries no profile).
+    pub syncs_here: bool,
+    /// Default's name, blank until renamed; shown in "Switch to … to sync".
+    pub default_name: String,
 }
 
 impl SyncManager {
-    pub fn new() -> Self {
+    pub fn new(profile: SyncProfile) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
+            profile,
         }
+    }
+
+    pub fn syncs_here(&self) -> bool {
+        self.profile.syncs_here
+    }
+
+    /// The only way into a session: refuses outside Default, then while one is running.
+    pub async fn begin(&self) -> Result<(), SyncError> {
+        if !self.profile.syncs_here {
+            return Err(SyncError::NotDefaultProfile(
+                self.profile.default_name.clone(),
+            ));
+        }
+        if self.is_busy().await {
+            return Err(SyncError::Busy);
+        }
+        Ok(())
     }
 
     pub async fn status(&self) -> SyncStatus {
@@ -212,7 +234,7 @@ impl SyncManager {
     }
 
     /// True while a session is mid-flight (a new one would collide).
-    async fn is_busy(&self) -> bool {
+    pub async fn is_busy(&self) -> bool {
         matches!(
             self.inner.lock().await.status.phase.as_str(),
             "hosting" | "connecting" | "awaitingConsent" | "transferring"
@@ -475,9 +497,7 @@ pub async fn start_host(
     selection: Vec<Collection>,
     receive: bool,
 ) -> Result<HostStartInfo, SyncError> {
-    if manager.is_busy().await {
-        return Err(SyncError::Busy);
-    }
+    manager.begin().await?;
 
     let pool = pool_of(&app);
     let device_id = ledger::get_or_create_device_id(&pool).await?;
@@ -740,9 +760,7 @@ pub async fn scan_join(
     manager: Arc<SyncManager>,
     qr_text: String,
 ) -> Result<(), SyncError> {
-    if manager.is_busy().await {
-        return Err(SyncError::Busy);
-    }
+    manager.begin().await?;
     let payload = QrPayload::from_json(&qr_text)?;
     if payload.is_expired(now_s()) {
         return Err(SyncError::Expired);

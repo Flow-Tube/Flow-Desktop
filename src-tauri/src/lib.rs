@@ -459,7 +459,12 @@ pub fn run() {
             })?;
             app.manage(music_brain_store);
 
-            app.manage(Arc::new(sync::session::SyncManager::new()));
+            app.manage(Arc::new(sync::session::SyncManager::new(
+                sync::session::SyncProfile {
+                    syncs_here: active_profile.is_default,
+                    default_name: active_profile.default_name.clone(),
+                },
+            )));
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
             app.manage(ShortsService::new());

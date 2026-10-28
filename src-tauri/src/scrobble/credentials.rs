@@ -249,6 +249,7 @@ mod tests {
             id: "study".into(),
             is_default: false,
             after_switch: false,
+            default_name: String::new(),
         };
         let raw = ScopedMemory::default();
         raw.write("LASTFM", r#"{"userName":"default-user","secret":"k"}"#)
@@ -276,6 +277,7 @@ mod tests {
             id: "d".into(),
             is_default: true,
             after_switch: false,
+            default_name: String::new(),
         };
         let scoped = ProfileScoped::new(ScopedMemory::default(), &default);
         let mut mine = Credentials::default();

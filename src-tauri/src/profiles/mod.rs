@@ -15,6 +15,8 @@ pub struct ActiveProfile {
     pub is_default: bool,
     /// True on the first start after a switch.
     pub after_switch: bool,
+    /// Default's name, blank until renamed (shown as "Default").
+    pub default_name: String,
 }
 
 impl ActiveProfile {
@@ -25,6 +27,7 @@ impl ActiveProfile {
             id: String::new(),
             is_default: true,
             after_switch: false,
+            default_name: String::new(),
         }
     }
 
@@ -103,6 +106,12 @@ pub fn load_for_process(app_data_dir: &Path) -> (ActiveProfile, Option<String>) 
         id: state.active_id().to_string(),
         is_default: state.active_id() == state.default_id(),
         after_switch,
+        default_name: state
+            .profiles
+            .iter()
+            .find(|profile| profile.id == state.default_id())
+            .map(|profile| profile.name.clone())
+            .unwrap_or_default(),
     };
     (active, warning)
 }
@@ -121,6 +130,7 @@ mod tests {
             id: "study".into(),
             is_default: false,
             after_switch: false,
+            default_name: String::new(),
         };
         assert_eq!(
             webview_script(&study),

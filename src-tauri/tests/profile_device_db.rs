@@ -23,6 +23,7 @@ async fn another_profile_shares_defaults_device_rows() {
         id: "study".into(),
         is_default: false,
         after_switch: false,
+        default_name: String::new(),
     };
 
     let pool = open_database(&dir, &study).await.unwrap();

@@ -3,6 +3,7 @@ use crate::api::innertube::extractors::audio_preference;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
 use crate::errors::ErrorResponse;
+use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
 use crate::sync::local_edits;
 use sqlx::SqlitePool;
@@ -54,16 +55,24 @@ pub async fn add_watch_records_bulk(
 pub async fn delete_watch_record(
     video_id: String,
     pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    note_sync_failure(local_edits::record_watch_deletion(&pool, Some(&video_id)).await);
+    if profile.is_default {
+        note_sync_failure(local_edits::record_watch_deletion(&pool, Some(&video_id)).await);
+    }
     watch_history::delete_watch_record(&pool, &video_id)
         .await
         .map_err(ErrorResponse::from)
 }
 
 #[tauri::command]
-pub async fn clear_watch_history(pool: State<'_, SqlitePool>) -> Result<(), ErrorResponse> {
-    note_sync_failure(local_edits::record_watch_deletion(&pool, None).await);
+pub async fn clear_watch_history(
+    pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
+) -> Result<(), ErrorResponse> {
+    if profile.is_default {
+        note_sync_failure(local_edits::record_watch_deletion(&pool, None).await);
+    }
     watch_history::clear_watch_history(&pool)
         .await
         .map_err(ErrorResponse::from)
@@ -84,8 +93,11 @@ pub async fn set_setting(
     key: String,
     value: String,
     pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    note_sync_failure(local_edits::record_blob_write(&pool, &key, &value).await);
+    if profile.is_default {
+        note_sync_failure(local_edits::record_blob_write(&pool, &key, &value).await);
+    }
     settings::set_setting(&pool, &key, &value)
         .await
         .map_err(ErrorResponse::from)?;
@@ -111,7 +123,7 @@ pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
     }
 }
 
-/// Sync bookkeeping never blocks the user's own change; the worst case is that this one edit
+/// Only Default syncs, so only Default records its edits for sync. Sync bookkeeping never blocks the user's own change; the worst case is that this one edit
 /// syncs the way it did before this was recorded (a deletion a peer may undo).
 fn note_sync_failure(result: Result<(), SyncError>) {
     if let Err(e) = result {

@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
-  AudioLines,
   Captions,
-  Check,
-  ChevronLeft,
   ChevronRight,
   Expand,
-  Gauge,
   ListVideo,
   Maximize2,
+  MessageSquareText,
   Minimize2,
-  Monitor,
   Pause,
   PictureInPicture2,
   Play,
+  ScrollText,
   Settings as SettingsIcon,
   SkipBack,
   SkipForward,
@@ -21,10 +18,8 @@ import {
   Volume1,
   Volume2,
   VolumeX,
-  Sliders,
-  SlidersHorizontal,
 } from "lucide-react";
-import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
+import { usePlayerStore, type FullscreenPanel, type PlaybackRate } from "../../store/usePlayerStore";
 import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
@@ -38,7 +33,8 @@ import { HeatmapStrip } from "./HeatmapStrip";
 import { PREVIEW_WIDTH, pickStoryboardLevel, storyboardFrameAt } from "../../lib/seekPreview";
 import { proxiedImage } from "../../lib/imageProxy";
 import { useImageProxyStore } from "../../store/useImageProxyStore";
-import { SubtitleCustomizer } from "./SubtitleCustomizer";
+import { PlayerSettingsMenu, qualityLabel, type SettingsPane } from "./PlayerSettingsMenu";
+import { PLAYER_MENU_OWNER_ATTR } from "../../lib/playerMenuDismiss";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
 import {
   PROGRESS_EVENTS,
@@ -50,13 +46,7 @@ import {
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
-import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
-import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
-import { useEqActive } from "../../lib/audio/eq/useEqualizer";
-import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
-import { useEqStore } from "../../store/useEqStore";
 import { Slider } from "../ui/Slider";
-import { videoCodecLabel } from "../../lib/settings/playerRuntime";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -115,16 +105,6 @@ export interface FlowPlayerControlsProps {
   storyboard?: StoryboardLevel[];
   activeQualityLabel?: string;
 }
-
-type SettingsPane =
-  | "root"
-  | "speed"
-  | "quality"
-  | "captions"
-  | "captions-translate"
-  | "captions-customize"
-  | "audio"
-  | "sleep";
 
 const defaultSpeedOptions: PlaybackRate[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
@@ -209,7 +189,21 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     setIsChaptersPanelOpen,
     isQueuePanelOpen,
     setIsQueuePanelOpen,
+    fullscreenPanel,
+    setFullscreenPanel,
+    isLiveChatAvailable,
   } = usePlayerStore();
+
+  // In fullscreen the panel buttons drive the side panel beside the video instead of the sidebar.
+  const panelOpen = (panel: FullscreenPanel) =>
+    isFullscreen ? fullscreenPanel === panel : panel === "queue" ? isQueuePanelOpen : panel === "chapters" && isChaptersPanelOpen;
+  const togglePanel = (panel: FullscreenPanel) => {
+    if (isFullscreen) setFullscreenPanel(fullscreenPanel === panel ? null : panel);
+    else if (panel === "queue") setIsQueuePanelOpen(!isQueuePanelOpen);
+    else if (panel === "chapters") setIsChaptersPanelOpen(!isChaptersPanelOpen);
+  };
+  const panelButtonClass = (panel: FullscreenPanel) =>
+    cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", panelOpen(panel) && "bg-chrome-white/15 text-primary/90");
 
   const { sponsorBlockColors, sponsorBlockEnabled, sbSubmitEnabled } = useSettingsStore();
   const selectPlaybackRate = onSelectPlaybackRate ?? setPlaybackRate;
@@ -344,24 +338,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
   const supportedQualities = qualities;
 
-  const selectedCaption =
-    captions.find((caption) => caption.id === selectedCaptionId) || null;
-  const nativeCaptions = captions.filter((caption) => !caption.isTranslation);
-  const translatedCaptions = captions.filter((caption) => caption.isTranslation);
-  const captionLabel = (caption: CaptionTrack) =>
-    caption.isTranslation ? getString("player_captions_translated_label", caption.label) : caption.label;
-  const selectedAudioTrack =
-    audioTracks.find((track) => track.id === selectedAudioTrackId) ||
-    audioTracks.find((track) => track.isDefault) ||
-    audioTracks[0] ||
-    null;
-
-  useEffect(() => {
-    if (!settingsOpen) {
-      setSettingsPane("root");
-    }
-  }, [settingsOpen]);
-
   const updateHoverPreview = (clientX: number, trackEl?: HTMLElement) => {
     const pill = hoverPillRef.current;
     if (!pill || isLive || !(duration > 0)) return;
@@ -481,32 +457,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const handleProgressMove = (event: React.MouseEvent<HTMLDivElement>) => {
     updateHoverPreview(event.clientX, event.currentTarget);
   };
-
-  const eqActive = useEqActive();
-  const eqEditorHosted = useEqStore((s) => s.editorHosted);
-  const openEqEditor = useEqStore((s) => s.setEditorOpen);
-
-  const renderSettingRow = (
-    label: string,
-    value: React.ReactNode,
-    icon: React.ReactNode,
-    onClick: () => void
-  ) => (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
-    >
-      <span className="grid h-7 w-7 place-items-center text-chrome-zinc-300">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1 font-medium">{label}</span>
-      <span className="max-w-[46%] truncate text-right text-chrome-zinc-300">
-        {value}
-      </span>
-      <ChevronRight size={16} className="text-chrome-zinc-400" />
-    </button>
-  );
 
   return (
     <>
@@ -742,7 +692,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               <button
                 ref={chapterPillRef}
                 type="button"
-                onClick={() => setIsChaptersPanelOpen(!isChaptersPanelOpen)}
+                onClick={() => togglePanel("chapters")}
                 className="hidden items-center gap-1.5 text-xs font-medium text-chrome-white sm:text-sm bg-chrome-black/20 hover:bg-chrome-white/10 rounded-full px-2 py-1 transition-all select-none cursor-pointer active:scale-95 group/pill max-w-[150px] sm:max-w-[260px] truncate"
               >
                 <span className="chapter-title truncate"></span>
@@ -751,18 +701,40 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 bg-chrome-black/20 rounded-full px-1 py-1">
+              {isFullscreen && (
+                <button
+                  type="button"
+                  title={getString("player_panel_chapters")}
+                  aria-label={getString("player_panel_chapters")}
+                  aria-pressed={panelOpen("chapters")}
+                  onClick={() => togglePanel("chapters")}
+                  className={panelButtonClass("chapters")}
+                >
+                  <ScrollText size={19} />
+                </button>
+              )}
               <button
                 type="button"
                 title={getString("queue_title")}
                 aria-label={getString("queue_title")}
-                onClick={() => setIsQueuePanelOpen(!isQueuePanelOpen)}
-                className={cx(
-                  "grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10",
-                  isQueuePanelOpen && "bg-chrome-white/15 text-primary/90"
-                )}
+                aria-pressed={panelOpen("queue")}
+                onClick={() => togglePanel("queue")}
+                className={panelButtonClass("queue")}
               >
                 <ListVideo size={19} />
               </button>
+              {isFullscreen && isLiveChatAvailable && (
+                <button
+                  type="button"
+                  title={getString("live_chat_title")}
+                  aria-label={getString("live_chat_title")}
+                  aria-pressed={panelOpen("chat")}
+                  onClick={() => togglePanel("chat")}
+                  className={panelButtonClass("chat")}
+                >
+                  <MessageSquareText size={19} />
+                </button>
+              )}
               {sbSubmitEnabled && currentVideo && (
                 <button
                   type="button"
@@ -779,7 +751,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               )}
               <button
                 type="button"
-                title="Quality"
+                {...{ [PLAYER_MENU_OWNER_ATTR]: "" }}
+                title={getString("player_menu_quality")}
                 onClick={() => {
                   if (settingsOpen && settingsPane === "quality") {
                     setSettingsOpen(false);
@@ -791,13 +764,13 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 }}
                 className="hidden h-7 items-center rounded-full px-2 text-xs font-bold text-chrome-white hover:bg-chrome-white/10 sm:flex"
               >
-                {selectedQualityId === "auto"
-                  ? `Auto${activeQualityLabel ? ` (${activeQualityLabel})` : ""}`
-                  : (supportedQualities.find(q => q.id === selectedQualityId)?.qualityLabel || "Auto")}
+                {qualityLabel(selectedQualityId || "auto", supportedQualities, activeQualityLabel)}
               </button>
               <button
                 type="button"
-                title="Captions"
+                {...{ [PLAYER_MENU_OWNER_ATTR]: "" }}
+                title={getString("player_menu_captions")}
+                aria-label={getString("player_menu_captions")}
                 onClick={() => {
                   if (settingsOpen && settingsPane === "captions") {
                     setSettingsOpen(false);
@@ -816,7 +789,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               </button>
               <button
                 type="button"
-                title="Settings"
+                {...{ [PLAYER_MENU_OWNER_ATTR]: "" }}
+                title={getString("player_menu_settings")}
+                aria-label={getString("player_menu_settings")}
+                aria-expanded={settingsOpen}
                 onClick={() => {
                   setSettingsOpen((value) => !value);
                   setSettingsPane("root");
@@ -871,332 +847,27 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         </div>
       </div>
 
-      <div
-        className={cx(
-          "absolute bottom-20 right-3 z-40 w-[min(92vw,360px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover/95 p-2 text-chrome-white shadow-2xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] transform sm:right-5",
-          settingsOpen
-            ? "opacity-100 translate-y-0 scale-100 pointer-events-auto"
-            : "opacity-0 translate-y-4 scale-95 pointer-events-none"
-        )}
-      >
-        {settingsPane !== "root" && (
-          <div className="mb-1 flex items-center justify-between px-1">
-            <button
-              type="button"
-              onClick={() => {
-                if (settingsPane === "captions-customize" || settingsPane === "captions-translate") {
-                  setSettingsPane("captions");
-                } else {
-                  setSettingsPane("root");
-                }
-              }}
-              className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md pl-2 pr-3 text-sm font-bold hover:bg-chrome-white/10 text-left"
-            >
-              <ChevronLeft size={18} />
-              {settingsPane === "speed"
-                ? "Playback speed"
-                : settingsPane === "quality"
-                ? "Quality"
-                : settingsPane === "captions"
-                ? "Subtitles/CC"
-                : settingsPane === "captions-translate"
-                ? getString("player_captions_auto_translate")
-                : settingsPane === "captions-customize"
-                ? "Subtitle Style"
-                : settingsPane === "audio"
-                ? "Audio track"
-                : getString("sleep_timer")}
-            </button>
-            {settingsPane === "captions" && (
-              <button
-                type="button"
-                title="Customize Subtitles"
-                onClick={() => setSettingsPane("captions-customize")}
-                className="grid h-8 w-8 place-items-center rounded-md text-chrome-zinc-300 hover:bg-chrome-white/10 hover:text-chrome-white"
-              >
-                <Sliders size={17} />
-              </button>
-            )}
-          </div>
-        )}
-
-        {settingsPane === "root" && (
-          <div className="space-y-1 animate-pane-in">
-            {renderSettingRow(
-              "Playback speed",
-              playbackRate === 1 ? "Normal" : `${playbackRate}x`,
-              <Gauge size={18} />,
-              () => setSettingsPane("speed")
-            )}
-            {renderSettingRow(
-              "Quality",
-              selectedQualityId === "auto"
-                ? `Auto${activeQualityLabel ? ` (${activeQualityLabel})` : ""}`
-                : (supportedQualities.find(q => q.id === selectedQualityId)?.qualityLabel || "Auto"),
-              <Monitor size={18} />,
-              () => setSettingsPane("quality")
-            )}
-            {renderSettingRow(
-              "Subtitles/CC",
-              selectedCaption ? captionLabel(selectedCaption) : "Off",
-              <Captions size={18} />,
-              () => setSettingsPane("captions")
-            )}
-            {renderSettingRow(
-              "Subtitle Style",
-              "Customize",
-              <Sliders size={18} />,
-              () => setSettingsPane("captions-customize")
-            )}
-            {renderSettingRow(
-              "Audio track",
-              selectedAudioTrack?.label || "Original",
-              <AudioLines size={18} />,
-              () => setSettingsPane("audio")
-            )}
-            {renderSettingRow(
-              getString("sleep_timer"),
-              <SleepTimerLabel />,
-              <Pause size={18} />,
-              () => setSettingsPane("sleep")
-            )}
-            {eqEditorHosted &&
-              renderSettingRow(
-                getString("music_equalizer"),
-                // Read when the menu draws: the self-test only settles once the equalizer is used.
-                getString(!videoEqAvailable() ? "eq_state_unavailable" : eqActive ? "eq_state_on" : "eq_state_off"),
-                <SlidersHorizontal size={18} />,
-                () => {
-                  setSettingsOpen(false);
-                  openEqEditor(true);
-                }
-              )}
-          </div>
-        )}
-
-        {settingsPane === "speed" && (
-          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            {speedSliderEnabled && (
-              <div className="rounded-md px-3 py-3 text-sm text-chrome-zinc-100">
-                <div className="mb-2 flex items-center justify-between text-xs font-semibold text-chrome-zinc-300">
-                  <span>Speed</span>
-                  <span className="font-mono text-primary">{playbackRate}x</span>
-                </div>
-                <input
-                  aria-label="Playback speed"
-                  type="range"
-                  min={0.25}
-                  max={4}
-                  step={0.05}
-                  value={playbackRate}
-                  onChange={(event) => selectPlaybackRate(Number(event.target.value))}
-                  className="h-1 w-full accent-primary"
-                />
-              </div>
-            )}
-            {speedOptions.map((speed) => (
-              <button
-                key={speed}
-                type="button"
-                onClick={() => {
-                  selectPlaybackRate(speed);
-                  setSettingsPane("root");
-                }}
-                className="flex h-10 w-full items-center justify-between rounded-md px-3 text-sm font-medium hover:bg-chrome-white/10"
-              >
-                <span>{speed === 1 ? "Normal" : `${speed}x`}</span>
-                {playbackRate === speed && <Check size={17} />}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {settingsPane === "quality" && (
-          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            <button
-              type="button"
-              onClick={() => {
-                onSelectQuality?.("auto");
-                setSettingsPane("root");
-                setSettingsOpen(false);
-              }}
-              className="flex h-10 w-full items-center justify-between rounded-md px-3 text-sm font-medium hover:bg-chrome-white/10 text-chrome-zinc-100"
-            >
-              <span className="flex items-center gap-1.5">
-                <span>Auto</span>
-                {selectedQualityId === "auto" && activeQualityLabel && (
-                  <span className="text-xs text-chrome-zinc-400 font-normal">
-                    ({activeQualityLabel})
-                  </span>
-                )}
-              </span>
-              {selectedQualityId === "auto" && <Check size={17} />}
-            </button>
-
-            {supportedQualities.map((quality) => {
-              const codec = videoCodecLabel(quality.mimeType);
-              return (
-                <button
-                  key={quality.id}
-                  type="button"
-                  onClick={() => {
-                    if (
-                      !isDashPlayback &&
-                      !quality.hasAudio &&
-                      !audioTracks.some((track) => !!track.localUrl)
-                    ) {
-                      return;
-                    }
-                    onSelectQuality?.(quality);
-                    setSettingsPane("root");
-                    setSettingsOpen(false);
-                  }}
-                  className={cx(
-                    "flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-chrome-zinc-100",
-                    isDashPlayback ||
-                      quality.hasAudio ||
-                      audioTracks.some((track) => !!track.localUrl)
-                      ? "hover:bg-chrome-white/10"
-                      : "cursor-not-allowed text-chrome-zinc-500"
-                  )}
-                >
-                  <span className="flex flex-col text-left leading-tight">
-                    <span>{quality.qualityLabel}</span>
-                    {codec && (
-                      <span className="text-xs font-normal text-chrome-zinc-400">{codec}</span>
-                    )}
-                  </span>
-                  {selectedQualityId === quality.id && <Check size={17} />}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {settingsPane === "captions" && (
-          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCaptionId("off");
-                setSettingsPane("root");
-              }}
-              className="flex h-10 w-full items-center justify-between rounded-md px-3 text-sm font-medium hover:bg-chrome-white/10"
-            >
-              <span>Off</span>
-              {selectedCaptionId === "off" && <Check size={17} />}
-            </button>
-            {nativeCaptions.map((caption) => (
-              <button
-                key={caption.id}
-                type="button"
-                onClick={() => {
-                  setSelectedCaptionId(caption.id);
-                  setSettingsPane("root");
-                }}
-                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-chrome-white/10"
-              >
-                <span className="text-left">
-                  {caption.label}
-                  {caption.isAutoGenerated && (
-                    <span className="ml-1 text-xs text-chrome-zinc-400">auto</span>
-                  )}
-                </span>
-                {selectedCaptionId === caption.id && <Check size={17} />}
-              </button>
-            ))}
-            {translatedCaptions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSettingsPane("captions-translate")}
-                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-chrome-white/10"
-              >
-                <span className="text-left">{getString("player_captions_auto_translate")}</span>
-                <span className="flex items-center gap-1 text-xs text-chrome-zinc-400">
-                  {selectedCaption?.isTranslation ? selectedCaption.label : null}
-                  <ChevronRight size={16} />
-                </span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {settingsPane === "captions-translate" && (
-          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            {translatedCaptions.map((caption) => (
-              <button
-                key={caption.id}
-                type="button"
-                onClick={() => {
-                  setSelectedCaptionId(caption.id);
-                  setSettingsPane("root");
-                }}
-                className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium hover:bg-chrome-white/10"
-              >
-                <span className="text-left">{caption.label}</span>
-                {selectedCaptionId === caption.id && <Check size={17} />}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {settingsPane === "captions-customize" && (
-          <div className="animate-pane-in max-h-64 overflow-y-auto pr-1 select-scrollbar-hidden">
-            <SubtitleCustomizer />
-          </div>
-        )}
-
-        {settingsPane === "audio" && (
-          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            {audioTracks.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-chrome-zinc-400">
-                Original audio
-              </div>
-            ) : (
-              audioTracks.map((track) => {
-                const unavailable = track.available === false;
-                return (
-                  <button
-                    key={track.id}
-                    type="button"
-                    disabled={unavailable}
-                    title={unavailable ? "This audio track isn't available for this video" : undefined}
-                    onClick={() => {
-                      if (unavailable) return;
-                      setSelectedAudioTrackId(track.id);
-                      setSettingsPane("root");
-                    }}
-                    className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium ${
-                      unavailable ? "cursor-not-allowed opacity-40" : "hover:bg-chrome-white/10"
-                    }`}
-                  >
-                    <span className="text-left">
-                      {track.label}
-                      {track.languageCode && (
-                        <span className="ml-1 text-xs text-chrome-zinc-400">
-                          {track.languageCode}
-                        </span>
-                      )}
-                    </span>
-                    {unavailable ? (
-                      <span className="text-xs text-chrome-zinc-500">Unavailable</span>
-                    ) : (
-                      (selectedAudioTrackId === track.id ||
-                        (!selectedAudioTrackId && track.isDefault)) && <Check size={17} />
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        {settingsPane === "sleep" && (
-          <div className="space-y-1 animate-pane-in max-h-60 overflow-y-auto pr-1 select-scrollbar-hidden">
-            <SleepTimerPanel tone="video" onDone={() => setSettingsPane("root")} />
-          </div>
-        )}
-      </div>
+      <PlayerSettingsMenu
+        open={settingsOpen}
+        pane={settingsPane}
+        onPaneChange={setSettingsPane}
+        onClose={() => setSettingsOpen(false)}
+        qualities={supportedQualities}
+        selectedQualityId={selectedQualityId || "auto"}
+        activeQualityLabel={activeQualityLabel}
+        isDashPlayback={isDashPlayback}
+        onSelectQuality={onSelectQuality}
+        captions={captions}
+        selectedCaptionId={selectedCaptionId}
+        setSelectedCaptionId={setSelectedCaptionId}
+        audioTracks={audioTracks}
+        selectedAudioTrackId={selectedAudioTrackId}
+        setSelectedAudioTrackId={setSelectedAudioTrackId}
+        speedOptions={speedOptions}
+        speedSliderEnabled={speedSliderEnabled}
+        playbackRate={playbackRate}
+        onSelectPlaybackRate={selectPlaybackRate}
+      />
 
       {submitDialogOpen && currentVideo && (
         <SponsorBlockSubmitDialog

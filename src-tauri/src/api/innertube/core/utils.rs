@@ -31,6 +31,7 @@ pub fn build_related_content_from_compact_video(video: &Value) -> Option<Related
         playlist_id: None,
         is_mix: false,
         is_live: summary.is_live,
+        is_short: summary.is_short,
         ..Default::default()
     })
 }

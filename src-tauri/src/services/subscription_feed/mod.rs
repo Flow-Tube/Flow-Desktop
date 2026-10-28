@@ -5,7 +5,7 @@
 pub mod reels;
 pub mod rss;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -22,12 +22,12 @@ const FALLBACK_CONCURRENCY: usize = 3;
 const FALLBACK_JITTER_MS: u64 = 300;
 /// The newest uploads get their length looked up; the rest stay without one.
 const DURATION_FILL: usize = 100;
-/// Shorts tabs looked up per load; channels past it are classified once cached.
+/// Shorts tabs looked up per load, for uploads RSS could not classify.
 const REEL_LOOKUPS_PER_LOAD: usize = 60;
 /// How far down the feed the Shorts tabs are asked about.
 const REEL_WINDOW: usize = 200;
-/// The longest a video can run and still be guessed a Short when its channel's
-/// Shorts tab is unknown.
+/// The longest an unclassified upload can run and still be guessed a Short when
+/// its channel's Shorts tab is unknown.
 const SHORT_GUESS_MAX_SECONDS: u64 = 60;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -57,6 +57,8 @@ pub struct ChannelUploads {
     pub channels: Vec<SubscriptionRssChannel>,
     pub videos: Vec<(i64, VideoSummary)>,
     pub failed_channel_ids: Vec<String>,
+    /// Uploads not known to be a Short or a video; every other upload's `is_short` is final.
+    pub unclassified: HashSet<String>,
 }
 
 fn now_secs() -> i64 {
@@ -140,14 +142,17 @@ pub async fn fetch_channels(yt: &YoutubeService, channel_ids: &[String]) -> Chan
     for (channel_id, parsed) in feeds {
         match parsed {
             // An error page served with a 200 parses to nothing, not even a name.
-            Ok((None, videos)) if videos.is_empty() => unread.push(channel_id),
-            Ok((name, videos)) => {
+            Ok(feed) if feed.channel_name.is_none() && feed.videos.is_empty() => {
+                unread.push(channel_id);
+            }
+            Ok(feed) => {
                 uploads.channels.push(SubscriptionRssChannel {
                     id: channel_id,
-                    name,
+                    name: feed.channel_name,
                     avatar_url: None,
                 });
-                uploads.videos.extend(videos);
+                uploads.videos.extend(feed.videos);
+                uploads.unclassified.extend(feed.unclassified);
             }
             Err(reason) => {
                 tracing::warn!(%channel_id, %reason, "Subscription RSS fetch failed");
@@ -181,12 +186,16 @@ pub fn sort_and_dedupe(videos: &mut Vec<(i64, VideoSummary)>) {
     videos.retain(|(_, video)| seen.insert(video.id.clone()));
 }
 
-/// Length is only a guess, used for channels whose Shorts tab is unknown.
+/// Length is only a guess, used for unclassified uploads whose channel's Shorts tab is unknown.
 fn guess_shorts(
     videos: &mut [VideoSummary],
-    verdicts: &HashMap<String, std::collections::HashSet<String>>,
+    unclassified: &HashSet<String>,
+    verdicts: &HashMap<String, HashSet<String>>,
 ) {
-    for video in videos {
+    for video in videos
+        .iter_mut()
+        .filter(|video| unclassified.contains(&video.id))
+    {
         let classified = video
             .channel_id
             .as_ref()
@@ -213,12 +222,13 @@ pub fn partial_feed(videos: &[(i64, VideoSummary)], limit: usize) -> Vec<VideoSu
     feed
 }
 
-/// The finished feed: Shorts tabs asked for the top of it while the newest
-/// uploads get their lengths, then remembered for the home feed.
+/// The finished feed: Shorts tabs asked about the unclassified uploads near its
+/// top while the newest uploads get their lengths, then remembered for the home feed.
 pub async fn finish_feed(
     yt: &YoutubeService,
     pool: &sqlx::SqlitePool,
     videos: Vec<(i64, VideoSummary)>,
+    unclassified: &HashSet<String>,
     limit: usize,
 ) -> Vec<VideoSummary> {
     let published: HashMap<String, i64> = videos
@@ -230,18 +240,28 @@ pub async fn finish_feed(
         .map(|(_, video)| video)
         .take(limit)
         .collect();
-    let window: Vec<VideoSummary> = feed.iter().take(REEL_WINDOW).cloned().collect();
+    let window: Vec<VideoSummary> = feed
+        .iter()
+        .take(REEL_WINDOW)
+        .filter(|video| unclassified.contains(&video.id))
+        .cloned()
+        .collect();
     let fill = feed.len().min(DURATION_FILL);
     let (verdicts, ()) = tokio::join!(
         reels::verdicts(yt, &window, REEL_LOOKUPS_PER_LOAD),
         populate_video_durations(&mut feed[..fill], yt, pool),
     );
     reels::mark(&mut feed, &verdicts);
-    guess_shorts(&mut feed, &verdicts);
+    let known = crate::db::known_shorts::all(pool).await.unwrap_or_default();
+    for video in &mut feed {
+        video.is_short |= known.contains(&video.id);
+    }
+    guess_shorts(&mut feed, unclassified, &verdicts);
     tracing::info!(
         videos = feed.len(),
         shorts = feed.iter().filter(|video| video.is_short).count(),
         upcoming = feed.iter().filter(|video| video.is_upcoming).count(),
+        unclassified = unclassified.len(),
         classified_channels = verdicts.len(),
         "Subscription feed finished"
     );
@@ -252,7 +272,6 @@ pub async fn finish_feed(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     fn video(id: &str, channel: &str, seconds: Option<u64>) -> VideoSummary {
         VideoSummary {
@@ -264,17 +283,18 @@ mod tests {
     }
 
     #[test]
-    fn length_is_only_a_guess_where_the_shorts_tab_is_unknown() {
+    fn length_is_only_a_guess_for_unclassified_uploads_of_unknown_channels() {
         let mut videos = vec![
             video("a", "known", Some(40)),
             video("b", "unknown", Some(40)),
             video("c", "unknown", Some(61)),
+            video("d", "unknown", Some(40)),
         ];
+        let unclassified: HashSet<String> = ["a", "b", "c"].map(String::from).into();
         let verdicts = HashMap::from([("known".to_string(), HashSet::new())]);
-        guess_shorts(&mut videos, &verdicts);
-        assert!(!videos[0].is_short);
-        assert!(videos[1].is_short);
-        assert!(!videos[2].is_short);
+        guess_shorts(&mut videos, &unclassified, &verdicts);
+        let kinds: Vec<bool> = videos.iter().map(|video| video.is_short).collect();
+        assert_eq!(kinds, [false, true, false, false]);
     }
 
     #[test]

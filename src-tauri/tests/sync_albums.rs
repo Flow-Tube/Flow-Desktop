@@ -224,3 +224,56 @@ async fn same_titled_owned_playlists_coalesce_and_union_tracks() {
         "both devices' tracks survived the coalesce, got {ids:?}"
     );
 }
+
+#[tokio::test]
+async fn a_music_playlist_from_android_goes_back_under_its_own_id() {
+    // Android's own music playlist: no album ids, just its sync id.
+    let line = serde_json::json!({
+        "syncId": "4f2a9c1e0b7d4e6f8a3b5c7d9e1f2a3b",
+        "origin": "local",
+        "title": "Late night",
+        "isMusic": true,
+        "isUserCreated": true,
+        "createdAtMs": 1781000000000_u64,
+        "updatedHlc": "1781000000000:0:dpeer",
+        "items": [{ "videoId": "s1", "position": 0, "title": "Song", "isMusic": true,
+                    "hlc": "1781000000000:0:dpeer" }]
+    });
+    let ndjson = format!("{line}\n").into_bytes();
+    let staged = StagedCollection {
+        collection: Collection::Playlists,
+        hash: sha256_hex(&ndjson),
+        ndjson,
+        record_count: 1,
+    };
+    let desktop = memory_pool().await;
+    apply_payload(&desktop, OUR, PEER, &[staged]).await.unwrap();
+
+    // Renamed on the desktop: the title no longer matches, the id still does.
+    let albums = get_setting(&desktop, "saved_albums").await.unwrap();
+    assert!(
+        albums.contains("Late night"),
+        "it lands in the album library"
+    );
+    set_setting(
+        &desktop,
+        "saved_albums",
+        &albums.replace("Late night", "Late night drive"),
+    )
+    .await;
+
+    let outgoing = export_collections(&desktop, OUR, &[Collection::Playlists])
+        .await
+        .unwrap();
+    let sent: Vec<serde_json::Value> = outgoing[0]
+        .ndjson
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .map(|l| serde_json::from_slice(l).unwrap())
+        .collect();
+    let back = sent
+        .iter()
+        .find(|p| p["title"] == "Late night drive")
+        .expect("the playlist goes back");
+    assert_eq!(back["syncId"], "4f2a9c1e0b7d4e6f8a3b5c7d9e1f2a3b");
+}

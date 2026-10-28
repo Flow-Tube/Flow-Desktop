@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { ArrowUpLeft, Clock, Search, X } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import {
@@ -10,6 +11,7 @@ import {
 } from "../../lib/searchSuggestions";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { useExitGhost } from "../../lib/useExitGhost";
 
 export const suggestionOptionId = (key: string) => `search-suggestion-${key.replace(/[^\w-]/g, "_")}`;
 
@@ -59,6 +61,8 @@ export function SearchSuggestionsPanel({
   onRemoveHistory,
   onClearHistory,
 }: PanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useExitGhost(panelRef);
   const isEmptyQuery = !query.trim();
   const hasSide = columns.side.length > 0;
 
@@ -145,9 +149,10 @@ export function SearchSuggestionsPanel({
 
   return (
     <div
+      ref={panelRef}
       id="search-suggestions"
       role="listbox"
-      className={`animate-fade-in absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-1.5 scrollbar-none ${
+      className={`animate-menu-in absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-1.5 scrollbar-none ${
         hasSide ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-1.5" : ""
       }`}
     >

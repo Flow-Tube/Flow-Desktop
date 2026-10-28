@@ -1,3 +1,4 @@
+pub mod app_window;
 pub mod backup;
 pub mod db;
 pub mod diagnostics;
@@ -12,10 +13,13 @@ pub mod music_brain;
 pub mod music_queue;
 pub mod notifications;
 pub mod pip;
+pub mod process;
+pub mod profiles;
 pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;
 pub mod sync;
+pub mod theme;
 pub mod tray;
 pub mod window;
 pub mod youtube;

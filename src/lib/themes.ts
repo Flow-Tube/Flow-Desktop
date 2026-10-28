@@ -59,18 +59,21 @@ export type ThemeDescriptionKey =
   | "theme_description_royal_gold"
   | "theme_description_cream_paper";
 
+/** The colours a palette is designed from; the container shades are mixed from them. */
+export type ThemeSeed = Pick<ThemeColors, "primary" | "onPrimary" | "secondary" | "background" | "surface" | "onSurface" | "onSurfaceVariant" | "outline" | "error">;
+
 interface PaletteSeed {
   id: string;
   name: string;
   descriptionKey: ThemeDescriptionKey;
-  light: Pick<ThemeColors, "primary" | "onPrimary" | "secondary" | "background" | "surface" | "onSurface" | "onSurfaceVariant" | "outline" | "error">;
-  dark: Pick<ThemeColors, "primary" | "onPrimary" | "secondary" | "background" | "surface" | "onSurface" | "onSurfaceVariant" | "outline" | "error">;
+  light: ThemeSeed;
+  dark: ThemeSeed;
 }
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
-function expandPalette(
-  base: PaletteSeed["light"],
+export function expandPalette(
+  base: ThemeSeed,
   variant: ThemeVariant,
 ): ThemeColors {
   const dark = variant !== "light";

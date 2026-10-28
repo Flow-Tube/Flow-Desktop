@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { listen } from "@tauri-apps/api/event";
+import { sessionStore } from "./storage/profileStorage";
+import { holdLinkForNextProfile, takeHeldLink } from "./api/profiles";
+import { useProfilesStore } from "../store/useProfilesStore";
 
 import { getVideoDetails } from "./api/youtube";
 import { getMusicQueue } from "./api/music";
@@ -196,6 +199,13 @@ export function useDeepLinkHandoff() {
   acceptRef.current = (raw: string) => {
     const handoff = parseFlowUrl(raw);
     if (!handoff) return;
+    // During a profile switch the link belongs to the next profile, not this dying process.
+    if (useProfilesStore.getState().switchingTo) {
+      void holdLinkForNextProfile(raw).then((held) => {
+        if (!held) acceptRef.current(raw);
+      });
+      return;
+    }
     pendingRef.current = handoff;
     flush();
   };
@@ -214,8 +224,8 @@ export function useDeepLinkHandoff() {
     // download dialog. sessionStorage is cleared on a real relaunch, so the next
     // genuine cold start is still handled.
     const COLD_START_KEY = "flow_handoff_cold_start_done";
-    if (!sessionStorage.getItem(COLD_START_KEY)) {
-      sessionStorage.setItem(COLD_START_KEY, "1");
+    if (!sessionStore.getItem(COLD_START_KEY)) {
+      sessionStore.setItem(COLD_START_KEY, "1");
       void getCurrent()
         .then((urls) => {
           const url = latest(urls);
@@ -223,6 +233,11 @@ export function useDeepLinkHandoff() {
         })
         .catch(() => {});
     }
+    void takeHeldLink()
+      .then((url) => {
+        if (url) acceptRef.current(url);
+      })
+      .catch(() => {});
     void onOpenUrl((urls) => {
       const url = latest(urls);
       if (url) acceptRef.current(url);

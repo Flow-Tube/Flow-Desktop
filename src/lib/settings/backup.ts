@@ -2,6 +2,7 @@ import { getSetting } from "../api/db";
 import { isTauriEnv } from "../api/env";
 import { invokeBackend } from "../api/errors";
 import { getAppMetadata, type AppMetadata } from "../appMetadata";
+import { listProfiles, type Profile } from "../api/profiles";
 import {
   SETTING_DEFINITIONS_BY_KEY,
   SETTING_EXPORT_KEYS,
@@ -46,6 +47,35 @@ export interface SettingsBackup {
   /** Present since schemaVersion 2: the backend export in the sync wire representation. */
   collections?: BackupCollections;
   deviceId?: string;
+}
+
+/** Android's master-backup manifest (`MasterBackupZip.kt`), as a top-level key. */
+export interface MasterManifest {
+  format: "flow-master";
+  version: 1;
+  defaultId: string;
+  profiles: Profile[];
+  /** Ids whose data is in this file. */
+  included: string[];
+}
+
+export interface ProfileBackupSlice {
+  settings: Record<string, unknown>;
+  collections: BackupCollections;
+}
+
+/** Default's data stays at the top level, where older builds read it; they ignore the rest. */
+export interface MasterBackup extends SettingsBackup {
+  manifest: MasterManifest;
+  profiles: Record<string, ProfileBackupSlice>;
+  /** WebP photos as base64, by profile id. */
+  profile_avatars: Record<string, string>;
+}
+
+interface ProfileBackupPart {
+  id: string;
+  settings: Record<string, string>;
+  export: BackupCollectionsExport;
 }
 
 export interface ValidatedSettingsBackup {
@@ -153,10 +183,54 @@ export function extractBackupCollections(value: unknown): BackupCollections | nu
   return Object.keys(collections).length > 0 ? collections : null;
 }
 
+function typedSettings(raw: Record<string, string>): Record<string, unknown> {
+  const settings: Record<string, unknown> = {};
+  for (const key of SETTING_EXPORT_KEYS) {
+    const definition = SETTING_DEFINITIONS_BY_KEY.get(key as SettingKey);
+    if (!definition || !(key in raw)) continue;
+    settings[key] = toTypedBackupValue(definition, normalizeSettingValue(definition, raw[key]).value);
+  }
+  return settings;
+}
+
+/** Every profile: Default at the top level, the others under `profiles`, plus the manifest. */
+export async function buildMasterBackup(): Promise<MasterBackup> {
+  const view = await listProfiles();
+  const backup: MasterBackup = {
+    schemaVersion: SETTINGS_BACKUP_SCHEMA_VERSION,
+    app: await getAppMetadata(),
+    exportedAt: new Date().toISOString(),
+    scope: "MASTER",
+    settings: {},
+    manifest: { format: "flow-master", version: 1, defaultId: view.defaultId, profiles: view.profiles, included: [] },
+    profiles: {},
+    profile_avatars: {},
+  };
+  // One at a time: each profile carries its whole history.
+  for (const profile of view.profiles) {
+    const part = await invokeBackend<ProfileBackupPart>("export_profile_backup", {
+      id: profile.id,
+      settingKeys: SETTING_EXPORT_KEYS,
+    });
+    const slice = { settings: typedSettings(part.settings), collections: part.export.collections };
+    if (profile.id === view.defaultId) {
+      backup.settings = slice.settings;
+      backup.collections = slice.collections;
+      backup.deviceId = part.export.deviceId;
+    } else {
+      backup.profiles[profile.id] = slice;
+    }
+    backup.manifest.included.push(profile.id);
+    const photo = view.photos[profile.id];
+    if (photo) backup.profile_avatars[profile.id] = photo.slice(photo.indexOf(",") + 1);
+  }
+  return backup;
+}
+
 export async function buildSettingsBackupJson(
   scope: SettingsBackupScope = "APP_DATA",
 ): Promise<string> {
-  const backup = await buildSettingsBackup(scope);
+  const backup = scope === "MASTER" && (await isTauriEnv()) ? await buildMasterBackup() : await buildSettingsBackup(scope);
   return JSON.stringify(backup, null, 2);
 }
 

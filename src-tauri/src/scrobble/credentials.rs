@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::models::{Account, Service};
+use crate::profiles::ActiveProfile;
 
 // Debug builds keep their own item, so a dev build and an installed Flow never take turns asking
 // for each other's.
@@ -103,6 +104,11 @@ pub fn save(store: &dyn CredentialStore, credentials: &Credentials) -> Result<()
     store.write(CREDENTIALS_ENTRY, &value)
 }
 
+/// Removes the item, for a deleted profile.
+pub fn forget(store: &dyn CredentialStore) -> Result<(), CredentialError> {
+    store.remove(CREDENTIALS_ENTRY)
+}
+
 fn legacy_entries() -> impl Iterator<Item = &'static str> {
     Service::ALL
         .into_iter()
@@ -159,6 +165,42 @@ impl CredentialStore for Keychain {
     }
 }
 
+/// One profile's items. Default keeps today's names; another profile's names end in `@<id>`.
+/// The old per-account items only ever exist under Default's names, so only Default migrates
+/// them.
+pub struct ProfileScoped<S> {
+    inner: S,
+    suffix: Option<String>,
+}
+
+impl<S> ProfileScoped<S> {
+    pub fn new(inner: S, profile: &ActiveProfile) -> Self {
+        let suffix = (!profile.is_default).then(|| profile.id.clone());
+        Self { inner, suffix }
+    }
+
+    fn name(&self, name: &str) -> String {
+        match &self.suffix {
+            Some(id) => format!("{name}@{id}"),
+            None => name.to_string(),
+        }
+    }
+}
+
+impl<S: CredentialStore> CredentialStore for ProfileScoped<S> {
+    fn read(&self, name: &str) -> Result<Option<String>, CredentialError> {
+        self.inner.read(&self.name(name))
+    }
+
+    fn write(&self, name: &str, value: &str) -> Result<(), CredentialError> {
+        self.inner.write(&self.name(name), value)
+    }
+
+    fn remove(&self, name: &str) -> Result<(), CredentialError> {
+        self.inner.remove(&self.name(name))
+    }
+}
+
 /// A fixed description per failure: the keyring errors can carry the stored bytes.
 fn describe(error: &keyring::Error) -> CredentialError {
     CredentialError(match error {
@@ -203,6 +245,52 @@ pub mod memory {
 
 #[cfg(test)]
 mod tests {
+    use super::memory::MemoryStore as ScopedMemory;
+
+    #[test]
+    fn another_profile_keeps_its_own_item_and_never_takes_defaults() {
+        use super::*;
+        let study = ActiveProfile {
+            id: "study".into(),
+            is_default: false,
+            after_switch: false,
+            default_name: String::new(),
+        };
+        let raw = ScopedMemory::default();
+        raw.write("LASTFM", r#"{"userName":"default-user","secret":"k"}"#)
+            .unwrap();
+        let scoped = ProfileScoped::new(raw, &study);
+
+        assert_eq!(load(&scoped).unwrap(), Credentials::default());
+        let mut mine = Credentials::default();
+        mine.own_key.enabled = true;
+        save(&scoped, &mine).unwrap();
+
+        let items = scoped.inner.0.lock().unwrap();
+        assert!(items.contains_key("CREDENTIALS@study"));
+        assert!(
+            items.contains_key("LASTFM"),
+            "Default's old item is left alone"
+        );
+        assert!(!items.contains_key("CREDENTIALS"));
+    }
+
+    #[test]
+    fn default_keeps_todays_names() {
+        use super::*;
+        let default = ActiveProfile {
+            id: "d".into(),
+            is_default: true,
+            after_switch: false,
+            default_name: String::new(),
+        };
+        let scoped = ProfileScoped::new(ScopedMemory::default(), &default);
+        let mut mine = Credentials::default();
+        mine.own_key.enabled = true;
+        save(&scoped, &mine).unwrap();
+        assert!(scoped.inner.0.lock().unwrap().contains_key("CREDENTIALS"));
+    }
+
     use super::memory::MemoryStore;
     use super::*;
 

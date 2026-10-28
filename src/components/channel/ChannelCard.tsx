@@ -9,6 +9,7 @@ import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
+import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
 
 export interface ChannelCardProps {
   channelId: string;
@@ -61,8 +62,10 @@ export function ChannelCard({
   const unsubscribe = useSubscriptionStore((s) => s.unsubscribe);
   const subscribed = isSubscribed(cleanId);
 
-  const open = () => {
-    if (cleanId) navigate(`/channel/${cleanId}`);
+  const route = `/channel/${cleanId}`;
+  const open = (event?: React.MouseEvent) => {
+    if (!cleanId || openedInBackgroundTab(event, route)) return;
+    navigate(route);
   };
 
   const toggleSubscribe = (e: React.MouseEvent) => {
@@ -80,6 +83,7 @@ export function ChannelCard({
       role="button"
       tabIndex={0}
       onClick={open}
+      {...(cleanId ? backgroundTabClickProps(route) : {})}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();

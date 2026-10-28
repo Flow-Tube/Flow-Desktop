@@ -21,13 +21,19 @@ import {
   validateSettingsBackup,
   type BackupCollections,
 } from "../lib/settings/backup";
-import { SETTINGS, type SettingKey } from "../lib/settings/schema";
+import { SETTINGS, SETTING_SCOPES, type SettingKey } from "../lib/settings/schema";
 import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
 import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../store/useLikesStore";
 import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
 import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "../lib/playlistLibrary";
 import type { VideoSummary } from "../types/video";
 import type { WatchHistoryRecord } from "../types/db";
+import { isProfilesMaster, restoreMasterProfiles } from "../lib/settings/masterRestore";
+import { confirmAction } from "../lib/dialogs";
+import { profileDisplayName } from "../lib/profiles/display";
+import { useProfilesStore } from "../store/useProfilesStore";
+import { useUiStore } from "../store/useUiStore";
+import { activeProfile } from "../lib/storage/profileStorage";
 
 interface ParseChannelResult { id: string; name: string; }
 interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
@@ -57,6 +63,7 @@ export const ImportData: React.FC = () => {
   const [importLikes, setImportLikes] = useState(true);
 
   const [importState, setImportState] = useState<"idle" | "reading" | "parsing" | "saving" | "success" | "error">("idle");
+  const showToast = useUiStore((state) => state.showToast);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -173,7 +180,9 @@ export const ImportData: React.FC = () => {
           if (!ab) throw new Error(getString("import_error_empty_archive"));
           const dec = unzipSync(new Uint8Array(ab));
           const jk = Object.keys(dec).filter(k => k.toLowerCase().endsWith(".json"));
-          const key = jk.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /engine[_-]?brain|neuro[_-]?brain|flow[_-]?brain/i.test(k)) ?? jk[0];
+          // A profiles-era Android master also has profiles/<id>/app_data.json; the root one is Default's.
+          const atRoot = jk.filter(k => !k.includes("/"));
+          const key = atRoot.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /engine[_-]?brain|neuro[_-]?brain|flow[_-]?brain/i.test(k)) ?? jk[0];
           if (!key) throw new Error(getString("import_error_no_json_archive"));
           text = new TextDecoder("utf-8").decode(dec[key]);
         } else { text = event.target?.result as string; }
@@ -186,9 +195,33 @@ export const ImportData: React.FC = () => {
         setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
         let subbedCount = 0, playCount = 0, timelineCount = 0, importedSettingsCount = 0;
 
+        if (isJson && backupData && isProfilesMaster(backupData)) {
+          // Every profile in the backup: the ones not running are restored into their own
+          // databases; the running one continues through the import below.
+          setStatusMessage(getString("import_restoring_profiles"));
+          const { running, restoredElsewhere } = await restoreMasterProfiles(backupData);
+          backupData = { schemaVersion: 2, settings: running?.settings ?? {}, collections: running?.collections ?? {} };
+          if (restoredElsewhere > 0) {
+            showToast({ message: getString("import_profiles_restored", restoredElsewhere), variant: "success" });
+          }
+          void useProfilesStore.getState().load();
+        } else if (isJson && backupData?.scope === "MASTER") {
+          const profiles = useProfilesStore.getState().view;
+          const running = profiles?.profiles.find((profile) => profile.id === profiles.activeId);
+          if (profiles && running && profiles.profiles.length > 1) {
+            const proceed = await confirmAction(getString("import_old_master_into", profileDisplayName(running)));
+            if (!proceed) { setImportState("idle"); setProgress(0); return; }
+          }
+        }
+
         const settingsBackup = isJson && backupData ? validateSettingsBackup(backupData) : null;
+        // Device settings (folders, proxy, quality, region) belong to the whole computer: only
+        // Default restores them, so restoring into another profile can't change them.
+        const restoresDeviceSettings = activeProfile().isDefault;
         const settingsEntries = settingsBackup
-          ? Object.entries(settingsBackup.settings) as [SettingKey, string][]
+          ? (Object.entries(settingsBackup.settings) as [SettingKey, string][]).filter(
+              ([key]) => restoresDeviceSettings || SETTING_SCOPES[key] !== "device",
+            )
           : [];
         if (importSettings && settingsEntries.length > 0) {
           setStatusMessage(getString("import_importing_settings", settingsEntries.length));

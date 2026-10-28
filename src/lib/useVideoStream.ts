@@ -23,6 +23,7 @@ import type {
   StreamVariant,
   VideoSummary,
 } from "../types/video";
+import { profileStorage } from "./storage/profileStorage";
 
 export type SourceMode = "hls" | "dash-native" | "sabr-dash" | "direct" | "unavailable";
 
@@ -33,7 +34,7 @@ type SavedWatchProgress = { currentTime: number; duration: number; updatedAt: nu
 
 export const readSavedWatchProgress = (videoId: string, fallbackDuration = 0): number => {
   try {
-    const raw = localStorage.getItem(getProgressKey(videoId));
+    const raw = profileStorage.getItem(getProgressKey(videoId));
     if (!raw) return 0;
     const progress = JSON.parse(raw) as SavedWatchProgress;
     const duration = progress.duration || fallbackDuration || 0;
@@ -50,10 +51,10 @@ export const saveLocalWatchProgress = (videoId: string, currentTime: number, dur
   if (!Number.isFinite(currentTime) || currentTime < 0) return;
   try {
     if (duration > 0 && currentTime >= Math.max(0, duration - 12)) {
-      localStorage.removeItem(getProgressKey(videoId));
+      profileStorage.removeItem(getProgressKey(videoId));
       return;
     }
-    localStorage.setItem(
+    profileStorage.setItem(
       getProgressKey(videoId),
       JSON.stringify({ currentTime, duration, updatedAt: Date.now() } satisfies SavedWatchProgress),
     );
@@ -64,7 +65,7 @@ export const saveLocalWatchProgress = (videoId: string, currentTime: number, dur
 
 export const clearLocalWatchProgress = (videoId: string) => {
   try {
-    localStorage.removeItem(getProgressKey(videoId));
+    profileStorage.removeItem(getProgressKey(videoId));
   } catch (error) {
     console.warn("Failed to clear watch progress", error);
   }

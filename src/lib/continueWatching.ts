@@ -1,8 +1,9 @@
+import { profileStorage } from "./storage/profileStorage";
 const CONTINUE_WATCHING_HIDDEN_KEY = "flow_continue_watching_hidden_v1";
 
 const readHiddenIds = (): string[] => {
   try {
-    const raw = localStorage.getItem(CONTINUE_WATCHING_HIDDEN_KEY);
+    const raw = profileStorage.getItem(CONTINUE_WATCHING_HIDDEN_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
@@ -18,7 +19,7 @@ export const hideContinueWatchingVideo = (videoId: string) => {
   try {
     const hidden = getHiddenContinueWatchingIds();
     hidden.add(videoId);
-    localStorage.setItem(CONTINUE_WATCHING_HIDDEN_KEY, JSON.stringify(Array.from(hidden)));
+    profileStorage.setItem(CONTINUE_WATCHING_HIDDEN_KEY, JSON.stringify(Array.from(hidden)));
   } catch (error) {
     console.warn("Failed to hide Continue Watching video", error);
   }

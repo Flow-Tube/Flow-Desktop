@@ -85,6 +85,8 @@ pub struct RelatedContentItem {
     pub is_verified: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_members_only: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_short: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub badges: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -172,12 +174,14 @@ pub struct VideoMetadata {
     pub category: Option<String>,
 }
 
-/// The two facts a feed needs to fill in for a listed video, without the full
-/// details lookup and its `next` request.
+/// What a feed needs to fill in for a listed video, without the full details
+/// lookup and its `next` request.
 #[derive(Debug, Clone, Default)]
 pub struct VideoBasics {
     pub channel_id: Option<String>,
     pub duration_seconds: Option<u64>,
+    /// Whether it is a Short, told by its frame; `None` when no format says.
+    pub is_short: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

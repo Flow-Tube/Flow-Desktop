@@ -138,11 +138,37 @@ pub async fn record_feed_impressions(
     videos: Vec<VideoSummary>,
     recommendation_service: State<'_, RecommendationService>,
     home: State<'_, crate::services::home_feed::HomeFeedService>,
+    pool: State<'_, SqlitePool>,
 ) -> Result<(), ErrorResponse> {
     let ids: Vec<String> = videos.iter().map(|video| video.id.clone()).collect();
     home.note_impressions(&app, &ids).await;
+    let _ =
+        crate::db::seen_videos::remember(&pool, &ids, chrono::Utc::now().timestamp_millis()).await;
     recommendation_service
         .record_feed_impressions(videos)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// Cards seen in a list the ranker does not learn from (the Watch page's related videos): kept
+/// only so "Hide videos you've already seen" can leave them out.
+#[tauri::command]
+pub async fn record_seen_videos(
+    ids: Vec<String>,
+    pool: State<'_, SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    crate::db::seen_videos::remember(&pool, &ids, chrono::Utc::now().timestamp_millis())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+/// Which of these videos were already seen.
+#[tauri::command]
+pub async fn seen_video_ids_among(
+    ids: Vec<String>,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<String>, ErrorResponse> {
+    crate::db::seen_videos::among(&pool, &ids)
         .await
         .map_err(ErrorResponse::from)
 }

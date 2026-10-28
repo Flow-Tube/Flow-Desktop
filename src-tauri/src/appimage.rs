@@ -119,6 +119,28 @@ fn host_env_changes(
     changes
 }
 
+/// An environment captured inside the bundle, minus the bundle: what a relaunched AppImage
+/// starts from (its own runtime sets the bundle paths again).
+pub fn without_bundle(vars: Vec<(OsString, OsString)>) -> Vec<(OsString, OsString)> {
+    let appdir = vars
+        .iter()
+        .find(|(key, value)| key == "APPDIR" && !value.is_empty())
+        .map(|(_, value)| PathBuf::from(value));
+    let Some(appdir) = appdir else { return vars };
+    let mut vars = vars;
+    for change in host_env_changes(&appdir, vars.clone()) {
+        match change {
+            EnvChange::Set(key, value) => {
+                if let Some(entry) = vars.iter_mut().find(|(name, _)| *name == key) {
+                    entry.1 = value;
+                }
+            }
+            EnvChange::Remove(key) => vars.retain(|(name, _)| *name != key),
+        }
+    }
+    vars
+}
+
 fn bundle_env_changes() -> Vec<EnvChange> {
     std::env::var_os("APPDIR")
         .filter(|appdir| !appdir.is_empty())
@@ -159,7 +181,9 @@ pub fn host_tokio_command(program: impl AsRef<OsStr>) -> tokio::process::Command
 
 #[cfg(test)]
 mod tests {
-    use super::{EnvChange, LIBVA_FALLBACK_DIR, host_env_changes, library_path_with_fallback};
+    use super::{
+        EnvChange, LIBVA_FALLBACK_DIR, host_env_changes, library_path_with_fallback, without_bundle,
+    };
     use std::ffi::OsString;
     use std::path::Path;
 
@@ -167,6 +191,27 @@ mod tests {
 
     fn fallback() -> String {
         format!("{APPDIR}/{LIBVA_FALLBACK_DIR}")
+    }
+
+    #[test]
+    fn a_relaunch_starts_from_the_host_environment() {
+        let vars = [
+            ("APPDIR", APPDIR.to_string()),
+            ("PATH", format!("{APPDIR}/usr/bin:/usr/bin")),
+            ("GST_PLUGIN_PATH", format!("{APPDIR}/usr/lib/gstreamer-1.0")),
+            ("HOME", "/home/me".to_string()),
+        ]
+        .map(|(key, value)| (OsString::from(key), OsString::from(value)))
+        .to_vec();
+        let host = without_bundle(vars);
+        let names: Vec<_> = host
+            .iter()
+            .map(|(key, _)| key.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["PATH", "HOME"]);
+        assert_eq!(host[0].1, OsString::from("/usr/bin"));
+        let outside = vec![(OsString::from("HOME"), OsString::from("/home/me"))];
+        assert_eq!(without_bundle(outside.clone()), outside);
     }
 
     #[test]

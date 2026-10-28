@@ -42,8 +42,8 @@ use crate::sync::frames::{
 };
 use crate::sync::ledger;
 use crate::sync::protocol::{
-    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection,
-    run_client_sender, run_host_receiver, run_receiver, run_sender,
+    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection, Withheld,
+    WithheldReason, run_client_sender, run_host_receiver, run_receiver, run_sender,
 };
 use crate::sync::qr::QrPayload;
 use crate::sync::transport;
@@ -100,6 +100,26 @@ pub struct StatInfo {
     pub tombstoned: u64,
 }
 
+/// A collection that stayed on both devices, and why (see [`crate::sync::protocol::withheld`]).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithheldInfo {
+    pub collection: String,
+    pub reason: WithheldReason,
+}
+
+fn withheld_info(withheld: &[Withheld]) -> Option<Vec<WithheldInfo>> {
+    (!withheld.is_empty()).then(|| {
+        withheld
+            .iter()
+            .map(|w| WithheldInfo {
+                collection: w.collection.key().to_string(),
+                reason: w.reason,
+            })
+            .collect()
+    })
+}
+
 /// A flat status snapshot the UI renders directly. `phase` drives the screen; the optional fields
 /// carry whatever that phase needs.
 #[derive(Debug, Clone, Serialize)]
@@ -119,6 +139,10 @@ pub struct SyncStatus {
     pub consent_kind: Option<String>,
     pub manifests: Option<Vec<ManifestInfo>>,
     pub stats: Option<Vec<StatInfo>>,
+    /// For `completed`: `sent` or `received`, whichever this device did.
+    pub direction: Option<String>,
+    /// For `completed`: collections neither device sent, because they key topics differently.
+    pub withheld: Option<Vec<WithheldInfo>>,
     pub expires_at: Option<u64>,
     pub device_name: Option<String>,
 }
@@ -135,6 +159,8 @@ impl SyncStatus {
             consent_kind: None,
             manifests: None,
             stats: None,
+            direction: None,
+            withheld: None,
             expires_at: None,
             device_name: None,
         }
@@ -192,19 +218,41 @@ impl Default for SyncStatus {
 
 pub struct SyncManager {
     inner: Mutex<Inner>,
+    profile: SyncProfile,
 }
 
-impl Default for SyncManager {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Which profile this process runs as, as far as sync cares. Fixed for the process.
+#[derive(Debug, Clone)]
+pub struct SyncProfile {
+    /// Only the Default profile syncs (FLOW-SYNC/1 carries no profile).
+    pub syncs_here: bool,
+    /// Default's name, blank until renamed; shown in "Switch to … to sync".
+    pub default_name: String,
 }
 
 impl SyncManager {
-    pub fn new() -> Self {
+    pub fn new(profile: SyncProfile) -> Self {
         Self {
             inner: Mutex::new(Inner::default()),
+            profile,
         }
+    }
+
+    pub fn syncs_here(&self) -> bool {
+        self.profile.syncs_here
+    }
+
+    /// The only way into a session: refuses outside Default, then while one is running.
+    pub async fn begin(&self) -> Result<(), SyncError> {
+        if !self.profile.syncs_here {
+            return Err(SyncError::NotDefaultProfile(
+                self.profile.default_name.clone(),
+            ));
+        }
+        if self.is_busy().await {
+            return Err(SyncError::Busy);
+        }
+        Ok(())
     }
 
     pub async fn status(&self) -> SyncStatus {
@@ -212,7 +260,7 @@ impl SyncManager {
     }
 
     /// True while a session is mid-flight (a new one would collide).
-    async fn is_busy(&self) -> bool {
+    pub async fn is_busy(&self) -> bool {
         matches!(
             self.inner.lock().await.status.phase.as_str(),
             "hosting" | "connecting" | "awaitingConsent" | "transferring"
@@ -475,9 +523,7 @@ pub async fn start_host(
     selection: Vec<Collection>,
     receive: bool,
 ) -> Result<HostStartInfo, SyncError> {
-    if manager.is_busy().await {
-        return Err(SyncError::Busy);
-    }
+    manager.begin().await?;
 
     let pool = pool_of(&app);
     let device_id = ledger::get_or_create_device_id(&pool).await?;
@@ -740,9 +786,7 @@ pub async fn scan_join(
     manager: Arc<SyncManager>,
     qr_text: String,
 ) -> Result<(), SyncError> {
-    if manager.is_busy().await {
-        return Err(SyncError::Busy);
-    }
+    manager.begin().await?;
     let payload = QrPayload::from_json(&qr_text)?;
     if payload.is_expired(now_s()) {
         return Err(SyncError::Expired);
@@ -835,7 +879,7 @@ async fn client_send_session(
 
     // Send the freshest data: flush resident brains before exporting.
     flush_brains(app).await;
-    let selection = producible_collections();
+    let selection = Collection::ALL.to_vec();
     let mut outgoing = export::export_collections(&pool, &device_id, &selection).await?;
     enrich_outgoing_albums(app, &mut outgoing).await;
 
@@ -1034,6 +1078,8 @@ async fn finish_receive(
                 role: Some(role.to_string()),
                 peer: Some(peer_info(&received.peer)),
                 stats: Some(stats),
+                direction: Some("received".into()),
+                withheld: withheld_info(&received.withheld),
                 ..SyncStatus::idle()
             },
         )
@@ -1078,6 +1124,8 @@ async fn finish_send(
                         role: Some(role.to_string()),
                         peer: Some(peer_info(&send.peer)),
                         stats: Some(stats),
+                        direction: Some("sent".into()),
+                        withheld: withheld_info(&send.withheld),
                         ..SyncStatus::idle()
                     },
                 )
@@ -1090,12 +1138,4 @@ async fn finish_send(
         }
     }
     Ok(())
-}
-
-/// Every collection this desktop can produce (all except subscriptions, which has no table).
-fn producible_collections() -> Vec<Collection> {
-    Collection::ALL
-        .into_iter()
-        .filter(|c| !matches!(c, Collection::Subscriptions))
-        .collect()
 }

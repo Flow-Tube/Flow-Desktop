@@ -53,11 +53,16 @@ describe("decideRouteChangePlayerAction", () => {
     currentVideoId: "a",
     videoPlayerMode: "watch" as const,
     autoPipEnabled: true,
+    tabSwitch: false,
   };
 
   it("shrinks the video into the mini player when leaving its page, paused or playing", () => {
     expect(decideRouteChangePlayerAction(base)).toBe("enter-pip");
     expect(decideRouteChangePlayerAction({ ...base, autoPipEnabled: false })).toBe("dismiss");
+  });
+
+  it("keeps the video in the mini player when you switch tabs, even with auto mini player off", () => {
+    expect(decideRouteChangePlayerAction({ ...base, autoPipEnabled: false, tabSwitch: true })).toBe("enter-pip");
   });
 
   it("expands the mini player when its video's page opens", () => {

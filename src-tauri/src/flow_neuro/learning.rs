@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::flow_neuro::display_forms::{fill_gaps, record, spellings_in};
 use crate::flow_neuro::features::{
     TopicReader, VideoText, document_terms, extract_features, pick_keys, plant_filter,
+    video_han_fold,
 };
 use crate::flow_neuro::keyed_lists::{KeyedLists, keyed_lists};
 use crate::flow_neuro::rejections::{record_rejection, reject_topics, rejection_aggression};
@@ -224,7 +225,7 @@ pub fn apply_interaction(brain: &mut UserBrain, event: &Interaction) -> Interact
 
     if learning_rate > 0.0 {
         learn_links(brain, &video_vector);
-        count_document(brain, event.video_id, event.title, &video_vector, &spec);
+        count_document(brain, event, &video_vector, &spec);
         learn_channel_profile(brain, event.channel_id, &video_vector);
         brain.topic_evidence = update_topic_evidence(
             &brain.topic_evidence,
@@ -362,12 +363,15 @@ fn learn_taste(
     // new interest can establish on a mature profile at all.
     if is_strong(event) && !event.is_short {
         let own_documents = i32::from(is_counted(brain, event.video_id));
+        let spec = brain.key_spec();
+        let han = video_han_fold(event.title, event.channel_name, event.description, &spec);
         let plantable = plant_filter(
             event.title,
             event.description,
             idf,
-            &brain.key_spec(),
+            &spec,
             own_documents,
+            han,
         );
         global = plant_topics(
             &global,
@@ -462,15 +466,16 @@ fn is_counted(brain: &UserBrain, video_id: &str) -> bool {
 /// Document frequency counts each video once, so pair counts can say what is a phrase.
 fn count_document(
     brain: &mut UserBrain,
-    video_id: &str,
-    title: &str,
+    event: &Interaction,
     video_vector: &ContentVector,
     spec: &crate::flow_neuro::keyspec::KeySpec,
 ) {
+    let video_id = event.video_id;
     if brain.watch_history_map.contains_key(video_id) || !brain.counted_documents.insert(video_id) {
         return;
     }
-    for term in document_terms(title, video_vector, spec) {
+    let han = video_han_fold(event.title, event.channel_name, event.description, spec);
+    for term in document_terms(event.title, video_vector, spec, han) {
         *brain.idf_word_frequency.entry(term).or_insert(0) += 1;
     }
     brain.idf_total_documents += 1;

@@ -483,6 +483,12 @@ export async function parseSubscriptionExport(
   return invokeBackend<[string, string][]>("parse_subscription_export", { data });
 }
 
+/** Videos refused for good (members-only, private, blocked here...) when they were opened. */
+export async function getUnplayableVideoIds(): Promise<string[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<string[]>("get_unplayable_video_ids");
+}
+
 export async function getSubscriptionRotationFeed(): Promise<VideoSummary[]> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning empty subscriptions rotation.");

@@ -59,6 +59,8 @@ export interface RelatedContentItem {
   isUpcoming?: boolean;
   isVerified?: boolean;
   isMembersOnly?: boolean;
+  /** A video card that opens the Shorts player. */
+  isShort?: boolean;
   badges?: string[];
   collaborators?: Collaborator[];
 }

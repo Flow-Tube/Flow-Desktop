@@ -12,8 +12,12 @@ Type=Application
 {{#if mime_type}}
 MimeType={{mime_type}}
 {{/if}}
-Actions=safe-graphics;
+Actions=new-window;safe-graphics;
 
 [Desktop Action safe-graphics]
 Name=Start with safe graphics
 Exec={{exec}} --safe-graphics
+
+[Desktop Action new-window]
+Name=New window
+Exec={{exec}} --new-window

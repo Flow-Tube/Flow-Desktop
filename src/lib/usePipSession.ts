@@ -11,7 +11,7 @@ import { PIP_RETURN_REQUEST_EVENT } from "./pipHandoff";
 import { primeStreamInfo } from "./streamResolution";
 import {
   PIP_EVENTS,
-  focusMainWindow,
+  focusPipSourceWindow,
   getPipSession,
   markPipWindowReady,
   setPipAlwaysOnTop,
@@ -205,7 +205,7 @@ export function usePipSession() {
 
   const returnToMainWindow = useCallback(async () => {
     await handBack(true);
-    await focusMainWindow().catch(() => {});
+    await focusPipSourceWindow().catch(() => {});
     // destroy() skips the close-requested handler, so the handback above is the
     // only one that fires.
     await getCurrentWindow().destroy().catch(() => {});

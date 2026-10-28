@@ -1,5 +1,6 @@
 import type { LyricsEntry } from "./types";
 import { evictCachedLyrics, getCachedLyrics, putCachedLyrics } from "../api/lyrics";
+import { profileStorage } from "../storage/profileStorage";
 
 /**
  * Two tiers, as on Android: the last 32 songs in memory, and every song's lyrics as
@@ -47,19 +48,19 @@ export function migrateLegacyCache(): Promise<void> {
   migration ??= (async () => {
     let keys: string[] = [];
     try {
-      keys = Object.keys(localStorage).filter((key) => key.startsWith(LEGACY_PREFIX));
+      keys = profileStorage.keys().filter((key) => key.startsWith(LEGACY_PREFIX));
     } catch {
       return;
     }
     for (const key of keys) {
       try {
-        const raw = localStorage.getItem(key);
+        const raw = profileStorage.getItem(key);
         if (raw && parseEntries(raw)) await putCachedLyrics(key.slice(LEGACY_PREFIX.length), raw);
       } catch {
         // An entry that cannot move is dropped with the rest.
       }
       try {
-        localStorage.removeItem(key);
+        profileStorage.removeItem(key);
       } catch {
         return;
       }

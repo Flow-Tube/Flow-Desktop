@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
+import { profileStorage } from "../lib/storage/profileStorage";
 
 const STORAGE_KEY = "flow_search_history";
 export const SEARCH_HISTORY_LIMIT = 50;
@@ -11,7 +12,7 @@ export interface SearchHistoryEntry {
 
 function load(): SearchHistoryEntry[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = profileStorage.getItem(STORAGE_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
     return parsed
@@ -25,7 +26,7 @@ function load(): SearchHistoryEntry[] {
 
 function persist(entries: SearchHistoryEntry[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    profileStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   } catch (error) {
     console.warn("Failed to save search history", error);
   }

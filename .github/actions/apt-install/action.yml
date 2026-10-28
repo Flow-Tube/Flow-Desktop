@@ -1,0 +1,50 @@
+name: Install Linux packages
+description: apt-get install that keeps the downloaded packages in the Actions cache, saved from main only.
+
+inputs:
+  packages:
+    description: Package names, separated by spaces or newlines.
+    required: true
+  cache-key:
+    description: Names the package set and runner image, so each image keeps its own packages.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # A slow mirror once took 22 minutes for 56 MB. The weekly key bounds the
+    # cache to one entry per image while picking up Ubuntu's package updates.
+    - name: Name this week's package cache
+      id: week
+      shell: bash
+      run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore downloaded packages
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/apt-archives
+        key: apt-${{ inputs.cache-key }}-${{ steps.week.outputs.week }}
+        restore-keys: apt-${{ inputs.cache-key }}-
+
+    - name: Install packages
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        archives="$HOME/apt-archives"
+        mkdir -p "$archives/partial"
+        sudo apt-get update
+        sudo apt-get install -y \
+          -o Dir::Cache::Archives="$archives" \
+          -o APT::Keep-Downloaded-Packages=true \
+          $PACKAGES
+        # Drops superseded versions so the restored cache does not keep growing.
+        sudo apt-get autoclean -o Dir::Cache::Archives="$archives"
+
+    - name: Save downloaded packages
+      if: github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/apt-archives
+        key: apt-${{ inputs.cache-key }}-${{ steps.week.outputs.week }}

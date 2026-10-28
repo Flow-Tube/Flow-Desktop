@@ -4,6 +4,7 @@ import { prefetchStreamInfo } from "../lib/streamResolution";
 import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
+import { profileStorage } from "../lib/storage/profileStorage";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
 
@@ -65,7 +66,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 
 const getSavedSubtitleStyle = (): SubtitleStyle => {
   try {
-    const saved = localStorage.getItem("flow_subtitle_style");
+    const saved = profileStorage.getItem("flow_subtitle_style");
     if (saved) {
       // A style saved by an older build lacks the newer fields; they take the defaults.
       return { ...DEFAULT_SUBTITLE_STYLE, ...JSON.parse(saved) };
@@ -78,14 +79,14 @@ const getSavedSubtitleStyle = (): SubtitleStyle => {
 
 const getSavedTheaterMode = (): boolean => {
   try {
-    return localStorage.getItem("flow_theater_mode") === "true";
+    return profileStorage.getItem("flow_theater_mode") === "true";
   } catch (e) {
     console.error("Failed to load saved theater mode", e);
   }
   return false;
 };
 
-interface PlayerState {
+export interface PlayerState {
   currentVideo: VideoSummary | null;
   isPlaying: boolean;
   volume: number;
@@ -192,7 +193,19 @@ interface PlayerState {
   setIsChaptersPanelOpen: (open: boolean) => void;
   isQueuePanelOpen: boolean;
   setIsQueuePanelOpen: (open: boolean) => void;
+  /**
+   * The side panel shown beside the video in fullscreen. It starts closed on every entry, so a
+   * queue panel left open in the sidebar does not shrink the picture; opening chapters or the
+   * queue here also leaves it open in the sidebar afterwards. Chat only appears here.
+   */
+  fullscreenPanel: FullscreenPanel | null;
+  setFullscreenPanel: (panel: FullscreenPanel | null) => void;
+  /** The watch page has a live chat or chat replay to show. */
+  isLiveChatAvailable: boolean;
+  setIsLiveChatAvailable: (available: boolean) => void;
 }
+
+export type FullscreenPanel = "chapters" | "queue" | "chat";
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentVideo: null,
@@ -227,6 +240,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   captions: [],
   isChaptersPanelOpen: false,
   isQueuePanelOpen: false,
+  fullscreenPanel: null,
+  isLiveChatAvailable: false,
 
   setCurrentVideo: (video) => {
     const isNew = get().currentVideo?.id !== video?.id;
@@ -235,6 +250,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isPlaying: !!video,
       isChaptersPanelOpen: false,
       isQueuePanelOpen: false,
+      fullscreenPanel: null,
       ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
@@ -594,6 +610,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     playbackStartedVideoId: null,
     isChaptersPanelOpen: false,
     isQueuePanelOpen: false,
+    fullscreenPanel: null,
   }),
   
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -683,24 +700,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setIsTheaterMode: (isTheaterMode) => {
-    localStorage.setItem("flow_theater_mode", String(isTheaterMode));
+    profileStorage.setItem("flow_theater_mode", String(isTheaterMode));
     set({ isTheaterMode });
   },
   setSponsorBlockSegments: (sponsorBlockSegments) => set({ sponsorBlockSegments }),
   setDearrowData: (dearrowData) => set({ dearrowData }),
   setRydData: (rydData) => set({ rydData }),
   setCaptions: (captions) => set({ captions }),
-  setIsChaptersPanelOpen: (isChaptersPanelOpen) => set({
+  setIsChaptersPanelOpen: (isChaptersPanelOpen) => set((state) => ({
     isChaptersPanelOpen,
     ...(isChaptersPanelOpen ? { isQueuePanelOpen: false } : {}),
-  }),
-  setIsQueuePanelOpen: (isQueuePanelOpen) => set({
+    ...(!isChaptersPanelOpen && state.fullscreenPanel === "chapters" ? { fullscreenPanel: null } : {}),
+  })),
+  setIsQueuePanelOpen: (isQueuePanelOpen) => set((state) => ({
     isQueuePanelOpen,
     ...(isQueuePanelOpen ? { isChaptersPanelOpen: false } : {}),
+    ...(!isQueuePanelOpen && state.fullscreenPanel === "queue" ? { fullscreenPanel: null } : {}),
+  })),
+  setFullscreenPanel: (fullscreenPanel) => set({
+    fullscreenPanel,
+    ...(fullscreenPanel === "chapters" ? { isChaptersPanelOpen: true, isQueuePanelOpen: false } : {}),
+    ...(fullscreenPanel === "queue" ? { isQueuePanelOpen: true, isChaptersPanelOpen: false } : {}),
   }),
+  setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {
-    localStorage.setItem("flow_subtitle_style", JSON.stringify(style));
+    profileStorage.setItem("flow_subtitle_style", JSON.stringify(style));
     set({ subtitleStyle: style });
   },
 }));

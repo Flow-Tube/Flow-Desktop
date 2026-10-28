@@ -90,9 +90,10 @@ export function WatchMetadata({
             onMouseLeave={() => setShowingOriginal(false)}
             className="grid cursor-default text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100"
           >
+            {/* Both titles are stacked; only the visible one may be selected, or a copy pastes both. */}
             <span
               className={`col-start-1 row-start-1 transition-opacity duration-200 ease-out ${
-                showingOriginal ? "opacity-0" : "opacity-100"
+                showingOriginal ? "select-none opacity-0" : "select-text opacity-100"
               }`}
             >
               {primaryTitle}
@@ -100,14 +101,14 @@ export function WatchMetadata({
             <span
               aria-hidden
               className={`col-start-1 row-start-1 transition-opacity duration-200 ease-out ${
-                showingOriginal ? "opacity-100" : "opacity-0"
+                showingOriginal ? "select-text opacity-100" : "select-none opacity-0"
               }`}
             >
               {currentVideo.title}
             </span>
           </h1>
         ) : primaryTitle ? (
-          <h1 className="text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
+          <h1 className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
         ) : (
           // A cold open starts playback from the video id alone; the title lands
           // a moment later. A placeholder bar reads better than an empty heading.

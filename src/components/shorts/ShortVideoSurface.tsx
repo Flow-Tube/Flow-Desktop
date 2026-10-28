@@ -386,6 +386,9 @@ export function ShortVideoSurface({
       player.updateSettings({
         streaming: {
           capabilities: { useMediaCapabilitiesApi: false },
+          // dash.js otherwise keeps these in localStorage, which every profile shares.
+          lastBitrateCachingInfo: { enabled: false },
+          lastMediaSettingsCachingInfo: { enabled: false },
           buffer: { bufferToKeep: 12, bufferTimeDefault: 3 },
         },
       });

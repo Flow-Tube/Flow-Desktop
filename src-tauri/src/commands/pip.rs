@@ -43,6 +43,10 @@ pub struct PipSession {
     pub settings: serde_json::Value,
     pub stream: Option<serde_json::Value>,
     pub silent_until_takeover: bool,
+    /// The Flow window the video came from, which gets it back. Set here from
+    /// the calling window, never taken from the frontend.
+    #[serde(default)]
+    pub source_window: Option<String>,
 }
 
 #[derive(Default)]
@@ -59,6 +63,14 @@ impl PipState {
         })?;
         *slot = session;
         Ok(())
+    }
+
+    /// The window the current pop-out session came from.
+    pub fn source_window(&self) -> Option<String> {
+        self.read()
+            .ok()
+            .flatten()
+            .and_then(|session| session.source_window)
     }
 
     fn read(&self) -> Result<Option<PipSession>, ErrorResponse> {
@@ -108,9 +120,11 @@ fn pip_origin<R: Runtime>(app: &AppHandle<R>) -> Option<(f64, f64)> {
 #[tauri::command]
 pub async fn open_pip_window<R: Runtime>(
     app: AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     state: State<'_, PipState>,
-    session: PipSession,
+    mut session: PipSession,
 ) -> Result<(), ErrorResponse> {
+    session.source_window = Some(window.label().to_owned());
     let always_on_top = session.always_on_top;
     let video_count = session.queue.len();
     state.store(Some(session))?;
@@ -139,6 +153,7 @@ pub async fn open_pip_window<R: Runtime>(
             .maximizable(false)
             .decorations(false)
             .always_on_top(always_on_top)
+            .general_autofill_enabled(false)
             // Painted before the webview has anything to show, so the pop-out
             // never flashes white over whatever the user is working in.
             .background_color(Color(0, 0, 0, 255));
@@ -233,7 +248,26 @@ pub fn pip_window_ready<R: Runtime>(app: AppHandle<R>) -> Result<(), ErrorRespon
     Ok(())
 }
 
-/// Raises the main window when the pop-out hands playback back to it.
+/// Raises the window the pop-out's video came from when playback goes back to
+/// it, or the main window when that one has closed.
+#[tauri::command]
+pub fn focus_pip_source_window<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, PipState>,
+) -> Result<(), ErrorResponse> {
+    let window = state
+        .source_window()
+        .and_then(|label| app.get_webview_window(&label))
+        .or_else(|| app.get_webview_window("main"));
+    if let Some(window) = window {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+/// Raises the main window, for pages and music only it shows.
 #[tauri::command]
 pub fn focus_main_window<R: Runtime>(app: AppHandle<R>) -> Result<(), ErrorResponse> {
     if let Some(window) = app.get_webview_window("main") {

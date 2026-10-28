@@ -140,6 +140,18 @@ fn command(lockup: &Value) -> &Value {
     &lockup["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"]
 }
 
+/// A video card that opens the Shorts player. Shorts shelves use their own lockup, but a Short can
+/// also come as a plain video card.
+fn opens_shorts_player(lockup: &Value) -> bool {
+    let command = command(lockup);
+    let web = &command["commandMetadata"]["webCommandMetadata"];
+    command.get("reelWatchEndpoint").is_some()
+        || web["webPageType"] == "WEB_PAGE_TYPE_SHORTS"
+        || web["url"]
+            .as_str()
+            .is_some_and(|url| url.starts_with("/shorts/"))
+}
+
 /// What a lockup points at.
 struct Ids {
     item_type: &'static str,
@@ -273,6 +285,7 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         is_verified: channel.is_some_and(|part| part.is_verified),
         is_members_only: row_badges(lockup)
             .any(|badge| badge["badgeStyle"] == "BADGE_MEMBERS_ONLY"),
+        is_short: is_video && opens_shorts_player(lockup),
         badges: row_badges(lockup)
             .filter(|badge| badge["badgeStyle"] != "BADGE_MEMBERS_ONLY")
             .filter_map(|badge| badge["badgeText"].as_str())
@@ -303,6 +316,7 @@ pub fn related_to_video(item: RelatedContentItem) -> VideoSummary {
         is_upcoming: item.is_upcoming,
         is_verified: item.is_verified,
         is_members_only: item.is_members_only,
+        is_short: item.is_short,
         badges: item.badges,
         collaborators: item.collaborators,
         ..Default::default()
@@ -337,6 +351,23 @@ mod tests {
                 "metadata": { "contentMetadataViewModel": { "metadataRows": rows } }
             } }
         })
+    }
+
+    #[test]
+    fn a_video_card_that_opens_the_shorts_player_is_a_short() {
+        let mut lockup = video_lockup(&json!([]));
+        lockup["rendererContext"] = json!({ "commandContext": { "onTap": { "innertubeCommand": {
+            "commandMetadata": { "webCommandMetadata": { "url": "/watch?v=vid00000001" } },
+            "watchEndpoint": { "videoId": "vid00000001" }
+        } } } });
+        assert!(!lockup_item(&lockup).unwrap().is_short);
+        lockup["rendererContext"] = json!({ "commandContext": { "onTap": { "innertubeCommand": {
+            "commandMetadata": { "webCommandMetadata": { "url": "/shorts/vid00000001" } },
+            "reelWatchEndpoint": { "videoId": "vid00000001" }
+        } } } });
+        let item = lockup_item(&lockup).unwrap();
+        assert!(item.is_short);
+        assert!(related_to_video(item).is_short);
     }
 
     #[test]

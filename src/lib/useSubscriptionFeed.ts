@@ -30,7 +30,8 @@ interface PersistedFeed extends CachedFeed {
 
 const FEED_TTL_MS = 15 * 60 * 1000;
 // v2: Shorts are marked by the backend (`isShort`), which v1 feeds never carry.
-const FEED_CACHE_KEY = 'subscription_feed_cache_v2';
+// v3: v2 feeds were saved before RSS links and frame checks told Shorts apart.
+const FEED_CACHE_KEY = 'subscription_feed_cache_v3';
 const MAX_CACHED_VIDEOS = 500;
 
 const feedCache = new Map<string, CachedFeed>();

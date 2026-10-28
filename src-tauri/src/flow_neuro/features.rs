@@ -404,7 +404,7 @@ fn description_keywords(
                     .any(|pattern| lower.contains(pattern.as_str()))
                 && !lower.contains("http")
                 && !lower.trim_start().starts_with('#')
-                && (utf16_len(trimmed) <= 5 || trimmed != trimmed.to_uppercase())
+                && (utf16_len(trimmed) <= 5 || !is_shouted(line))
         })
         .take(DESCRIPTION_TAKE_LINES)
         .collect();
@@ -426,6 +426,23 @@ fn description_keywords(
         }
     }
     weights
+}
+
+/// An all-caps line ("SUBSCRIBE NOW") or one with no letters at all. Chinese, Japanese and Thai
+/// have no case, so their letters count against the capitals: "【MV】周杰倫 新歌" is not shouting.
+fn is_shouted(line: &str) -> bool {
+    let mut capitals = 0;
+    let mut uncased = 0;
+    for c in line.chars() {
+        if c.is_lowercase() {
+            return false;
+        } else if c.is_uppercase() {
+            capitals += 1;
+        } else if c.is_alphabetic() {
+            uncased += 1;
+        }
+    }
+    capitals >= uncased
 }
 
 /// Whether a run of title words is an interest: a phrase the engine knows, or a pair the viewer's
@@ -977,5 +994,48 @@ mod tests {
             HanFold::None
         );
         assert_eq!(KeySpec::default().fold("鬼滅"), "鬼灭");
+    }
+
+    // Android NeuroDescriptionKeywordsTest (#1400).
+    fn description_words(description: &str) -> Vec<String> {
+        let spec = KeySpec::default();
+        description_keywords(Some(description), &spec, &no_counts(), spec.default_han())
+            .into_iter()
+            .map(|(key, _)| key)
+            .collect()
+    }
+
+    #[test]
+    fn descriptions_in_scripts_without_case_give_keywords() {
+        assert!(
+            description_words("周杰倫 演唱會 台北小巨蛋 現場完整收錄 精彩片段一次看")
+                .contains(&"台北".to_string())
+        );
+        assert!(
+            !description_words("今日は東京で一番美味しいラーメン屋さんを紹介します").is_empty()
+        );
+        assert!(
+            description_words("【MV】周杰倫 演唱會 台北小巨蛋 現場完整收錄")
+                .contains(&"台北".to_string())
+        );
+    }
+
+    #[test]
+    fn a_shouted_line_and_a_bare_line_are_still_skipped() {
+        let found = description_words(
+            "SUBSCRIBE NOW FOR MORE VIDEOS\nLearning guitar chords for beginners today",
+        );
+        assert!(found.contains(&"guitar".to_string()), "{found:?}");
+        assert!(
+            !found.iter().any(|word| word.starts_with("subscrib")),
+            "{found:?}"
+        );
+
+        let mut lines = vec![
+            "━━━━━━━━━━━━━━━━━━━━";
+            DESCRIPTION_TAKE_LINES
+        ];
+        lines.push("Learning guitar chords for beginners today");
+        assert!(description_words(&lines.join("\n")).contains(&"guitar".to_string()));
     }
 }

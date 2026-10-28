@@ -17,6 +17,8 @@ import { useStartupHealth } from "./lib/useStartupHealth";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
 import type { VideoSummary } from "./types/video";
+import { useProfileSwitchListener } from "./lib/profiles/useProfileSwitchListener";
+import { markSwitching } from "./store/useProfilesStore";
 
 import { PageWrapper } from "./components/layout/PageWrapper";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -110,6 +112,7 @@ function App() {
   const tabsRestored = useTabSession();
   useSingleTabWhenOff();
   useCrossWindowSync();
+  useProfileSwitchListener(markSwitching);
 
   // Onboarding belongs to the main window; an extra window only exists once it is done.
   const [loadingOnboarding, setLoadingOnboarding] = useState(IS_MAIN_WINDOW);

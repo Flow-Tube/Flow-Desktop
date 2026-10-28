@@ -85,6 +85,10 @@ pub enum AppError {
     #[error("Profile in use: {0}")]
     ProfileInUse(String),
 
+    /// A switch can't start now; carries `syncRunning`, `switching` or `alreadyActive`.
+    #[error("{0}")]
+    ProfileSwitchRefused(&'static str),
+
     /// The new profile couldn't be filled from the current one; nothing was created.
     #[error("Couldn't copy into the new profile: {0}")]
     ProfileCopyFailed(String),
@@ -197,6 +201,7 @@ impl From<AppError> for ErrorResponse {
             AppError::ProfileNotFound(_) => "profileNotFound",
             AppError::ProfileInUse(_) => "profileInUse",
             AppError::ProfileCopyFailed(_) => "profileCopyFailed",
+            AppError::ProfileSwitchRefused(_) => "profileSwitchRefused",
             AppError::Streaming(_) => "streaming",
             AppError::MediaDecode(_) => "mediaDecode",
             AppError::StreamExpired(_) => "streamExpired",
@@ -267,6 +272,10 @@ mod tests {
             (AppError::ProfileNotFound("p".into()), "profileNotFound"),
             (AppError::ProfileInUse("p".into()), "profileInUse"),
             (AppError::ProfileCopyFailed("p".into()), "profileCopyFailed"),
+            (
+                AppError::ProfileSwitchRefused("switching"),
+                "profileSwitchRefused",
+            ),
             (AppError::Internal("i".into()), "internal"),
         ];
         for (error, expected_kind) in cases {

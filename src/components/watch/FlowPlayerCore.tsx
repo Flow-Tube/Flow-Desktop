@@ -24,6 +24,7 @@ import { openExternalOrOfferCopy } from "../../lib/openExternal";
 import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
+import { onBeforeProfileSwitch } from "../../lib/profiles/beforeSwitch";
 
 /** How close to the end the next video is resolved. Long enough to cover a slow
  * client ladder, short enough that a video abandoned early never triggers it. */
@@ -169,7 +170,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       if (!latest || latest.videoId !== currentVideoId || !video || video.id !== currentVideoId) return;
       if (!shouldRecordWatchHistory()) return;
       saveLocalWatchProgress(video.id, latest.time, latest.duration);
-      void addWatchRecord({
+      return addWatchRecord({
         videoId: video.id,
         title: video.title,
         channelName: video.channelName,
@@ -182,8 +183,10 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     };
 
     window.addEventListener("beforeunload", persistLatestProgress);
+    const offSwitch = onBeforeProfileSwitch(persistLatestProgress);
     return () => {
       window.removeEventListener("beforeunload", persistLatestProgress);
+      offSwitch();
       persistLatestProgress();
     };
   }, [currentVideoId]);

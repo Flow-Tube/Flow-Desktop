@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { endWatchSession, reportWatchProgress, type WatchReport } from "./api/recommendation";
+import { onBeforeProfileSwitch } from "./profiles/beforeSwitch";
 
 const REPORT_INTERVAL_MS = 5000;
 /** A larger jump between two time updates is a seek, not playback. */
@@ -95,7 +96,7 @@ export function useWatchSession(subject: WatchSubject | null) {
       const report = takeReport(videoId);
       if (!report) return;
       if (natural && report.duration > 0) report.position = report.duration;
-      void endWatchSession(report, natural).catch((err) => console.warn("Failed to end watch session", err));
+      return endWatchSession(report, natural).catch((err) => console.warn("Failed to end watch session", err));
     },
     [takeReport],
   );
@@ -105,8 +106,10 @@ export function useWatchSession(subject: WatchSubject | null) {
     if (!videoId) return;
     const onUnload = () => end(videoId, false);
     window.addEventListener("beforeunload", onUnload);
+    const offSwitch = onBeforeProfileSwitch(onUnload);
     return () => {
       window.removeEventListener("beforeunload", onUnload);
+      offSwitch();
       end(videoId, false);
     };
   }, [videoId, end]);

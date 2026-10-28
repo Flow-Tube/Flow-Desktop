@@ -81,6 +81,8 @@ pub struct ProfileService {
     app_data_dir: PathBuf,
     running: ActiveProfile,
     edits: Mutex<()>,
+    /// The profile a committed switch is heading to.
+    switching: std::sync::Mutex<Option<String>>,
     /// Removes a deleted profile's scrobbling item; tests swap it so they never touch the
     /// real keychain.
     forget_keychain_item: fn(&str) -> bool,
@@ -92,6 +94,7 @@ impl ProfileService {
             app_data_dir,
             running,
             edits: Mutex::new(()),
+            switching: std::sync::Mutex::new(None),
             forget_keychain_item: forget_in_keychain,
         }
     }
@@ -209,6 +212,53 @@ impl ProfileService {
         Ok(updated)
     }
 
+    /// Commits to a switch: from here links are held for the next process and the windows
+    /// save their work. Refused while sync runs, during another switch, or for the running
+    /// profile.
+    pub fn prepare_switch(&self, id: &str, sync_busy: bool) -> AppResult<()> {
+        let state = self.load()?;
+        if state.profiles.iter().all(|profile| profile.id != id) {
+            return Err(AppError::ProfileNotFound(id.to_string()));
+        }
+        if id == self.running_id(&state) {
+            return Err(AppError::ProfileSwitchRefused("alreadyActive"));
+        }
+        if sync_busy {
+            return Err(AppError::ProfileSwitchRefused("syncRunning"));
+        }
+        let mut switching = self.switching.lock().expect("switch lock");
+        if switching.is_some() {
+            return Err(AppError::ProfileSwitchRefused("switching"));
+        }
+        *switching = Some(id.to_string());
+        Ok(())
+    }
+
+    pub fn cancel_switch(&self) {
+        *self.switching.lock().expect("switch lock") = None;
+    }
+
+    pub fn is_switching(&self) -> bool {
+        self.switching.lock().expect("switch lock").is_some()
+    }
+
+    /// Makes the prepared profile the active one for the next process.
+    pub async fn finish_switch(&self, id: &str) -> AppResult<()> {
+        if self.switching.lock().expect("switch lock").as_deref() != Some(id) {
+            return Err(AppError::ProfileSwitchRefused("switching"));
+        }
+        let _edit = self.edits.lock().await;
+        let mut state = self.load()?;
+        if state.profiles.iter().all(|profile| profile.id != id) {
+            return Err(AppError::ProfileNotFound(id.to_string()));
+        }
+        state.active_id = Some(id.to_string());
+        state.post_switch = true;
+        self.save(&state)?;
+        tracing::info!(from = %self.running.id, to = %id, "profile switch");
+        Ok(())
+    }
+
     /// Removes an inactive, non-default profile and everything it owns, right away.
     pub async fn delete(&self, id: &str) -> AppResult<()> {
         let _edit = self.edits.lock().await;
@@ -216,7 +266,12 @@ impl ProfileService {
         if state.profiles.iter().all(|profile| profile.id != id) {
             return Err(AppError::ProfileNotFound(id.to_string()));
         }
-        if id == state.default_id() || id == self.running_id(&state) || id == state.active_id() {
+        let switching_to = self.switching.lock().expect("switch lock").clone();
+        if id == state.default_id()
+            || id == self.running_id(&state)
+            || id == state.active_id()
+            || switching_to.as_deref() == Some(id)
+        {
             return Err(AppError::ProfileInUse(id.to_string()));
         }
         let dir = self.profile_dir(id)?;
@@ -522,6 +577,49 @@ mod tests {
                 service.delete(&profile.id).await.unwrap();
             }
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_switch_is_refused_while_syncing_and_persists_the_target() {
+        let (dir, service, pool) = setup().await;
+        let study = service
+            .create(&pool, request("Study", CopyParts::default()))
+            .await
+            .unwrap();
+        let default_id = service.list().unwrap().default_id;
+        assert!(matches!(
+            service.prepare_switch(&default_id, false),
+            Err(AppError::ProfileSwitchRefused("alreadyActive"))
+        ));
+        assert!(matches!(
+            service.prepare_switch(&study.id, true),
+            Err(AppError::ProfileSwitchRefused("syncRunning"))
+        ));
+        assert!(!service.is_switching());
+        assert!(
+            service.finish_switch(&study.id).await.is_err(),
+            "nothing was prepared"
+        );
+
+        service.prepare_switch(&study.id, false).unwrap();
+        assert!(matches!(
+            service.prepare_switch(&study.id, false),
+            Err(AppError::ProfileSwitchRefused("switching"))
+        ));
+        assert!(matches!(
+            service.delete(&study.id).await,
+            Err(AppError::ProfileInUse(_))
+        ));
+        service.finish_switch(&study.id).await.unwrap();
+        let state = registry::load(&dir).unwrap();
+        assert_eq!(state.active_id(), study.id);
+        assert!(state.post_switch);
+        assert_eq!(
+            service.list().unwrap().active_id,
+            default_id,
+            "this process stays Default"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

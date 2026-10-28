@@ -14,6 +14,7 @@ import {
 import { normalizeBackendError } from "../lib/api/errors";
 import { SETTING_DEFINITIONS } from "../lib/settings/schema";
 import { copyKeysToProfile, removeProfileKeys } from "../lib/storage/profileStorage";
+import { switchProfile, type PrepareSwitchPayload } from "../lib/profiles/switchProfile";
 
 /** Web-storage preferences that travel with "Copy settings". */
 const COPIED_UI_KEYS = ["flow_subtitle_style", "flow_theater_mode", "flow_sidebar_expanded", "flow_sidebar_subs_collapsed"];
@@ -45,6 +46,9 @@ interface ProfilesState {
   rename: (id: string, name: string) => Promise<void>;
   setLook: (id: string, colorKey: string, avatar: ProfileAvatar) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** The profile a switch is heading to, while this window waits for the restart. */
+  switchingTo: Profile | null;
+  switchTo: (profile: Profile) => Promise<void>;
 }
 
 function replaceProfile(view: ProfilesView | null, profile: Profile): ProfilesView | null {
@@ -95,4 +99,20 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     removeProfileKeys(id);
     await get().load();
   },
+
+  switchingTo: null,
+  switchTo: async (profile) => {
+    set({ switchingTo: profile });
+    try {
+      await switchProfile(profile);
+    } catch (error) {
+      set({ switchingTo: null });
+      throw error;
+    }
+  },
 }));
+
+/** Another window started a switch: show it here too. */
+export function markSwitching(payload: PrepareSwitchPayload): void {
+  useProfilesStore.setState({ switchingTo: payload.target });
+}

@@ -66,3 +66,17 @@ export function setProfileLook(id: string, colorKey: string, avatar: ProfileAvat
 export function deleteProfile(id: string): Promise<void> {
   return invokeBackend<void>("profiles_delete", { id });
 }
+
+/** Commits to a switch; refused while sync runs or another switch is under way. */
+export function prepareProfileSwitch(id: string): Promise<void> {
+  return invokeBackend<void>("profiles_prepare_switch", { id });
+}
+
+export function cancelProfileSwitch(): Promise<void> {
+  return invokeBackend<void>("profiles_cancel_switch");
+}
+
+/** Makes the profile active and restarts Flow into it. */
+export function finishProfileSwitch(id: string): Promise<void> {
+  return invokeBackend<void>("profiles_switch", { id });
+}

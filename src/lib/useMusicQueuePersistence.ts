@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { onBeforeProfileSwitch } from "./profiles/beforeSwitch";
 
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { getSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
@@ -24,14 +25,14 @@ const settingsLoaded = (): Promise<void> =>
     });
   });
 
-function writeNow(): void {
-  if (!restoreEnabled()) return;
+function writeNow(): Promise<void> | undefined {
+  if (!restoreEnabled()) return undefined;
   const state = useMusicPlayerStore.getState();
   const request =
     state.queue.length === 0
       ? clearMusicQueueState()
       : saveMusicQueueState(JSON.stringify(serializeQueue(state)));
-  request.catch((error) => console.warn("Failed to save the music queue", error));
+  return request.catch((error) => console.warn("Failed to save the music queue", error));
 }
 
 /**
@@ -50,7 +51,7 @@ export function useMusicQueuePersistence() {
     const flush = () => {
       if (timer !== null) clearTimeout(timer);
       timer = null;
-      if (ready) writeNow();
+      return ready ? writeNow() : undefined;
     };
     const schedule = () => {
       if (timer === null) timer = setTimeout(flush, SAVE_DELAY_MS);
@@ -75,6 +76,7 @@ export function useMusicQueuePersistence() {
       }
     });
     window.addEventListener("beforeunload", flush);
+    const offSwitch = onBeforeProfileSwitch(flush);
 
     void (async () => {
       await settingsLoaded();
@@ -91,6 +93,7 @@ export function useMusicQueuePersistence() {
       cancelled = true;
       unsubscribe();
       window.removeEventListener("beforeunload", flush);
+      offSwitch();
       if (timer !== null) clearTimeout(timer);
     };
   }, []);

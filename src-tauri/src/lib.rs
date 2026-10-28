@@ -361,7 +361,10 @@ pub fn run() {
             // Initialize native Innertube extractor (shared by the video path and
             // the additive YouTube Music subsystem).
             let extractor = Arc::new(InnertubeClient::new());
-            extractor.keep_identity_in(app_data_dir.join("visitor_identity.json"));
+            // Each profile has its own YouTube visitor identity; a new one is fetched on first open.
+            let profile_root = active_profile.root(&app_data_dir);
+            std::fs::create_dir_all(&profile_root)?;
+            extractor.keep_identity_in(profile_root.join("visitor_identity.json"));
             let youtube_service = YoutubeService::new(extractor.clone());
             app.manage(youtube_service);
             app.manage(extractor.clone());
@@ -392,7 +395,10 @@ pub fn run() {
             app.manage(pool.clone());
             let scrobbler = Arc::new(scrobble::scrobbler::Scrobbler::new(
                 pool.clone(),
-                Arc::new(scrobble::credentials::Keychain),
+                Arc::new(scrobble::credentials::ProfileScoped::new(
+                    scrobble::credentials::Keychain,
+                    &active_profile,
+                )),
             ));
             scrobble::worker::spawn(Arc::clone(&scrobbler));
             app.manage(scrobbler);

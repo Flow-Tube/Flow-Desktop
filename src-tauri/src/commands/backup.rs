@@ -15,6 +15,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::errors::{AppError, ErrorResponse};
 use crate::music_brain::store::MusicBrainStore;
+use crate::services::profile_service::ProfileService;
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::apply;
 use crate::sync::canonical::{
@@ -345,6 +346,75 @@ pub async fn export_backup_data(
     }
     flush_brains(&app, false).await;
     export_backup(&pool, &scope).await.map_err(sync_err)
+}
+
+/// One profile's part of a master backup: its raw settings and its collections.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileBackupPart {
+    pub id: String,
+    pub settings: std::collections::HashMap<String, String>,
+    pub export: BackupExport,
+}
+
+async fn raw_settings(
+    pool: &SqlitePool,
+    keys: &[String],
+    with_device_keys: bool,
+) -> Result<std::collections::HashMap<String, String>, SyncError> {
+    let mut settings = std::collections::HashMap::new();
+    for key in keys {
+        // Device settings travel once, in Default's part, where older builds read them.
+        if !with_device_keys && crate::profiles::device_keys::is_device_key(key) {
+            continue;
+        }
+        if let Some(value) = get_setting_value(pool, key).await? {
+            settings.insert(key.clone(), value);
+        }
+    }
+    Ok(settings)
+}
+
+/// Exports any profile for the master backup: the running one through its live pool (brains
+/// flushed first), any other from its closed database.
+#[tauri::command]
+pub async fn export_profile_backup(
+    id: String,
+    setting_keys: Vec<String>,
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    profiles: State<'_, ProfileService>,
+) -> Result<ProfileBackupPart, ErrorResponse> {
+    let running = profiles.running_profile_id().map_err(ErrorResponse::from)?;
+    let default_id = profiles.list().map_err(ErrorResponse::from)?.default_id;
+    if id == running {
+        flush_brains(&app, false).await;
+        let settings = raw_settings(&pool, &setting_keys, id == default_id)
+            .await
+            .map_err(sync_err)?;
+        let export = export_backup(&pool, "MASTER").await.map_err(sync_err)?;
+        return Ok(ProfileBackupPart {
+            id,
+            settings,
+            export,
+        });
+    }
+    let (closed, is_default) = profiles
+        .open_closed(&id)
+        .await
+        .map_err(ErrorResponse::from)?;
+    let part = async {
+        let settings = raw_settings(&closed, &setting_keys, is_default).await?;
+        let export = export_backup(&closed, "MASTER").await?;
+        Ok::<_, SyncError>(ProfileBackupPart {
+            id: id.clone(),
+            settings,
+            export,
+        })
+    }
+    .await;
+    closed.close().await;
+    part.map_err(sync_err)
 }
 
 #[tauri::command]

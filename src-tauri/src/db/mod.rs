@@ -59,6 +59,11 @@ fn migrator() -> sqlx::migrate::Migrator {
     migrator
 }
 
+/// Opens a profile that isn't running, such as for a master backup.
+pub async fn open_closed_profile(dir: PathBuf) -> AppResult<SqlitePool> {
+    open_migrated(dir, 2).await
+}
+
 async fn open_migrated(dir: PathBuf, max_connections: u32) -> AppResult<SqlitePool> {
     std::fs::create_dir_all(&dir).map_err(AppError::from)?;
 

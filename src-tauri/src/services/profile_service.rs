@@ -282,6 +282,26 @@ impl ProfileService {
         self.switching.lock().expect("switch lock").is_some()
     }
 
+    /// The running profile's id (Default's id when the registry couldn't be read at start).
+    pub fn running_profile_id(&self) -> AppResult<String> {
+        Ok(self.running_id(&self.load()?))
+    }
+
+    /// Opens a profile that isn't running. Default's file is the app data folder's own.
+    pub async fn open_closed(&self, id: &str) -> AppResult<(SqlitePool, bool)> {
+        let state = self.load()?;
+        if state.profiles.iter().all(|profile| profile.id != id) {
+            return Err(AppError::ProfileNotFound(id.to_string()));
+        }
+        let is_default = id == state.default_id();
+        let dir = if is_default {
+            self.app_data_dir.clone()
+        } else {
+            self.profile_dir(id)?
+        };
+        Ok((crate::db::open_closed_profile(dir).await?, is_default))
+    }
+
     /// Keeps a link that arrived during a switch for the next process; the latest one wins.
     /// Returns false when no switch is under way, so the caller opens it itself.
     pub fn hold_link(&self, url: &str) -> bool {

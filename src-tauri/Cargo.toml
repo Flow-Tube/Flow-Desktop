@@ -146,3 +146,6 @@ inherits = "release"
 lto = "thin"
 codegen-units = 16
 
+
+[dev-dependencies]
+wiremock = "0.6"

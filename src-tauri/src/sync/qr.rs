@@ -193,19 +193,24 @@ impl QrPayload {
 /// session key: a pasted code pointing at an internet host would stream the library to it, and the
 /// matching verification code proves nothing when the attacker made the key.
 pub fn is_local_address(ip: &str) -> bool {
-    match ip.parse::<IpAddr>() {
-        Ok(IpAddr::V4(v4)) => {
+    ip.parse().is_ok_and(is_local_ip)
+}
+
+/// [`is_local_address`] for a parsed address. An IPv4-mapped IPv6 address is judged as IPv4.
+pub fn is_local_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
             let [a, b, ..] = v4.octets();
             v4.is_private()
                 || v4.is_link_local()
                 || v4.is_loopback()
                 || (a == 100 && (64..=127).contains(&b))
         }
-        Ok(IpAddr::V6(v6)) => {
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => is_local_ip(IpAddr::V4(v4)),
             // Unique-local only: a link-local fe80:: address needs a zone id a QR can't carry.
-            v6.is_loopback() || (v6.segments()[0] & 0xfe00) == 0xfc00
-        }
-        Err(_) => false,
+            None => v6.is_loopback() || (v6.segments()[0] & 0xfe00) == 0xfc00,
+        },
     }
 }
 

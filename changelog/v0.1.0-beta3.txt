@@ -130,6 +130,8 @@ INTERFACE
 TABS AND WINDOWS
 - Going Back returns to where you were on the page, such as halfway down Home, instead of the top.
 - The mouse side buttons, Alt+Left and Alt+Right (and Cmd+[ and Cmd+] on a Mac) go back and forward. The Back and Forward buttons dim when there is nowhere to go.
+- Each tab keeps its own video. Switching away from a tab that is playing keeps the video going in the mini player, and the mini player's expand button takes you back to that tab.
+- Opening a video in another tab pauses the first one where it was; going back to its tab picks it up from that spot.
 
 PLAYER
 - Hovering the seek bar shows a preview frame of that moment, and the most-replayed graph above it shows which parts people watch again.

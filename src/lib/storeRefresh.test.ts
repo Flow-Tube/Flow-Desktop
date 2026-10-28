@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./streamResolution", () => ({ prefetchStreamInfo: vi.fn() }));
 
-const { refreshForSettingKeys } = await import("./storeRefresh");
+const { refreshForSettingKeys, refreshSyncedCollections } = await import("./storeRefresh");
 const { useLikesStore } = await import("../store/useLikesStore");
 const { useAppSettingsStore } = await import("../store/useAppSettingsStore");
 const { useSettingsStore } = await import("../store/useSettingsStore");
@@ -38,5 +38,18 @@ describe("refreshForSettingKeys", () => {
     expect(appSettings).toHaveBeenCalledTimes(1);
     expect(playerSettings).toHaveBeenCalledTimes(1);
     window.removeEventListener("flow:likes-library-updated", libraryEvent);
+  });
+});
+
+describe("refreshSyncedCollections", () => {
+  it("reloads both settings stores after a settings merge", async () => {
+    const appSettings = vi.fn(async () => {});
+    const playerSettings = vi.fn(async () => {});
+    useAppSettingsStore.setState({ loadSettings: appSettings });
+    useSettingsStore.setState({ loadSettings: playerSettings });
+
+    await refreshSyncedCollections(["settings"]);
+    expect(appSettings).toHaveBeenCalledTimes(1);
+    expect(playerSettings).toHaveBeenCalledTimes(1);
   });
 });

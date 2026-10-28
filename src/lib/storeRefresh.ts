@@ -35,7 +35,7 @@ async function reloadSettings(): Promise<void> {
 export async function refreshSyncedCollections(collections: string[]): Promise<void> {
   try {
     if (collections.includes("likes")) await reloadLikes();
-    if (collections.includes("settings")) await useAppSettingsStore.getState().loadSettings();
+    if (collections.includes("settings")) await reloadSettings();
     if (collections.includes("playlists")) await reloadPlaylists();
     if (collections.includes("subscribed_channels")) await useSubscriptionStore.getState().loadSubscriptions();
     if (collections.includes("subscriptions")) await useSubscriptionStore.getState().loadSubscriptionGroups();

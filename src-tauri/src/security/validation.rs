@@ -109,3 +109,80 @@ pub fn validate_browse_id(id: &str) -> AppResult<()> {
         ))
     }
 }
+
+/// Links Flow hands to the system to open: web pages and mail only, never a
+/// file, a script or another app's scheme.
+pub fn validate_external_url(url: &str) -> AppResult<()> {
+    let parsed =
+        reqwest::Url::parse(url.trim()).map_err(|_| AppError::Validation("Invalid link".into()))?;
+    match parsed.scheme() {
+        "http" | "https" if parsed.host_str().is_some_and(|host| !host.is_empty()) => Ok(()),
+        "mailto" => Ok(()),
+        _ => Err(AppError::Validation(
+            "Only web and mail links can be opened".into(),
+        )),
+    }
+}
+
+/// A page inside Flow that a new window opens on: an app path such as
+/// `/watch/<id>`, never a URL that could point the window somewhere else.
+pub fn validate_app_route(route: &str) -> AppResult<()> {
+    let valid = route.len() <= 2048
+        && route.starts_with('/')
+        && !route.starts_with("//")
+        && !route.contains('\\')
+        && !route.chars().any(char::is_control);
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::Validation("Invalid page for a new window".into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{validate_app_route, validate_external_url};
+
+    #[test]
+    fn app_routes_stay_inside_flow() {
+        assert!(validate_app_route("/").is_ok());
+        assert!(validate_app_route("/watch/dQw4w9WgXcQ?t=42").is_ok());
+        assert!(validate_app_route("/search?q=lofi%20beats").is_ok());
+        for route in [
+            "",
+            "watch/abc",
+            "//evil.example",
+            "/\\evil.example",
+            "https://evil.example",
+            "/watch/a\nb",
+        ] {
+            assert!(
+                validate_app_route(route).is_err(),
+                "{route:?} should be rejected"
+            );
+        }
+        assert!(validate_app_route(&format!("/{}", "a".repeat(2048))).is_err());
+    }
+
+    #[test]
+    fn web_and_mail_links_open() {
+        assert!(validate_external_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ").is_ok());
+        assert!(validate_external_url("http://example.com").is_ok());
+        assert!(validate_external_url("mailto:someone@example.com").is_ok());
+    }
+
+    #[test]
+    fn files_scripts_and_other_schemes_do_not() {
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "smb://server/share",
+            "flow://watch?v=x",
+            "https://",
+            "not a url",
+            "",
+        ] {
+            assert!(validate_external_url(url).is_err(), "{url}");
+        }
+    }
+}

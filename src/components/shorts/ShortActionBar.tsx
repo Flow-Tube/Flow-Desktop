@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   Ban,
@@ -15,7 +15,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useVideoReactions } from "../../lib/useVideoReactions";
+import { useExitGhost } from "../../lib/useExitGhost";
 import { useUiStore } from "../../store/useUiStore";
+import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import {
   isShortSaved,
@@ -158,20 +160,37 @@ export function ShortActionBar({
 
   const toggleSavedShort = async () => {
     setMenuOpen(false);
+    const removing = savedToLibrary;
+    const item = { title: savedShort.title, image: savedShort.thumbnailUrl, shape: "portrait" as const };
     try {
-      if (savedToLibrary) {
+      if (removing) {
         await removeShortFromLibrary(short.id);
         setSavedToLibrary(false);
-        showToast({ variant: "success", message: getString("shorts_removed_from_library") });
+        showSaveToast({
+          destination: { kind: "savedShorts" },
+          item,
+          removed: true,
+          undo: async () => {
+            await saveShortToLibrary(savedShort);
+            setSavedToLibrary(true);
+          },
+        });
         return;
       }
 
       await saveShortToLibrary(savedShort);
       setSavedToLibrary(true);
-      showToast({ variant: "success", message: getString("shorts_saved_to_library") });
+      showSaveToast({
+        destination: { kind: "savedShorts" },
+        item,
+        undo: async () => {
+          await removeShortFromLibrary(short.id);
+          setSavedToLibrary(false);
+        },
+      });
     } catch (error) {
       console.error("Failed to update saved Shorts", error);
-      showToast({ variant: "error", message: getString("shorts_save_failed") });
+      showSaveFailedToast({ destination: { kind: "savedShorts" }, item, removed: removing, retry: toggleSavedShort });
     }
   };
 
@@ -220,7 +239,7 @@ export function ShortActionBar({
         {menuOpen && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute bottom-2 right-16 z-20 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1">
+            <MoreMenu>
               <MenuItem icon={savedToLibrary ? BookmarkCheck : Bookmark} onClick={() => void toggleSavedShort()}>
                 {getString(savedToLibrary ? "shorts_menu_remove_from_library" : "shorts_menu_save_to_library")}
               </MenuItem>
@@ -232,7 +251,7 @@ export function ShortActionBar({
                 </MenuItem>
               )}
               <MenuItem icon={Copy} onClick={copyLink}>{getString("shorts_menu_copy_link")}</MenuItem>
-            </div>
+            </MoreMenu>
           </>
         )}
       </div>
@@ -268,6 +287,20 @@ function ActionButton({
       <span className="mt-1 mb-2 h-4 text-xs font-semibold text-chrome-neutral-300">
         {countText ?? ""}
       </span>
+    </div>
+  );
+}
+
+function MoreMenu({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useExitGhost(ref);
+  return (
+    <div
+      ref={ref}
+      style={{ transformOrigin: "bottom right" }}
+      className="animate-menu-in absolute bottom-2 right-16 z-20 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1"
+    >
+      {children}
     </div>
   );
 }

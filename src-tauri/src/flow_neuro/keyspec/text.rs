@@ -1,5 +1,9 @@
 //! Stage 1 and the word split of stage 2 (Android `NeuroText`): styled letters fold to plain
-//! ones, and scripts written without spaces split into dictionary words.
+//! ones, Traditional Chinese folds to Simplified, and scripts written without spaces split into
+//! dictionary words.
+
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use icu_properties::props::Script;
 use icu_segmenter::WordSegmenter;
@@ -43,6 +47,42 @@ const APOSTROPHES: [char; 5] = ['\u{2019}', '\u{2018}', '\u{02BC}', '`', '\u{00B
 // Turkish dotted capital I, the emoji variation selector and joiner, and the Unicode hyphens.
 const MARKS: [char; 5] = ['\u{0130}', '\u{FE0F}', '\u{200D}', '\u{2010}', '\u{2011}'];
 
+/// `resources/neuro/fold/hant-hans.txt`: Traditional to Simplified characters, one to one, from
+/// the Open Chinese Convert table.
+const HANT_HANS: &str = include_str!("../../../resources/neuro/fold/hant-hans.txt");
+
+static HANT_TO_HANS: LazyLock<HashMap<char, char>> = LazyLock::new(|| {
+    HANT_HANS
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let mut chars = line.chars();
+            match (chars.next(), chars.next(), chars.next()) {
+                (Some(hant), Some(hans), None) => Some((hant, hans)),
+                _ => None,
+            }
+        })
+        .collect()
+});
+
+/// How [`fold_with`] treats Han characters (Android `HanFold`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HanFold {
+    /// Han stays as written (key spec 2, and Japanese viewers).
+    None,
+    /// Traditional folds to Simplified unless the text holds kana, which makes it Japanese.
+    UnlessKana,
+    /// Traditional folds to Simplified whatever else the text holds.
+    Always,
+}
+
+/// A word of folded text; `joined` when nothing stood between it and the word before.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Piece {
+    pub text: String,
+    pub joined: bool,
+}
+
 const UNSPACED_SCRIPTS: [Script; 7] = [
     Script::Han,
     Script::Hiragana,
@@ -53,10 +93,17 @@ const UNSPACED_SCRIPTS: [Script; 7] = [
     Script::Myanmar,
 ];
 
-/// Lowercase plain letters: "𝙋𝙃𝙊𝙉𝙆", "ｐｈｏｎｋ", "ⓟⓗⓞⓝⓚ" and "ᴘʜᴏɴᴋ" all read "phonk". Every
-/// apostrophe reads ', Turkish İ reads i, and emoji joiners are dropped.
+/// [`fold_with`] as Android's default: Traditional folds to Simplified unless the text has kana.
 #[must_use]
 pub fn fold(text: &str) -> String {
+    fold_with(text, HanFold::UnlessKana)
+}
+
+/// Lowercase plain letters: "𝙋𝙃𝙊𝙉𝙆", "ｐｈｏｎｋ", "ⓟⓗⓞⓝⓚ" and "ᴘʜᴏɴᴋ" all read "phonk". Every
+/// apostrophe reads ', Turkish İ reads i, and emoji joiners are dropped. `han` decides whether
+/// Traditional Chinese reads as Simplified.
+#[must_use]
+pub fn fold_with(text: &str, han: HanFold) -> String {
     if text.is_ascii() {
         return text.to_ascii_lowercase().replace('`', "'");
     }
@@ -86,25 +133,68 @@ pub fn fold(text: &str) -> String {
                 .map_or(c, |(_, plain)| *plain)
         })
         .collect();
-    plain.to_lowercase()
+    let lower = plain.to_lowercase();
+    match han {
+        HanFold::None => lower,
+        HanFold::UnlessKana => simplified(&lower, false),
+        HanFold::Always => simplified(&lower, true),
+    }
+}
+
+/// Traditional characters as Simplified ones; unchanged when `text` has kana unless `ignore_kana`.
+#[must_use]
+pub fn simplified(text: &str, ignore_kana: bool) -> String {
+    let table = &*HANT_TO_HANS;
+    if !text.chars().any(|c| table.contains_key(&c)) || (!ignore_kana && has_kana(text)) {
+        return text.to_string();
+    }
+    text.chars()
+        .map(|c| table.get(&c).copied().unwrap_or(c))
+        .collect()
+}
+
+#[must_use]
+pub fn has_kana(text: &str) -> bool {
+    text.chars().any(is_kana)
+}
+
+#[must_use]
+pub fn is_kana(c: char) -> bool {
+    matches!(c, '\u{3040}'..='\u{30FF}' | '\u{31F0}'..='\u{31FF}' | '\u{FF66}'..='\u{FF9F}')
+}
+
+// Every Han block starts at U+2E80; below it the script lookup is skipped.
+#[must_use]
+pub fn is_han(c: char) -> bool {
+    u32::from(c) >= 0x2E80 && script(c) == Some(Script::Han)
 }
 
 /// The words of folded text, split at ASCII whitespace as Java's `\s+` does. Chinese, Japanese,
 /// Thai, Lao, Khmer and Burmese runs are split by the ICU dictionary word breaker.
 #[must_use]
 pub fn words(folded: &str) -> Vec<String> {
-    folded
+    pieces(folded).into_iter().map(|piece| piece.text).collect()
+}
+
+/// [`words`], each knowing whether it touched the word before it.
+#[must_use]
+pub fn pieces(folded: &str) -> Vec<Piece> {
+    let mut out = Vec::new();
+    // Android keeps an empty piece at either end; no later stage reads anything from one.
+    for chunk in folded
         .split([' ', '\t', '\n', '\u{0B}', '\u{0C}', '\r'])
-        // Android keeps an empty piece at either end; no later stage reads anything from one.
-        .filter(|piece| !piece.is_empty())
-        .flat_map(|piece| {
-            if piece.chars().any(is_unspaced) {
-                segment(piece)
-            } else {
-                vec![piece.to_string()]
-            }
-        })
-        .collect()
+        .filter(|chunk| !chunk.is_empty())
+    {
+        if chunk.chars().any(is_unspaced) {
+            segment(chunk, &mut out);
+        } else {
+            out.push(Piece {
+                text: chunk.to_string(),
+                joined: false,
+            });
+        }
+    }
+    out
 }
 
 /// A letter, digit or combining mark: the marks spell vowels and tones in Thai and Devanagari words.
@@ -134,14 +224,21 @@ fn is_grammar_kana(word: &str) -> bool {
     word.chars().all(|c| script(c) == Some(Script::Hiragana))
 }
 
-fn segment(chunk: &str) -> Vec<String> {
+fn segment(chunk: &str, out: &mut Vec<Piece>) {
     let breaks: Vec<usize> = WordSegmenter::new_dictionary(WordBreakInvariantOptions::default())
         .segment_str(chunk)
         .collect();
-    breaks
-        .windows(2)
-        .map(|pair| &chunk[pair[0]..pair[1]])
-        .filter(|word| word.chars().any(is_letter_or_digit))
-        .map(str::to_string)
-        .collect()
+    let mut joined = false;
+    for pair in breaks.windows(2) {
+        let token = &chunk[pair[0]..pair[1]];
+        if token.chars().any(is_letter_or_digit) {
+            out.push(Piece {
+                text: token.to_string(),
+                joined,
+            });
+            joined = true;
+        } else {
+            joined = false;
+        }
+    }
 }

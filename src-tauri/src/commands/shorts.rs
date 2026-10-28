@@ -17,8 +17,9 @@ pub async fn get_shorts_feed(
     shorts_service: State<'_, ShortsService>,
     youtube_service: State<'_, YoutubeService>,
     recommendation_service: State<'_, RecommendationService>,
+    pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<ShortsFeed, ErrorResponse> {
-    shorts_service
+    let feed = shorts_service
         .get_feed(
             &youtube_service,
             &recommendation_service,
@@ -27,7 +28,9 @@ pub async fn get_shorts_feed(
             region,
         )
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    remember_shorts(&pool, &feed).await;
+    Ok(feed)
 }
 
 /// Fetch the next page of Shorts, served instantly from the prefetch buffer.
@@ -39,8 +42,9 @@ pub async fn load_more_shorts(
     shorts_service: State<'_, ShortsService>,
     youtube_service: State<'_, YoutubeService>,
     recommendation_service: State<'_, RecommendationService>,
+    pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<ShortsFeed, ErrorResponse> {
-    shorts_service
+    let feed = shorts_service
         .load_more(
             &youtube_service,
             &recommendation_service,
@@ -49,7 +53,16 @@ pub async fn load_more_shorts(
             region,
         )
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    remember_shorts(&pool, &feed).await;
+    Ok(feed)
+}
+
+/// Every reel the Shorts feed serves is a Short wherever it turns up next.
+async fn remember_shorts(pool: &sqlx::SqlitePool, feed: &ShortsFeed) {
+    let ids: Vec<String> = feed.items.iter().map(|item| item.id.clone()).collect();
+    let _ =
+        crate::db::known_shorts::remember(pool, &ids, chrono::Utc::now().timestamp_millis()).await;
 }
 
 /// Clear the session's prefetch buffer and seen-set so the feed starts fresh.

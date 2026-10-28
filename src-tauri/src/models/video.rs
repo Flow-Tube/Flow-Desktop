@@ -85,6 +85,8 @@ pub struct RelatedContentItem {
     pub is_verified: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub is_members_only: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_short: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub badges: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -156,12 +158,30 @@ pub struct RelatedPage {
     pub continuation: Option<String>,
 }
 
-/// The two facts a feed needs to fill in for a listed video, without the full
-/// details lookup and its `next` request.
+/// What a listed video is, from one small player request: enough to fill in a
+/// stored track without the full details lookup.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoMetadata {
+    pub title: String,
+    pub channel_name: String,
+    pub channel_id: Option<String>,
+    pub duration_seconds: Option<u64>,
+    pub view_count: Option<u64>,
+    /// The upload time, exact, in epoch milliseconds.
+    pub published_at_ms: Option<i64>,
+    pub is_live: bool,
+    pub category: Option<String>,
+}
+
+/// What a feed needs to fill in for a listed video, without the full details
+/// lookup and its `next` request.
 #[derive(Debug, Clone, Default)]
 pub struct VideoBasics {
     pub channel_id: Option<String>,
     pub duration_seconds: Option<u64>,
+    /// Whether it is a Short, told by its frame; `None` when no format says.
+    pub is_short: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

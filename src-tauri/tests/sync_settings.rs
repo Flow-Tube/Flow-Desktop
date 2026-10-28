@@ -238,3 +238,67 @@ async fn the_music_player_background_syncs_between_desktops() {
         Some("blur")
     );
 }
+
+#[tokio::test]
+async fn sponsorblock_actions_go_out_as_androids_per_category_settings() {
+    let pool = memory_pool().await;
+    set_like_the_app(
+        &pool,
+        "sponsorblock_categories",
+        r#"{"sponsor":"skip","intro":"mute","outro":"notify","filler":"ignore","made_up":"skip"}"#,
+    )
+    .await;
+
+    let out = export_collections(&pool, OUR, &[Collection::Settings])
+        .await
+        .unwrap();
+    let sent: Vec<SettingEntry> = String::from_utf8(out[0].ndjson.clone())
+        .unwrap()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let value = |key: &str| sent.iter().find(|e| e.key == key).map(|e| e.value.clone());
+    assert_eq!(value("sponsorblock_action_sponsor"), Some(json!("SKIP")));
+    assert_eq!(value("sponsorblock_action_intro"), Some(json!("MUTE")));
+    assert_eq!(
+        value("sponsorblock_action_outro"),
+        Some(json!("SHOW_TOAST"))
+    );
+    assert_eq!(value("sponsorblock_action_filler"), Some(json!("IGNORE")));
+    assert_eq!(value("sponsorblock_action_preview"), None, "never set here");
+    assert!(sent.iter().all(|e| !e.key.contains("made_up")));
+    assert_eq!(value("desktop.sponsorblock_categories"), None);
+}
+
+#[tokio::test]
+async fn an_android_sponsorblock_action_changes_one_category_here() {
+    let pool = memory_pool().await;
+    sqlx::query(
+        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, '2020-01-01T00:00:00Z')",
+    )
+    .bind("sponsorblock_categories")
+    .bind(r#"{"sponsor":"skip","intro":"skip","selfpromo":"notify"}"#)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let now = 1_900_000_000_000;
+    let incoming = [
+        entry("sponsorblock_action_sponsor", json!("MUTE"), now),
+        entry("sponsorblock_action_filler", json!("IGNORE"), now),
+        entry("sponsorblock_action_intro", json!("WHATEVER"), now),
+    ];
+    apply_payload(&pool, OUR, PEER, &[staged(&incoming, "h1")])
+        .await
+        .unwrap();
+
+    let actions: Value =
+        serde_json::from_str(&stored(&pool, "sponsorblock_categories").await.unwrap()).unwrap();
+    assert_eq!(actions["sponsor"], "mute");
+    assert_eq!(actions["filler"], "ignore");
+    assert_eq!(
+        actions["intro"], "skip",
+        "an unknown action changes nothing"
+    );
+    assert_eq!(actions["selfpromo"], "notify", "other categories stay");
+}

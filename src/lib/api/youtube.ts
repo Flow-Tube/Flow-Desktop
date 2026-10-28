@@ -1,7 +1,9 @@
 import type {
+  SearchSuggestion,
   SearchVideosRequest,
   SearchVideosResponse,
   VideoDetails,
+  VideoMetadata,
   StreamInfo,
   ChannelAbout,
   ChannelDetails,
@@ -125,6 +127,12 @@ export async function getRelatedVideos(videoId: string): Promise<RelatedPage> {
 export async function getMoreRelatedVideos(continuation: string): Promise<RelatedPage> {
   if (!(await isTauriEnv())) return { items: [], continuation: null };
   return invokeBackend<RelatedPage>("get_more_related_videos", { continuation });
+}
+
+/** A listed video's length, views, upload date and category, from one small request. */
+export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> {
+  if (!(await isTauriEnv())) throw new Error("Video metadata requires the desktop app.");
+  return invokeBackend<VideoMetadata>("get_video_metadata", { videoId });
 }
 
 /** The video's category, from a small request of its own. */
@@ -454,17 +462,12 @@ export async function getExploreGrid(
 }
 
 /** Suggestions for `query`; `region` is the viewer's two-letter country code. */
-export async function getSearchSuggestions(query: string, region?: string | null): Promise<string[]> {
+export async function getSearchSuggestions(query: string, region?: string | null): Promise<SearchSuggestion[]> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock suggestions.");
-    return [
-      `${query} tutorial`,
-      `${query} crash course`,
-      `${query} setup guide`,
-      `${query} tips & tricks`,
-    ];
+    return ["tutorial", "crash course", "setup guide"].map((tail) => ({ text: `${query} ${tail}`, entity: null }));
   }
-  return invokeBackend<string[]>("get_search_suggestions", { query, region: region ?? null });
+  return invokeBackend<SearchSuggestion[]>("get_search_suggestions", { query, region: region ?? null });
 }
 
 export async function parseSubscriptionExport(
@@ -478,6 +481,12 @@ export async function parseSubscriptionExport(
     ];
   }
   return invokeBackend<[string, string][]>("parse_subscription_export", { data });
+}
+
+/** Videos refused for good (members-only, private, blocked here...) when they were opened. */
+export async function getUnplayableVideoIds(): Promise<string[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<string[]>("get_unplayable_video_ids");
 }
 
 export async function getSubscriptionRotationFeed(): Promise<VideoSummary[]> {

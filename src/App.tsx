@@ -10,11 +10,18 @@ import { useLikesStore } from "./store/useLikesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
+import { useSubscriptionStore } from "./store/useSubscriptionStore";
+import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
 import { useStartupHealth } from "./lib/useStartupHealth";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
 import type { VideoSummary } from "./types/video";
+import { useProfileSwitchListener } from "./lib/profiles/useProfileSwitchListener";
+import { markSwitching } from "./store/useProfilesStore";
+import { ProfileSwitchOverlay } from "./components/profiles/ProfileSwitchOverlay";
+import { ProfileSwitchPanel } from "./components/profiles/ProfileSwitchPanel";
+import { takeSwitchingTo } from "./lib/profiles/switchProfile";
 
 import { PageWrapper } from "./components/layout/PageWrapper";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -50,7 +57,7 @@ import { ShortsFeed } from "./components/shorts/ShortsFeed";
 import Onboarding from "./pages/Onboarding";
 import FlowNeuroPersona from "./pages/FlowNeuroPersona";
 import { LayoutGroup } from "framer-motion";
-import { ToastHost } from "./components/ui/ToastHost";
+import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
 import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
 import { MusicOverlay } from "./components/music/MusicOverlay";
@@ -70,6 +77,15 @@ import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
 import { ThemeController } from "./lib/useTheme";
+import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
+import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
+import { useTabShortcuts } from "./lib/tabs/useTabShortcuts";
+import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
+import { useTabSession } from "./lib/tabs/useTabSession";
+import { useSingleTabWhenOff } from "./lib/tabs/useSingleTabWhenOff";
+import { useCrossWindowSync } from "./lib/useCrossWindowSync";
+import { IS_MAIN_WINDOW } from "./lib/appWindow";
+import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
 import type { CSSProperties } from "react";
@@ -92,8 +108,19 @@ function App() {
   // Clear the Linux startup-crash sentinel as soon as the app mounts
   useStartupHealth();
   useImageProxyBootstrap();
+  useTabHistoryShortcuts();
+  useEffect(installTabPlaybackSync, []);
+  useTabShortcuts();
+  useActiveTabTitle();
+  const tabsRestored = useTabSession();
+  useSingleTabWhenOff();
+  useCrossWindowSync();
+  useProfileSwitchListener(markSwitching);
 
-  const [loadingOnboarding, setLoadingOnboarding] = useState(true);
+  // Onboarding belongs to the main window; an extra window only exists once it is done.
+  const [loadingOnboarding, setLoadingOnboarding] = useState(IS_MAIN_WINDOW);
+  // A switch restarts the app; keep its "Switching to …" up until this profile is ready.
+  const [arrivedFrom] = useState(() => (IS_MAIN_WINDOW ? takeSwitchingTo() : null));
 
   useEffect(() => {
     void useFeedActionsStore.getState().load();
@@ -105,10 +132,14 @@ function App() {
     void useDownloadsLibraryStore.getState().load();
     void useDownloadCollectionsLibraryStore.getState().load();
     void useWatchLaterStore.getState().load();
+    // Every subscribe button reads these, so they load once here rather than once per button.
+    void useSubscriptionStore.getState().loadSubscriptions();
+    void useNotificationStore.getState().loadChannelPreferences();
   }, []);
 
   // Check onboarding state from sqlite db setting
   useEffect(() => {
+    if (!IS_MAIN_WINDOW) return;
     const checkOnboarding = async () => {
       try {
         const completed = await getOnboardingStatus();
@@ -138,13 +169,17 @@ function App() {
     addToQueue(video);
   }, [addToQueue]);
 
-  if (loadingOnboarding) {
+  if (loadingOnboarding || !tabsRestored) {
     return (
       <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
         <ThemeController />
         <TitleBar />
         <div className="flex flex-1 items-center justify-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          {arrivedFrom ? (
+            <ProfileSwitchPanel profile={arrivedFrom} />
+          ) : (
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          )}
         </div>
       </div>
     );
@@ -153,6 +188,7 @@ function App() {
   return (
     <div style={windowLayoutStyle} className="relative flex h-screen flex-col overflow-hidden bg-background text-chrome-zinc-100 font-sans">
       <ThemeController />
+      <SelectionMenu />
       <TitleBar />
       <div data-app-content className="relative min-h-0 flex-1">
       <Routes>
@@ -260,26 +296,32 @@ function App() {
       </div>
       <GlobalVideoPlayer />
       <PipWindowController />
-      <GlobalMusicAudio />
-      <LayoutGroup>
-        <GlobalMusicDock />
-        <MusicOverlay />
-      </LayoutGroup>
+      {/* Music, deep links, the updater and other once-per-app jobs run in the main window only. */}
+      {IS_MAIN_WINDOW && (
+        <>
+          <GlobalMusicAudio />
+          <LayoutGroup>
+            <GlobalMusicDock />
+            <MusicOverlay />
+          </LayoutGroup>
+          <DeepFlowController />
+          <DeepLinkController />
+          <MusicTrayController />
+          <ScrobbleController />
+        </>
+      )}
       <EqualizerDialog />
       <AddToAlbumModal />
       <AddTracksToAlbumModal />
       <AddToPlaylistModal />
-      <DeepFlowController />
-      <DeepLinkController />
       <DiscordPresenceController />
-      <MusicTrayController />
-      <ScrobbleController />
       <LayoutGroup id="downloads">
         <DownloadDialog />
         <DownloadActivity />
       </LayoutGroup>
-      <DonationPromptHost enabled={location.pathname !== "/onboarding"} />
-      <UpdateManager enabled={location.pathname !== "/onboarding"} />
+      <DonationPromptHost enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
+      <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
+      <ProfileSwitchOverlay />
       <ToastHost />
     </div>
   );

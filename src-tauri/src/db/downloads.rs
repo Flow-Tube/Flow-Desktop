@@ -70,6 +70,7 @@ pub async fn upsert_download(
     pool: &SqlitePool,
     record: &DownloadRecord,
 ) -> AppResult<Vec<DownloadRecord>> {
+    let pool = crate::db::device::pool(pool);
     let mut replaced = Vec::new();
     if let Some(video_id) = record.video_id.as_deref() {
         let scope = "video_id = ? AND media_kind = ? AND collection_db_id IS ?";
@@ -134,6 +135,7 @@ pub async fn downloads_for_collection(
     pool: &SqlitePool,
     collection_db_id: i64,
 ) -> AppResult<Vec<DownloadRecord>> {
+    let pool = crate::db::device::pool(pool);
     let query = format!("SELECT {SELECT_COLUMNS} FROM downloads WHERE collection_db_id = ?");
     sqlx::query_as::<_, DownloadRecord>(AssertSqlSafe(query))
         .bind(collection_db_id)
@@ -143,6 +145,7 @@ pub async fn downloads_for_collection(
 }
 
 pub async fn list_downloads(pool: &SqlitePool) -> AppResult<Vec<DownloadRecord>> {
+    let pool = crate::db::device::pool(pool);
     let query = format!("SELECT {SELECT_COLUMNS} FROM downloads ORDER BY created_at DESC, id DESC");
     sqlx::query_as::<_, DownloadRecord>(AssertSqlSafe(query))
         .fetch_all(pool)
@@ -157,6 +160,7 @@ pub async fn download_by_video_id(
     video_id: &str,
     kinds: &[&str],
 ) -> AppResult<Option<DownloadRecord>> {
+    let pool = crate::db::device::pool(pool);
     let placeholders = vec!["?"; kinds.len().max(1)].join(", ");
     let query = format!(
         "SELECT {SELECT_COLUMNS} FROM downloads WHERE video_id = ? AND media_kind IN ({placeholders}) ORDER BY created_at DESC, id DESC LIMIT 1"
@@ -169,6 +173,7 @@ pub async fn download_by_video_id(
 }
 
 pub async fn downloads_by_ids(pool: &SqlitePool, ids: &[i64]) -> AppResult<Vec<DownloadRecord>> {
+    let pool = crate::db::device::pool(pool);
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -182,6 +187,7 @@ pub async fn downloads_by_ids(pool: &SqlitePool, ids: &[i64]) -> AppResult<Vec<D
 }
 
 pub async fn delete_downloads(pool: &SqlitePool, ids: &[i64]) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     if ids.is_empty() {
         return Ok(());
     }
@@ -196,6 +202,7 @@ pub async fn delete_downloads(pool: &SqlitePool, ids: &[i64]) -> AppResult<()> {
 }
 
 pub async fn clear_downloads(pool: &SqlitePool) -> AppResult<()> {
+    let pool = crate::db::device::pool(pool);
     sqlx::query("DELETE FROM downloads")
         .execute(pool)
         .await
@@ -205,6 +212,7 @@ pub async fn clear_downloads(pool: &SqlitePool) -> AppResult<()> {
 
 /// All distinct `video_id`s with a saved download, for fast "is this downloaded?" checks.
 pub async fn downloaded_video_ids(pool: &SqlitePool) -> AppResult<Vec<String>> {
+    let pool = crate::db::device::pool(pool);
     let rows = sqlx::query("SELECT DISTINCT video_id FROM downloads WHERE video_id IS NOT NULL")
         .fetch_all(pool)
         .await

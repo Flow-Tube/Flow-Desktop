@@ -1,8 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
+import { TabRouter } from "./components/layout/TabRouter";
 import { PipWindowApp } from "./components/pip/PipWindowApp";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installGlobalErrorHandlers } from "./lib/diagnostics";
@@ -29,9 +29,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       {isPopoutPlayerWindow ? (
         <PipWindowApp />
       ) : (
-        <BrowserRouter>
+        <TabRouter>
           <App />
-        </BrowserRouter>
+        </TabRouter>
       )}
     </ErrorBoundary>
   </React.StrictMode>,

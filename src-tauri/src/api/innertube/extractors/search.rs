@@ -10,7 +10,8 @@ use crate::api::innertube::renderers::video::video_from_renderer;
 use crate::errors::{AppError, AppResult};
 use crate::models::channel::PlaylistSummary;
 use crate::models::search::{
-    SearchChannel, SearchCorrection, SearchShelf, SearchVideosRequest, SearchVideosResponse,
+    SearchChannel, SearchCorrection, SearchShelf, SearchSuggestion, SearchVideosRequest,
+    SearchVideosResponse, SuggestionEntity,
 };
 use base64::Engine;
 use serde_json::Value;
@@ -327,7 +328,7 @@ impl InnertubeClient {
         &self,
         query: &str,
         region: Option<&str>,
-    ) -> AppResult<Vec<String>> {
+    ) -> AppResult<Vec<SearchSuggestion>> {
         let encoded_query = custom_url_encode(query);
         let region = region
             .map(str::trim)
@@ -359,32 +360,61 @@ impl InnertubeClient {
 
         let val: Value = serde_json::from_str(&body)
             .map_err(|e| AppError::Extractor(format!("JSON error suggestions: {}", e)))?;
-
-        let mut suggestions: Vec<String> = Vec::new();
-        if let Some(arr) = val.get(1).and_then(|v| v.as_array()) {
-            for item in arr {
-                let Some(text) = item.get(0).and_then(|s| s.as_str()) else {
-                    continue;
-                };
-                let cleaned = text.trim();
-                // The endpoint repeats entries that differ only by casing or spacing.
-                if cleaned.is_empty()
-                    || suggestions
-                        .iter()
-                        .any(|existing| existing.eq_ignore_ascii_case(cleaned))
-                {
-                    continue;
-                }
-                suggestions.push(cleaned.to_string());
-            }
-        }
-        Ok(suggestions)
+        Ok(parse_suggestions(&val))
     }
+}
+
+/// Reads the suggest endpoint's `[query, [[text, 0, [..], {entity}], ..], ..]` answer.
+/// The entity keys are terse: `zao` names it, `zaf` describes it, `zai` is its picture.
+fn parse_suggestions(val: &Value) -> Vec<SearchSuggestion> {
+    let mut suggestions: Vec<SearchSuggestion> = Vec::new();
+    let Some(rows) = val.get(1).and_then(Value::as_array) else {
+        return suggestions;
+    };
+    for row in rows {
+        let text = row
+            .as_str()
+            .or_else(|| row.get(0).and_then(Value::as_str))
+            .map(str::trim)
+            .unwrap_or_default();
+        // The endpoint repeats entries that differ only by casing or spacing.
+        if text.is_empty()
+            || suggestions
+                .iter()
+                .any(|existing| existing.text.eq_ignore_ascii_case(text))
+        {
+            continue;
+        }
+        let entity = row
+            .as_array()
+            .and_then(|parts| parts.iter().find(|part| part.is_object()))
+            .and_then(suggestion_entity);
+        suggestions.push(SearchSuggestion {
+            text: text.to_string(),
+            entity,
+        });
+    }
+    suggestions
+}
+
+fn suggestion_entity(card: &Value) -> Option<SuggestionEntity> {
+    let field = |key: &str| {
+        card[key]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    };
+    Some(SuggestionEntity {
+        title: field("zao")?,
+        description: field("zaf"),
+        image: field("zai").filter(|url| url.starts_with("https://")),
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_search_params, parse_innertube_search};
+    use super::{build_search_params, parse_innertube_search, parse_suggestions};
     use crate::models::search::SearchVideosRequest;
 
     fn params(request: &SearchVideosRequest) -> Option<String> {
@@ -574,5 +604,54 @@ mod tests {
     #[test]
     fn exact_searches_turn_correction_off() {
         assert_eq!(with(|r| r.exact = true).as_deref(), Some("QgIIAQ%3D%3D"));
+    }
+
+    #[test]
+    fn suggestions_keep_the_knowledge_card_and_drop_repeats() {
+        let answer = serde_json::json!([
+            "linus tor",
+            [
+                ["linus torvalds", 0, [512, 433, 47], {
+                    "zae": "/m/04gnf",
+                    "zaf": "Finnish-American software engineer",
+                    "zai": "https://encrypted-tbn3.gstatic.com/images?q=tbn:abc",
+                    "zao": "Linus Torvalds",
+                    "zaq": "https://www.britannica.com/biography/Linus-Torvalds"
+                }],
+                ["linus torvalds interview", 0, [512, 433]],
+                ["Linus Torvalds Interview ", 0, [512]],
+                ["blank card", 0, [512], { "zao": " ", "zai": "http://insecure.example/x.jpg" }],
+                "plain string row"
+            ],
+            { "k": 1 }
+        ]);
+        let suggestions = parse_suggestions(&answer);
+        let texts: Vec<&str> = suggestions.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "linus torvalds",
+                "linus torvalds interview",
+                "blank card",
+                "plain string row"
+            ]
+        );
+        let card = suggestions[0].entity.as_ref().unwrap();
+        assert_eq!(card.title, "Linus Torvalds");
+        assert_eq!(
+            card.description.as_deref(),
+            Some("Finnish-American software engineer")
+        );
+        assert!(
+            card.image
+                .as_deref()
+                .unwrap()
+                .starts_with("https://encrypted-tbn3")
+        );
+        assert!(suggestions[1].entity.is_none());
+        assert!(
+            suggestions[2].entity.is_none(),
+            "a card without a name is dropped"
+        );
     }
 }

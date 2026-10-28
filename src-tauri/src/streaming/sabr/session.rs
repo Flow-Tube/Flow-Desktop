@@ -26,11 +26,10 @@ pub struct TrackState {
     pub end_segment: i64,
     // Total media duration in ms (0 = unknown), from format init.
     pub total_end_ms: i64,
-    pub mime_type: String,
 }
 
 impl TrackState {
-    fn new(format_id: FormatId, mime_type: String) -> Self {
+    fn new(format_id: FormatId) -> Self {
         Self {
             format_id,
             initialized: false,
@@ -38,7 +37,6 @@ impl TrackState {
             max_segment: -1,
             end_segment: 0,
             total_end_ms: 0,
-            mime_type,
         }
     }
 
@@ -105,8 +103,8 @@ impl SabrState {
             sabr_contexts: HashMap::new(),
             contexts_to_send: HashSet::new(),
             contexts_discard: HashSet::new(),
-            audio: TrackState::new(audio_fid, selected.audio.mime_type.clone()),
-            video: TrackState::new(video_fid, selected.video.mime_type.clone()),
+            audio: TrackState::new(audio_fid),
+            video: TrackState::new(video_fid),
             ustreamer_config,
             po_token,
             client,
@@ -305,8 +303,8 @@ impl SabrState {
 
     // Switch the active audio format (language). Resets only audio progress so the
     // next request re-initializes and fetches the new track; video is untouched.
-    pub fn set_audio_format(&mut self, format_id: FormatId, mime_type: String) {
-        self.audio = TrackState::new(format_id, mime_type);
+    pub fn set_audio_format(&mut self, format_id: FormatId) {
+        self.audio = TrackState::new(format_id);
     }
 
     pub fn seek_audio_to(&mut self, target_ms: i64) {

@@ -4,6 +4,7 @@
 
 pub mod audioscrobbler;
 pub mod credentials;
+pub mod index;
 pub mod listenbrainz;
 pub mod models;
 pub mod queue;

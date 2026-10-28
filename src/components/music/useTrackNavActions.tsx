@@ -21,6 +21,7 @@ export function useTrackNavActions(
       id: 'view-artist',
       label: getString('music_view_artist'),
       icon: <User size={16} />,
+      group: 'go',
       onSelect: () => {
         options?.onNavigate?.();
         navigate(`/music/artist/${artistId}`);
@@ -34,6 +35,7 @@ export function useTrackNavActions(
       id: 'view-album',
       label: getString('music_view_album'),
       icon: <Disc size={16} />,
+      group: 'go',
       onSelect: () => {
         options?.onNavigate?.();
         navigate(`/music/album/${albumId}`);

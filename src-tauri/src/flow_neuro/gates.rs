@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::flow_neuro::keyspec::KeySpec;
-use crate::flow_neuro::keyspec::text::fold;
+use crate::flow_neuro::keyspec::text::{HanFold, fold_with};
 use crate::flow_neuro::scoring::{
     ContentVector, FeedEntry, ONBOARDING_WARMUP_INTERACTIONS, strip_domain_tag,
 };
@@ -56,7 +56,7 @@ impl BlockedMatchers {
     }
 
     fn add(&mut self, term: &str, spec: &KeySpec) {
-        let lower = term.to_lowercase().trim().to_string();
+        let lower = fold_with(term, HanFold::Always).trim().to_string();
         if lower.is_empty() {
             return;
         }
@@ -78,8 +78,9 @@ impl BlockedMatchers {
         if self.is_empty() {
             return false;
         }
-        let title = fold(title);
-        let channel = fold(channel_name);
+        // Both sides fold Han whatever kana a title holds, so a block in either spelling matches.
+        let title = fold_with(title, HanFold::Always);
+        let channel = fold_with(channel_name, HanFold::Always);
         if self
             .phrases
             .iter()
@@ -228,5 +229,22 @@ pub fn adaptive_jitter(total_interactions: i32, feed_overlap_ratio: f64) -> f64 
         0.12
     } else {
         JITTER_NORMAL
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Android NeuroHanFoldDecisionTest: blocking reads both sides fully folded.
+    #[test]
+    fn a_block_in_either_chinese_spelling_matches_either_spelling() {
+        let spec = KeySpec::default();
+        let simplified = BlockedMatchers::new(&HashSet::from(["鬼灭".to_string()]), &spec);
+        assert!(simplified.blocks_text("鬼滅 アニメ 最新話", "", &spec));
+        assert!(simplified.blocks_text("鬼灭 アニメ", "", &spec));
+        assert!(!simplified.blocks_text("別的 アニメ", "", &spec));
+        let traditional = BlockedMatchers::new(&HashSet::from(["鬼滅".to_string()]), &spec);
+        assert!(traditional.blocks_text("鬼灭 最新话", "", &spec));
     }
 }

@@ -1502,12 +1502,13 @@ dependencies = [
 
 [[package]]
 name = "flow"
-version = "0.1.0-beta2"
+version = "0.1.0-beta3"
 dependencies = [
  "aes-gcm",
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "dirs",
  "discord-rich-presence",
  "flate2",
  "futures-util",
@@ -1553,6 +1554,7 @@ dependencies = [
  "webkit2gtk",
  "webm-iterable",
  "windows",
+ "windows-core",
  "windows-registry",
  "zeroize",
 ]

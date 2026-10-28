@@ -27,29 +27,37 @@ export function ShortMetadata({
   const channelName = short.channelName.trim() || details?.channelName || "Unknown channel";
   const viewText = formatCount(short.viewCountText ?? details?.viewCountText);
   const viewStatText = viewText ? `${viewText} views` : null;
+  const openChannel = () => short.channelId && navigate(`/channel/${short.channelId}`);
 
   return (
     <div className="mb-4 flex w-[260px] flex-col gap-4 lg:w-[280px]">
-      <div className="flex min-w-0 items-center gap-3">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
         <button
           type="button"
-          onClick={() => short.channelId && navigate(`/channel/${short.channelId}`)}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          tabIndex={-1}
+          aria-hidden="true"
+          onClick={openChannel}
+          className="row-span-2"
         >
           {avatar ? (
             <img
               src={avatar}
               alt=""
-              className="h-12 w-12 shrink-0 rounded-full object-cover"
+              className="h-12 w-12 rounded-full object-cover"
             />
           ) : (
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-container-high text-base font-bold text-chrome-neutral-300">
+            <div className="grid h-12 w-12 place-items-center rounded-full bg-surface-container-high text-base font-bold text-chrome-neutral-300">
               {channelName.charAt(0).toUpperCase()}
             </div>
           )}
-          <span className="truncate text-lg font-bold text-chrome-neutral-100 hover:text-chrome-white">
-            {channelName}
-          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={openChannel}
+          className="truncate text-left text-lg font-bold text-chrome-neutral-100 hover:text-chrome-white"
+        >
+          {channelName}
         </button>
 
         {channelId && (
@@ -58,7 +66,7 @@ export function ShortMetadata({
             channelName={channelName}
             avatarUrl={avatar || undefined}
             size="sm"
-            className="shrink-0 !bg-chrome-white !px-4 !py-1.5 !text-sm !font-bold !text-chrome-black hover:!bg-chrome-neutral-200"
+            className="!bg-chrome-white !px-4 !py-1.5 !text-sm !font-bold !text-chrome-black hover:!bg-chrome-neutral-200"
           />
         )}
       </div>

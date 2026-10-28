@@ -25,6 +25,7 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       is_prerelease: ${{ steps.release.outputs.is_prerelease }}
       notes: ${{ steps.changelog.outputs.notes }}
+      app_notes: ${{ steps.changelog.outputs.app_notes }}
 
     steps:
       - name: Check out repository
@@ -57,32 +58,25 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve changelog notes
+      # The GitHub body is markdown with the support message; the updater's
+      # latest.json gets plain text, because the update dialog prints it as is.
+      - name: Build release notes
         id: changelog
         shell: bash
         run: |
+          set -euo pipefail
           tag="${{ steps.release.outputs.tag }}"
 
-          # Prefer the changelog that matches the released tag; otherwise fall
-          # back to the newest changelog file by semantic version.
-          file="changelog/${tag}.txt"
-          if [[ ! -f "$file" ]]; then
-            file="$(ls -1 changelog/v*.txt 2>/dev/null | sort -V | tail -n1 || true)"
-          fi
-
-          if [[ -n "$file" && -f "$file" ]]; then
-            echo "Using changelog file: $file"
-          else
-            echo "No changelog file found; using a generic release note."
-          fi
+          node scripts/release-notes.mjs "$tag" > release-notes.md
+          node scripts/release-notes.mjs "$tag" --app > app-notes.txt
+          cat release-notes.md
 
           {
             echo "notes<<CHANGELOG_EOF"
-            if [[ -n "$file" && -f "$file" ]]; then
-              cat "$file"
-            else
-              echo "Download the installer for your operating system and architecture below."
-            fi
+            cat release-notes.md
+            echo "CHANGELOG_EOF"
+            echo "app_notes<<CHANGELOG_EOF"
+            cat app-notes.txt
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -112,7 +106,8 @@ jobs:
             slug: linux-x64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: --target x86_64-unknown-linux-gnu --bundles deb,rpm
+            rpm: x86_64
+            args: --target x86_64-unknown-linux-gnu --bundles deb
           - name: Linux x64 AppImage
             slug: linux-x64
             runner: ubuntu-24.04
@@ -124,7 +119,8 @@ jobs:
             slug: linux-arm64
             runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
-            args: --target aarch64-unknown-linux-gnu --bundles deb,rpm
+            rpm: aarch64
+            args: --target aarch64-unknown-linux-gnu --bundles deb
           - name: Linux ARM64 AppImage
             slug: linux-arm64
             runner: ubuntu-24.04-arm
@@ -228,6 +224,53 @@ jobs:
             ${{ matrix.args }}
             ${{ needs.prepare.outputs.is_prerelease == 'true' && '--config src-tauri/tauri.prerelease.conf.json' || '' }}
 
+      # The RPM bundler rejects "-" in a version, so a prerelease RPM is packaged
+      # as e.g. 0.1.0+beta3 from the binary tauri-action already built. Only the
+      # package metadata changes: the app keeps its real version for the
+      # updater, where 0.1.0+beta3 would rank above every later 0.1.0 prerelease.
+      - name: Bundle the RPM
+        if: matrix.rpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.version }}"
+          configs=()
+          if [[ "${{ needs.prepare.outputs.is_prerelease }}" == "true" ]]; then
+            configs+=(--config src-tauri/tauri.prerelease.conf.json)
+          fi
+          configs+=(--config "{\"version\":\"${version/-/+}\",\"bundle\":{\"createUpdaterArtifacts\":false}}")
+          pnpm tauri bundle --target ${{ matrix.target }} --bundles rpm "${configs[@]}"
+
+      - name: Upload the RPM to the release and sign it
+        if: matrix.rpm && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.prepare.outputs.tag }}"
+          rpm="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm | head -n1)"
+          asset="Flow_${{ needs.prepare.outputs.version }}_linux_${{ matrix.rpm }}.rpm"
+
+          cp "$rpm" "$asset"
+          rm -f "$asset.sig"
+          pnpm tauri signer sign "$asset"
+          gh release upload "$tag" "$asset" "$asset.sig" --clobber --repo "$GITHUB_REPOSITORY"
+
+          mkdir -p rpm-sig
+          cp "$asset.sig" "rpm-sig/linux-${{ matrix.rpm }}.sig"
+
+      - name: Upload RPM signature for the updater patch
+        if: matrix.rpm && startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v7
+        with:
+          name: rpm-sig-linux-${{ matrix.rpm }}
+          path: rpm-sig/linux-${{ matrix.rpm }}.sig
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Log the bundled media stack versions
         if: matrix.appimage
         run: dpkg-query -W -f='${Package} ${Version}\n' libwebkit2gtk-4.1-0 libgstreamer1.0-0 libva2
@@ -328,15 +371,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # Patch the re-signed AppImage signatures into the combined updater manifest.
-  # Runs once, after every matrix leg has merged its platform into latest.json,
-  # so it operates on the full manifest and can't be clobbered by a parallel
-  # upload (the reason the re-sign step above does NOT touch latest.json
-  # itself). It also points the plain linux-<arch> entry at the AppImage:
-  # tauri-action sets that entry to whichever package its leg signed first, and
-  # .deb/.rpm now build in their own legs.
+  # Patch the re-signed AppImages and the separately bundled RPMs into the
+  # combined updater manifest. Runs once, after every matrix leg has merged its
+  # platform into latest.json, so it operates on the full manifest and can't be
+  # clobbered by a parallel upload (the reason the steps above do NOT touch
+  # latest.json themselves). It also points the plain linux-<arch> entry at the
+  # AppImage: tauri-action sets that entry to whichever package its leg signed
+  # first, and .deb/.rpm build in their own legs.
   patch-appimage-updater:
-    name: Patch updater manifest with re-signed AppImages
+    name: Patch updater manifest with re-signed AppImages and RPMs
     needs: [prepare, publish]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-22.04
@@ -350,28 +393,56 @@ jobs:
           path: appimage-sig
           merge-multiple: true
 
-      - name: Patch latest.json with the re-signed AppImage signatures
+      - name: Download RPM signatures
+        uses: actions/download-artifact@v8
+        with:
+          pattern: rpm-sig-linux-*
+          path: rpm-sig
+          merge-multiple: true
+
+      - name: Patch latest.json with the AppImages, RPMs and app notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_NOTES: ${{ needs.prepare.outputs.app_notes }}
         shell: bash
         run: |
           set -euo pipefail
           tag="${{ needs.prepare.outputs.tag }}"
+          version="${{ needs.prepare.outputs.version }}"
 
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern latest.json --clobber
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets > assets.json
 
           for arch in x86_64 aarch64; do
-            new_sig="$(cat "appimage-sig/linux-$arch.sig")"
-            test -n "$new_sig" || { echo "empty re-signed signature for $arch"; exit 1; }
+            case "$arch" in
+              x86_64) arch_names='(x86_64|amd64|x64)' ;;
+              aarch64) arch_names='(aarch64|arm64)' ;;
+            esac
+            appimage="$(jq -r --arg re "$arch_names" \
+              '.assets[].name | select(endswith(".AppImage")) | select(test($re))' assets.json | head -n1)"
+            rpm="Flow_${version}_linux_${arch}.rpm"
 
-            jq -e --arg key "linux-$arch-appimage" 'has("platforms") and (.platforms | has($key))' latest.json >/dev/null \
-              || { echo "latest.json missing platforms.linux-$arch-appimage"; exit 1; }
+            # Re-uploading an asset gives it a new id, so the URLs come from the
+            # release as it is now, not from what tauri-action recorded.
+            appimage_url="$(jq -er --arg name "$appimage" '.assets[] | select(.name == $name) | .apiUrl' assets.json)"
+            rpm_url="$(jq -er --arg name "$rpm" '.assets[] | select(.name == $name) | .apiUrl' assets.json)"
+            appimage_sig="$(cat "appimage-sig/linux-$arch.sig")"
+            rpm_sig="$(cat "rpm-sig/linux-$arch.sig")"
+            test -n "$appimage_sig" || { echo "empty re-signed AppImage signature for $arch"; exit 1; }
+            test -n "$rpm_sig" || { echo "empty RPM signature for $arch"; exit 1; }
 
-            jq --arg sig "$new_sig" --arg key "linux-$arch" '
-              .platforms[$key + "-appimage"].signature = $sig
+            jq --arg key "linux-$arch" \
+              --arg appimage_sig "$appimage_sig" --arg appimage_url "$appimage_url" \
+              --arg rpm_sig "$rpm_sig" --arg rpm_url "$rpm_url" '
+              .platforms[$key + "-appimage"] = {signature: $appimage_sig, url: $appimage_url}
               | .platforms[$key] = .platforms[$key + "-appimage"]
+              | .platforms[$key + "-rpm"] = {signature: $rpm_sig, url: $rpm_url}
             ' latest.json > latest.json.tmp
             mv latest.json.tmp latest.json
           done
+
+          # tauri-action copied the markdown release body into notes.
+          jq --arg notes "$APP_NOTES" '.notes = $notes' latest.json > latest.json.tmp
+          mv latest.json.tmp latest.json
 
           gh release upload "$tag" latest.json --clobber --repo "$GITHUB_REPOSITORY"

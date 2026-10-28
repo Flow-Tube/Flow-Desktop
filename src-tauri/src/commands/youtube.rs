@@ -8,8 +8,8 @@ use crate::models::channel::{ChannelAbout, ChannelDetails, ChannelPage, ChannelT
 use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
-use crate::models::search::{SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoSummary};
+use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
+use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoMetadata, VideoSummary};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -323,6 +323,7 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
 pub async fn search_videos(
     request: SearchVideosRequest,
     youtube_service: State<'_, YoutubeService>,
+    pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<SearchVideosResponse, ErrorResponse> {
     if let Some(page_token) = request.page_token.as_deref() {
         validate_page_token(page_token).map_err(ErrorResponse::from)?;
@@ -330,10 +331,26 @@ pub async fn search_videos(
         validate_search_query(&request.query).map_err(ErrorResponse::from)?;
     }
 
-    youtube_service
+    let response = youtube_service
         .search_videos(request)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    let shorts: Vec<String> = response
+        .shorts
+        .iter()
+        .map(|short| short.id.clone())
+        .chain(
+            response
+                .items
+                .iter()
+                .filter(|video| video.is_short)
+                .map(|video| video.id.clone()),
+        )
+        .collect();
+    let _ =
+        crate::db::known_shorts::remember(&pool, &shorts, chrono::Utc::now().timestamp_millis())
+            .await;
+    Ok(response)
 }
 
 #[tauri::command]
@@ -365,6 +382,20 @@ pub async fn get_related_videos(
         .map_err(ErrorResponse::from)?;
     recommendation_service.note_related(&video_id, &related.items);
     Ok(related)
+}
+
+/// A listed video's length, views, upload date and category, from one small
+/// request that stays out of the playback caches.
+#[tauri::command]
+pub async fn get_video_metadata(
+    video_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<VideoMetadata, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_video_metadata(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 /// The video's category, for the recommendation engine. A small request of
@@ -399,13 +430,28 @@ pub async fn get_stream_info(
     refresh: Option<bool>,
     youtube_service: State<'_, YoutubeService>,
     streaming_manager: State<'_, StreamingManager>,
+    pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<StreamInfo, ErrorResponse> {
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
 
-    let mut stream_info = youtube_service
-        .get_stream_info(&video_id, refresh.unwrap_or(false))
-        .await
-        .map_err(ErrorResponse::from)?;
+    let refresh = refresh.unwrap_or(false);
+    // Feeds stop offering a video refused for good, and offer it again once it plays.
+    let mut stream_info = match youtube_service.get_stream_info(&video_id, refresh).await {
+        Ok(info) => {
+            let _ = crate::db::unplayable_videos::clear(&pool, &video_id).await;
+            info
+        }
+        Err(error) => {
+            let lasting = error.is_lasting_refusal();
+            let response = ErrorResponse::from(error);
+            if lasting {
+                let now = chrono::Utc::now().timestamp_millis();
+                let _ =
+                    crate::db::unplayable_videos::mark(&pool, &video_id, &response.kind, now).await;
+            }
+            return Err(response);
+        }
+    };
 
     let token = uuid::Uuid::new_v4().to_string();
 
@@ -539,6 +585,9 @@ pub async fn get_stream_info(
     }
 
     if let Some(descriptor) = stream_info.sabr_descriptor.take() {
+        if refresh {
+            streaming_manager.sabr().discard_video(&descriptor.video_id);
+        }
         let session_id = streaming_manager
             .sabr()
             .prepare(descriptor, crate::streaming::sabr::CodecSupport::default());
@@ -779,7 +828,7 @@ pub async fn get_search_suggestions(
     query: String,
     region: Option<String>,
     youtube_service: State<'_, YoutubeService>,
-) -> Result<Vec<String>, ErrorResponse> {
+) -> Result<Vec<SearchSuggestion>, ErrorResponse> {
     youtube_service
         .get_search_suggestions(&query, region.as_deref())
         .await
@@ -1034,6 +1083,8 @@ pub async fn get_subscription_rotation_feed(
 /// few at a time on a slow link.
 const DURATION_FILL_CONCURRENCY: usize = 3;
 
+/// Fills in lengths, and marks the Shorts that a lookup told apart by their
+/// frame, remembering each one it checked.
 pub(crate) async fn populate_video_durations(
     videos: &mut [VideoSummary],
     youtube_service: &YoutubeService,
@@ -1063,7 +1114,7 @@ pub(crate) async fn populate_video_durations(
                     crate::db::cache::get_cached_video_summary(&pool, &video_id).await
                 {
                     if cached.duration_seconds.is_some() {
-                        return (video_id, cached.duration_seconds);
+                        return (video_id, cached.duration_seconds, None);
                     }
                 }
 
@@ -1084,16 +1135,20 @@ pub(crate) async fn populate_video_durations(
                     };
                     // Cache it for 7 days
                     let _ = crate::db::cache::cache_video_summary(&pool, &summary, 604800).await;
-                    (video_id, details.duration_seconds)
+                    (video_id, details.duration_seconds, details.is_short)
                 } else {
-                    (video_id, None)
+                    (video_id, None, None)
                 }
             }
         },
     )
     .await;
     let mut durations = std::collections::HashMap::new();
-    for (id, dur) in results {
+    let mut kinds = Vec::new();
+    for (id, dur, is_short) in results {
+        if let Some(is_short) = is_short {
+            kinds.push((id.clone(), is_short));
+        }
         if let Some(d) = dur {
             durations.insert(id, d);
         }
@@ -1106,6 +1161,17 @@ pub(crate) async fn populate_video_durations(
             }
         }
     }
+    let shorts: std::collections::HashSet<&str> = kinds
+        .iter()
+        .filter(|(_, is_short)| *is_short)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    for video in videos.iter_mut() {
+        video.is_short |= shorts.contains(video.id.as_str());
+    }
+    let _ =
+        crate::db::video_kind_checks::record(pool, &kinds, chrono::Utc::now().timestamp_millis())
+            .await;
 }
 
 fn dedupe_channel_ids(channel_ids: Vec<String>) -> Result<Vec<String>, ErrorResponse> {
@@ -1122,6 +1188,17 @@ fn dedupe_channel_ids(channel_ids: Vec<String>) -> Result<Vec<String>, ErrorResp
 
 const SUBSCRIPTION_RSS_BATCH_SIZE: usize = 50;
 
+/// Videos that were refused for good when they were opened, for Subscriptions to hide.
+#[tauri::command]
+pub async fn get_unplayable_video_ids(
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<Vec<String>, ErrorResponse> {
+    let ids = crate::db::unplayable_videos::all(&pool)
+        .await
+        .map_err(ErrorResponse::from)?;
+    Ok(ids.into_iter().collect())
+}
+
 #[tauri::command]
 pub async fn get_subscription_rss_feed(
     channel_ids: Vec<String>,
@@ -1134,8 +1211,14 @@ pub async fn get_subscription_rss_feed(
     let mut uploads =
         subscription_feed::fetch_channels(&youtube_service, &unique_channel_ids).await;
     subscription_feed::sort_and_dedupe(&mut uploads.videos);
-    let videos =
-        subscription_feed::finish_feed(&youtube_service, &pool, uploads.videos, limit).await;
+    let videos = subscription_feed::finish_feed(
+        &youtube_service,
+        &pool,
+        uploads.videos,
+        &uploads.unclassified,
+        limit,
+    )
+    .await;
     let total = unique_channel_ids.len();
     Ok(SubscriptionRssFeed {
         videos,
@@ -1167,6 +1250,7 @@ pub async fn stream_subscription_rss_feed(
         uploads.channels.extend(found.channels);
         uploads.videos.extend(found.videos);
         uploads.failed_channel_ids.extend(found.failed_channel_ids);
+        uploads.unclassified.extend(found.unclassified);
         processed = (processed + batch.len()).min(total);
         subscription_feed::sort_and_dedupe(&mut uploads.videos);
         let _ = on_event.send(SubscriptionRssFeed {
@@ -1178,8 +1262,14 @@ pub async fn stream_subscription_rss_feed(
         });
     }
 
-    let videos =
-        subscription_feed::finish_feed(&youtube_service, &pool, uploads.videos, limit).await;
+    let videos = subscription_feed::finish_feed(
+        &youtube_service,
+        &pool,
+        uploads.videos,
+        &uploads.unclassified,
+        limit,
+    )
+    .await;
     let _ = on_event.send(SubscriptionRssFeed {
         videos,
         channels: uploads.channels,

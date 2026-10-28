@@ -126,7 +126,8 @@ fn activate_video(app: &AppHandle, video_id: &str) {
         let _ = window.show();
         let _ = window.set_focus();
     }
-    if let Err(error) = app.emit(
+    if let Err(error) = app.emit_to(
+        "main",
         crate::services::notification_service::ACTIVATE_NOTIFICATION_EVENT,
         video_id,
     ) {

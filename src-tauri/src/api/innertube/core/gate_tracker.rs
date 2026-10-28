@@ -1,10 +1,10 @@
 //! Clients googlevideo has started refusing for this viewer.
 //!
 //! A refused media URL says which client minted it in its `c=` parameter. When
-//! the URL had not expired, the refusal is about that client: Flow for Android
-//! measured these walls lasting for a while per visitor, so the client is tried
-//! last for 30 minutes instead of first. Both the video and the music ladders
-//! read this.
+//! the URL was fresh and had not expired, the refusal is about that client: Flow
+//! for Android measured these walls lasting for a while per visitor, so the
+//! client is tried last for 30 minutes instead of first. Both the video and the
+//! music ladders read this.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -12,12 +12,19 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const GATE_TTL: Duration = Duration::from_mins(30);
 
+/// googlevideo ties a link to the viewer's IP, so a VPN or network change gets
+/// every older link refused, including those of the one client that lasts. Only
+/// a link refused this soon after it was issued says something about its client.
+const FRESH_LINK: Duration = Duration::from_mins(5);
+
 /// Why googlevideo refused a URL.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Denial {
     /// The URL's own `expire` time had passed; a fresh lookup fixes it.
     Expired,
-    /// The URL was still valid, so the client that minted it is walled.
+    /// The URL was older than a few minutes; a fresh lookup fixes it.
+    Stale,
+    /// The URL was fresh and still valid, so the client that minted it is walled.
     Gated,
 }
 
@@ -48,17 +55,18 @@ pub fn url_expiry_secs(url: &str) -> Option<u64> {
 }
 
 #[must_use]
-pub fn classify_denial(url: &str, now_secs: u64) -> Denial {
+pub fn classify_denial(url: &str, now_secs: u64, link_age: Duration) -> Denial {
     match url_expiry_secs(url) {
         Some(expire) if expire <= now_secs => Denial::Expired,
+        _ if link_age > FRESH_LINK => Denial::Stale,
         _ => Denial::Gated,
     }
 }
 
-/// Remember that googlevideo refused `url`, gating the client that minted it
-/// unless the URL had simply expired.
-pub fn record_refused_url(url: &str) {
-    if classify_denial(url, now_secs()) == Denial::Expired {
+/// Remember that googlevideo refused `url`, issued `link_age` ago, gating the
+/// client that minted it unless the link was expired or old.
+pub fn record_refused_url(url: &str, link_age: Duration) {
+    if classify_denial(url, now_secs(), link_age) != Denial::Gated {
         return;
     }
     let Some(client) = query_value(url, "c") else {
@@ -102,21 +110,34 @@ pub(crate) fn clear() {
 mod tests {
     use super::*;
 
+    const FRESH: Duration = Duration::from_secs(30);
+
     #[test]
     fn expired_urls_are_not_a_wall() {
         let url = "https://rr1.googlevideo.com/videoplayback?expire=1000&c=VISIONOS";
-        assert_eq!(classify_denial(url, 2000), Denial::Expired);
-        assert_eq!(classify_denial(url, 500), Denial::Gated);
+        assert_eq!(classify_denial(url, 2000, FRESH), Denial::Expired);
+        assert_eq!(classify_denial(url, 500, FRESH), Denial::Gated);
         assert_eq!(url_expiry_secs(url), Some(1000));
+    }
+
+    #[test]
+    fn old_links_are_not_a_wall() {
+        let url = "https://rr1.googlevideo.com/videoplayback?expire=10000&c=VISIONOS";
+        assert_eq!(classify_denial(url, 500, FRESH_LINK), Denial::Gated);
+        assert_eq!(
+            classify_denial(url, 500, FRESH_LINK + Duration::from_secs(1)),
+            Denial::Stale
+        );
     }
 
     #[test]
     fn a_refused_client_goes_last() {
         clear();
         let far = now_secs() + 3600;
-        record_refused_url(&format!(
-            "https://rr1.googlevideo.com/videoplayback?expire={far}&c=TESTCLIENT"
-        ));
+        record_refused_url(
+            &format!("https://rr1.googlevideo.com/videoplayback?expire={far}&c=TESTCLIENT"),
+            FRESH,
+        );
         assert!(is_gated("TestClient"));
         let ladder = ["TESTCLIENT", "OTHER", "THIRD"];
         assert_eq!(
@@ -125,5 +146,15 @@ mod tests {
         );
         clear();
         assert!(!is_gated("TESTCLIENT"));
+    }
+
+    #[test]
+    fn a_refused_old_link_benches_nobody() {
+        let far = now_secs() + 3600;
+        record_refused_url(
+            &format!("https://rr1.googlevideo.com/videoplayback?expire={far}&c=STALECLIENT"),
+            Duration::from_mins(40),
+        );
+        assert!(!is_gated("STALECLIENT"));
     }
 }

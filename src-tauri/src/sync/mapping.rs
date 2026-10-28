@@ -287,10 +287,17 @@ impl WatchRow {
             duration_seconds: self.total_duration_seconds.map(|t| t.max(0) as u64),
             is_music: self.is_music,
             is_short: self.is_short,
+            thumbnail_url: None,
             hlc,
             deleted: false,
         }
     }
+}
+
+/// The standard thumbnail of a video, which every video has.
+#[must_use]
+pub fn video_thumbnail(video_id: &str) -> String {
+    format!("https://i.ytimg.com/vi/{video_id}/hqdefault.jpg")
 }
 
 /// The DB column values for a canonical record, ready to bind into an INSERT.
@@ -901,6 +908,9 @@ struct StoredAlbumMirror {
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
+/// The sync id an owned music playlist from another device arrived with, kept on its album.
+const ARRIVED_SYNC_ID: &str = "syncId";
+
 #[must_use]
 pub fn is_album_playlist(p: &Playlist) -> bool {
     if p.is_music {
@@ -1021,7 +1031,16 @@ fn album_to_playlist(m: StoredAlbumMirror, device_id: &str) -> Playlist {
             false,
         )
     } else {
-        (PlaylistOrigin::Local, None, format!("album:{}", m.id), true)
+        // A music playlist another device made keeps the id it arrived with, so it merges back
+        // into itself there even after a rename.
+        let arrived_as = m
+            .extra
+            .get(ARRIVED_SYNC_ID)
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .map(String::from);
+        let sync_id = arrived_as.unwrap_or_else(|| format!("album:{}", m.id));
+        (PlaylistOrigin::Local, None, sync_id, true)
     };
 
     let items: Vec<PlaylistItem> = m
@@ -1114,11 +1133,14 @@ fn playlist_to_album(p: &Playlist) -> StoredAlbumMirror {
         .map(item_to_song)
         .collect();
 
-    let extra = raw
+    let mut extra: BTreeMap<String, Value> = raw
         .get("extra")
         .and_then(Value::as_object)
         .map(|o| o.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
         .unwrap_or_default();
+    if p.is_user_created && !p.sync_id.starts_with("album:") {
+        extra.insert(ARRIVED_SYNC_ID.into(), Value::String(p.sync_id.clone()));
+    }
 
     StoredAlbumMirror {
         id,

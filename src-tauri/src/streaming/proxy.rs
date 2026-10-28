@@ -20,6 +20,8 @@ pub enum StreamSessionKind {
 pub struct StreamSession {
     pub kind: StreamSessionKind,
     pub content_type: String,
+    /// When the session was registered, close to when its links were issued.
+    pub registered_at: u64,
     pub expires_at: u64,
     pub user_agent: String,
 }
@@ -109,10 +111,17 @@ const UNDATED_SESSION_SECS: u64 = 6 * 3600;
 
 /// A remote session lives as long as its URL does. A fixed hour cut every video
 /// still playing an hour after it resolved off mid-stream.
-fn remote_session_expiry(remote_url: &str, now: u64) -> u64 {
+pub(crate) fn remote_session_expiry(remote_url: &str, now: u64) -> u64 {
     crate::api::innertube::core::gate_tracker::url_expiry_secs(remote_url)
         .filter(|expire| *expire > now)
         .unwrap_or(now + UNDATED_SESSION_SECS)
+}
+
+fn session_link_age(session: &StreamSession) -> std::time::Duration {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs());
+    std::time::Duration::from_secs(now.saturating_sub(session.registered_at))
 }
 
 impl StreamingManager {
@@ -172,6 +181,7 @@ impl StreamingManager {
             .unwrap()
             .as_secs();
         let session = StreamSession {
+            registered_at: now,
             expires_at: remote_session_expiry(&remote_url, now),
             kind: StreamSessionKind::Remote { remote_url },
             content_type,
@@ -190,6 +200,7 @@ impl StreamingManager {
         let session = StreamSession {
             kind: StreamSessionKind::Inline { body },
             content_type,
+            registered_at: now,
             expires_at: now + UNDATED_SESSION_SECS,
             user_agent: String::new(),
         };
@@ -206,6 +217,7 @@ impl StreamingManager {
         let session = StreamSession {
             kind: StreamSessionKind::Local { path },
             content_type,
+            registered_at: now,
             expires_at: now + 24 * 3600,
             user_agent: String::new(),
         };
@@ -548,6 +560,7 @@ async fn handle_connection(
                 remote_url: target_url.clone(),
             },
             content_type: super::images::image_content_type(&target_url),
+            registered_at: 0,
             expires_at: 0,
             user_agent: crate::api::http::BROWSER_USER_AGENT.to_string(),
         };
@@ -809,7 +822,6 @@ async fn relay_remote(
     let mut bytes_relayed: u64 = 0;
     let mut attempt: u32 = 0;
     let mut content_length_value: usize = 0;
-    let mut should_cache = false;
     let mut content_type_value = session.content_type.clone();
     let mut content_range_value: Option<String> = None;
     let mut accept_ranges_value = "bytes".to_string();
@@ -873,7 +885,10 @@ async fn relay_remote(
                 effective_start,
                 "FLOW_DEBUG_REFUSE_AFTER_BYTES: refusing the relay"
             );
-            crate::api::innertube::core::gate_tracker::record_refused_url(target_url);
+            crate::api::innertube::core::gate_tracker::record_refused_url(
+                target_url,
+                session_link_age(session),
+            );
             return write_status_only(socket, 403, "Forbidden", "Refused for testing").await;
         }
 
@@ -939,7 +954,10 @@ async fn relay_remote(
                     "Upstream rejected stream relay"
                 );
                 if stall_guarded && matches!(status.as_u16(), 401 | 403) {
-                    crate::api::innertube::core::gate_tracker::record_refused_url(target_url);
+                    crate::api::innertube::core::gate_tracker::record_refused_url(
+                        target_url,
+                        session_link_age(session),
+                    );
                 }
             }
             let headers = response.headers();
@@ -975,7 +993,7 @@ async fn relay_remote(
                 || ct_lower.contains("text/vtt");
             let is_cacheable_kind = ct_lower.starts_with("image/");
 
-            should_cache = status.is_success()
+            let should_cache = status.is_success()
                 && !is_manifest
                 && is_cacheable_kind
                 && content_length_header.is_some()
@@ -1312,6 +1330,7 @@ mod range_recovery_tests {
                     remote_url: url.clone(),
                 },
                 content_type: "audio/mp4".into(),
+                registered_at: 0,
                 expires_at: u64::MAX,
                 user_agent: "test".into(),
             };
@@ -1369,6 +1388,7 @@ mod range_recovery_tests {
                     remote_url: url.clone(),
                 },
                 content_type: content_type.into(),
+                registered_at: 0,
                 expires_at: u64::MAX,
                 user_agent: "test".into(),
             };
@@ -1519,5 +1539,30 @@ mod range_recovery_tests {
             100,
             None
         ));
+    }
+}
+
+#[cfg(test)]
+mod session_expiry_tests {
+    use super::{UNDATED_SESSION_SECS, remote_session_expiry};
+
+    #[test]
+    fn a_session_lives_as_long_as_its_url() {
+        let url = "https://rr1.googlevideo.com/videoplayback?expire=30000&c=VISIONOS";
+        assert_eq!(remote_session_expiry(url, 1000), 30000);
+    }
+
+    #[test]
+    fn an_undated_or_expired_url_gets_six_hours() {
+        let undated = "https://example.com/manifest.mpd";
+        assert_eq!(
+            remote_session_expiry(undated, 1000),
+            1000 + UNDATED_SESSION_SECS
+        );
+        let expired = "https://rr1.googlevideo.com/videoplayback?expire=500";
+        assert_eq!(
+            remote_session_expiry(expired, 1000),
+            1000 + UNDATED_SESSION_SECS
+        );
     }
 }

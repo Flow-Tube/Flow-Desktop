@@ -1,12 +1,26 @@
 //! Session keys, tokens and the listener's own Last.fm key live in the OS keychain, never in the
 //! settings table, so sync, backups and settings exports can never carry them.
+//!
+//! On macOS every read of an item another build wrote raises a password prompt, so everything
+//! lives in one item: loading the credentials asks at most once.
+
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
 use super::models::{Account, Service};
+use crate::profiles::ActiveProfile;
 
-const KEYCHAIN_SERVICE: &str = "io.github.aedev.flow.desktop.scrobbling";
-const OWN_KEY_ENTRY: &str = "LASTFM_OWN_KEY";
+// Debug builds keep their own item, so a dev build and an installed Flow never take turns asking
+// for each other's.
+const KEYCHAIN_SERVICE: &str = if cfg!(debug_assertions) {
+    "io.github.aedev.flow.desktop.scrobbling.dev"
+} else {
+    "io.github.aedev.flow.desktop.scrobbling"
+};
+const CREDENTIALS_ENTRY: &str = "CREDENTIALS";
+/// Before one item held everything, each account (by service name) and the own key had their own.
+const LEGACY_OWN_KEY_ENTRY: &str = "LASTFM_OWN_KEY";
 
 /// Why the keychain could not be used. Carries no secret material.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -32,48 +46,91 @@ impl std::fmt::Debug for OwnKey {
     }
 }
 
+/// Everything the keychain item holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Credentials {
+    pub accounts: HashMap<Service, Account>,
+    pub own_key: OwnKey,
+}
+
+impl Credentials {
+    fn is_empty(&self) -> bool {
+        self.accounts.is_empty() && self.own_key == OwnKey::default()
+    }
+
+    fn without_blank_accounts(mut self) -> Self {
+        self.accounts
+            .retain(|_, account| !account.secret.is_empty());
+        self
+    }
+}
+
 pub trait CredentialStore: Send + Sync {
     fn read(&self, name: &str) -> Result<Option<String>, CredentialError>;
     fn write(&self, name: &str, value: &str) -> Result<(), CredentialError>;
     fn remove(&self, name: &str) -> Result<(), CredentialError>;
 }
 
-pub fn read_account(
-    store: &dyn CredentialStore,
-    service: Service,
-) -> Result<Option<Account>, CredentialError> {
-    Ok(store
-        .read(service.as_str())?
-        .and_then(|value| serde_json::from_str::<Account>(&value).ok())
-        .filter(|account| !account.secret.is_empty()))
-}
-
-pub fn write_account(
-    store: &dyn CredentialStore,
-    service: Service,
-    account: Option<&Account>,
-) -> Result<(), CredentialError> {
-    match account {
-        Some(account) => {
-            let value = serde_json::to_string(account)
-                .map_err(|_| CredentialError("Could not encode the account"))?;
-            store.write(service.as_str(), &value)
-        }
-        None => store.remove(service.as_str()),
+/// Reads the one item, moving the older per-account items into it the first time.
+pub fn load(store: &dyn CredentialStore) -> Result<Credentials, CredentialError> {
+    if let Some(value) = store.read(CREDENTIALS_ENTRY)? {
+        return Ok(serde_json::from_str::<Credentials>(&value)
+            .unwrap_or_default()
+            .without_blank_accounts());
     }
+    let legacy = load_legacy(store)?;
+    if !legacy.is_empty() {
+        save(store, &legacy)?;
+        for name in legacy_entries() {
+            if store.remove(name).is_err() {
+                tracing::warn!(
+                    entry = name,
+                    "Could not remove an old scrobbling keychain item"
+                );
+            }
+        }
+    }
+    Ok(legacy)
 }
 
-pub fn read_own_key(store: &dyn CredentialStore) -> Result<OwnKey, CredentialError> {
-    Ok(store
-        .read(OWN_KEY_ENTRY)?
+/// Writes the one item; with nothing left to keep, the item is removed instead.
+pub fn save(store: &dyn CredentialStore, credentials: &Credentials) -> Result<(), CredentialError> {
+    if credentials.is_empty() {
+        return store.remove(CREDENTIALS_ENTRY);
+    }
+    let value = serde_json::to_string(credentials)
+        .map_err(|_| CredentialError("Could not encode the credentials"))?;
+    store.write(CREDENTIALS_ENTRY, &value)
+}
+
+/// Removes the item, for a deleted profile.
+pub fn forget(store: &dyn CredentialStore) -> Result<(), CredentialError> {
+    store.remove(CREDENTIALS_ENTRY)
+}
+
+fn legacy_entries() -> impl Iterator<Item = &'static str> {
+    Service::ALL
+        .into_iter()
+        .map(Service::as_str)
+        .chain([LEGACY_OWN_KEY_ENTRY])
+}
+
+fn load_legacy(store: &dyn CredentialStore) -> Result<Credentials, CredentialError> {
+    let mut accounts = HashMap::new();
+    for service in Service::ALL {
+        if let Some(account) = store
+            .read(service.as_str())?
+            .and_then(|value| serde_json::from_str::<Account>(&value).ok())
+        {
+            accounts.insert(service, account);
+        }
+    }
+    let own_key = store
+        .read(LEGACY_OWN_KEY_ENTRY)?
         .and_then(|value| serde_json::from_str(&value).ok())
-        .unwrap_or_default())
-}
-
-pub fn write_own_key(store: &dyn CredentialStore, key: &OwnKey) -> Result<(), CredentialError> {
-    let value =
-        serde_json::to_string(key).map_err(|_| CredentialError("Could not encode the key"))?;
-    store.write(OWN_KEY_ENTRY, &value)
+        .unwrap_or_default();
+    Ok(Credentials { accounts, own_key }.without_blank_accounts())
 }
 
 /// The platform keychain through the `keyring` crate.
@@ -105,6 +162,42 @@ impl CredentialStore for Keychain {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(error) => Err(describe(&error)),
         }
+    }
+}
+
+/// One profile's items. Default keeps today's names; another profile's names end in `@<id>`.
+/// The old per-account items only ever exist under Default's names, so only Default migrates
+/// them.
+pub struct ProfileScoped<S> {
+    inner: S,
+    suffix: Option<String>,
+}
+
+impl<S> ProfileScoped<S> {
+    pub fn new(inner: S, profile: &ActiveProfile) -> Self {
+        let suffix = (!profile.is_default).then(|| profile.id.clone());
+        Self { inner, suffix }
+    }
+
+    fn name(&self, name: &str) -> String {
+        match &self.suffix {
+            Some(id) => format!("{name}@{id}"),
+            None => name.to_string(),
+        }
+    }
+}
+
+impl<S: CredentialStore> CredentialStore for ProfileScoped<S> {
+    fn read(&self, name: &str) -> Result<Option<String>, CredentialError> {
+        self.inner.read(&self.name(name))
+    }
+
+    fn write(&self, name: &str, value: &str) -> Result<(), CredentialError> {
+        self.inner.write(&self.name(name), value)
+    }
+
+    fn remove(&self, name: &str) -> Result<(), CredentialError> {
+        self.inner.remove(&self.name(name))
     }
 }
 
@@ -152,38 +245,126 @@ pub mod memory {
 
 #[cfg(test)]
 mod tests {
+    use super::memory::MemoryStore as ScopedMemory;
+
+    #[test]
+    fn another_profile_keeps_its_own_item_and_never_takes_defaults() {
+        use super::*;
+        let study = ActiveProfile {
+            id: "study".into(),
+            is_default: false,
+            after_switch: false,
+            default_name: String::new(),
+        };
+        let raw = ScopedMemory::default();
+        raw.write("LASTFM", r#"{"userName":"default-user","secret":"k"}"#)
+            .unwrap();
+        let scoped = ProfileScoped::new(raw, &study);
+
+        assert_eq!(load(&scoped).unwrap(), Credentials::default());
+        let mut mine = Credentials::default();
+        mine.own_key.enabled = true;
+        save(&scoped, &mine).unwrap();
+
+        let items = scoped.inner.0.lock().unwrap();
+        assert!(items.contains_key("CREDENTIALS@study"));
+        assert!(
+            items.contains_key("LASTFM"),
+            "Default's old item is left alone"
+        );
+        assert!(!items.contains_key("CREDENTIALS"));
+    }
+
+    #[test]
+    fn default_keeps_todays_names() {
+        use super::*;
+        let default = ActiveProfile {
+            id: "d".into(),
+            is_default: true,
+            after_switch: false,
+            default_name: String::new(),
+        };
+        let scoped = ProfileScoped::new(ScopedMemory::default(), &default);
+        let mut mine = Credentials::default();
+        mine.own_key.enabled = true;
+        save(&scoped, &mine).unwrap();
+        assert!(scoped.inner.0.lock().unwrap().contains_key("CREDENTIALS"));
+    }
+
     use super::memory::MemoryStore;
     use super::*;
 
-    #[test]
-    fn accounts_round_trip_and_sign_out_removes_them() {
-        let store = MemoryStore::default();
-        let account = Account {
+    fn account(secret: &str) -> Account {
+        Account {
             user_name: "listener".into(),
-            secret: "SK".into(),
-        };
-        write_account(&store, Service::LastFm, Some(&account)).unwrap();
-        assert_eq!(
-            read_account(&store, Service::LastFm).unwrap(),
-            Some(account)
-        );
-        assert_eq!(read_account(&store, Service::LibreFm).unwrap(), None);
-        write_account(&store, Service::LastFm, None).unwrap();
-        assert_eq!(read_account(&store, Service::LastFm).unwrap(), None);
+            secret: secret.into(),
+        }
+    }
+
+    #[test]
+    fn credentials_round_trip_through_one_item() {
+        let store = MemoryStore::default();
+        let mut credentials = Credentials::default();
+        credentials.accounts.insert(Service::LastFm, account("SK"));
+        credentials.own_key.api_key = "key".into();
+        save(&store, &credentials).unwrap();
+
+        assert_eq!(store.0.lock().unwrap().len(), 1);
+        assert_eq!(load(&store).unwrap(), credentials);
+    }
+
+    #[test]
+    fn nothing_to_keep_removes_the_item() {
+        let store = MemoryStore::default();
+        let mut credentials = Credentials::default();
+        credentials
+            .accounts
+            .insert(Service::ListenBrainz, account("token"));
+        save(&store, &credentials).unwrap();
+        save(&store, &Credentials::default()).unwrap();
+        assert!(store.0.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_old_items_move_into_one_and_are_removed() {
+        let store = MemoryStore::default();
+        store
+            .write("LASTFM", &serde_json::to_string(&account("SK")).unwrap())
+            .unwrap();
+        store
+            .write("LIBREFM", &serde_json::to_string(&account("")).unwrap())
+            .unwrap();
+        store
+            .write(
+                LEGACY_OWN_KEY_ENTRY,
+                r#"{"enabled":true,"apiKey":"abc","secret":"s"}"#,
+            )
+            .unwrap();
+
+        let loaded = load(&store).unwrap();
+        assert_eq!(loaded.accounts.len(), 1);
+        assert_eq!(loaded.accounts[&Service::LastFm], account("SK"));
+        assert!(loaded.own_key.enabled);
+        let items = store.0.lock().unwrap();
+        assert_eq!(items.keys().collect::<Vec<_>>(), [CREDENTIALS_ENTRY]);
     }
 
     #[test]
     fn an_account_never_prints_its_secret() {
-        let account = Account {
-            user_name: "listener".into(),
-            secret: "SESSION-KEY".into(),
-        };
+        let account = account("SESSION-KEY");
         assert!(!format!("{account:?}").contains("SESSION-KEY"));
+        let mut credentials = Credentials::default();
+        credentials.accounts.insert(Service::LastFm, account);
+        credentials.own_key.secret = "OWN-SECRET".into();
+        let printed = format!("{credentials:?}");
+        assert!(!printed.contains("SESSION-KEY") && !printed.contains("OWN-SECRET"));
     }
 
     #[test]
-    fn a_missing_own_key_reads_as_disabled() {
-        let store = MemoryStore::default();
-        assert_eq!(read_own_key(&store).unwrap(), OwnKey::default());
+    fn a_missing_item_reads_as_signed_out() {
+        assert_eq!(
+            load(&MemoryStore::default()).unwrap(),
+            Credentials::default()
+        );
     }
 }

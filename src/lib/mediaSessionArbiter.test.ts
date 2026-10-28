@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   claimMediaSession,
+  pauseAllMediaSessionClients,
   refreshMediaSession,
   registerMediaSessionClient,
   reportMediaPosition,
+  setMediaSessionClaimListener,
   type MediaSessionClient,
 } from "./mediaSessionArbiter";
 
@@ -60,6 +62,23 @@ afterEach(() => {
 });
 
 describe("media session arbiter", () => {
+  it("tells other windows when a player here starts, and pauses everything when one there does", () => {
+    const listener = vi.fn();
+    setMediaSessionClaimListener(listener);
+    const music = client("Song", true);
+    const video = client("Video", true);
+    register("music", music.c);
+    register("video", video.c);
+
+    claimMediaSession("video");
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(music.pause).toHaveBeenCalled();
+
+    pauseAllMediaSessionClients();
+    expect(video.pause).toHaveBeenCalled();
+    setMediaSessionClaimListener(null);
+  });
+
   it("keeps music's keys when a paused video re-renders, and hands them over when the video leaves", () => {
     const music = client("Song", true);
     const video = client("Video");

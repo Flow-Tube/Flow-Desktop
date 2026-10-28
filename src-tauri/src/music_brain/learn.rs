@@ -42,7 +42,6 @@ pub struct MusicSignal {
     pub track_id: String,
     pub artist_key: String,
     pub genre: Option<String>,
-    pub percent_played: f32,
     pub is_explicit_like: bool,
     pub title: Option<String>,
     pub artist_display: Option<String>,
@@ -341,12 +340,11 @@ where
 mod tests {
     use super::*;
 
-    fn sig(track: &str, artist: &str, pct: f32) -> MusicSignal {
+    fn sig(track: &str, artist: &str) -> MusicSignal {
         MusicSignal {
             track_id: track.to_string(),
             artist_key: artist.to_string(),
             genre: None,
-            percent_played: pct,
             is_explicit_like: false,
             title: None,
             artist_display: None,
@@ -357,7 +355,7 @@ mod tests {
     #[test]
     fn counted_listen_stores_track_meta_for_the_shelf() {
         let mut b = MusicBrain::default();
-        let mut s = sig("t1", "artistA", 1.0);
+        let mut s = sig("t1", "artistA");
         s.title = Some("My Song".into());
         s.artist_display = Some("Artist A".into());
         s.thumbnail = Some("http://thumb".into());
@@ -367,7 +365,7 @@ mod tests {
         assert_eq!(meta.artist, "Artist A");
         // A sample-only tick (no count) must not create meta.
         let mut b2 = MusicBrain::default();
-        let mut s2 = sig("t2", "artistB", 0.2);
+        let mut s2 = sig("t2", "artistB");
         s2.title = Some("Skip".into());
         apply_music_signal(&mut b2, &s2, &newly_crossed(0.0, 0.2), 1_000, None);
         assert!(b2.track_meta.get("t2").is_none());
@@ -377,7 +375,7 @@ mod tests {
     fn full_listen_counts_one_play_and_pushes_one_timestamp() {
         let mut b = MusicBrain::default();
         let crossed = newly_crossed(0.0, 1.0);
-        let counted = apply_music_signal(&mut b, &sig("t1", "artistA", 1.0), &crossed, 1_000, None);
+        let counted = apply_music_signal(&mut b, &sig("t1", "artistA"), &crossed, 1_000, None);
         assert!(counted);
         assert_eq!(b.total_plays, 1);
         assert_eq!(b.artist_affinity["artistA"].plays, 1);
@@ -390,7 +388,7 @@ mod tests {
         let mut b = MusicBrain::default();
         // 0 -> 0.2 crosses only the 0.15 sample milestone, not the 0.5 count milestone.
         let crossed = newly_crossed(0.0, 0.2);
-        let counted = apply_music_signal(&mut b, &sig("t1", "artistA", 0.2), &crossed, 1_000, None);
+        let counted = apply_music_signal(&mut b, &sig("t1", "artistA"), &crossed, 1_000, None);
         assert!(!counted);
         assert_eq!(b.total_plays, 0);
         assert!(b.track_plays.get("t1").is_none());
@@ -401,10 +399,10 @@ mod tests {
     fn second_listen_of_same_track_adds_a_second_timestamp() {
         let mut b = MusicBrain::default();
         let c = newly_crossed(0.0, 1.0);
-        apply_music_signal(&mut b, &sig("t1", "artistA", 1.0), &c, 1_000, None);
+        apply_music_signal(&mut b, &sig("t1", "artistA"), &c, 1_000, None);
         // A fresh listen (store resets prev to 0) crosses milestones again.
         let c2 = newly_crossed(0.0, 1.0);
-        apply_music_signal(&mut b, &sig("t1", "artistA", 1.0), &c2, 5_000, None);
+        apply_music_signal(&mut b, &sig("t1", "artistA"), &c2, 5_000, None);
         assert_eq!(b.track_plays["t1"].len(), 2);
         assert_eq!(b.artist_affinity["artistA"].plays, 2);
     }
@@ -413,13 +411,7 @@ mod tests {
     fn co_occurrence_records_session_pairs() {
         let mut b = MusicBrain::default();
         let c = newly_crossed(0.0, 1.0);
-        apply_music_signal(
-            &mut b,
-            &sig("t2", "artistB", 1.0),
-            &c,
-            2_000,
-            Some("artistA"),
-        );
+        apply_music_signal(&mut b, &sig("t2", "artistB"), &c, 2_000, Some("artistA"));
         assert_eq!(
             b.artist_cooc.get(&pair_key("artistA", "artistB")).copied(),
             Some(1.0)
@@ -429,9 +421,9 @@ mod tests {
     #[test]
     fn explicit_like_counts_and_marks_liked() {
         let mut b = MusicBrain::default();
-        let mut s = sig("t1", "artistA", 0.05); // barely played, but liked
+        let mut s = sig("t1", "artistA");
         s.is_explicit_like = true;
-        let crossed = newly_crossed(0.0, 0.05); // no milestone crossed
+        let crossed = newly_crossed(0.0, 0.05); // barely played, no milestone crossed, but liked
         let counted = apply_music_signal(&mut b, &s, &crossed, 1_000, None);
         assert!(counted);
         assert!(b.artist_affinity["artistA"].liked);
@@ -443,7 +435,7 @@ mod tests {
         let mut b = MusicBrain::default();
         for i in 0..20 {
             let c = newly_crossed(0.0, 1.0);
-            apply_music_signal(&mut b, &sig("t1", "a", 1.0), &c, 1_000 + i, None);
+            apply_music_signal(&mut b, &sig("t1", "a"), &c, 1_000 + i, None);
         }
         assert_eq!(b.track_plays["t1"].len(), TRACK_PLAYS_RING);
     }
@@ -452,14 +444,14 @@ mod tests {
     fn dislike_is_a_cooldown_not_a_ban() {
         let mut b = MusicBrain::default();
         let c = newly_crossed(0.0, 1.0);
-        apply_music_signal(&mut b, &sig("t1", "artistA", 1.0), &c, 1_000, None);
+        apply_music_signal(&mut b, &sig("t1", "artistA"), &c, 1_000, None);
         let before = b.artist_affinity["artistA"].score;
         apply_music_dislike(&mut b, "artistA", 2_000);
         assert!(b.disliked_artists.contains_key("artistA"));
         assert!(b.artist_affinity["artistA"].score < before);
         // A later real listen clears the cooldown (reversible).
         let c2 = newly_crossed(0.0, 1.0);
-        apply_music_signal(&mut b, &sig("t1", "artistA", 1.0), &c2, 3_000, None);
+        apply_music_signal(&mut b, &sig("t1", "artistA"), &c2, 3_000, None);
         assert!(!b.disliked_artists.contains_key("artistA"));
     }
 
@@ -479,7 +471,7 @@ mod tests {
     fn block_is_reversible_and_preserves_history() {
         let mut b = MusicBrain::default();
         let c = newly_crossed(0.0, 1.0);
-        apply_music_signal(&mut b, &sig("t1", "artistA", 1.0), &c, 1_000, None);
+        apply_music_signal(&mut b, &sig("t1", "artistA"), &c, 1_000, None);
         block_music_artist(&mut b, "artistA");
         assert!(b.is_artist_blocked("artistA"));
         // History (the play timestamp) survives a block so unblock can warm back up.

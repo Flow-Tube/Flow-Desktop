@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -6,7 +6,12 @@ import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { SETTINGS } from "../../lib/settings/schema";
 import { FlowPlayerCore } from "./FlowPlayerCore";
+import { decideRouteChangePlayerAction, watchVideoIdFromPath } from "../../lib/watchRouteSync";
+import { expandPlayerInOwnerTab } from "../../lib/tabs/tabPlayback";
+import { useTabsStore } from "../../store/useTabsStore";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
+import { glideFrame } from "../../lib/theaterGlide";
+import { FullscreenPanelHost } from "./FullscreenPanelHost";
 
 type PlayerBounds = {
   top: number;
@@ -14,13 +19,6 @@ type PlayerBounds = {
   width: number;
   height: number;
 };
-
-const WATCH_ROUTE_RE = /^\/watch\/([^/?#]+)/;
-
-function watchVideoIdFromPath(pathname: string) {
-  const match = pathname.match(WATCH_ROUTE_RE);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
-}
 
 function readSlotBounds(): PlayerBounds | null {
   const slot = document.querySelector<HTMLElement>("[data-flow-watch-player-slot='true']");
@@ -45,10 +43,11 @@ export function GlobalVideoPlayer() {
   const navigate = useNavigate();
   const location = useLocation();
   const currentVideo = usePlayerStore((s) => s.currentVideo);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const videoPlayerMode = usePlayerStore((s) => s.videoPlayerMode);
   const isVideoFullscreen = usePlayerStore((s) => s.isVideoFullscreen);
   const isVideoFullscreenTransitioning = usePlayerStore((s) => s.isVideoFullscreenTransitioning);
+  const isTheaterMode = usePlayerStore((s) => s.isTheaterMode);
+  const setFullscreenPanel = usePlayerStore((s) => s.setFullscreenPanel);
   const watchPageCache = usePlayerStore((s) => s.watchPageCache);
   const enterVideoPip = usePlayerStore((s) => s.enterVideoPip);
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
@@ -162,41 +161,52 @@ export function GlobalVideoPlayer() {
     };
   }, [isFloating, isPoppedOut, isVideoFullscreen, currentVideo?.id, location.pathname]);
 
+  // Every fullscreen starts with the whole picture; a panel opens only when asked for there.
+  useEffect(() => {
+    setFullscreenPanel(null);
+  }, [isVideoFullscreen, setFullscreenPanel]);
+
+  // Runs in the same commit as the layout swap, before the slot tracker snaps the frame.
+  const shownTheaterRef = useRef(isTheaterMode);
+  useLayoutEffect(() => {
+    if (shownTheaterRef.current === isTheaterMode) return;
+    shownTheaterRef.current = isTheaterMode;
+    const frame = frameRef.current;
+    if (!frame || isFloating || isPoppedOut || isVideoFullscreen) return;
+    const from = frame.getBoundingClientRect();
+    const to = readSlotBounds();
+    if (!to || from.width <= 0) return;
+    frame.style.transform = `translate3d(${to.left}px, ${to.top}px, 0)`;
+    frame.style.width = `${to.width}px`;
+    frame.style.height = `${to.height}px`;
+    lastSlotBoundsRef.current = to;
+    setSlotBounds(to);
+    glideFrame(frame, { top: from.top, left: from.left, width: from.width, height: from.height }, to, isTheaterMode);
+  }, [isTheaterMode, isFloating, isPoppedOut, isVideoFullscreen]);
+
   useEffect(() => {
     const previousPath = previousPathRef.current;
     if (previousPath === location.pathname) return;
     previousPathRef.current = location.pathname;
 
-    if (!currentVideo) return;
-
-    const prevWatchId = watchVideoIdFromPath(previousPath);
-    const nextWatchId = watchVideoIdFromPath(location.pathname);
-
-    if (nextWatchId === currentVideo.id) {
-      if (videoPlayerMode === "pip") expandVideoPlayer();
-      return;
-    }
-
-    if (nextWatchId === null && prevWatchId === currentVideo.id && videoPlayerMode === "watch") {
-      if (isPlaying && autoPipEnabled) {
-        enterVideoPip("auto");
-      } else {
-        dismissVideoPlayer();
-      }
-    }
-  }, [
-    location.pathname,
-    currentVideo,
-    videoPlayerMode,
-    isPlaying,
-    autoPipEnabled,
-    enterVideoPip,
-    expandVideoPlayer,
-    dismissVideoPlayer,
-  ]);
+    // The route renders in a transition, so values from this render can be a
+    // step behind the store; decide from the store as it is now.
+    const player = usePlayerStore.getState();
+    const action = decideRouteChangePlayerAction({
+      previousWatchId: watchVideoIdFromPath(previousPath),
+      nextWatchId: watchVideoIdFromPath(location.pathname),
+      currentVideoId: player.currentVideo?.id ?? null,
+      videoPlayerMode: player.videoPlayerMode,
+      autoPipEnabled,
+      tabSwitch: useTabsStore.getState().cause === "tab",
+    });
+    if (action === "expand") expandVideoPlayer();
+    else if (action === "enter-pip") enterVideoPip("auto");
+    else if (action === "dismiss") dismissVideoPlayer();
+  }, [location.pathname, autoPipEnabled, enterVideoPip, expandVideoPlayer, dismissVideoPlayer]);
 
   const expandFromFloating = useCallback(() => {
-    if (!currentVideo) return;
+    if (!currentVideo || expandPlayerInOwnerTab()) return;
     expandVideoPlayer();
     navigate(`/watch/${currentVideo.id}`);
   }, [currentVideo, expandVideoPlayer, navigate]);
@@ -260,9 +270,9 @@ export function GlobalVideoPlayer() {
         ref={frameRef}
         className={
           isVideoFullscreen
-            ? "fixed z-[300] overflow-hidden bg-chrome-black"
+            ? "fixed z-[300] flex overflow-hidden bg-chrome-black"
             : isFloating
-            ? "group fixed z-50 overflow-hidden rounded-xl bg-chrome-black shadow-2xl ring-1 ring-chrome-white/10"
+            ? "group fixed z-50 overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-black"
             : "fixed z-30 bg-chrome-black"
         }
         style={frameStyle}
@@ -287,7 +297,8 @@ export function GlobalVideoPlayer() {
             </button>
           </div>
         )}
-        <div className="group h-full w-full">{playerNode}</div>
+        <div className={isVideoFullscreen ? "group h-full min-w-0 flex-1" : "group h-full w-full"}>{playerNode}</div>
+        {isVideoFullscreen && <FullscreenPanelHost />}
       </div>
 
       {isVideoFullscreenTransitioning && (

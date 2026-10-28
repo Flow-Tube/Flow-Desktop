@@ -21,20 +21,6 @@ export function youtubeThumbnailUrl(
   return `https://i.ytimg.com/vi/${videoId}/${file}.jpg`;
 }
 
-/** Upgrade Innertube / cached URLs; prefer canonical i.ytimg.com when we have a video id. */
-export function resolveVideoThumbnailUrl(
-  videoId?: string | null,
-  fallbackUrl?: string | null,
-  quality: ThumbnailQuality = "standard",
-): string | undefined {
-  if (isYoutubeVideoId(videoId)) {
-    return youtubeThumbnailUrl(videoId, quality);
-  }
-
-  if (!fallbackUrl?.trim()) return undefined;
-  return upgradeThumbnailUrl(fallbackUrl, quality);
-}
-
 export function upgradeThumbnailUrl(
   url: string,
   quality: ThumbnailQuality = "standard",
@@ -59,28 +45,63 @@ export function upgradeThumbnailUrl(
   return upgraded;
 }
 
+/**
+ * Exists for every video, unlike `hq720` and `maxresdefault`. It is 480×360 with
+ * the 16:9 frame letterboxed inside, so `object-cover` crops it to 480×270, at
+ * about a fifth of the decoded memory of a 1280×720 `hq720`.
+ */
+function youtubeHqDefaultUrl(videoId: string): string {
+  return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+}
+
+const HQDEFAULT_WIDTH = 480;
+
+function devicePixelRatio(): number {
+  return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+}
+
+/** Whether a thumbnail drawn this many CSS px wide would upscale `hqdefault`. */
+export function thumbnailNeedsHighRes(cssWidth: number): boolean {
+  return cssWidth * devicePixelRatio() > HQDEFAULT_WIDTH;
+}
+
+/**
+ * Every source from the requested quality down to `hqdefault`, so a missing
+ * `maxresdefault` lands on `hq720` before the much smaller `hqdefault`.
+ */
 export function buildThumbnailSources(
   videoId?: string | null,
   fallbackUrl?: string | null,
   quality: ThumbnailQuality = "standard",
-) {
-  const hqFallback = isYoutubeVideoId(videoId)
-    ? youtubeThumbnailUrl(videoId, "standard")
-    : fallbackUrl
-      ? upgradeThumbnailUrl(fallbackUrl, "standard")
-      : undefined;
+): string[] {
+  if (isYoutubeVideoId(videoId)) {
+    return [
+      ...new Set([
+        youtubeThumbnailUrl(videoId, quality),
+        youtubeThumbnailUrl(videoId, "standard"),
+        youtubeHqDefaultUrl(videoId),
+      ]),
+    ];
+  }
 
-  const primary = resolveVideoThumbnailUrl(videoId, fallbackUrl, quality) ?? hqFallback;
-
-  return {
-    primary,
-    fallback: hqFallback ?? primary,
-  };
+  if (!fallbackUrl?.trim()) return [];
+  return [
+    ...new Set([
+      upgradeThumbnailUrl(fallbackUrl, quality),
+      upgradeThumbnailUrl(fallbackUrl, "standard"),
+    ]),
+  ];
 }
 
+/**
+ * `highRes` says whether the card is drawn wider than `hqdefault`. Callers that
+ * do not measure their cards leave it to the screen: a 1× screen starts on
+ * `hqdefault`, since cards outside the feed grid stay well under 480 px.
+ */
 export function resolveYoutubeThumbnailCandidates(
   videoId?: string | null,
   fallbackUrl?: string | null,
+  highRes = devicePixelRatio() > 1,
 ): string[] {
   const raw = fallbackUrl?.trim();
   const resolvedId = isYoutubeVideoId(videoId)
@@ -89,10 +110,8 @@ export function resolveYoutubeThumbnailCandidates(
 
   const candidates: string[] = [];
   if (resolvedId) {
-    candidates.push(
-      youtubeThumbnailUrl(resolvedId, "standard"),
-      `https://i.ytimg.com/vi/${resolvedId}/hqdefault.jpg`,
-    );
+    if (highRes) candidates.push(youtubeThumbnailUrl(resolvedId, "standard"));
+    candidates.push(youtubeHqDefaultUrl(resolvedId));
   }
   if (raw) {
     candidates.push(upgradeThumbnailUrl(raw, "standard"), raw);

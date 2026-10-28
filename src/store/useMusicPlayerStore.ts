@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { profileStorage } from "../lib/storage/profileStorage";
 
 import type { MusicStreamInfo, SongItem } from "../types/music";
 import type { MusicAudioQuality } from "../lib/api/music";
@@ -67,7 +68,7 @@ const DEFAULT_CONFIG: PersistedMusicConfig = {
 
 const loadConfig = (): PersistedMusicConfig => {
   try {
-    const saved = localStorage.getItem(PERSIST_KEY);
+    const saved = profileStorage.getItem(PERSIST_KEY);
     if (!saved) return { ...DEFAULT_CONFIG };
     const parsed = JSON.parse(saved) as Partial<PersistedMusicConfig>;
     return {
@@ -94,7 +95,7 @@ const saveConfig = (get: () => MusicPlayerState) => {
       isShuffle: s.isShuffle,
       radioEnabled: s.radioEnabled,
     };
-    localStorage.setItem(PERSIST_KEY, JSON.stringify(config));
+    profileStorage.setItem(PERSIST_KEY, JSON.stringify(config));
   } catch (error) {
     console.warn("Failed to save music player config", error);
   }
@@ -899,9 +900,11 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // published when the whole second changes; the full player's bar reads the
   // audio element itself for anything finer.
   _syncTime: (progress, duration) => {
-    const seconds = Number.isFinite(progress) ? progress : 0;
-    const nextDuration = Number.isFinite(duration) && duration > 0 ? duration : get().duration;
     const current = get();
+    // While the next song resolves, the element still plays the last one.
+    if (current.loadingStreamId !== null) return;
+    const seconds = Number.isFinite(progress) ? progress : 0;
+    const nextDuration = Number.isFinite(duration) && duration > 0 ? duration : current.duration;
     if (current.currentTrack && current.isPlaying && !current.isBuffering) {
       recovery.notePlaying(videoIdOf(current.currentTrack), Date.now());
     }

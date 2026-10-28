@@ -19,6 +19,7 @@ use crate::db::downloads::DownloadRecord;
 use crate::errors::{AppError, ErrorResponse};
 use crate::models::music_stream::MusicAudioQuality;
 use crate::models::video::CaptionTrack;
+use crate::profiles::{ActiveProfile, collection_owners};
 use crate::security::validation::validate_video_id;
 use crate::services::youtube_service::YoutubeService;
 use crate::streaming::proxy::StreamingManager;
@@ -90,6 +91,7 @@ pub async fn get_download_formats(
 /// never from the caller.
 #[tauri::command]
 pub async fn reveal_download(
+    app: tauri::AppHandle,
     video_id: String,
     media_kind: DownloadMediaKind,
     pool: State<'_, SqlitePool>,
@@ -100,8 +102,9 @@ pub async fn reveal_download(
             .await
             .map_err(ErrorResponse::from)?
             .ok_or_else(|| download_error("No saved download for this item"))?;
-    tauri_plugin_opener::reveal_item_in_dir(&record.file_path)
-        .map_err(|error| download_error(format!("Could not show the file: {error}")))
+    super::external::reveal_file(&app, std::path::Path::new(&record.file_path))
+        .await
+        .map_err(ErrorResponse::from)
 }
 
 /// A system notification for a download that ended while Flow was in the
@@ -988,7 +991,9 @@ pub async fn create_download_collection(
     request: CreateCollectionRequest,
     app: AppHandle,
     pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<CreatedCollection, ErrorResponse> {
+    let stored_id = collection_owners::stored_id(&profile, &request.collection_id);
     let title = request.title.trim().to_string();
     if title.is_empty() || title.chars().count() > 240 {
         return Err(ErrorResponse::from(AppError::Validation(
@@ -1005,13 +1010,10 @@ pub async fn create_download_collection(
         }
     };
 
-    if let Some(existing) = crate::db::download_collections::find_collection(
-        &pool,
-        &request.collection_id,
-        &request.kind,
-    )
-    .await
-    .map_err(ErrorResponse::from)?
+    if let Some(existing) =
+        crate::db::download_collections::find_collection(&pool, &stored_id, &request.kind)
+            .await
+            .map_err(ErrorResponse::from)?
     {
         let id = existing.id.unwrap_or_default();
         crate::db::download_collections::set_total_count(&pool, id, request.total_count)
@@ -1051,7 +1053,7 @@ pub async fn create_download_collection(
 
     let record = DownloadCollectionRecord {
         id: None,
-        collection_id: request.collection_id,
+        collection_id: stored_id,
         kind: request.kind,
         title,
         author: request.author,
@@ -1076,10 +1078,18 @@ pub async fn create_download_collection(
 pub async fn list_download_collections(
     pool: State<'_, SqlitePool>,
     streaming_manager: State<'_, StreamingManager>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<Vec<DownloadCollectionRecord>, ErrorResponse> {
     let mut collections = crate::db::download_collections::list_collections(&pool)
         .await
         .map_err(ErrorResponse::from)?;
+    // Another profile's own playlists stay with it; the app sees the bare playlist id.
+    collections
+        .retain(|collection| collection_owners::visible_to(&collection.collection_id, &profile));
+    for collection in &mut collections {
+        collection.collection_id =
+            collection_owners::playlist_id(&collection.collection_id).to_string();
+    }
     let records = crate::db::downloads::list_downloads(&pool)
         .await
         .map_err(ErrorResponse::from)?;

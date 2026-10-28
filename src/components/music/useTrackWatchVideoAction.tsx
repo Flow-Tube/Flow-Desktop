@@ -46,6 +46,7 @@ export function useTrackWatchVideoAction(
       id: 'watch-video',
       label: getString('music_watch_video'),
       icon: <Clapperboard size={16} />,
+      group: 'go',
       onSelect: () => void open(),
     },
   ];

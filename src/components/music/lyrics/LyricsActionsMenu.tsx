@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { MENU_ENTER_TRANSITION, MENU_EXIT_TRANSITION } from "../../../lib/motion";
 import {
   AlignCenter,
   AlignLeft,
@@ -122,10 +123,10 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
         {open && (
           <motion.div
             role="menu"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
+            exit={{ opacity: 0, scale: 0.98, transition: MENU_EXIT_TRANSITION }}
+            style={{ transformOrigin: "top right" }}
             className="absolute right-0 top-full z-30 mt-2 w-80 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-2"
           >
             <MenuRow

@@ -23,6 +23,7 @@ import { usePublishTitle } from "../lib/usePublishTitle";
 import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
 import { youtubePlaylistUrl } from "../lib/youtubeUrl";
 import { copyText } from "../lib/clipboard";
+import { fisherYates } from "../lib/musicShuffle";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useUiStore } from "../store/useUiStore";
@@ -55,18 +56,14 @@ export function PlaylistDetailsPage({
     loadMoreFailed,
     loadMore,
     loadAllVideos,
+    setVideos,
   } = usePlaylistDetails(playlistId);
   usePublishTitle(meta?.title);
 
   const [storedSortOrder, setStoredSortOrder] = useState<string | null>(() =>
     playlistId ? loadPlaylistSortOrder(playlistId) : null,
   );
-  const [manualVideos, setManualVideos] = useState<VideoSummary[]>([]);
   const [savedInLibrary, setSavedInLibrary] = useState(false);
-
-  useEffect(() => {
-    setManualVideos(videos);
-  }, [videos]);
 
   useEffect(() => {
     setStoredSortOrder(playlistId ? loadPlaylistSortOrder(playlistId) : null);
@@ -94,11 +91,11 @@ export function PlaylistDetailsPage({
   }, [sortOrder, hasMore, loadAllVideos]);
 
   const displayVideos = useMemo(
-    () => sortPlaylistVideos(manualVideos, sortOrder, isProtected),
-    [manualVideos, sortOrder, isProtected],
+    () => sortPlaylistVideos(videos, sortOrder, isProtected),
+    [videos, sortOrder, isProtected],
   );
 
-  const leadVideo = manualVideos[0];
+  const leadVideo = videos[0];
   const heroThumbnailUrl = leadVideo?.thumbnailUrl ?? meta?.thumbnailUrl ?? null;
 
   const openCollectionDownload = useDownloadStore((state) => state.openCollection);
@@ -119,7 +116,7 @@ export function PlaylistDetailsPage({
   };
 
   const handleReorder = async (nextVideos: VideoSummary[]) => {
-    setManualVideos(nextVideos);
+    setVideos(nextVideos);
     if (storedPlaylist) {
       await updateStoredPlaylistTracks(storedPlaylist.id, nextVideos);
     }
@@ -161,7 +158,7 @@ export function PlaylistDetailsPage({
     try {
       const playlists = await savePlaylistToLibrary(summary);
       const saved = playlists.find((playlist) => playlist.id === meta.id);
-      if (saved) setManualVideos(saved.tracks);
+      if (saved) setVideos(saved.tracks);
       setSavedInLibrary(true);
       showToast({
         variant: "success",
@@ -196,21 +193,26 @@ export function PlaylistDetailsPage({
     }
   };
 
+  const editable = isProtected || isOwned;
+  const playlistContext = meta
+    ? { id: meta.id, title: meta.title, editable, reorderable: editable && sortOrder === "manual" }
+    : null;
+
   const playQueue = (shuffle: boolean) => {
     if (displayVideos.length === 0) return;
     const queue = shuffle
-      ? [...displayVideos].sort(() => Math.random() - 0.5)
+      ? fisherYates(displayVideos)
       : displayVideos;
     const first = queue[0];
     if (!first) return;
-    setQueue(queue, 0);
+    setQueue(queue, 0, playlistContext, shuffle ? displayVideos : null);
     navigate(`/watch/${first.id}`);
   };
 
   const playFromPlaylist = (video: VideoSummary) => {
     const startIndex = displayVideos.findIndex((item) => item.id === video.id);
     const safeIndex = startIndex >= 0 ? startIndex : 0;
-    setQueue(displayVideos, safeIndex);
+    setQueue(displayVideos, safeIndex, playlistContext);
     navigate(`/watch/${video.id}`);
   };
 
@@ -261,7 +263,7 @@ export function PlaylistDetailsPage({
         />
 
         <PlaylistSortableList
-          videos={manualVideos}
+          videos={videos}
           displayVideos={displayVideos}
           sortOrder={sortOrder}
           sortOptions={availablePlaylistSortOrders(isLocalPlaylist)}

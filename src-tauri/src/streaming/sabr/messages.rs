@@ -382,16 +382,6 @@ impl MediaHeader {
         }
         0
     }
-
-    // The format's last-modified time, preferring the nested FormatId.
-    pub fn effective_lmt(&self) -> u64 {
-        if let Some(fid) = &self.format_id {
-            if fid.last_modified != 0 {
-                return fid.last_modified;
-            }
-        }
-        self.lmt
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -566,8 +556,6 @@ pub struct StreamProtectionStatus {
 
 impl StreamProtectionStatus {
     // status enum (observed): 1 = OK, 2 = attestation pending, 3 = attestation required
-    pub const OK: i32 = 1;
-    pub const ATTESTATION_PENDING: i32 = 2;
     pub const ATTESTATION_REQUIRED: i32 = 3;
 
     pub fn decode(data: &[u8]) -> Self {

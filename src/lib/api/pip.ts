@@ -1,8 +1,23 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { StreamInfo, VideoSummary } from "../../types/video";
 import { invokeBackend } from "./errors";
 
 /** Window label of the pop-out player; must match `commands::pip::PIP_WINDOW_LABEL`. */
 export const PIP_WINDOW_LABEL = "pip";
+
+/** Whether this window is the pop-out player. False outside Tauri. */
+export function isPopOutWindow(): boolean {
+  try {
+    return getCurrentWindow().label === PIP_WINDOW_LABEL;
+  } catch {
+    return false;
+  }
+}
+
+/** Hands the pointer to the OS, which moves this window until it is released. */
+export function startWindowDrag(): Promise<void> {
+  return getCurrentWindow().startDragging();
+}
 
 /**
  * Playback handed between the main window and the pop-out player. Both windows
@@ -68,6 +83,8 @@ export const PIP_EVENTS = {
   /** Pop-out → main: decoding has started, the swap can happen now. */
   ready: "flow:pip-ready",
   takeover: "flow:pip-takeover",
+  /** App window → other app windows: this one now owns the pop-out. */
+  claimed: "flow:pip-claimed",
 } as const;
 
 export function openPipWindow(session: PipSession): Promise<void> {
@@ -92,4 +109,9 @@ export function markPipWindowReady(): Promise<void> {
 
 export function focusMainWindow(): Promise<void> {
   return invokeBackend("focus_main_window");
+}
+
+/** Raises the window the pop-out's video came from. */
+export function focusPipSourceWindow(): Promise<void> {
+  return invokeBackend("focus_pip_source_window");
 }

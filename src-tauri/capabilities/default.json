@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-capability",
   "description": "Main window permissions for Flow Desktop",
-  "windows": ["main"],
+  "windows": ["main", "flow-*"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",
@@ -25,7 +25,6 @@
     "os:allow-os-type",
     "os:allow-platform",
     "os:allow-version",
-    "opener:default",
     "notification:default",
     "deep-link:default",
     "core:event:default",

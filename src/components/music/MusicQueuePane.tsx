@@ -83,7 +83,7 @@ export function MusicQueuePane() {
     showToast({
       message,
       durationMs: 5000,
-      action: { label: getString("undo"), onSelect: undoQueueEdit },
+      actions: [{ label: getString("undo"), onSelect: undoQueueEdit }],
     });
 
   const handleRemove = (index: number) => {

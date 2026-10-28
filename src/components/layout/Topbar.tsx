@@ -9,6 +9,7 @@ import { SETTINGS } from '../../lib/settings/schema';
 import { getString } from '../../lib/i18n/index';
 import { toggleDeepFlow } from '../../lib/deepFlow';
 import { NotificationsBell } from '../notifications/NotificationsBell';
+import { activeTab, useTabsStore } from '../../store/useTabsStore';
 
 /** PageWrapper returns focus here when Escape closes the drawer. */
 export const SIDEBAR_MENU_BUTTON_ID = 'sidebar-menu-button';
@@ -24,6 +25,11 @@ export function Topbar() {
   const sidebarOpen = usesDrawer ? isWatchSidebarOpen : isSidebarExpanded;
   const showAppLogo = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_APP_LOGO_ICON] !== 'false');
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
+  const canGoBack = useTabsStore((state) => activeTab(state).index > 0);
+  const canGoForward = useTabsStore((state) => {
+    const tab = activeTab(state);
+    return tab.index < tab.entries.length - 1;
+  });
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent bg-background px-3">
@@ -47,6 +53,7 @@ export function Topbar() {
             title={getString('topbar_back')}
             aria-label={getString('topbar_back')}
             onClick={() => navigate(-1)}
+            disabled={!canGoBack}
             className="text-chrome-neutral-300 hover:text-chrome-neutral-100"
           >
             <ArrowLeft />
@@ -55,6 +62,7 @@ export function Topbar() {
             title={getString('topbar_forward')}
             aria-label={getString('topbar_forward')}
             onClick={() => navigate(1)}
+            disabled={!canGoForward}
             className="text-chrome-neutral-300 hover:text-chrome-neutral-100"
           >
             <ArrowRight />

@@ -72,6 +72,7 @@ import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
 import { ThemeController } from "./lib/useTheme";
+import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
 import { APP_TITLEBAR_HEIGHT } from "./lib/platform";
@@ -95,6 +96,7 @@ function App() {
   // Clear the Linux startup-crash sentinel as soon as the app mounts
   useStartupHealth();
   useImageProxyBootstrap();
+  useTabHistoryShortcuts();
 
   const [loadingOnboarding, setLoadingOnboarding] = useState(true);
 

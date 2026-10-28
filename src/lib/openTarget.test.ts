@@ -10,6 +10,11 @@ const { backgroundTabClickProps, moveTabToNewWindow, moveVideoToNewWindow, route
 const { useTabsStore } = await import("../store/useTabsStore");
 const { usePlayerStore } = await import("../store/usePlayerStore");
 const { createEntry } = await import("./tabs/tabHistory");
+const { useAppSettingsStore } = await import("../store/useAppSettingsStore");
+const { openedInBackgroundTab } = await import("./openTarget");
+
+const setTabsOn = (on: boolean) =>
+  useAppSettingsStore.setState((state) => ({ values: { ...state.values, tabs_enabled: String(on) } }));
 
 const video = (id: string): VideoSummary => ({ id, title: id, channelName: "Flow" });
 
@@ -28,6 +33,7 @@ beforeEach(() => {
   });
   usePlayerStore.getState().setQueue([video("p")], 0);
   usePlayerStore.getState().setCurrentTime(12);
+  setTabsOn(true);
 });
 
 afterEach(() => {
@@ -53,6 +59,16 @@ describe("backgroundTabClickProps", () => {
     const state = useTabsStore.getState();
     expect(state.tabs.map((tab) => tab.entries[0]?.pathname)).toEqual(["/", "/feed", "/watch/n"]);
     expect(state.activeId).toBe("a");
+  });
+});
+
+describe("with tabs off", () => {
+  it("opens no tabs, and a modified click falls through to a normal one", () => {
+    setTabsOn(false);
+    const event = { button: 0, ctrlKey: true, metaKey: true, preventDefault: vi.fn(), stopPropagation: vi.fn() } as never;
+    expect(openedInBackgroundTab(event, "/feed")).toBe(false);
+    backgroundTabClickProps("/feed").onAuxClick({ button: 1, preventDefault: vi.fn(), stopPropagation: vi.fn() } as never);
+    expect(useTabsStore.getState().tabs).toHaveLength(2);
   });
 });
 

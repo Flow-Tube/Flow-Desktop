@@ -133,6 +133,20 @@ describe("useTabsStore titles and copies", () => {
     expect(useTabsStore.getState().titles).toBe(before);
   });
 
+  it("keeps only one tab, which takes over the player", () => {
+    const other = useTabsStore.getState().openTab("/music");
+    useTabsStore.getState().setTabTitle(other, "k", "Music");
+    useTabsStore.getState().park("tab-1", { videoId: "v", positionSeconds: 1, queue: [], currentIndex: 0, playlistContext: null });
+    useTabsStore.getState().setPlayerTab(other);
+    useTabsStore.getState().keepOnlyTab("tab-1");
+    const state = useTabsStore.getState();
+    expect(state.tabs.map((tab) => tab.id)).toEqual(["tab-1"]);
+    expect(state.activeId).toBe("tab-1");
+    expect(state.playerTabId).toBe("tab-1");
+    expect(state.parked).toEqual({});
+    expect(state.titles).toEqual({});
+  });
+
   it("drops a closed tab's title", () => {
     const other = useTabsStore.getState().openTab("/music");
     useTabsStore.getState().setTabTitle(other, "k", "Music");

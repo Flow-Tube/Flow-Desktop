@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { listen } from "@tauri-apps/api/event";
 import { sessionStore } from "./storage/profileStorage";
+import { holdLinkForNextProfile, takeHeldLink } from "./api/profiles";
+import { useProfilesStore } from "../store/useProfilesStore";
 
 import { getVideoDetails } from "./api/youtube";
 import { getMusicQueue } from "./api/music";
@@ -197,6 +199,13 @@ export function useDeepLinkHandoff() {
   acceptRef.current = (raw: string) => {
     const handoff = parseFlowUrl(raw);
     if (!handoff) return;
+    // During a profile switch the link belongs to the next profile, not this dying process.
+    if (useProfilesStore.getState().switchingTo) {
+      void holdLinkForNextProfile(raw).then((held) => {
+        if (!held) acceptRef.current(raw);
+      });
+      return;
+    }
     pendingRef.current = handoff;
     flush();
   };
@@ -224,6 +233,11 @@ export function useDeepLinkHandoff() {
         })
         .catch(() => {});
     }
+    void takeHeldLink()
+      .then((url) => {
+        if (url) acceptRef.current(url);
+      })
+      .catch(() => {});
     void onOpenUrl((urls) => {
       const url = latest(urls);
       if (url) acceptRef.current(url);

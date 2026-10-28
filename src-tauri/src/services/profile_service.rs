@@ -242,6 +242,26 @@ impl ProfileService {
         self.switching.lock().expect("switch lock").is_some()
     }
 
+    /// Keeps a link that arrived during a switch for the next process; the latest one wins.
+    /// Returns false when no switch is under way, so the caller opens it itself.
+    pub fn hold_link(&self, url: &str) -> bool {
+        if !self.is_switching() {
+            return false;
+        }
+        let url = url.to_string();
+        local_state::update(&self.app_data_dir, |state| {
+            state.pending_handoff = Some(url)
+        });
+        true
+    }
+
+    /// The link held by the previous process's switch, once.
+    pub fn take_held_link(&self) -> Option<String> {
+        let held = local_state::read(&self.app_data_dir).pending_handoff?;
+        local_state::update(&self.app_data_dir, |state| state.pending_handoff = None);
+        Some(held)
+    }
+
     /// Makes the prepared profile the active one for the next process.
     pub async fn finish_switch(&self, id: &str) -> AppResult<()> {
         if self.switching.lock().expect("switch lock").as_deref() != Some(id) {
@@ -620,6 +640,25 @@ mod tests {
             default_id,
             "this process stays Default"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_link_is_held_only_during_a_switch_and_taken_once() {
+        let (dir, service, pool) = setup().await;
+        let study = service
+            .create(&pool, request("Study", CopyParts::default()))
+            .await
+            .unwrap();
+        assert!(!service.hold_link("flow://watch?v=a"));
+        service.prepare_switch(&study.id, false).unwrap();
+        assert!(service.hold_link("flow://watch?v=a"));
+        assert!(service.hold_link("flow://watch?v=b"));
+        assert_eq!(
+            service.take_held_link().as_deref(),
+            Some("flow://watch?v=b")
+        );
+        assert_eq!(service.take_held_link(), None);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

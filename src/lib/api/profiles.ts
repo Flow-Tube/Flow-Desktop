@@ -80,3 +80,13 @@ export function cancelProfileSwitch(): Promise<void> {
 export function finishProfileSwitch(id: string): Promise<void> {
   return invokeBackend<void>("profiles_switch", { id });
 }
+
+/** Keeps a link for the next process while a switch is under way; false if none is. */
+export function holdLinkForNextProfile(url: string): Promise<boolean> {
+  return invokeBackend<boolean>("profiles_hold_link", { url });
+}
+
+/** The link the previous process held during its switch, once. */
+export function takeHeldLink(): Promise<string | null> {
+  return invokeBackend<string | null>("profiles_take_held_link");
+}

@@ -12,6 +12,8 @@ pub const FILE_NAME: &str = "profiles_local.json";
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct LocalState {
+    /// A link that arrived during a switch, opened by the next process.
+    pub pending_handoff: Option<String>,
     /// Deleted profiles whose scrobbling keychain item couldn't be removed yet.
     pub keychain_deletes: Vec<String>,
 }

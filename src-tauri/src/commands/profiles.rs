@@ -108,3 +108,14 @@ pub async fn profiles_switch(
     app.exit(0);
     Ok(())
 }
+
+/// A link that arrived during a switch; opened by the next process instead.
+#[tauri::command]
+pub fn profiles_hold_link(url: String, service: State<'_, ProfileService>) -> bool {
+    service.hold_link(&url)
+}
+
+#[tauri::command]
+pub fn profiles_take_held_link(service: State<'_, ProfileService>) -> Option<String> {
+    service.take_held_link()
+}

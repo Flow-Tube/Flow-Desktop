@@ -14,7 +14,7 @@ function tabWatchId(tab: TabHistory | undefined): string | null {
   return tab ? watchVideoIdFromPath(currentEntry(tab).pathname) : null;
 }
 
-function snapshot(player: Pick<PlayerState, "currentVideo" | "currentTime" | "queue" | "currentIndex" | "playlistContext">): ParkedVideo | null {
+export function playerSnapshot(player: Pick<PlayerState, "currentVideo" | "currentTime" | "queue" | "currentIndex" | "playlistContext">): ParkedVideo | null {
   if (!player.currentVideo) return null;
   return {
     videoId: player.currentVideo.id,
@@ -41,13 +41,20 @@ export function switchToTab(id: string): void {
   const parked = tabs.parked[id];
   if (parked && tabWatchId(target) === parked.videoId) {
     const owner = tabs.playerTabId;
-    const current = snapshot(usePlayerStore.getState());
+    const current = playerSnapshot(usePlayerStore.getState());
     if (owner && owner !== id && current) tabs.park(owner, current);
     tabs.unpark(id);
     resume(parked);
     tabs.setPlayerTab(id);
   }
   tabs.activateTab(id);
+}
+
+export function closeOtherTabs(keepId: string): void {
+  switchToTab(keepId);
+  for (const tab of useTabsStore.getState().tabs) {
+    if (tab.id !== keepId) closeTabWithPlayback(tab.id);
+  }
 }
 
 export function closeTabWithPlayback(id: string): void {
@@ -97,7 +104,7 @@ export function installTabPlaybackSync(): () => void {
     }
     if (owner === tabs.activeId) return;
 
-    const parked = snapshot(previous);
+    const parked = playerSnapshot(previous);
     queueMicrotask(() => {
       const now = useTabsStore.getState();
       if (now.playerTabId !== owner) return;

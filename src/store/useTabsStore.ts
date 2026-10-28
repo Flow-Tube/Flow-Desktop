@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { NavigationType, type To } from "react-router-dom";
 import {
   createEntry,
+  createEntryKey,
   goInTab,
   pushEntry,
   replaceEntry,
@@ -20,6 +21,12 @@ export interface ParkedVideo {
   playlistContext: PlaylistContext | null;
 }
 
+/** A tab's title, tied to the page it was read from so a stale one is never shown. */
+export interface TabTitle {
+  key: string;
+  text: string;
+}
+
 interface TabsState {
   tabs: TabHistory[];
   activeId: string;
@@ -30,17 +37,22 @@ interface TabsState {
   /** The tab whose video is in the window's player. */
   playerTabId: string | null;
   parked: Record<string, ParkedVideo>;
+  titles: Record<string, TabTitle>;
   push: (to: To, state?: unknown) => void;
   replace: (to: To, state?: unknown) => void;
   go: (delta: number) => void;
   /** Replaces the current page of any tab, active or not. */
   replaceInTab: (id: string, to: To) => void;
   openTab: (to: To, options?: { activate?: boolean }) => string;
+  /** A copy of the tab's back/forward list, opened in the background after it. */
+  duplicateTab: (id: string) => void;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
   setPlayerTab: (id: string | null) => void;
   park: (id: string, video: ParkedVideo) => void;
   unpark: (id: string) => void;
+  setTabTitle: (id: string, key: string, text: string) => void;
+  restoreTabs: (restored: Pick<TabsState, "tabs" | "activeId" | "parked" | "titles">) => void;
 }
 
 function initialTab(): TabHistory {
@@ -75,6 +87,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   cause: "history",
   playerTabId: null,
   parked: {},
+  titles: {},
 
   push: (to, state) => {
     const current = get();
@@ -121,6 +134,23 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     return tab.id;
   },
 
+  duplicateTab: (id) => {
+    const current = get();
+    const source = current.tabs.find((tab) => tab.id === id);
+    if (!source) return;
+    const copy: TabHistory = {
+      id: createTabId(),
+      entries: source.entries.map((entry) => ({ ...entry, key: createEntryKey() })),
+      index: source.index,
+    };
+    const title = current.titles[id];
+    const copiedKey = copy.entries[copy.index]?.key;
+    set({
+      tabs: insertTabAfter(current.tabs, id, copy),
+      ...(title && copiedKey ? { titles: { ...current.titles, [copy.id]: { key: copiedKey, text: title.text } } } : {}),
+    });
+  },
+
   activateTab: (id) => {
     const current = get();
     if (id === current.activeId || !current.tabs.some((tab) => tab.id === id)) return;
@@ -134,6 +164,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     set({
       tabs: current.tabs.filter((tab) => tab.id !== id),
       parked: withoutKey(current.parked, id),
+      titles: withoutKey(current.titles, id),
       playerTabId: current.playerTabId === id ? null : current.playerTabId,
       ...(current.activeId === id ? { activeId: neighbor.id, action: NavigationType.Pop, cause: "tab" as const } : {}),
     });
@@ -142,4 +173,13 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   setPlayerTab: (id) => set({ playerTabId: id }),
   park: (id, video) => set((current) => ({ parked: { ...current.parked, [id]: video } })),
   unpark: (id) => set((current) => ({ parked: withoutKey(current.parked, id) })),
+
+  setTabTitle: (id, key, text) => {
+    const title = get().titles[id];
+    if (title?.key === key && title.text === text) return;
+    set((current) => ({ titles: { ...current.titles, [id]: { key, text } } }));
+  },
+
+  restoreTabs: (restored) =>
+    set({ ...restored, playerTabId: null, action: NavigationType.Pop, cause: "tab" }),
 }));

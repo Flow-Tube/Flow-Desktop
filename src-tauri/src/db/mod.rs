@@ -50,6 +50,15 @@ pub async fn open_device_database(app_data_dir: PathBuf) -> AppResult<SqlitePool
     open_migrated(app_data_dir, 2).await
 }
 
+/// A newer build's migrations don't stop this one from opening the database. That only works
+/// while migrations stay additive (new tables, nullable or defaulted columns), so an older build
+/// can keep using a database a newer one has migrated.
+fn migrator() -> sqlx::migrate::Migrator {
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(true);
+    migrator
+}
+
 async fn open_migrated(dir: PathBuf, max_connections: u32) -> AppResult<SqlitePool> {
     std::fs::create_dir_all(&dir).map_err(AppError::from)?;
 
@@ -96,10 +105,33 @@ async fn open_migrated(dir: PathBuf, max_connections: u32) -> AppResult<SqlitePo
     .map_err(AppError::from)?;
 
     // Run migrations compile-time verified
-    sqlx::migrate!("./migrations")
+    migrator()
         .run(&pool)
         .await
         .map_err(|error| AppError::Internal(format!("DB migration failed: {error}")))?;
 
     Ok(pool)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_database_from_a_newer_build_still_opens() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        migrator().run(&pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+             VALUES (99999, 'from a newer build', 1, x'00', 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        migrator().run(&pool).await.unwrap();
+    }
 }

@@ -18,6 +18,7 @@ mod linux_startup;
 mod macos_window;
 pub mod models;
 mod music_brain;
+pub mod profiles;
 mod scrobble;
 mod security;
 mod services;
@@ -196,6 +197,16 @@ pub fn run() {
     // GTK/WebKitGTK init (which happens in `.build()` below).
     let context = tauri::generate_context!();
 
+    // The profile must be known before the builder registers anything that opens a store.
+    let (active_profile, profile_warning) =
+        match profiles::app_data_dir(context.config().identifier.as_str()) {
+            Some(dir) => profiles::load_for_process(&dir),
+            None => (
+                profiles::ActiveProfile::fallback_default(),
+                Some("no app data folder for the profile registry".to_string()),
+            ),
+        };
+
     #[cfg(target_os = "linux")]
     let boot_report = linux_startup::begin(
         context.config().identifier.as_str(),
@@ -289,6 +300,23 @@ pub fn run() {
             if let Some(guard) = init_tracing(&app_data_dir) {
                 app.manage(std::sync::Mutex::new(guard));
             }
+
+            tracing::info!(
+                profile = %active_profile.id,
+                default = active_profile.is_default,
+                after_switch = active_profile.after_switch,
+                "profile"
+            );
+            if let Some(warning) = &profile_warning {
+                tracing::warn!("{warning}");
+            }
+            if profiles::app_data_dir(&app.config().identifier).as_ref() != Some(&app_data_dir) {
+                tracing::warn!(
+                    "profile registry folder differs from the app data folder {}",
+                    app_data_dir.display()
+                );
+            }
+            app.manage(active_profile.clone());
 
             // Report which Linux GPU/Wayland workaround tier this launch applied,
             // so it appears in bug reports. `prior_failed_boots > 0` means the

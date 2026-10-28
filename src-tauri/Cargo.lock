@@ -1508,6 +1508,7 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "dirs",
  "discord-rich-presence",
  "flate2",
  "futures-util",

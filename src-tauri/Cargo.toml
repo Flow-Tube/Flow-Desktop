@@ -40,6 +40,7 @@ discord-rich-presence = "1.1"
 sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "7"
 
 # Error Handling & Observability
 thiserror = "2"

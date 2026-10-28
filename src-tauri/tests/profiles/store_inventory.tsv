@@ -97,3 +97,5 @@ dir_site	src/linux_startup.rs	DEVICE	-	startup_state.json
 dir_site	src/services/win_notify.rs	DEVICE	-	toast logo
 setting	feed_actions_state_v1	PROFILE	private	Dismissed videos, blocked channels and keywords
 setting	homeSubsRotationCursor	PROFILE	private	Home subscriptions rotation cursor
+file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
+dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder

@@ -2,23 +2,22 @@
 //! roster key; the server never sees anything but sealed objects.
 
 use std::collections::BTreeMap;
-use std::net::{IpAddr, SocketAddr};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use reqwest::{Client, Method, StatusCode, Url, redirect};
+use reqwest::{Client, Method, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use super::curve::sign;
+use super::http::Transport;
 use super::kdf::tag;
 use super::keys::MemberSecrets;
 use super::mailbox::Mailbox;
 use super::roster::{Entry, parse_entry};
 use super::store::Store;
-use crate::sync::qr::is_local_ip;
 
 /// Refresh a token this long before it expires.
 const TOKEN_MARGIN_MS: u64 = 60_000;
@@ -37,6 +36,8 @@ pub enum StoreError {
     AlreadyClaimed,
     #[error("a linked device declined the request to join")]
     JoinDeclined,
+    #[error("the storage refused the user name or password")]
+    Unauthorized,
     #[error("this device's copy of the group could not be read")]
     Local(#[source] sqlx::Error),
     #[error("the server sent an invalid response")]
@@ -82,37 +83,6 @@ fn now_ms() -> u64 {
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
-/// HTTPS anywhere; plain HTTP only to a private address or a `.local` name, whose addresses are
-/// all checked and then pinned so DNS can't move the connection afterwards.
-async fn transport_for(url: &Url) -> Result<Option<(String, SocketAddr)>> {
-    match url.scheme() {
-        "https" => return Ok(None),
-        "http" => {}
-        _ => return Err(StoreError::Insecure),
-    }
-    let host = url
-        .host_str()
-        .ok_or(StoreError::Insecure)?
-        .trim_matches(['[', ']']);
-    if host.parse::<IpAddr>().is_ok_and(is_local_ip) {
-        return Ok(None);
-    }
-    if !host.to_ascii_lowercase().ends_with(".local") {
-        return Err(StoreError::Insecure);
-    }
-    let port = url.port_or_known_default().unwrap_or(80);
-    let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
-        .await
-        .map_err(|_| StoreError::Insecure)?
-        .collect();
-    match addresses.first() {
-        Some(first) if addresses.iter().all(|a| is_local_ip(a.ip())) => {
-            Ok(Some((host.to_owned(), *first)))
-        }
-        _ => Err(StoreError::Insecure),
-    }
-}
-
 impl ServerStore {
     /// Prepares a connection to `url` for `member`. `instance` and `group` are the ids pinned at
     /// pairing; a device restoring from its recovery key doesn't know them yet.
@@ -123,25 +93,12 @@ impl ServerStore {
         group: Option<String>,
     ) -> Result<Self> {
         let base = Url::parse(url).map_err(|_| StoreError::Insecure)?;
-        let pinned = transport_for(&base).await?;
-        let builder = || {
-            let builder = Client::builder()
-                .tls_backend_rustls()
-                .redirect(redirect::Policy::none())
-                .user_agent(concat!("FlowDesktop/", env!("CARGO_PKG_VERSION")))
-                .connect_timeout(Duration::from_secs(10));
-            match &pinned {
-                Some((host, address)) => builder.resolve(host, *address),
-                None => builder,
-            }
-        };
+        let transport = Transport::for_url(&base).await?;
         Ok(Self {
             base,
-            client: builder()
-                .timeout(Duration::from_secs(60))
-                .build()
-                .map_err(StoreError::Network)?,
-            live: builder()
+            client: transport.client()?,
+            live: transport
+                .builder()
                 .http1_only()
                 .build()
                 .map_err(StoreError::Network)?,

@@ -29,6 +29,7 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedWrongWords: "linked_error_wrong_words",
   linkedRecoveryUsed: "linked_error_recovery_used",
   linkedAlreadyLinked: "linked_error_already_linked",
+  linkedLanUnreachable: "linked_error_lan_unreachable",
 };
 
 /** The actionable, translated message for a sync failure, falling back to the backend's text. */

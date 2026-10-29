@@ -1,12 +1,12 @@
-import { useCallback, useState } from "react";
-import { Camera } from "lucide-react";
+import { useState } from "react";
+import { QrCode } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { TextInput } from "../../ui/TextInput";
-import { CameraScanner } from "../CameraScanner";
 import { Card, Field } from "./Card";
+import { CodeEntry } from "./CodeEntry";
 
 function CreateGroup() {
   const { create, busy } = useLinkedDevicesStore();
@@ -28,33 +28,14 @@ function CreateGroup() {
 }
 
 function JoinGroup() {
-  const { join, busy } = useLinkedDevicesStore();
-  const [code, setCode] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const onScanned = useCallback(
-    (text: string) => {
-      setScanning(false);
-      void join(text);
-    },
-    [join],
-  );
+  const { showCode, busy } = useLinkedDevicesStore();
   return (
     <Card title={getString("linked_join_title")} subtitle={getString("linked_join_subtitle")} className="col-span-12 lg:col-span-6">
-      {scanning ? (
-        <CameraScanner onResult={onScanned} onClose={() => setScanning(false)} />
-      ) : (
-        <>
-          <TextInput value={code} onChange={setCode} placeholder={getString("linked_join_placeholder")} spellCheck={false} />
-          <div className="mt-auto flex gap-2">
-            <Button disabled={busy || !code.trim()} onClick={() => void join(code)}>
-              {getString("linked_join")}
-            </Button>
-            <Button variant="tonal" disabled={busy} onClick={() => setScanning(true)}>
-              <Camera className="h-4 w-4" /> {getString("linked_scan")}
-            </Button>
-          </div>
-        </>
-      )}
+      <CodeEntry>
+        <Button variant="tonal" disabled={busy} onClick={() => void showCode()}>
+          <QrCode className="h-4 w-4" /> {getString("linked_show_code")}
+        </Button>
+      </CodeEntry>
     </Card>
   );
 }

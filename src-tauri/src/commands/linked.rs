@@ -87,8 +87,13 @@ pub async fn linked_add_device(app: AppHandle) -> Result<(), ErrorResponse> {
 }
 
 #[tauri::command]
-pub async fn linked_join(app: AppHandle, code: String) -> Result<(), ErrorResponse> {
-    link_task::start_joining(&app, &code)
+pub async fn linked_show_code(app: AppHandle) -> Result<(), ErrorResponse> {
+    link_task::start_showing(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_enter_code(app: AppHandle, code: String) -> Result<(), ErrorResponse> {
+    link_task::start_with_code(&app, &code)
         .await
         .map_err(|e| err(&e))
 }

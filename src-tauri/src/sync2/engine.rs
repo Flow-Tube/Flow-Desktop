@@ -58,6 +58,8 @@ pub enum EngineError {
     RecoveryUsed,
     #[error("this device is already in a sync group")]
     AlreadyLinked,
+    #[error("the other device couldn't be reached on this network")]
+    LanUnreachable,
 }
 
 impl EngineError {
@@ -78,6 +80,7 @@ impl EngineError {
             Self::WrongWords => "linkedWrongWords",
             Self::RecoveryUsed => "linkedRecoveryUsed",
             Self::AlreadyLinked => "linkedAlreadyLinked",
+            Self::LanUnreachable => "linkedLanUnreachable",
         }
     }
 }

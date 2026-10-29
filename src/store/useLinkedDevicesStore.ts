@@ -5,17 +5,18 @@ import {
   answerCode,
   cancelLink,
   createGroup,
+  enterCode,
   forgetGroup,
   getLinkPhase,
   getLinkedDevices,
   getLinkedStatus,
-  joinGroup,
   markRecoverySaved,
   onLinkPhase,
   onSynced,
   removeDevice,
   renameDevice,
   restoreGroup,
+  showCode,
   syncNow,
   type LinkPhase,
   type LinkedDevice,
@@ -45,7 +46,8 @@ interface LinkedState {
   refresh: () => Promise<void>;
   create: (url: string, adminToken: string) => Promise<void>;
   restore: (url: string, words: string) => Promise<void>;
-  join: (code: string) => Promise<void>;
+  enterCode: (code: string) => Promise<void>;
+  showCode: () => Promise<void>;
   addDevice: () => Promise<void>;
   answer: (accept: boolean) => Promise<void>;
   closeLink: () => Promise<void>;
@@ -126,7 +128,8 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await get().refresh();
       }),
 
-    join: (code) => run(() => joinGroup(code)),
+    enterCode: (code) => run(() => enterCode(code)),
+    showCode: () => run(showCode),
     addDevice: () => run(addDevice),
     answer: (accept) => run(() => answerCode(accept)),
     closeLink: () => run(cancelLink),

@@ -49,7 +49,10 @@ export const removeDevice = (id: string) => invokeBackend<void>("linked_remove",
 export const forgetGroup = () => invokeBackend<void>("linked_forget");
 export const syncNow = () => invokeBackend<string[]>("linked_sync_now");
 export const addDevice = () => invokeBackend<void>("linked_add_device");
-export const joinGroup = (code: string) => invokeBackend<void>("linked_join", { code });
+/** Answers another device's code: a member's code joins its group, a new device's code adds it. */
+export const enterCode = (code: string) => invokeBackend<void>("linked_enter_code", { code });
+/** Shows a code for a member on the same network to scan. */
+export const showCode = () => invokeBackend<void>("linked_show_code");
 export const answerCode = (accept: boolean) => invokeBackend<void>("linked_answer", { accept });
 export const cancelLink = () => invokeBackend<void>("linked_cancel");
 

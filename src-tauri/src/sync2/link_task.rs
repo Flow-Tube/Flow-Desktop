@@ -10,8 +10,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
 use super::actions::{ensure_unlinked, local, open_session};
+use super::codes::{Code, new_offer, read_code};
 use super::engine::{EngineError, Result};
-use super::linking::{add_device, join, new_offer, read_offer};
+use super::linking::{add_device, add_scanned, answer_shown, finish_join, join};
+use super::pipe::listen;
 use super::server::ServerStore;
 use super::service::sync_soon;
 use super::state::load_group;
@@ -23,7 +25,7 @@ pub const EVENT_LINK: &str = "sync2://link";
 pub enum LinkPhase {
     #[default]
     Idle,
-    /// Waiting for the other device; a member shows `code` once its slot is open.
+    /// Waiting for the other device, with the `code` this device shows, if any.
     Waiting {
         code: Option<String>,
     },
@@ -100,6 +102,15 @@ pub fn cancel(app: &AppHandle) {
     set_phase(app, LinkPhase::Idle);
 }
 
+fn show(app: &AppHandle, code: &str) {
+    set_phase(
+        app,
+        LinkPhase::Waiting {
+            code: Some(code.to_owned()),
+        },
+    );
+}
+
 fn start(app: &AppHandle, work: impl Future<Output = Result<()>> + Send + 'static) {
     cancel(app);
     set_phase(app, LinkPhase::Waiting { code: None });
@@ -122,7 +133,8 @@ fn start(app: &AppHandle, work: impl Future<Output = Result<()>> + Send + 'stati
     }
 }
 
-/// This device, already in a group, shows a code for a new device to scan.
+/// This device, already in a group, shows a code for a new device to scan, through the store or
+/// over the LAN.
 pub async fn start_adding(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
     let record = load_group(&local.pool)
@@ -131,13 +143,9 @@ pub async fn start_adding(app: &AppHandle) -> Result<()> {
     let task = app.clone();
     start(app, async move {
         let session = open_session(&local.pool, &record, &local.device).await?;
-        let offer = new_offer(&record.store_url, &local.meta.name);
-        set_phase(
-            &task,
-            LinkPhase::Waiting {
-                code: Some(offer.qr.clone()),
-            },
-        );
+        let listening = listen().await.unwrap_or_default();
+        let offer = new_offer(Some(&record.store_url), &local.meta.name, listening);
+        show(&task, &offer.qr);
         add_device(&session, offer, &local.device, |sas| {
             confirm(task.clone(), sas)
         })
@@ -147,23 +155,69 @@ pub async fn start_adding(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// This device joins the group of the member that shows `code`.
-pub async fn start_joining(app: &AppHandle, code: &str) -> Result<()> {
-    let offer = read_offer(code.trim())?;
+/// This device, in no group yet, shows a code for a member on the same network to scan.
+pub async fn start_showing(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
     ensure_unlinked(&local.pool).await?;
-    let (task, code) = (app.clone(), code.trim().to_owned());
+    let listening = listen().await?.ok_or(EngineError::LanUnreachable)?;
+    let task = app.clone();
     start(app, async move {
-        let store = ServerStore::connect(&offer.s.u, local.device.clone(), None, None).await?;
-        join(
-            &local.pool,
-            &store,
-            &code,
-            &local.device,
-            local.meta,
-            |sas| confirm(task.clone(), sas),
+        let offer = new_offer(None, &local.meta.name, Some(listening));
+        show(&task, &offer.qr);
+        let welcomed = answer_shown(offer, &local.device, local.meta, |sas| {
+            confirm(task.clone(), sas)
+        })
+        .await?;
+        let welcome = &welcomed.welcome;
+        let store = ServerStore::connect(
+            &welcome.store.u,
+            local.device.clone(),
+            Some(welcome.store.i.clone()),
+            Some(welcome.group.clone()),
         )
-        .await
+        .await?;
+        finish_join(&local.pool, &store, welcomed).await
     });
+    Ok(())
+}
+
+/// Answers a code from another device: a member's code joins its group, and a new device's code
+/// adds that device to this one's group.
+pub async fn start_with_code(app: &AppHandle, text: &str) -> Result<()> {
+    let code = read_code(text)?;
+    let local = local(app).await?;
+    let task = app.clone();
+    match &code {
+        Code::Member { store_url, .. } => {
+            ensure_unlinked(&local.pool).await?;
+            let store_url = store_url.clone();
+            start(app, async move {
+                let store =
+                    ServerStore::connect(&store_url, local.device.clone(), None, None).await?;
+                join(
+                    &local.pool,
+                    &store,
+                    &code,
+                    &local.device,
+                    local.meta,
+                    |sas| confirm(task.clone(), sas),
+                )
+                .await
+            });
+        }
+        Code::New { .. } => {
+            let record = load_group(&local.pool)
+                .await?
+                .ok_or(EngineError::NotLinked)?;
+            start(app, async move {
+                let session = open_session(&local.pool, &record, &local.device).await?;
+                add_scanned(&session, &code, &local.device, |sas| {
+                    confirm(task.clone(), sas)
+                })
+                .await?;
+                Ok(())
+            });
+        }
+    }
     Ok(())
 }

@@ -7,6 +7,7 @@ import { syncErrorMessage } from "../../../lib/syncErrors";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { Spinner, VerificationCode } from "../SyncParts";
+import { CodeEntry } from "./CodeEntry";
 
 function Waiting({ label }: { label: string }) {
   return (
@@ -38,11 +39,21 @@ export function LinkPanel({ link, joining }: { link: LinkPhase; joining: boolean
       {link.phase === "waiting" &&
         (link.code ? (
           <>
-            <h3 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{getString("linked_add_title")}</h3>
-            <p className="max-w-sm text-sm text-chrome-neutral-400">{getString("linked_add_subtitle")}</p>
+            <h3 className="text-xl font-bold tracking-tight text-chrome-neutral-100">
+              {getString(joining ? "linked_show_title" : "linked_add_title")}
+            </h3>
+            <p className="max-w-sm text-sm text-chrome-neutral-400">
+              {getString(joining ? "linked_show_subtitle" : "linked_add_subtitle")}
+            </p>
             <div className="rounded-3xl bg-chrome-white p-6">
               <QRCodeSVG value={link.code} size={232} level="M" marginSize={1} />
             </div>
+            {!joining && (
+              <div className="flex w-full max-w-sm flex-col gap-3 text-left">
+                <p className="text-sm text-chrome-neutral-400">{getString("linked_scan_theirs")}</p>
+                <CodeEntry />
+              </div>
+            )}
           </>
         ) : (
           <Waiting label={getString(joining ? "linked_waiting_join" : "linked_preparing")} />

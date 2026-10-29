@@ -11,7 +11,8 @@ use super::entries::{Draft, build_entry, epoch_draft, member_subject};
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
 use super::meta::seal_device_meta;
-use super::recovery::{recovery_keys, recovery_words};
+use super::recovery::{recovery_keys, recovery_secret, recovery_words};
+use super::recovery_flow::restore;
 use super::roster::{Op, Role, replay_roster};
 use super::sealed::random_bytes;
 use super::server::ServerStore;
@@ -77,15 +78,48 @@ pub async fn create_group(
     }
     add_roster_entries(pool, &roster).await?;
     let (instance, _) = store.identity().await;
-    let record = GroupRecord {
-        group_id: hex::encode(group),
-        store_url: store_url.to_owned(),
+    let record = GroupRecord::new(
+        hex::encode(group),
+        store_url.to_owned(),
         instance,
-        link: link.to_owned(),
-        own_seq: 0,
-        own_prev: hex::encode([0; 32]),
-        cursor: 0,
-    };
+        link.to_owned(),
+    );
     save_group(pool, &record).await?;
     Ok(recovery_words(&recovery_secret))
+}
+
+/// Restores the group onto this device from the recovery words, replaces the recovery key, and
+/// returns the new words to show once.
+pub async fn restore_group(
+    pool: &SqlitePool,
+    store_url: &str,
+    words: &str,
+    device: &MemberSecrets,
+    meta: &DeviceMeta,
+    link: &str,
+) -> Result<String> {
+    let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
+    let as_recovery = ServerStore::connect(store_url, recovery_keys(&secret), None, None).await?;
+    let as_device = ServerStore::connect(store_url, device.clone(), None, None).await?;
+    let restored = restore(
+        &as_recovery,
+        &as_device,
+        &recovery_keys(&secret),
+        device,
+        meta,
+    )
+    .await?;
+    let (instance, group) = as_device.identity().await;
+    if (instance.clone(), group.clone()) != as_recovery.identity().await {
+        return Err(EngineError::Unexpected);
+    }
+    let group = group.ok_or(EngineError::Unexpected)?;
+    replay_roster(&restored.entries)?;
+    add_roster_entries(pool, &restored.entries).await?;
+    save_group(
+        pool,
+        &GroupRecord::new(group, store_url.to_owned(), instance, link.to_owned()),
+    )
+    .await?;
+    Ok(restored.words)
 }

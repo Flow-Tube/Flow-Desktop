@@ -24,6 +24,7 @@ pub mod pairing;
 pub mod paths;
 pub mod payload;
 pub mod recovery;
+pub mod recovery_flow;
 pub mod roster;
 pub mod sealed;
 pub mod server;

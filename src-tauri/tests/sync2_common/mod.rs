@@ -243,15 +243,7 @@ pub async fn device_pool(group: &Group) -> SqlitePool {
         .await
         .unwrap();
     sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-    let record = GroupRecord {
-        group_id: hex::encode(group.group),
-        store_url: "memory".into(),
-        instance: None,
-        link: LINK.into(),
-        own_seq: 0,
-        own_prev: hex::encode([0; 32]),
-        cursor: 0,
-    };
+    let record = GroupRecord::new(hex::encode(group.group), "memory".into(), None, LINK.into());
     save_group(&pool, &record).await.unwrap();
     let genesis = group.store.0.lock().unwrap().roster[0].clone();
     add_roster_entries(&pool, &[genesis]).await.unwrap();

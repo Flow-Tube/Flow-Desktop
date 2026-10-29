@@ -21,6 +21,7 @@ use crate::sync::canonical::to_canonical_json;
 
 /// A fresh epoch key, wrapped to every member after a change, with the previous key chained.
 pub struct NewEpoch {
+    pub key: [u8; 32],
     pub field: EpochField,
     pub wraps: BTreeMap<String, String>,
     pub chain: String,
@@ -43,6 +44,7 @@ pub fn new_epoch(
         );
     }
     Ok(NewEpoch {
+        key,
         field: epoch_draft(&key, group, n, &ids),
         wraps,
         chain: URL_SAFE_NO_PAD.encode(seal_chain(&key, group, n, previous_key)),

@@ -21,6 +21,26 @@ pub struct GroupRecord {
     pub cursor: i64,
 }
 
+impl GroupRecord {
+    /// A group this device has just joined: nothing written or read yet.
+    pub fn new(
+        group_id: String,
+        store_url: String,
+        instance: Option<String>,
+        link: String,
+    ) -> Self {
+        Self {
+            group_id,
+            store_url,
+            instance,
+            link,
+            own_seq: 0,
+            own_prev: hex::encode([0; 32]),
+            cursor: 0,
+        }
+    }
+}
+
 pub async fn load_group(pool: &SqlitePool) -> Result<Option<GroupRecord>, SyncError> {
     Ok(sqlx::query_as("SELECT group_id, store_url, instance, link, own_seq, own_prev, cursor FROM sync2_group WHERE id = 1")
         .fetch_optional(pool)

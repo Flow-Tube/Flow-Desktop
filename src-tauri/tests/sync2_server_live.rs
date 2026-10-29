@@ -111,10 +111,10 @@ async fn desktop_talks_to_a_real_server() {
 
 #[tokio::test]
 #[ignore = "needs a fresh flow-sync server"]
-async fn a_group_is_created_and_a_second_device_pairs_through_the_server() {
+async fn a_group_is_created_paired_with_and_restored_through_the_server() {
     use flow_desktop_lib::sync2::engine::Session;
     use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join, new_offer};
-    use flow_desktop_lib::sync2::setup::create_group;
+    use flow_desktop_lib::sync2::setup::{create_group, restore_group};
     use flow_desktop_lib::sync2::state::load_group;
     use sqlx::sqlite::SqlitePoolOptions;
 
@@ -167,10 +167,47 @@ async fn a_group_is_created_and_a_second_device_pairs_through_the_server() {
     let joined_record = load_group(&pool_b).await.unwrap().unwrap();
     assert_eq!(
         (
-            joined_record.group_id,
-            joined_record.instance,
-            joined_record.link
+            &joined_record.group_id,
+            &joined_record.instance,
+            &joined_record.link
         ),
-        (record.group_id, record.instance, record.link)
+        (&record.group_id, &record.instance, &record.link)
+    );
+
+    let restored = member_secrets(random_bytes(), random_bytes());
+    let pool_c = pool().await;
+    let next_words = restore_group(&pool_c, &url, &words, &restored, &meta("C"), "default-link")
+        .await
+        .unwrap();
+    assert_ne!(next_words, words);
+    let restored_record = load_group(&pool_c).await.unwrap().unwrap();
+    assert_eq!(restored_record.group_id, joined_record.group_id);
+    let store_c = ServerStore::connect(
+        &url,
+        restored.clone(),
+        restored_record.instance.clone(),
+        Some(restored_record.group_id.clone()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        Session::open(&pool_c, store_c, &restored)
+            .await
+            .unwrap()
+            .roster()
+            .epoch,
+        2
+    );
+    assert!(
+        restore_group(
+            &pool().await,
+            &url,
+            &words,
+            &member_secrets(random_bytes(), random_bytes()),
+            &meta("D"),
+            "default-link",
+        )
+        .await
+        .is_err()
     );
 }

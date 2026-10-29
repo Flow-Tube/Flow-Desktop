@@ -45,6 +45,10 @@ pub enum EngineError {
     TimedOut,
     #[error("the other device sent something unexpected")]
     Unexpected,
+    #[error("these recovery words are not valid")]
+    WrongWords,
+    #[error("this recovery key was already used or replaced")]
+    RecoveryUsed,
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

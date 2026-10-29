@@ -400,15 +400,7 @@ where
         return Err(Error::RosterChain.into());
     }
     add_roster_entries(pool, &roster).await?;
-    let record = GroupRecord {
-        group_id: group,
-        store_url: location.u,
-        instance: Some(location.i),
-        link,
-        own_seq: 0,
-        own_prev: hex::encode([0; 32]),
-        cursor: 0,
-    };
+    let record = GroupRecord::new(group, location.u, Some(location.i), link);
     save_group(pool, &record).await?;
     channel.send(&Message::Done, &[]).await
 }

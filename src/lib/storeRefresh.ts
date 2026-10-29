@@ -2,6 +2,7 @@ import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../store/useLikesSto
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
+import { HISTORY_UPDATED_EVENT, useHistoryStore } from "../store/useHistoryStore";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useNotificationStore } from "../store/useNotificationStore";
 import { useFeedActionsStore } from "../store/useFeedActionsStore";
@@ -27,6 +28,14 @@ async function reloadPlaylists(): Promise<void> {
   window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
 }
 
+/** Fired after a sync merged either recommendation brain, which the backend already reloaded. */
+export const BRAINS_UPDATED_EVENT = "flow:brains-updated";
+
+async function reloadHistory(): Promise<void> {
+  if (useHistoryStore.getState().loaded) await useHistoryStore.getState().load(true);
+  window.dispatchEvent(new Event(HISTORY_UPDATED_EVENT));
+}
+
 async function reloadSettings(): Promise<void> {
   await Promise.all([useAppSettingsStore.getState().loadSettings(), useSettingsStore.getState().loadSettings()]);
 }
@@ -34,6 +43,10 @@ async function reloadSettings(): Promise<void> {
 /** Collections named by a sync merge (`sync://refresh`). */
 export async function refreshSyncedCollections(collections: string[]): Promise<void> {
   try {
+    if (collections.includes("watch_history")) await reloadHistory();
+    if (collections.includes("flow_neuro_brain") || collections.includes("music_brain")) {
+      window.dispatchEvent(new Event(BRAINS_UPDATED_EVENT));
+    }
     if (collections.includes("likes")) await reloadLikes();
     if (collections.includes("settings")) await reloadSettings();
     if (collections.includes("playlists")) await reloadPlaylists();

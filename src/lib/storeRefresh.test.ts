@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./streamResolution", () => ({ prefetchStreamInfo: vi.fn() }));
 
-const { refreshForSettingKeys, refreshSyncedCollections } = await import("./storeRefresh");
+const { BRAINS_UPDATED_EVENT, refreshForSettingKeys, refreshSyncedCollections } = await import("./storeRefresh");
+const { HISTORY_UPDATED_EVENT, useHistoryStore } = await import("../store/useHistoryStore");
 const { useLikesStore } = await import("../store/useLikesStore");
 const { useAppSettingsStore } = await import("../store/useAppSettingsStore");
 const { useSettingsStore } = await import("../store/useSettingsStore");
@@ -51,5 +52,26 @@ describe("refreshSyncedCollections", () => {
     await refreshSyncedCollections(["settings"]);
     expect(appSettings).toHaveBeenCalledTimes(1);
     expect(playerSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads loaded history and tells the history readers and brain views", async () => {
+    const history = vi.fn(async () => {});
+    useHistoryStore.setState({ load: history, loaded: true });
+    const historyEvent = vi.fn();
+    const brainsEvent = vi.fn();
+    window.addEventListener(HISTORY_UPDATED_EVENT, historyEvent);
+    window.addEventListener(BRAINS_UPDATED_EVENT, brainsEvent);
+
+    await refreshSyncedCollections(["watch_history", "flow_neuro_brain", "music_brain"]);
+    expect(history).toHaveBeenCalledWith(true);
+    expect(historyEvent).toHaveBeenCalledTimes(1);
+    expect(brainsEvent).toHaveBeenCalledTimes(1);
+
+    useHistoryStore.setState({ loaded: false });
+    await refreshSyncedCollections(["watch_history"]);
+    expect(history).toHaveBeenCalledTimes(1);
+    expect(historyEvent).toHaveBeenCalledTimes(2);
+    window.removeEventListener(HISTORY_UPDATED_EVENT, historyEvent);
+    window.removeEventListener(BRAINS_UPDATED_EVENT, brainsEvent);
   });
 });

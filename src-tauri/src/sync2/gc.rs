@@ -164,21 +164,20 @@ impl Facts<'_> {
     }
 
     /// Snapshots of `link` that every current device has acked.
-    fn acknowledged<'s>(&'s self, link: &'s Option<String>) -> impl Iterator<Item = &'s Logged> {
+    fn acknowledged<'s>(&'s self, link: Option<&'s str>) -> impl Iterator<Item = &'s Logged> {
         self.manifests
             .iter()
-            .filter(move |m| m.manifest.link == *link && self.acked(&m.did) >= m.seq)
+            .filter(move |m| m.manifest.link.as_deref() == link && self.acked(&m.did) >= m.seq)
     }
 
     fn superseded(&self, old: &Logged) -> bool {
-        self.acknowledged(&old.manifest.link).any(|newer| {
-            (newer.did != old.did || newer.seq != old.seq)
-                && old
-                    .manifest
-                    .vv
-                    .iter()
-                    .all(|(did, tip)| newer.manifest.vv.get(did).is_some_and(|n| n.seq >= tip.seq))
-        })
+        self.acknowledged(old.manifest.link.as_deref())
+            .any(|newer| {
+                (newer.did != old.did || newer.seq != old.seq)
+                    && old.manifest.vv.iter().all(|(did, tip)| {
+                        newer.manifest.vv.get(did).is_some_and(|n| n.seq >= tip.seq)
+                    })
+            })
     }
 
     /// The highest `seq` of `did`'s log that an acknowledged snapshot of every link includes.
@@ -186,7 +185,7 @@ impl Facts<'_> {
         self.links
             .iter()
             .map(|link| {
-                self.acknowledged(link)
+                self.acknowledged(link.as_deref())
                     .filter_map(|m| m.manifest.vv.get(did).map(|tip| tip.seq))
                     .max()
                     .unwrap_or(0)

@@ -27,8 +27,6 @@ use crate::sync::session::EVENT_REFRESH;
 pub const EVENT_SYNCED: &str = "sync2://synced";
 /// A run started; [`EVENT_SYNCED`] says when it ended.
 pub const EVENT_SYNCING: &str = "sync2://syncing";
-/// What a run applied, by the device that sent it.
-pub const EVENT_RECEIVED: &str = "sync2://received";
 /// Devices asking to join, seen during a sync, so the app can tell the user on any page.
 pub const EVENT_JOIN_REQUESTS: &str = "sync2://join-requests";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
@@ -71,8 +69,9 @@ pub fn last_sync(app: &AppHandle) -> Option<LastSync> {
         .and_then(|last| last.clone())
 }
 
-/// Syncs once when this device is in a group, and returns the collections that changed here.
-pub async fn sync_now(app: &AppHandle) -> Result<Vec<String>> {
+/// Syncs once when this device is in a group, and returns what it applied from each device. Only
+/// a sync the user asked for shows that; background runs show just the indicator.
+pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
     let state = app.state::<BackgroundSync>();
     let _running = state.running.lock().await;
     let pool = app.state::<SqlitePool>().inner().clone();
@@ -92,7 +91,7 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<String>> {
     result
 }
 
-async fn run(app: &AppHandle) -> Result<Vec<String>> {
+async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     let local = local(app).await?;
     let Some(record) = load_group(&local.pool).await? else {
         return Ok(Vec::new());
@@ -118,20 +117,21 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
         let _ = app.emit(EVENT_REFRESH, &changed);
     }
     session.finish(pool, pulled).await?;
-    if !received.is_empty() {
-        let names = device_names(&mut session).await.unwrap_or_default();
-        let received: Vec<Received> = received
-            .into_iter()
-            .map(|(sender, count)| Received {
-                name: names
-                    .get(&sender)
-                    .map(|m| m.name.clone())
-                    .unwrap_or_default(),
-                count,
-            })
-            .collect();
-        let _ = app.emit(EVENT_RECEIVED, received);
-    }
+    let names = if received.is_empty() {
+        BTreeMap::new()
+    } else {
+        device_names(&mut session).await.unwrap_or_default()
+    };
+    let received: Vec<Received> = received
+        .into_iter()
+        .map(|(sender, count)| Received {
+            name: names
+                .get(&sender)
+                .map(|m| m.name.clone())
+                .unwrap_or_default(),
+            count,
+        })
+        .collect();
     if snapshot_due(pool, &session.record().link).await? {
         let exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
         session.write_snapshot(pool, exported).await?;
@@ -144,7 +144,7 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
     {
         let _ = app.emit(EVENT_JOIN_REQUESTS, requests);
     }
-    Ok(changed)
+    Ok(received)
 }
 
 /// Applies each sender's batches, and returns the collections they touched and how many records

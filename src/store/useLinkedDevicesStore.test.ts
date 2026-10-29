@@ -86,4 +86,21 @@ describe("useLinkedDevicesStore", () => {
     await useLinkedDevicesStore.getState().loadJoinRequests();
     expect(useLinkedDevicesStore.getState().error).toBeNull();
   });
+
+  it("tells what a sync the user asked for brought in, and nothing for an empty one", async () => {
+    const { useUiStore } = await import("./useUiStore");
+    const showToast = vi.fn();
+    useUiStore.setState({ showToast });
+    api.getLinkedStatus.mockResolvedValue(LINKED);
+    api.getLinkedDevices.mockResolvedValue([]);
+
+    api.syncNow.mockResolvedValue([{ name: "Pixel", count: 3 }]);
+    await useLinkedDevicesStore.getState().syncNow();
+    expect(showToast).toHaveBeenCalledWith({ message: "Received 3 changes from Pixel" });
+
+    showToast.mockClear();
+    api.syncNow.mockResolvedValue([]);
+    await useLinkedDevicesStore.getState().syncNow();
+    expect(showToast).not.toHaveBeenCalled();
+  });
 });

@@ -170,3 +170,27 @@ async fn a_brain_whose_only_change_is_its_export_time_is_not_sent_again() {
     let later = outgoing(&pool, Collection::MusicBrain, hours(7)).await;
     assert!(later.batches.is_empty());
 }
+
+#[tokio::test]
+async fn a_record_received_in_another_app_s_form_is_not_sent_back() {
+    let android_line = serde_json::json!({
+        "videoId": "aw1", "title": "From phone", "channelName": "", "channelId": "",
+        "thumbnailUrl": "https://img/aw1.jpg", "watchedAtMs": 1_735_689_600_000_u64, "progress": 0.5,
+        "durationSeconds": 120, "isMusic": false, "isShort": false,
+        "hlc": "1735689600000:0:a1b2c3d4", "deleted": false
+    });
+    let header = serde_json::json!({ "collection": "watch_history", "head": HEAD, "link": LINK });
+    let content = format!("{header}\n{android_line}");
+    let incoming = [parse_batch(content.as_bytes()).unwrap()];
+
+    let receiver = memory_pool().await;
+    apply_batches(&receiver, "device-a", "phone-did", &incoming, 0)
+        .await
+        .unwrap();
+    assert_eq!(watched_ids(&receiver).await, ["aw1"]);
+    let echo = outgoing(&receiver, Collection::WatchHistory, 0).await;
+    assert!(
+        echo.batches.is_empty(),
+        "the phone's own record must not go back to it"
+    );
+}

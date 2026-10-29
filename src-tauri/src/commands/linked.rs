@@ -8,7 +8,7 @@ use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
 use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
-use crate::sync2::service;
+use crate::sync2::service::{self, Received};
 
 pub(crate) fn err(e: &EngineError) -> ErrorResponse {
     ErrorResponse {
@@ -73,7 +73,7 @@ pub async fn linked_forget(app: AppHandle) -> Result<(), ErrorResponse> {
 }
 
 #[tauri::command]
-pub async fn linked_sync_now(app: AppHandle) -> Result<Vec<String>, ErrorResponse> {
+pub async fn linked_sync_now(app: AppHandle) -> Result<Vec<Received>, ErrorResponse> {
     service::sync_now(&app).await.map_err(|e| err(&e))
 }
 

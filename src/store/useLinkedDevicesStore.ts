@@ -30,7 +30,9 @@ import {
 } from "../lib/api/linked";
 import { normalizeBackendError } from "../lib/api/errors";
 import { isTauriEnv } from "../lib/api/env";
+import { receivedMessage } from "../lib/linked/receivedMessage";
 import { syncErrorMessage } from "../lib/syncErrors";
+import { useUiStore } from "./useUiStore";
 
 function describe(error: unknown): string {
   const { kind, message } = normalizeBackendError(error);
@@ -201,7 +203,9 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
 
     syncNow: () =>
       run(async () => {
-        await syncNow();
+        const received = await syncNow();
+        const toast = useUiStore.getState().showToast;
+        received.forEach((from) => toast({ message: receivedMessage(from) }));
         await get().refresh();
       }),
   };

@@ -2,7 +2,7 @@
 //! since this device last uploaded them, in the FLOW-SYNC/1 canonical form, so the existing
 //! export and the existing transactional apply do the real work.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,6 +12,7 @@ use crate::sync::apply::{ApplyReport, apply_stream_payload};
 use crate::sync::canonical::{Collection, to_canonical_json};
 use crate::sync::codec::sha256_hex;
 use crate::sync::error::SyncError;
+use crate::sync::export::export_collections;
 use crate::sync::frames::collection_from_key;
 use crate::sync::protocol::{OutgoingCollection, StagedCollection};
 
@@ -221,7 +222,7 @@ pub async fn apply_batches(
     now_ms: i64,
 ) -> Result<ApplyReport, SyncError> {
     let mut staged = Vec::new();
-    let mut known = Vec::new();
+    let mut received = BTreeSet::new();
     for batch in batches {
         let Some(collection) = batch.collection else {
             continue;
@@ -234,7 +235,7 @@ pub async fn apply_batches(
         for line in &lines {
             let record: Value = serde_json::from_slice(line)?;
             if let Some(key) = record_key(collection, &record) {
-                known.push((collection, key, record_hash(collection, &record, line)));
+                received.insert((collection.key(), key));
             }
         }
         let ndjson = lines.join(&b'\n');
@@ -246,6 +247,31 @@ pub async fn apply_batches(
         });
     }
     let report = apply_stream_payload(pool, our_device_id, sender, &staged).await?;
+    // Another app writes the same record in its own canonical form, so what counts as sent is this
+    // device's export of each received record, or the next push would send it straight back.
+    let mut collections: Vec<Collection> = Vec::new();
+    for collection in staged.iter().map(|s| s.collection) {
+        if !collections.contains(&collection) {
+            collections.push(collection);
+        }
+    }
+    let exported = export_collections(pool, our_device_id, &collections).await?;
+    let mut known = Vec::new();
+    for exported in exported {
+        let collection = exported.collection;
+        for line in exported
+            .ndjson
+            .split(|&b| b == b'\n')
+            .filter(|l| !l.is_empty())
+        {
+            let record: Value = serde_json::from_slice(line)?;
+            if let Some(key) = record_key(collection, &record)
+                && received.contains(&(collection.key(), key.clone()))
+            {
+                known.push((collection, key, record_hash(collection, &record, line)));
+            }
+        }
+    }
     remember(pool, &known, now_ms).await?;
     Ok(report)
 }

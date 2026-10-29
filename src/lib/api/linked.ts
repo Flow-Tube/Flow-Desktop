@@ -72,7 +72,8 @@ export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_save
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
 export const removeDevice = (id: string) => invokeBackend<void>("linked_remove", { id });
 export const forgetGroup = () => invokeBackend<void>("linked_forget");
-export const syncNow = () => invokeBackend<string[]>("linked_sync_now");
+/** Resolves to what the run applied, by device. */
+export const syncNow = () => invokeBackend<Received[]>("linked_sync_now");
 export const addDevice = () => invokeBackend<void>("linked_add_device");
 /** Answers another device's code: a member's code joins its group, a new device's code adds it. */
 export const enterCode = (code: string) => invokeBackend<void>("linked_enter_code", { code });
@@ -97,10 +98,6 @@ export function onJoinRequests(cb: (requests: JoinRequest[]) => void): Promise<U
 
 export function onSyncing(cb: () => void): Promise<UnlistenFn> {
   return listen("sync2://syncing", () => cb());
-}
-
-export function onReceived(cb: (received: Received[]) => void): Promise<UnlistenFn> {
-  return listen<Received[]>("sync2://received", (event) => cb(event.payload));
 }
 
 export function onSynced(cb: (last: LastSync) => void): Promise<UnlistenFn> {

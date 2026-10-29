@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { receivedMessage } from "./useLinkedSyncEvents";
+import { receivedMessage } from "./receivedMessage";
 
 describe("receivedMessage", () => {
   it("names the device and counts the changes", () => {

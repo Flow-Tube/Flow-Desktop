@@ -6,6 +6,8 @@ mod sync2_common;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use flow_desktop_lib::sync::canonical::Collection;
+use flow_desktop_lib::sync::export::export_collections;
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
 use flow_desktop_lib::sync2::entries::{build_entry, epoch_draft, member_subject};
@@ -68,15 +70,40 @@ async fn two_devices_exchange_changes_and_acknowledgements() {
     assert_eq!(watched(&pool_a).await, ["aaaaaaaaaaa", "bbbbbbbbbbb"]);
     assert_eq!(watched(&pool_b).await, ["aaaaaaaaaaa", "bbbbbbbbbbb"]);
 
+    sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap();
     let before = g.store.0.lock().unwrap().objects.len();
-    assert_eq!(sync(&pool_a, &g.store, &g.a, "app-a").await.unwrap(), 0);
-    assert_eq!(sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap(), 0);
+    for _ in 0..3 {
+        assert_eq!(sync(&pool_a, &g.store, &g.a, "app-a").await.unwrap(), 0);
+        assert_eq!(sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap(), 0);
+    }
     let after = g.store.0.lock().unwrap().objects.len();
-    assert_eq!(
-        after - before,
-        1,
-        "only the ack of the other device's ack is new"
-    );
+    assert_eq!(after, before, "acks aren't acknowledged");
+}
+
+/// Pushes only watch history, so each change is one batch, then reads and acknowledges.
+async fn sync_history(pool: &SqlitePool, store: &MemoryStore, device: &MemberSecrets) -> i64 {
+    let mut session = Session::open(pool, store, device).await.unwrap();
+    let history = export_collections(pool, "app", &[Collection::WatchHistory])
+        .await
+        .unwrap();
+    session.push(pool, history).await.unwrap();
+    let pulled = session.pull(pool).await.unwrap();
+    session.finish(pool, pulled).await.unwrap();
+    session.record().own_seq
+}
+
+#[tokio::test]
+async fn idle_devices_stop_after_one_batch_and_one_ack_each() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    watch(&pool_b, "bbbbbbbbbbb").await;
+    for _ in 0..4 {
+        sync_history(&pool_a, &g.store, &g.a).await;
+        sync_history(&pool_b, &g.store, &g.b).await;
+    }
+    assert_eq!(sync_history(&pool_a, &g.store, &g.a).await, 2);
+    assert_eq!(sync_history(&pool_b, &g.store, &g.b).await, 2);
 }
 
 #[tokio::test]

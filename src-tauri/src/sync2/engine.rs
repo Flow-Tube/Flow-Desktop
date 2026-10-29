@@ -97,6 +97,8 @@ pub struct Pulled {
     pub batches: BTreeMap<String, Vec<IncomingBatch>>,
     positions: BTreeMap<String, StreamPosition>,
     cursor: i64,
+    /// Batches and snapshot manifests read. Acks aren't acknowledged, so two idle devices don't
+    /// answer each other's acks forever.
     consumed: usize,
     stalled: bool,
     /// The links named by the batches and snapshot manifests read, in reading order; `None` is
@@ -377,7 +379,9 @@ impl<'a, S: Store> Session<'a, S> {
                         Some((position, content)) => {
                             let seq = position.seq;
                             pulled.positions.insert(did.clone(), position);
-                            pulled.consumed += 1;
+                            if !matches!(content, Content::Ack) {
+                                pulled.consumed += 1;
+                            }
                             match content {
                                 Content::Batch(batch) => {
                                     pulled.links.push(batch.link.clone());

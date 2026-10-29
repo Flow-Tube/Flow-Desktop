@@ -35,11 +35,24 @@ const IDLE: Duration = Duration::from_secs(3);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
 pub enum Request {
-    Roster { after: i64 },
-    Key { epoch: u32, name: String },
-    List { vv: BTreeMap<String, u64> },
-    Get { path: String },
-    Put { path: String },
+    Roster {
+        after: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        head: Option<String>,
+    },
+    Key {
+        epoch: u32,
+        name: String,
+    },
+    List {
+        vv: BTreeMap<String, u64>,
+    },
+    Get {
+        path: String,
+    },
+    Put {
+        path: String,
+    },
     Live,
 }
 
@@ -327,10 +340,10 @@ impl Holder {
             ..Response::default()
         };
         Ok(match request {
-            Request::Roster { after } => (
+            Request::Roster { after, head } => (
                 Response {
                     ok: true,
-                    entries: Some(self.store.candidates_after(after).await?),
+                    entries: Some(self.store.roster_for(after, head.as_deref()).await?),
                     ..Response::default()
                 },
                 Vec::new(),
@@ -474,8 +487,8 @@ impl Link {
         Ok(response.ok.then_some(bytes))
     }
 
-    pub async fn roster(&self, after: i64) -> Result<Vec<Entry>> {
-        let (response, _) = self.ask(Request::Roster { after }).await?;
+    pub async fn roster(&self, after: i64, head: Option<String>) -> Result<Vec<Entry>> {
+        let (response, _) = self.ask(Request::Roster { after, head }).await?;
         response.entries.ok_or(EngineError::Unexpected)
     }
 
@@ -509,10 +522,27 @@ mod tests {
 
     #[test]
     fn headers_are_canonical_json_lines() {
-        let roster = request_header(&Request::Roster { after: -1 }, 0);
+        let roster = request_header(
+            &Request::Roster {
+                after: -1,
+                head: None,
+            },
+            0,
+        );
         assert_eq!(
             frame_content(&roster, &[]),
             br#"{"after":-1,"id":0,"op":"roster"}"#
+        );
+        let after_head = request_header(
+            &Request::Roster {
+                after: 1,
+                head: Some("ab".into()),
+            },
+            1,
+        );
+        assert_eq!(
+            frame_content(&after_head, &[]),
+            br#"{"after":1,"head":"ab","id":1,"op":"roster"}"#
         );
         let get = request_header(
             &Request::Get {

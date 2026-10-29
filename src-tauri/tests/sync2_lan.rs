@@ -121,7 +121,6 @@ fn named(name: &str) -> DeviceMeta {
 }
 
 #[tokio::test]
-#[ignore = "spec/live.md asks `roster` after the highest seq held, so a competing entry at that seq never arrives"]
 async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
     let g = group().await;
     let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);

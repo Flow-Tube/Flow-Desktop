@@ -1,10 +1,11 @@
 import { useState } from "react";
 
+import type { WebdavLogin } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { Card } from "./Card";
-import { type WebdavLogin, WebdavLoginFields } from "./WebdavLoginFields";
+import { WebdavLoginFields } from "./WebdavLoginFields";
 
 /** Shown once the WebDAV folder refused its login: nothing syncs until a new one works. */
 export function LoginRefused() {

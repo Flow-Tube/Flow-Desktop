@@ -1,11 +1,7 @@
+import type { WebdavLogin } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
 import { TextInput } from "../../ui/TextInput";
 import { Field } from "./Card";
-
-export interface WebdavLogin {
-  user: string;
-  password: string;
-}
 
 /** The user name and password of a WebDAV folder. */
 export function WebdavLoginFields({ login, onChange }: { login: WebdavLogin; onChange: (login: WebdavLogin) => void }) {

@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Wifi } from "lucide-react";
 
+import type { WebdavLogin } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { SegmentedControl } from "../../ui/SegmentedControl";
 import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
-import { type WebdavLogin, WebdavLoginFields } from "./WebdavLoginFields";
+import { WebdavLoginFields } from "./WebdavLoginFields";
 
 type Place = "server" | "webdav" | "lan";
 

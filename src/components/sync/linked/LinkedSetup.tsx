@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { FolderKey, KeyRound, QrCode } from "lucide-react";
 
+import type { WebdavLogin } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
+import { SegmentedControl } from "../../ui/SegmentedControl";
 import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
 import { CreateGroup } from "./CreateGroup";
-import { type WebdavLogin, WebdavLoginFields } from "./WebdavLoginFields";
+import { WebdavLoginFields } from "./WebdavLoginFields";
 
 /** Joins a server group with its address and admin token instead of a code. */
 function AskToJoin() {
@@ -73,15 +75,34 @@ function JoinGroup() {
 
 function RestoreGroup() {
   const { restore, busy } = useLinkedDevicesStore();
+  const [place, setPlace] = useState<"server" | "webdav">("server");
   const [url, setUrl] = useState("");
   const [words, setWords] = useState("");
+  const [login, setLogin] = useState<WebdavLogin>({ user: "", password: "" });
+  const onWebdav = place === "webdav";
+  const ready = url.trim() && words.trim() && (!onWebdav || (login.user.trim() && login.password));
   return (
     <Card title={getString("linked_restore_title")} subtitle={getString("linked_restore_subtitle")} className="col-span-12">
+      <SegmentedControl<"server" | "webdav">
+        label={getString("linked_store_choice")}
+        value={place}
+        onChange={setPlace}
+        options={[
+          { value: "server", label: getString("linked_store_server") },
+          { value: "webdav", label: getString("linked_store_webdav") },
+        ]}
+      />
       <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 lg:col-span-4">
-          <Field label={getString("linked_server_url")}>
-            <TextInput value={url} onChange={setUrl} placeholder={getString("linked_server_url_placeholder")} spellCheck={false} />
+        <div className="col-span-12 flex flex-col gap-4 lg:col-span-4">
+          <Field label={getString(onWebdav ? "linked_webdav_url" : "linked_server_url")}>
+            <TextInput
+              value={url}
+              onChange={setUrl}
+              placeholder={getString(onWebdav ? "linked_webdav_url_placeholder" : "linked_server_url_placeholder")}
+              spellCheck={false}
+            />
           </Field>
+          {onWebdav && <WebdavLoginFields login={login} onChange={setLogin} />}
         </div>
         <div className="col-span-12 lg:col-span-8">
           <Field label={getString("linked_restore_words")}>
@@ -89,7 +110,12 @@ function RestoreGroup() {
           </Field>
         </div>
       </div>
-      <Button variant="tonal" className="self-start" disabled={busy || !url.trim() || !words.trim()} onClick={() => void restore(url, words)}>
+      <Button
+        variant="tonal"
+        className="self-start"
+        disabled={busy || !ready}
+        onClick={() => void restore(url, words, onWebdav ? login : undefined)}
+      >
         {getString("linked_restore")}
       </Button>
     </Card>

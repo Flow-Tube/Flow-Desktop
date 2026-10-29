@@ -204,10 +204,16 @@ impl Facts<'_> {
                 plan.logs.insert(did.clone(), (from, through));
             }
         }
+        // A manifest is an object of its writer's log too: readers wait at a gap, so it stays until
+        // every other current device has read past it (flow-sync#43).
         plan.manifests = self
             .manifests
             .iter()
-            .filter(|m| self.collectable.contains(&m.did) && self.superseded(m))
+            .filter(|m| {
+                self.collectable.contains(&m.did)
+                    && self.superseded(m)
+                    && self.acked(&m.did) >= m.seq
+            })
             .map(|m| (m.did.clone(), m.seq))
             .collect();
         plan
@@ -432,6 +438,24 @@ mod tests {
         assert_eq!(
             plan_for(&links, &["a", "b"], &["a"], &acks, &both).logs,
             BTreeMap::from([("a".to_owned(), (1, 5))])
+        );
+    }
+
+    #[test]
+    fn a_superseded_snapshot_stays_until_every_device_read_past_it() {
+        let own = snapshot("a", 573, &[("a", 572), ("b", 540)]);
+        let newer = snapshot("b", 544, &[("a", 572), ("b", 543)]);
+        let manifests = [own, newer];
+        let read_to_572 = [("a", vv(&[("b", 544)])), ("b", vv(&[("a", 572)]))];
+        assert!(
+            plan(&["a", "b"], &["a"], &read_to_572, &manifests)
+                .manifests
+                .is_empty()
+        );
+        let read_past = [("a", vv(&[("b", 544)])), ("b", vv(&[("a", 573)]))];
+        assert_eq!(
+            plan(&["a", "b"], &["a"], &read_past, &manifests).manifests,
+            [("a".to_owned(), 573)]
         );
     }
 }

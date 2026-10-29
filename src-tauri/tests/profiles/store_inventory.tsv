@@ -18,6 +18,9 @@ table	sync2_acks	DEFAULT_ONLY	sync	Only Default syncs; each device's latest FLOW
 table	sync2_manifests	DEFAULT_ONLY	sync	Only Default syncs; snapshot manifests seen, for garbage collection
 table	sync2_links	DEFAULT_ONLY	sync	Only Default syncs; links that batches name, for garbage collection
 table	sync2_collected	DEFAULT_ONLY	sync	Only Default syncs; how far each log was deleted
+table	sync2_held_roster	DEFAULT_ONLY	sync	Only Default syncs; roster entries a LAN group keeps on its devices
+table	sync2_held_keys	DEFAULT_ONLY	sync	Only Default syncs; wraps and chain boxes a LAN group keeps
+table	sync2_held_objects	DEFAULT_ONLY	sync	Only Default syncs; log objects and blobs a LAN group keeps
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log

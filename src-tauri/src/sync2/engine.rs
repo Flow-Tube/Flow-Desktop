@@ -71,9 +71,11 @@ impl EngineError {
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
             Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
+            Self::Store(StoreError::Local(_)) | Self::Keychain(_) | Self::Settings(_) => {
+                "linkedLocal"
+            }
             Self::Store(_) | Self::Protocol(_) | Self::Unexpected => "linkedProtocol",
             Self::Local(error) => error.kind(),
-            Self::Keychain(_) | Self::Settings(_) => "linkedLocal",
             Self::NotLinked => "linkedNotLinked",
             Self::Removed => "linkedRemoved",
             Self::Declined => "linkedDeclined",
@@ -134,6 +136,32 @@ fn decode_b64(value: &str) -> Result<Vec<u8>> {
         .map_err(|_| Error::RosterFormat.into())
 }
 
+/// The signing key of every device the roster ever added, by `did`.
+pub fn signing_keys(entries: &[Entry]) -> Result<BTreeMap<String, [u8; 32]>> {
+    let mut keys = BTreeMap::new();
+    for subject in entries.iter().flat_map(|e| e.add.iter().flatten()) {
+        keys.insert(subject.did.clone(), array(&decode_b64(&subject.sig)?));
+    }
+    Ok(keys)
+}
+
+/// Steps 1 to 3 of reading an envelope (spec/store.md): structure, sender, signature, for the
+/// object at `did`'s `seq`.
+pub fn verify_logged<'b>(
+    bytes: &'b [u8],
+    group: &[u8; 16],
+    signing_keys: &BTreeMap<String, [u8; 32]>,
+    did: &str,
+    seq: u64,
+) -> std::result::Result<ParsedObject<'b>, Error> {
+    let object = parse_object(bytes, group)?;
+    verify_object(&object, signing_keys.get(did).ok_or(Error::Sender)?)?;
+    if hex::encode(object.header.sender) != did || object.header.seq != seq {
+        return Err(Error::Replay);
+    }
+    Ok(object)
+}
+
 impl<'a, S: Store> Session<'a, S> {
     /// Brings the roster up to date and unwraps the current epoch key.
     pub async fn open(pool: &SqlitePool, store: S, device: &'a MemberSecrets) -> Result<Self> {
@@ -162,15 +190,9 @@ impl<'a, S: Store> Session<'a, S> {
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
         };
-        for entry in &entries {
-            for subject in entry.add.iter().flatten() {
-                session
-                    .signing_keys
-                    .insert(subject.did.clone(), array(&decode_b64(&subject.sig)?));
-            }
-            if let Some(epoch) = &entry.epoch {
-                session.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
-            }
+        session.signing_keys = signing_keys(&entries)?;
+        for epoch in entries.iter().filter_map(|e| e.epoch.as_ref()) {
+            session.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
         }
         session.entries = entries;
         session.unwrap_current().await?;
@@ -444,13 +466,17 @@ impl<'a, S: Store> Session<'a, S> {
         did: &str,
         seq: u64,
     ) -> Result<ParsedObject<'b>> {
-        let object = parse_object(bytes, &self.group)?;
-        let sender = self.signing_keys.get(did).ok_or(Error::Sender)?;
-        verify_object(&object, sender)?;
-        if hex::encode(object.header.sender) != did || object.header.seq != seq {
-            return Err(Error::Replay.into());
-        }
-        Ok(object)
+        Ok(verify_logged(
+            bytes,
+            &self.group,
+            &self.signing_keys,
+            did,
+            seq,
+        )?)
+    }
+
+    pub(super) fn signing_keys(&self) -> &BTreeMap<String, [u8; 32]> {
+        &self.signing_keys
     }
 
     pub(super) async fn open_content(&mut self, object: &ParsedObject<'_>) -> Result<Content> {

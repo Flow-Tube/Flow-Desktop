@@ -10,9 +10,18 @@ use super::roster::{Entry, parse_entry};
 use crate::sync::canonical::to_canonical_json;
 use crate::sync::error::SyncError;
 
+/// Where a group keeps its objects: a Flow server, or only its devices on the LAN.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[sqlx(rename_all = "lowercase")]
+pub enum StoreKind {
+    Server,
+    Lan,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
 pub struct GroupRecord {
     pub group_id: String,
+    pub kind: StoreKind,
     pub store_url: String,
     pub instance: Option<String>,
     pub link: String,
@@ -22,7 +31,7 @@ pub struct GroupRecord {
 }
 
 impl GroupRecord {
-    /// A group this device has just joined: nothing written or read yet.
+    /// A group on a Flow server this device has just joined: nothing written or read yet.
     pub fn new(
         group_id: String,
         store_url: String,
@@ -31,6 +40,7 @@ impl GroupRecord {
     ) -> Self {
         Self {
             group_id,
+            kind: StoreKind::Server,
             store_url,
             instance,
             link,
@@ -39,23 +49,33 @@ impl GroupRecord {
             cursor: 0,
         }
     }
+
+    /// A LAN group this device has just joined or created.
+    pub fn on_lan(group_id: String, link: String) -> Self {
+        Self {
+            kind: StoreKind::Lan,
+            ..Self::new(group_id, String::new(), None, link)
+        }
+    }
 }
 
 pub async fn load_group(pool: &SqlitePool) -> Result<Option<GroupRecord>, SyncError> {
-    Ok(sqlx::query_as("SELECT group_id, store_url, instance, link, own_seq, own_prev, cursor FROM sync2_group WHERE id = 1")
+    Ok(sqlx::query_as("SELECT group_id, kind, store_url, instance, link, own_seq, own_prev, cursor FROM sync2_group WHERE id = 1")
         .fetch_optional(pool)
         .await?)
 }
 
 pub async fn save_group(pool: &SqlitePool, record: &GroupRecord) -> Result<(), SyncError> {
     sqlx::query(
-        "INSERT INTO sync2_group (id, group_id, store_url, instance, link, own_seq, own_prev, cursor)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET group_id = excluded.group_id, store_url = excluded.store_url,
+        "INSERT INTO sync2_group (id, group_id, kind, store_url, instance, link, own_seq, own_prev, cursor)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET group_id = excluded.group_id, kind = excluded.kind,
+             store_url = excluded.store_url,
              instance = excluded.instance, link = excluded.link, own_seq = excluded.own_seq,
              own_prev = excluded.own_prev, cursor = excluded.cursor",
     )
     .bind(&record.group_id)
+    .bind(record.kind)
     .bind(&record.store_url)
     .bind(&record.instance)
     .bind(&record.link)
@@ -152,6 +172,9 @@ pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
         "DELETE FROM sync2_manifests",
         "DELETE FROM sync2_links",
         "DELETE FROM sync2_collected",
+        "DELETE FROM sync2_held_roster",
+        "DELETE FROM sync2_held_keys",
+        "DELETE FROM sync2_held_objects",
     ] {
         sqlx::query(statement).execute(&mut *tx).await?;
     }

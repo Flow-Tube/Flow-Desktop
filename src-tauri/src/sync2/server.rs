@@ -35,6 +35,8 @@ pub enum StoreError {
     InstanceChanged,
     #[error("this server already has a group")]
     AlreadyClaimed,
+    #[error("this device's copy of the group could not be read")]
+    Local(#[source] sqlx::Error),
     #[error("the server sent an invalid response")]
     Malformed,
     #[error(transparent)]

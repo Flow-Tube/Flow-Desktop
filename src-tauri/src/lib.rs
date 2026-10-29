@@ -61,9 +61,9 @@ use commands::downloads::{
 use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::linked::{
-    linked_add_device, linked_answer, linked_cancel, linked_create, linked_devices,
-    linked_enter_code, linked_forget, linked_link_phase, linked_recovery_saved, linked_remove,
-    linked_rename, linked_restore, linked_show_code, linked_status, linked_sync_now,
+    linked_add_device, linked_answer, linked_cancel, linked_create, linked_create_lan,
+    linked_devices, linked_enter_code, linked_forget, linked_link_phase, linked_recovery_saved,
+    linked_remove, linked_rename, linked_restore, linked_show_code, linked_status, linked_sync_now,
 };
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
@@ -492,8 +492,10 @@ pub fn run() {
             )));
             app.manage(sync2::service::BackgroundSync::default());
             app.manage(sync2::link_task::LinkTask::default());
+            app.manage(sync2::lan_runtime::LanPeers::default());
             if active_profile.is_default {
                 sync2::service::spawn(app.handle().clone());
+                sync2::lan_runtime::spawn(app.handle().clone());
             }
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
@@ -795,6 +797,7 @@ pub fn run() {
             linked_status,
             linked_devices,
             linked_create,
+            linked_create_lan,
             linked_restore,
             linked_recovery_saved,
             linked_rename,

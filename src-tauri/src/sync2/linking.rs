@@ -10,22 +10,26 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 
-use super::Error;
 use super::codes::{Code, Offer, b64_key};
 use super::curve::{agreement_public_key, sign};
 use super::engine::{EngineError, Result, Session};
 use super::entries::{Draft, build_entry, member_subject};
+use super::epoch::check_epoch_key;
+use super::held::HeldStore;
 use super::keys::{MemberSecrets, member_id};
 use super::mailbox::Mailbox;
 use super::meta::seal_device_meta;
 use super::pairing::{pairing_aad, pairing_keys, pairing_slot};
 use super::payload::{decode_payload, encode_payload};
 use super::pipe::{AnyPipe, KEY_SIZE, MailboxPipe, Pipe, dial};
-use super::roster::{Entry, Op, Role, Subject, apply_entry, replay_roster, signing_bytes};
+use super::roster::{
+    Entry, Op, Role, RosterState, Subject, apply_entry, replay_roster, signing_bytes,
+};
 use super::sealed::{open, random_bytes, seal};
-use super::state::{GroupRecord, add_roster_entries, save_group};
+use super::state::{GroupRecord, StoreKind, add_roster_entries, save_group};
 use super::store::Store;
-use super::wrap::wrap_epoch_key;
+use super::wrap::{unwrap_epoch_key, wrap_epoch_key};
+use super::{Error, array};
 use crate::sync::canonical::to_canonical_json;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,12 +40,13 @@ pub struct DeviceMeta {
     pub platform: String,
 }
 
+/// Where the group lives, as `welcome` names it: `{"k":"server","u":url,"i":instance}` or
+/// `{"k":"lan"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct WelcomeStore {
-    pub k: String,
-    pub u: String,
-    pub i: String,
+#[serde(tag = "k", rename_all = "lowercase", deny_unknown_fields)]
+pub enum WelcomeStore {
+    Server { u: String, i: String },
+    Lan,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +69,10 @@ enum Message {
         seq: u64,
         link: String,
         store: WelcomeStore,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        entries: Option<Vec<Entry>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        wrap: Option<String>,
     },
     Done,
 }
@@ -240,8 +249,14 @@ where
     };
     entry.sigs.insert(hex::encode(did), sig);
     let after = apply_entry(Some(state), &entry)?;
-    let wrap = wrap_epoch_key(&kem_public, group, state.epoch, &did, session.current_key())?;
-    let wraps = BTreeMap::from([(hex::encode(did), URL_SAFE_NO_PAD.encode(wrap))]);
+    let wrap = URL_SAFE_NO_PAD.encode(wrap_epoch_key(
+        &kem_public,
+        group,
+        state.epoch,
+        &did,
+        session.current_key(),
+    )?);
+    let wraps = BTreeMap::from([(hex::encode(did), wrap.clone())]);
     if session
         .store()
         .append_roster(&state.head, &entry, &wraps, None)
@@ -252,19 +267,33 @@ where
     }
 
     let record = session.record();
+    // A LAN group has no store to read from, so the new device gets the roster and its wrap here.
+    let (store, entries, wrap) = match record.kind {
+        StoreKind::Server => {
+            let store = WelcomeStore::Server {
+                u: record.store_url.clone(),
+                i: record.instance.clone().unwrap_or_default(),
+            };
+            (store, None, None)
+        }
+        StoreKind::Lan => {
+            let entries = session.store().roster_after(-1).await?;
+            (WelcomeStore::Lan, Some(entries), Some(wrap))
+        }
+    };
     let welcome = Message::Welcome {
         group: record.group_id.clone(),
         head: after.head,
         seq: after.seq,
         link: record.link.clone(),
-        store: WelcomeStore {
-            k: "server".into(),
-            u: record.store_url.clone(),
-            i: record.instance.clone().unwrap_or_default(),
-        },
+        store,
+        entries,
+        wrap,
     };
     channel.send(&welcome).await?;
-    match channel.receive().await? {
+    let done = channel.receive().await?;
+    channel.pipe.close().await;
+    match done {
         Message::Done => Ok(hex::encode(did)),
         _ => Err(EngineError::Unexpected),
     }
@@ -278,6 +307,9 @@ pub struct Welcome {
     pub seq: u64,
     pub link: String,
     pub store: WelcomeStore,
+    /// For a LAN group: the roster up to `head`, and this device's wrap of the current epoch.
+    pub entries: Option<Vec<Entry>>,
+    pub wrap: Option<String>,
 }
 
 /// A new device that was welcomed and has yet to check the roster and say it is done.
@@ -327,11 +359,13 @@ where
         seq,
         link,
         store,
+        entries,
+        wrap,
     } = channel.receive().await?
     else {
         return Err(EngineError::Unexpected);
     };
-    if group != entry.group || store.k != "server" {
+    if group != entry.group {
         return Err(EngineError::Unexpected);
     }
     Ok(Welcomed {
@@ -343,41 +377,93 @@ where
             seq,
             link,
             store,
+            entries,
+            wrap,
         },
     })
 }
 
-/// Saves the group once the roster on `store` verifies up to the head the member named.
+/// Checks that `roster` reaches the head the member named and lists this device.
+fn check_pinned(roster: &[Entry], welcome: &Welcome, me: &Subject) -> Result<RosterState> {
+    let pinned = roster
+        .iter()
+        .position(|e| e.seq == welcome.seq)
+        .map(|end| replay_roster(&roster[..=end]))
+        .transpose()?;
+    let state = replay_roster(roster)?;
+    if pinned.is_none_or(|pinned| pinned.head != welcome.head)
+        || !state.members.contains_key(&me.did)
+    {
+        return Err(Error::RosterChain.into());
+    }
+    Ok(state)
+}
+
+async fn say_done<P: Pipe>(mut channel: Channel<P>) -> Result<()> {
+    channel.send(&Message::Done).await?;
+    channel.pipe.close().await;
+    Ok(())
+}
+
+/// Saves a server group once the roster on `store` verifies up to the head the member named.
 pub async fn finish_join<S: Store, P: Pipe>(
     pool: &SqlitePool,
     store: &S,
     welcomed: Welcomed<P>,
 ) -> Result<()> {
     let Welcomed {
-        mut channel,
+        channel,
         me,
         welcome,
     } = welcomed;
+    let WelcomeStore::Server { u, i } = &welcome.store else {
+        return Err(EngineError::Unexpected);
+    };
     let roster = store.roster_after(-1).await?;
-    let pinned = roster
-        .iter()
-        .position(|e| e.seq == welcome.seq)
-        .map(|end| replay_roster(&roster[..=end]))
-        .transpose()?;
-    if pinned.is_none_or(|state| state.head != welcome.head)
-        || !replay_roster(&roster)?.members.contains_key(&me.did)
-    {
-        return Err(Error::RosterChain.into());
-    }
+    check_pinned(&roster, &welcome, &me)?;
     add_roster_entries(pool, &roster).await?;
-    let record = GroupRecord::new(
-        welcome.group,
-        welcome.store.u,
-        Some(welcome.store.i),
-        welcome.link,
-    );
+    let record = GroupRecord::new(welcome.group, u.clone(), Some(i.clone()), welcome.link);
     save_group(pool, &record).await?;
-    channel.send(&Message::Done).await
+    say_done(channel).await
+}
+
+/// Saves a LAN group from what `welcome` carried: the roster, checked from genesis to the head,
+/// and this device's wrap, checked against the epoch commitment. Its objects arrive when the
+/// devices next meet on the LAN.
+pub async fn finish_lan_join<P: Pipe>(
+    pool: &SqlitePool,
+    device: &MemberSecrets,
+    welcomed: Welcomed<P>,
+) -> Result<()> {
+    let Welcomed {
+        channel,
+        me,
+        welcome,
+    } = welcomed;
+    let (WelcomeStore::Lan, Some(roster), Some(wrap)) =
+        (&welcome.store, &welcome.entries, &welcome.wrap)
+    else {
+        return Err(EngineError::Unexpected);
+    };
+    let state = check_pinned(roster, &welcome, &me)?;
+    let group: [u8; 16] = array(&hex::decode(&welcome.group).map_err(|_| Error::Group)?);
+    let wrap = URL_SAFE_NO_PAD
+        .decode(wrap)
+        .map_err(|_| EngineError::Unexpected)?;
+    let commitment = URL_SAFE_NO_PAD
+        .decode(&state.kc)
+        .map_err(|_| Error::RosterFormat)?;
+    let key = unwrap_epoch_key(&device.kem_secret, &group, state.epoch, &device.did, &wrap)?;
+    check_epoch_key(&key, &group, state.epoch, &commitment)?;
+
+    let held = HeldStore::new(pool.clone());
+    for entry in roster {
+        held.hold_entry(entry).await?;
+    }
+    held.hold_key(state.epoch, &me.did, &wrap).await?;
+    add_roster_entries(pool, roster).await?;
+    save_group(pool, &GroupRecord::on_lan(welcome.group, welcome.link)).await?;
+    say_done(channel).await
 }
 
 /// The new device's side, on a member's code: tries the LAN addresses it lists, then the store's
@@ -394,7 +480,12 @@ where
     S: Store + Mailbox + Sync,
     F: Future<Output = bool>,
 {
-    let Code::Member { store_url, lan, .. } = code else {
+    let Code::Member {
+        store_url: Some(store_url),
+        lan,
+        ..
+    } = code
+    else {
         return Err(EngineError::Unexpected);
     };
     let pipe = if let Some(pipe) = dial(lan).await {
@@ -405,14 +496,40 @@ where
     };
     let (channel, sas) = Channel::scanner(pipe, code).await?;
     let welcomed = new_side(channel, sas, device, meta, confirm).await?;
-    if welcomed.welcome.store.u != *store_url {
+    if !matches!(&welcomed.welcome.store, WelcomeStore::Server { u, .. } if u == store_url) {
         return Err(EngineError::Unexpected);
     }
     finish_join(pool, store, welcomed).await
 }
 
+/// The new device's side, on the code of a LAN group's member: pairs over the LAN and saves the
+/// group from the welcome.
+pub async fn join_lan<F>(
+    pool: &SqlitePool,
+    code: &Code,
+    device: &MemberSecrets,
+    meta: DeviceMeta,
+    confirm: impl FnOnce(String) -> F,
+) -> Result<()>
+where
+    F: Future<Output = bool>,
+{
+    let Code::Member {
+        store_url: None,
+        lan,
+        ..
+    } = code
+    else {
+        return Err(EngineError::Unexpected);
+    };
+    let pipe = dial(lan).await.ok_or(EngineError::LanUnreachable)?;
+    let (channel, sas) = Channel::scanner(pipe, code).await?;
+    let welcomed = new_side(channel, sas, device, meta, confirm).await?;
+    finish_lan_join(pool, device, welcomed).await
+}
+
 /// The new device's side, on the code it shows: waits on the LAN for a member to scan it. The
-/// caller connects to the welcome's store and calls [`finish_join`].
+/// caller then calls [`finish_join`] with the welcome's server, or [`finish_lan_join`].
 pub async fn answer_shown<F>(
     mut offer: Offer,
     device: &MemberSecrets,

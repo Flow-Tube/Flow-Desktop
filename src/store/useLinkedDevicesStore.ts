@@ -5,6 +5,7 @@ import {
   answerCode,
   cancelLink,
   createGroup,
+  createLanGroup,
   enterCode,
   forgetGroup,
   getLinkPhase,
@@ -45,6 +46,7 @@ interface LinkedState {
   init: () => Promise<void>;
   refresh: () => Promise<void>;
   create: (url: string, adminToken: string) => Promise<void>;
+  createOnLan: () => Promise<void>;
   restore: (url: string, words: string) => Promise<void>;
   enterCode: (code: string) => Promise<void>;
   showCode: () => Promise<void>;
@@ -109,7 +111,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       try {
         const status = await getLinkedStatus();
         set({ status });
-        if (status.storeUrl) await loadDevices();
+        if (status.linked) await loadDevices();
         else set({ devices: null, devicesError: null });
       } catch (error) {
         set({ error: describe(error) });
@@ -119,6 +121,12 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     create: (url, adminToken) =>
       run(async () => {
         set({ words: await createGroup(url, adminToken) });
+        await get().refresh();
+      }),
+
+    createOnLan: () =>
+      run(async () => {
+        set({ words: await createLanGroup() });
         await get().refresh();
       }),
 

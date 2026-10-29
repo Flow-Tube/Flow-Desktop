@@ -45,9 +45,9 @@ function DeviceRow({ device }: { device: LinkedDevice }) {
           <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_confirm", displayName(device))}</p>
         )}
       </div>
-      {device.thisDevice && (
+      {(device.thisDevice || device.nearby) && (
         <span className="rounded-full bg-surface-container-high px-2.5 py-0.5 text-xs text-chrome-neutral-300">
-          {getString("linked_this_device")}
+          {getString(device.thisDevice ? "linked_this_device" : "linked_nearby")}
         </span>
       )}
       {mode === "remove" ? (

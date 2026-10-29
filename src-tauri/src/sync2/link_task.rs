@@ -10,13 +10,16 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
 use super::actions::{ensure_unlinked, local, open_session};
-use super::codes::{Code, new_offer, read_code};
+use super::codes::{Code, StoreLocation, new_offer, read_code};
 use super::engine::{EngineError, Result};
-use super::linking::{add_device, add_scanned, answer_shown, finish_join, join};
+use super::linking::{
+    WelcomeStore, add_device, add_scanned, answer_shown, finish_join, finish_lan_join, join,
+    join_lan,
+};
 use super::pipe::listen;
 use super::server::ServerStore;
 use super::service::sync_soon;
-use super::state::load_group;
+use super::state::{StoreKind, load_group};
 
 pub const EVENT_LINK: &str = "sync2://link";
 
@@ -133,18 +136,27 @@ fn start(app: &AppHandle, work: impl Future<Output = Result<()>> + Send + 'stati
     }
 }
 
-/// This device, already in a group, shows a code for a new device to scan, through the store or
-/// over the LAN.
+/// This device, already in a group, shows a code for a new device to scan: over the LAN, and
+/// through the server's mailbox for a server group.
 pub async fn start_adding(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
     let record = load_group(&local.pool)
         .await?
         .ok_or(EngineError::NotLinked)?;
+    let (store, listening) = match record.kind {
+        StoreKind::Server => (
+            StoreLocation::server(&record.store_url),
+            listen().await.unwrap_or_default(),
+        ),
+        StoreKind::Lan => (
+            StoreLocation::lan(),
+            Some(listen().await?.ok_or(EngineError::LanUnreachable)?),
+        ),
+    };
     let task = app.clone();
     start(app, async move {
         let session = open_session(&local.pool, &record, &local.device).await?;
-        let listening = listen().await.unwrap_or_default();
-        let offer = new_offer(Some(&record.store_url), &local.meta.name, listening);
+        let offer = new_offer(Some(store), &local.meta.name, listening);
         show(&task, &offer.qr);
         add_device(&session, offer, &local.device, |sas| {
             confirm(task.clone(), sas)
@@ -168,14 +180,11 @@ pub async fn start_showing(app: &AppHandle) -> Result<()> {
             confirm(task.clone(), sas)
         })
         .await?;
-        let welcome = &welcomed.welcome;
-        let store = ServerStore::connect(
-            &welcome.store.u,
-            local.device.clone(),
-            Some(welcome.store.i.clone()),
-            Some(welcome.group.clone()),
-        )
-        .await?;
+        let WelcomeStore::Server { u, i } = welcomed.welcome.store.clone() else {
+            return finish_lan_join(&local.pool, &local.device, welcomed).await;
+        };
+        let group = welcomed.welcome.group.clone();
+        let store = ServerStore::connect(&u, local.device.clone(), Some(i), Some(group)).await?;
         finish_join(&local.pool, &store, welcomed).await
     });
     Ok(())
@@ -192,6 +201,10 @@ pub async fn start_with_code(app: &AppHandle, text: &str) -> Result<()> {
             ensure_unlinked(&local.pool).await?;
             let store_url = store_url.clone();
             start(app, async move {
+                let confirm = |sas| confirm(task.clone(), sas);
+                let Some(store_url) = store_url else {
+                    return join_lan(&local.pool, &code, &local.device, local.meta, confirm).await;
+                };
                 let store =
                     ServerStore::connect(&store_url, local.device.clone(), None, None).await?;
                 join(
@@ -200,7 +213,7 @@ pub async fn start_with_code(app: &AppHandle, text: &str) -> Result<()> {
                     &code,
                     &local.device,
                     local.meta,
-                    |sas| confirm(task.clone(), sas),
+                    confirm,
                 )
                 .await
             });

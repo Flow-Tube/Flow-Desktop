@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { QrCode } from "lucide-react";
+import { QrCode, Wifi } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
@@ -9,7 +9,7 @@ import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
 
 function CreateGroup() {
-  const { create, busy } = useLinkedDevicesStore();
+  const { create, createOnLan, busy } = useLinkedDevicesStore();
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
   return (
@@ -20,9 +20,14 @@ function CreateGroup() {
       <Field label={getString("linked_admin_token")} hint={getString("linked_admin_token_hint")}>
         <TextInput type="password" value={token} onChange={setToken} spellCheck={false} />
       </Field>
-      <Button className="mt-auto self-start" disabled={busy || !url.trim() || !token.trim()} onClick={() => void create(url, token)}>
-        {getString("linked_create")}
-      </Button>
+      <div className="mt-auto flex flex-wrap gap-2">
+        <Button disabled={busy || !url.trim() || !token.trim()} onClick={() => void create(url, token)}>
+          {getString("linked_create")}
+        </Button>
+        <Button variant="tonal" disabled={busy} onClick={() => void createOnLan()}>
+          <Wifi className="h-4 w-4" /> {getString("linked_create_lan")}
+        </Button>
+      </div>
     </Card>
   );
 }

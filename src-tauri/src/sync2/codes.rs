@@ -14,11 +14,29 @@ use crate::sync::canonical::to_canonical_json;
 
 const NAME_LIMIT: usize = 64;
 
+/// Where a member's group lives: `{"k":"server","u":url}` or `{"k":"lan"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoreLocation {
     pub k: String,
-    pub u: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub u: Option<String>,
+}
+
+impl StoreLocation {
+    pub fn server(url: &str) -> Self {
+        Self {
+            k: "server".into(),
+            u: Some(url.into()),
+        }
+    }
+
+    pub fn lan() -> Self {
+        Self {
+            k: "lan".into(),
+            u: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -37,10 +55,11 @@ pub struct QrCode {
 
 /// A code read from another device, checked for what this build can answer.
 pub enum Code {
-    /// A member's code, which a new device answers: the store, and LAN addresses to try first.
+    /// A member's code, which a new device answers: its server (`None` for a LAN group), and
+    /// LAN addresses to try first.
     Member {
         qr: QrCode,
-        store_url: String,
+        store_url: Option<String>,
         lan: Vec<LanAddress>,
     },
     /// A new device's code, which a member answers over the LAN.
@@ -82,8 +101,13 @@ pub fn read_code(text: &str) -> Result<Code> {
     let qr: QrCode = serde_json::from_str(text.trim()).map_err(|_| EngineError::Unexpected)?;
     let lan = qr.l.clone().unwrap_or_default();
     match (qr.v, qr.r.as_str(), &qr.s) {
-        (2, "m", Some(store)) if store.k == "server" => Ok(Code::Member {
+        (2, "m", Some(store)) if store.k == "server" && store.u.is_some() => Ok(Code::Member {
             store_url: store.u.clone(),
+            lan,
+            qr,
+        }),
+        (2, "m", Some(store)) if store.k == "lan" && !lan.is_empty() => Ok(Code::Member {
+            store_url: None,
             lan,
             qr,
         }),
@@ -101,9 +125,9 @@ pub struct Offer {
     pub listening: Option<Listening>,
 }
 
-/// A member's code (`store_url` set) or a new device's (`store_url` `None`, so it must listen).
+/// A member's code (with its group's `store`) or a new device's (`None`, so it must listen).
 pub fn new_offer(
-    store_url: Option<&str>,
+    store: Option<StoreLocation>,
     device_name: &str,
     listening: Option<Listening>,
 ) -> Offer {
@@ -113,12 +137,9 @@ pub fn new_offer(
         v: 2,
         t: URL_SAFE_NO_PAD.encode(token),
         e: URL_SAFE_NO_PAD.encode(public),
-        r: if store_url.is_some() { "m" } else { "n" }.into(),
+        r: if store.is_some() { "m" } else { "n" }.into(),
         d: device_name.chars().take(NAME_LIMIT).collect(),
-        s: store_url.map(|u| StoreLocation {
-            k: "server".into(),
-            u: u.into(),
-        }),
+        s: store,
         l: listening.as_ref().map(|l| l.addresses.clone()),
     };
     Offer {

@@ -6,7 +6,7 @@ mod sync2_common;
 use std::sync::Mutex;
 
 use flow_desktop_lib::sync2::batches::apply_batches;
-use flow_desktop_lib::sync2::codes::{Code, new_offer, read_code};
+use flow_desktop_lib::sync2::codes::{Code, StoreLocation, new_offer, read_code};
 use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
 use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::linking::{
@@ -44,7 +44,7 @@ async fn a_new_device_pairs_and_then_syncs() {
 
     let newcomer = member_secrets(random_bytes(), random_bytes());
     let pool_n = empty_pool().await;
-    let offer = new_offer(Some("memory"), "Desktop A", None);
+    let offer = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None);
     let code = read_code(&offer.qr).unwrap();
     let codes = Mutex::new(Vec::new());
     let shown = |sas: String| {
@@ -85,7 +85,7 @@ async fn declining_the_code_adds_nobody() {
     let pool_a = device_pool(&g).await;
     let session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
     let roster_before = head(&g.store).seq;
-    let offer = new_offer(Some("memory"), "Desktop A", None);
+    let offer = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None);
     let code = read_code(&offer.qr).unwrap();
     let newcomer = member_secrets(random_bytes(), random_bytes());
     let pool_n = empty_pool().await;
@@ -102,7 +102,7 @@ async fn declining_the_code_adds_nobody() {
 
 #[test]
 fn codes_this_build_cannot_answer_are_refused() {
-    let member = new_offer(Some("memory"), "Desktop A", None).qr;
+    let member = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None).qr;
     let without_store = member.replace(r#","s":{"k":"server","u":"memory"}"#, "");
     let new_without_lan = member.replace(r#""r":"m""#, r#""r":"n""#);
     let flow_sync_1 = r#"{"v":1,"sid":"AAAAAAAAAAAAAAAAAAAAAA","k":"AAAA","ip":"192.168.1.2","p":1,"d":"x","exp":0}"#;
@@ -167,7 +167,7 @@ async fn a_new_device_reaches_a_member_over_the_lan_first() {
     let newcomer = member_secrets(random_bytes(), random_bytes());
     let pool_n = empty_pool().await;
     let offer = new_offer(
-        Some("memory"),
+        Some(StoreLocation::server("memory")),
         "Desktop A",
         Some(listen_on(loopback()).await.unwrap()),
     );
@@ -195,7 +195,7 @@ async fn a_new_device_falls_back_to_the_mailbox_when_the_lan_does_not_answer() {
     let session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
     let newcomer = member_secrets(random_bytes(), random_bytes());
     let pool_n = empty_pool().await;
-    let offer = new_offer(Some("memory"), "Desktop A", None);
+    let offer = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None);
     let unanswered = offer
         .qr
         .replacen('{', r#"{"l":[{"a":"127.0.0.1","p":9}],"#, 1);

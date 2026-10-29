@@ -87,6 +87,11 @@ pub async fn linked_add_device(app: AppHandle) -> Result<(), ErrorResponse> {
 }
 
 #[tauri::command]
+pub async fn linked_create_lan(app: AppHandle) -> Result<String, ErrorResponse> {
+    actions::create_on_lan(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
 pub async fn linked_show_code(app: AppHandle) -> Result<(), ErrorResponse> {
     link_task::start_showing(&app).await.map_err(|e| err(&e))
 }

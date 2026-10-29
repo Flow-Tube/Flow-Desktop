@@ -88,6 +88,12 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
     Ok(taken)
 }
 
+/// A session that ended: the member met, and how many objects this device took from it.
+pub struct Met {
+    pub peer: String,
+    pub taken: usize,
+}
+
 /// Opens a session to a member at `address`:`port` and pulls from it. The session also serves
 /// the member's requests until the pull is done.
 pub async fn meet(
@@ -95,24 +101,34 @@ pub async fn meet(
     device: &MemberSecrets,
     address: &str,
     port: u16,
-) -> Result<usize> {
+) -> Result<Met> {
     let (socket, _) = connect_async(ws_url(address, port, SESSION_PATH).as_str())
         .await
         .map_err(|_| EngineError::LanUnreachable)?;
     let held = HeldStore::new(pool.clone());
     let session = Session::open(pool, held.clone(), device).await?;
-    let (framed, _) = hello_as_client(WsChannel::new(socket), &session, device).await?;
+    let (framed, peer) = hello_as_client(WsChannel::new(socket), &session, device).await?;
     let link = Link::spawn(framed, Holder::of(held.clone(), &session));
-    pull_from(&held, &link, session.group()).await
+    let taken = pull_from(&held, &link, session.group()).await?;
+    Ok(Met { peer, taken })
 }
 
-/// Answers sessions from other members for as long as `listener` lives, pulling from each.
-pub async fn serve(listener: TcpListener, pool: SqlitePool, device: MemberSecrets) {
+/// Answers sessions from other members for as long as `listener` lives, pulling from each and
+/// telling `met` about it.
+pub async fn serve(
+    listener: TcpListener,
+    pool: SqlitePool,
+    device: MemberSecrets,
+    met: impl Fn(Met) + Clone + Send + 'static,
+) {
     while let Ok((stream, _)) = listener.accept().await {
-        let (pool, device) = (pool.clone(), device.clone());
+        let (pool, device, met) = (pool.clone(), device.clone(), met.clone());
         tokio::spawn(async move {
-            if let Err(error) = answer(stream, &pool, &device).await {
-                tracing::debug!(target: "flow::sync2", kind = error.kind(), "LAN session ended");
+            match answer(stream, &pool, &device).await {
+                Ok(session) => met(session),
+                Err(error) => {
+                    tracing::debug!(target: "flow::sync2", kind = error.kind(), "LAN session ended");
+                }
             }
         });
     }
@@ -122,13 +138,14 @@ async fn answer(
     stream: tokio::net::TcpStream,
     pool: &SqlitePool,
     device: &MemberSecrets,
-) -> Result<usize> {
+) -> Result<Met> {
     let socket = accept_async(stream)
         .await
         .map_err(|_| EngineError::LanUnreachable)?;
     let held = HeldStore::new(pool.clone());
     let mut session = Session::open(pool, held.clone(), device).await?;
-    let (framed, _) = hello_as_server(WsChannel::new(socket), &mut session, device).await?;
+    let (framed, peer) = hello_as_server(WsChannel::new(socket), &mut session, device).await?;
     let link = Link::spawn(framed, Holder::of(held.clone(), &session));
-    pull_from(&held, &link, session.group()).await
+    let taken = pull_from(&held, &link, session.group()).await?;
+    Ok(Met { peer, taken })
 }

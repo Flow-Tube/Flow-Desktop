@@ -18,6 +18,8 @@ use crate::sync::transport::{ClientStream, WsChannel, bind, lan_ip_candidates, w
 
 const PAIR_PATH: &str = "/flow-sync/2/pair";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long the shower waits after the last message for the scanner to close (spec/live.md).
+const LINGER: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 pub const SLOT_LIFETIME: Duration = Duration::from_secs(180);
 /// Addresses a code lists, best first, as many as FLOW-SYNC/1 codes carry.
@@ -39,6 +41,8 @@ pub trait Pipe {
     fn send_key(&mut self, key: [u8; KEY_SIZE]) -> impl Future<Output = Result<()>> + Send;
     /// The shower's first step: the scanner's key, which it needs to open anything.
     fn receive_key(&mut self) -> impl Future<Output = Result<[u8; KEY_SIZE]>> + Send;
+    /// Ends pairing after the last message.
+    fn close(&mut self) -> impl Future<Output = ()> + Send;
 }
 
 fn split_key(bytes: &[u8]) -> Result<([u8; KEY_SIZE], &[u8])> {
@@ -112,18 +116,25 @@ impl<M: Mailbox + Sync> Pipe for MailboxPipe<'_, M> {
         self.pending = Some(rest.to_vec());
         Ok(key)
     }
+
+    fn close(&mut self) -> impl Future<Output = ()> + Send {
+        std::future::ready(())
+    }
 }
 
 /// A WebSocket to the other device on the same network. The scanner's key is its own first frame.
-pub struct LanPipe<S>(WsChannel<S>);
+pub struct LanPipe<S> {
+    socket: WsChannel<S>,
+    shower: bool,
+}
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
     async fn send(&mut self, bytes: Vec<u8>) -> Result<()> {
-        Ok(self.0.send_binary(bytes).await?)
+        Ok(self.socket.send_binary(bytes).await?)
     }
 
     async fn receive(&mut self) -> Result<Vec<u8>> {
-        timeout(SLOT_LIFETIME, self.0.recv_binary())
+        timeout(SLOT_LIFETIME, self.socket.recv_binary())
             .await
             .map_err(|_| EngineError::TimedOut)?
             .map_err(EngineError::from)
@@ -139,6 +150,17 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
             (key, []) => Ok(key),
             _ => Err(EngineError::Unexpected),
         }
+    }
+
+    /// The shower waits a little for the scanner to close, so the last message isn't cut off.
+    async fn close(&mut self) {
+        if self.shower {
+            let _ = timeout(LINGER, async {
+                while self.socket.recv_binary().await.is_ok() {}
+            })
+            .await;
+        }
+        self.socket.close().await;
     }
 }
 
@@ -178,6 +200,13 @@ where
         match self {
             Self::Mailbox(pipe) => pipe.receive_key().await,
             Self::Lan(pipe) => pipe.receive_key().await,
+        }
+    }
+
+    async fn close(&mut self) {
+        match self {
+            Self::Mailbox(pipe) => pipe.close().await,
+            Self::Lan(pipe) => pipe.close().await,
         }
     }
 }
@@ -227,7 +256,10 @@ impl Listening {
             .await
             .map_err(|_| EngineError::TimedOut)?
             .map_err(crate::sync::error::SyncError::from)?;
-        let mut pipe = LanPipe(WsChannel::new(socket));
+        let mut pipe = LanPipe {
+            socket: WsChannel::new(socket),
+            shower: true,
+        };
         let key = pipe.receive_key().await?;
         Ok((pipe, key))
     }
@@ -238,7 +270,10 @@ pub async fn dial(addresses: &[LanAddress]) -> Option<LanPipe<ClientStream>> {
     for address in addresses.iter().filter(|a| is_local_address(&a.a)) {
         let url = ws_url(&address.a, address.p, PAIR_PATH);
         if let Ok(Ok((socket, _))) = timeout(CONNECT_TIMEOUT, connect_async(url.as_str())).await {
-            return Some(LanPipe(WsChannel::new(socket)));
+            return Some(LanPipe {
+                socket: WsChannel::new(socket),
+                shower: false,
+            });
         }
     }
     None

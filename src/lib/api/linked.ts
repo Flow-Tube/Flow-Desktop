@@ -10,7 +10,10 @@ export interface LastSync {
 }
 
 export interface LinkedStatus {
-  /** The Flow server this device syncs with; absent when it is in no group. */
+  linked: boolean;
+  /** The group lives on its devices and syncs on the same network, with no server. */
+  onLan: boolean;
+  /** The Flow server this device syncs with, for a server group. */
   storeUrl?: string | null;
   recoverySaved: boolean;
   lastSync?: LastSync | null;
@@ -21,6 +24,8 @@ export interface LinkedDevice {
   name: string;
   platform: string;
   thisDevice: boolean;
+  /** Met on this network in the last few minutes. */
+  nearby: boolean;
 }
 
 export type LinkPhase =
@@ -38,6 +43,9 @@ export const getLinkPhase = () => invokeBackend<LinkPhase>("linked_link_phase");
 /** Resolves to the recovery words, shown once. */
 export const createGroup = (url: string, adminToken: string) =>
   invokeBackend<string>("linked_create", { url, adminToken });
+
+/** Starts a group on this network, with no server. Resolves to the recovery words, shown once. */
+export const createLanGroup = () => invokeBackend<string>("linked_create_lan");
 
 /** Resolves to the new recovery words, shown once. */
 export const restoreGroup = (url: string, words: string) =>

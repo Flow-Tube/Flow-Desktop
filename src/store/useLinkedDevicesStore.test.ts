@@ -5,6 +5,7 @@ const api = vi.hoisted(() => ({
   answerCode: vi.fn(),
   cancelLink: vi.fn(),
   createGroup: vi.fn(),
+  createLanGroup: vi.fn(),
   forgetGroup: vi.fn(),
   getLinkPhase: vi.fn(),
   getLinkedDevices: vi.fn(),
@@ -24,7 +25,7 @@ vi.mock("../lib/api/linked", () => api);
 import { useLinkedDevicesStore } from "./useLinkedDevicesStore";
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `word${i}`).join(" ");
-const LINKED = { storeUrl: "https://sync.example.com", recoverySaved: false, lastSync: null };
+const LINKED = { linked: true, onLan: false, storeUrl: "https://sync.example.com", recoverySaved: false, lastSync: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -60,7 +61,7 @@ describe("useLinkedDevicesStore", () => {
   });
 
   it("loads no devices for a device in no group", async () => {
-    api.getLinkedStatus.mockResolvedValue({ storeUrl: null, recoverySaved: false, lastSync: null });
+    api.getLinkedStatus.mockResolvedValue({ linked: false, onLan: false, storeUrl: null, recoverySaved: false, lastSync: null });
 
     await useLinkedDevicesStore.getState().refresh();
     expect(api.getLinkedDevices).not.toHaveBeenCalled();

@@ -6,14 +6,22 @@ mod sync2_common;
 use std::time::Duration;
 
 use flow_desktop_lib::sync2::batches::apply_batches;
+use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
+use flow_desktop_lib::sync2::group_store::GroupStore;
 use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::keys::MemberSecrets;
+use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan_sync::{meet, serve};
-use flow_desktop_lib::sync2::linking::DeviceMeta;
+use flow_desktop_lib::sync2::linking::{
+    DeviceMeta, add_device, add_scanned, answer_shown, finish_lan_join, join_lan,
+};
 use flow_desktop_lib::sync2::membership::rename_device;
 use flow_desktop_lib::sync2::paths::log_path;
+use flow_desktop_lib::sync2::pipe::listen_on;
+use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
+use flow_desktop_lib::sync2::state::{StoreKind, load_group};
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
 use sync2_common::{Group, LINK, empty_pool, exported, group};
@@ -65,7 +73,7 @@ async fn push(pool: &SqlitePool, device: &MemberSecrets) {
 async fn listening(pool: &SqlitePool, device: &MemberSecrets) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(serve(listener, pool.clone(), device.clone()));
+    tokio::spawn(serve(listener, pool.clone(), device.clone(), |_| {}));
     port
 }
 
@@ -91,7 +99,9 @@ async fn two_members_exchange_their_objects_in_one_session() {
     push(&pool_b, &g.b).await;
 
     let port = listening(&pool_a, &g.a).await;
-    assert!(meet(&pool_b, &g.b, "127.0.0.1", port).await.unwrap() > 0);
+    let met = meet(&pool_b, &g.b, "127.0.0.1", port).await.unwrap();
+    assert_eq!(met.peer, hex::encode(g.a.did));
+    assert!(met.taken > 0);
     assert!(eventually_holds(&pool_a, &log_path(&hex::encode(g.b.did), 1)).await);
 
     let mut session = Session::open(&pool_b, HeldStore::new(pool_b.clone()), &g.b)
@@ -153,4 +163,80 @@ async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
     let (on_a, on_b) = (head(&pool_a).await, head(&pool_b).await);
     assert_eq!(on_a.seq, 2);
     assert_eq!(on_a, on_b);
+}
+
+fn loopback() -> Vec<String> {
+    vec!["127.0.0.1".into()]
+}
+
+/// After pairing, the new device holds the group and gets the member's objects when they meet.
+async fn joined_and_synced(g: &Group, pool_a: &SqlitePool, pool_n: &SqlitePool, n: &MemberSecrets) {
+    let record = load_group(pool_n).await.unwrap().unwrap();
+    assert_eq!(record.kind, StoreKind::Lan);
+    assert!(
+        Session::open(pool_n, HeldStore::new(pool_n.clone()), n)
+            .await
+            .is_ok()
+    );
+    let port = listening(pool_a, &g.a).await;
+    let met = meet(pool_n, n, "127.0.0.1", port).await.unwrap();
+    assert!(met.taken > 0, "the member's objects arrive once they meet");
+}
+
+#[tokio::test]
+async fn a_new_device_scans_a_lan_group_member_and_then_syncs() {
+    let g = group().await;
+    let pool_a = holding(&g).await;
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    push(&pool_a, &g.a).await;
+    let session = Session::open(
+        &pool_a,
+        GroupStore::Held(HeldStore::new(pool_a.clone())),
+        &g.a,
+    )
+    .await
+    .unwrap();
+    let newcomer = member_secrets(random_bytes(), random_bytes());
+    let pool_n = empty_pool().await;
+    let offer = new_offer(
+        Some(StoreLocation::lan()),
+        "Desktop A",
+        Some(listen_on(loopback()).await.unwrap()),
+    );
+    let code = read_code(&offer.qr).unwrap();
+    let shown = |_sas: String| async { true };
+    let (added, joined) = tokio::join!(
+        add_device(&session, offer, &g.a, shown),
+        join_lan(&pool_n, &code, &newcomer, named("New"), shown),
+    );
+    joined.unwrap();
+    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    joined_and_synced(&g, &pool_a, &pool_n, &newcomer).await;
+}
+
+#[tokio::test]
+async fn a_lan_group_member_scans_a_new_device_code() {
+    let g = group().await;
+    let pool_a = holding(&g).await;
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    push(&pool_a, &g.a).await;
+    let session = Session::open(
+        &pool_a,
+        GroupStore::Held(HeldStore::new(pool_a.clone())),
+        &g.a,
+    )
+    .await
+    .unwrap();
+    let newcomer = member_secrets(random_bytes(), random_bytes());
+    let pool_n = empty_pool().await;
+    let offer = new_offer(None, "New", Some(listen_on(loopback()).await.unwrap()));
+    let code = read_code(&offer.qr).unwrap();
+    let shown = |_sas: String| async { true };
+    let (added, joined) = tokio::join!(add_scanned(&session, &code, &g.a, shown), async {
+        let welcomed = answer_shown(offer, &newcomer, named("New"), shown).await?;
+        finish_lan_join(&pool_n, &newcomer, welcomed).await
+    });
+    joined.unwrap();
+    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    joined_and_synced(&g, &pool_a, &pool_n, &newcomer).await;
 }

@@ -112,7 +112,7 @@ async fn desktop_talks_to_a_real_server() {
 #[tokio::test]
 #[ignore = "needs a fresh flow-sync server"]
 async fn a_group_is_created_paired_with_and_restored_through_the_server() {
-    use flow_desktop_lib::sync2::codes::{new_offer, read_code};
+    use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
     use flow_desktop_lib::sync2::engine::Session;
     use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join};
     use flow_desktop_lib::sync2::setup::{create_group, restore_group};
@@ -154,7 +154,7 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
     .unwrap();
     let session = Session::open(&pool_a, store_a, &a).await.unwrap();
 
-    let offer = new_offer(Some(&url), "A", None);
+    let offer = new_offer(Some(StoreLocation::server(&url)), "A", None);
     let code = read_code(&offer.qr).unwrap();
     let store_b = ServerStore::connect(&url, b.clone(), None, None)
         .await

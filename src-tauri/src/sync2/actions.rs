@@ -6,16 +6,19 @@ use tauri::{AppHandle, Manager};
 
 use super::device::{device_keys, keychain};
 use super::engine::{EngineError, Result, Session};
+use super::group_store::GroupStore;
+use super::held::HeldStore;
 use super::keys::MemberSecrets;
+use super::lan_runtime::nearby;
 use super::linking::DeviceMeta;
 use super::membership::{remove_device, rename_device};
 use super::names::device_names;
 use super::roster::Role;
 use super::server::ServerStore;
 use super::service::{LastSync, last_sync, sync_soon};
-use super::setup::{create_group, restore_group};
+use super::setup::{create_group, create_lan_group, restore_group};
 use super::snapshot::snapshot_soon;
-use super::state::{GroupRecord, forget_group, load_group};
+use super::state::{GroupRecord, StoreKind, forget_group, load_group};
 use crate::db::settings::{get_setting, set_setting};
 use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
@@ -54,14 +57,19 @@ pub async fn open_session<'a>(
     pool: &SqlitePool,
     record: &GroupRecord,
     device: &'a MemberSecrets,
-) -> Result<Session<'a, ServerStore>> {
-    let store = ServerStore::connect(
-        &record.store_url,
-        device.clone(),
-        record.instance.clone(),
-        Some(record.group_id.clone()),
-    )
-    .await?;
+) -> Result<Session<'a, GroupStore>> {
+    let store = match record.kind {
+        StoreKind::Server => GroupStore::Server(Box::new(
+            ServerStore::connect(
+                &record.store_url,
+                device.clone(),
+                record.instance.clone(),
+                Some(record.group_id.clone()),
+            )
+            .await?,
+        )),
+        StoreKind::Lan => GroupStore::Held(HeldStore::new(pool.clone())),
+    };
     Session::open(pool, store, device).await
 }
 
@@ -88,6 +96,9 @@ async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedStatus {
+    pub linked: bool,
+    /// The group lives on its devices, with no server.
+    pub on_lan: bool,
     pub store_url: Option<String>,
     pub recovery_saved: bool,
     pub last_sync: Option<LastSync>,
@@ -97,8 +108,13 @@ pub struct LinkedStatus {
 pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
     let pool = app.state::<SqlitePool>().inner().clone();
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
+    let record = load_group(&pool).await?;
     Ok(LinkedStatus {
-        store_url: load_group(&pool).await?.map(|record| record.store_url),
+        linked: record.is_some(),
+        on_lan: record.as_ref().is_some_and(|r| r.kind == StoreKind::Lan),
+        store_url: record
+            .filter(|r| r.kind == StoreKind::Server)
+            .map(|r| r.store_url),
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
         last_sync: last_sync(app),
@@ -112,6 +128,8 @@ pub struct LinkedDevice {
     pub name: String,
     pub platform: String,
     pub this_device: bool,
+    /// Met on this network in the last few minutes.
+    pub nearby: bool,
 }
 
 pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
@@ -120,6 +138,7 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
     let mut session = open_session(&local.pool, &record, &local.device).await?;
     let names = device_names(&mut session).await?;
     let me = hex::encode(local.device.did);
+    let nearby = nearby(app);
     Ok(session
         .roster()
         .members
@@ -132,6 +151,7 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
                 name: meta.map(|m| m.name.clone()).unwrap_or_default(),
                 platform: meta.map(|m| m.platform.clone()).unwrap_or_default(),
                 this_device: *id == me,
+                nearby: nearby.contains(id),
             }
         })
         .collect())
@@ -150,6 +170,17 @@ pub async fn create(app: &AppHandle, url: &str, admin_token: &str) -> Result<Str
         &default_link(app),
     )
     .await?;
+    set_recovery_saved(&local.pool, false).await?;
+    Ok(words)
+}
+
+/// Starts a group that lives on this network's devices, with no server, and returns the recovery
+/// words to show once.
+pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
+    let local = local(app).await?;
+    ensure_unlinked(&local.pool).await?;
+    let words =
+        create_lan_group(&local.pool, &local.device, &local.meta, &default_link(app)).await?;
     set_recovery_saved(&local.pool, false).await?;
     Ok(words)
 }

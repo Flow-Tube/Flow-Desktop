@@ -23,8 +23,12 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
   const { devices, devicesError, busy, syncNow, addDevice, refresh } = useLinkedDevicesStore();
   return (
     <div className="grid grid-cols-12 gap-4">
-      <Card title={getString("linked_server")} className="col-span-12 lg:col-span-5">
-        <p className="break-all font-mono text-sm text-chrome-neutral-100">{status.storeUrl}</p>
+      <Card title={getString(status.onLan ? "linked_on_lan" : "linked_server")} className="col-span-12 lg:col-span-5">
+        {status.onLan ? (
+          <p className="text-sm text-chrome-neutral-400">{getString("linked_on_lan_body")}</p>
+        ) : (
+          <p className="break-all font-mono text-sm text-chrome-neutral-100">{status.storeUrl}</p>
+        )}
         <p className={`text-sm ${status.lastSync?.error ? "text-chrome-red-400" : "text-chrome-neutral-400"}`}>
           {lastSyncText(status)}
         </p>

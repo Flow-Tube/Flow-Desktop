@@ -235,13 +235,13 @@ impl Store for HeldStore {
             .map_err(StoreError::Local)
     }
 
-    async fn delete_object(&self, path: &str) -> Result<()> {
-        sqlx::query("DELETE FROM sync2_held_objects WHERE path = ?")
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        let deleted = sqlx::query("DELETE FROM sync2_held_objects WHERE path = ?")
             .bind(path)
             .execute(&self.pool)
             .await
             .map_err(StoreError::Local)?;
-        Ok(())
+        Ok(deleted.rows_affected() > 0)
     }
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {

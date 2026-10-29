@@ -32,6 +32,8 @@ pub struct Memory {
     pub keys: BTreeMap<(u32, String), Vec<u8>>,
     pub objects: BTreeMap<String, (u64, Vec<u8>)>,
     pub mailbox: BTreeMap<String, Vec<u8>>,
+    /// Every delete request made, found or not.
+    pub deletes: Vec<String>,
     cursor: u64,
 }
 
@@ -119,9 +121,10 @@ impl Store for &MemoryStore {
             .map(|(_, bytes)| bytes.clone()))
     }
 
-    async fn delete_object(&self, path: &str) -> Result<()> {
-        self.0.lock().unwrap().objects.remove(path);
-        Ok(())
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        let mut memory = self.0.lock().unwrap();
+        memory.deletes.push(path.to_owned());
+        Ok(memory.objects.remove(path).is_some())
     }
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {

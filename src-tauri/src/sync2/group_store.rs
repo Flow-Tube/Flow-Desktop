@@ -65,7 +65,7 @@ impl Store for GroupStore {
         }
     }
 
-    async fn delete_object(&self, path: &str) -> Result<()> {
+    async fn delete_object(&self, path: &str) -> Result<bool> {
         match self {
             Self::Server(store) => store.delete_object(path).await,
             Self::Held(store) => store.delete_object(path).await,

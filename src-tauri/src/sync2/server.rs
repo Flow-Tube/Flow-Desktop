@@ -378,14 +378,14 @@ impl Store for ServerStore {
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
         self.get_bytes(&format!("v1/objects/{path}")).await
     }
-    async fn delete_object(&self, path: &str) -> Result<()> {
+    async fn delete_object(&self, path: &str) -> Result<bool> {
         let response = self
             .authorized(Method::DELETE, &format!("v1/objects/{path}"), None)
             .await?;
         if response.status() == StatusCode::NOT_FOUND {
-            return Ok(());
+            return Ok(false);
         }
-        decode_empty(response).await
+        decode_empty(response).await.map(|()| true)
     }
     /// Objects that arrived after `cursor`, and the cursor to pass next time.
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {

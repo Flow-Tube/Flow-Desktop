@@ -15,8 +15,8 @@ use super::store::Store;
 use crate::sync::canonical::to_canonical_json;
 use crate::sync::error::SyncError;
 
-/// Deletions per sync, so one run stays short.
-const BUDGET: usize = 500;
+/// Deletions per sync, well inside the server's 600 requests per device per minute.
+const BUDGET: usize = 100;
 
 pub type VersionVector = BTreeMap<String, u64>;
 
@@ -221,6 +221,18 @@ impl Facts<'_> {
 }
 
 impl<S: Store> Session<'_, S> {
+    /// Deletes one object, and whether it was still there; `None` when the store refused, which
+    /// ends the pass so collecting never crowds out the requests that sync (a 429 among them).
+    async fn delete_or_stop(&self, path: &str) -> Option<bool> {
+        match self.store().delete_object(path).await {
+            Ok(found) => Some(found),
+            Err(error) => {
+                tracing::debug!(target: "flow::sync2", %error, "garbage collection paused");
+                None
+            }
+        }
+    }
+
     /// Deletes what [`Facts::plan`] allows, a bounded amount per call.
     pub async fn collect_garbage(&self, pool: &SqlitePool) -> Result<()> {
         let current: BTreeSet<String> = self
@@ -263,12 +275,17 @@ impl<S: Store> Session<'_, S> {
             if budget < logged.manifest.parts.len() + 1 {
                 return Ok(());
             }
-            for part in &logged.manifest.parts {
-                self.store()
-                    .delete_object(&blob_path(did, &part.blob))
-                    .await?;
+            let paths = logged
+                .manifest
+                .parts
+                .iter()
+                .map(|part| blob_path(did, &part.blob))
+                .chain([log_path(did, *seq)]);
+            for path in paths {
+                if self.delete_or_stop(&path).await.is_none() {
+                    return Ok(());
+                }
             }
-            self.store().delete_object(&log_path(did, *seq)).await?;
             sqlx::query("DELETE FROM sync2_manifests WHERE did = ? AND seq = ?")
                 .bind(did)
                 .bind(to_i64(*seq)?)
@@ -287,12 +304,26 @@ impl<S: Store> Session<'_, S> {
                 .map(|m| m.seq)
                 .collect();
             let mut done = from - 1;
-            for n in (from..=through).filter(|n| !kept.contains(n)).take(budget) {
-                self.store().delete_object(&log_path(&did, n)).await?;
+            let mut stopped = false;
+            for n in (from..=through).filter(|n| !kept.contains(n)) {
+                if budget == 0 {
+                    break;
+                }
                 budget -= 1;
-                done = n;
+                match self.delete_or_stop(&log_path(&did, n)).await {
+                    Some(true) => done = n,
+                    // Gone already: another device collected this range, or this one did before.
+                    Some(false) => {
+                        done = through;
+                        break;
+                    }
+                    None => {
+                        stopped = true;
+                        break;
+                    }
+                }
             }
-            if budget > 0 {
+            if budget > 0 && !stopped {
                 done = through;
             }
             sqlx::query(
@@ -304,6 +335,9 @@ impl<S: Store> Session<'_, S> {
             .execute(pool)
             .await
             .map_err(SyncError::from)?;
+            if stopped {
+                return Ok(());
+            }
         }
         Ok(())
     }

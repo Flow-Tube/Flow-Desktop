@@ -48,6 +48,7 @@ pub mod snapshot;
 pub mod state;
 pub mod store;
 pub mod webdav;
+pub mod webdav_login;
 pub mod wrap;
 
 pub use error::{Error, Result};

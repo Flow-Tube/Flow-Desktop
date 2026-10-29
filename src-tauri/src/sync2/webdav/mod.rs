@@ -34,6 +34,11 @@ pub struct WebDavStore {
 }
 
 impl WebDavStore {
+    /// The folder at `url`, as the device `me` reads it.
+    pub async fn connect(url: &str, login: WebDavLogin, me: String) -> Result<Self> {
+        Ok(Self::new(WebDav::connect(url, login).await?, me))
+    }
+
     pub fn new(client: WebDav, me: String) -> Self {
         Self {
             client,

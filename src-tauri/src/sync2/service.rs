@@ -11,10 +11,11 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
-use super::actions::{default_link, local, open_session};
+use super::actions::{default_link, local, login_refused, open_session, set_login_refused};
 use super::batches::{IncomingBatch, apply_batches};
-use super::engine::{Result, now_ms};
+use super::engine::{EngineError, Result, now_ms};
 use super::names::device_names;
+use super::server::StoreError;
 use super::snapshot::snapshot_due;
 use super::state::load_group;
 use crate::sync::canonical::Collection;
@@ -75,11 +76,14 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
     let state = app.state::<BackgroundSync>();
     let _running = state.running.lock().await;
     let pool = app.state::<SqlitePool>().inner().clone();
-    if load_group(&pool).await?.is_none() {
+    if load_group(&pool).await?.is_none() || login_refused(&pool).await? {
         return Ok(Vec::new());
     }
     let _ = app.emit(EVENT_SYNCING, ());
     let result = run(app).await;
+    if matches!(result, Err(EngineError::Store(StoreError::Unauthorized))) {
+        set_login_refused(&pool, true).await?;
+    }
     let last = LastSync {
         at_ms: now_ms(),
         error: result.as_ref().err().map(|e| e.kind().to_owned()),

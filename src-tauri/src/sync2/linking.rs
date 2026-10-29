@@ -26,7 +26,7 @@ use super::roster::{
     Entry, Op, Role, RosterState, Subject, apply_entry, replay_roster, signing_bytes,
 };
 use super::sealed::{open, random_bytes, seal};
-use super::state::{GroupRecord, StoreKind, add_roster_entries, save_group};
+use super::state::{GroupRecord, add_roster_entries, save_group};
 use super::store::Store;
 use super::wrap::{unwrap_epoch_key, wrap_epoch_key};
 use super::{Error, array};
@@ -40,12 +40,13 @@ pub struct DeviceMeta {
     pub platform: String,
 }
 
-/// Where the group lives, as `welcome` names it: `{"k":"server","u":url,"i":instance}` or
-/// `{"k":"lan"}`.
+/// Where the group lives, as `welcome` names it: `{"k":"server","u":url,"i":instance}`,
+/// `{"k":"webdav","u":url,"n":user,"w":password}` or `{"k":"lan"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "k", rename_all = "lowercase", deny_unknown_fields)]
 pub enum WelcomeStore {
     Server { u: String, i: String },
+    WebDav { u: String, n: String, w: String },
     Lan,
 }
 
@@ -144,6 +145,7 @@ pub async fn add_device<S, F>(
     session: &Session<'_, S>,
     mut offer: Offer,
     device: &MemberSecrets,
+    store: WelcomeStore,
     confirm: impl FnOnce(String) -> F,
 ) -> Result<String>
 where
@@ -164,7 +166,9 @@ where
         Ok((lan, key)) => {
             let pipe = lan.map_or(AnyPipe::Mailbox(mailbox), AnyPipe::Lan);
             match Channel::shower(pipe, &offer, &key) {
-                Ok((channel, sas)) => member_side(session, channel, sas, device, confirm).await,
+                Ok((channel, sas)) => {
+                    member_side(session, channel, sas, device, store, confirm).await
+                }
                 Err(error) => Err(error),
             }
         }
@@ -181,6 +185,7 @@ pub async fn add_scanned<S, F>(
     session: &Session<'_, S>,
     code: &Code,
     device: &MemberSecrets,
+    store: WelcomeStore,
     confirm: impl FnOnce(String) -> F,
 ) -> Result<String>
 where
@@ -192,14 +197,16 @@ where
     };
     let pipe = dial(lan).await.ok_or(EngineError::LanUnreachable)?;
     let (channel, sas) = Channel::scanner(pipe, code).await?;
-    member_side(session, channel, sas, device, confirm).await
+    member_side(session, channel, sas, device, store, confirm).await
 }
 
+/// `store` is where the group lives, as the welcome names it to the new device.
 async fn member_side<S, P, F>(
     session: &Session<'_, S>,
     mut channel: Channel<P>,
     sas: String,
     device: &MemberSecrets,
+    store: WelcomeStore,
     confirm: impl FnOnce(String) -> F,
 ) -> Result<String>
 where
@@ -268,18 +275,10 @@ where
 
     let record = session.record();
     // A LAN group has no store to read from, so the new device gets the roster and its wrap here.
-    let (store, entries, wrap) = match record.kind {
-        StoreKind::Server => {
-            let store = WelcomeStore::Server {
-                u: record.store_url.clone(),
-                i: record.instance.clone().unwrap_or_default(),
-            };
-            (store, None, None)
-        }
-        StoreKind::Lan => {
-            let entries = session.store().roster_after(-1).await?;
-            (WelcomeStore::Lan, Some(entries), Some(wrap))
-        }
+    let (entries, wrap) = if store == WelcomeStore::Lan {
+        (Some(session.store().roster_after(-1).await?), Some(wrap))
+    } else {
+        (None, None)
     };
     let welcome = Message::Welcome {
         group: record.group_id.clone(),
@@ -405,7 +404,8 @@ async fn say_done<P: Pipe>(mut channel: Channel<P>) -> Result<()> {
     Ok(())
 }
 
-/// Saves a server group once the roster on `store` verifies up to the head the member named.
+/// Saves a server or `WebDAV` group once the roster on `store` verifies up to the head the member
+/// named.
 pub async fn finish_join<S: Store, P: Pipe>(
     pool: &SqlitePool,
     store: &S,
@@ -416,13 +416,14 @@ pub async fn finish_join<S: Store, P: Pipe>(
         me,
         welcome,
     } = welcomed;
-    let WelcomeStore::Server { u, i } = &welcome.store else {
-        return Err(EngineError::Unexpected);
-    };
     let roster = store.roster_after(-1).await?;
     check_pinned(&roster, &welcome, &me)?;
+    let record = match welcome.store {
+        WelcomeStore::Server { u, i } => GroupRecord::new(welcome.group, u, Some(i), welcome.link),
+        WelcomeStore::WebDav { u, .. } => GroupRecord::on_webdav(welcome.group, u, welcome.link),
+        WelcomeStore::Lan => return Err(EngineError::Unexpected),
+    };
     add_roster_entries(pool, &roster).await?;
-    let record = GroupRecord::new(welcome.group, u.clone(), Some(i.clone()), welcome.link);
     save_group(pool, &record).await?;
     say_done(channel).await
 }
@@ -502,15 +503,15 @@ where
     finish_join(pool, store, welcomed).await
 }
 
-/// The new device's side, on the code of a LAN group's member: pairs over the LAN and saves the
-/// group from the welcome.
-pub async fn join_lan<F>(
-    pool: &SqlitePool,
+/// The new device's side, on the code of a member it can reach only over the LAN: pairs there.
+/// The caller then calls [`finish_lan_join`], or [`finish_join`] with the welcome's `WebDAV`
+/// folder.
+pub async fn join_on_lan<F>(
     code: &Code,
     device: &MemberSecrets,
     meta: DeviceMeta,
     confirm: impl FnOnce(String) -> F,
-) -> Result<()>
+) -> Result<Welcomed<impl Pipe>>
 where
     F: Future<Output = bool>,
 {
@@ -524,8 +525,7 @@ where
     };
     let pipe = dial(lan).await.ok_or(EngineError::LanUnreachable)?;
     let (channel, sas) = Channel::scanner(pipe, code).await?;
-    let welcomed = new_side(channel, sas, device, meta, confirm).await?;
-    finish_lan_join(pool, device, welcomed).await
+    new_side(channel, sas, device, meta, confirm).await
 }
 
 /// The new device's side, on the code it shows: waits on the LAN for a member to scan it. The

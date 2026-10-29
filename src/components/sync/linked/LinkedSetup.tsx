@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyRound, QrCode, Wifi } from "lucide-react";
+import { KeyRound, QrCode } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
@@ -7,30 +7,7 @@ import { Button } from "../../ui/Button";
 import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
-
-function CreateGroup() {
-  const { create, createOnLan, busy } = useLinkedDevicesStore();
-  const [url, setUrl] = useState("");
-  const [token, setToken] = useState("");
-  return (
-    <Card title={getString("linked_setup_title")} subtitle={getString("linked_setup_subtitle")} className="col-span-12 lg:col-span-6">
-      <Field label={getString("linked_server_url")}>
-        <TextInput value={url} onChange={setUrl} placeholder={getString("linked_server_url_placeholder")} spellCheck={false} />
-      </Field>
-      <Field label={getString("linked_admin_token")} hint={getString("linked_admin_token_hint")}>
-        <TextInput type="password" value={token} onChange={setToken} spellCheck={false} />
-      </Field>
-      <div className="mt-auto flex flex-wrap gap-2">
-        <Button disabled={busy || !url.trim() || !token.trim()} onClick={() => void create(url, token)}>
-          {getString("linked_create")}
-        </Button>
-        <Button variant="tonal" disabled={busy} onClick={() => void createOnLan()}>
-          <Wifi className="h-4 w-4" /> {getString("linked_create_lan")}
-        </Button>
-      </div>
-    </Card>
-  );
-}
+import { CreateGroup } from "./CreateGroup";
 
 /** Joins a server group with its address and admin token instead of a code. */
 function AskToJoin() {

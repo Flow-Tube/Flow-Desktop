@@ -10,10 +10,12 @@ export interface LastSync {
 }
 
 export interface LinkedStatus {
-  /** The group this device is in: on a Flow server, or on its devices on the network. */
-  kind: "server" | "lan" | null;
-  /** The Flow server this device syncs with, for a server group. */
+  /** The group this device is in: on a Flow server, in a WebDAV folder, or on its devices on the network. */
+  kind: "server" | "webdav" | "lan" | null;
+  /** The Flow server or WebDAV folder this device syncs with. */
   storeUrl?: string | null;
+  /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
+  loginRefused: boolean;
   recoverySaved: boolean;
   lastSync?: LastSync | null;
   /** A run is under way. */
@@ -63,6 +65,14 @@ export const createGroup = (url: string, adminToken: string) =>
 
 /** Starts a group on this network, with no server. Resolves to the recovery words, shown once. */
 export const createLanGroup = () => invokeBackend<string>("linked_create_lan");
+
+/** Starts a group in a WebDAV folder. Resolves to the recovery words, shown once. */
+export const createWebdavGroup = (url: string, user: string, password: string) =>
+  invokeBackend<string>("linked_create_webdav", { url, user, password });
+
+/** Replaces a WebDAV login the folder refused. */
+export const updateLogin = (user: string, password: string) =>
+  invokeBackend<void>("linked_update_login", { user, password });
 
 /** Resolves to the new recovery words, shown once. */
 export const restoreGroup = (url: string, words: string) =>

@@ -14,7 +14,7 @@ use flow_desktop_lib::sync2::keys::MemberSecrets;
 use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan_sync::{meet, serve};
 use flow_desktop_lib::sync2::linking::{
-    DeviceMeta, add_device, add_scanned, answer_shown, finish_lan_join, join_lan,
+    DeviceMeta, WelcomeStore, add_device, add_scanned, answer_shown, finish_lan_join, join_on_lan,
 };
 use flow_desktop_lib::sync2::membership::rename_device;
 use flow_desktop_lib::sync2::paths::log_path;
@@ -243,8 +243,11 @@ async fn a_new_device_scans_a_lan_group_member_and_then_syncs() {
     let code = read_code(&offer.qr).unwrap();
     let shown = |_sas: String| async { true };
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, shown),
-        join_lan(&pool_n, &code, &newcomer, named("New"), shown),
+        add_device(&session, offer, &g.a, WelcomeStore::Lan, shown),
+        async {
+            let welcomed = join_on_lan(&code, &newcomer, named("New"), shown).await?;
+            finish_lan_join(&pool_n, &newcomer, welcomed).await
+        },
     );
     joined.unwrap();
     assert_eq!(added.unwrap(), hex::encode(newcomer.did));
@@ -269,10 +272,13 @@ async fn a_lan_group_member_scans_a_new_device_code() {
     let offer = new_offer(None, "New", Some(listen_on(loopback()).await.unwrap()));
     let code = read_code(&offer.qr).unwrap();
     let shown = |_sas: String| async { true };
-    let (added, joined) = tokio::join!(add_scanned(&session, &code, &g.a, shown), async {
-        let welcomed = answer_shown(offer, &newcomer, named("New"), shown).await?;
-        finish_lan_join(&pool_n, &newcomer, welcomed).await
-    });
+    let (added, joined) = tokio::join!(
+        add_scanned(&session, &code, &g.a, WelcomeStore::Lan, shown),
+        async {
+            let welcomed = answer_shown(offer, &newcomer, named("New"), shown).await?;
+            finish_lan_join(&pool_n, &newcomer, welcomed).await
+        }
+    );
     joined.unwrap();
     assert_eq!(added.unwrap(), hex::encode(newcomer.did));
     joined_and_synced(&g, &pool_a, &pool_n, &newcomer).await;

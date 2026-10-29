@@ -93,6 +93,29 @@ pub async fn linked_create_lan(app: AppHandle) -> Result<String, ErrorResponse> 
 }
 
 #[tauri::command]
+pub async fn linked_create_webdav(
+    app: AppHandle,
+    url: String,
+    user: String,
+    password: String,
+) -> Result<String, ErrorResponse> {
+    actions::create_on_webdav(&app, &url, &user, &password)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_update_login(
+    app: AppHandle,
+    user: String,
+    password: String,
+) -> Result<(), ErrorResponse> {
+    actions::update_login(&app, &user, &password)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
 pub async fn linked_ask_to_join(
     app: AppHandle,
     url: String,

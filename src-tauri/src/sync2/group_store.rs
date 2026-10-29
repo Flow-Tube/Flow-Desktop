@@ -1,4 +1,5 @@
-//! The store a group syncs through: its Flow server, or what its devices hold on the LAN.
+//! The store a group syncs through: its Flow server, its `WebDAV` folder, or what its devices hold
+//! on the LAN.
 
 use std::collections::BTreeMap;
 
@@ -7,10 +8,23 @@ use super::mailbox::Mailbox;
 use super::roster::Entry;
 use super::server::{Appended, ChangedObject, Result, ServerStore};
 use super::store::Store;
+use super::webdav::WebDavStore;
 
 pub enum GroupStore {
     Server(Box<ServerStore>),
+    WebDav(Box<WebDavStore>),
     Held(HeldStore),
+}
+
+/// The same call on whichever store this is.
+macro_rules! each {
+    ($self:ident, $store:ident => $call:expr) => {
+        match $self {
+            Self::Server($store) => $call,
+            Self::WebDav($store) => $call,
+            Self::Held($store) => $call,
+        }
+    };
 }
 
 impl GroupStore {
@@ -18,17 +32,14 @@ impl GroupStore {
     pub fn server(&self) -> Option<&ServerStore> {
         match self {
             Self::Server(store) => Some(store),
-            Self::Held(_) => None,
+            Self::WebDav(_) | Self::Held(_) => None,
         }
     }
 }
 
 impl Store for GroupStore {
     async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
-        match self {
-            Self::Server(store) => store.roster_after(after).await,
-            Self::Held(store) => store.roster_after(after).await,
-        }
+        each!(self, store => store.roster_after(after).await)
     }
 
     async fn append_roster(
@@ -38,45 +49,35 @@ impl Store for GroupStore {
         wraps: &BTreeMap<String, String>,
         chain: Option<&str>,
     ) -> Result<Appended> {
-        match self {
-            Self::Server(store) => store.append_roster(head, entry, wraps, chain).await,
-            Self::Held(store) => store.append_roster(head, entry, wraps, chain).await,
-        }
+        each!(self, store => store.append_roster(head, entry, wraps, chain).await)
     }
 
     async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        match self {
-            Self::Server(store) => store.key(epoch, name).await,
-            Self::Held(store) => store.key(epoch, name).await,
-        }
+        each!(self, store => store.key(epoch, name).await)
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
-        match self {
-            Self::Server(store) => store.put_object(path, bytes).await,
-            Self::Held(store) => store.put_object(path, bytes).await,
-        }
+        each!(self, store => store.put_object(path, bytes).await)
     }
 
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        match self {
-            Self::Server(store) => store.get_object(path).await,
-            Self::Held(store) => store.get_object(path).await,
-        }
+        each!(self, store => store.get_object(path).await)
     }
 
     async fn delete_object(&self, path: &str) -> Result<bool> {
-        match self {
-            Self::Server(store) => store.delete_object(path).await,
-            Self::Held(store) => store.delete_object(path).await,
-        }
+        each!(self, store => store.delete_object(path).await)
     }
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
-        match self {
-            Self::Server(store) => store.changes(cursor).await,
-            Self::Held(store) => store.changes(cursor).await,
-        }
+        each!(self, store => store.changes(cursor).await)
+    }
+
+    async fn new_objects(
+        &self,
+        cursor: u64,
+        read: &BTreeMap<String, u64>,
+    ) -> Result<(Vec<ChangedObject>, u64)> {
+        each!(self, store => store.new_objects(cursor, read).await)
     }
 }
 
@@ -85,6 +86,7 @@ impl Mailbox for GroupStore {
     async fn open_slot(&self, slot: &str) -> Result<()> {
         match self {
             Self::Server(store) => store.open_slot(slot).await,
+            Self::WebDav(store) => store.open_slot(slot).await,
             Self::Held(_) => Ok(()),
         }
     }
@@ -92,6 +94,7 @@ impl Mailbox for GroupStore {
     async fn put_message(&self, slot: &str, name: &str, bytes: Vec<u8>) -> Result<()> {
         match self {
             Self::Server(store) => store.put_message(slot, name, bytes).await,
+            Self::WebDav(store) => store.put_message(slot, name, bytes).await,
             Self::Held(_) => Ok(()),
         }
     }
@@ -99,6 +102,7 @@ impl Mailbox for GroupStore {
     async fn get_message(&self, slot: &str, name: &str) -> Result<Option<Vec<u8>>> {
         match self {
             Self::Server(store) => store.get_message(slot, name).await,
+            Self::WebDav(store) => store.get_message(slot, name).await,
             Self::Held(_) => Ok(None),
         }
     }
@@ -106,6 +110,7 @@ impl Mailbox for GroupStore {
     async fn close_slot(&self, slot: &str) -> Result<()> {
         match self {
             Self::Server(store) => store.close_slot(slot).await,
+            Self::WebDav(store) => store.close_slot(slot).await,
             Self::Held(_) => Ok(()),
         }
     }

@@ -61,9 +61,10 @@ use commands::downloads::{
 use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::linked::{
-    linked_add_device, linked_answer, linked_cancel, linked_create, linked_create_lan,
-    linked_devices, linked_enter_code, linked_forget, linked_link_phase, linked_recovery_saved,
-    linked_remove, linked_rename, linked_restore, linked_show_code, linked_status, linked_sync_now,
+    linked_accept_join, linked_add_device, linked_answer, linked_ask_to_join, linked_cancel,
+    linked_create, linked_create_lan, linked_decline_join, linked_devices, linked_enter_code,
+    linked_forget, linked_join_requests, linked_link_phase, linked_recovery_saved, linked_remove,
+    linked_rename, linked_restore, linked_show_code, linked_status, linked_sync_now,
 };
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
@@ -808,6 +809,10 @@ pub fn run() {
             linked_link_phase,
             linked_add_device,
             linked_show_code,
+            linked_ask_to_join,
+            linked_join_requests,
+            linked_accept_join,
+            linked_decline_join,
             linked_enter_code,
             linked_answer,
             linked_cancel,

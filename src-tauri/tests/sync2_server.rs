@@ -224,3 +224,93 @@ async fn claiming_a_server_that_has_a_group_says_so() {
         Err(StoreError::AlreadyClaimed)
     ));
 }
+
+#[tokio::test]
+async fn a_join_request_waits_for_a_member_s_code() {
+    use flow_desktop_lib::sync2::codes::{Code, StoreLocation, new_offer};
+    use flow_desktop_lib::sync2::join_requests::wait_for_code;
+    use wiremock::matchers::path_regex;
+
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/join"))
+        .and(header("authorization", "Bearer admin"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "expires": 1 })))
+        .mount(&server)
+        .await;
+    let answer = "^/v1/join/[0-9a-f]{32}$";
+    Mock::given(method("GET"))
+        .and(path_regex(answer))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({ "error": "not_found" })))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    let code = new_offer(
+        Some(StoreLocation::server(&server.uri())),
+        "Desktop A",
+        None,
+    )
+    .qr;
+    Mock::given(method("GET"))
+        .and(path_regex(answer))
+        .and(header("authorization", "Bearer admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "code": code })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let answered = wait_for_code(&store, "admin", "New desktop").await.unwrap();
+    assert!(matches!(answered, Code::Member { .. }));
+    let posted: Value = serde_json::from_slice(
+        &server
+            .received_requests()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.url.path() == "/v1/join")
+            .unwrap()
+            .body,
+    )
+    .unwrap();
+    assert_eq!(posted["name"], "New desktop");
+    assert_eq!(posted["id"].as_str().unwrap().len(), 32);
+}
+
+#[tokio::test]
+async fn members_list_answer_and_decline_join_requests_with_their_token() {
+    let (server, _) = server(INSTANCE).await;
+    let id = "ab".repeat(16);
+    Mock::given(method("GET"))
+        .and(path("/v1/join"))
+        .and(header("authorization", "Bearer t1"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(
+                json!({ "requests": [{ "id": id, "name": "Phone", "expires": 5 }] }),
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path(format!("/v1/join/{id}")))
+        .respond_with(ResponseTemplate::new(201))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path(format!("/v1/join/{id}")))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let requests = store.join_requests().await.unwrap();
+    assert_eq!(
+        (requests[0].id.as_str(), requests[0].name.as_str()),
+        (id.as_str(), "Phone")
+    );
+    store.answer_join(&id, "{}").await.unwrap();
+    store.decline_join(&id).await.unwrap();
+}

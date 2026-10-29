@@ -220,7 +220,7 @@ impl ServerStore {
     }
 
     /// Sends an authenticated request, signing in again once if the token was refused.
-    async fn authorized(
+    pub(super) async fn authorized(
         &self,
         method: Method,
         path: &str,
@@ -251,6 +251,19 @@ impl ServerStore {
         unreachable!("the loop returns on its second pass")
     }
 
+    /// A request with the operator's admin token instead of a device token.
+    pub(super) fn as_admin(
+        &self,
+        method: Method,
+        path: &str,
+        admin_token: &str,
+    ) -> Result<reqwest::RequestBuilder> {
+        Ok(self
+            .client
+            .request(method, self.url(path)?)
+            .bearer_auth(admin_token))
+    }
+
     /// Creates the group on an unclaimed server with the operator's admin token.
     pub async fn claim(
         &self,
@@ -259,9 +272,7 @@ impl ServerStore {
         wraps: &BTreeMap<String, String>,
     ) -> Result<()> {
         let response = self
-            .client
-            .post(self.url("v1/claim")?)
-            .bearer_auth(admin_token)
+            .as_admin(Method::POST, "v1/claim", admin_token)?
             .json(&json!({ "entry": genesis, "wraps": wraps }))
             .send()
             .await
@@ -421,7 +432,7 @@ impl Mailbox for ServerStore {
     }
 }
 
-enum Body {
+pub(super) enum Body {
     Json(Value),
     Bytes(Vec<u8>),
     Append { value: Value, head: String },
@@ -443,7 +454,7 @@ async fn check(response: reqwest::Response) -> Result<reqwest::Response> {
     })
 }
 
-async fn decode(response: reqwest::Response) -> Result<Value> {
+pub(super) async fn decode(response: reqwest::Response) -> Result<Value> {
     check(response)
         .await?
         .json()
@@ -451,6 +462,6 @@ async fn decode(response: reqwest::Response) -> Result<Value> {
         .map_err(|_| StoreError::Malformed)
 }
 
-async fn decode_empty(response: reqwest::Response) -> Result<()> {
+pub(super) async fn decode_empty(response: reqwest::Response) -> Result<()> {
     check(response).await.map(drop)
 }

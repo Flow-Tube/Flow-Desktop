@@ -30,11 +30,19 @@ export interface LinkedDevice {
 
 export type LinkPhase =
   | { phase: "idle" }
+  | { phase: "asking" }
   | { phase: "waiting"; code?: string | null }
   | { phase: "confirm"; sas: string }
   | { phase: "linking" }
   | { phase: "done" }
   | { phase: "failed"; kind: string; message: string };
+
+/** A device asking to join with the server's admin token; its name is unauthenticated. */
+export interface JoinRequest {
+  id: string;
+  name: string;
+  expires: number;
+}
 
 export const getLinkedStatus = () => invokeBackend<LinkedStatus>("linked_status");
 export const getLinkedDevices = () => invokeBackend<LinkedDevice[]>("linked_devices");
@@ -61,11 +69,21 @@ export const addDevice = () => invokeBackend<void>("linked_add_device");
 export const enterCode = (code: string) => invokeBackend<void>("linked_enter_code", { code });
 /** Shows a code for a member on the same network to scan. */
 export const showCode = () => invokeBackend<void>("linked_show_code");
+/** Asks the group on `url` to let this device join; a linked device then accepts it. */
+export const askToJoin = (url: string, adminToken: string) =>
+  invokeBackend<void>("linked_ask_to_join", { url, adminToken });
+export const getJoinRequests = () => invokeBackend<JoinRequest[]>("linked_join_requests");
+export const acceptJoin = (id: string) => invokeBackend<void>("linked_accept_join", { id });
+export const declineJoin = (id: string) => invokeBackend<void>("linked_decline_join", { id });
 export const answerCode = (accept: boolean) => invokeBackend<void>("linked_answer", { accept });
 export const cancelLink = () => invokeBackend<void>("linked_cancel");
 
 export function onLinkPhase(cb: (phase: LinkPhase) => void): Promise<UnlistenFn> {
   return listen<LinkPhase>("sync2://link", (event) => cb(event.payload));
+}
+
+export function onJoinRequests(cb: (requests: JoinRequest[]) => void): Promise<UnlistenFn> {
+  return listen<JoinRequest[]>("sync2://join-requests", (event) => cb(event.payload));
 }
 
 export function onSynced(cb: (last: LastSync) => void): Promise<UnlistenFn> {

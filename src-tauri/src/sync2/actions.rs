@@ -8,6 +8,7 @@ use super::device::{device_keys, keychain};
 use super::engine::{EngineError, Result, Session};
 use super::group_store::GroupStore;
 use super::held::HeldStore;
+use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
 use super::lan_runtime::nearby;
 use super::linking::DeviceMeta;
@@ -220,6 +221,25 @@ pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
     snapshot_soon(&local.pool).await?;
     sync_soon(app);
     Ok(())
+}
+
+/// Devices asking to join this device's server group; none for a LAN group.
+pub async fn join_requests(app: &AppHandle) -> Result<Vec<JoinRequest>> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let session = open_session(&local.pool, &record, &local.device).await?;
+    match session.store().server() {
+        Some(server) => Ok(server.join_requests().await?),
+        None => Ok(Vec::new()),
+    }
+}
+
+pub async fn decline_join(app: &AppHandle, id: &str) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let session = open_session(&local.pool, &record, &local.device).await?;
+    let server = session.store().server().ok_or(EngineError::Unexpected)?;
+    Ok(server.decline_join(id).await?)
 }
 
 /// Stops syncing on this device. The group keeps it as a member until another device removes it.

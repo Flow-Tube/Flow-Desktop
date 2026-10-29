@@ -6,6 +6,7 @@ use tauri::AppHandle;
 use crate::errors::ErrorResponse;
 use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
 use crate::sync2::engine::EngineError;
+use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
 use crate::sync2::service;
 
@@ -89,6 +90,34 @@ pub async fn linked_add_device(app: AppHandle) -> Result<(), ErrorResponse> {
 #[tauri::command]
 pub async fn linked_create_lan(app: AppHandle) -> Result<String, ErrorResponse> {
     actions::create_on_lan(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_ask_to_join(
+    app: AppHandle,
+    url: String,
+    admin_token: String,
+) -> Result<(), ErrorResponse> {
+    link_task::start_asking(&app, &url, &admin_token)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_join_requests(app: AppHandle) -> Result<Vec<JoinRequest>, ErrorResponse> {
+    actions::join_requests(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_accept_join(app: AppHandle, id: String) -> Result<(), ErrorResponse> {
+    link_task::start_accepting(&app, id)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_decline_join(app: AppHandle, id: String) -> Result<(), ErrorResponse> {
+    actions::decline_join(&app, &id).await.map_err(|e| err(&e))
 }
 
 #[tauri::command]

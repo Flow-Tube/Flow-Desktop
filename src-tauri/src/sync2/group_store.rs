@@ -13,6 +13,16 @@ pub enum GroupStore {
     Held(HeldStore),
 }
 
+impl GroupStore {
+    /// The Flow server, for a server group.
+    pub fn server(&self) -> Option<&ServerStore> {
+        match self {
+            Self::Server(store) => Some(store),
+            Self::Held(_) => None,
+        }
+    }
+}
+
 impl Store for GroupStore {
     async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
         match self {

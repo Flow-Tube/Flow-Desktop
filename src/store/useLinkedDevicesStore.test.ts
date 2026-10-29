@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  acceptJoin: vi.fn(),
   addDevice: vi.fn(),
+  askToJoin: vi.fn(),
+  declineJoin: vi.fn(),
+  getJoinRequests: vi.fn(),
   answerCode: vi.fn(),
   cancelLink: vi.fn(),
   createGroup: vi.fn(),
@@ -66,5 +70,20 @@ describe("useLinkedDevicesStore", () => {
     await useLinkedDevicesStore.getState().refresh();
     expect(api.getLinkedDevices).not.toHaveBeenCalled();
     expect(useLinkedDevicesStore.getState().devices).toBeNull();
+  });
+
+  it("lists join requests quietly and drops one once it is answered", async () => {
+    const phone = { id: "a".repeat(32), name: "Phone", expires: 1 };
+    api.getJoinRequests.mockResolvedValue([phone]);
+    await useLinkedDevicesStore.getState().loadJoinRequests();
+    expect(useLinkedDevicesStore.getState().joinRequests).toEqual([phone]);
+
+    await useLinkedDevicesStore.getState().declineJoin(phone.id);
+    expect(api.declineJoin).toHaveBeenCalledWith(phone.id);
+    expect(useLinkedDevicesStore.getState().joinRequests).toEqual([]);
+
+    api.getJoinRequests.mockRejectedValue({ kind: "linkedRefused", message: "not found" });
+    await useLinkedDevicesStore.getState().loadJoinRequests();
+    expect(useLinkedDevicesStore.getState().error).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ pub mod error;
 pub mod gc;
 pub mod group_store;
 pub mod held;
+pub mod join_requests;
 pub mod kdf;
 pub mod keys;
 pub mod lan;

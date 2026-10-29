@@ -1,13 +1,17 @@
 import { create } from "zustand";
 
 import {
+  acceptJoin,
   addDevice,
+  askToJoin,
   answerCode,
   cancelLink,
   createGroup,
   createLanGroup,
+  declineJoin,
   enterCode,
   forgetGroup,
+  getJoinRequests,
   getLinkPhase,
   getLinkedDevices,
   getLinkedStatus,
@@ -19,6 +23,7 @@ import {
   restoreGroup,
   showCode,
   syncNow,
+  type JoinRequest,
   type LinkPhase,
   type LinkedDevice,
   type LinkedStatus,
@@ -37,6 +42,7 @@ interface LinkedState {
   status: LinkedStatus | null;
   devices: LinkedDevice[] | null;
   devicesError: string | null;
+  joinRequests: JoinRequest[];
   link: LinkPhase;
   /** Recovery words to show once, until the user proves they saved them. */
   words: string | null;
@@ -49,6 +55,10 @@ interface LinkedState {
   createOnLan: () => Promise<void>;
   restore: (url: string, words: string) => Promise<void>;
   enterCode: (code: string) => Promise<void>;
+  askToJoin: (url: string, adminToken: string) => Promise<void>;
+  loadJoinRequests: () => Promise<void>;
+  acceptJoin: (id: string) => Promise<void>;
+  declineJoin: (id: string) => Promise<void>;
   showCode: () => Promise<void>;
   addDevice: () => Promise<void>;
   answer: (accept: boolean) => Promise<void>;
@@ -86,6 +96,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     status: null,
     devices: null,
     devicesError: null,
+    joinRequests: [],
     link: { phase: "idle" },
     words: null,
     busy: false,
@@ -137,6 +148,25 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       }),
 
     enterCode: (code) => run(() => enterCode(code)),
+    askToJoin: (url, adminToken) => run(() => askToJoin(url, adminToken)),
+    // Polled while the page is open, so a failure (an older server, no network) stays quiet.
+    loadJoinRequests: async () => {
+      try {
+        set({ joinRequests: await getJoinRequests() });
+      } catch {
+        set({ joinRequests: [] });
+      }
+    },
+    acceptJoin: (id) =>
+      run(async () => {
+        set((state) => ({ joinRequests: state.joinRequests.filter((r) => r.id !== id) }));
+        await acceptJoin(id);
+      }),
+    declineJoin: (id) =>
+      run(async () => {
+        set((state) => ({ joinRequests: state.joinRequests.filter((r) => r.id !== id) }));
+        await declineJoin(id);
+      }),
     showCode: () => run(showCode),
     addDevice: () => run(addDevice),
     answer: (accept) => run(() => answerCode(accept)),

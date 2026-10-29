@@ -73,6 +73,7 @@ export function LinkPanel({ link, joining }: { link: LinkPhase; joining: boolean
           </div>
         </>
       )}
+      {link.phase === "asking" && <Waiting label={getString("linked_waiting_accept")} />}
       {link.phase === "linking" && <Waiting label={getString("linked_linking")} />}
       {link.phase === "done" && <Outcome title={getString("linked_done_title")} body={getString("linked_done_body")} />}
       {link.phase === "failed" && (

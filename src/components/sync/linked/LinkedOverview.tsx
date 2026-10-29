@@ -9,6 +9,7 @@ import { Button } from "../../ui/Button";
 import { Spinner } from "../SyncParts";
 import { Card } from "./Card";
 import { DeviceList } from "./DeviceList";
+import { JoinRequests } from "./JoinRequests";
 import { LeaveGroup } from "./LeaveGroup";
 
 function lastSyncText(status: LinkedStatus): string {
@@ -23,6 +24,7 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
   const { devices, devicesError, busy, syncNow, addDevice, refresh } = useLinkedDevicesStore();
   return (
     <div className="grid grid-cols-12 gap-4">
+      {!status.onLan && <JoinRequests />}
       <Card title={getString(status.onLan ? "linked_on_lan" : "linked_server")} className="col-span-12 lg:col-span-5">
         {status.onLan ? (
           <p className="text-sm text-chrome-neutral-400">{getString("linked_on_lan_body")}</p>

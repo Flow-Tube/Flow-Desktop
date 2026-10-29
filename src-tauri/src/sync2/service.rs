@@ -23,6 +23,8 @@ use crate::sync::runtime::{
 use crate::sync::session::EVENT_REFRESH;
 
 pub const EVENT_SYNCED: &str = "sync2://synced";
+/// Devices asking to join, seen during a sync, so the app can tell the user on any page.
+pub const EVENT_JOIN_REQUESTS: &str = "sync2://join-requests";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
 const INTERVAL: Duration = Duration::from_mins(5);
 
@@ -100,6 +102,13 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
         session.write_snapshot(pool, exported).await?;
     }
     session.collect_garbage(pool).await?;
+    // A server without join requests (older than flow-sync#41) shouldn't fail the sync.
+    if let Some(server) = session.store().server()
+        && let Ok(requests) = server.join_requests().await
+        && !requests.is_empty()
+    {
+        let _ = app.emit(EVENT_JOIN_REQUESTS, requests);
+    }
     Ok(changed)
 }
 

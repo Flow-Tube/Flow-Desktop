@@ -2,10 +2,12 @@
 
 mod sync2_common;
 
+use std::collections::BTreeMap;
+
 use flow_desktop_lib::sync::canonical::Collection;
-use flow_desktop_lib::sync2::batches::parse_batch;
+use flow_desktop_lib::sync2::batches::{IncomingBatch, apply_batches, parse_batch};
 use flow_desktop_lib::sync2::blob::open_blob;
-use flow_desktop_lib::sync2::engine::Session;
+use flow_desktop_lib::sync2::engine::{Session, now_ms};
 use flow_desktop_lib::sync2::envelope::{ObjectType, open_object, parse_object};
 use flow_desktop_lib::sync2::epoch::purpose_key;
 use flow_desktop_lib::sync2::paths::{blob_path, log_path};
@@ -137,4 +139,78 @@ async fn other_devices_read_past_a_snapshot_manifest() {
             .iter()
             .any(|b| b.collection == Some(Collection::WatchHistory))
     );
+}
+
+/// Device A's log after garbage collection: a batch, a snapshot, then a newer batch, with the
+/// first batch deleted.
+async fn collected_log(g: &Group) {
+    let pool = device_pool(g).await;
+    watched(&pool, "aaaaaaaaaaa").await;
+    let mut session = Session::open(&pool, &g.store, &g.a).await.unwrap();
+    session
+        .push(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    let pushed = u64::try_from(session.record().own_seq).unwrap();
+    session
+        .write_snapshot(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    watched(&pool, "bbbbbbbbbbb").await;
+    session
+        .push(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    for seq in 1..=pushed {
+        g.store.take(&log_path(&hex::encode(g.a.did), seq));
+    }
+}
+
+async fn applied_videos(
+    pool: &SqlitePool,
+    pulled: &BTreeMap<String, Vec<IncomingBatch>>,
+) -> Vec<String> {
+    for (sender, batches) in pulled {
+        apply_batches(pool, "app-b", sender, batches, now_ms())
+            .await
+            .unwrap();
+    }
+    sqlx::query_scalar("SELECT video_id FROM watch_history ORDER BY video_id")
+        .fetch_all(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_new_device_starts_from_the_snapshot_when_old_objects_are_gone() {
+    let g = group().await;
+    collected_log(&g).await;
+
+    let pool_b = device_pool(&g).await;
+    let mut reader = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
+    let pulled = reader.pull(&pool_b).await.unwrap();
+    assert_eq!(
+        applied_videos(&pool_b, &pulled.batches).await,
+        ["aaaaaaaaaaa", "bbbbbbbbbbb"]
+    );
+    reader.finish(&pool_b, pulled).await.unwrap();
+    let again = reader.pull(&pool_b).await.unwrap();
+    assert!(again.batches.is_empty());
+}
+
+#[tokio::test]
+async fn without_a_snapshot_a_log_missing_its_start_is_not_read() {
+    let g = group().await;
+    let pool_a = device_pool(&g).await;
+    watched(&pool_a, "aaaaaaaaaaa").await;
+    let mut session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    session
+        .push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    g.store.take(&log_path(&hex::encode(g.a.did), 1));
+
+    let pool_b = device_pool(&g).await;
+    let mut reader = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
+    assert!(reader.pull(&pool_b).await.unwrap().batches.is_empty());
 }

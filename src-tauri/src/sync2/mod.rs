@@ -6,6 +6,7 @@
 pub mod actions;
 pub mod batches;
 pub mod blob;
+pub mod bootstrap;
 pub mod curve;
 pub mod device;
 pub mod engine;

@@ -171,6 +171,21 @@ pub struct StreamPosition {
     pub hash: [u8; 32],
 }
 
+impl StreamPosition {
+    /// A position from a snapshot's version vector. The object at `seq` may be gone, so the next
+    /// one is checked by its signature and `seq` only.
+    pub fn after_snapshot(seq: u64) -> Self {
+        Self {
+            seq,
+            hash: ZERO_HASH,
+        }
+    }
+
+    fn is_chained(&self) -> bool {
+        self.seq == 0 || self.hash != ZERO_HASH
+    }
+}
+
 /// Advances a sender's log stream; a sender never read before starts before `seq` 1, so a store
 /// can't hide the beginning of a log.
 pub fn next_in_stream(
@@ -178,14 +193,15 @@ pub fn next_in_stream(
     object: &ParsedObject<'_>,
 ) -> Result<StreamPosition> {
     let Header { seq, prev, .. } = &object.header;
-    let (last_seq, last_hash) = last.map_or((0, &ZERO_HASH), |l| (l.seq, &l.hash));
-    if *seq <= last_seq {
+    let start = StreamPosition::after_snapshot(0);
+    let last = last.unwrap_or(&start);
+    if *seq <= last.seq {
         return Err(Error::Replay);
     }
-    if *seq > last_seq + 1 {
+    if *seq > last.seq + 1 {
         return Err(Error::Gap);
     }
-    if !bool::from(prev.ct_eq(last_hash)) {
+    if last.is_chained() && !bool::from(prev.ct_eq(&last.hash)) {
         return Err(Error::Prev);
     }
     Ok(StreamPosition {

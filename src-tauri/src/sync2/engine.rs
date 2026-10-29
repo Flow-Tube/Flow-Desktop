@@ -9,8 +9,8 @@ use sqlx::SqlitePool;
 
 use super::batches::{IncomingBatch, mark_sent, outgoing_batches, parse_batch};
 use super::envelope::{
-    Header, ObjectType, StreamPosition, next_in_stream, open_object, parse_object, seal_object,
-    verify_object,
+    Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
+    seal_object, verify_object,
 };
 use super::epoch::{check_epoch_key, open_chain, purpose_key};
 use super::keys::MemberSecrets;
@@ -100,7 +100,7 @@ pub struct Pulled {
 }
 
 /// What a log object carries, once checked and opened.
-enum Content {
+pub(super) enum Content {
     Batch(IncomingBatch),
     Snapshot(Manifest),
     Ack,
@@ -332,6 +332,16 @@ impl<'a, S: Store> Session<'a, S> {
             cursor: self.record.cursor,
             ..Pulled::default()
         };
+        if pulled.positions.is_empty()
+            && pulled.cursor == 0
+            && let Some(start) = self.bootstrap().await?
+        {
+            pulled.links.extend(start.manifest.link.clone());
+            if link.is_none_or(|l| start.manifest.link.as_deref() == Some(l)) {
+                pulled.batches.insert(start.writer, start.batches);
+            }
+            pulled.positions = start.positions;
+        }
         loop {
             let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
             let (changes, next) = self.store.changes(cursor).await?;
@@ -399,16 +409,32 @@ impl<'a, S: Store> Session<'a, S> {
         let Some(bytes) = self.store.get_object(path).await? else {
             return Ok(None);
         };
-        let object = parse_object(&bytes, &self.group)?;
+        let object = self.verified(&bytes, did, seq)?;
+        let position = match next_in_stream(last, &object) {
+            Err(Error::Gap) => return Ok(None),
+            other => other?,
+        };
+        Ok(Some((position, self.open_content(&object).await?)))
+    }
+
+    /// Steps 1 to 3 of reading an envelope: structure, sender, signature. The caller checks its
+    /// place in the stream before opening it.
+    pub(super) fn verified<'b>(
+        &self,
+        bytes: &'b [u8],
+        did: &str,
+        seq: u64,
+    ) -> Result<ParsedObject<'b>> {
+        let object = parse_object(bytes, &self.group)?;
         let sender = self.signing_keys.get(did).ok_or(Error::Sender)?;
         verify_object(&object, sender)?;
         if hex::encode(object.header.sender) != did || object.header.seq != seq {
             return Err(Error::Replay.into());
         }
-        let position = match next_in_stream(last, &object) {
-            Err(Error::Gap) => return Ok(None),
-            other => other?,
-        };
+        Ok(object)
+    }
+
+    pub(super) async fn open_content(&mut self, object: &ParsedObject<'_>) -> Result<Content> {
         let epoch = object.header.epoch;
         let key = purpose_key(
             &self.epoch_key(epoch).await?,
@@ -416,16 +442,15 @@ impl<'a, S: Store> Session<'a, S> {
             epoch,
             object.header.object_type.purpose(),
         );
-        let content = decode_payload(&open_object(&object, &key)?)?;
-        let content = match object.header.object_type {
+        let content = decode_payload(&open_object(object, &key)?)?;
+        Ok(match object.header.object_type {
             ObjectType::Changes => Content::Batch(parse_batch(&content)?),
             ObjectType::Snapshot => {
                 Content::Snapshot(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
             }
             ObjectType::Ack => Content::Ack,
             ObjectType::Live => return Err(Error::Suite.into()),
-        };
-        Ok(Some((position, content)))
+        })
     }
 
     /// Saves how far reading got, after the caller applied the batches, and acknowledges it.

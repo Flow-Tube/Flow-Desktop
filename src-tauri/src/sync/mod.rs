@@ -4,6 +4,7 @@ pub mod brain_rekey;
 pub mod brainmap;
 pub mod canonical;
 pub mod changes;
+pub mod clock;
 pub mod codec;
 pub mod compat;
 pub mod crypto;

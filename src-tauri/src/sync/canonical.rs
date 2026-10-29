@@ -613,14 +613,30 @@ pub struct MusicBrainSnapshot {
 // Collection: subscription groups
 // ===========================================================================================
 
+/// A group: `channel_ids` lists the live members for apps that predate `members`, which carries
+/// each channel with its own stamp so a removal travels as a tombstone (flow-sync spec, Change
+/// batches).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SubscriptionGroup {
     pub channel_ids: Vec<String>,
     pub deleted: bool,
     pub hlc: Hlc,
+    /// Sorted by `channel_id`. Absent from older records, which count every `channel_ids` entry as
+    /// live at the record's `hlc`; left out when empty, so such a record keeps its bytes.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<GroupMember>,
     pub name: String,
     pub sort_order: i32,
+}
+
+/// One channel of a group, merged like a playlist item.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GroupMember {
+    pub channel_id: String,
+    pub deleted: bool,
+    pub hlc: Hlc,
 }
 
 // ===========================================================================================

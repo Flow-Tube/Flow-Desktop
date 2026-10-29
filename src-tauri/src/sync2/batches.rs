@@ -12,9 +12,8 @@ use crate::sync::apply::{ApplyReport, apply_payload};
 use crate::sync::canonical::{Collection, to_canonical_json};
 use crate::sync::codec::sha256_hex;
 use crate::sync::error::SyncError;
-use crate::sync::export::export_collections;
 use crate::sync::frames::collection_from_key;
-use crate::sync::protocol::StagedCollection;
+use crate::sync::protocol::{OutgoingCollection, StagedCollection};
 
 /// FLOW-SYNC/1's chunk size; it keeps every batch well under the 4 MiB object limit.
 const RECORDS_PER_BATCH: usize = 1000;
@@ -94,12 +93,11 @@ async fn sent_hashes(
         .collect())
 }
 
-/// Exports `collections` and keeps the records whose canonical form changed since the last
-/// upload. `head` is this device's roster head, `link` the profile link id, `now_ms` the time.
+/// Keeps the exported records whose canonical form changed since the last upload. `head` is this
+/// device's roster head, `link` the profile link id, `now_ms` the time.
 pub async fn outgoing_batches(
     pool: &SqlitePool,
-    device_id: &str,
-    collections: &[Collection],
+    exported: Vec<OutgoingCollection>,
     head: &str,
     link: &str,
     now_ms: i64,
@@ -108,7 +106,7 @@ pub async fn outgoing_batches(
         now_ms,
         ..Outgoing::default()
     };
-    for exported in export_collections(pool, device_id, collections).await? {
+    for exported in exported {
         let collection = exported.collection;
         let sent = sent_hashes(pool, collection).await?;
         let mut changed = Vec::new();

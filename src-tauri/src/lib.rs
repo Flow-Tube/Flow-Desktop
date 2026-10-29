@@ -485,6 +485,10 @@ pub fn run() {
                     default_name: active_profile.default_name.clone(),
                 },
             )));
+            app.manage(sync2::service::SyncLock::default());
+            if active_profile.is_default {
+                sync2::service::spawn(app.handle().clone());
+            }
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
             app.manage(ShortsService::new());

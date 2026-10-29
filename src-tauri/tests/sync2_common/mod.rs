@@ -9,6 +9,9 @@ use std::sync::Mutex;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use flow_desktop_lib::sync::canonical::Collection;
+use flow_desktop_lib::sync::export::export_collections;
+use flow_desktop_lib::sync::protocol::OutgoingCollection;
 use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::mailbox::Mailbox;
@@ -293,4 +296,11 @@ pub async fn empty_pool() -> SqlitePool {
         .unwrap();
     sqlx::migrate!("./migrations").run(&pool).await.unwrap();
     pool
+}
+
+/// Every collection, exported as the app would before a push.
+pub async fn exported(pool: &SqlitePool, app_id: &str) -> Vec<OutgoingCollection> {
+    export_collections(pool, app_id, &Collection::ALL)
+        .await
+        .unwrap()
 }

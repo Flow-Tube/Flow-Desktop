@@ -28,6 +28,7 @@ pub mod recovery_flow;
 pub mod roster;
 pub mod sealed;
 pub mod server;
+pub mod service;
 pub mod setup;
 pub mod state;
 pub mod store;

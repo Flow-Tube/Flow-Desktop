@@ -2,7 +2,10 @@
 //! upload, and batches from another device apply through the FLOW-SYNC/1 merges.
 
 use flow_desktop_lib::sync::canonical::Collection;
-use flow_desktop_lib::sync2::batches::{apply_batches, mark_sent, outgoing_batches, parse_batch};
+use flow_desktop_lib::sync::export::export_collections;
+use flow_desktop_lib::sync2::batches::{
+    Outgoing, apply_batches, mark_sent, outgoing_batches, parse_batch,
+};
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
@@ -60,35 +63,26 @@ fn records(content: &[u8]) -> usize {
         .count()
 }
 
+async fn outgoing(pool: &SqlitePool, collection: Collection, now_ms: i64) -> Outgoing {
+    let exported = export_collections(pool, "device-a", &[collection])
+        .await
+        .unwrap();
+    outgoing_batches(pool, exported, HEAD, LINK, now_ms)
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn only_records_changed_since_the_last_upload_go_out() {
     let pool = memory_pool().await;
     insert_watch(&pool, "aaaaaaaaaaa", 10).await;
     insert_watch(&pool, "bbbbbbbbbbb", 20).await;
 
-    let first = outgoing_batches(
-        &pool,
-        "device-a",
-        &[Collection::WatchHistory],
-        HEAD,
-        LINK,
-        0,
-    )
-    .await
-    .unwrap();
+    let first = outgoing(&pool, Collection::WatchHistory, 0).await;
     assert_eq!(first.batches.len(), 1);
     assert_eq!(records(&first.batches[0].content), 2);
 
-    let unsent = outgoing_batches(
-        &pool,
-        "device-a",
-        &[Collection::WatchHistory],
-        HEAD,
-        LINK,
-        0,
-    )
-    .await
-    .unwrap();
+    let unsent = outgoing(&pool, Collection::WatchHistory, 0).await;
     assert_eq!(
         records(&unsent.batches[0].content),
         2,
@@ -96,29 +90,11 @@ async fn only_records_changed_since_the_last_upload_go_out() {
     );
 
     mark_sent(&pool, &first).await.unwrap();
-    let idle = outgoing_batches(
-        &pool,
-        "device-a",
-        &[Collection::WatchHistory],
-        HEAD,
-        LINK,
-        0,
-    )
-    .await
-    .unwrap();
+    let idle = outgoing(&pool, Collection::WatchHistory, 0).await;
     assert!(idle.batches.is_empty());
 
     insert_watch(&pool, "aaaaaaaaaaa", 300).await;
-    let changed = outgoing_batches(
-        &pool,
-        "device-a",
-        &[Collection::WatchHistory],
-        HEAD,
-        LINK,
-        0,
-    )
-    .await
-    .unwrap();
+    let changed = outgoing(&pool, Collection::WatchHistory, 0).await;
     assert_eq!(records(&changed.batches[0].content), 1);
 }
 
@@ -128,16 +104,7 @@ async fn large_collections_are_split_into_batches_of_a_thousand() {
     for i in 0..2500 {
         insert_watch(&pool, &format!("{i:011}"), 1).await;
     }
-    let out = outgoing_batches(
-        &pool,
-        "device-a",
-        &[Collection::WatchHistory],
-        HEAD,
-        LINK,
-        0,
-    )
-    .await
-    .unwrap();
+    let out = outgoing(&pool, Collection::WatchHistory, 0).await;
     let sizes: Vec<usize> = out.batches.iter().map(|b| records(&b.content)).collect();
     assert_eq!(sizes, [1000, 1000, 500]);
 }
@@ -146,16 +113,7 @@ async fn large_collections_are_split_into_batches_of_a_thousand() {
 async fn batches_from_another_device_apply_through_the_merges() {
     let sender = memory_pool().await;
     insert_watch(&sender, "aaaaaaaaaaa", 10).await;
-    let out = outgoing_batches(
-        &sender,
-        "device-a",
-        &[Collection::WatchHistory],
-        HEAD,
-        LINK,
-        0,
-    )
-    .await
-    .unwrap();
+    let out = outgoing(&sender, Collection::WatchHistory, 0).await;
     let incoming: Vec<_> = out
         .batches
         .iter()
@@ -205,15 +163,10 @@ fn a_header_with_unknown_fields_is_rejected() {
 #[tokio::test]
 async fn a_brain_whose_only_change_is_its_export_time_is_not_sent_again() {
     let pool = memory_pool().await;
-    let brain = [Collection::MusicBrain];
-    let first = outgoing_batches(&pool, "device-a", &brain, HEAD, LINK, 0)
-        .await
-        .unwrap();
+    let first = outgoing(&pool, Collection::MusicBrain, 0).await;
     assert_eq!(first.batches.len(), 1);
     mark_sent(&pool, &first).await.unwrap();
     let hours = |h: i64| h * 60 * 60 * 1000;
-    let later = outgoing_batches(&pool, "device-a", &brain, HEAD, LINK, hours(7))
-        .await
-        .unwrap();
+    let later = outgoing(&pool, Collection::MusicBrain, hours(7)).await;
     assert!(later.batches.is_empty());
 }

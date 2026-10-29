@@ -25,8 +25,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{Mutex, oneshot};
 use tokio::time::timeout;
 
-use crate::music_brain::store::MusicBrainStore;
-use crate::services::music_service::{Freshness, MusicService};
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::PROTOCOL_VERSION;
 use crate::sync::apply;
@@ -42,12 +40,14 @@ use crate::sync::frames::{
 };
 use crate::sync::ledger;
 use crate::sync::protocol::{
-    ApplyOutput, ClientOutcome, HostOutcome, OutgoingCollection, StagedCollection, Withheld,
-    WithheldReason, run_client_sender, run_host_receiver, run_receiver, run_sender,
+    ApplyOutput, ClientOutcome, HostOutcome, StagedCollection, Withheld, WithheldReason,
+    run_client_sender, run_host_receiver, run_receiver, run_sender,
 };
 use crate::sync::qr::QrPayload;
+use crate::sync::runtime::{
+    enrich_outgoing_albums, flush_and_hold_brains, flush_brains, reload_brains,
+};
 use crate::sync::transport;
-use serde_json::Value;
 
 /// Per-collection schema version this build advertises in its capabilities.
 const CAP_SCHEMA: i32 = 1;
@@ -407,104 +407,8 @@ fn now_s() -> u64 {
     chrono::Utc::now().timestamp().max(0) as u64
 }
 
-// --------------------------------------------------------------------------------------------
-// Resident-brain flush / reload around apply
-// --------------------------------------------------------------------------------------------
-
-async fn flush_brains(app: &AppHandle) {
-    if let Some(svc) = app.try_state::<RecommendationService>() {
-        if let Err(e) = svc.flush_brain().await {
-            tracing::warn!(%e, "[sync] flush flow_neuro brain before merge failed");
-        }
-    }
-    if let Some(store) = app.try_state::<Arc<MusicBrainStore>>() {
-        if let Err(e) = store.flush().await {
-            tracing::warn!(%e, "[sync] flush music brain before merge failed");
-        }
-    }
-}
-
-/// As [`flush_brains`], then holds the video brain's saves until [`reload_brains`], so its
-/// background save cannot write the old brain over the one the merge stores.
-async fn flush_and_hold_brains(app: &AppHandle) {
-    flush_brains(app).await;
-    if let Some(svc) = app.try_state::<RecommendationService>() {
-        if let Err(e) = svc.flush_and_hold_brain().await {
-            tracing::warn!(%e, "[sync] hold flow_neuro brain before merge failed");
-        }
-    }
-}
-
-async fn reload_brains(app: &AppHandle) {
-    if let Some(svc) = app.try_state::<RecommendationService>() {
-        if let Err(e) = svc.reload_brain().await {
-            tracing::warn!(%e, "[sync] reload flow_neuro brain after merge failed");
-        }
-    }
-    if let Some(store) = app.try_state::<Arc<MusicBrainStore>>() {
-        if let Err(e) = store.reload().await {
-            tracing::warn!(%e, "[sync] reload music brain after merge failed");
-        }
-    }
-}
-
 fn pool_of(app: &AppHandle) -> SqlitePool {
     app.state::<SqlitePool>().inner().clone()
-}
-
-async fn enrich_outgoing_albums(app: &AppHandle, outgoing: &mut [OutgoingCollection]) {
-    let Some(pl) = outgoing
-        .iter_mut()
-        .find(|o| o.collection == Collection::Playlists)
-    else {
-        return;
-    };
-    let browse_ids = export::album_browse_ids_missing_tracks(&pl.ndjson);
-    if browse_ids.is_empty() {
-        return;
-    }
-    let Some(music) = app.try_state::<MusicService>() else {
-        return;
-    };
-    let mut tracks: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-    for id in browse_ids {
-        match music.album(&id, Freshness::Cached).await {
-            Ok(page) => {
-                let cover = page.album.thumbnail.clone();
-                let songs: Vec<Value> = page
-                    .songs
-                    .iter()
-                    .filter_map(|s| {
-                        let mut v = serde_json::to_value(s).ok()?;
-                        if !cover.is_empty() {
-                            if let Some(obj) = v.as_object_mut() {
-                                let has = obj
-                                    .get("thumbnail")
-                                    .and_then(Value::as_str)
-                                    .is_some_and(|t| !t.is_empty());
-                                if !has {
-                                    obj.insert(
-                                        "thumbnail".to_string(),
-                                        Value::String(cover.clone()),
-                                    );
-                                }
-                            }
-                        }
-                        Some(v)
-                    })
-                    .collect();
-                if !songs.is_empty() {
-                    tracks.insert(id, songs);
-                }
-            }
-            Err(error) => {
-                tracing::warn!(target: "flow::sync::session", album = %id, %error, "album track fetch failed; album sent without tracks");
-            }
-        }
-    }
-    if !tracks.is_empty() {
-        pl.ndjson = export::fill_album_tracks(&pl.ndjson, &tracks);
-    }
 }
 
 // --------------------------------------------------------------------------------------------

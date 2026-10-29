@@ -24,8 +24,9 @@ use super::state::{
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
 use super::{Error, array};
-use crate::sync::canonical::{Collection, to_canonical_json};
+use crate::sync::canonical::to_canonical_json;
 use crate::sync::error::SyncError;
+use crate::sync::protocol::OutgoingCollection;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -35,6 +36,8 @@ pub enum EngineError {
     Local(#[from] SyncError),
     #[error(transparent)]
     Protocol(#[from] Error),
+    #[error(transparent)]
+    Keychain(#[from] crate::security::keychain::CredentialError),
     #[error("this device is not in a sync group")]
     NotLinked,
     #[error("this device was removed from its sync group")]
@@ -229,13 +232,15 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(())
     }
 
-    /// Uploads what changed locally since the last upload. `app_device_id` is the FLOW-SYNC/1
-    /// device id the canonical records are stamped with.
-    pub async fn push(&mut self, pool: &SqlitePool, app_device_id: &str) -> Result<usize> {
+    /// Uploads what changed in `exported` since the last upload.
+    pub async fn push(
+        &mut self,
+        pool: &SqlitePool,
+        exported: Vec<OutgoingCollection>,
+    ) -> Result<usize> {
         let outgoing = outgoing_batches(
             pool,
-            app_device_id,
-            &Collection::ALL,
+            exported,
             &self.state.head,
             &self.record.link,
             now_ms(),

@@ -17,6 +17,7 @@ pub mod mapping;
 pub mod merge;
 pub mod protocol;
 pub mod qr;
+pub mod runtime;
 pub mod session;
 pub mod settings_map;
 pub mod tombstones;

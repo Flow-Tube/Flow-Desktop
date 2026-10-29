@@ -16,7 +16,7 @@ use flow_desktop_lib::sync2::roster::{Op, Role};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{MemoryStore, device_pool, draft, group, head, wraps};
+use sync2_common::{MemoryStore, device_pool, draft, exported, group, head, wraps};
 
 async fn watch(pool: &SqlitePool, id: &str) {
     sqlx::query(
@@ -45,7 +45,7 @@ async fn sync(
     app_id: &str,
 ) -> std::result::Result<usize, EngineError> {
     let mut session = Session::open(pool, store, device).await?;
-    session.push(pool, app_id).await?;
+    session.push(pool, exported(pool, app_id).await).await?;
     let pulled = session.pull(pool).await?;
     for (sender, batches) in &pulled.batches {
         apply_batches(pool, app_id, sender, batches, now_ms()).await?;

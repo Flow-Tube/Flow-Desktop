@@ -10,7 +10,7 @@ use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
 use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join, new_offer};
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use sync2_common::{device_pool, empty_pool, group, head};
+use sync2_common::{device_pool, empty_pool, exported, group, head};
 
 fn meta() -> DeviceMeta {
     DeviceMeta {
@@ -33,7 +33,10 @@ async fn a_new_device_pairs_and_then_syncs() {
     .await
     .unwrap();
     let mut session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
-    session.push(&pool_a, "app-a").await.unwrap();
+    session
+        .push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
 
     let newcomer = member_secrets(random_bytes(), random_bytes());
     let pool_n = empty_pool().await;

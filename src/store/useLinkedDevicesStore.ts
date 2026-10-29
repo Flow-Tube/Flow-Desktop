@@ -15,6 +15,7 @@ import {
   getLinkPhase,
   getLinkedDevices,
   getLinkedStatus,
+  leaveGroup,
   markRecoverySaved,
   onLinkPhase,
   onSynced,
@@ -68,6 +69,7 @@ interface LinkedState {
   confirmSaved: () => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  leave: () => Promise<void>;
   forget: () => Promise<void>;
   syncNow: () => Promise<void>;
 }
@@ -193,6 +195,12 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       run(async () => {
         await removeDevice(id);
         await loadDevices();
+      }),
+
+    leave: () =>
+      run(async () => {
+        await leaveGroup();
+        await get().refresh();
       }),
 
     forget: () =>

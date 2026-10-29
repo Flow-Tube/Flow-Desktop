@@ -26,6 +26,8 @@ pub enum Op {
     Genesis,
     Add,
     Remove,
+    Leave,
+    Rotate,
     Rename,
     Restore,
     Recovery,
@@ -83,6 +85,8 @@ pub struct RosterState {
     pub head: String,
     pub epoch: u32,
     pub kc: String,
+    /// A device left in this epoch, so the next device to write must rotate first.
+    pub rotate: bool,
     pub members: BTreeMap<String, Member>,
     pub seen: BTreeSet<String>,
 }
@@ -165,6 +169,8 @@ fn check_shape(entry: &Entry) -> Result<()> {
         Op::Genesis => (2, false, true),
         Op::Add | Op::Restore => (1, false, entry.op == Op::Restore),
         Op::Remove => (0, true, true),
+        Op::Leave => (0, true, false),
+        Op::Rotate => (0, false, true),
         Op::Rename => (0, false, false),
         Op::Recovery => (1, true, true),
     };
@@ -291,10 +297,14 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
         Role::Device
     };
     for id in entry.remove.iter().flatten() {
-        if *id == entry.signer || members.get(id).is_none_or(|m| m.role != removed_role) {
+        let wrong_target = (*id == entry.signer) != (entry.op == Op::Leave);
+        if wrong_target || members.get(id).is_none_or(|m| m.role != removed_role) {
             return Err(Error::RosterOp);
         }
         members.remove(id);
+    }
+    if entry.op == Op::Leave && !members.values().any(|m| m.role == Role::Device) {
+        return Err(Error::RosterOp);
     }
     if entry.op == Op::Restore {
         members.insert(
@@ -345,6 +355,7 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
             || state.map(|s| s.kc.clone()).unwrap_or_default(),
             |e| e.kc.clone(),
         ),
+        rotate: entry.op == Op::Leave || (entry.epoch.is_none() && state.is_some_and(|s| s.rotate)),
         members,
         seen,
     })
@@ -361,11 +372,13 @@ pub fn replay_roster(entries: &[Entry]) -> Result<RosterState> {
 fn rank(op: Op) -> u8 {
     match op {
         Op::Remove => 0,
-        Op::Recovery => 1,
-        Op::Restore => 2,
-        Op::Add => 3,
-        Op::Rename => 4,
-        Op::Genesis => 5,
+        Op::Leave => 1,
+        Op::Recovery => 2,
+        Op::Restore => 3,
+        Op::Rotate => 4,
+        Op::Add => 5,
+        Op::Rename => 6,
+        Op::Genesis => 7,
     }
 }
 

@@ -1,5 +1,6 @@
-//! This installation's roster keys. They live in the OS keychain, one item for every profile,
-//! because a device is one roster member however many profiles it has.
+//! This device's roster keys. They live in the OS keychain, one item for every profile, because a
+//! device is one roster member however many profiles it has. They belong to one membership
+//! (spec/crypto.md, Device keys): fresh for each group joined, deleted once it is left.
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -44,14 +45,23 @@ fn encode(keys: &MemberSecrets) -> Result<String, CredentialError> {
 /// Loads the keys, creating them on first use. A damaged item is an error and is never replaced:
 /// new keys would silently take this device out of its group.
 pub fn device_keys(store: &dyn CredentialStore) -> Result<MemberSecrets, CredentialError> {
-    if let Some(value) = store.read(DEVICE_ENTRY)? {
-        return decode(&value).ok_or(CredentialError(
+    match store.read(DEVICE_ENTRY)? {
+        Some(value) => decode(&value).ok_or(CredentialError(
             "The device keys in the keychain are damaged",
-        ));
+        )),
+        None => renew_device_keys(store),
     }
+}
+
+/// Replaces the keys with fresh ones, for a group this device is about to create or join.
+pub fn renew_device_keys(store: &dyn CredentialStore) -> Result<MemberSecrets, CredentialError> {
     let keys = member_secrets(random_bytes(), random_bytes());
     store.write(DEVICE_ENTRY, &encode(&keys)?)?;
     Ok(keys)
+}
+
+pub fn forget_device_keys(store: &dyn CredentialStore) -> Result<(), CredentialError> {
+    store.remove(DEVICE_ENTRY)
 }
 
 #[cfg(test)]
@@ -67,6 +77,17 @@ mod tests {
         assert_eq!(first.did, again.did);
         assert_eq!(first.sig_seed, again.sig_seed);
         assert_eq!(first.kem_secret, again.kem_secret);
+    }
+
+    #[test]
+    fn each_membership_gets_fresh_keys_and_leaving_deletes_them() {
+        let store = MemoryStore::default();
+        let first = device_keys(&store).unwrap();
+        let renewed = renew_device_keys(&store).unwrap();
+        assert_ne!(first.did, renewed.did);
+        assert_eq!(device_keys(&store).unwrap().did, renewed.did);
+        forget_device_keys(&store).unwrap();
+        assert_eq!(store.read(DEVICE_ENTRY).unwrap(), None);
     }
 
     #[test]

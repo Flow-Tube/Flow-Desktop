@@ -14,7 +14,7 @@ use crate::music_brain::rank::{
 };
 use crate::music_brain::store::MusicBrainStore;
 use crate::profiles::ActiveProfile;
-use crate::sync2::actions::leave;
+use crate::sync2::actions::forget_here;
 use sqlx::SqlitePool;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
@@ -284,7 +284,7 @@ pub async fn reset_music_brain(
     profile: State<'_, ActiveProfile>,
 ) -> CmdResult<()> {
     if profile.is_default {
-        leave(&pool).await.map_err(|e| linked_err(&e))?;
+        forget_here(&pool).await.map_err(|e| linked_err(&e))?;
     }
     music_brain.reset().await.map_err(ErrorResponse::from)
 }

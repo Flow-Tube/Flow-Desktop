@@ -13,6 +13,7 @@ use super::envelope::{
     seal_object, verify_object,
 };
 use super::epoch::{check_epoch_key, open_chain, purpose_key};
+use super::gc::{Ack, Logged, VersionVector, record_ack, record_manifest};
 use super::keys::MemberSecrets;
 use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
@@ -97,13 +98,15 @@ pub struct Pulled {
     stalled: bool,
     /// The profile links named by the batches and snapshot manifests read, in reading order.
     links: Vec<String>,
+    acks: BTreeMap<String, VersionVector>,
+    manifests: Vec<Logged>,
 }
 
 /// What a log object carries, once checked and opened.
 pub(super) enum Content {
     Batch(IncomingBatch),
     Snapshot(Manifest),
-    Ack,
+    Ack(Ack),
 }
 
 pub struct Session<'a, S> {
@@ -367,6 +370,7 @@ impl<'a, S: Store> Session<'a, S> {
                         .await?
                     {
                         Some((position, content)) => {
+                            let seq = position.seq;
                             pulled.positions.insert(did.clone(), position);
                             pulled.consumed += 1;
                             match content {
@@ -376,8 +380,13 @@ impl<'a, S: Store> Session<'a, S> {
                                         pulled.batches.entry(did).or_default().push(batch);
                                     }
                                 }
-                                Content::Snapshot(manifest) => pulled.links.extend(manifest.link),
-                                Content::Ack => {}
+                                Content::Snapshot(manifest) => {
+                                    pulled.links.extend(manifest.link.clone());
+                                    pulled.manifests.push(Logged { did, seq, manifest });
+                                }
+                                Content::Ack(ack) => {
+                                    pulled.acks.insert(did, ack.vv);
+                                }
                             }
                         }
                         None => still.push((did, seq, path)),
@@ -448,7 +457,9 @@ impl<'a, S: Store> Session<'a, S> {
             ObjectType::Snapshot => {
                 Content::Snapshot(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
             }
-            ObjectType::Ack => Content::Ack,
+            ObjectType::Ack => {
+                Content::Ack(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
+            }
             ObjectType::Live => return Err(Error::Suite.into()),
         })
     }
@@ -459,18 +470,23 @@ impl<'a, S: Store> Session<'a, S> {
         let merged = pulled.batches.values().flatten().map(|b| b.size).sum();
         note_merged(pool, &self.record.link, merged).await?;
         self.record.cursor = pulled.cursor;
+        for (did, vv) in &pulled.acks {
+            record_ack(pool, did, vv).await?;
+        }
+        for logged in &pulled.manifests {
+            record_manifest(pool, logged).await?;
+        }
         if pulled.consumed > 0 {
-            let vv: BTreeMap<&String, u64> = pulled
-                .positions
-                .iter()
-                .map(|(did, p)| (did, p.seq))
-                .collect();
-            self.write(
-                pool,
-                ObjectType::Ack,
-                &to_canonical_json(&serde_json::json!({ "vv": vv })),
-            )
-            .await?;
+            let ack = Ack {
+                vv: pulled
+                    .positions
+                    .iter()
+                    .map(|(did, p)| (did.clone(), p.seq))
+                    .collect(),
+            };
+            self.write(pool, ObjectType::Ack, &to_canonical_json(&ack))
+                .await?;
+            record_ack(pool, &hex::encode(self.device.did), &ack.vv).await?;
         }
         Ok(())
     }

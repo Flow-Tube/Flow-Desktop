@@ -19,6 +19,8 @@ pub trait Store {
     fn key(&self, epoch: u32, name: &str) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
     fn put_object(&self, path: &str, bytes: Vec<u8>) -> impl Future<Output = Result<()>> + Send;
     fn get_object(&self, path: &str) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
+    /// Deletes an object; one that is already gone counts as deleted.
+    fn delete_object(&self, path: &str) -> impl Future<Output = Result<()>> + Send;
     fn changes(
         &self,
         cursor: u64,

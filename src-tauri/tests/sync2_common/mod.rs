@@ -119,6 +119,11 @@ impl Store for &MemoryStore {
             .map(|(_, bytes)| bytes.clone()))
     }
 
+    async fn delete_object(&self, path: &str) -> Result<()> {
+        self.0.lock().unwrap().objects.remove(path);
+        Ok(())
+    }
+
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
         let memory = self.0.lock().unwrap();
         let mut changes: Vec<(u64, &String, &Vec<u8>)> = memory

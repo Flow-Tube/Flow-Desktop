@@ -14,6 +14,7 @@ pub mod entries;
 pub mod envelope;
 pub mod epoch;
 pub mod error;
+pub mod gc;
 pub mod kdf;
 pub mod keys;
 pub mod lan;

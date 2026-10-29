@@ -247,16 +247,6 @@ impl ServerStore {
         unreachable!("the loop returns on its second pass")
     }
 
-    pub async fn delete_object(&self, path: &str) -> Result<()> {
-        let response = self
-            .authorized(Method::DELETE, &format!("v1/objects/{path}"), None)
-            .await?;
-        if response.status() == StatusCode::NOT_FOUND {
-            return Ok(());
-        }
-        decode_empty(response).await
-    }
-
     /// Creates the group on an unclaimed server with the operator's admin token.
     pub async fn claim(
         &self,
@@ -347,6 +337,15 @@ impl Store for ServerStore {
     }
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
         self.get_bytes(&format!("v1/objects/{path}")).await
+    }
+    async fn delete_object(&self, path: &str) -> Result<()> {
+        let response = self
+            .authorized(Method::DELETE, &format!("v1/objects/{path}"), None)
+            .await?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        decode_empty(response).await
     }
     /// Objects that arrived after `cursor`, and the cursor to pass next time.
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {

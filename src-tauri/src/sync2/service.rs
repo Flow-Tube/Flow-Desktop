@@ -99,6 +99,7 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
         let exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
         session.write_snapshot(pool, exported).await?;
     }
+    session.collect_garbage(pool).await?;
     Ok(changed)
 }
 

@@ -11,6 +11,7 @@ use super::blob::seal_blob;
 use super::engine::{Result, Session, now_ms};
 use super::envelope::ObjectType;
 use super::epoch::purpose_key;
+use super::gc::{Logged, record_manifest};
 use super::kdf::sha256;
 use super::paths::blob_path;
 use super::payload::encode_payload;
@@ -157,6 +158,12 @@ impl<S: Store> Session<'_, S> {
         };
         self.write(pool, ObjectType::Snapshot, &to_canonical_json(&manifest))
             .await?;
+        let logged = Logged {
+            did: hex::encode(did),
+            seq: u64::try_from(self.record().own_seq).unwrap_or(0),
+            manifest,
+        };
+        record_manifest(pool, &logged).await?;
         snapshot_written(pool, &link).await
     }
 }

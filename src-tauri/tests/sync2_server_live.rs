@@ -176,7 +176,7 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
 
     let restored = member_secrets(random_bytes(), random_bytes());
     let pool_c = pool().await;
-    let next_words = restore_group(&pool_c, &url, &words, &restored, &meta("C"), "default-link")
+    let next_words = restore_group(&pool_c, &url, &words, &restored, &meta("C"))
         .await
         .unwrap();
     assert_ne!(next_words, words);
@@ -205,7 +205,6 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
             &words,
             &member_secrets(random_bytes(), random_bytes()),
             &meta("D"),
-            "default-link",
         )
         .await
         .is_err()

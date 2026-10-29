@@ -12,7 +12,7 @@ use super::membership::{remove_device, rename_device};
 use super::names::device_names;
 use super::roster::Role;
 use super::server::ServerStore;
-use super::service::{LastSync, last_sync};
+use super::service::{LastSync, last_sync, sync_soon};
 use super::setup::{create_group, restore_group};
 use super::state::{GroupRecord, forget_group, load_group};
 use crate::db::settings::{get_setting, set_setting};
@@ -75,8 +75,8 @@ async fn linked(pool: &SqlitePool) -> Result<GroupRecord> {
     load_group(pool).await?.ok_or(EngineError::NotLinked)
 }
 
-/// The profile link this device's Default profile publishes under: its own id.
-fn default_link(app: &AppHandle) -> String {
+/// The profile link this device's Default profile publishes under when it starts one: its own id.
+pub fn default_link(app: &AppHandle) -> String {
     app.state::<ActiveProfile>().id.clone()
 }
 
@@ -156,16 +156,9 @@ pub async fn create(app: &AppHandle, url: &str, admin_token: &str) -> Result<Str
 pub async fn restore(app: &AppHandle, url: &str, words: &str) -> Result<String> {
     let local = local(app).await?;
     ensure_unlinked(&local.pool).await?;
-    let next = restore_group(
-        &local.pool,
-        url.trim(),
-        words,
-        &local.device,
-        &local.meta,
-        &default_link(app),
-    )
-    .await?;
+    let next = restore_group(&local.pool, url.trim(), words, &local.device, &local.meta).await?;
     set_recovery_saved(&local.pool, false).await?;
+    sync_soon(app);
     Ok(next)
 }
 

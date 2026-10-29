@@ -89,14 +89,14 @@ pub async fn create_group(
 }
 
 /// Restores the group onto this device from the recovery words, replaces the recovery key, and
-/// returns the new words to show once.
+/// returns the new words to show once. The profile link is chosen on the first sync, by
+/// [`Session::adopt_link`](super::engine::Session::adopt_link).
 pub async fn restore_group(
     pool: &SqlitePool,
     store_url: &str,
     words: &str,
     device: &MemberSecrets,
     meta: &DeviceMeta,
-    link: &str,
 ) -> Result<String> {
     let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
     let as_recovery = ServerStore::connect(store_url, recovery_keys(&secret), None, None).await?;
@@ -118,7 +118,7 @@ pub async fn restore_group(
     add_roster_entries(pool, &restored.entries).await?;
     save_group(
         pool,
-        &GroupRecord::new(group, store_url.to_owned(), instance, link.to_owned()),
+        &GroupRecord::new(group, store_url.to_owned(), instance, String::new()),
     )
     .await?;
     Ok(restored.words)

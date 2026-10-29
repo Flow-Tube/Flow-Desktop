@@ -93,6 +93,7 @@ pub struct Pulled {
     positions: BTreeMap<String, StreamPosition>,
     cursor: i64,
     consumed: usize,
+    stalled: bool,
 }
 
 pub struct Session<'a, S> {
@@ -283,6 +284,33 @@ impl<'a, S: Store> Session<'a, S> {
     /// Reads other devices' new objects in stream order, checking each one. Nothing is applied:
     /// the caller applies [`Pulled::batches`] and then calls [`Session::finish`].
     pub async fn pull(&mut self, pool: &SqlitePool) -> Result<Pulled> {
+        let link = self.record.link.clone();
+        self.read_new(pool, Some(&link)).await
+    }
+
+    /// Links a restored device's profile (spec/protocol.md, Recovery): to the link other devices'
+    /// batches name, or to `own` when they name none. False while the logs can't be read to the
+    /// end yet; nothing may be pushed or pulled until this returns true.
+    pub async fn adopt_link(&mut self, pool: &SqlitePool, own: &str) -> Result<bool> {
+        if !self.record.link.is_empty() {
+            return Ok(true);
+        }
+        let read = self.read_new(pool, None).await?;
+        if read.stalled {
+            return Ok(false);
+        }
+        self.record.link = read
+            .batches
+            .values()
+            .flatten()
+            .find_map(|batch| batch.link.clone())
+            .unwrap_or_else(|| own.to_owned());
+        save_group(pool, &self.record).await?;
+        Ok(true)
+    }
+
+    /// Batches of `link` only, or every batch when `link` is `None`.
+    async fn read_new(&mut self, pool: &SqlitePool, link: Option<&str>) -> Result<Pulled> {
         let me = hex::encode(self.device.did);
         let mut pulled = Pulled {
             positions: streams(pool).await?,
@@ -316,8 +344,8 @@ impl<'a, S: Store> Session<'a, S> {
                         Some((position, batch)) => {
                             pulled.positions.insert(did.clone(), position);
                             pulled.consumed += 1;
-                            if let Some(batch) = batch
-                                .filter(|b| b.link.as_deref() == Some(self.record.link.as_str()))
+                            if let Some(batch) =
+                                batch.filter(|b| link.is_none_or(|l| b.link.as_deref() == Some(l)))
                             {
                                 pulled.batches.entry(did).or_default().push(batch);
                             }
@@ -330,9 +358,9 @@ impl<'a, S: Store> Session<'a, S> {
                     break;
                 }
             }
-            let stalled = !waiting.is_empty();
             // A missing object means the store hasn't caught up: read this page again next time.
-            if stalled {
+            if !waiting.is_empty() {
+                pulled.stalled = true;
                 return Ok(pulled);
             }
             pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;

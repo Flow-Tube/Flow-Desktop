@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
-use super::actions::{local, open_session};
+use super::actions::{default_link, local, open_session};
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{Result, now_ms};
 use super::state::load_group;
@@ -75,6 +75,9 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
     };
     let pool = &local.pool;
     let mut session = open_session(pool, &record, &local.device).await?;
+    if !session.adopt_link(pool, &default_link(app)).await? {
+        return Ok(Vec::new());
+    }
 
     flush_brains(app).await;
     let mut exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;

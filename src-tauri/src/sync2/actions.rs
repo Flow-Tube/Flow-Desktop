@@ -20,6 +20,7 @@ use super::service::{LastSync, is_syncing, last_sync, sync_soon};
 use super::setup::{create_group, create_lan_group, restore_group};
 use super::snapshot::snapshot_soon;
 use super::state::{GroupRecord, StoreKind, forget_group, load_group};
+use super::store::Store;
 use crate::db::settings::{get_setting, set_setting};
 use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
@@ -284,11 +285,30 @@ pub async fn decline_join(app: &AppHandle, id: &str) -> Result<()> {
 }
 
 /// Leaves the group (spec/protocol.md, Leaving): appends a `leave` entry, then forgets the group
-/// and this device's keys. The last device of a group only forgets it.
+/// and this device's keys.
 pub async fn leave(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
     let session = open_session(&local.pool, &record, &local.device).await?;
+    depart(&local.pool, &session, &local.device).await?;
+    Ok(forget_device_keys(&keychain())?)
+}
+
+/// [`leave`], when this device is in a group.
+pub async fn leave_if_linked(app: &AppHandle) -> Result<()> {
+    match load_group(app.state::<SqlitePool>().inner()).await? {
+        Some(_) => leave(app).await,
+        None => Ok(()),
+    }
+}
+
+/// Appends `leave` unless this is the group's last device, which can only forget it, then forgets
+/// the group here.
+pub async fn depart<S: Store>(
+    pool: &SqlitePool,
+    session: &Session<'_, S>,
+    device: &MemberSecrets,
+) -> Result<()> {
     let devices = session
         .roster()
         .members
@@ -296,9 +316,9 @@ pub async fn leave(app: &AppHandle) -> Result<()> {
         .filter(|m| m.role == Role::Device)
         .count();
     if devices > 1 {
-        leave_group(&session, &local.device).await?;
+        leave_group(session, device).await?;
     }
-    forget(app).await
+    forget_here(pool).await
 }
 
 /// Forgets the group and this device's keys without telling the group, for a device it already
@@ -308,12 +328,12 @@ pub async fn forget(app: &AppHandle) -> Result<()> {
     Ok(forget_device_keys(&keychain())?)
 }
 
-/// Clears history, subscriptions and playlists. When this profile syncs, the device first leaves
-/// its group and afterwards drops the deletions it recorded, so a reset never reaches the other
-/// devices; linking again brings their data back.
+/// Clears history, subscriptions and playlists. When this profile syncs, the caller first leaves
+/// the group ([`leave_if_linked`]), and the deletions recorded here are dropped, so a reset never
+/// reaches the other devices; linking again brings their data back.
 pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
-    if syncs {
-        forget_here(pool).await?;
+    if syncs && load_group(pool).await?.is_some() {
+        return Err(EngineError::AlreadyLinked);
     }
     crate::db::watch_history::clear_watch_history(pool).await?;
     for key in ["subscriptions", "user_playlists"] {
@@ -325,8 +345,8 @@ pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     Ok(())
 }
 
-/// Forgets the group on a database, for a reset that must not reach the other devices.
-pub async fn forget_here(pool: &SqlitePool) -> Result<()> {
+/// Forgets the group on a database, keeping this device's keys.
+async fn forget_here(pool: &SqlitePool) -> Result<()> {
     forget_group(pool).await?;
     set_setting(pool, STOPPED, "").await?;
     set_recovery_saved(pool, true).await

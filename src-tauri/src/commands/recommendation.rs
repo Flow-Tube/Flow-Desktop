@@ -14,7 +14,7 @@ use crate::models::video::VideoSummary;
 use crate::profiles::ActiveProfile;
 use crate::services::blocked_channel_names::{self, BlockedChannelNames};
 use crate::services::recommendation_service::RecommendationService;
-use crate::sync2::actions::forget_here;
+use crate::sync2::actions::leave_if_linked;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -434,12 +434,12 @@ pub async fn import_brain(
 /// reaches the other devices.
 #[tauri::command]
 pub async fn reset_brain(
+    app: AppHandle,
     recommendation_service: State<'_, RecommendationService>,
-    pool: State<'_, SqlitePool>,
     profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     if profile.is_default {
-        forget_here(&pool).await.map_err(|e| linked_err(&e))?;
+        leave_if_linked(&app).await.map_err(|e| linked_err(&e))?;
     }
     recommendation_service
         .reset_brain()

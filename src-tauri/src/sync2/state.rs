@@ -150,6 +150,7 @@ pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
         "DELETE FROM sync2_snapshots",
         "DELETE FROM sync2_acks",
         "DELETE FROM sync2_manifests",
+        "DELETE FROM sync2_links",
         "DELETE FROM sync2_collected",
     ] {
         sqlx::query(statement).execute(&mut *tx).await?;

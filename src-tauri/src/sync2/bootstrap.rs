@@ -1,9 +1,9 @@
 //! Starting a device that has read nothing from a snapshot (spec/protocol.md, Snapshots), once
-//! garbage collection has removed the beginning of some logs.
+//! garbage collection has removed the beginning of some logs. Each log goes on from the object the
+//! snapshot names, chained to its hash.
 
 use std::collections::BTreeMap;
 
-use super::Error;
 use super::batches::{IncomingBatch, parse_batch};
 use super::blob::open_blob;
 use super::engine::{Content, Result, Session};
@@ -13,6 +13,7 @@ use super::paths::{blob_path, log_path, parse_log_path};
 use super::payload::decode_payload;
 use super::snapshot::Manifest;
 use super::store::Store;
+use super::{Error, array};
 
 /// The snapshot a device starts from: its writer, its records, and where each log goes on.
 pub struct Start {
@@ -22,14 +23,17 @@ pub struct Start {
     pub positions: BTreeMap<String, StreamPosition>,
 }
 
+/// How many objects of all logs the snapshot includes.
+fn merged(manifest: &Manifest) -> u64 {
+    manifest.vv.values().map(|tip| tip.seq).sum()
+}
+
 /// Whether `manifest` covers every log that no longer starts at its first object.
 fn covers(manifest: &Manifest, first: &BTreeMap<String, u64>) -> bool {
-    first.iter().filter(|(_, seq)| **seq > 1).all(|(did, seq)| {
-        manifest
-            .vv
-            .get(did)
-            .is_some_and(|merged| merged + 1 >= *seq)
-    })
+    first
+        .iter()
+        .filter(|(_, seq)| **seq > 1)
+        .all(|(did, seq)| manifest.vv.get(did).is_some_and(|tip| tip.seq + 1 >= *seq))
 }
 
 impl<S: Store> Session<'_, S> {
@@ -63,9 +67,9 @@ impl<S: Store> Session<'_, S> {
             seqs.sort_unstable();
             if let Some((epoch, manifest)) = self.newest_manifest(did, seqs).await?
                 && covers(&manifest, &first)
-                && best.as_ref().is_none_or(|(_, _, b)| {
-                    b.vv.values().sum::<u64>() < manifest.vv.values().sum::<u64>()
-                })
+                && best
+                    .as_ref()
+                    .is_none_or(|(_, _, b)| merged(b) < merged(&manifest))
             {
                 best = Some((did.clone(), epoch, manifest));
             }
@@ -74,12 +78,18 @@ impl<S: Store> Session<'_, S> {
             return Ok(None);
         };
         let batches = self.snapshot_batches(&writer, epoch, &manifest).await?;
-        let positions = manifest
-            .vv
-            .iter()
-            .filter(|(did, _)| **did != me)
-            .map(|(did, seq)| (did.clone(), StreamPosition::after_snapshot(*seq)))
-            .collect();
+        let mut positions = BTreeMap::new();
+        for (did, tip) in manifest.vv.iter().filter(|(did, _)| **did != me) {
+            let hash = hex::decode(&tip.hash)
+                .ok()
+                .filter(|h| h.len() == 32)
+                .ok_or(Error::Prev)?;
+            let position = StreamPosition {
+                seq: tip.seq,
+                hash: array(&hash),
+            };
+            positions.insert(did.clone(), position);
+        }
         Ok(Some(Start {
             writer,
             manifest,

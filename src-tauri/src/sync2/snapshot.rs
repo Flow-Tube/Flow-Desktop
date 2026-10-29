@@ -34,13 +34,21 @@ pub struct Part {
     pub size: u64,
 }
 
+/// The last object of a log that a snapshot includes, so reading can go on from it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tip {
+    pub hash: String,
+    pub seq: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub head: String,
     pub link: Option<String>,
     pub parts: Vec<Part>,
-    pub vv: BTreeMap<String, u64>,
+    pub vv: BTreeMap<String, Tip>,
 }
 
 /// Counts merged or uploaded batch bytes toward the next snapshot of `link`. The first call for a
@@ -141,14 +149,23 @@ impl<S: Store> Session<'_, S> {
                     .await?;
             }
         }
-        let mut vv: BTreeMap<String, u64> = streams(pool)
+        let mut vv: BTreeMap<String, Tip> = streams(pool)
             .await?
             .into_iter()
-            .map(|(sender, position)| (sender, position.seq))
+            .map(|(sender, position)| {
+                let tip = Tip {
+                    hash: hex::encode(position.hash),
+                    seq: position.seq,
+                };
+                (sender, tip)
+            })
             .collect();
         vv.insert(
             hex::encode(did),
-            u64::try_from(self.record().own_seq).unwrap_or(0),
+            Tip {
+                hash: self.record().own_prev.clone(),
+                seq: u64::try_from(self.record().own_seq).unwrap_or(0),
+            },
         );
         let manifest = Manifest {
             head,

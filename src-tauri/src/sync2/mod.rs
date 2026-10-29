@@ -32,6 +32,7 @@ pub mod sealed;
 pub mod server;
 pub mod service;
 pub mod setup;
+pub mod snapshot;
 pub mod state;
 pub mod store;
 pub mod wrap;

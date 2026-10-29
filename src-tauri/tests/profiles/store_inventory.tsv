@@ -13,6 +13,7 @@ table	sync2_sent	DEFAULT_ONLY	sync	Only Default syncs; the FLOW-SYNC/2 upload le
 table	sync2_group	DEFAULT_ONLY	sync	Only Default syncs; the FLOW-SYNC/2 group and log positions
 table	sync2_roster	DEFAULT_ONLY	sync	Only Default syncs; the verified FLOW-SYNC/2 roster
 table	sync2_streams	DEFAULT_ONLY	sync	Only Default syncs; how far each device's log was read
+table	sync2_snapshots	DEFAULT_ONLY	sync	Only Default syncs; when each link last got a snapshot
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log

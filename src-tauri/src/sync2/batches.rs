@@ -93,6 +93,27 @@ async fn sent_hashes(
         .collect())
 }
 
+/// A header line and then the records, one per line: the format of change batches and of
+/// snapshot blobs.
+pub fn batch_content(
+    collection: Collection,
+    head: &str,
+    link: &str,
+    records: &[impl AsRef<[u8]>],
+) -> Vec<u8> {
+    let header = BatchHeader {
+        collection: collection.key().to_owned(),
+        head: head.to_owned(),
+        link: Some(link.to_owned()),
+    };
+    let mut content = to_canonical_json(&header);
+    for record in records {
+        content.push(b'\n');
+        content.extend_from_slice(record.as_ref());
+    }
+    content
+}
+
 /// Keeps the exported records whose canonical form changed since the last upload. `head` is this
 /// device's roster head, `link` the profile link id, `now_ms` the time.
 pub async fn outgoing_batches(
@@ -128,16 +149,10 @@ pub async fn outgoing_batches(
                 outgoing.sent.push((collection, key, hash));
             }
         }
-        let header = BatchHeader {
-            collection: collection.key().to_owned(),
-            head: head.to_owned(),
-            link: Some(link.to_owned()),
-        };
         for records in changed.chunks(RECORDS_PER_BATCH) {
-            let content = [to_canonical_json(&header), records.join(&b'\n')].join(&b'\n');
             outgoing.batches.push(Batch {
                 collection,
-                content,
+                content: batch_content(collection, head, link, records),
             });
         }
     }
@@ -173,6 +188,8 @@ pub struct IncomingBatch {
     pub collection: Option<Collection>,
     pub link: Option<String>,
     pub head: String,
+    /// The batch's length in bytes, which counts toward the next snapshot.
+    pub size: usize,
     records: Vec<u8>,
 }
 
@@ -188,6 +205,7 @@ pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, SyncError> {
         collection: collection_from_key(&header.collection),
         link: header.link,
         head: header.head,
+        size: content.len(),
         records: records.strip_prefix(b"\n").unwrap_or(records).to_vec(),
     })
 }

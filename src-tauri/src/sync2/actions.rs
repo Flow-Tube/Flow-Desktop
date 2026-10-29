@@ -14,6 +14,7 @@ use super::roster::Role;
 use super::server::ServerStore;
 use super::service::{LastSync, last_sync, sync_soon};
 use super::setup::{create_group, restore_group};
+use super::snapshot::snapshot_soon;
 use super::state::{GroupRecord, forget_group, load_group};
 use crate::db::settings::{get_setting, set_setting};
 use crate::profiles::ActiveProfile;
@@ -183,7 +184,10 @@ pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
     let session = open_session(&local.pool, &record, &local.device).await?;
-    remove_device(&session, &local.device, id).await
+    remove_device(&session, &local.device, id).await?;
+    snapshot_soon(&local.pool).await?;
+    sync_soon(app);
+    Ok(())
 }
 
 /// Stops syncing on this device. The group keeps it as a member until another device removes it.

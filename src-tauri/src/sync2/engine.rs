@@ -18,6 +18,7 @@ use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::roster::{Entry, RosterState, apply_entry, replay_roster};
 use super::server::StoreError;
+use super::snapshot::{Manifest, note_merged};
 use super::state::{
     GroupRecord, add_roster_entries, load_group, roster_entries, save_group, save_streams, streams,
 };
@@ -94,6 +95,15 @@ pub struct Pulled {
     cursor: i64,
     consumed: usize,
     stalled: bool,
+    /// The profile links named by the batches and snapshot manifests read, in reading order.
+    links: Vec<String>,
+}
+
+/// What a log object carries, once checked and opened.
+enum Content {
+    Batch(IncomingBatch),
+    Snapshot(Manifest),
+    Ack,
 }
 
 pub struct Session<'a, S> {
@@ -173,6 +183,10 @@ impl<'a, S: Store> Session<'a, S> {
         &self.record
     }
 
+    pub fn device(&self) -> &MemberSecrets {
+        self.device
+    }
+
     /// The key of the epoch in force, unwrapped when the session opened.
     pub fn current_key(&self) -> &[u8] {
         self.keys.get(&self.state.epoch).map_or(&[], Vec::as_slice)
@@ -221,7 +235,7 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(self.keys[&epoch].clone())
     }
 
-    async fn write(
+    pub(super) async fn write(
         &mut self,
         pool: &SqlitePool,
         object_type: ObjectType,
@@ -278,6 +292,8 @@ impl<'a, S: Store> Session<'a, S> {
                 .await?;
         }
         mark_sent(pool, &outgoing).await?;
+        let bytes = outgoing.batches.iter().map(|b| b.content.len()).sum();
+        note_merged(pool, &self.record.link, bytes).await?;
         Ok(outgoing.batches.len())
     }
 
@@ -300,10 +316,9 @@ impl<'a, S: Store> Session<'a, S> {
             return Ok(false);
         }
         self.record.link = read
-            .batches
-            .values()
-            .flatten()
-            .find_map(|batch| batch.link.clone())
+            .links
+            .into_iter()
+            .next()
             .unwrap_or_else(|| own.to_owned());
         save_group(pool, &self.record).await?;
         Ok(true)
@@ -341,13 +356,18 @@ impl<'a, S: Store> Session<'a, S> {
                         .read_object(&path, &did, seq, pulled.positions.get(&did))
                         .await?
                     {
-                        Some((position, batch)) => {
+                        Some((position, content)) => {
                             pulled.positions.insert(did.clone(), position);
                             pulled.consumed += 1;
-                            if let Some(batch) =
-                                batch.filter(|b| link.is_none_or(|l| b.link.as_deref() == Some(l)))
-                            {
-                                pulled.batches.entry(did).or_default().push(batch);
+                            match content {
+                                Content::Batch(batch) => {
+                                    pulled.links.extend(batch.link.clone());
+                                    if link.is_none_or(|l| batch.link.as_deref() == Some(l)) {
+                                        pulled.batches.entry(did).or_default().push(batch);
+                                    }
+                                }
+                                Content::Snapshot(manifest) => pulled.links.extend(manifest.link),
+                                Content::Ack => {}
                             }
                         }
                         None => still.push((did, seq, path)),
@@ -375,7 +395,7 @@ impl<'a, S: Store> Session<'a, S> {
         did: &str,
         seq: u64,
         last: Option<&StreamPosition>,
-    ) -> Result<Option<(StreamPosition, Option<IncomingBatch>)>> {
+    ) -> Result<Option<(StreamPosition, Content)>> {
         let Some(bytes) = self.store.get_object(path).await? else {
             return Ok(None);
         };
@@ -397,17 +417,22 @@ impl<'a, S: Store> Session<'a, S> {
             object.header.object_type.purpose(),
         );
         let content = decode_payload(&open_object(&object, &key)?)?;
-        let batch = match object.header.object_type {
-            ObjectType::Changes => Some(parse_batch(&content)?),
-            ObjectType::Ack | ObjectType::Snapshot => None,
+        let content = match object.header.object_type {
+            ObjectType::Changes => Content::Batch(parse_batch(&content)?),
+            ObjectType::Snapshot => {
+                Content::Snapshot(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
+            }
+            ObjectType::Ack => Content::Ack,
             ObjectType::Live => return Err(Error::Suite.into()),
         };
-        Ok(Some((position, batch)))
+        Ok(Some((position, content)))
     }
 
     /// Saves how far reading got, after the caller applied the batches, and acknowledges it.
     pub async fn finish(&mut self, pool: &SqlitePool, pulled: Pulled) -> Result<()> {
         save_streams(pool, &pulled.positions, pulled.cursor).await?;
+        let merged = pulled.batches.values().flatten().map(|b| b.size).sum();
+        note_merged(pool, &self.record.link, merged).await?;
         self.record.cursor = pulled.cursor;
         if pulled.consumed > 0 {
             let vv: BTreeMap<&String, u64> = pulled

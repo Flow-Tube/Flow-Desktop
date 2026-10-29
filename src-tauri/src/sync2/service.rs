@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 use super::actions::{default_link, local, open_session};
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{Result, now_ms};
+use super::snapshot::snapshot_due;
 use super::state::load_group;
 use crate::sync::canonical::Collection;
 use crate::sync::export::export_collections;
@@ -94,6 +95,10 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
         let _ = app.emit(EVENT_REFRESH, &changed);
     }
     session.finish(pool, pulled).await?;
+    if snapshot_due(pool, &session.record().link).await? {
+        let exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
+        session.write_snapshot(pool, exported).await?;
+    }
     Ok(changed)
 }
 

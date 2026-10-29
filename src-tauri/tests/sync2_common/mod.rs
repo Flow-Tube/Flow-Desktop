@@ -14,6 +14,7 @@ use flow_desktop_lib::sync::export::export_collections;
 use flow_desktop_lib::sync::protocol::OutgoingCollection;
 use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
+use flow_desktop_lib::sync2::linking::WelcomeStore;
 use flow_desktop_lib::sync2::mailbox::Mailbox;
 use flow_desktop_lib::sync2::roster::{Entry, Op, Role, RosterState, replay_roster};
 use flow_desktop_lib::sync2::sealed::random_bytes;
@@ -244,6 +245,14 @@ pub async fn group() -> Group {
         a,
         b,
         recovery,
+    }
+}
+
+/// The store a member of this fixture's group names in its welcome.
+pub fn memory_welcome() -> WelcomeStore {
+    WelcomeStore::Server {
+        u: "memory".into(),
+        i: String::new(),
     }
 }
 

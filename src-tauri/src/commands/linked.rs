@@ -9,6 +9,7 @@ use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
 use crate::sync2::service::{self, Received};
+use crate::sync2::webdav::WebDavLogin;
 
 pub(crate) fn err(e: &EngineError) -> ErrorResponse {
     ErrorResponse {
@@ -46,8 +47,9 @@ pub async fn linked_restore(
     app: AppHandle,
     url: String,
     words: String,
+    login: Option<WebDavLogin>,
 ) -> Result<String, ErrorResponse> {
-    actions::restore(&app, &url, &words)
+    actions::restore(&app, &url, &words, login)
         .await
         .map_err(|e| err(&e))
 }
@@ -98,6 +100,29 @@ pub async fn linked_create_lan(app: AppHandle) -> Result<String, ErrorResponse> 
 }
 
 #[tauri::command]
+pub async fn linked_create_webdav(
+    app: AppHandle,
+    url: String,
+    user: String,
+    password: String,
+) -> Result<String, ErrorResponse> {
+    actions::create_on_webdav(&app, &url, &user, &password)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_update_login(
+    app: AppHandle,
+    user: String,
+    password: String,
+) -> Result<(), ErrorResponse> {
+    actions::update_login(&app, &user, &password)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
 pub async fn linked_ask_to_join(
     app: AppHandle,
     url: String,
@@ -131,8 +156,12 @@ pub async fn linked_show_code(app: AppHandle) -> Result<(), ErrorResponse> {
 }
 
 #[tauri::command]
-pub async fn linked_enter_code(app: AppHandle, code: String) -> Result<(), ErrorResponse> {
-    link_task::start_with_code(&app, &code)
+pub async fn linked_enter_code(
+    app: AppHandle,
+    code: String,
+    folder: Option<link_task::FolderAccess>,
+) -> Result<(), ErrorResponse> {
+    link_task::start_with_code(&app, &code, folder)
         .await
         .map_err(|e| err(&e))
 }

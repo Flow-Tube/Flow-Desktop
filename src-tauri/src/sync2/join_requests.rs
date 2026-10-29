@@ -44,8 +44,10 @@ impl ServerStore {
             .send()
             .await
             .map_err(StoreError::Network)?;
-        if response.status() == StatusCode::NOT_FOUND {
-            return Ok(None);
+        match response.status() {
+            StatusCode::NOT_FOUND => return Ok(None),
+            StatusCode::GONE => return Err(StoreError::JoinDeclined),
+            _ => {}
         }
         let answer = server::decode(response).await?;
         Ok(answer["code"].as_str().map(str::to_owned))

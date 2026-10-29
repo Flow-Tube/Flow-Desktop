@@ -7,6 +7,7 @@ import { IconChip, Spinner } from "../SyncParts";
 import { LinkPanel } from "./LinkPanel";
 import { LinkedOverview } from "./LinkedOverview";
 import { LinkedSetup } from "./LinkedSetup";
+import { LoginRefused } from "./LoginRefused";
 import { RecoveryWords } from "./RecoveryWords";
 import { StoppedNotice } from "./StoppedNotice";
 
@@ -17,6 +18,7 @@ function Body() {
   if (link.phase !== "idle") return <LinkPanel link={link} joining={!status.kind} />;
   if (status.stopped) return <StoppedNotice reason={status.stopped} />;
   if (!status.kind) return <LinkedSetup />;
+  if (status.loginRefused) return <LoginRefused />;
   return <LinkedOverview status={status} />;
 }
 

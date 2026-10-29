@@ -10,12 +10,14 @@ export interface LastSync {
 }
 
 export interface LinkedStatus {
-  /** The group this device is in: on a Flow server, or on its devices on the network. */
-  kind: "server" | "lan" | null;
+  /** The group this device is in: on a Flow server, in a WebDAV folder, or on its devices on the network. */
+  kind: "server" | "webdav" | "lan" | null;
   /** Why syncing stopped by itself: the group shut this device out (an `EngineError::kind`). */
   stopped?: "linkedRemoved" | "linkedSignInRefused" | null;
-  /** The Flow server this device syncs with, for a server group. */
+  /** The Flow server or WebDAV folder this device syncs with. */
   storeUrl?: string | null;
+  /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
+  loginRefused: boolean;
   recoverySaved: boolean;
   lastSync?: LastSync | null;
   /** A run is under way. */
@@ -66,9 +68,17 @@ export const createGroup = (url: string, adminToken: string) =>
 /** Starts a group on this network, with no server. Resolves to the recovery words, shown once. */
 export const createLanGroup = () => invokeBackend<string>("linked_create_lan");
 
+/** Starts a group in a WebDAV folder. Resolves to the recovery words, shown once. */
+export const createWebdavGroup = (url: string, user: string, password: string) =>
+  invokeBackend<string>("linked_create_webdav", { url, user, password });
+
+/** Replaces a WebDAV login the folder refused. */
+export const updateLogin = (user: string, password: string) =>
+  invokeBackend<void>("linked_update_login", { user, password });
+
 /** Resolves to the new recovery words, shown once. */
-export const restoreGroup = (url: string, words: string) =>
-  invokeBackend<string>("linked_restore", { url, words });
+export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
+  invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
@@ -81,7 +91,19 @@ export const forgetGroup = () => invokeBackend<void>("linked_forget");
 export const syncNow = () => invokeBackend<Received[]>("linked_sync_now");
 export const addDevice = () => invokeBackend<void>("linked_add_device");
 /** Answers another device's code: a member's code joins its group, a new device's code adds it. */
-export const enterCode = (code: string) => invokeBackend<void>("linked_enter_code", { code });
+/** The user name and password of a WebDAV folder. */
+export interface WebdavLogin {
+  user: string;
+  password: string;
+}
+
+/** A WebDAV folder and its login, entered before scanning so pairing can use the folder's mailbox. */
+export interface FolderAccess extends WebdavLogin {
+  url: string;
+}
+
+export const enterCode = (code: string, folder?: FolderAccess) =>
+  invokeBackend<void>("linked_enter_code", { code, folder: folder ?? null });
 /** Shows a code for a member on the same network to scan. */
 export const showCode = () => invokeBackend<void>("linked_show_code");
 /** Asks the group on `url` to let this device join; a linked device then accepts it. */

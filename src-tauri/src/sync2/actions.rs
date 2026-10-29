@@ -17,10 +17,14 @@ use super::names::device_names;
 use super::roster::Role;
 use super::server::{ServerStore, StoreError};
 use super::service::{LastSync, is_syncing, last_sync, sync_soon};
-use super::setup::{create_group, create_lan_group, restore_group};
+use super::setup::{
+    create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
+};
 use super::snapshot::snapshot_soon;
 use super::state::{GroupRecord, StoreKind, forget_group, load_group};
 use super::store::Store;
+use super::webdav::{WebDavLogin, WebDavStore};
+use super::webdav_login::{forget_login, load_login, save_login};
 use crate::db::settings::{get_setting, set_setting};
 use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
@@ -28,6 +32,9 @@ use crate::sync::{changes, ledger};
 
 const RECOVERY_SAVED: &str = "sync2_recovery_saved";
 const STOPPED: &str = "sync2_stopped";
+/// Set once the `WebDAV` folder refused its login: nothing is sent until the user enters a new
+/// one, because Nextcloud bans an address after repeated failures.
+const LOGIN_REFUSED: &str = "sync2_login_refused";
 const NAME_LIMIT: usize = 64;
 
 /// This installation as the group sees it.
@@ -71,6 +78,14 @@ pub async fn open_session<'a>(
             )
             .await?,
         )),
+        StoreKind::WebDav => GroupStore::WebDav(Box::new(
+            WebDavStore::connect(
+                &record.store_url,
+                load_login(&keychain())?,
+                hex::encode(device.did),
+            )
+            .await?,
+        )),
         StoreKind::Lan => GroupStore::Held(HeldStore::new(pool.clone())),
     };
     Session::open(pool, store, device).await
@@ -98,10 +113,7 @@ pub async fn stopped(pool: &SqlitePool) -> Result<Option<String>> {
 /// leaves that to the user, because the roster can't be read then.
 pub async fn stop_if_shut_out(pool: &SqlitePool, error: &EngineError) -> Result<()> {
     match error {
-        EngineError::Removed => {
-            forget_here(pool).await?;
-            forget_device_keys(&keychain())?;
-        }
+        EngineError::Removed => forget_with_keys(pool).await?,
         EngineError::Store(StoreError::SignInRefused) => {}
         _ => return Ok(()),
     }
@@ -121,14 +133,26 @@ async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
     Ok(set_setting(pool, RECOVERY_SAVED, if saved { "1" } else { "0" }).await?)
 }
 
+pub async fn login_refused(pool: &SqlitePool) -> Result<bool> {
+    Ok(get_setting(pool, LOGIN_REFUSED).await?.as_deref() == Some("1"))
+}
+
+pub async fn set_login_refused(pool: &SqlitePool, refused: bool) -> Result<()> {
+    Ok(set_setting(pool, LOGIN_REFUSED, if refused { "1" } else { "0" }).await?)
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedStatus {
-    /// The group this device is in: on a server or on its devices; `None` when in no group.
+    /// The group this device is in: on a server, in a `WebDAV` folder or on its devices; `None`
+    /// when in no group.
     pub kind: Option<StoreKind>,
     /// Set when syncing stopped because the group shut this device out.
     pub stopped: Option<String>,
+    /// The server or folder the group syncs through.
     pub store_url: Option<String>,
+    /// The `WebDAV` folder refused its login, so nothing syncs until a new one is entered.
+    pub login_refused: bool,
     pub recovery_saved: bool,
     pub last_sync: Option<LastSync>,
     pub syncing: bool,
@@ -143,8 +167,9 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
         kind: record.as_ref().map(|r| r.kind),
         stopped: stopped(&pool).await?,
         store_url: record
-            .filter(|r| r.kind == StoreKind::Server)
+            .filter(|r| r.kind != StoreKind::Lan)
             .map(|r| r.store_url),
+        login_refused: login_refused(&pool).await?,
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
         last_sync: last_sync(app),
@@ -217,6 +242,54 @@ pub async fn create(app: &AppHandle, url: &str, admin_token: &str) -> Result<Str
     Ok(words)
 }
 
+/// Starts a group in a `WebDAV` folder and returns the recovery words to show once.
+pub async fn create_on_webdav(
+    app: &AppHandle,
+    url: &str,
+    user: &str,
+    password: &str,
+) -> Result<String> {
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
+    let url = url.trim();
+    let login = WebDavLogin {
+        user: user.trim().to_owned(),
+        password: password.to_owned(),
+    };
+    let store = WebDavStore::connect(url, login.clone(), hex::encode(local.device.did)).await?;
+    save_login(&keychain(), &login)?;
+    let link = default_link(app);
+    let words =
+        create_webdav_group(&local.pool, &store, url, &local.device, &local.meta, &link).await?;
+    set_recovery_saved(&local.pool, false).await?;
+    Ok(words)
+}
+
+/// Replaces a `WebDAV` login the folder refused, once the folder takes the new one and still
+/// holds this group.
+pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let login = WebDavLogin {
+        user: user.trim().to_owned(),
+        password: password.to_owned(),
+    };
+    let store = WebDavStore::connect(
+        &record.store_url,
+        login.clone(),
+        hex::encode(local.device.did),
+    )
+    .await?;
+    store.probe().await?;
+    if store.group().await?.as_deref() != Some(record.group_id.as_str()) {
+        return Err(EngineError::Unexpected);
+    }
+    save_login(&keychain(), &login)?;
+    set_login_refused(&local.pool, false).await?;
+    sync_soon(app);
+    Ok(())
+}
+
 /// Starts a group that lives on this network's devices, with no server, and returns the recovery
 /// words to show once.
 pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
@@ -228,11 +301,25 @@ pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
     Ok(words)
 }
 
-/// Restores the group from its recovery words and returns the new words to show once.
-pub async fn restore(app: &AppHandle, url: &str, words: &str) -> Result<String> {
+/// Restores the group from its recovery words, on a Flow server or, with `login`, in a `WebDAV`
+/// folder, and returns the new words to show once.
+pub async fn restore(
+    app: &AppHandle,
+    url: &str,
+    words: &str,
+    login: Option<WebDavLogin>,
+) -> Result<String> {
     let mut local = local(app).await?;
     start_membership(&mut local).await?;
-    let next = restore_group(&local.pool, url.trim(), words, &local.device, &local.meta).await?;
+    let (pool, url, device, meta) = (&local.pool, url.trim(), &local.device, &local.meta);
+    let next = match login {
+        Some(login) => {
+            let store = WebDavStore::connect(url, login.clone(), hex::encode(device.did)).await?;
+            save_login(&keychain(), &login)?;
+            restore_webdav_group(pool, &store, url, words, device, meta).await?
+        }
+        None => restore_group(pool, url, words, device, meta).await?,
+    };
     set_recovery_saved(&local.pool, false).await?;
     sync_soon(app);
     Ok(next)
@@ -291,7 +378,7 @@ pub async fn leave(app: &AppHandle) -> Result<()> {
     let record = linked(&local.pool).await?;
     let session = open_session(&local.pool, &record, &local.device).await?;
     depart(&local.pool, &session, &local.device).await?;
-    Ok(forget_device_keys(&keychain())?)
+    forget_keys()
 }
 
 /// [`leave`], when this device is in a group.
@@ -324,8 +411,7 @@ pub async fn depart<S: Store>(
 /// Forgets the group and this device's keys without telling the group, for a device it already
 /// shut out.
 pub async fn forget(app: &AppHandle) -> Result<()> {
-    forget_here(app.state::<SqlitePool>().inner()).await?;
-    Ok(forget_device_keys(&keychain())?)
+    forget_with_keys(app.state::<SqlitePool>().inner()).await
 }
 
 /// Clears history, subscriptions and playlists. When this profile syncs, the caller first leaves
@@ -345,9 +431,22 @@ pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     Ok(())
 }
 
+/// Forgets the device keys and the `WebDAV` login kept for the group.
+fn forget_keys() -> Result<()> {
+    forget_device_keys(&keychain())?;
+    Ok(forget_login(&keychain())?)
+}
+
+/// Forgets the group here, with its keys.
+async fn forget_with_keys(pool: &SqlitePool) -> Result<()> {
+    forget_here(pool).await?;
+    forget_keys()
+}
+
 /// Forgets the group on a database, keeping this device's keys.
 async fn forget_here(pool: &SqlitePool) -> Result<()> {
     forget_group(pool).await?;
     set_setting(pool, STOPPED, "").await?;
+    set_login_refused(pool, false).await?;
     set_recovery_saved(pool, true).await
 }

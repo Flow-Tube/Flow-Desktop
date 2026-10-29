@@ -18,6 +18,7 @@ pub mod error;
 pub mod gc;
 pub mod group_store;
 pub mod held;
+pub mod http;
 pub mod join_requests;
 pub mod kdf;
 pub mod keys;
@@ -47,6 +48,8 @@ pub mod setup;
 pub mod snapshot;
 pub mod state;
 pub mod store;
+pub mod webdav;
+pub mod webdav_login;
 pub mod wrap;
 
 pub use error::{Error, Result};

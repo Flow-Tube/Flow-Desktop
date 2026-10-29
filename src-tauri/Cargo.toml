@@ -96,6 +96,8 @@ flate2 = "1"
 local-ip-address = "0.6"
 # FLOW-SYNC/2 LAN groups find each other over mDNS (`_flow._tcp`).
 mdns-sd = "0.21.6"
+# FLOW-SYNC/2 WebDAV stores: reading PROPFIND answers.
+quick-xml = "0.42"
 
 # Native Windows toast notifications: build the toast XML directly so we can attach
 # the app logo + a video thumbnail (hero image) and register a proper AppUserModelID,
@@ -151,3 +153,7 @@ codegen-units = 16
 
 [dev-dependencies]
 wiremock = "0.6"
+# In-process WebDAV server for the FLOW-SYNC/2 WebDAV store tests.
+dav-server = { version = "0.11", default-features = false, features = ["memfs"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }

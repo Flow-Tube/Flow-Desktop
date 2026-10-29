@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useUiStore } from '../../store/useUiStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
+import { useSyncActivityStore } from '../../store/useSyncActivityStore';
 import { SidebarItem } from '../ui/SidebarItem';
 import { SidebarNavIcon, type SidebarNavIconName } from '../ui/SidebarNavIcon';
 import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
@@ -27,6 +29,17 @@ function navIconPair(name: SidebarNavIconName) {
   };
 }
 
+/** A small turning badge on an icon while linked devices sync, visible collapsed or not. */
+function withSyncBadge(icon: ReactNode, syncing: boolean): ReactNode {
+  if (!syncing) return icon;
+  return (
+    <span className="relative">
+      {icon}
+      <RefreshCw className="absolute -bottom-1 -right-1.5 h-3 w-3 animate-spin rounded-full bg-surface text-chrome-neutral-300" />
+    </span>
+  );
+}
+
 const shortsNavIconPair = {
   icon: <ShortsIcon className="h-6 w-6 shrink-0" />,
   activeIcon: <ShortsAIcon className="h-6 w-6 shrink-0" />,
@@ -49,6 +62,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const isOverlay = mode === 'overlay';
   const expanded = isOverlay || isSidebarExpanded;
   const collapsed = !expanded;
+  const syncing = useSyncActivityStore((state) => state.syncing);
 
   if (
     !isOverlay &&
@@ -134,7 +148,15 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
             </nav>
           </div>
           <nav className="flex flex-col gap-1.5">
-            <SidebarItem onOpenInNewTab={openInNewTab} to="/sync" {...navIconPair('sync')} label={getString('sidebar_sync')} onClick={closeOverlay} collapsed={collapsed} />
+            <SidebarItem
+              onOpenInNewTab={openInNewTab}
+              to="/sync"
+              icon={withSyncBadge(navIcon('sync', 'outline'), syncing)}
+              activeIcon={withSyncBadge(navIcon('sync', 'filled'), syncing)}
+              label={getString('sidebar_sync')}
+              onClick={closeOverlay}
+              collapsed={collapsed}
+            />
             <SidebarItem onOpenInNewTab={openInNewTab} to="/sponsorblock" {...navIconPair('extensions')} label={getString('sidebar_extensions')} onClick={closeOverlay} collapsed={collapsed} />
             <SidebarItem onOpenInNewTab={openInNewTab} to="/support" {...navIconPair('support')} label={getString('sidebar_support')} onClick={closeOverlay} collapsed={collapsed} />
           </nav>

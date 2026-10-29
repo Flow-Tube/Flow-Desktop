@@ -314,3 +314,22 @@ async fn members_list_answer_and_decline_join_requests_with_their_token() {
     store.answer_join(&id, "{}").await.unwrap();
     store.decline_join(&id).await.unwrap();
 }
+
+#[tokio::test]
+async fn the_server_says_when_it_last_heard_from_each_device() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "used": 0, "quota": 1, "objects": 0,
+            "devices": { "aa": { "seen": 1000 }, "bb": { "seen": 2000 } }
+        })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let seen = store.last_seen().await.unwrap();
+    assert_eq!(seen.get("aa"), Some(&1000));
+    assert_eq!(seen.get("bb"), Some(&2000));
+}

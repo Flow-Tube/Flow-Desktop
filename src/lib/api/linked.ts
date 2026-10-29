@@ -10,13 +10,14 @@ export interface LastSync {
 }
 
 export interface LinkedStatus {
-  linked: boolean;
-  /** The group lives on its devices and syncs on the same network, with no server. */
-  onLan: boolean;
+  /** The group this device is in: on a Flow server, or on its devices on the network. */
+  kind: "server" | "lan" | null;
   /** The Flow server this device syncs with, for a server group. */
   storeUrl?: string | null;
   recoverySaved: boolean;
   lastSync?: LastSync | null;
+  /** A run is under way. */
+  syncing: boolean;
 }
 
 export interface LinkedDevice {
@@ -26,6 +27,14 @@ export interface LinkedDevice {
   thisDevice: boolean;
   /** Met on this network in the last few minutes. */
   nearby: boolean;
+  /** When the device last synced, as the server saw it, or as this device last met it on the LAN. */
+  lastSyncMs?: number | null;
+}
+
+/** Records one run applied from one device. */
+export interface Received {
+  name: string;
+  count: number;
 }
 
 export type LinkPhase =
@@ -84,6 +93,14 @@ export function onLinkPhase(cb: (phase: LinkPhase) => void): Promise<UnlistenFn>
 
 export function onJoinRequests(cb: (requests: JoinRequest[]) => void): Promise<UnlistenFn> {
   return listen<JoinRequest[]>("sync2://join-requests", (event) => cb(event.payload));
+}
+
+export function onSyncing(cb: () => void): Promise<UnlistenFn> {
+  return listen("sync2://syncing", () => cb());
+}
+
+export function onReceived(cb: (received: Received[]) => void): Promise<UnlistenFn> {
+  return listen<Received[]>("sync2://received", (event) => cb(event.payload));
 }
 
 export function onSynced(cb: (last: LastSync) => void): Promise<UnlistenFn> {

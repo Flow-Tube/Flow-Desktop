@@ -112,7 +112,9 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       });
       await onSynced((lastSync) => {
         const status = get().status;
-        if (status) set({ status: { ...status, lastSync } });
+        if (!status) return;
+        set({ status: { ...status, lastSync } });
+        if (status.kind) void loadDevices();
       });
       set({ link: await getLinkPhase() });
       await get().refresh();
@@ -122,7 +124,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       try {
         const status = await getLinkedStatus();
         set({ status });
-        if (status.linked) await loadDevices();
+        if (status.kind) await loadDevices();
         else set({ devices: null, devicesError: null });
       } catch (error) {
         set({ error: describe(error) });

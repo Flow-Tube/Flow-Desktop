@@ -17,12 +17,14 @@ function Waiting({ label }: { label: string }) {
   );
 }
 
-function Outcome({ title, body, failed }: { title: string; body: string; failed?: boolean }) {
-  const tone = failed ? "bg-chrome-red-950/30 text-chrome-red-400" : "bg-surface-container-high text-chrome-neutral-200";
+type Ending = "done" | "failed" | "cancelled";
+
+function Outcome({ title, body, ending }: { title: string; body: string; ending: Ending }) {
+  const tone = ending === "failed" ? "bg-chrome-red-950/30 text-chrome-red-400" : "bg-surface-container-high text-chrome-neutral-200";
   return (
     <>
       <div className={`flex h-12 w-12 items-center justify-center rounded-full ${tone}`}>
-        {failed ? <X className="h-6 w-6" /> : <CircleCheck className="h-6 w-6" />}
+        {ending === "done" ? <CircleCheck className="h-6 w-6" /> : <X className="h-6 w-6" />}
       </div>
       <h3 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h3>
       <p className="max-w-sm text-sm text-chrome-neutral-400">{body}</p>
@@ -75,9 +77,13 @@ export function LinkPanel({ link, joining }: { link: LinkPhase; joining: boolean
       )}
       {link.phase === "asking" && <Waiting label={getString("linked_waiting_accept")} />}
       {link.phase === "linking" && <Waiting label={getString("linked_linking")} />}
-      {link.phase === "done" && <Outcome title={getString("linked_done_title")} body={getString("linked_done_body")} />}
+      {link.phase === "done" && <Outcome ending="done" title={getString("linked_done_title")} body={getString("linked_done_body")} />}
       {link.phase === "failed" && (
-        <Outcome failed title={getString("linked_failed_title")} body={syncErrorMessage(link.kind, link.message)} />
+        <Outcome
+          ending={link.kind === "linkedDeclined" ? "cancelled" : "failed"}
+          title={getString(link.kind === "linkedDeclined" ? "linked_cancelled_title" : "linked_failed_title")}
+          body={syncErrorMessage(link.kind, link.message)}
+        />
       )}
       <Button variant={finished ? "primary" : "secondary"} onClick={() => void closeLink()}>
         {getString(finished ? "linked_close" : "linked_cancel")}

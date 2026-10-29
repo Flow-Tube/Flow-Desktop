@@ -33,19 +33,23 @@ pub struct LanPeers {
     seen: Mutex<BTreeMap<String, i64>>,
 }
 
-/// The members met on the LAN in the last few minutes.
-pub fn nearby(app: &AppHandle) -> BTreeSet<String> {
-    let since = now_ms() - NEARBY_MS;
+/// When this device last met each member on the LAN.
+pub fn met(app: &AppHandle) -> BTreeMap<String, i64> {
     app.state::<LanPeers>()
         .seen
         .lock()
-        .map(|seen| {
-            seen.iter()
-                .filter(|(_, at)| **at >= since)
-                .map(|(did, _)| did.clone())
-                .collect()
-        })
+        .map(|seen| seen.clone())
         .unwrap_or_default()
+}
+
+/// The members met on the LAN in the last few minutes.
+pub fn nearby(app: &AppHandle) -> BTreeSet<String> {
+    let since = now_ms() - NEARBY_MS;
+    met(app)
+        .into_iter()
+        .filter(|(_, at)| *at >= since)
+        .map(|(did, _)| did)
+        .collect()
 }
 
 fn note(app: &AppHandle, met: &Met) {

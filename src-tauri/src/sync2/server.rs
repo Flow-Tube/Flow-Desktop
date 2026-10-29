@@ -263,6 +263,16 @@ impl ServerStore {
         unreachable!("the loop returns on its second pass")
     }
 
+    /// When the server last heard from each device, by `did` (`GET /v1/status`).
+    pub async fn last_seen(&self) -> Result<BTreeMap<String, i64>> {
+        let status = decode(self.authorized(Method::GET, "v1/status", None).await?).await?;
+        let devices = status["devices"].as_object().ok_or(StoreError::Malformed)?;
+        Ok(devices
+            .iter()
+            .filter_map(|(did, device)| Some((did.clone(), device["seen"].as_i64()?)))
+            .collect())
+    }
+
     /// A request with the operator's admin token instead of a device token.
     pub(super) fn as_admin(
         &self,

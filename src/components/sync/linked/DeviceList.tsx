@@ -3,6 +3,7 @@ import { Monitor, Pencil, Smartphone, Trash2 } from "lucide-react";
 
 import type { LinkedDevice } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
+import { formatYouTubeRelativeTime } from "../../../lib/publishedDate";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { TextInput } from "../../ui/TextInput";
@@ -41,6 +42,11 @@ function DeviceRow({ device }: { device: LinkedDevice }) {
       <Icon className="h-5 w-5 shrink-0 text-chrome-neutral-400" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-chrome-neutral-100">{displayName(device)}</p>
+        {device.lastSyncMs != null && mode !== "remove" && (
+          <p className="text-xs text-chrome-neutral-400">
+            {getString("linked_device_synced", formatYouTubeRelativeTime(device.lastSyncMs))}
+          </p>
+        )}
         {mode === "remove" && (
           <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_confirm", displayName(device))}</p>
         )}

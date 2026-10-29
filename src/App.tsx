@@ -84,7 +84,7 @@ import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
 import { useTabSession } from "./lib/tabs/useTabSession";
 import { useSingleTabWhenOff } from "./lib/tabs/useSingleTabWhenOff";
 import { useCrossWindowSync } from "./lib/useCrossWindowSync";
-import { useJoinRequestNotice } from "./lib/useJoinRequestNotice";
+import { useLinkedSyncEvents } from "./lib/useLinkedSyncEvents";
 import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
@@ -116,7 +116,7 @@ function App() {
   const tabsRestored = useTabSession();
   useSingleTabWhenOff();
   useCrossWindowSync();
-  useJoinRequestNotice();
+  useLinkedSyncEvents();
   useProfileSwitchListener(markSwitching);
 
   // Onboarding belongs to the main window; an extra window only exists once it is done.

@@ -10,13 +10,13 @@ use super::group_store::GroupStore;
 use super::held::HeldStore;
 use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
-use super::lan_runtime::nearby;
+use super::lan_runtime::{met, nearby};
 use super::linking::DeviceMeta;
 use super::membership::{remove_device, rename_device};
 use super::names::device_names;
 use super::roster::Role;
 use super::server::ServerStore;
-use super::service::{LastSync, last_sync, sync_soon};
+use super::service::{LastSync, is_syncing, last_sync, sync_soon};
 use super::setup::{create_group, create_lan_group, restore_group};
 use super::snapshot::snapshot_soon;
 use super::state::{GroupRecord, StoreKind, forget_group, load_group};
@@ -97,12 +97,12 @@ async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedStatus {
-    pub linked: bool,
-    /// The group lives on its devices, with no server.
-    pub on_lan: bool,
+    /// The group this device is in: on a server or on its devices; `None` when in no group.
+    pub kind: Option<StoreKind>,
     pub store_url: Option<String>,
     pub recovery_saved: bool,
     pub last_sync: Option<LastSync>,
+    pub syncing: bool,
 }
 
 /// What can be shown without reaching the server.
@@ -111,14 +111,14 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
     let record = load_group(&pool).await?;
     Ok(LinkedStatus {
-        linked: record.is_some(),
-        on_lan: record.as_ref().is_some_and(|r| r.kind == StoreKind::Lan),
+        kind: record.as_ref().map(|r| r.kind),
         store_url: record
             .filter(|r| r.kind == StoreKind::Server)
             .map(|r| r.store_url),
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
         last_sync: last_sync(app),
+        syncing: is_syncing(app),
     })
 }
 
@@ -131,6 +131,9 @@ pub struct LinkedDevice {
     pub this_device: bool,
     /// Met on this network in the last few minutes.
     pub nearby: bool,
+    /// When the device last synced: as the server saw it, or for a LAN group when this device
+    /// last met it (or, for this device, its own last run).
+    pub last_sync_ms: Option<i64>,
 }
 
 pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
@@ -140,6 +143,14 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
     let names = device_names(&mut session).await?;
     let me = hex::encode(local.device.did);
     let nearby = nearby(app);
+    // Best effort: the list still shows when the server can't be asked.
+    let last_synced = if let Some(server) = session.store().server() {
+        server.last_seen().await.unwrap_or_default()
+    } else {
+        let mut met = met(app);
+        met.extend(last_sync(app).map(|last| (me.clone(), last.at_ms)));
+        met
+    };
     Ok(session
         .roster()
         .members
@@ -153,6 +164,7 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
                 platform: meta.map(|m| m.platform.clone()).unwrap_or_default(),
                 this_device: *id == me,
                 nearby: nearby.contains(id),
+                last_sync_ms: last_synced.get(id).copied(),
             }
         })
         .collect())

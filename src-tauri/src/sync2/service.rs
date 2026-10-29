@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 use super::actions::{default_link, local, open_session};
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{Result, now_ms};
+use super::names::device_names;
 use super::snapshot::snapshot_due;
 use super::state::load_group;
 use crate::sync::canonical::Collection;
@@ -24,6 +25,10 @@ use crate::sync::runtime::{
 use crate::sync::session::EVENT_REFRESH;
 
 pub const EVENT_SYNCED: &str = "sync2://synced";
+/// A run started; [`EVENT_SYNCED`] says when it ended.
+pub const EVENT_SYNCING: &str = "sync2://syncing";
+/// What a run applied, by the device that sent it.
+pub const EVENT_RECEIVED: &str = "sync2://received";
 /// Devices asking to join, seen during a sync, so the app can tell the user on any page.
 pub const EVENT_JOIN_REQUESTS: &str = "sync2://join-requests";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
@@ -47,6 +52,17 @@ pub struct BackgroundSync {
     scheduled: AtomicU64,
 }
 
+/// Records applied from one device in one run.
+#[derive(Debug, Clone, Serialize)]
+pub struct Received {
+    pub name: String,
+    pub count: u64,
+}
+
+pub fn is_syncing(app: &AppHandle) -> bool {
+    app.state::<BackgroundSync>().running.try_lock().is_err()
+}
+
 pub fn last_sync(app: &AppHandle) -> Option<LastSync> {
     app.state::<BackgroundSync>()
         .last
@@ -63,6 +79,7 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<String>> {
     if load_group(&pool).await?.is_none() {
         return Ok(Vec::new());
     }
+    let _ = app.emit(EVENT_SYNCING, ());
     let result = run(app).await;
     let last = LastSync {
         at_ms: now_ms(),
@@ -92,8 +109,8 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
     session.push(pool, exported).await?;
 
     let pulled = session.pull(pool).await?;
-    let changed = if pulled.batches.is_empty() {
-        Vec::new()
+    let (changed, received) = if pulled.batches.is_empty() {
+        (Vec::new(), BTreeMap::new())
     } else {
         apply(app, pool, &local.meta.app, &pulled.batches).await?
     };
@@ -101,6 +118,20 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
         let _ = app.emit(EVENT_REFRESH, &changed);
     }
     session.finish(pool, pulled).await?;
+    if !received.is_empty() {
+        let names = device_names(&mut session).await.unwrap_or_default();
+        let received: Vec<Received> = received
+            .into_iter()
+            .map(|(sender, count)| Received {
+                name: names
+                    .get(&sender)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_default(),
+                count,
+            })
+            .collect();
+        let _ = app.emit(EVENT_RECEIVED, received);
+    }
     if snapshot_due(pool, &session.record().link).await? {
         let exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
         session.write_snapshot(pool, exported).await?;
@@ -116,18 +147,31 @@ async fn run(app: &AppHandle) -> Result<Vec<String>> {
     Ok(changed)
 }
 
+/// Applies each sender's batches, and returns the collections they touched and how many records
+/// each sender changed here.
 async fn apply(
     app: &AppHandle,
     pool: &SqlitePool,
     app_id: &str,
     batches: &BTreeMap<String, Vec<IncomingBatch>>,
-) -> Result<Vec<String>> {
+) -> Result<(Vec<String>, BTreeMap<String, u64>)> {
     flush_and_hold_brains(app).await;
     let mut changed = BTreeSet::new();
+    let mut received = BTreeMap::new();
     let mut result = Ok(());
     for (sender, batches) in batches {
         match apply_batches(pool, app_id, sender, batches, now_ms()).await {
-            Ok(report) => changed.extend(report.stats.into_iter().map(|s| s.collection_key)),
+            Ok(report) => {
+                let count = report
+                    .stats
+                    .iter()
+                    .map(|s| s.added + s.updated + s.tombstoned)
+                    .sum::<u64>();
+                if count > 0 {
+                    received.insert(sender.clone(), count);
+                }
+                changed.extend(report.stats.into_iter().map(|s| s.collection_key));
+            }
             Err(error) => {
                 result = Err(error);
                 break;
@@ -137,7 +181,7 @@ async fn apply(
     // Also after a failed apply, which releases the held brain.
     reload_brains(app).await;
     result?;
-    Ok(changed.into_iter().collect())
+    Ok((changed.into_iter().collect(), received))
 }
 
 /// Syncs once without waiting, for example right after this device joined a group.

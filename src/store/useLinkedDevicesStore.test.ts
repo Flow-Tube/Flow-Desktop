@@ -29,7 +29,7 @@ vi.mock("../lib/api/linked", () => api);
 import { useLinkedDevicesStore } from "./useLinkedDevicesStore";
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `word${i}`).join(" ");
-const LINKED = { linked: true, onLan: false, storeUrl: "https://sync.example.com", recoverySaved: false, lastSync: null };
+const LINKED = { kind: "server", storeUrl: "https://sync.example.com", recoverySaved: false, lastSync: null, syncing: false };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,7 +65,7 @@ describe("useLinkedDevicesStore", () => {
   });
 
   it("loads no devices for a device in no group", async () => {
-    api.getLinkedStatus.mockResolvedValue({ linked: false, onLan: false, storeUrl: null, recoverySaved: false, lastSync: null });
+    api.getLinkedStatus.mockResolvedValue({ kind: null, storeUrl: null, recoverySaved: false, lastSync: null, syncing: false });
 
     await useLinkedDevicesStore.getState().refresh();
     expect(api.getLinkedDevices).not.toHaveBeenCalled();

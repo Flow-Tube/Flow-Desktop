@@ -11,8 +11,9 @@ use crate::sync::canonical::to_canonical_json;
 use crate::sync::error::SyncError;
 
 /// Where a group keeps its objects: a Flow server, or only its devices on the LAN.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize)]
 #[sqlx(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum StoreKind {
     Server,
     Lan,

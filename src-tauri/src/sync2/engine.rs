@@ -13,7 +13,7 @@ use super::envelope::{
     seal_object, verify_object,
 };
 use super::epoch::{check_epoch_key, open_chain, purpose_key};
-use super::gc::{Ack, Logged, VersionVector, record_ack, record_manifest};
+use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
 use super::keys::MemberSecrets;
 use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
@@ -96,8 +96,9 @@ pub struct Pulled {
     cursor: i64,
     consumed: usize,
     stalled: bool,
-    /// The profile links named by the batches and snapshot manifests read, in reading order.
-    links: Vec<String>,
+    /// The links named by the batches and snapshot manifests read, in reading order; `None` is
+    /// the `profiles` collection.
+    links: Vec<Option<String>>,
     acks: BTreeMap<String, VersionVector>,
     manifests: Vec<Logged>,
 }
@@ -321,6 +322,7 @@ impl<'a, S: Store> Session<'a, S> {
         self.record.link = read
             .links
             .into_iter()
+            .flatten()
             .next()
             .unwrap_or_else(|| own.to_owned());
         save_group(pool, &self.record).await?;
@@ -339,7 +341,7 @@ impl<'a, S: Store> Session<'a, S> {
             && pulled.cursor == 0
             && let Some(start) = self.bootstrap().await?
         {
-            pulled.links.extend(start.manifest.link.clone());
+            pulled.links.push(start.manifest.link.clone());
             if link.is_none_or(|l| start.manifest.link.as_deref() == Some(l)) {
                 pulled.batches.insert(start.writer, start.batches);
             }
@@ -375,13 +377,13 @@ impl<'a, S: Store> Session<'a, S> {
                             pulled.consumed += 1;
                             match content {
                                 Content::Batch(batch) => {
-                                    pulled.links.extend(batch.link.clone());
+                                    pulled.links.push(batch.link.clone());
                                     if link.is_none_or(|l| batch.link.as_deref() == Some(l)) {
                                         pulled.batches.entry(did).or_default().push(batch);
                                     }
                                 }
                                 Content::Snapshot(manifest) => {
-                                    pulled.links.extend(manifest.link.clone());
+                                    pulled.links.push(manifest.link.clone());
                                     pulled.manifests.push(Logged { did, seq, manifest });
                                 }
                                 Content::Ack(ack) => {
@@ -476,6 +478,7 @@ impl<'a, S: Store> Session<'a, S> {
         for logged in &pulled.manifests {
             record_manifest(pool, logged).await?;
         }
+        record_links(pool, &pulled.links).await?;
         if pulled.consumed > 0 {
             let ack = Ack {
                 vv: pulled

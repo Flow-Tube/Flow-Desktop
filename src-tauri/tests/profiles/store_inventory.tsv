@@ -16,6 +16,7 @@ table	sync2_streams	DEFAULT_ONLY	sync	Only Default syncs; how far each device's 
 table	sync2_snapshots	DEFAULT_ONLY	sync	Only Default syncs; when each link last got a snapshot
 table	sync2_acks	DEFAULT_ONLY	sync	Only Default syncs; each device's latest FLOW-SYNC/2 ack
 table	sync2_manifests	DEFAULT_ONLY	sync	Only Default syncs; snapshot manifests seen, for garbage collection
+table	sync2_links	DEFAULT_ONLY	sync	Only Default syncs; links that batches name, for garbage collection
 table	sync2_collected	DEFAULT_ONLY	sync	Only Default syncs; how far each log was deleted
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions

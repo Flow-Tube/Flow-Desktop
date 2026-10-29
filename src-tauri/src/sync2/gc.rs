@@ -65,6 +65,28 @@ pub async fn record_manifest(pool: &SqlitePool, logged: &Logged) -> Result<()> {
     Ok(())
 }
 
+/// Remembers the links batches named, so garbage collection waits for a snapshot of each.
+pub async fn record_links(pool: &SqlitePool, links: &[Option<String>]) -> Result<()> {
+    for link in links.iter().collect::<BTreeSet<_>>() {
+        sqlx::query("INSERT OR IGNORE INTO sync2_links (link) VALUES (?)")
+            .bind(json(link))
+            .execute(pool)
+            .await
+            .map_err(SyncError::from)?;
+    }
+    Ok(())
+}
+
+async fn links(pool: &SqlitePool) -> Result<BTreeSet<Option<String>>> {
+    let rows: Vec<String> = sqlx::query_scalar("SELECT link FROM sync2_links")
+        .fetch_all(pool)
+        .await
+        .map_err(SyncError::from)?;
+    rows.iter()
+        .map(|link| Ok(serde_json::from_str(link).map_err(SyncError::from)?))
+        .collect()
+}
+
 async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
     let rows: Vec<(String, String)> = sqlx::query_as("SELECT did, vv FROM sync2_acks")
         .fetch_all(pool)
@@ -117,59 +139,66 @@ pub struct Facts<'a> {
     pub current: &'a BTreeSet<String>,
     /// Logs this device may delete from: its own and removed devices'.
     pub collectable: &'a BTreeSet<String>,
-    pub link: &'a str,
+    /// Every link batches named, each of which needs an acknowledged snapshot.
+    pub links: &'a BTreeSet<Option<String>>,
     pub acks: &'a BTreeMap<String, VersionVector>,
     pub manifests: &'a [Logged],
     pub collected: &'a VersionVector,
 }
 
 impl Facts<'_> {
-    /// The highest `seq` of `did`'s log that every current device has consumed. A device has all
-    /// of its own log.
+    /// The highest `seq` of `did`'s log that every current device other than `did` has acked.
     fn acked(&self, did: &str) -> u64 {
         self.current
             .iter()
+            .filter(|reader| *reader != did)
             .map(|reader| {
-                if reader == did {
-                    u64::MAX
-                } else {
-                    self.acks
-                        .get(reader)
-                        .and_then(|vv| vv.get(did))
-                        .copied()
-                        .unwrap_or(0)
-                }
+                self.acks
+                    .get(reader)
+                    .and_then(|vv| vv.get(did))
+                    .copied()
+                    .unwrap_or(0)
+            })
+            .min()
+            .unwrap_or(u64::MAX)
+    }
+
+    /// Snapshots of `link` that every current device has acked.
+    fn acknowledged<'s>(&'s self, link: &'s Option<String>) -> impl Iterator<Item = &'s Logged> {
+        self.manifests
+            .iter()
+            .filter(move |m| m.manifest.link == *link && self.acked(&m.did) >= m.seq)
+    }
+
+    fn superseded(&self, old: &Logged) -> bool {
+        self.acknowledged(&old.manifest.link).any(|newer| {
+            (newer.did != old.did || newer.seq != old.seq)
+                && old
+                    .manifest
+                    .vv
+                    .iter()
+                    .all(|(did, tip)| newer.manifest.vv.get(did).is_some_and(|n| n.seq >= tip.seq))
+        })
+    }
+
+    /// The highest `seq` of `did`'s log that an acknowledged snapshot of every link includes.
+    fn covered(&self, did: &str) -> u64 {
+        self.links
+            .iter()
+            .map(|link| {
+                self.acknowledged(link)
+                    .filter_map(|m| m.manifest.vv.get(did).map(|tip| tip.seq))
+                    .max()
+                    .unwrap_or(0)
             })
             .min()
             .unwrap_or(0)
     }
 
-    fn acknowledged(&self) -> impl Iterator<Item = &Logged> {
-        self.manifests.iter().filter(|m| {
-            m.manifest.link.as_deref() == Some(self.link) && self.acked(&m.did) >= m.seq
-        })
-    }
-
-    fn superseded(&self, old: &Logged) -> bool {
-        self.acknowledged().any(|newer| {
-            (newer.did != old.did || newer.seq != old.seq)
-                && newer.manifest.link == old.manifest.link
-                && old
-                    .manifest
-                    .vv
-                    .iter()
-                    .all(|(did, seq)| newer.manifest.vv.get(did).is_some_and(|n| n >= seq))
-        })
-    }
-
     pub fn plan(&self) -> Plan {
         let mut plan = Plan::default();
         for did in self.collectable {
-            let covered = self
-                .acknowledged()
-                .filter_map(|m| m.manifest.vv.get(did).copied())
-                .max()
-                .unwrap_or(0);
+            let covered = self.covered(did);
             let through = self.acked(did).min(covered);
             let from = self.collected.get(did).map_or(1, |c| c + 1);
             if through >= from {
@@ -209,10 +238,12 @@ impl<S: Store> Session<'_, S> {
             manifests(pool).await?,
             collected(pool).await?,
         );
+        let mut links = links(pool).await?;
+        links.insert(Some(self.record().link.clone()));
         let plan = Facts {
             current: &current,
             collectable: &collectable,
-            link: &self.record().link,
+            links: &links,
             acks: &acks,
             manifests: &manifests,
             collected: &collected,
@@ -276,6 +307,7 @@ impl<S: Store> Session<'_, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sync2::snapshot::Tip;
 
     const LINK: &str = "link";
 
@@ -284,14 +316,25 @@ mod tests {
     }
 
     fn snapshot(did: &str, seq: u64, covers: &[(&str, u64)]) -> Logged {
+        snapshot_of(Some(LINK), did, seq, covers)
+    }
+
+    fn snapshot_of(link: Option<&str>, did: &str, seq: u64, covers: &[(&str, u64)]) -> Logged {
+        let tip = |seq: u64| Tip {
+            hash: String::new(),
+            seq,
+        };
         Logged {
             did: did.into(),
             seq,
             manifest: Manifest {
                 head: String::new(),
-                link: Some(LINK.into()),
+                link: link.map(str::to_owned),
                 parts: Vec::new(),
-                vv: vv(covers),
+                vv: covers
+                    .iter()
+                    .map(|(d, s)| ((*d).to_owned(), tip(*s)))
+                    .collect(),
             },
         }
     }
@@ -306,6 +349,16 @@ mod tests {
         acks: &[(&str, VersionVector)],
         manifests: &[Logged],
     ) -> Plan {
+        plan_for(&[Some(LINK)], current, collectable, acks, manifests)
+    }
+
+    fn plan_for(
+        links: &[Option<&str>],
+        current: &[&str],
+        collectable: &[&str],
+        acks: &[(&str, VersionVector)],
+        manifests: &[Logged],
+    ) -> Plan {
         let acks = acks
             .iter()
             .map(|(d, v)| ((*d).to_owned(), v.clone()))
@@ -313,7 +366,7 @@ mod tests {
         Facts {
             current: &set(current),
             collectable: &set(collectable),
-            link: LINK,
+            links: &links.iter().map(|l| l.map(str::to_owned)).collect(),
             acks: &acks,
             manifests,
             collected: &VersionVector::new(),
@@ -361,6 +414,25 @@ mod tests {
             plan(&["a", "b"], &["a"], &unacked, &manifests)
                 .manifests
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn every_link_batches_name_needs_an_acknowledged_snapshot() {
+        let acks = [("b", vv(&[("a", 9)]))];
+        let snap = [snapshot("a", 6, &[("a", 5)])];
+        let links = [Some(LINK), None];
+        assert_eq!(
+            plan_for(&links, &["a", "b"], &["a"], &acks, &snap),
+            Plan::default()
+        );
+        let both = [
+            snapshot("a", 6, &[("a", 5)]),
+            snapshot_of(None, "a", 8, &[("a", 7)]),
+        ];
+        assert_eq!(
+            plan_for(&links, &["a", "b"], &["a"], &acks, &both).logs,
+            BTreeMap::from([("a".to_owned(), (1, 5))])
         );
     }
 }

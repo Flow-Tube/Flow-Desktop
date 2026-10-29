@@ -116,13 +116,24 @@ impl HeldStore {
             .collect())
     }
 
-    /// The highest `seq` of any roster entry held, or -1.
-    pub async fn highest_seq(&self) -> Result<i64> {
-        let seq: Option<i64> = sqlx::query_scalar("SELECT MAX(seq) FROM sync2_held_roster")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(StoreError::Local)?;
-        Ok(seq.unwrap_or(-1))
+    /// What a `roster` request names: the `seq` and hash of this device's head, or -1 and none.
+    pub async fn head(&self) -> Result<(i64, Option<String>)> {
+        let chain = winning_chain(&self.candidates_after(-1).await?);
+        Ok(chain.last().map_or((-1, None), |entry| {
+            let seq = i64::try_from(entry.seq).unwrap_or(i64::MAX);
+            (seq, Some(entry_hash(entry)))
+        }))
+    }
+
+    /// The entries above `after`, or every entry held when none of them hashes to `head`: the
+    /// asker's head then lost a fork here, or is unknown, so it needs the whole picture.
+    pub async fn roster_for(&self, after: i64, head: Option<&str>) -> Result<Vec<Entry>> {
+        let all = self.candidates_after(-1).await?;
+        let known = head.is_none_or(|head| all.iter().any(|e| entry_hash(e) == head));
+        Ok(all
+            .into_iter()
+            .filter(|e| !known || i64::try_from(e.seq).is_ok_and(|seq| seq > after))
+            .collect())
     }
 }
 

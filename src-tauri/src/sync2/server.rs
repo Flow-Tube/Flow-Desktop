@@ -33,6 +33,8 @@ pub enum StoreError {
     Refused { status: u16, code: String },
     #[error("this is not the server instance this device paired with")]
     InstanceChanged,
+    #[error("this server already has a group")]
+    AlreadyClaimed,
     #[error("the server sent an invalid response")]
     Malformed,
     #[error(transparent)]
@@ -262,6 +264,9 @@ impl ServerStore {
             .send()
             .await
             .map_err(StoreError::Network)?;
+        if response.status() == StatusCode::CONFLICT {
+            return Err(StoreError::AlreadyClaimed);
+        }
         decode_empty(response).await
     }
 

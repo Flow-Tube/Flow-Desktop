@@ -70,6 +70,7 @@ impl EngineError {
             Self::Store(StoreError::Network(_)) => "linkedUnreachable",
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
+            Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
             Self::Store(_) | Self::Protocol(_) | Self::Unexpected => "linkedProtocol",
             Self::Local(error) => error.kind(),
             Self::Keychain(_) | Self::Settings(_) => "linkedLocal",

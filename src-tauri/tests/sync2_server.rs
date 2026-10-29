@@ -202,3 +202,25 @@ async fn a_lost_append_reports_the_current_head() {
         }
     );
 }
+
+#[tokio::test]
+async fn claiming_a_server_that_has_a_group_says_so() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/claim"))
+        .respond_with(ResponseTemplate::new(409).set_body_json(json!({ "error": "conflict" })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let genesis = serde_json::from_value(json!({
+        "v": 2, "group": GROUP, "seq": 0, "prev": "00".repeat(32), "op": "rename",
+        "signer": "00".repeat(16), "meta": { "00000000000000000000000000000000": "x" }, "sigs": {}
+    }))
+    .unwrap();
+    assert!(matches!(
+        store.claim("admin", &genesis, &Default::default()).await,
+        Err(StoreError::AlreadyClaimed)
+    ));
+}

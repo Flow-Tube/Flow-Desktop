@@ -99,7 +99,8 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
     Ok(LinkedStatus {
         store_url: load_group(&pool).await?.map(|record| record.store_url),
-        recovery_saved: saved.as_deref() == Some("1"),
+        // Only a device that created or restored the group was shown words to confirm.
+        recovery_saved: saved.as_deref() != Some("0"),
         last_sync: last_sync(app),
     })
 }
@@ -192,5 +193,7 @@ pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
 
 /// Stops syncing on this device. The group keeps it as a member until another device removes it.
 pub async fn forget(app: &AppHandle) -> Result<()> {
-    Ok(forget_group(app.state::<SqlitePool>().inner()).await?)
+    let pool = app.state::<SqlitePool>().inner();
+    forget_group(pool).await?;
+    set_recovery_saved(pool, true).await
 }

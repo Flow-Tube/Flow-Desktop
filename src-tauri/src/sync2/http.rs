@@ -2,9 +2,10 @@
 //! anywhere, plain HTTP only to a private address or a `.local` name, and no redirects.
 
 use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use reqwest::{Client, ClientBuilder, Url, redirect};
+use reqwest::{Client, ClientBuilder, RequestBuilder, Response, StatusCode, Url, redirect};
 
 use super::server::{Result, StoreError};
 use crate::sync::qr::is_local_ip;
@@ -62,5 +63,42 @@ impl Transport {
             .timeout(Duration::from_secs(60))
             .build()
             .map_err(StoreError::Network)
+    }
+}
+
+/// Sends nothing more once the storage has refused the credentials, so retries with a wrong
+/// password can't get the address banned (spec/store.md, `WebDAV`).
+pub struct Refusal {
+    refused: AtomicBool,
+    statuses: &'static [StatusCode],
+}
+
+impl Refusal {
+    /// `statuses` are the answers that mean the credentials are wrong.
+    pub const fn on(statuses: &'static [StatusCode]) -> Self {
+        Self {
+            refused: AtomicBool::new(false),
+            statuses,
+        }
+    }
+
+    pub async fn send(&self, request: RequestBuilder) -> Result<Response> {
+        if self.refused.load(Ordering::SeqCst) {
+            return Err(StoreError::Unauthorized);
+        }
+        let response = request.send().await.map_err(StoreError::Network)?;
+        if self.statuses.contains(&response.status()) {
+            self.refused.store(true, Ordering::SeqCst);
+            return Err(StoreError::Unauthorized);
+        }
+        Ok(response)
+    }
+}
+
+/// An answer the storage gave that the store can't use.
+pub fn refused(response: &Response, code: &str) -> StoreError {
+    StoreError::Refused {
+        status: response.status().as_u16(),
+        code: code.to_owned(),
     }
 }

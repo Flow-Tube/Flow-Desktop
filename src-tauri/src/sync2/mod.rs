@@ -41,6 +41,7 @@ pub mod plain;
 pub mod recovery;
 pub mod recovery_flow;
 pub mod roster;
+pub mod s3;
 pub mod sealed;
 pub mod server;
 pub mod service;

@@ -3,14 +3,13 @@
 //! change, because Nextcloud bans an address after repeated failures.
 
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use quick_xml::Reader;
 use quick_xml::events::Event;
-use reqwest::{Client, Method, RequestBuilder, Response, StatusCode, Url};
+use reqwest::{Client, Method, RequestBuilder, StatusCode, Url};
 use tokio::sync::Mutex;
 
-use super::http::Transport;
+use super::http::{Refusal, Transport, refused};
 use super::plain::Bucket;
 use super::server::{Result, StoreError};
 
@@ -29,7 +28,7 @@ pub struct WebDav {
     login: WebDavLogin,
     /// Folders known to exist, so each is created once.
     folders: Mutex<HashSet<String>>,
-    refused: AtomicBool,
+    refusal: Refusal,
 }
 
 impl WebDav {
@@ -45,28 +44,16 @@ impl WebDav {
             client,
             login,
             folders: Mutex::new(HashSet::new()),
-            refused: AtomicBool::new(false),
+            refusal: Refusal::on(&[StatusCode::UNAUTHORIZED]),
         })
     }
 
     fn request(&self, method: Method, path: &str) -> Result<RequestBuilder> {
-        if self.refused.load(Ordering::SeqCst) {
-            return Err(StoreError::Unauthorized);
-        }
         let url = self.base.join(path).map_err(|_| StoreError::Malformed)?;
         Ok(self
             .client
             .request(method, url)
             .basic_auth(&self.login.user, Some(&self.login.password)))
-    }
-
-    async fn send(&self, request: RequestBuilder) -> Result<Response> {
-        let response = request.send().await.map_err(StoreError::Network)?;
-        if response.status() == StatusCode::UNAUTHORIZED {
-            self.refused.store(true, Ordering::SeqCst);
-            return Err(StoreError::Unauthorized);
-        }
-        Ok(response)
     }
 
     /// Creates each missing folder above `path`, the group's own folder first. A folder that
@@ -81,22 +68,15 @@ impl WebDav {
                 continue;
             }
             let mkcol = Method::from_bytes(b"MKCOL").map_err(|_| StoreError::Malformed)?;
-            let response = self.send(self.request(mkcol, &folder)?).await?;
+            let response = self.refusal.send(self.request(mkcol, &folder)?).await?;
             if !response.status().is_success()
                 && response.status() != StatusCode::METHOD_NOT_ALLOWED
             {
-                return Err(refused(&response));
+                return Err(refused(&response, "webdav"));
             }
             known.insert(folder.clone());
         }
         Ok(())
-    }
-}
-
-fn refused(response: &Response) -> StoreError {
-    StoreError::Refused {
-        status: response.status().as_u16(),
-        code: "webdav".to_owned(),
     }
 }
 
@@ -138,16 +118,16 @@ impl Bucket for WebDav {
             .request(Method::PUT, path)?
             .header("content-type", "application/octet-stream")
             .body(bytes);
-        let response = self.send(request).await?;
+        let response = self.refusal.send(request).await?;
         if response.status().is_success() {
             Ok(())
         } else {
-            Err(refused(&response))
+            Err(refused(&response, "webdav"))
         }
     }
 
     async fn get(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        let response = self.send(self.request(Method::GET, path)?).await?;
+        let response = self.refusal.send(self.request(Method::GET, path)?).await?;
         match response.status() {
             StatusCode::NOT_FOUND => Ok(None),
             status if status.is_success() => Ok(Some(
@@ -157,32 +137,35 @@ impl Bucket for WebDav {
                     .map_err(StoreError::Network)?
                     .to_vec(),
             )),
-            _ => Err(refused(&response)),
+            _ => Err(refused(&response, "webdav")),
         }
     }
 
     async fn delete(&self, path: &str) -> Result<bool> {
-        let response = self.send(self.request(Method::DELETE, path)?).await?;
+        let response = self
+            .refusal
+            .send(self.request(Method::DELETE, path)?)
+            .await?;
         match response.status() {
             StatusCode::NOT_FOUND => Ok(false),
             status if status.is_success() => Ok(true),
-            _ => Err(refused(&response)),
+            _ => Err(refused(&response, "webdav")),
         }
     }
 
-    async fn list(&self, dir: &str) -> Result<Vec<String>> {
+    async fn list(&self, dir: &str, after: Option<&str>) -> Result<Vec<String>> {
         let propfind = Method::from_bytes(b"PROPFIND").map_err(|_| StoreError::Malformed)?;
         let request = self
             .request(propfind, dir)?
             .header("depth", "1")
             .header("content-type", "application/xml")
             .body(PROPFIND_BODY);
-        let response = self.send(request).await?;
+        let response = self.refusal.send(request).await?;
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(Vec::new());
         }
         if response.status() != StatusCode::MULTI_STATUS {
-            return Err(refused(&response));
+            return Err(refused(&response, "webdav"));
         }
         let folder = self.base.join(dir).map_err(|_| StoreError::Malformed)?;
         let xml = response.text().await.map_err(StoreError::Network)?;
@@ -191,7 +174,8 @@ impl Bucket for WebDav {
             .filter_map(|(href, is_folder)| {
                 let path = folder.join(&href).ok()?.path().to_owned();
                 let name = path.strip_prefix(folder.path())?.trim_end_matches('/');
-                (!name.is_empty() && !name.contains('/')).then(|| {
+                let listed = !name.is_empty() && !name.contains('/');
+                (listed && after.is_none_or(|after| name > after)).then(|| {
                     if is_folder {
                         format!("{name}/")
                     } else {

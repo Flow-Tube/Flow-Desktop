@@ -98,6 +98,8 @@ local-ip-address = "0.6"
 mdns-sd = "0.21.6"
 # FLOW-SYNC/2 WebDAV stores: reading PROPFIND answers.
 quick-xml = "0.42"
+# FLOW-SYNC/2 S3 stores: SigV4-signed URLs, sent with the shared reqwest client.
+rusty-s3 = "0.11"
 
 # Native Windows toast notifications: build the toast XML directly so we can attach
 # the app logo + a video thumbnail (hero image) and register a proper AppUserModelID,
@@ -157,3 +159,6 @@ wiremock = "0.6"
 dav-server = { version = "0.11", default-features = false, features = ["memfs"] }
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
+# In-process S3 server for the FLOW-SYNC/2 S3 store tests.
+s3s = "0.17"
+s3s-fs = "0.17"

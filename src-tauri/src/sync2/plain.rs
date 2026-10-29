@@ -29,8 +29,13 @@ pub trait Bucket: Send + Sync {
     fn get(&self, path: &str) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
     /// Deletes a file, or an empty folder, and says whether it was there.
     fn delete(&self, path: &str) -> impl Future<Output = Result<bool>> + Send;
-    /// The names directly inside folder `dir` (which ends in `/`); folder names end in `/`.
-    fn list(&self, dir: &str) -> impl Future<Output = Result<Vec<String>>> + Send;
+    /// The names directly inside folder `dir` (which ends in `/`) that sort after `after`;
+    /// folder names end in `/`.
+    fn list(
+        &self,
+        dir: &str,
+        after: Option<&str>,
+    ) -> impl Future<Output = Result<Vec<String>>> + Send;
 }
 
 pub struct PlainStore<B> {
@@ -52,7 +57,7 @@ impl<B: Bucket> PlainStore<B> {
 
     async fn candidates(&self) -> Result<Vec<Entry>> {
         let mut held = self.roster.lock().await;
-        for name in self.bucket.list("roster/").await? {
+        for name in self.bucket.list("roster/", None).await? {
             let path = format!("roster/{name}");
             if name.strip_suffix(".r").is_none() || held.contains_key(&path) {
                 continue;
@@ -101,7 +106,7 @@ impl<B: Bucket> PlainStore<B> {
     async fn senders(&self) -> Result<Vec<String>> {
         Ok(self
             .bucket
-            .list("dev/")
+            .list("dev/", None)
             .await?
             .into_iter()
             .filter_map(|name| name.strip_suffix('/').map(str::to_owned))
@@ -109,12 +114,13 @@ impl<B: Bucket> PlainStore<B> {
             .collect())
     }
 
-    /// The `seq`s of `did`'s log held in `shard`.
-    async fn shard(&self, did: &str, shard: u64) -> Result<Vec<u64>> {
+    /// The `seq`s of `did`'s log held in `shard`, from `from` on.
+    async fn shard(&self, did: &str, shard: u64, from: u64) -> Result<Vec<u64>> {
         let dir = format!("dev/{did}/log/{shard:016x}/");
+        let after = from.checked_sub(1).map(|seq| format!("{seq:016x}.o"));
         Ok(self
             .bucket
-            .list(&dir)
+            .list(&dir, after.as_deref())
             .await?
             .iter()
             .filter_map(|name| u64::from_str_radix(name.strip_suffix(".o")?, 16).ok())
@@ -209,7 +215,7 @@ impl<B: Bucket> Store for PlainStore<B> {
         }
         let mut objects = Vec::new();
         for did in self.senders().await? {
-            for shard in self.bucket.list(&format!("dev/{did}/log/")).await? {
+            for shard in self.bucket.list(&format!("dev/{did}/log/"), None).await? {
                 let Some(shard) = shard
                     .strip_suffix('/')
                     .and_then(|s| u64::from_str_radix(s, 16).ok())
@@ -217,7 +223,7 @@ impl<B: Bucket> Store for PlainStore<B> {
                     continue;
                 };
                 objects.extend(
-                    self.shard(&did, shard)
+                    self.shard(&did, shard, 0)
                         .await?
                         .into_iter()
                         .map(|seq| changed(&did, seq)),
@@ -238,13 +244,9 @@ impl<B: Bucket> Store for PlainStore<B> {
             let next = read.get(&did).map_or(1, |seq| seq + 1);
             let mut shard = next / SHARD;
             loop {
-                let held = self.shard(&did, shard).await?;
+                let held = self.shard(&did, shard, next).await?;
                 let full = held.contains(&(shard * SHARD + SHARD - 1));
-                objects.extend(
-                    held.into_iter()
-                        .filter(|seq| *seq >= next)
-                        .map(|seq| changed(&did, seq)),
-                );
+                objects.extend(held.into_iter().map(|seq| changed(&did, seq)));
                 if !full {
                     break;
                 }
@@ -272,7 +274,7 @@ impl<B: Bucket> Mailbox for PlainStore<B> {
 
     async fn close_slot(&self, slot: &str) -> Result<()> {
         let dir = format!("pair/{slot}/");
-        for name in self.bucket.list(&dir).await? {
+        for name in self.bucket.list(&dir, None).await? {
             self.bucket.delete(&format!("{dir}{name}")).await?;
         }
         self.bucket.delete(&dir).await?;

@@ -11,6 +11,7 @@ use sqlx::SqlitePool;
 
 use crate::sync::canonical::{Hlc, Playlist, SubscriptionGroup};
 use crate::sync::changes::{self, Change};
+use crate::sync::clock;
 use crate::sync::error::SyncError;
 use crate::sync::mapping;
 
@@ -24,7 +25,12 @@ pub async fn record_blob_write(pool: &SqlitePool, key: &str, new: &str) -> Resul
         .bind(key)
         .fetch_optional(pool)
         .await?;
-    let edits = diff_blob(key, old.as_deref().unwrap_or("[]"), new, now_ms());
+    let edits = diff_blob(
+        key,
+        old.as_deref().unwrap_or("[]"),
+        new,
+        clock::edit_ms(pool).await?,
+    );
     if edits.is_empty() {
         return Ok(());
     }
@@ -45,7 +51,7 @@ pub async fn record_watch_deletion(
                 .await?
         }
     };
-    let now = now_ms();
+    let now = clock::edit_ms(pool).await?;
     let edits: Vec<Change> = ids
         .into_iter()
         .map(|id| Change::delete(changes::WATCH_HISTORY, id, now, None))
@@ -195,8 +201,4 @@ fn diff_groups(old: &str, new: &str, now: u64) -> Vec<Change> {
             .map(|(n, _)| Change::edit(changes::GROUPS, n.clone(), now)),
     );
     out
-}
-
-fn now_ms() -> u64 {
-    u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(0)
 }

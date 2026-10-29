@@ -29,6 +29,7 @@ use crate::sync::canonical::{
     PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Change};
+use crate::sync::clock;
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchInsert, WatchRow};
 use crate::sync::merge::{self, MergedFlowNeuroBrain, MergedMusicBrain};
@@ -142,6 +143,7 @@ pub async fn apply_payload(
         };
 
         if applied {
+            clock::observe(&mut tx, clock::highest_stamp(&sc.ndjson)).await?;
             sqlx::query(
                 "INSERT OR IGNORE INTO sync_log (peer_device_id, collection, payload_hash, applied_at, hwm_hlc)
                  VALUES (?, ?, ?, ?, ?)",

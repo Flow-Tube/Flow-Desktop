@@ -13,6 +13,7 @@ pub const LIKES: &str = "likes";
 pub const PLAYLISTS: &str = "playlists";
 pub const PLAYLIST_ITEMS: &str = "playlist_items";
 pub const GROUPS: &str = "subscriptions";
+pub const GROUP_MEMBERS: &str = "subscription_members";
 
 /// One local edit or deletion.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,10 +62,27 @@ pub struct Stamp {
     pub from_peer: bool,
 }
 
-/// The key of a track inside a playlist.
+/// The key of a track inside a playlist, or of a channel inside a group.
 #[must_use]
-pub fn item_key(sync_id: &str, video_id: &str) -> String {
-    format!("{sync_id}|{video_id}")
+pub fn item_key(parent: &str, child: &str) -> String {
+    format!("{parent}|{child}")
+}
+
+/// The children recorded under `parent`, by child key. Children never contain the separator, so a
+/// parent whose name extends `parent` past it isn't mistaken for one.
+pub fn children<'a>(
+    stamps: &'a BTreeMap<String, Stamp>,
+    parent: &str,
+) -> impl Iterator<Item = (&'a str, &'a Stamp)> {
+    let prefix = item_key(parent, "");
+    let len = prefix.len();
+    stamps
+        .range(prefix.clone()..)
+        .take_while(move |(key, _)| key.starts_with(&prefix))
+        .filter_map(move |(key, stamp)| {
+            let child = &key[len..];
+            (!child.contains('|')).then_some((child, stamp))
+        })
 }
 
 /// Record local edits and deletions (latest wins per record).

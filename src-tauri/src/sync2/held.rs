@@ -106,8 +106,12 @@ impl HeldStore {
             .into_iter()
             .filter_map(|(did, seqs)| {
                 let first = *seqs.first()?;
-                let last = (first..).take_while(|seq| seqs.contains(seq)).last()?;
-                Some((did, last))
+                let last = seqs
+                    .iter()
+                    .zip(first..)
+                    .take_while(|(held, expected)| **held == *expected)
+                    .last()?;
+                Some((did, *last.0))
             })
             .collect())
     }

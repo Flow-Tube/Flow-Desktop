@@ -37,7 +37,6 @@ pub mod pairing;
 pub mod paths;
 pub mod payload;
 pub mod pipe;
-pub mod plain;
 pub mod recovery;
 pub mod recovery_flow;
 pub mod roster;

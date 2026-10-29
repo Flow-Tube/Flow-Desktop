@@ -1,7 +1,8 @@
-//! A group kept on plain storage such as `WebDAV` or S3 (spec/store.md): the same objects under the
-//! same names as on a Flow server, each written once, over a bucket that can only put, get, list
-//! and delete. With no server to order appends, concurrent roster entries both stay and every
-//! device picks the same winner (spec/protocol.md, Forks).
+//! A group kept in a `WebDAV` folder (spec/store.md): the same objects under the same names as on
+//! a Flow server, each written once. With no server to order appends, concurrent roster entries
+//! both stay and every device picks the same winner (spec/protocol.md, Forks).
+
+mod client;
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -11,6 +12,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
+pub use self::client::{WebDav, WebDavLogin};
 use super::held::winning_chain;
 use super::mailbox::Mailbox;
 use super::paths::{chain_path, log_path, roster_path, wrap_path};
@@ -23,28 +25,18 @@ use crate::sync::canonical::to_canonical_json;
 /// Objects per log shard (spec/store.md, Layout).
 const SHARD: u64 = 1024;
 
-/// What plain storage offers.
-pub trait Bucket: Send + Sync {
-    fn put(&self, path: &str, bytes: Vec<u8>) -> impl Future<Output = Result<()>> + Send;
-    fn get(&self, path: &str) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
-    /// Deletes a file, or an empty folder, and says whether it was there.
-    fn delete(&self, path: &str) -> impl Future<Output = Result<bool>> + Send;
-    /// The names directly inside folder `dir` (which ends in `/`); folder names end in `/`.
-    fn list(&self, dir: &str) -> impl Future<Output = Result<Vec<String>>> + Send;
-}
-
-pub struct PlainStore<B> {
-    bucket: B,
+pub struct WebDavStore {
+    client: WebDav,
     /// This device's `did`: its own log is never something to read.
     me: String,
     /// Roster entries already read, by store name; each is written once and never changes.
     roster: Mutex<BTreeMap<String, Entry>>,
 }
 
-impl<B: Bucket> PlainStore<B> {
-    pub fn new(bucket: B, me: String) -> Self {
+impl WebDavStore {
+    pub fn new(client: WebDav, me: String) -> Self {
         Self {
-            bucket,
+            client,
             me,
             roster: Mutex::new(BTreeMap::new()),
         }
@@ -52,12 +44,12 @@ impl<B: Bucket> PlainStore<B> {
 
     async fn candidates(&self) -> Result<Vec<Entry>> {
         let mut held = self.roster.lock().await;
-        for name in self.bucket.list("roster/").await? {
+        for name in self.client.list("roster/").await? {
             let path = format!("roster/{name}");
             if name.strip_suffix(".r").is_none() || held.contains_key(&path) {
                 continue;
             }
-            let Some(bytes) = self.bucket.get(&path).await? else {
+            let Some(bytes) = self.client.get(&path).await? else {
                 continue;
             };
             let value: Value = serde_json::from_slice(&bytes).map_err(|_| StoreError::Malformed)?;
@@ -70,9 +62,9 @@ impl<B: Bucket> PlainStore<B> {
     pub async fn probe(&self) -> Result<()> {
         let path = format!("probe/{}", hex::encode(random_bytes::<16>()));
         let marker = b"FLOW-SYNC/2 probe".to_vec();
-        self.bucket.put(&path, marker.clone()).await?;
-        let read = self.bucket.get(&path).await?;
-        self.bucket.delete(&path).await?;
+        self.client.put(&path, marker.clone()).await?;
+        let read = self.client.get(&path).await?;
+        self.client.delete(&path).await?;
         if read.as_deref() == Some(marker.as_slice()) {
             Ok(())
         } else {
@@ -83,14 +75,14 @@ impl<B: Bucket> PlainStore<B> {
     /// Names the group this storage holds, once, when the group is created here.
     pub async fn mark(&self, group: &str) -> Result<()> {
         let marker = json!({ "format": "FLOW-SYNC/2", "group": group });
-        self.bucket
+        self.client
             .put("store.json", to_canonical_json(&marker))
             .await
     }
 
     /// The group this storage holds, if any.
     pub async fn group(&self) -> Result<Option<String>> {
-        let Some(bytes) = self.bucket.get("store.json").await? else {
+        let Some(bytes) = self.client.get("store.json").await? else {
             return Ok(None);
         };
         let marker: Value = serde_json::from_slice(&bytes).map_err(|_| StoreError::Malformed)?;
@@ -100,7 +92,7 @@ impl<B: Bucket> PlainStore<B> {
     /// The other devices' logs, by `did`.
     async fn senders(&self) -> Result<Vec<String>> {
         Ok(self
-            .bucket
+            .client
             .list("dev/")
             .await?
             .into_iter()
@@ -113,7 +105,7 @@ impl<B: Bucket> PlainStore<B> {
     async fn shard(&self, did: &str, shard: u64) -> Result<Vec<u64>> {
         let dir = format!("dev/{did}/log/{shard:016x}/");
         Ok(self
-            .bucket
+            .client
             .list(&dir)
             .await?
             .iter()
@@ -129,7 +121,7 @@ fn changed(did: &str, seq: u64) -> ChangedObject {
     }
 }
 
-impl<B: Bucket> Store for PlainStore<B> {
+impl Store for WebDavStore {
     async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
         Ok(winning_chain(&self.candidates().await?)
             .into_iter()
@@ -165,15 +157,15 @@ impl<B: Bucket> Store for PlainStore<B> {
                 .map_err(|_| StoreError::Malformed)
         };
         for (did, wrap) in wraps {
-            self.bucket
+            self.client
                 .put(&wrap_path(epoch, did), decode(wrap)?)
                 .await?;
         }
         if let Some(chain) = chain {
-            self.bucket.put(&chain_path(epoch), decode(chain)?).await?;
+            self.client.put(&chain_path(epoch), decode(chain)?).await?;
         }
         let hash = entry_hash(entry);
-        self.bucket
+        self.client
             .put(&roster_path(entry.seq, &hash), to_canonical_json(entry))
             .await?;
         let after = winning_chain(&self.candidates().await?);
@@ -186,22 +178,22 @@ impl<B: Bucket> Store for PlainStore<B> {
     }
 
     async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        self.bucket.get(&wrap_path(epoch, name)).await
+        self.client.get(&wrap_path(epoch, name)).await
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
-        self.bucket.put(path, bytes).await
+        self.client.put(path, bytes).await
     }
 
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        self.bucket.get(path).await
+        self.client.get(path).await
     }
 
     async fn delete_object(&self, path: &str) -> Result<bool> {
-        self.bucket.delete(path).await
+        self.client.delete(path).await
     }
 
-    /// Every log object, once: plain storage has no change cursor, so the first call lists all
+    /// Every log object, once: `WebDAV` has no change cursor, so the first call lists all
     /// of them and later calls none.
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
         if cursor > 0 {
@@ -209,7 +201,7 @@ impl<B: Bucket> Store for PlainStore<B> {
         }
         let mut objects = Vec::new();
         for did in self.senders().await? {
-            for shard in self.bucket.list(&format!("dev/{did}/log/")).await? {
+            for shard in self.client.list(&format!("dev/{did}/log/")).await? {
                 let Some(shard) = shard
                     .strip_suffix('/')
                     .and_then(|s| u64::from_str_radix(s, 16).ok())
@@ -257,25 +249,25 @@ impl<B: Bucket> Store for PlainStore<B> {
 }
 
 /// The pairing mailbox as files under `pair/<slot>/` (spec/store.md, Pairing mailbox).
-impl<B: Bucket> Mailbox for PlainStore<B> {
+impl Mailbox for WebDavStore {
     fn open_slot(&self, _slot: &str) -> impl Future<Output = Result<()>> + Send {
         std::future::ready(Ok(()))
     }
 
     async fn put_message(&self, slot: &str, name: &str, bytes: Vec<u8>) -> Result<()> {
-        self.bucket.put(&format!("pair/{slot}/{name}"), bytes).await
+        self.client.put(&format!("pair/{slot}/{name}"), bytes).await
     }
 
     async fn get_message(&self, slot: &str, name: &str) -> Result<Option<Vec<u8>>> {
-        self.bucket.get(&format!("pair/{slot}/{name}")).await
+        self.client.get(&format!("pair/{slot}/{name}")).await
     }
 
     async fn close_slot(&self, slot: &str) -> Result<()> {
         let dir = format!("pair/{slot}/");
-        for name in self.bucket.list(&dir).await? {
-            self.bucket.delete(&format!("{dir}{name}")).await?;
+        for name in self.client.list(&dir).await? {
+            self.client.delete(&format!("{dir}{name}")).await?;
         }
-        self.bucket.delete(&dir).await?;
+        self.client.delete(&dir).await?;
         Ok(())
     }
 }

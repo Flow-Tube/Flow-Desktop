@@ -1,5 +1,5 @@
-//! `WebDAV` as a [`Bucket`] (spec/store.md, WebDAV): `PUT`, `GET`, `DELETE`, `MKCOL`, and
-//! `PROPFIND` with `Depth` always given. After a 401 nothing more is sent until the credentials
+//! The `WebDAV` requests a group's folder needs (spec/store.md, `WebDAV`): `PUT`, `GET`, `DELETE`,
+//! `MKCOL`, and `PROPFIND` with `Depth` always given. After a 401 nothing more is sent until the credentials
 //! change, because Nextcloud bans an address after repeated failures.
 
 use std::collections::HashSet;
@@ -10,9 +10,8 @@ use quick_xml::events::Event;
 use reqwest::{Client, Method, RequestBuilder, Response, StatusCode, Url};
 use tokio::sync::Mutex;
 
-use super::http::Transport;
-use super::plain::Bucket;
-use super::server::{Result, StoreError};
+use crate::sync2::http::Transport;
+use crate::sync2::server::{Result, StoreError};
 
 const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>"#;
 
@@ -131,8 +130,8 @@ fn parse_multistatus(xml: &str) -> Vec<(String, bool)> {
     }
 }
 
-impl Bucket for WebDav {
-    async fn put(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+impl WebDav {
+    pub async fn put(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
         self.make_folders(path).await?;
         let request = self
             .request(Method::PUT, path)?
@@ -146,7 +145,7 @@ impl Bucket for WebDav {
         }
     }
 
-    async fn get(&self, path: &str) -> Result<Option<Vec<u8>>> {
+    pub async fn get(&self, path: &str) -> Result<Option<Vec<u8>>> {
         let response = self.send(self.request(Method::GET, path)?).await?;
         match response.status() {
             StatusCode::NOT_FOUND => Ok(None),
@@ -161,7 +160,7 @@ impl Bucket for WebDav {
         }
     }
 
-    async fn delete(&self, path: &str) -> Result<bool> {
+    pub async fn delete(&self, path: &str) -> Result<bool> {
         let response = self.send(self.request(Method::DELETE, path)?).await?;
         match response.status() {
             StatusCode::NOT_FOUND => Ok(false),
@@ -170,7 +169,7 @@ impl Bucket for WebDav {
         }
     }
 
-    async fn list(&self, dir: &str) -> Result<Vec<String>> {
+    pub async fn list(&self, dir: &str) -> Result<Vec<String>> {
         let propfind = Method::from_bytes(b"PROPFIND").map_err(|_| StoreError::Malformed)?;
         let request = self
             .request(propfind, dir)?

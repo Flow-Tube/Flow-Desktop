@@ -22,12 +22,11 @@ use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join};
 use flow_desktop_lib::sync2::membership::rename_device;
 use flow_desktop_lib::sync2::paths::{roster_path, wrap_path};
-use flow_desktop_lib::sync2::plain::{Bucket, PlainStore};
 use flow_desktop_lib::sync2::roster::entry_hash;
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::StoreError;
 use flow_desktop_lib::sync2::store::Store;
-use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin};
+use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
@@ -90,22 +89,22 @@ async fn webdav(url: &str, password: &str) -> WebDav {
 
 /// The two-device group of `sync2_common`, written onto the WebDAV folder at `url`.
 async fn onto_webdav(g: &Group, url: &str) {
-    let bucket = webdav(url, PASSWORD).await;
+    let client = webdav(url, PASSWORD).await;
     let (roster, keys) = {
         let memory = g.store.0.lock().unwrap();
         (memory.roster.clone(), memory.keys.clone())
     };
     for ((epoch, name), wrap) in keys {
-        bucket.put(&wrap_path(epoch, &name), wrap).await.unwrap();
+        client.put(&wrap_path(epoch, &name), wrap).await.unwrap();
     }
     for entry in &roster {
         let path = roster_path(entry.seq, &entry_hash(entry));
-        bucket.put(&path, to_canonical_json(entry)).await.unwrap();
+        client.put(&path, to_canonical_json(entry)).await.unwrap();
     }
 }
 
-async fn store_for(url: &str, did: &[u8; 16]) -> PlainStore<WebDav> {
-    PlainStore::new(webdav(url, PASSWORD).await, hex::encode(did))
+async fn store_for(url: &str, did: &[u8; 16]) -> WebDavStore {
+    WebDavStore::new(webdav(url, PASSWORD).await, hex::encode(did))
 }
 
 async fn watch(pool: &SqlitePool, id: &str) {
@@ -243,7 +242,7 @@ async fn pairing_runs_through_the_webdav_mailbox() {
 #[tokio::test]
 async fn a_refused_password_stops_every_later_request() {
     let (url, requests) = webdav_server().await;
-    let wrong = PlainStore::new(webdav(&url, "wrong").await, String::new());
+    let wrong = WebDavStore::new(webdav(&url, "wrong").await, String::new());
     assert!(matches!(wrong.probe().await, Err(StoreError::Unauthorized)));
     let made = requests.load(Ordering::SeqCst);
     assert!(matches!(wrong.group().await, Err(StoreError::Unauthorized)));
@@ -257,7 +256,7 @@ async fn a_refused_password_stops_every_later_request() {
 #[tokio::test]
 async fn the_probe_and_the_group_marker_work_on_a_fresh_folder() {
     let (url, _) = webdav_server().await;
-    let store = PlainStore::new(webdav(&url, PASSWORD).await, String::new());
+    let store = WebDavStore::new(webdav(&url, PASSWORD).await, String::new());
     store.probe().await.unwrap();
     assert_eq!(store.group().await.unwrap(), None);
     store

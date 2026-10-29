@@ -1,5 +1,5 @@
-//! What the sync engine needs from a store: the Flow server, what devices hold on the LAN, and
-//! plain storage (`WebDAV`, S3) through [`super::plain`].
+//! What the sync engine needs from a store: the Flow server, what devices hold on the LAN, and a
+//! `WebDAV` folder.
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -27,7 +27,7 @@ pub trait Store {
         cursor: u64,
     ) -> impl Future<Output = Result<(Vec<ChangedObject>, u64)>> + Send;
     /// The log objects to read next, given how far each sender's log was read (`read`). A store
-    /// with a change cursor lists by cursor; plain storage looks only past each position.
+    /// with a change cursor lists by cursor; `WebDAV` looks only past each position.
     fn new_objects(
         &self,
         cursor: u64,

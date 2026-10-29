@@ -9,9 +9,9 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use flow_desktop_lib::sync::canonical::{
-    AffinityWire, FlowNeuroBrainSnapshot, GCounter, Hlc, Like, LikeKind, LikeState, Lww,
-    MusicBrainSnapshot, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry, SubscribedChannel,
-    SubscriptionGroup, WatchHistoryRecord,
+    AffinityWire, FlowNeuroBrainSnapshot, GCounter, GroupMember, Hlc, Like, LikeKind, LikeState,
+    Lww, MusicBrainSnapshot, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
+    SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use flow_desktop_lib::sync::merge;
 
@@ -186,16 +186,31 @@ fn subscriptions_merge_obeys_crdt_laws() {
         let mut v = Vec::new();
         for name in ["Tech", "News"] {
             if r.random_bool(0.8) {
+                // Half the records come from apps without `members`, half carry them.
+                let with_members = r.random_bool(0.5);
                 let mut channel_ids: Vec<String> = Vec::new();
+                let mut members: Vec<GroupMember> = Vec::new();
                 for c in ["c1", "c2", "c3"] {
-                    if r.random_bool(0.6) {
+                    if !r.random_bool(0.6) {
+                        continue;
+                    }
+                    let deleted = with_members && r.random_bool(0.4);
+                    if !deleted {
                         channel_ids.push(c.to_string());
+                    }
+                    if with_members {
+                        members.push(GroupMember {
+                            channel_id: c.to_string(),
+                            deleted,
+                            hlc: hlc(&mut r),
+                        });
                     }
                 }
                 v.push(SubscriptionGroup {
                     channel_ids,
                     deleted: r.random_bool(0.2),
                     hlc: hlc(&mut r),
+                    members,
                     name: name.to_string(),
                     sort_order: r.random_range(0..5),
                 });
@@ -345,4 +360,52 @@ fn music_brain_merge_is_order_independent_and_idempotent() {
     assert_eq!(a.total_plays.total(), 50); // d1 max(10,30)=30 + d2:20
     // UCx plays G-Counter: max(d1:1,3)=3 + d2:2 = 5
     assert_eq!(a.artist_affinity["UCx"].plays.total(), 5);
+}
+
+fn group(hlc: &str, channel_ids: &[&str], members: Vec<GroupMember>) -> SubscriptionGroup {
+    SubscriptionGroup {
+        channel_ids: channel_ids.iter().map(|c| (*c).to_string()).collect(),
+        hlc: hlc.parse().unwrap(),
+        members,
+        name: "Tech".to_string(),
+        ..SubscriptionGroup::default()
+    }
+}
+
+fn member(channel_id: &str, hlc: &str, deleted: bool) -> GroupMember {
+    GroupMember {
+        channel_id: channel_id.to_string(),
+        deleted,
+        hlc: hlc.parse().unwrap(),
+    }
+}
+
+#[test]
+fn a_removed_channel_leaves_the_group_on_every_device() {
+    let old_app = group("100:0:d1", &["c1", "c2"], Vec::new());
+    let removed_later = group(
+        "200:0:d2",
+        &["c1"],
+        vec![
+            member("c1", "100:0:d2", false),
+            member("c2", "200:0:d2", true),
+        ],
+    );
+    let merged = merge::merge_subscriptions(vec![old_app.clone()], vec![removed_later]);
+    assert_eq!(merged[0].channel_ids, ["c1"]);
+    assert_eq!(
+        merged[0].members,
+        [
+            member("c1", "100:0:d2", false),
+            member("c2", "200:0:d2", true)
+        ]
+    );
+
+    let added_back = group("300:0:d1", &["c1", "c2"], Vec::new());
+    let merged = merge::merge_subscriptions(merged, vec![added_back]);
+    assert_eq!(
+        merged[0].channel_ids,
+        ["c1", "c2"],
+        "a later add wins over the removal"
+    );
 }

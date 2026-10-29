@@ -16,7 +16,7 @@ use super::epoch::{check_epoch_key, open_chain, purpose_key};
 use super::keys::MemberSecrets;
 use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
-use super::roster::{RosterState, apply_entry, replay_roster};
+use super::roster::{Entry, RosterState, apply_entry, replay_roster};
 use super::server::StoreError;
 use super::state::{
     GroupRecord, add_roster_entries, load_group, roster_entries, save_group, save_streams, streams,
@@ -68,6 +68,7 @@ pub struct Session<'a, S> {
     record: GroupRecord,
     group: [u8; 16],
     state: RosterState,
+    entries: Vec<Entry>,
     signing_keys: BTreeMap<String, [u8; 32]>,
     commitments: BTreeMap<u32, Vec<u8>>,
     keys: BTreeMap<u32, Vec<u8>>,
@@ -102,6 +103,7 @@ impl<'a, S: Store> Session<'a, S> {
             record,
             group,
             state,
+            entries: Vec::new(),
             signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
@@ -116,6 +118,7 @@ impl<'a, S: Store> Session<'a, S> {
                 session.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
             }
         }
+        session.entries = entries;
         session.unwrap_current().await?;
         Ok(session)
     }
@@ -141,6 +144,11 @@ impl<'a, S: Store> Session<'a, S> {
         self.keys.get(&self.state.epoch).map_or(&[], Vec::as_slice)
     }
 
+    /// The verified roster entries, oldest first.
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
     async fn unwrap_current(&mut self) -> Result<()> {
         let epoch = self.state.epoch;
         let did = self.device.did;
@@ -157,7 +165,7 @@ impl<'a, S: Store> Session<'a, S> {
     }
 
     /// The key of `epoch`, walking the history chain back from the newest key this device holds.
-    async fn epoch_key(&mut self, epoch: u32) -> Result<Vec<u8>> {
+    pub async fn epoch_key(&mut self, epoch: u32) -> Result<Vec<u8>> {
         while !self.keys.contains_key(&epoch) {
             let (&known, key) = self.keys.iter().next().ok_or(Error::KeyCommitment)?;
             if known <= epoch {

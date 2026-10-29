@@ -71,6 +71,7 @@ impl EngineError {
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
             Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
+            Self::Store(StoreError::JoinDeclined) => "linkedJoinDeclined",
             Self::Store(StoreError::Local(_)) | Self::Keychain(_) | Self::Settings(_) => {
                 "linkedLocal"
             }

@@ -1864,6 +1864,7 @@
   "linked_error_not_linked": "This device isn't in a sync group.",
   "linked_error_removed": "This device was removed from its sync group.",
   "linked_error_declined": "The codes weren't confirmed, so nothing was linked.",
+  "linked_error_join_declined": "A linked device declined the request to join.",
   "linked_error_timed_out": "The other device didn't answer in time. Start again.",
   "linked_error_wrong_words": "These recovery words aren't valid. Check the spelling and the order.",
   "linked_error_recovery_used": "This recovery key was already used or replaced.",

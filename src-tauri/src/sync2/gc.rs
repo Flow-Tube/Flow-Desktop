@@ -233,6 +233,51 @@ impl<S: Store> Session<'_, S> {
         }
     }
 
+    /// Deletes `did`'s log objects in `from..=through`, all but the `kept` manifests, and saves how
+    /// far it got. False when the store refused, which ends the pass.
+    async fn collect_log(
+        &self,
+        pool: &SqlitePool,
+        did: &str,
+        (from, through): (u64, u64),
+        kept: &BTreeSet<u64>,
+        budget: &mut usize,
+    ) -> Result<bool> {
+        let mut done = from - 1;
+        let mut stopped = false;
+        for n in (from..=through).filter(|n| !kept.contains(n)) {
+            if *budget == 0 {
+                break;
+            }
+            *budget -= 1;
+            match self.delete_or_stop(&log_path(did, n)).await {
+                Some(true) => done = n,
+                // Gone already: another device collected this range, or this one did before.
+                Some(false) => {
+                    done = through;
+                    break;
+                }
+                None => {
+                    stopped = true;
+                    break;
+                }
+            }
+        }
+        if *budget > 0 && !stopped {
+            done = through;
+        }
+        sqlx::query(
+            "INSERT INTO sync2_collected (did, through) VALUES (?, ?)
+             ON CONFLICT (did) DO UPDATE SET through = excluded.through",
+        )
+        .bind(did)
+        .bind(to_i64(done)?)
+        .execute(pool)
+        .await
+        .map_err(SyncError::from)?;
+        Ok(!stopped)
+    }
+
     /// Deletes what [`Facts::plan`] allows, a bounded amount per call.
     pub async fn collect_garbage(&self, pool: &SqlitePool) -> Result<()> {
         let current: BTreeSet<String> = self
@@ -294,49 +339,18 @@ impl<S: Store> Session<'_, S> {
                 .map_err(SyncError::from)?;
             budget -= logged.manifest.parts.len() + 1;
         }
-        for (did, (from, through)) in plan.logs {
-            if budget == 0 {
-                break;
-            }
+        for (did, range) in plan.logs {
             let kept: BTreeSet<u64> = manifests
                 .iter()
                 .filter(|m| m.did == did)
                 .map(|m| m.seq)
                 .collect();
-            let mut done = from - 1;
-            let mut stopped = false;
-            for n in (from..=through).filter(|n| !kept.contains(n)) {
-                if budget == 0 {
-                    break;
-                }
-                budget -= 1;
-                match self.delete_or_stop(&log_path(&did, n)).await {
-                    Some(true) => done = n,
-                    // Gone already: another device collected this range, or this one did before.
-                    Some(false) => {
-                        done = through;
-                        break;
-                    }
-                    None => {
-                        stopped = true;
-                        break;
-                    }
-                }
-            }
-            if budget > 0 && !stopped {
-                done = through;
-            }
-            sqlx::query(
-                "INSERT INTO sync2_collected (did, through) VALUES (?, ?)
-                 ON CONFLICT (did) DO UPDATE SET through = excluded.through",
-            )
-            .bind(&did)
-            .bind(to_i64(done)?)
-            .execute(pool)
-            .await
-            .map_err(SyncError::from)?;
-            if stopped {
-                return Ok(());
+            if budget == 0
+                || !self
+                    .collect_log(pool, &did, range, &kept, &mut budget)
+                    .await?
+            {
+                break;
             }
         }
         Ok(())

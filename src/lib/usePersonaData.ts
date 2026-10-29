@@ -7,6 +7,8 @@ import {
   type UserBrain,
 } from "./api/recommendation";
 import { getMusicTasteProfile } from "./api/music";
+import { BRAINS_UPDATED_EVENT } from "./storeRefresh";
+import { useEventVersion } from "./useEventVersion";
 import type { MusicTasteProfile } from "../types/music";
 
 export function usePersonaData() {
@@ -16,6 +18,7 @@ export function usePersonaData() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
+  const brainsVersion = useEventVersion(BRAINS_UPDATED_EVENT);
 
   const refresh = useCallback(async (force = false) => {
     if (force) setRefreshing(true);
@@ -43,7 +46,7 @@ export function usePersonaData() {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, brainsVersion]);
 
   return { brain, persona, musicProfile, loading, refreshing, failed, refresh };
 }

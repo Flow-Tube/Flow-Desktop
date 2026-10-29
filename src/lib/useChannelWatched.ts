@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getWatchHistory } from './api/db';
 import { getString } from './i18n/index';
+import { useEventVersion } from './useEventVersion';
+import { HISTORY_UPDATED_EVENT } from '../store/useHistoryStore';
 import type { VideoSummary } from '../types/video';
 
 const HISTORY_WINDOW = 150;
@@ -8,6 +10,7 @@ const HISTORY_WINDOW = 150;
 /** What the viewer watched from this channel recently, matched by channel id: names are not unique. */
 export function useChannelWatched(channelId: string | undefined, enabled: boolean): VideoSummary[] {
   const [videos, setVideos] = useState<VideoSummary[]>([]);
+  const historyVersion = useEventVersion(HISTORY_UPDATED_EVENT);
 
   useEffect(() => {
     if (!channelId || !enabled) {
@@ -36,7 +39,7 @@ export function useChannelWatched(channelId: string | undefined, enabled: boolea
     return () => {
       cancelled = true;
     };
-  }, [channelId, enabled]);
+  }, [channelId, enabled, historyVersion]);
 
   return videos;
 }

@@ -125,11 +125,13 @@ impl HeldStore {
         }))
     }
 
-    /// The entries above `after`, or every entry held when none of them hashes to `head`: the
-    /// asker's head then lost a fork here, or is unknown, so it needs the whole picture.
+    /// The entries above `after`, or every entry held when `head` isn't on this device's winning
+    /// chain: the asker's head then lost a fork here, or is unknown, so it needs the whole picture.
+    /// Holding `head` isn't enough, since this device may have just fetched it from the asker.
     pub async fn roster_for(&self, after: i64, head: Option<&str>) -> Result<Vec<Entry>> {
         let all = self.candidates_after(-1).await?;
-        let known = head.is_none_or(|head| all.iter().any(|e| entry_hash(e) == head));
+        let known =
+            head.is_none_or(|head| winning_chain(&all).iter().any(|e| entry_hash(e) == head));
         Ok(all
             .into_iter()
             .filter(|e| !known || i64::try_from(e.seq).is_ok_and(|seq| seq > after))

@@ -19,6 +19,7 @@ use flow_desktop_lib::sync2::linking::{
 use flow_desktop_lib::sync2::membership::rename_device;
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::listen_on;
+use flow_desktop_lib::sync2::roster::{Entry, fork_winner};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
 use flow_desktop_lib::sync2::state::{StoreKind, load_group};
@@ -130,10 +131,20 @@ fn named(name: &str) -> DeviceMeta {
     }
 }
 
-#[tokio::test]
-async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
-    let g = group().await;
-    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+/// The entry at the top of what `pool` holds.
+async fn head_of(pool: &SqlitePool) -> Entry {
+    let held = HeldStore::new(pool.clone());
+    held.roster_after(-1)
+        .await
+        .unwrap()
+        .last()
+        .cloned()
+        .unwrap()
+}
+
+/// Both devices rename device A at the same `seq`, each on its own copy of the group.
+async fn concurrent_renames(g: &Group) -> (SqlitePool, SqlitePool) {
+    let (pool_a, pool_b) = (holding(g).await, holding(g).await);
     let a_did = hex::encode(g.a.did);
     for (pool, device, name) in [(&pool_a, &g.a, "from A"), (&pool_b, &g.b, "from B")] {
         let session = Session::open(pool, HeldStore::new(pool.clone()), device)
@@ -143,25 +154,52 @@ async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
             .await
             .unwrap();
     }
+    (pool_a, pool_b)
+}
 
+/// Waits until the two devices agree, since the answering side pulls on its own schedule.
+async fn eventually_agree(pool_a: &SqlitePool, pool_b: &SqlitePool) -> (Entry, Entry) {
+    for _ in 0..50 {
+        let (on_a, on_b) = (head_of(pool_a).await, head_of(pool_b).await);
+        if on_a == on_b {
+            return (on_a, on_b);
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    (head_of(pool_a).await, head_of(pool_b).await)
+}
+
+#[tokio::test]
+async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
+    let g = group().await;
+    let (pool_a, pool_b) = concurrent_renames(&g).await;
     let port = listening(&pool_a, &g.a).await;
     meet(&pool_b, &g.b, "127.0.0.1", port).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    let head = |pool: &SqlitePool| {
-        let held = HeldStore::new(pool.clone());
-        async move {
-            held.roster_after(-1)
-                .await
-                .unwrap()
-                .last()
-                .cloned()
-                .unwrap()
-        }
-    };
-    let (on_a, on_b) = (head(&pool_a).await, head(&pool_b).await);
+    let (on_a, on_b) = eventually_agree(&pool_a, &pool_b).await;
     assert_eq!(on_a.seq, 2);
     assert_eq!(on_a, on_b);
+}
+
+#[tokio::test]
+async fn a_device_whose_entry_lost_learns_the_winner_from_a_peer_holding_both() {
+    let g = group().await;
+    let (pool_a, pool_b) = concurrent_renames(&g).await;
+    let (entry_a, entry_b) = (head_of(&pool_a).await, head_of(&pool_b).await);
+    let a_won = fork_winner(&[entry_a.clone(), entry_b.clone()]) == Some(&entry_a);
+    let ((winner, winner_device), (loser, loser_device, losing)) = if a_won {
+        ((&pool_a, &g.a), (&pool_b, &g.b, entry_b))
+    } else {
+        ((&pool_b, &g.b), (&pool_a, &g.a, entry_a))
+    };
+    // The winning device already fetched the losing entry, as when both pull at once.
+    HeldStore::new(winner.clone())
+        .hold_entry(&losing)
+        .await
+        .unwrap();
+
+    let port = listening(winner, winner_device).await;
+    meet(loser, loser_device, "127.0.0.1", port).await.unwrap();
+    assert_eq!(head_of(loser).await, head_of(winner).await);
 }
 
 fn loopback() -> Vec<String> {

@@ -54,6 +54,14 @@ pub async fn record_watch_deletion(
     changes::record(&mut conn, &edits).await
 }
 
+/// Whether writing settings `key` changes data that sync sends to other devices.
+#[must_use]
+pub fn is_synced_setting(key: &str) -> bool {
+    is_tracked_blob(key)
+        || key == mapping::SUBSCRIBED_CHANNELS_SETTING_KEY
+        || crate::sync::settings_map::desktop_keys().any(|k| k == key)
+}
+
 fn is_tracked_blob(key: &str) -> bool {
     [
         mapping::LIKES_SETTING_KEY,

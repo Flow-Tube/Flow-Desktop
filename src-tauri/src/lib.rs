@@ -497,6 +497,7 @@ pub fn run() {
             if active_profile.is_default {
                 sync2::service::spawn(app.handle().clone());
                 sync2::lan_runtime::spawn(app.handle().clone());
+                sync2::live::spawn(app.handle().clone());
             }
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)

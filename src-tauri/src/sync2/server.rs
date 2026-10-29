@@ -68,6 +68,8 @@ struct Session {
 pub struct ServerStore {
     base: Url,
     client: Client,
+    /// HTTP/1.1 only, with no overall timeout, for the live channel's WebSocket upgrade.
+    pub(super) live: Client,
     member: MemberSecrets,
     session: Mutex<Session>,
 }
@@ -119,18 +121,28 @@ impl ServerStore {
         group: Option<String>,
     ) -> Result<Self> {
         let base = Url::parse(url).map_err(|_| StoreError::Insecure)?;
-        let mut builder = Client::builder()
-            .tls_backend_rustls()
-            .redirect(redirect::Policy::none())
-            .user_agent(concat!("FlowDesktop/", env!("CARGO_PKG_VERSION")))
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(60));
-        if let Some((host, address)) = transport_for(&base).await? {
-            builder = builder.resolve(&host, address);
-        }
+        let pinned = transport_for(&base).await?;
+        let builder = || {
+            let builder = Client::builder()
+                .tls_backend_rustls()
+                .redirect(redirect::Policy::none())
+                .user_agent(concat!("FlowDesktop/", env!("CARGO_PKG_VERSION")))
+                .connect_timeout(Duration::from_secs(10));
+            match &pinned {
+                Some((host, address)) => builder.resolve(host, *address),
+                None => builder,
+            }
+        };
         Ok(Self {
             base,
-            client: builder.build().map_err(StoreError::Network)?,
+            client: builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .map_err(StoreError::Network)?,
+            live: builder()
+                .http1_only()
+                .build()
+                .map_err(StoreError::Network)?,
             member,
             session: Mutex::new(Session {
                 instance,
@@ -140,7 +152,7 @@ impl ServerStore {
         })
     }
 
-    fn url(&self, path: &str) -> Result<Url> {
+    pub(super) fn url(&self, path: &str) -> Result<Url> {
         self.base.join(path).map_err(|_| StoreError::Malformed)
     }
 
@@ -203,7 +215,7 @@ impl ServerStore {
         Ok(value)
     }
 
-    async fn token(&self, renew: bool) -> Result<String> {
+    pub(super) async fn token(&self, renew: bool) -> Result<String> {
         let mut session = self.session.lock().await;
         match &session.token {
             Some((token, expires)) if !renew && *expires > now_ms() + TOKEN_MARGIN_MS => {

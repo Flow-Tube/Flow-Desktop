@@ -8,8 +8,9 @@ use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
 use crate::sync::local_edits;
 use crate::sync2::actions::reset_local_data;
+use crate::sync2::service::push_soon;
 use sqlx::SqlitePool;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn get_watch_history(
@@ -35,32 +36,46 @@ pub async fn get_music_history(
 
 #[tauri::command]
 pub async fn add_watch_record(
+    app: AppHandle,
     record: WatchHistoryRecord,
     pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     watch_history::upsert_watch_record(&pool, &record)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    if profile.is_default {
+        push_soon(&app);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn add_watch_records_bulk(
+    app: AppHandle,
     records: Vec<WatchHistoryRecord>,
     pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     watch_history::upsert_watch_records_bulk(&pool, &records)
         .await
-        .map_err(ErrorResponse::from)
+        .map_err(ErrorResponse::from)?;
+    if profile.is_default {
+        push_soon(&app);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn delete_watch_record(
+    app: AppHandle,
     video_id: String,
     pool: State<'_, SqlitePool>,
     profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     if profile.is_default {
         note_sync_failure(local_edits::record_watch_deletion(&pool, Some(&video_id)).await);
+        push_soon(&app);
     }
     watch_history::delete_watch_record(&pool, &video_id)
         .await
@@ -69,11 +84,13 @@ pub async fn delete_watch_record(
 
 #[tauri::command]
 pub async fn clear_watch_history(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     if profile.is_default {
         note_sync_failure(local_edits::record_watch_deletion(&pool, None).await);
+        push_soon(&app);
     }
     watch_history::clear_watch_history(&pool)
         .await
@@ -102,6 +119,7 @@ pub async fn get_setting(
 
 #[tauri::command]
 pub async fn set_setting(
+    app: AppHandle,
     key: String,
     value: String,
     pool: State<'_, SqlitePool>,
@@ -109,6 +127,9 @@ pub async fn set_setting(
 ) -> Result<(), ErrorResponse> {
     if profile.is_default {
         note_sync_failure(local_edits::record_blob_write(&pool, &key, &value).await);
+        if local_edits::is_synced_setting(&key) {
+            push_soon(&app);
+        }
     }
     settings::set_setting(&pool, &key, &value)
         .await

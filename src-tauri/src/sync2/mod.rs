@@ -27,6 +27,7 @@ pub mod lan_runtime;
 pub mod lan_sync;
 pub mod link_task;
 pub mod linking;
+pub mod live;
 pub mod mailbox;
 pub mod membership;
 pub mod meta;

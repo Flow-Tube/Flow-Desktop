@@ -3,6 +3,7 @@
 //! FLOW-SYNC/1.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -27,6 +28,7 @@ pub const EVENT_SYNCED: &str = "sync2://synced";
 pub const EVENT_JOIN_REQUESTS: &str = "sync2://join-requests";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
 const INTERVAL: Duration = Duration::from_mins(5);
+const LOCAL_EDIT_DELAY: Duration = Duration::from_secs(10);
 
 /// When the last run ended, and the kind of error it ended with, if any.
 #[derive(Debug, Clone, Serialize)]
@@ -41,6 +43,8 @@ pub struct LastSync {
 pub struct BackgroundSync {
     running: Mutex<()>,
     last: std::sync::Mutex<Option<LastSync>>,
+    /// Counts [`sync_after`] calls, so only the latest one runs.
+    scheduled: AtomicU64,
 }
 
 pub fn last_sync(app: &AppHandle) -> Option<LastSync> {
@@ -140,6 +144,33 @@ async fn apply(
 pub fn sync_soon(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move { log_failure(sync_now(&app).await) });
+}
+
+/// Sends a local edit soon, once edits stop for a few seconds.
+pub fn push_soon(app: &AppHandle) {
+    sync_after(app, LOCAL_EDIT_DELAY);
+}
+
+/// Syncs once `delay` after the last of several calls in a row, such as a burst of edits or of
+/// changes announced by the server. A run already under way is never interrupted.
+pub fn sync_after(app: &AppHandle, delay: Duration) {
+    let mine = app
+        .state::<BackgroundSync>()
+        .scheduled
+        .fetch_add(1, Ordering::SeqCst)
+        + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(delay).await;
+        if app
+            .state::<BackgroundSync>()
+            .scheduled
+            .load(Ordering::SeqCst)
+            == mine
+        {
+            log_failure(sync_now(&app).await);
+        }
+    });
 }
 
 fn log_failure<T>(result: Result<T>) {

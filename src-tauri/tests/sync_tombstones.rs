@@ -442,6 +442,60 @@ async fn a_deleted_group_travels() {
 // Android-shaped records (synthetic, field-for-field with Flow for Android's canonical model)
 // --------------------------------------------------------------------------------------------
 
+/// Sends `from`'s groups to `to`.
+async fn send_groups(from: &SqlitePool, to: &SqlitePool, hash: &str) {
+    let out = export_one(from, Collection::Subscriptions).await;
+    apply_payload(
+        to,
+        PEER,
+        DESK,
+        &[stage_bytes(Collection::Subscriptions, out, hash)],
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn a_channel_removed_from_a_group_travels_and_stays_removed() {
+    let a = memory_pool().await;
+    let b = memory_pool().await;
+    frontend_write(
+        &a,
+        "subscription_groups",
+        r#"[{"name":"Tech","channelIds":["UCa","UCb"],"sortOrder":0}]"#,
+    )
+    .await;
+    send_groups(&a, &b, "m1").await;
+
+    frontend_write(
+        &a,
+        "subscription_groups",
+        r#"[{"name":"Tech","channelIds":["UCa"],"sortOrder":0}]"#,
+    )
+    .await;
+    let out = export_one(&a, Collection::Subscriptions).await;
+    let groups: Vec<SubscriptionGroup> = records(&out);
+    assert_eq!(groups[0].channel_ids, ["UCa"]);
+    assert!(
+        groups[0]
+            .members
+            .iter()
+            .any(|m| m.channel_id == "UCb" && m.deleted)
+    );
+    send_groups(&a, &b, "m2").await;
+    assert_eq!(
+        blob(&b, "subscription_groups").await[0]["channelIds"],
+        json!(["UCa"])
+    );
+
+    // B relays the tombstone, so sending its groups back doesn't restore the channel on A.
+    send_groups(&b, &a, "m3").await;
+    assert_eq!(
+        blob(&a, "subscription_groups").await[0]["channelIds"],
+        json!(["UCa"])
+    );
+}
+
 #[tokio::test]
 async fn android_shaped_records_apply() {
     let desk = memory_pool().await;

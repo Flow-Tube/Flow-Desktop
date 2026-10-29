@@ -188,12 +188,26 @@ fn diff_groups(old: &str, new: &str, now: u64) -> Vec<Change> {
         .filter(|n| !after.contains_key(*n))
         .map(|n| Change::delete(changes::GROUPS, n.clone(), now, None))
         .collect();
-    out.extend(
-        after
-            .iter()
-            .filter(|(n, g)| before.get(*n) != Some(g))
-            .map(|(n, _)| Change::edit(changes::GROUPS, n.clone(), now)),
-    );
+    for (name, group) in &after {
+        let was = before.get(name);
+        if was != Some(group) {
+            out.push(Change::edit(changes::GROUPS, name.clone(), now));
+        }
+        let had = was.map_or(&[][..], |g| g.channel_ids.as_slice());
+        let key = |channel: &String| changes::item_key(name, channel);
+        out.extend(
+            had.iter()
+                .filter(|c| !group.channel_ids.contains(c))
+                .map(|c| Change::delete(changes::GROUP_MEMBERS, key(c), now, None)),
+        );
+        out.extend(
+            group
+                .channel_ids
+                .iter()
+                .filter(|c| !had.contains(c))
+                .map(|c| Change::edit(changes::GROUP_MEMBERS, key(c), now)),
+        );
+    }
     out
 }
 

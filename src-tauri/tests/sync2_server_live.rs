@@ -36,8 +36,8 @@ async fn desktop_talks_to_a_real_server() {
         op: Op::Genesis,
         signer: hex::encode(device.did),
         add: Some(vec![
-            member_subject(&device, Role::Device),
-            member_subject(&recovery, Role::Recovery),
+            member_subject(&device.sig_public, &device.kem_public, Role::Device),
+            member_subject(&recovery.sig_public, &recovery.kem_public, Role::Recovery),
         ]),
         remove: None,
         epoch: Some(epoch_draft(
@@ -106,5 +106,71 @@ async fn desktop_talks_to_a_real_server() {
     assert_eq!(
         decode_payload(&open_object(&parsed, &key).unwrap()).unwrap(),
         b"hello from Rust"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs a fresh flow-sync server"]
+async fn a_group_is_created_and_a_second_device_pairs_through_the_server() {
+    use flow_desktop_lib::sync2::engine::Session;
+    use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join, new_offer};
+    use flow_desktop_lib::sync2::setup::create_group;
+    use flow_desktop_lib::sync2::state::load_group;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    let url = std::env::var("FLOW_SYNC_TEST_URL").expect("FLOW_SYNC_TEST_URL");
+    let admin = std::env::var("FLOW_SYNC_TEST_ADMIN").expect("FLOW_SYNC_TEST_ADMIN");
+    let pool = || async {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    };
+    let meta = |name: &str| DeviceMeta {
+        app: format!("app-{name}"),
+        name: name.into(),
+        platform: "macos".into(),
+    };
+    let (pool_a, pool_b) = (pool().await, pool().await);
+    let a = member_secrets(random_bytes(), random_bytes());
+    let b = member_secrets(random_bytes(), random_bytes());
+
+    let words = create_group(&pool_a, &url, &admin, &a, &meta("A"), "default-link")
+        .await
+        .unwrap();
+    assert_eq!(words.split(' ').count(), 24);
+    let record = load_group(&pool_a).await.unwrap().unwrap();
+    let store_a = ServerStore::connect(
+        &url,
+        a.clone(),
+        record.instance.clone(),
+        Some(record.group_id.clone()),
+    )
+    .await
+    .unwrap();
+    let session = Session::open(&pool_a, store_a, &a).await.unwrap();
+
+    let offer = new_offer(&url, "A");
+    let qr = offer.qr.clone();
+    let store_b = ServerStore::connect(&url, b.clone(), None, None)
+        .await
+        .unwrap();
+    let (added, joined) = tokio::join!(
+        add_device(&session, offer, &a, |_| async { true }),
+        join(&pool_b, &store_b, &qr, &b, meta("B"), |_| async { true }),
+    );
+    assert_eq!(added.unwrap(), hex::encode(b.did));
+    joined.unwrap();
+    let joined_record = load_group(&pool_b).await.unwrap().unwrap();
+    assert_eq!(
+        (
+            joined_record.group_id,
+            joined_record.instance,
+            joined_record.link
+        ),
+        (record.group_id, record.instance, record.link)
     );
 }

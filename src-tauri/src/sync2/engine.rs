@@ -39,6 +39,12 @@ pub enum EngineError {
     NotLinked,
     #[error("this device was removed from its sync group")]
     Removed,
+    #[error("the six-digit code was not confirmed")]
+    Declined,
+    #[error("the other device didn't answer in time")]
+    TimedOut,
+    #[error("the other device sent something unexpected")]
+    Unexpected,
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -112,6 +118,27 @@ impl<'a, S: Store> Session<'a, S> {
         }
         session.unwrap_current().await?;
         Ok(session)
+    }
+
+    pub fn store(&self) -> &S {
+        &self.store
+    }
+
+    pub fn roster(&self) -> &RosterState {
+        &self.state
+    }
+
+    pub fn group(&self) -> &[u8; 16] {
+        &self.group
+    }
+
+    pub fn record(&self) -> &GroupRecord {
+        &self.record
+    }
+
+    /// The key of the epoch in force, unwrapped when the session opened.
+    pub fn current_key(&self) -> &[u8] {
+        self.keys.get(&self.state.epoch).map_or(&[], Vec::as_slice)
     }
 
     async fn unwrap_current(&mut self) -> Result<()> {

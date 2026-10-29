@@ -7,7 +7,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use super::curve::sign;
 use super::epoch::epoch_commitment;
-use super::keys::MemberSecrets;
+use super::keys::{MemberSecrets, member_id};
 use super::roster::{Entry, EpochField, Op, Role, RosterState, Subject, signing_bytes};
 
 /// What an entry says, before the chain fields and signatures are added.
@@ -20,11 +20,11 @@ pub struct Draft {
     pub meta: Option<BTreeMap<String, String>>,
 }
 
-pub fn member_subject(member: &MemberSecrets, role: Role) -> Subject {
+pub fn member_subject(sig_public: &[u8; 32], kem_public: &[u8; 32], role: Role) -> Subject {
     Subject {
-        did: hex::encode(member.did),
-        sig: URL_SAFE_NO_PAD.encode(member.sig_public),
-        kem: URL_SAFE_NO_PAD.encode(member.kem_public),
+        did: hex::encode(member_id(sig_public, kem_public)),
+        sig: URL_SAFE_NO_PAD.encode(sig_public),
+        kem: URL_SAFE_NO_PAD.encode(kem_public),
         role,
     }
 }

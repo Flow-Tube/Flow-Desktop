@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use super::curve::sign;
 use super::kdf::tag;
 use super::keys::MemberSecrets;
+use super::mailbox::Mailbox;
 use super::roster::{Entry, parse_entry};
 use super::store::Store;
 use crate::sync::qr::is_local_ip;
@@ -229,6 +230,7 @@ impl ServerStore {
                 .request(method.clone(), url.clone())
                 .bearer_auth(token);
             request = match &body {
+                Some(Body::Json(value)) => request.json(value),
                 Some(Body::Bytes(bytes)) => request
                     .header("content-type", "application/octet-stream")
                     .body(bytes.clone()),
@@ -362,7 +364,59 @@ impl Store for ServerStore {
     }
 }
 
+/// Writing and reading messages needs no token: the new device has none yet, and only someone
+/// who read the QR code can derive the slot id.
+impl Mailbox for ServerStore {
+    async fn open_slot(&self, slot: &str) -> Result<()> {
+        let body = Body::Json(json!({ "slot": slot }));
+        decode_empty(self.authorized(Method::POST, "v1/pair", Some(body)).await?).await
+    }
+
+    async fn put_message(&self, slot: &str, name: &str, bytes: Vec<u8>) -> Result<()> {
+        let request = self
+            .client
+            .put(self.url(&format!("v1/pair/{slot}/{name}"))?);
+        let response = request
+            .header("content-type", "application/octet-stream")
+            .body(bytes)
+            .send()
+            .await
+            .map_err(StoreError::Network)?;
+        decode_empty(response).await
+    }
+
+    async fn get_message(&self, slot: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        let url = self.url(&format!("v1/pair/{slot}/{name}"))?;
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(StoreError::Network)?;
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        Ok(Some(
+            check(response)
+                .await?
+                .bytes()
+                .await
+                .map_err(StoreError::Network)?
+                .to_vec(),
+        ))
+    }
+
+    async fn close_slot(&self, slot: &str) -> Result<()> {
+        decode_empty(
+            self.authorized(Method::DELETE, &format!("v1/pair/{slot}"), None)
+                .await?,
+        )
+        .await
+    }
+}
+
 enum Body {
+    Json(Value),
     Bytes(Vec<u8>),
     Append { value: Value, head: String },
 }

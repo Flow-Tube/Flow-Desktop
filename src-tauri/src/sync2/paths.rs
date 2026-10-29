@@ -32,3 +32,8 @@ pub fn parse_log_path(path: &str) -> Option<(String, u64)> {
             .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase());
     (valid && log_path(did, seq) == path && shard.len() == 16).then(|| (did.to_owned(), seq))
 }
+
+/// A pairing message: `direction` is `a` from the device showing the code, `b` from the scanner.
+pub fn pair_message_name(direction: char, seq: u64) -> String {
+    format!("{direction}-{seq:016x}.p")
+}

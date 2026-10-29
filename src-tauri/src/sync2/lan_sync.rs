@@ -46,11 +46,7 @@ fn is_blob_of(path: &str, bytes: &[u8]) -> bool {
 
 /// Pulls what `held` lacks from the peer behind `link`, and returns how many objects it took.
 pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Result<usize> {
-    let top = winning_chain(&held.candidates_after(-1).await?)
-        .last()
-        .map_or(-1, |e| i64::try_from(e.seq).unwrap_or(i64::MAX));
-    // From one below the head, so a competing entry at the head's `seq` arrives too.
-    for entry in link.roster((top - 1).max(-1)).await? {
+    for entry in link.roster(held.highest_seq().await?).await? {
         held.hold_entry(&entry).await?;
     }
     let chain = winning_chain(&held.candidates_after(-1).await?);

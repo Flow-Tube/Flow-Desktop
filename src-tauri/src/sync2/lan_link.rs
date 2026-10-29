@@ -29,8 +29,8 @@ use crate::sync::transport::WsChannel;
 pub const SESSION_PATH: &str = "/flow-sync/2";
 const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
 const NONCE_SIZE: usize = 32;
-/// Once this side has no more requests, the session stays open while the peer keeps asking.
-const IDLE: Duration = Duration::from_secs(10);
+/// Once this side has no more requests, the session closes when the peer stops sending.
+const IDLE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
@@ -439,11 +439,11 @@ impl Link {
                     )),
                 };
                 let (mut response, bytes) = answer.unwrap_or_else(|_| {
-                    let refused = Response {
-                        error: Some("refused".to_owned()),
+                    let failed = Response {
+                        error: Some("invalid".to_owned()),
                         ..Response::default()
                     };
-                    (refused, Vec::new())
+                    (failed, Vec::new())
                 });
                 response.re = id;
                 if framed

@@ -68,47 +68,57 @@ impl HeldStore {
         Ok(())
     }
 
-    /// The log objects held above `vv`, and the blobs held for the senders of those objects.
+    /// The log objects held above `vv`, and every blob held.
     pub async fn listing(&self, vv: &BTreeMap<String, u64>) -> Result<(Vec<String>, Vec<String>)> {
         let rows: Vec<String> =
             sqlx::query_scalar("SELECT path FROM sync2_held_objects ORDER BY id")
                 .fetch_all(&self.pool)
                 .await
                 .map_err(StoreError::Local)?;
-        let mut paths = Vec::new();
-        let mut senders = BTreeSet::new();
-        for path in &rows {
-            if let Some((did, seq)) = parse_log_path(path)
-                && vv.get(&did).is_none_or(|known| seq > *known)
-            {
-                paths.push(path.clone());
-                senders.insert(did);
-            }
-        }
-        let blobs = rows
+        let (logs, blobs): (Vec<String>, Vec<String>) = rows
+            .into_iter()
+            .partition(|path| parse_log_path(path).is_some());
+        let paths = logs
             .into_iter()
             .filter(|path| {
-                path.split_once("/blob/").is_some_and(|(dir, _)| {
-                    dir.strip_prefix("dev/")
-                        .is_some_and(|did| senders.contains(did))
-                })
+                parse_log_path(path)
+                    .is_some_and(|(did, seq)| vv.get(&did).is_none_or(|known| seq > *known))
             })
             .collect();
-        Ok((paths, blobs))
+        Ok((
+            paths,
+            blobs.into_iter().filter(|p| p.contains("/blob/")).collect(),
+        ))
     }
 
-    /// The highest `seq` held of every sender's log.
+    /// For each log, the last `seq` held with none missing before it, counted from the oldest
+    /// held (older ones may have been collected).
     pub async fn held_vv(&self) -> Result<BTreeMap<String, u64>> {
         let rows: Vec<String> = sqlx::query_scalar("SELECT path FROM sync2_held_objects")
             .fetch_all(&self.pool)
             .await
             .map_err(StoreError::Local)?;
-        let mut vv = BTreeMap::new();
+        let mut logs: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
         for (did, seq) in rows.iter().filter_map(|p| parse_log_path(p)) {
-            let top = vv.entry(did).or_insert(0);
-            *top = seq.max(*top);
+            logs.entry(did).or_default().insert(seq);
         }
-        Ok(vv)
+        Ok(logs
+            .into_iter()
+            .filter_map(|(did, seqs)| {
+                let first = *seqs.first()?;
+                let last = (first..).take_while(|seq| seqs.contains(seq)).last()?;
+                Some((did, last))
+            })
+            .collect())
+    }
+
+    /// The highest `seq` of any roster entry held, or -1.
+    pub async fn highest_seq(&self) -> Result<i64> {
+        let seq: Option<i64> = sqlx::query_scalar("SELECT MAX(seq) FROM sync2_held_roster")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(StoreError::Local)?;
+        Ok(seq.unwrap_or(-1))
     }
 }
 

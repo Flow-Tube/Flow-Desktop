@@ -25,10 +25,11 @@ use crate::sync::brain_attrib::{
 use crate::sync::brain_rekey;
 use crate::sync::brainmap;
 use crate::sync::canonical::{
-    Collection, FlowNeuroBrainSnapshot, Hlc, Like, LikeState, MusicBrainSnapshot, Playlist,
-    PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
+    Collection, FlowNeuroBrainSnapshot, GroupMember, Hlc, Like, LikeState, MusicBrainSnapshot,
+    Playlist, PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Change};
+use crate::sync::clock;
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchInsert, WatchRow};
 use crate::sync::merge::{self, MergedFlowNeuroBrain, MergedMusicBrain};
@@ -142,6 +143,7 @@ pub async fn apply_payload(
         };
 
         if applied {
+            clock::observe(&mut tx, clock::highest_stamp(&sc.ndjson)).await?;
             sqlx::query(
                 "INSERT OR IGNORE INTO sync_log (peer_device_id, collection, payload_hash, applied_at, hwm_hlc)
                  VALUES (?, ?, ?, ?, ?)",
@@ -283,6 +285,52 @@ async fn note_playlist_merge(
             &item.hlc,
         )
         .await?;
+    }
+    Ok(())
+}
+
+/// [`note_merge`] for a group and each of its channels that the merge changed.
+async fn note_group_merge(
+    tx: &mut Transaction<'_, Sqlite>,
+    rec: &SubscriptionGroup,
+    before: Option<&SubscriptionGroup>,
+) -> Result<(), SyncError> {
+    let header = |g: &SubscriptionGroup| SubscriptionGroup {
+        members: Vec::new(),
+        ..g.clone()
+    };
+    if before.map(header) != Some(header(rec)) {
+        note_merge(
+            tx,
+            changes::GROUPS,
+            &rec.name,
+            &header(rec),
+            rec.deleted,
+            &rec.hlc,
+        )
+        .await?;
+    }
+    let old: BTreeMap<&str, &GroupMember> = before
+        .map(|b| {
+            b.members
+                .iter()
+                .map(|m| (m.channel_id.as_str(), m))
+                .collect()
+        })
+        .unwrap_or_default();
+    for member in &rec.members {
+        if old.get(member.channel_id.as_str()) != Some(&member) {
+            let key = changes::item_key(&rec.name, &member.channel_id);
+            note_merge(
+                tx,
+                changes::GROUP_MEMBERS,
+                &key,
+                member,
+                member.deleted,
+                &member.hlc,
+            )
+            .await?;
+        }
     }
     Ok(())
 }
@@ -605,7 +653,8 @@ async fn apply_subscriptions(
         None => Vec::new(),
     };
     let stamps = changes::load(tx, changes::GROUPS, now_ms()).await?;
-    tombstones::stamp_groups(&mut local, &stamps, device_id);
+    let member_stamps = changes::load(tx, changes::GROUP_MEMBERS, now_ms()).await?;
+    tombstones::stamp_groups(&mut local, &stamps, &member_stamps, device_id);
     let live: BTreeSet<String> = local.iter().map(|g| g.name.clone()).collect();
     local.extend(tombstones::groups(&stamps, &live, device_id));
     let local_map: BTreeMap<String, SubscriptionGroup> =
@@ -619,9 +668,7 @@ async fn apply_subscriptions(
     };
     for rec in &merged {
         let before = local_map.get(&rec.name);
-        if before != Some(rec) {
-            note_merge(tx, changes::GROUPS, &rec.name, rec, rec.deleted, &rec.hlc).await?;
-        }
+        note_group_merge(tx, rec, before).await?;
         match before {
             Some(existing)
                 if existing.channel_ids == rec.channel_ids && existing.deleted == rec.deleted =>

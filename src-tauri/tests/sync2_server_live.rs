@@ -114,7 +114,7 @@ async fn desktop_talks_to_a_real_server() {
 async fn a_group_is_created_paired_with_and_restored_through_the_server() {
     use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
     use flow_desktop_lib::sync2::engine::Session;
-    use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join};
+    use flow_desktop_lib::sync2::linking::{DeviceMeta, WelcomeStore, add_device, join};
     use flow_desktop_lib::sync2::setup::{create_group, restore_group};
     use flow_desktop_lib::sync2::state::load_group;
     use sqlx::sqlite::SqlitePoolOptions;
@@ -155,12 +155,16 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
     let session = Session::open(&pool_a, store_a, &a).await.unwrap();
 
     let offer = new_offer(Some(StoreLocation::server(&url)), "A", None);
+    let welcome = WelcomeStore::Server {
+        u: url.clone(),
+        i: record.instance.clone().unwrap_or_default(),
+    };
     let code = read_code(&offer.qr).unwrap();
     let store_b = ServerStore::connect(&url, b.clone(), None, None)
         .await
         .unwrap();
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &a, |_| async { true }),
+        add_device(&session, offer, &a, welcome, |_| async { true }),
         join(&pool_b, &store_b, &code, &b, meta("B"), |_| async { true }),
     );
     assert_eq!(added.unwrap(), hex::encode(b.did));

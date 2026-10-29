@@ -21,14 +21,16 @@ function lastSyncText(status: LinkedStatus, syncing: boolean): string {
   return getString("linked_last_sync", formatYouTubeRelativeTime(last.atMs));
 }
 
-/** For a device in a group: its server, the last sync, and the devices it syncs with. */
+const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
+
+/** For a device in a group: where it lives, the last sync, and the devices it syncs with. */
 export function LinkedOverview({ status }: { status: LinkedStatus }) {
   const { devices, devicesError, busy, syncNow, addDevice, refresh } = useLinkedDevicesStore();
   const syncing = useSyncActivityStore((state) => state.syncing);
   return (
     <div className="grid grid-cols-12 gap-4">
       {status.kind === "server" && <JoinRequests />}
-      <Card title={getString(status.kind === "lan" ? "linked_on_lan" : "linked_server")} className="col-span-12 lg:col-span-5">
+      <Card title={getString(STORE_TITLES[status.kind ?? "server"])} className="col-span-12 lg:col-span-5">
         {status.kind === "lan" ? (
           <p className="text-sm text-chrome-neutral-400">{getString("linked_on_lan_body")}</p>
         ) : (

@@ -14,7 +14,7 @@ use flow_desktop_lib::sync2::linking::{
 };
 use flow_desktop_lib::sync2::pipe::listen_on;
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use sync2_common::{device_pool, empty_pool, exported, group, head};
+use sync2_common::{device_pool, empty_pool, exported, group, head, memory_welcome};
 
 fn meta() -> DeviceMeta {
     DeviceMeta {
@@ -53,7 +53,7 @@ async fn a_new_device_pairs_and_then_syncs() {
     };
     let store = &g.store;
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, &shown),
+        add_device(&session, offer, &g.a, memory_welcome(), &shown),
         join(&pool_n, &store, &code, &newcomer, meta(), &shown),
     );
     let did = added.unwrap();
@@ -92,7 +92,7 @@ async fn declining_the_code_adds_nobody() {
     let declined = |_sas: String| async { false };
     let store = &g.store;
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, declined),
+        add_device(&session, offer, &g.a, memory_welcome(), declined),
         join(&pool_n, &store, &code, &newcomer, meta(), declined),
     );
     assert!(matches!(added, Err(EngineError::Declined)));
@@ -147,10 +147,13 @@ async fn a_member_scans_a_new_device_code_over_the_lan() {
         async { true }
     };
     let store = &g.store;
-    let (added, joined) = tokio::join!(add_scanned(&session, &code, &g.a, &shown), async {
-        let welcomed = answer_shown(offer, &newcomer, meta(), &shown).await?;
-        finish_join(&pool_n, &store, welcomed).await
-    });
+    let (added, joined) = tokio::join!(
+        add_scanned(&session, &code, &g.a, memory_welcome(), &shown),
+        async {
+            let welcomed = answer_shown(offer, &newcomer, meta(), &shown).await?;
+            finish_join(&pool_n, &store, welcomed).await
+        }
+    );
     joined.unwrap();
     assert_same_digits(codes);
     let did = added.unwrap();
@@ -180,7 +183,7 @@ async fn a_new_device_reaches_a_member_over_the_lan_first() {
     };
     let store = &g.store;
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, &shown),
+        add_device(&session, offer, &g.a, memory_welcome(), &shown),
         join(&pool_n, &store, &code, &newcomer, meta(), &shown),
     );
     joined.unwrap();
@@ -208,7 +211,7 @@ async fn a_new_device_falls_back_to_the_mailbox_when_the_lan_does_not_answer() {
     };
     let store = &g.store;
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, &shown),
+        add_device(&session, offer, &g.a, memory_welcome(), &shown),
         join(&pool_n, &store, &code, &newcomer, meta(), &shown),
     );
     joined.unwrap();

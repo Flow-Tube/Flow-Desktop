@@ -60,6 +60,8 @@ pub enum EngineError {
     AlreadyLinked,
     #[error("the other device couldn't be reached on this network")]
     LanUnreachable,
+    #[error("the code names another WebDAV folder")]
+    OtherFolder,
 }
 
 impl EngineError {
@@ -72,6 +74,8 @@ impl EngineError {
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
             Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
             Self::Store(StoreError::SignInRefused) => "linkedSignInRefused",
+            Self::Store(StoreError::JoinDeclined) => "linkedJoinDeclined",
+            Self::Store(StoreError::Unauthorized) => "linkedStoreUnauthorized",
             Self::Store(StoreError::Local(_)) | Self::Keychain(_) | Self::Settings(_) => {
                 "linkedLocal"
             }
@@ -85,6 +89,7 @@ impl EngineError {
             Self::RecoveryUsed => "linkedRecoveryUsed",
             Self::AlreadyLinked => "linkedAlreadyLinked",
             Self::LanUnreachable => "linkedLanUnreachable",
+            Self::OtherFolder => "linkedOtherFolder",
         }
     }
 }
@@ -393,7 +398,12 @@ impl<'a, S: Store> Session<'a, S> {
         }
         loop {
             let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
-            let (changes, next) = self.store.changes(cursor).await?;
+            let read: BTreeMap<String, u64> = pulled
+                .positions
+                .iter()
+                .map(|(did, position)| (did.clone(), position.seq))
+                .collect();
+            let (changes, next) = self.store.new_objects(cursor, &read).await?;
             if changes.is_empty() {
                 return Ok(pulled);
             }

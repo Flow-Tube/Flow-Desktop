@@ -48,7 +48,7 @@ async fn a_snapshot_holds_every_record_and_the_logs_it_covers() {
         .push(&pool, exported(&pool, "app-a").await)
         .await
         .unwrap();
-    let pushed = session.record().own_seq;
+    let (pushed, last_hash) = (session.record().own_seq, session.record().own_prev.clone());
     session
         .write_snapshot(&pool, exported(&pool, "app-a").await)
         .await
@@ -62,10 +62,9 @@ async fn a_snapshot_holds_every_record_and_the_logs_it_covers() {
     ))
     .unwrap();
     assert_eq!(manifest.link.as_deref(), Some(LINK));
-    assert_eq!(
-        manifest.vv[&hex::encode(g.a.did)],
-        u64::try_from(pushed).unwrap()
-    );
+    let tip = &manifest.vv[&hex::encode(g.a.did)];
+    assert_eq!(tip.seq, u64::try_from(pushed).unwrap());
+    assert_eq!(tip.hash, last_hash);
     let snapshot_key = purpose_key(&g.epoch_key, &g.group, 0, ObjectType::Snapshot.purpose());
     let part = manifest
         .parts

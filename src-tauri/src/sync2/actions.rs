@@ -22,7 +22,7 @@ use super::state::{GroupRecord, StoreKind, forget_group, load_group};
 use crate::db::settings::{get_setting, set_setting};
 use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
-use crate::sync::ledger;
+use crate::sync::{changes, ledger};
 
 const RECOVERY_SAVED: &str = "sync2_recovery_saved";
 const NAME_LIMIT: usize = 64;
@@ -224,7 +224,28 @@ pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
 
 /// Stops syncing on this device. The group keeps it as a member until another device removes it.
 pub async fn forget(app: &AppHandle) -> Result<()> {
-    let pool = app.state::<SqlitePool>().inner();
+    leave(app.state::<SqlitePool>().inner()).await
+}
+
+/// Clears history, subscriptions and playlists. When this profile syncs, the device first leaves
+/// its group and afterwards drops the deletions it recorded, so a reset never reaches the other
+/// devices; linking again brings their data back.
+pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
+    if syncs {
+        leave(pool).await?;
+    }
+    crate::db::watch_history::clear_watch_history(pool).await?;
+    for key in ["subscriptions", "user_playlists"] {
+        set_setting(pool, key, "[]").await?;
+    }
+    if syncs {
+        changes::clear_all(pool).await?;
+    }
+    Ok(())
+}
+
+/// [`forget`] on a database, for a reset that must not reach the other devices.
+pub async fn leave(pool: &SqlitePool) -> Result<()> {
     forget_group(pool).await?;
     set_recovery_saved(pool, true).await
 }

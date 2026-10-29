@@ -510,3 +510,32 @@ async fn android_shaped_records_apply() {
     let back: Vec<Playlist> = records(&export_one(&desk, Collection::Playlists).await);
     assert_eq!(back[0].sync_id, "sync_3f2a");
 }
+
+#[tokio::test]
+async fn an_older_peer_row_leaves_this_device_s_own_tombstone_its_own() {
+    let desk = memory_pool().await;
+    add_watch(&desk, "v1", "2025-01-01T00:00:00+00:00").await;
+    delete_watch(&desk, "v1").await;
+    let old = WatchHistoryRecord {
+        video_id: "v1".to_string(),
+        title: "title-v1".to_string(),
+        watched_at_ms: 1_735_689_600_000,
+        hlc: Hlc::new(1_735_689_600_000, 0, PEER),
+        ..Default::default()
+    };
+    apply_payload(
+        &desk,
+        DESK,
+        PEER,
+        &[stage(Collection::WatchHistory, &[old], "w1")],
+    )
+    .await
+    .unwrap();
+    let from_peer: bool = sqlx::query_scalar(
+        "SELECT from_peer FROM sync_changes WHERE collection = 'watch_history' AND item_key = 'v1'",
+    )
+    .fetch_one(&desk)
+    .await
+    .unwrap();
+    assert!(!from_peer, "the deletion was made here, not received");
+}

@@ -9,7 +9,7 @@ use crate::sync2::engine::EngineError;
 use crate::sync2::link_task::{self, LinkPhase};
 use crate::sync2::service;
 
-fn err(e: &EngineError) -> ErrorResponse {
+pub(crate) fn err(e: &EngineError) -> ErrorResponse {
     ErrorResponse {
         message: e.to_string(),
         kind: e.kind().to_owned(),

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::SqlitePool;
 
-use crate::sync::apply::{ApplyReport, apply_payload};
+use crate::sync::apply::{ApplyReport, apply_stream_payload};
 use crate::sync::canonical::{Collection, to_canonical_json};
 use crate::sync::codec::sha256_hex;
 use crate::sync::error::SyncError;
@@ -245,7 +245,7 @@ pub async fn apply_batches(
             ndjson,
         });
     }
-    let report = apply_payload(pool, our_device_id, sender, &staged).await?;
+    let report = apply_stream_payload(pool, our_device_id, sender, &staged).await?;
     remember(pool, &known, now_ms).await?;
     Ok(report)
 }

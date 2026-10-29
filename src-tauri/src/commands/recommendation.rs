@@ -5,13 +5,16 @@ use std::time::Duration;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager, State};
 
+use crate::commands::linked::err as linked_err;
 use crate::errors::ErrorResponse;
 use crate::flow_neuro::bootstrap::ImportedVideo;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
+use crate::profiles::ActiveProfile;
 use crate::services::blocked_channel_names::{self, BlockedChannelNames};
 use crate::services::recommendation_service::RecommendationService;
+use crate::sync2::actions::leave;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -427,10 +430,17 @@ pub async fn import_brain(
         .map_err(ErrorResponse::from)
 }
 
+/// In the profile that syncs, this device leaves its sync group first, so the reset brain never
+/// reaches the other devices.
 #[tauri::command]
 pub async fn reset_brain(
     recommendation_service: State<'_, RecommendationService>,
+    pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
+    if profile.is_default {
+        leave(&pool).await.map_err(|e| linked_err(&e))?;
+    }
     recommendation_service
         .reset_brain()
         .await

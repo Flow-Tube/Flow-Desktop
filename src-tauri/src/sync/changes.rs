@@ -91,6 +91,33 @@ pub async fn record_peer_tombstone(
     .await
 }
 
+/// Drops every recorded edit and deletion, after a reset that must not reach other devices.
+pub async fn clear_all(pool: &sqlx::SqlitePool) -> Result<(), SyncError> {
+    sqlx::query("DELETE FROM sync_changes")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Whether this device recorded deleting `key` itself, at `at_ms`.
+pub async fn is_own_deletion(
+    conn: &mut SqliteConnection,
+    collection: &str,
+    key: &str,
+    at_ms: u64,
+) -> Result<bool, SyncError> {
+    let own: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM sync_changes
+         WHERE collection = ? AND item_key = ? AND deleted = 1 AND from_peer = 0 AND changed_at_ms = ?",
+    )
+    .bind(collection)
+    .bind(key)
+    .bind(i64::try_from(at_ms).unwrap_or(i64::MAX))
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(own.is_some())
+}
+
 /// Move a playlist's history, its tracks' included, to the sync id it adopted from a peer.
 pub async fn rename_playlist(
     conn: &mut SqliteConnection,

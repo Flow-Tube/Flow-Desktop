@@ -73,6 +73,15 @@ export async function clearWatchHistory(): Promise<void> {
   return invokeBackend<void>("clear_watch_history");
 }
 
+/** Clears history, subscriptions and saved playlists; a linked device first leaves its group. */
+export async function resetAppData(): Promise<void> {
+  if (!(await isTauriEnv())) {
+    profileStorage.removeItem("mock_watch_history");
+    return;
+  }
+  return invokeBackend<void>("reset_app_data");
+}
+
 export async function getSetting(key: string): Promise<string | null> {
   if (!(await isTauriEnv())) {
     console.warn(`Tauri not detected. Reading setting from local storage: ${key}`);

@@ -43,7 +43,7 @@ use commands::backup::{
 };
 use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_watch_record,
-    get_music_history, get_setting, get_watch_history, set_setting,
+    get_music_history, get_setting, get_watch_history, reset_app_data, set_setting,
 };
 use commands::diagnostics::{
     clear_logs, get_graphics_mode, log_frontend_event, logs_dir_path, read_logs,
@@ -613,6 +613,7 @@ pub fn run() {
             add_watch_records_bulk,
             delete_watch_record,
             clear_watch_history,
+            reset_app_data,
             get_setting,
             set_setting,
             profiles_list,

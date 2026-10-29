@@ -6,7 +6,7 @@ import { SettingItem } from '../SettingItem';
 import { Select } from '../../ui/Select';
 import { Button } from '../../ui/Button';
 import { usePreference } from '../../../lib/usePreference';
-import { getSetting, setSetting, clearWatchHistory, getWatchHistory } from '../../../lib/api/db';
+import { getSetting, resetAppData, getWatchHistory } from '../../../lib/api/db';
 import { buildSettingsBackupJson, type SettingsBackupScope } from '../../../lib/settings/backup';
 import { confirmAction } from '../../../lib/dialogs';
 import { saveJsonFile } from '../../../lib/saveJsonFile';
@@ -38,9 +38,7 @@ export function DataTab() {
     if (!(await confirmAction(getString('settings_clear_confirm'), getString('settings_clear_cache')))) return;
     setClearing(true);
     try {
-      await clearWatchHistory();
-      await setSetting('subscriptions', '[]');
-      await setSetting('user_playlists', '[]');
+      await resetAppData();
       setHistoryCount(0);
       setSubCount(0);
       showToast({ message: getString('settings_clear_success'), variant: 'success' });

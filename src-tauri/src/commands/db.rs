@@ -1,11 +1,13 @@
 use crate::api::innertube::core::{locale, remote_decoder};
 use crate::api::innertube::extractors::audio_preference;
+use crate::commands::linked::err as linked_err;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
 use crate::errors::ErrorResponse;
 use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
 use crate::sync::local_edits;
+use crate::sync2::actions::reset_local_data;
 use sqlx::SqlitePool;
 use tauri::State;
 
@@ -76,6 +78,16 @@ pub async fn clear_watch_history(
     watch_history::clear_watch_history(&pool)
         .await
         .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn reset_app_data(
+    pool: State<'_, SqlitePool>,
+    profile: State<'_, ActiveProfile>,
+) -> Result<(), ErrorResponse> {
+    reset_local_data(&pool, profile.is_default)
+        .await
+        .map_err(|e| linked_err(&e))
 }
 
 #[tauri::command]

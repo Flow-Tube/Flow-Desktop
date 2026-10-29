@@ -379,7 +379,7 @@ impl<'a, S: Store> Session<'a, S> {
                         Some((position, content)) => {
                             let seq = position.seq;
                             pulled.positions.insert(did.clone(), position);
-                            if !matches!(content, Content::Ack) {
+                            if !matches!(content, Content::Ack(_)) {
                                 pulled.consumed += 1;
                             }
                             match content {

@@ -75,6 +75,7 @@ setting	sync_music_merged	DEFAULT_ONLY	sync	MusicBrain CRDT state
 setting	sync_neuro_baseline	DEFAULT_ONLY	sync	FlowNeuro CRDT baseline
 setting	sync_music_baseline	DEFAULT_ONLY	sync	MusicBrain CRDT baseline
 setting	sync_last_backup	DEFAULT_ONLY	sync	Pre-apply snapshot of the last sync
+setting	sync_clock_hwm	DEFAULT_ONLY	sync	Newest stamp applied; local edits are stamped after it
 setting	sync_device_id	DEAD	-	Unused constant; the id lives in sync_identity
 setting	remote_signature_fallback	DEVICE	-	Network
 setting	content_language	DEVICE	-	Language and region

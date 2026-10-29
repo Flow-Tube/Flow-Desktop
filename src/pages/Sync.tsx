@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowDownToLine,
@@ -17,7 +16,10 @@ import {
   X,
 } from "lucide-react";
 
+import { CameraScanner } from "../components/sync/CameraScanner";
+import { LinkedDevicesSection } from "../components/sync/linked/LinkedDevicesSection";
 import { CopyConnectionData, NotConnectingHint } from "../components/sync/PairingHelp";
+import { IconChip, Spinner, VerificationCode } from "../components/sync/SyncParts";
 import { Button } from "../components/ui/Button";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
 import { useSyncStore } from "../store/useSyncStore";
@@ -71,37 +73,6 @@ const SCREEN_MOTION = {
 // Shared small pieces
 // --------------------------------------------------------------------------------------------
 
-function Spinner({ className = "" }: { className?: string }) {
-  return <Loader2 className={`animate-spin ${className}`} />;
-}
-
-/** Sleek neutral icon chip used in the section headers (clinical, never colored). */
-function IconChip({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-chrome-neutral-200">
-      {children}
-    </div>
-  );
-}
-
-/** The 6-digit verification code, rendered as massive spaced monospace digits. */
-function VerificationCode({ sas, size = "lg" }: { sas: string; size?: "lg" | "md" }) {
-  return (
-    <div className="flex flex-col items-center">
-      <span className="mb-3 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
-        {getString("sync_verification_code")}
-      </span>
-      <span
-        className={`font-mono font-bold text-chrome-neutral-100 tracking-[0.3em] ${
-          size === "lg" ? "text-5xl" : "text-3xl"
-        }`}
-      >
-        {sas}
-      </span>
-    </div>
-  );
-}
-
 function StatsTable({ stats }: { stats: StatInfo[] }) {
   const meaningful = stats.filter((s) => s.added + s.updated + s.tombstoned > 0 || s.skipped > 0);
   if (meaningful.length === 0) {
@@ -122,56 +93,6 @@ function StatsTable({ stats }: { stats: StatInfo[] }) {
           </span>
         </div>
       ))}
-    </div>
-  );
-}
-
-// --------------------------------------------------------------------------------------------
-// Camera scanner
-// --------------------------------------------------------------------------------------------
-
-function CameraScanner({ onResult, onClose }: { onResult: (text: string) => void; onClose: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const controlsRef = useRef<IScannerControls | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const reader = new BrowserQRCodeReader();
-    (async () => {
-      try {
-        const controls = await reader.decodeFromVideoDevice(undefined, videoRef.current ?? undefined, (result) => {
-          if (result && !cancelled) {
-            controlsRef.current?.stop();
-            onResult(result.getText());
-          }
-        });
-        if (cancelled) controls.stop();
-        else controlsRef.current = controls;
-      } catch {
-        if (!cancelled) setError(getString("sync_camera_error"));
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controlsRef.current?.stop();
-    };
-  }, [onResult]);
-
-  return (
-    <div className="mt-6 space-y-3">
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-chrome-black">
-        <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
-        <div className="pointer-events-none absolute inset-6 rounded-lg border-2 border-chrome-white/70" />
-      </div>
-      {error && <p className="text-sm text-chrome-red-400">{error}</p>}
-      <button
-        type="button"
-        onClick={onClose}
-        className="flex w-full items-center justify-center gap-2 rounded-full bg-surface-container-high py-2.5 text-sm font-medium text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
-      >
-        <X className="h-4 w-4" /> {getString("sync_stop_camera")}
-      </button>
     </div>
   );
 }
@@ -709,6 +630,8 @@ export default function Sync() {
           {body}
         </motion.div>
       </AnimatePresence>
+
+      {screenKey === "setup" && <LinkedDevicesSection />}
     </div>
   );
 }

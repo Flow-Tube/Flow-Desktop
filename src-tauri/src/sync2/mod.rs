@@ -3,6 +3,7 @@
 
 #![allow(clippy::must_use_candidate)]
 
+pub mod actions;
 pub mod batches;
 pub mod blob;
 pub mod curve;
@@ -15,6 +16,7 @@ pub mod error;
 pub mod kdf;
 pub mod keys;
 pub mod lan;
+pub mod link_task;
 pub mod linking;
 pub mod mailbox;
 pub mod membership;

@@ -5,64 +5,92 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
+use serde::Serialize;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
+use super::actions::{local, open_session};
 use super::batches::{IncomingBatch, apply_batches};
-use super::device::{device_keys, keychain};
-use super::engine::{Result, Session, now_ms};
-use super::server::ServerStore;
+use super::engine::{Result, now_ms};
 use super::state::load_group;
 use crate::sync::canonical::Collection;
 use crate::sync::export::export_collections;
-use crate::sync::ledger;
 use crate::sync::runtime::{
     enrich_outgoing_albums, flush_and_hold_brains, flush_brains, reload_brains,
 };
 use crate::sync::session::EVENT_REFRESH;
 
+pub const EVENT_SYNCED: &str = "sync2://synced";
 const FIRST_RUN_DELAY: Duration = Duration::from_secs(15);
 const INTERVAL: Duration = Duration::from_mins(5);
 
+/// When the last run ended, and the kind of error it ended with, if any.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastSync {
+    pub at_ms: i64,
+    pub error: Option<String>,
+}
+
 /// Keeps a timer run and a run the user asked for from overlapping.
 #[derive(Default)]
-pub struct SyncLock(Mutex<()>);
+pub struct BackgroundSync {
+    running: Mutex<()>,
+    last: std::sync::Mutex<Option<LastSync>>,
+}
+
+pub fn last_sync(app: &AppHandle) -> Option<LastSync> {
+    app.state::<BackgroundSync>()
+        .last
+        .lock()
+        .ok()
+        .and_then(|last| last.clone())
+}
 
 /// Syncs once when this device is in a group, and returns the collections that changed here.
 pub async fn sync_now(app: &AppHandle) -> Result<Vec<String>> {
-    let lock = app.state::<SyncLock>();
-    let _running = lock.0.lock().await;
+    let state = app.state::<BackgroundSync>();
+    let _running = state.running.lock().await;
     let pool = app.state::<SqlitePool>().inner().clone();
-    let Some(record) = load_group(&pool).await? else {
+    if load_group(&pool).await?.is_none() {
+        return Ok(Vec::new());
+    }
+    let result = run(app).await;
+    let last = LastSync {
+        at_ms: now_ms(),
+        error: result.as_ref().err().map(|e| e.kind().to_owned()),
+    };
+    if let Ok(mut slot) = state.last.lock() {
+        *slot = Some(last.clone());
+    }
+    let _ = app.emit(EVENT_SYNCED, last);
+    result
+}
+
+async fn run(app: &AppHandle) -> Result<Vec<String>> {
+    let local = local(app).await?;
+    let Some(record) = load_group(&local.pool).await? else {
         return Ok(Vec::new());
     };
-    let device = device_keys(&keychain())?;
-    let app_id = ledger::get_or_create_device_id(&pool).await?;
-    let store = ServerStore::connect(
-        &record.store_url,
-        device.clone(),
-        record.instance.clone(),
-        Some(record.group_id.clone()),
-    )
-    .await?;
-    let mut session = Session::open(&pool, store, &device).await?;
+    let pool = &local.pool;
+    let mut session = open_session(pool, &record, &local.device).await?;
 
     flush_brains(app).await;
-    let mut exported = export_collections(&pool, &app_id, &Collection::ALL).await?;
+    let mut exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
     enrich_outgoing_albums(app, &mut exported).await;
-    session.push(&pool, exported).await?;
+    session.push(pool, exported).await?;
 
-    let pulled = session.pull(&pool).await?;
+    let pulled = session.pull(pool).await?;
     let changed = if pulled.batches.is_empty() {
         Vec::new()
     } else {
-        apply(app, &pool, &app_id, &pulled.batches).await?
+        apply(app, pool, &local.meta.app, &pulled.batches).await?
     };
     if !changed.is_empty() {
         let _ = app.emit(EVENT_REFRESH, &changed);
     }
-    session.finish(&pool, pulled).await?;
+    session.finish(pool, pulled).await?;
     Ok(changed)
 }
 
@@ -90,6 +118,18 @@ async fn apply(
     Ok(changed.into_iter().collect())
 }
 
+/// Syncs once without waiting, for example right after this device joined a group.
+pub fn sync_soon(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { log_failure(sync_now(&app).await) });
+}
+
+fn log_failure<T>(result: Result<T>) {
+    if let Err(error) = result {
+        tracing::warn!(target: "flow::sync2", kind = error.kind(), "sync failed");
+    }
+}
+
 /// Runs [`sync_now`] shortly after start and then every few minutes for the app's lifetime.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
@@ -97,9 +137,7 @@ pub fn spawn(app: AppHandle) {
         let mut timer = tokio::time::interval(INTERVAL);
         loop {
             timer.tick().await;
-            if let Err(error) = sync_now(&app).await {
-                tracing::warn!(target: "flow::sync2", %error, "background sync failed");
-            }
+            log_failure(sync_now(&app).await);
         }
     });
 }

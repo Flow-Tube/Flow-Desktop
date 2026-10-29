@@ -38,6 +38,8 @@ pub enum EngineError {
     Protocol(#[from] Error),
     #[error(transparent)]
     Keychain(#[from] crate::security::keychain::CredentialError),
+    #[error(transparent)]
+    Settings(#[from] crate::errors::AppError),
     #[error("this device is not in a sync group")]
     NotLinked,
     #[error("this device was removed from its sync group")]
@@ -52,6 +54,30 @@ pub enum EngineError {
     WrongWords,
     #[error("this recovery key was already used or replaced")]
     RecoveryUsed,
+    #[error("this device is already in a sync group")]
+    AlreadyLinked,
+}
+
+impl EngineError {
+    /// A stable name the interface turns into a translated message.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Store(StoreError::Insecure) => "linkedInsecure",
+            Self::Store(StoreError::Network(_)) => "linkedUnreachable",
+            Self::Store(StoreError::Refused { .. }) => "linkedRefused",
+            Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
+            Self::Store(_) | Self::Protocol(_) | Self::Unexpected => "linkedProtocol",
+            Self::Local(error) => error.kind(),
+            Self::Keychain(_) | Self::Settings(_) => "linkedLocal",
+            Self::NotLinked => "linkedNotLinked",
+            Self::Removed => "linkedRemoved",
+            Self::Declined => "linkedDeclined",
+            Self::TimedOut => "linkedTimedOut",
+            Self::WrongWords => "linkedWrongWords",
+            Self::RecoveryUsed => "linkedRecoveryUsed",
+            Self::AlreadyLinked => "linkedAlreadyLinked",
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

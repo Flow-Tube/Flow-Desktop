@@ -138,3 +138,18 @@ pub async fn save_streams(
     tx.commit().await?;
     Ok(())
 }
+
+/// Forgets the group on this device, for a device that was removed from it.
+pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
+    let mut tx = pool.begin().await?;
+    for statement in [
+        "DELETE FROM sync2_group",
+        "DELETE FROM sync2_roster",
+        "DELETE FROM sync2_streams",
+        "DELETE FROM sync2_sent",
+    ] {
+        sqlx::query(statement).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}

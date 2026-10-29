@@ -1,0 +1,104 @@
+//! Tauri commands for Linked devices (FLOW-SYNC/2). Thin wrappers over [`crate::sync2::actions`];
+//! pairing progress arrives as `sync2://link` events and finished syncs as `sync2://synced`.
+
+use tauri::AppHandle;
+
+use crate::errors::ErrorResponse;
+use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
+use crate::sync2::engine::EngineError;
+use crate::sync2::link_task::{self, LinkPhase};
+use crate::sync2::service;
+
+fn err(e: &EngineError) -> ErrorResponse {
+    ErrorResponse {
+        message: e.to_string(),
+        kind: e.kind().to_owned(),
+        starts_at_ms: None,
+    }
+}
+
+#[tauri::command]
+pub async fn linked_status(app: AppHandle) -> Result<LinkedStatus, ErrorResponse> {
+    actions::status(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_devices(app: AppHandle) -> Result<Vec<LinkedDevice>, ErrorResponse> {
+    actions::devices(&app).await.map_err(|e| err(&e))
+}
+
+/// Returns the recovery words, shown once.
+#[tauri::command]
+pub async fn linked_create(
+    app: AppHandle,
+    url: String,
+    admin_token: String,
+) -> Result<String, ErrorResponse> {
+    actions::create(&app, &url, &admin_token)
+        .await
+        .map_err(|e| err(&e))
+}
+
+/// Returns the new recovery words, shown once.
+#[tauri::command]
+pub async fn linked_restore(
+    app: AppHandle,
+    url: String,
+    words: String,
+) -> Result<String, ErrorResponse> {
+    actions::restore(&app, &url, &words)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_recovery_saved(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::recovery_saved(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_rename(app: AppHandle, id: String, name: String) -> Result<(), ErrorResponse> {
+    actions::rename(&app, &id, &name).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_remove(app: AppHandle, id: String) -> Result<(), ErrorResponse> {
+    actions::remove(&app, &id).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_forget(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::forget(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_sync_now(app: AppHandle) -> Result<Vec<String>, ErrorResponse> {
+    service::sync_now(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_link_phase(app: AppHandle) -> LinkPhase {
+    link_task::phase(&app)
+}
+
+#[tauri::command]
+pub async fn linked_add_device(app: AppHandle) -> Result<(), ErrorResponse> {
+    link_task::start_adding(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_join(app: AppHandle, code: String) -> Result<(), ErrorResponse> {
+    link_task::start_joining(&app, &code)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_answer(app: AppHandle, accept: bool) {
+    link_task::answer(&app, accept);
+}
+
+#[tauri::command]
+pub async fn linked_cancel(app: AppHandle) {
+    link_task::cancel(&app);
+}

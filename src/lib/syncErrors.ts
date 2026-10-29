@@ -15,6 +15,20 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   syncCorrupted: "sync_error_corrupted",
   syncApplyFailed: "sync_error_apply_failed",
   syncProtocol: "sync_error_protocol",
+  // Mirrors `EngineError::kind` in src-tauri/src/sync2/engine.rs.
+  linkedInsecure: "linked_error_insecure",
+  linkedUnreachable: "linked_error_unreachable",
+  linkedRefused: "linked_error_refused",
+  linkedInstanceChanged: "linked_error_instance_changed",
+  linkedProtocol: "linked_error_protocol",
+  linkedLocal: "linked_error_local",
+  linkedNotLinked: "linked_error_not_linked",
+  linkedRemoved: "linked_error_removed",
+  linkedDeclined: "linked_error_declined",
+  linkedTimedOut: "linked_error_timed_out",
+  linkedWrongWords: "linked_error_wrong_words",
+  linkedRecoveryUsed: "linked_error_recovery_used",
+  linkedAlreadyLinked: "linked_error_already_linked",
 };
 
 /** The actionable, translated message for a sync failure, falling back to the backend's text. */

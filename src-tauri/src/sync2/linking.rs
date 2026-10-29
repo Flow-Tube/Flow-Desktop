@@ -310,6 +310,15 @@ where
     }
 }
 
+/// Reads a code shown by a member of a group on a Flow server; anything else is refused.
+pub fn read_offer(qr: &str) -> Result<QrCode> {
+    let code: QrCode = serde_json::from_str(qr).map_err(|_| EngineError::Unexpected)?;
+    if code.v != 2 || code.r != "m" || code.s.k != "server" {
+        return Err(EngineError::Unexpected);
+    }
+    Ok(code)
+}
+
 /// The new device's side: answers a member's code, shows the six digits through `confirm`, and
 /// once accepted saves the group with the roster verified up to the head the member named.
 pub async fn join<S, F>(
@@ -324,10 +333,7 @@ where
     S: Store + Mailbox,
     F: Future<Output = bool>,
 {
-    let code: QrCode = serde_json::from_str(qr).map_err(|_| EngineError::Unexpected)?;
-    if code.v != 2 || code.r != "m" || code.s.k != "server" {
-        return Err(EngineError::Unexpected);
-    }
+    let code = read_offer(qr)?;
     let token: [u8; 16] = URL_SAFE_NO_PAD
         .decode(&code.t)
         .ok()

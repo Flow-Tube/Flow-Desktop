@@ -60,6 +60,11 @@ use commands::downloads::{
 };
 use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
+use commands::linked::{
+    linked_add_device, linked_answer, linked_cancel, linked_create, linked_devices, linked_forget,
+    linked_join, linked_link_phase, linked_recovery_saved, linked_remove, linked_rename,
+    linked_restore, linked_status, linked_sync_now,
+};
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
     put_cached_lyrics, save_download_lyrics,
@@ -485,7 +490,8 @@ pub fn run() {
                     default_name: active_profile.default_name.clone(),
                 },
             )));
-            app.manage(sync2::service::SyncLock::default());
+            app.manage(sync2::service::BackgroundSync::default());
+            app.manage(sync2::link_task::LinkTask::default());
             if active_profile.is_default {
                 sync2::service::spawn(app.handle().clone());
             }
@@ -786,6 +792,20 @@ pub fn run() {
             get_music_resume_position,
             // --- Flow Local Sync (P2P LAN) ---
             sync_device_info,
+            linked_status,
+            linked_devices,
+            linked_create,
+            linked_restore,
+            linked_recovery_saved,
+            linked_rename,
+            linked_remove,
+            linked_forget,
+            linked_sync_now,
+            linked_link_phase,
+            linked_add_device,
+            linked_join,
+            linked_answer,
+            linked_cancel,
             sync_status,
             sync_start_host,
             sync_host_receive,

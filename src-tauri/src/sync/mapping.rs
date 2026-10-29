@@ -74,6 +74,7 @@ pub fn parse_subscription_groups_blob(raw: &str, hlc: &Hlc) -> Vec<SubscriptionG
                 channel_ids,
                 deleted: false,
                 hlc: hlc.clone(),
+                members: Vec::new(),
                 name: e.name,
                 sort_order: e.sort_order,
             }

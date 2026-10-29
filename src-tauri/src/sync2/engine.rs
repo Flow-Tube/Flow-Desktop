@@ -60,6 +60,8 @@ pub enum EngineError {
     AlreadyLinked,
     #[error("the other device couldn't be reached on this network")]
     LanUnreachable,
+    #[error("the code names another WebDAV folder")]
+    OtherFolder,
 }
 
 impl EngineError {
@@ -85,6 +87,7 @@ impl EngineError {
             Self::RecoveryUsed => "linkedRecoveryUsed",
             Self::AlreadyLinked => "linkedAlreadyLinked",
             Self::LanUnreachable => "linkedLanUnreachable",
+            Self::OtherFolder => "linkedOtherFolder",
         }
     }
 }

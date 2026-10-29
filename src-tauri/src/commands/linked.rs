@@ -149,8 +149,12 @@ pub async fn linked_show_code(app: AppHandle) -> Result<(), ErrorResponse> {
 }
 
 #[tauri::command]
-pub async fn linked_enter_code(app: AppHandle, code: String) -> Result<(), ErrorResponse> {
-    link_task::start_with_code(&app, &code)
+pub async fn linked_enter_code(
+    app: AppHandle,
+    code: String,
+    folder: Option<link_task::FolderAccess>,
+) -> Result<(), ErrorResponse> {
+    link_task::start_with_code(&app, &code, folder)
         .await
         .map_err(|e| err(&e))
 }

@@ -467,8 +467,8 @@ pub async fn finish_lan_join<P: Pipe>(
     say_done(channel).await
 }
 
-/// The new device's side, on a member's code: tries the LAN addresses it lists, then the store's
-/// mailbox, and saves the group once accepted.
+/// The new device's side, on a member's code: tries the LAN addresses it lists, then the mailbox
+/// of the store the code names, and saves the group once accepted.
 pub async fn join<S, F>(
     pool: &SqlitePool,
     store: &S,
@@ -482,9 +482,7 @@ where
     F: Future<Output = bool>,
 {
     let Code::Member {
-        store_url: Some(store_url),
-        lan,
-        ..
+        store: named, lan, ..
     } = code
     else {
         return Err(EngineError::Unexpected);
@@ -497,7 +495,12 @@ where
     };
     let (channel, sas) = Channel::scanner(pipe, code).await?;
     let welcomed = new_side(channel, sas, device, meta, confirm).await?;
-    if !matches!(&welcomed.welcome.store, WelcomeStore::Server { u, .. } if u == store_url) {
+    let same = match &welcomed.welcome.store {
+        WelcomeStore::Server { u, .. } => named.k == "server" && named.u.as_ref() == Some(u),
+        WelcomeStore::WebDav { u, .. } => named.k == "webdav" && named.u.as_ref() == Some(u),
+        WelcomeStore::Lan => false,
+    };
+    if !same {
         return Err(EngineError::Unexpected);
     }
     finish_join(pool, store, welcomed).await
@@ -515,14 +518,12 @@ pub async fn join_on_lan<F>(
 where
     F: Future<Output = bool>,
 {
-    let Code::Member {
-        store_url: None,
-        lan,
-        ..
-    } = code
-    else {
+    let Code::Member { store, lan, .. } = code else {
         return Err(EngineError::Unexpected);
     };
+    if store.k == "server" {
+        return Err(EngineError::Unexpected);
+    }
     let pipe = dial(lan).await.ok_or(EngineError::LanUnreachable)?;
     let (channel, sas) = Channel::scanner(pipe, code).await?;
     new_side(channel, sas, device, meta, confirm).await

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyRound, QrCode } from "lucide-react";
+import { FolderKey, KeyRound, QrCode } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
@@ -8,6 +8,7 @@ import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
 import { CreateGroup } from "./CreateGroup";
+import { type WebdavLogin, WebdavLoginFields } from "./WebdavLoginFields";
 
 /** Joins a server group with its address and admin token instead of a code. */
 function AskToJoin() {
@@ -29,20 +30,40 @@ function AskToJoin() {
   );
 }
 
+/** Joins a WebDAV group from another network: the folder's login lets pairing use its mailbox. */
+function ThroughFolder() {
+  const [url, setUrl] = useState("");
+  const [login, setLogin] = useState<WebdavLogin>({ user: "", password: "" });
+  const ready = url.trim() && login.user.trim() && login.password;
+  return (
+    <>
+      <p className="text-sm text-chrome-neutral-400">{getString("linked_join_folder_hint")}</p>
+      <Field label={getString("linked_webdav_url")}>
+        <TextInput value={url} onChange={setUrl} placeholder={getString("linked_webdav_url_placeholder")} spellCheck={false} />
+      </Field>
+      <WebdavLoginFields login={login} onChange={setLogin} />
+      {ready && <CodeEntry folder={{ url, ...login }} />}
+    </>
+  );
+}
+
 function JoinGroup() {
   const { showCode, busy } = useLinkedDevicesStore();
-  const [withToken, setWithToken] = useState(false);
+  const [way, setWay] = useState<"code" | "token" | "folder">("code");
   return (
     <Card title={getString("linked_join_title")} subtitle={getString("linked_join_subtitle")} className="col-span-12 lg:col-span-6">
-      {withToken ? (
-        <AskToJoin />
-      ) : (
+      {way === "token" && <AskToJoin />}
+      {way === "folder" && <ThroughFolder />}
+      {way === "code" && (
         <CodeEntry>
           <Button variant="tonal" disabled={busy} onClick={() => void showCode()}>
             <QrCode className="h-4 w-4" /> {getString("linked_show_code")}
           </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => setWithToken(true)}>
+          <Button variant="ghost" disabled={busy} onClick={() => setWay("token")}>
             <KeyRound className="h-4 w-4" /> {getString("linked_use_admin_token")}
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setWay("folder")}>
+            <FolderKey className="h-4 w-4" /> {getString("linked_use_folder")}
           </Button>
         </CodeEntry>
       )}

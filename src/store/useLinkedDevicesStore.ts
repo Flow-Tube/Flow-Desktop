@@ -25,6 +25,7 @@ import {
   showCode,
   syncNow,
   updateLogin,
+  type FolderAccess,
   type JoinRequest,
   type LinkPhase,
   type LinkedDevice,
@@ -60,7 +61,7 @@ interface LinkedState {
   createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
   updateLogin: (user: string, password: string) => Promise<void>;
   restore: (url: string, words: string) => Promise<void>;
-  enterCode: (code: string) => Promise<void>;
+  enterCode: (code: string, folder?: FolderAccess) => Promise<void>;
   askToJoin: (url: string, adminToken: string) => Promise<void>;
   loadJoinRequests: () => Promise<void>;
   acceptJoin: (id: string) => Promise<void>;
@@ -167,7 +168,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await get().refresh();
       }),
 
-    enterCode: (code) => run(() => enterCode(code)),
+    enterCode: (code, folder) => run(() => enterCode(code, folder)),
     askToJoin: (url, adminToken) => run(() => askToJoin(url, adminToken)),
     // Polled while the page is open, so a failure (an older server, no network) stays quiet.
     loadJoinRequests: async () => {

@@ -4,7 +4,7 @@
 use std::future::Future;
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
@@ -285,34 +285,59 @@ pub async fn start_showing(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
+/// A `WebDAV` folder and its login, entered before scanning so pairing can go through the
+/// folder's mailbox when no LAN address answers (spec/protocol.md, Pairing).
+#[derive(Debug, Deserialize)]
+pub struct FolderAccess {
+    pub url: String,
+    #[serde(flatten)]
+    pub login: WebDavLogin,
+}
+
+fn same_folder(a: &str, b: &str) -> bool {
+    a.trim().trim_end_matches('/') == b.trim().trim_end_matches('/')
+}
+
 /// Answers a code from another device: a member's code joins its group, and a new device's code
 /// adds that device to this one's group.
-pub async fn start_with_code(app: &AppHandle, text: &str) -> Result<()> {
+pub async fn start_with_code(
+    app: &AppHandle,
+    text: &str,
+    folder: Option<FolderAccess>,
+) -> Result<()> {
     let code = read_code(text)?;
     let local = local(app).await?;
     let task = app.clone();
     match &code {
-        Code::Member { store_url, .. } => {
+        Code::Member { store, .. } => {
             ensure_unlinked(&local.pool).await?;
-            let store_url = store_url.clone();
+            let (kind, url) = (store.k.clone(), store.u.clone().unwrap_or_default());
+            if let Some(folder) = &folder
+                && kind == "webdav"
+                && !same_folder(&folder.url, &url)
+            {
+                return Err(EngineError::OtherFolder);
+            }
             start(app, async move {
                 let confirm = |sas| confirm(task.clone(), sas);
-                let Some(store_url) = store_url else {
-                    let welcomed =
-                        join_on_lan(&code, &local.device, local.meta.clone(), confirm).await?;
-                    return finish_welcomed(&local, welcomed).await;
-                };
-                let store =
-                    ServerStore::connect(&store_url, local.device.clone(), None, None).await?;
-                join(
-                    &local.pool,
-                    &store,
-                    &code,
-                    &local.device,
-                    local.meta,
-                    confirm,
-                )
-                .await
+                let (pool, device, meta) = (&local.pool, &local.device, local.meta.clone());
+                match (kind.as_str(), folder) {
+                    ("server", _) => {
+                        let store = ServerStore::connect(&url, device.clone(), None, None).await?;
+                        join(pool, &store, &code, device, meta, confirm).await
+                    }
+                    ("webdav", Some(folder)) => {
+                        let did = hex::encode(device.did);
+                        let store = WebDavStore::connect(&url, folder.login.clone(), did).await?;
+                        store.probe().await?;
+                        save_login(&keychain(), &folder.login)?;
+                        join(pool, &store, &code, device, meta, confirm).await
+                    }
+                    _ => {
+                        let welcomed = join_on_lan(&code, device, meta, confirm).await?;
+                        finish_welcomed(&local, welcomed).await
+                    }
+                }
             });
         }
         Code::New { .. } => {

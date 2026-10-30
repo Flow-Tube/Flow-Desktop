@@ -45,12 +45,24 @@ fn encode(keys: &MemberSecrets) -> Result<String, CredentialError> {
 /// Loads the keys, creating them on first use. A damaged item is an error and is never replaced:
 /// new keys would silently take this device out of its group.
 pub fn device_keys(store: &dyn CredentialStore) -> Result<MemberSecrets, CredentialError> {
-    match store.read(DEVICE_ENTRY)? {
-        Some(value) => decode(&value).ok_or(CredentialError(
-            "The device keys in the keychain are damaged",
-        )),
+    match stored_device_keys(store)? {
+        Some(keys) => Ok(keys),
         None => renew_device_keys(store),
     }
+}
+
+/// The keys in the keychain, without creating any.
+pub fn stored_device_keys(
+    store: &dyn CredentialStore,
+) -> Result<Option<MemberSecrets>, CredentialError> {
+    store
+        .read(DEVICE_ENTRY)?
+        .map(|value| {
+            decode(&value).ok_or(CredentialError(
+                "The device keys in the keychain are damaged",
+            ))
+        })
+        .transpose()
 }
 
 /// Replaces the keys with fresh ones, for a group this device is about to create or join.
@@ -72,9 +84,11 @@ mod tests {
     #[test]
     fn keys_are_created_once_and_read_back() {
         let store = MemoryStore::default();
+        assert!(stored_device_keys(&store).unwrap().is_none());
         let first = device_keys(&store).unwrap();
         let again = device_keys(&store).unwrap();
         assert_eq!(first.did, again.did);
+        assert_eq!(stored_device_keys(&store).unwrap().unwrap().did, first.did);
         assert_eq!(first.sig_seed, again.sig_seed);
         assert_eq!(first.kem_secret, again.kem_secret);
     }

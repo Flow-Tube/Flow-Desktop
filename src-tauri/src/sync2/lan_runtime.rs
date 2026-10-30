@@ -6,18 +6,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{Receiver, ServiceDaemon, ServiceEvent, ServiceInfo};
 use tauri::{AppHandle, Manager};
 use tokio::net::TcpListener;
+use tokio::task::JoinSet;
 
 use super::actions::{Local, local};
+use super::device::{keychain, stored_device_keys};
 use super::engine::{Result, Session, now_ms};
 use super::epoch::{Purpose, purpose_key};
 use super::held::HeldStore;
+use super::keys::MemberSecrets;
 use super::lan::lan_tag;
 use super::lan_link::LiveSink;
 use super::lan_sync::{Met, meet, serve};
-use super::live_hub::{receive, subscribe};
+use super::live_hub::{forget_keys, receive, subscribe};
 use super::sealed::random_bytes;
 use super::service::sync_soon;
 use super::state::{StoreKind, load_group};
@@ -108,13 +111,36 @@ fn live_sink(app: &AppHandle) -> LiveSink {
     })
 }
 
-/// Runs for the app's lifetime in the Default profile.
+/// Runs for the app's lifetime in the Default profile, with the process's one mDNS daemon. A run
+/// ends once this device's keys change for a new group, and starts again at once with them; one
+/// that fails, for example on a locked keychain, starts again a minute later.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = run(&app).await {
-            tracing::warn!(target: "flow::sync2", kind = error.kind(), "LAN sync stopped");
+        let daemon = ServiceDaemon::new().ok();
+        if daemon.is_none() {
+            tracing::warn!(target: "flow::sync2", "mDNS is unavailable; LAN groups meet only when asked");
+        }
+        loop {
+            if let Err(error) = run(&app, daemon.as_ref()).await {
+                tracing::warn!(target: "flow::sync2", kind = error.kind(), "LAN sync stopped");
+                tokio::time::sleep(CHECK_EVERY).await;
+            }
         }
     });
+}
+
+/// Whether the keychain holds other keys than `device`: this device created or joined a group.
+fn renewed(device: &MemberSecrets) -> bool {
+    stored_device_keys(&keychain())
+        .is_ok_and(|keys| keys.is_some_and(|keys| keys.did != device.did))
+}
+
+/// The next service event, `None` once the browse ended, and never without one.
+async fn next_event(events: Option<&Receiver<ServiceEvent>>) -> Option<ServiceEvent> {
+    match events {
+        Some(events) => events.recv_async().await.ok(),
+        None => std::future::pending().await,
+    }
 }
 
 /// Sends every live envelope this device seals to the members it met on the LAN lately, each
@@ -149,9 +175,37 @@ async fn deliver_live(app: AppHandle, local: Local) {
     }
 }
 
-async fn run(app: &AppHandle) -> Result<()> {
+/// Advertises this device's service with `tag`, or withdraws it for `None`, unless `advertised`
+/// (its full name and tag) already says so.
+fn advertise(
+    daemon: &ServiceDaemon,
+    instance: &str,
+    port: u16,
+    advertised: &mut Option<(String, String)>,
+    tag: Option<String>,
+) {
+    if advertised.as_ref().map(|(_, tag)| tag) == tag.as_ref() {
+        return;
+    }
+    if let Some((fullname, _)) = advertised.take() {
+        let _ = daemon.unregister(&fullname);
+    }
+    if let Some(tag) = tag {
+        let properties = [("v", "2"), ("t", tag.as_str())];
+        let host = format!("{instance}.local.");
+        if let Ok(info) = ServiceInfo::new(SERVICE_TYPE, instance, &host, "", port, &properties[..])
+            && daemon.register(info.clone().enable_addr_auto()).is_ok()
+        {
+            *advertised = Some((info.get_fullname().to_owned(), tag));
+        }
+    }
+}
+
+async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
     let local = local(app).await?;
-    tokio::spawn(deliver_live(app.clone(), local.clone()));
+    // Dropped with the run, which aborts the tasks holding its keys.
+    let mut tasks = JoinSet::new();
+    tasks.spawn(deliver_live(app.clone(), local.clone()));
     let listener = TcpListener::bind("0.0.0.0:0")
         .await
         .map_err(crate::sync::error::SyncError::from)?;
@@ -160,7 +214,7 @@ async fn run(app: &AppHandle) -> Result<()> {
         .map_err(crate::sync::error::SyncError::from)?
         .port();
     let answered = app.clone();
-    tokio::spawn(serve(
+    tasks.spawn(serve(
         listener,
         local.pool.clone(),
         local.device.clone(),
@@ -168,36 +222,35 @@ async fn run(app: &AppHandle) -> Result<()> {
         live_sink(app),
     ));
 
-    let Ok(daemon) = ServiceDaemon::new() else {
-        tracing::warn!(target: "flow::sync2", "mDNS is unavailable; LAN groups meet only when asked");
-        return Ok(());
-    };
     let instance = format!("Flow-{}", hex::encode(random_bytes::<2>()));
     let mut advertised: Option<(String, String)> = None;
-    let events = daemon.browse(SERVICE_TYPE).ok();
+    let browse = || daemon.and_then(|daemon| daemon.browse(SERVICE_TYPE).ok());
+    let mut events = browse();
     let mut found: BTreeMap<String, Found> = BTreeMap::new();
     let mut timer = tokio::time::interval(CHECK_EVERY);
     loop {
         let event = tokio::select! {
-            _ = timer.tick() => None,
-            event = async { events.as_ref()?.recv_async().await.ok() } => event,
+            _ = timer.tick() => {
+                if renewed(&local.device) {
+                    break;
+                }
+                if events.is_none() {
+                    events = browse();
+                }
+                None
+            }
+            event = next_event(events.as_ref()) => {
+                // Browsing again waits for the next tick, so a browse that keeps ending can't spin.
+                if event.is_none() {
+                    events = None;
+                }
+                event
+            }
         };
         let tags = group_tags(&local).await.unwrap_or(None);
-        let current = tags.as_ref().map(|t| t[1].clone());
-        if advertised.as_ref().map(|(_, tag)| tag) != current.as_ref() {
-            if let Some((fullname, _)) = advertised.take() {
-                let _ = daemon.unregister(&fullname);
-            }
-            if let Some(tag) = current {
-                let properties = [("v", "2"), ("t", tag.as_str())];
-                let host = format!("{instance}.local.");
-                if let Ok(info) =
-                    ServiceInfo::new(SERVICE_TYPE, &instance, &host, "", port, &properties[..])
-                    && daemon.register(info.clone().enable_addr_auto()).is_ok()
-                {
-                    advertised = Some((info.get_fullname().to_owned(), tag));
-                }
-            }
+        if let Some(daemon) = daemon {
+            let tag = tags.as_ref().map(|t| t[1].clone());
+            advertise(daemon, &instance, port, &mut advertised, tag);
         }
         if let Some(ServiceEvent::ServiceResolved(info)) = event
             && Some(info.get_fullname()) != advertised.as_ref().map(|(name, _)| name.as_str())
@@ -239,4 +292,10 @@ async fn run(app: &AppHandle) -> Result<()> {
             }
         }
     }
+    if let Some(daemon) = daemon {
+        advertise(daemon, &instance, port, &mut advertised, None);
+    }
+    // The live keys held were those of the group this device was in.
+    forget_keys(app).await;
+    Ok(())
 }

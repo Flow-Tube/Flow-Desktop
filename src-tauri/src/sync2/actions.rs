@@ -225,10 +225,22 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
         .collect())
 }
 
-/// Starts a group on a fresh Flow server and returns the recovery words to show once.
-pub async fn create(app: &AppHandle, url: &str, admin_token: &str) -> Result<String> {
+/// Starts a group on a fresh Flow server, after resetting it when `reset_server` (which deletes the
+/// group it holds for every device), and returns the recovery words to show once.
+pub async fn create(
+    app: &AppHandle,
+    url: &str,
+    admin_token: &str,
+    reset_server: bool,
+) -> Result<String> {
     let mut local = local(app).await?;
     start_membership(&mut local).await?;
+    if reset_server {
+        ServerStore::connect(url.trim(), local.device.clone(), None, None)
+            .await?
+            .reset_server(admin_token.trim())
+            .await?;
+    }
     let words = create_group(
         &local.pool,
         url.trim(),

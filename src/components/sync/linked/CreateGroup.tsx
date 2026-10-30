@@ -12,8 +12,33 @@ import { WebdavLoginFields } from "./WebdavLoginFields";
 
 type Place = "server" | "webdav" | "lan";
 
+/** The server already holds a group: ask a member to join it, or reset the server and start over. */
+function ServerTaken({ url, token }: { url: string; token: string }) {
+  const { create, askToJoin, busy } = useLinkedDevicesStore();
+  const [confirmation, setConfirmation] = useState("");
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-chrome-neutral-800 p-4">
+      <p className="text-sm font-medium text-chrome-neutral-200">{getString("linked_server_taken_title")}</p>
+      <p className="text-sm text-chrome-neutral-400">{getString("linked_server_taken_body")}</p>
+      <Button variant="tonal" className="self-start" disabled={busy} onClick={() => void askToJoin(url, token)}>
+        {getString("linked_ask_to_join")}
+      </Button>
+      <p className="text-sm text-chrome-red-400">{getString("linked_reset_server_warning")}</p>
+      <TextInput value={confirmation} onChange={setConfirmation} placeholder="reset" spellCheck={false} autoComplete="off" />
+      <Button
+        variant="destructive"
+        className="self-start"
+        disabled={busy || confirmation.trim() !== "reset"}
+        onClick={() => void create(url, token, true)}
+      >
+        {getString("linked_reset_server")}
+      </Button>
+    </div>
+  );
+}
+
 function OnServer() {
-  const { create, busy } = useLinkedDevicesStore();
+  const { create, serverTaken, busy } = useLinkedDevicesStore();
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
   return (
@@ -24,9 +49,13 @@ function OnServer() {
       <Field label={getString("linked_admin_token")} hint={getString("linked_admin_token_hint")}>
         <TextInput type="password" value={token} onChange={setToken} spellCheck={false} />
       </Field>
-      <Button className="mt-auto self-start" disabled={busy || !url.trim() || !token.trim()} onClick={() => void create(url, token)}>
-        {getString("linked_create")}
-      </Button>
+      {serverTaken ? (
+        <ServerTaken url={url} token={token} />
+      ) : (
+        <Button className="mt-auto self-start" disabled={busy || !url.trim() || !token.trim()} onClick={() => void create(url, token)}>
+          {getString("linked_create")}
+        </Button>
+      )}
     </>
   );
 }

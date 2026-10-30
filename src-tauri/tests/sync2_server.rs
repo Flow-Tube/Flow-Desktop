@@ -12,7 +12,7 @@ use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::server::{ServerStore, StoreError};
 use flow_desktop_lib::sync2::store::Store;
 use serde_json::{Value, json};
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 const INSTANCE: &str = "0102030405060708090a0b0c0d0e0f10";
@@ -377,4 +377,40 @@ async fn a_server_reset_to_empty_says_the_group_is_gone() {
         .unwrap();
     let error = EngineError::from(store.roster_after(-1).await.unwrap_err());
     assert_eq!(error.kind(), "linkedGroupMissing");
+}
+
+#[tokio::test]
+async fn a_server_reset_needs_the_admin_token_and_says_when_it_is_refused() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/admin/reset"))
+        .and(header("authorization", "Bearer admin"))
+        .and(body_json(json!({ "confirm": "reset" })))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/admin/reset"))
+        .and(header("authorization", "Bearer wrong"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({ "error": "unauthorized" })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/admin/reset"))
+        .and(header("authorization", "Bearer banned"))
+        .respond_with(ResponseTemplate::new(429).set_body_json(json!({ "error": "rate_limited" })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    store.reset_server("admin").await.unwrap();
+    assert!(matches!(
+        store.reset_server("wrong").await,
+        Err(StoreError::AdminRefused)
+    ));
+    assert!(matches!(
+        store.reset_server("banned").await,
+        Err(StoreError::AdminBanned)
+    ));
 }

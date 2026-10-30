@@ -62,8 +62,9 @@ export const getLinkedDevices = () => invokeBackend<LinkedDevice[]>("linked_devi
 export const getLinkPhase = () => invokeBackend<LinkPhase>("linked_link_phase");
 
 /** Resolves to the recovery words, shown once. */
-export const createGroup = (url: string, adminToken: string) =>
-  invokeBackend<string>("linked_create", { url, adminToken });
+/** With `resetServer`, first deletes the group the server holds, for every device. */
+export const createGroup = (url: string, adminToken: string, resetServer = false) =>
+  invokeBackend<string>("linked_create", { url, adminToken, resetServer });
 
 /** Starts a group on this network, with no server. Resolves to the recovery words, shown once. */
 export const createLanGroup = () => invokeBackend<string>("linked_create_lan");

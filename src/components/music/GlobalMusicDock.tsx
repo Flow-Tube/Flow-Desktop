@@ -42,7 +42,8 @@ import { useRemoteActive } from "../../lib/live/usePlayOn";
 import { PlayOnButton } from "../playon/PlayOnButton";
 
 const GHOST = "grid h-9 w-9 place-items-center rounded-full transition-colors duration-200 ease-out";
-const GHOST_IDLE = `${GHOST} text-chrome-neutral-400 hover:text-chrome-neutral-100`;
+/** The dock's icon buttons, also used by the remote dock. */
+export const GHOST_IDLE = `${GHOST} text-chrome-neutral-400 hover:text-chrome-neutral-100`;
 
 export function GlobalMusicDock() {
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);

@@ -1,16 +1,14 @@
-import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
-
 import { getString } from "../../lib/i18n/index";
 import { positionOf } from "../../lib/live/position";
 import { usePlayOn, useRemoteActive } from "../../lib/live/usePlayOn";
 import { youtubeThumbnailUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
+import { GHOST_IDLE } from "../music/GlobalMusicDock";
+import { TransportButtons } from "../music/player/PlayerTransport";
 import { DeviceKindIcon } from "./DeviceKindIcon";
 import { PlayOnButton } from "./PlayOnButton";
 
-const CONTROL =
-  "grid h-9 w-9 place-items-center rounded-full text-chrome-neutral-200 transition-colors duration-200 ease-out hover:text-chrome-neutral-100";
 
 /** The player bar while another device plays and nothing plays here: its controls drive that device. */
 export function RemoteDock() {
@@ -35,24 +33,17 @@ export function RemoteDock() {
             </div>
           </div>
         </div>
-        <div className="flex w-1/3 items-center justify-center gap-5">
-          <button type="button" className={CONTROL} aria-label={getString("music_previous")} onClick={() => void drive(remote, "previous")}>
-            <SkipBack className="h-5 w-5" fill="currentColor" />
-          </button>
-          <button
-            type="button"
-            aria-label={getString(now.state === "playing" ? "music_pause" : "music_play")}
-            onClick={() => void drive(remote, now.state === "playing" ? "pause" : "play")}
-            className="grid h-11 w-11 place-items-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-          >
-            {now.state === "playing" ? <Pause className="h-7 w-7" fill="currentColor" /> : <Play className="h-7 w-7 translate-x-px" fill="currentColor" />}
-          </button>
-          <button type="button" className={CONTROL} aria-label={getString("music_next")} onClick={() => void drive(remote, "next")}>
-            <SkipForward className="h-5 w-5" fill="currentColor" />
-          </button>
+        <div className="flex w-1/3 items-center justify-center">
+          <TransportButtons
+            size="sm"
+            playing={now.state === "playing"}
+            onPrevious={() => void drive(remote, "previous")}
+            onTogglePlay={() => void drive(remote, now.state === "playing" ? "pause" : "play")}
+            onNext={() => void drive(remote, "next")}
+          />
         </div>
         <div className="flex w-1/3 items-center justify-end">
-          <PlayOnButton className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-200 ease-out text-chrome-neutral-400 hover:text-chrome-neutral-100" />
+          <PlayOnButton className={GHOST_IDLE} />
         </div>
         <span className="absolute inset-x-0 bottom-0 h-0.5 bg-surface-container-highest">
           <span className="block h-full bg-[var(--color-primary)]" style={{ width: `${fraction * 100}%` }} />

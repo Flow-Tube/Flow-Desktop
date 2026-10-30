@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react";
-import { Pause, Play, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { Volume2 } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
 import type { PlayOnDevice } from "../../lib/live/devices";
 import { positionOf } from "../../lib/live/position";
 import { formatTime } from "../../lib/musicFormat";
+import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../../lib/platform";
 import { youtubeThumbnailUrl } from "../../lib/thumbnails";
 import { useDebounce } from "../../lib/useDebounce";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
+import { TransportButtons } from "../music/player/PlayerTransport";
 import { Slider } from "../ui/Slider";
 import { DeviceKindIcon } from "./DeviceKindIcon";
 
-const CONTROL =
-  "grid h-9 w-9 place-items-center rounded-full text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100";
+/** The chip of a card playing here names the kind of computer. */
+const HERE = IS_MACOS_RUNTIME ? "play_on_here_mac" : IS_LINUX_RUNTIME ? "play_on_here_computer" : "play_on_here_pc";
+
 
 /** What the active device plays, with controls that drive it, here or elsewhere. */
 export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs: number }) {
@@ -54,7 +57,7 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
           <div className="line-clamp-1 text-xs text-chrome-neutral-400">{now.by}</div>
           <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-container-high px-2 py-0.5 text-xs text-chrome-neutral-300">
             <DeviceKindIcon kind={device.kind} className="h-3.5 w-3.5" />
-            {device.thisDevice ? getString("play_on_this_device") : device.name}
+            {device.thisDevice ? getString(HERE) : device.name}
           </span>
         </div>
       </div>
@@ -78,22 +81,13 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <button type="button" className={CONTROL} aria-label={getString("music_previous")} onClick={() => void drive(target, "previous")}>
-            <SkipBack className="h-4 w-4" fill="currentColor" />
-          </button>
-          <button
-            type="button"
-            aria-label={getString(playingHere ? "music_pause" : "music_play")}
-            onClick={() => void drive(target, playingHere ? "pause" : "play")}
-            className="grid h-10 w-10 place-items-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-colors duration-200 ease-out"
-          >
-            {playingHere ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="h-5 w-5 translate-x-px" fill="currentColor" />}
-          </button>
-          <button type="button" className={CONTROL} aria-label={getString("music_next")} onClick={() => void drive(target, "next")}>
-            <SkipForward className="h-4 w-4" fill="currentColor" />
-          </button>
-        </div>
+        <TransportButtons
+          size="sm"
+          playing={playingHere}
+          onPrevious={() => void drive(target, "previous")}
+          onTogglePlay={() => void drive(target, playingHere ? "pause" : "play")}
+          onNext={() => void drive(target, "next")}
+        />
         <label className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400">
           <Volume2 className="h-4 w-4 shrink-0" aria-hidden />
           <Slider value={volume} min={0} max={100} onChange={setVolume} aria-label={getString("music_volume")} className="flex-1" />

@@ -14,13 +14,20 @@ function detail(device: PlayOnDevice): string {
   return device.now?.title ? getString("play_on_paused", device.now.title) : getString("play_on_ready");
 }
 
-/** A device to play on: tapping it moves playback there. */
-export function DeviceRow({ device, active, onPick }: { device: PlayOnDevice; active: boolean; onPick: () => void }) {
+interface DeviceRowProps {
+  device: PlayOnDevice;
+  active: boolean;
+  disabled: boolean;
+  onPick: () => void;
+}
+
+/** A device to play on: tapping it moves playback there, or controls it when it plays already. */
+export function DeviceRow({ device, active, disabled, onPick }: DeviceRowProps) {
   const offline = device.group === "offline";
   return (
     <button
       type="button"
-      disabled={offline || active}
+      disabled={disabled}
       onClick={onPick}
       className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors duration-200 ease-out enabled:hover:bg-surface-container-high disabled:cursor-default"
     >

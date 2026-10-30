@@ -46,7 +46,7 @@ beforeEach(async () => {
   });
   api.getLiveStatus.mockResolvedValue({ available: true, devices: {}, online: [] });
   api.sendLive.mockResolvedValue(9);
-  usePlayOnStore.setState({ status: null, reported: null, overrides: {}, focus: null, linked: [], asking: [] });
+  usePlayOnStore.setState({ status: null, reported: null, overrides: {}, controlling: null, linked: [], asking: [] });
   await usePlayOnStore.getState().init(() => undefined);
 });
 
@@ -92,9 +92,11 @@ describe("usePlayOnStore", () => {
     await flush();
     expect(api.sendLive).toHaveBeenCalledWith(expect.objectContaining({ type: "play", to: "bb", video: "v1", pos: 5000 }));
     expect(players.pauseHere).not.toHaveBeenCalled();
+    expect(usePlayOnStore.getState().controlling).toBeNull();
     deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
     await handing;
     expect(players.pauseHere).toHaveBeenCalledOnce();
+    expect(usePlayOnStore.getState().controlling).toBe("bb");
   });
 
   it("keeps playing here when the target refuses", async () => {
@@ -123,9 +125,17 @@ describe("usePlayOnStore", () => {
       deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
       await pausing;
       expect(shownState()).toBe("paused");
-      expect(usePlayOnStore.getState().focus).toBe("bb");
       report(phone({ ...NOW, state: "playing" }, Date.now() + 1000));
       expect(shownState()).toBe("playing");
+    });
+
+    it("follows a device only once the user chose it, until it goes offline", () => {
+      report(phone(NOW, Date.now()));
+      expect(usePlayOnStore.getState().controlling).toBeNull();
+      usePlayOnStore.getState().control("bb");
+      expect(usePlayOnStore.getState().controlling).toBe("bb");
+      report({ ...phone(NOW, Date.now()), online: [] });
+      expect(usePlayOnStore.getState().controlling).toBeNull();
     });
 
     it("takes the pause back and says so when the device refuses", async () => {

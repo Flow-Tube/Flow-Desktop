@@ -12,22 +12,22 @@ export function usePlayOnAvailable(): boolean {
   return usePlayOnStore((state) => Boolean(state.status?.available));
 }
 
-/** The other device shown as playing (or paused there) while nothing plays here; its controls take over. */
+/** The device the user chose to control, while nothing plays here; the remote dock drives it. */
 export function useRemoteActive(): string | null {
-  const focus = usePlayOnStore((state) => state.focus);
+  const controlling = usePlayOnStore((state) => state.controlling);
   const musicPlaying = useMusicPlayerStore((state) => state.isPlaying);
   const videoPlaying = usePlayerStore((state) => state.isPlaying);
-  return musicPlaying || videoPlaying ? null : focus;
+  return musicPlaying || videoPlaying ? null : controlling;
 }
 
 /**
  * The group's devices for "Play on", with positions moving every second while one plays, and the
- * one to show: the device playing, or the one shown last while it stays paused.
+ * one to show: the device playing, or else the one the user chose to control.
  */
 export function usePlayOn(): { devices: PlayOnDevice[]; active: PlayOnDevice | null } {
   const status = usePlayOnStore((state) => state.status);
   const linked = usePlayOnStore((state) => state.linked);
-  const focus = usePlayOnStore((state) => state.focus);
+  const controlling = usePlayOnStore((state) => state.controlling);
   const available = Boolean(status?.available);
   const [tick, setTick] = useState(() => Date.now());
 
@@ -38,5 +38,5 @@ export function usePlayOn(): { devices: PlayOnDevice[]; active: PlayOnDevice | n
   }, [available]);
 
   const devices = useMemo(() => playOnDevices(status, linked, nowOf(playing()), tick), [status, linked, tick]);
-  return { devices, active: activeOf(devices) ?? devices.find((device) => device.did === focus) ?? null };
+  return { devices, active: activeOf(devices) ?? devices.find((device) => device.did === controlling) ?? null };
 }

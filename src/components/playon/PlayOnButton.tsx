@@ -1,47 +1,39 @@
-import { useEffect, useRef, useState } from "react";
-import { MonitorSpeaker } from "lucide-react";
+import { useState } from "react";
+import { Speaker } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
 import { usePlayOnAvailable, useRemoteActive } from "../../lib/live/usePlayOn";
+import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { PlayOnPopover } from "./PlayOnPopover";
 
 /** The devices button of a player bar; hidden while no other device can be reached. */
 export function PlayOnButton({ className, iconSize = 18 }: { className: string; iconSize?: number }) {
   const available = usePlayOnAvailable();
   const remote = useRemoteActive();
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent | KeyboardEvent) => {
-      if (event instanceof KeyboardEvent ? event.key === "Escape" : !box.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", close);
-    };
-  }, [open]);
+  const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
 
   if (!available) return null;
   return (
-    <div ref={box} className="relative" data-sheet-drag-ignore>
+    <>
       <button
         type="button"
+        data-sheet-drag-ignore
         aria-label={getString("play_on_title")}
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className={`${className} ${open || remote ? "text-[var(--color-primary)]" : ""}`}
+        aria-expanded={anchor !== null}
+        onClick={(event) => {
+          // Opens above the bar, as the dock's other popovers do.
+          const rect = event.currentTarget.getBoundingClientRect();
+          setAnchor(anchor ? null : { top: rect.bottom + 12, right: rect.right, flipBottom: rect.top - 12 });
+        }}
+        className={`${className} ${anchor || remote ? "text-[var(--color-primary)]" : ""}`}
       >
-        <MonitorSpeaker style={{ width: iconSize, height: iconSize }} />
+        <Speaker style={{ width: iconSize, height: iconSize }} />
       </button>
-      {open && (
-        <div className="absolute bottom-full right-0 z-50 mb-3">
+      {anchor && (
+        <AnchoredPortalMenu anchor={anchor} onClose={() => setAnchor(null)} closeOnScroll={false} className="z-[70]">
           <PlayOnPopover />
-        </div>
+        </AnchoredPortalMenu>
       )}
-    </div>
+    </>
   );
 }

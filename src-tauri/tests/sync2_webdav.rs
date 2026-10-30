@@ -35,8 +35,7 @@ use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use sqlx::SqlitePool;
-use sync2_common::{Group, device_pool, empty_pool, exported, group};
+use sync2_common::{Group, device_pool, empty_pool, exported, group, watch};
 use tokio::net::TcpListener;
 
 const USER: &str = "flow";
@@ -110,18 +109,6 @@ async fn onto_webdav(g: &Group, url: &str) {
 
 async fn store_for(url: &str, did: &[u8; 16]) -> WebDavStore {
     WebDavStore::new(webdav(url, PASSWORD).await, hex::encode(did))
-}
-
-async fn watch(pool: &SqlitePool, id: &str) {
-    sqlx::query(
-        "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds,
-             total_duration_seconds, is_music, is_short, updated_hlc)
-         VALUES (?, 'title', NULL, NULL, '2025-01-01T00:00:00+00:00', 10, 600, 0, 0, '100:0:dA')",
-    )
-    .bind(id)
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
 #[tokio::test]

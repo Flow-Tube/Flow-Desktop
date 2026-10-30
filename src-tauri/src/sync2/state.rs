@@ -185,6 +185,7 @@ pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
         "DELETE FROM sync2_held_roster",
         "DELETE FROM sync2_held_keys",
         "DELETE FROM sync2_held_objects",
+        "DELETE FROM sync2_pending",
         "DELETE FROM sync2_live_seen",
         "DELETE FROM sync2_consent",
     ] {

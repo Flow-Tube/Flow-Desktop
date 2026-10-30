@@ -70,14 +70,15 @@ fn note(app: &AppHandle, met: &Met, address: Option<(String, u16)>) {
     }
 }
 
-/// This hour's tag and the ones before and after it, for the LAN group this device is in.
+/// This hour's tag and the ones before and after it, for the group this device is in when it
+/// meets members on the LAN: a LAN group, or a server group.
 async fn group_tags(local: &Local) -> Result<Option<[String; 3]>> {
     match load_group(&local.pool).await? {
-        Some(record) if record.kind == StoreKind::Lan => {}
+        Some(record) if matches!(record.kind, StoreKind::Lan | StoreKind::Server) => {}
         _ => return Ok(None),
     }
     let held = HeldStore::new(local.pool.clone());
-    let session = Session::open(&local.pool, held, &local.device).await?;
+    let session = Session::open_as_peer(&local.pool, held, &local.device).await?;
     let lan_key = purpose_key(
         session.current_key(),
         session.group(),

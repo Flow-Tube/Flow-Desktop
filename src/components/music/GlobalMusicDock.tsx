@@ -38,8 +38,11 @@ import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { dockOpacity, registerSheetDock, sheetProgress } from "../../lib/musicSheet";
 import { useSheetDrag } from "../../lib/useSheetDrag";
-import { useRemoteActive } from "../../lib/live/usePlayOn";
+import { useControlledDevice, useRemoteActive } from "../../lib/live/usePlayOn";
+import { youtubeThumbnailUrl } from "../../lib/thumbnails";
+import { DeviceKindIcon } from "../playon/DeviceKindIcon";
 import { PlayOnButton } from "../playon/PlayOnButton";
+import { RemoteProgress } from "../playon/RemoteProgress";
 
 const GHOST = "grid h-9 w-9 place-items-center rounded-full transition-colors duration-200 ease-out";
 /** The dock's icon buttons, also used by the remote dock. */
@@ -83,12 +86,20 @@ export function GlobalMusicDock() {
   const docked = viewState === "dock";
   const sheetDrag = useSheetDrag();
   const opacity = useTransform(sheetProgress, dockOpacity);
-  // While another device plays and this one doesn't, the remote dock takes this place.
+  // While this device controls another, the dock shows that device's music and its buttons drive
+  // it (the player's actions go there); a video there gets the remote dock instead.
   const remote = useRemoteActive();
+  const controlled = useControlledDevice();
+  const away = remote && controlled?.did === remote && controlled.now.music ? controlled : null;
+  const shown = away
+    ? { thumbnail: youtubeThumbnailUrl(away.now.video), title: away.now.title, by: away.now.by }
+    : currentTrack && { thumbnail: currentTrack.thumbnail, title: currentTrack.title, by: artistsText(currentTrack.artists) };
+  const playing = away ? away.now.state === "playing" : isPlaying;
+  const busy = !away && loading;
 
   return (
     <AnimatePresence>
-      {currentTrack && !remote && (
+      {shown && (away || !remote) && (
         <motion.div
           key="music-dock"
           initial={{ y: 96, opacity: 0 }}
@@ -100,13 +111,15 @@ export function GlobalMusicDock() {
         >
           <motion.div style={{ opacity }} className="h-full">
             {/* Dismiss — appears on hover at the corner. */}
-            <HapticButton
-              onClick={dismiss}
-              aria-label={getString("music_dismiss")}
-              className="absolute -right-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
-            >
-              <X className="h-3.5 w-3.5" />
-            </HapticButton>
+            {!away && (
+              <HapticButton
+                onClick={dismiss}
+                aria-label={getString("music_dismiss")}
+                className="absolute -right-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </HapticButton>
+            )}
 
             {/* Playback failure — floats above the pill so transport stays usable. */}
             {errorInfo && (
@@ -137,6 +150,7 @@ export function GlobalMusicDock() {
               <div className="flex w-1/3 min-w-0 items-center gap-3">
                 <button
                   type="button"
+                  disabled={!!away}
                   onClick={() => openOverlay("full")}
                   onContextMenu={menu.openMenuFromContext}
                   aria-label={getString("music_expand")}
@@ -144,12 +158,12 @@ export function GlobalMusicDock() {
                 >
                   <div className="relative h-12 w-12 shrink-0">
                     <MusicArtwork
-                      src={currentTrack.thumbnail}
-                      alt={currentTrack.title}
-                      loading={loading}
+                      src={shown.thumbnail}
+                      alt={shown.title}
+                      loading={busy}
                       className="h-12 w-12 rounded-xl ring-1 ring-chrome-neutral-800/60 transition-transform duration-200 ease-out group-hover/art:scale-[1.04]"
                     />
-                    {isPlaying && !loading && (
+                    {playing && !busy && (
                       <span className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-chrome-black/35 text-chrome-white">
                         <PlayingWave className="h-4" />
                       </span>
@@ -157,11 +171,16 @@ export function GlobalMusicDock() {
                   </div>
                   <div className="min-w-0">
                     <div className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">
-                      {currentTrack.title}
+                      {shown.title}
                     </div>
-                    <div className="mt-0.5 line-clamp-1 text-[13px] font-medium text-chrome-neutral-400">
-                      {artistsText(currentTrack.artists)}
-                    </div>
+                    {away ? (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-primary)]">
+                        <DeviceKindIcon kind={away.kind} className="h-3.5 w-3.5 shrink-0" />
+                        <span className="line-clamp-1">{getString("play_on_on_device", away.name)}</span>
+                      </div>
+                    ) : (
+                      <div className="mt-0.5 line-clamp-1 text-[13px] font-medium text-chrome-neutral-400">{shown.by}</div>
+                    )}
                   </div>
                 </button>
                 <MusicCardMenu
@@ -174,15 +193,17 @@ export function GlobalMusicDock() {
 
               {/* CENTER — transport */}
               <div className="flex w-1/3 items-center justify-center gap-5">
-                <HapticButton
-                  onClick={toggleShuffle}
-                  aria-label={getString("music_shuffle")}
-                  aria-pressed={isShuffle}
-                  className={isShuffle ? GHOST : GHOST_IDLE}
-                  style={isShuffle ? accentActive : undefined}
-                >
-                  <Shuffle className="h-[18px] w-[18px]" />
-                </HapticButton>
+                {!away && (
+                  <HapticButton
+                    onClick={toggleShuffle}
+                    aria-label={getString("music_shuffle")}
+                    aria-pressed={isShuffle}
+                    className={isShuffle ? GHOST : GHOST_IDLE}
+                    style={isShuffle ? accentActive : undefined}
+                  >
+                    <Shuffle className="h-[18px] w-[18px]" />
+                  </HapticButton>
+                )}
 
                 <HapticButton
                   onClick={previous}
@@ -194,12 +215,12 @@ export function GlobalMusicDock() {
 
                 <HapticButton
                   onClick={togglePlay}
-                  aria-label={getString(isPlaying ? "music_pause" : "music_play")}
+                  aria-label={getString(playing ? "music_pause" : "music_play")}
                   className="grid h-11 w-11 place-items-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-transform duration-200 ease-out hover:scale-105 active:scale-90"
                 >
-                  {loading ? (
+                  {busy ? (
                     <Loader2 className="h-7 w-7 animate-spin" />
-                  ) : isPlaying ? (
+                  ) : playing ? (
                     <Pause className="h-7 w-7" fill="currentColor" />
                   ) : (
                     <Play className="h-7 w-7 translate-x-px" fill="currentColor" />
@@ -214,69 +235,81 @@ export function GlobalMusicDock() {
                   <SkipForward className="h-5 w-5" fill="currentColor" />
                 </HapticButton>
 
-                <HapticButton
-                  onClick={cycleRepeat}
-                  aria-label={
-                    repeatMode === "one" ? getString("music_repeat_one") : getString("music_repeat")
-                  }
-                  aria-pressed={repeatMode !== "none"}
-                  className={repeatMode !== "none" ? GHOST : GHOST_IDLE}
-                  style={repeatMode !== "none" ? accentActive : undefined}
-                >
-                  {repeatMode === "one" ? (
-                    <Repeat1 className="h-[18px] w-[18px]" />
-                  ) : (
-                    <Repeat className="h-[18px] w-[18px]" />
-                  )}
-                </HapticButton>
+                {!away && (
+                  <HapticButton
+                    onClick={cycleRepeat}
+                    aria-label={
+                      repeatMode === "one" ? getString("music_repeat_one") : getString("music_repeat")
+                    }
+                    aria-pressed={repeatMode !== "none"}
+                    className={repeatMode !== "none" ? GHOST : GHOST_IDLE}
+                    style={repeatMode !== "none" ? accentActive : undefined}
+                  >
+                    {repeatMode === "one" ? (
+                      <Repeat1 className="h-[18px] w-[18px]" />
+                    ) : (
+                      <Repeat className="h-[18px] w-[18px]" />
+                    )}
+                  </HapticButton>
+                )}
               </div>
 
-              {/* RIGHT — secondary actions */}
+              {/* RIGHT — secondary actions; the device controlled has its own. */}
               <div className="flex w-1/3 items-center justify-end gap-4">
-                <HapticButton
-                  data-sheet-drag-ignore
-                  onClick={() => setPopover((p) => (p === "vol" ? null : "vol"))}
-                  onWheel={(event) => setVolume(volumeAfterWheel(volume, event.deltaY))}
-                  aria-label={getString("music_volume")}
-                  aria-pressed={popover === "vol"}
-                  className={popover === "vol" ? `${GHOST} text-chrome-neutral-100` : GHOST_IDLE}
-                >
-                  {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
-                </HapticButton>
+                {!away && (
+                    <HapticButton
+                      data-sheet-drag-ignore
+                      onClick={() => setPopover((p) => (p === "vol" ? null : "vol"))}
+                      onWheel={(event) => setVolume(volumeAfterWheel(volume, event.deltaY))}
+                      aria-label={getString("music_volume")}
+                      aria-pressed={popover === "vol"}
+                      className={popover === "vol" ? `${GHOST} text-chrome-neutral-100` : GHOST_IDLE}
+                    >
+                      {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
+                    </HapticButton>
+                )}
 
                 <PlayOnButton className={GHOST_IDLE} />
 
-                <HapticButton
-                  onClick={() => openOverlay("queue")}
-                  aria-label={getString("music_queue")}
-                  className={GHOST_IDLE}
-                >
-                  <ListMusic className="h-[18px] w-[18px]" />
-                </HapticButton>
+                {!away && (
+                  <>
+                    <HapticButton
+                      onClick={() => openOverlay("queue")}
+                      aria-label={getString("music_queue")}
+                      className={GHOST_IDLE}
+                    >
+                      <ListMusic className="h-[18px] w-[18px]" />
+                    </HapticButton>
 
-                <HapticButton
-                  onClick={() => openOverlay("lyrics")}
-                  aria-label={getString("music_lyrics")}
-                  className={GHOST_IDLE}
-                >
-                  <Mic2 className="h-[18px] w-[18px]" />
-                </HapticButton>
+                    <HapticButton
+                      onClick={() => openOverlay("lyrics")}
+                      aria-label={getString("music_lyrics")}
+                      className={GHOST_IDLE}
+                    >
+                      <Mic2 className="h-[18px] w-[18px]" />
+                    </HapticButton>
 
-                <HapticButton
-                  onClick={() => setPopover((p) => (p === "eq" ? null : "eq"))}
-                  aria-label={getString("music_equalizer")}
-                  aria-pressed={popover === "eq"}
-                  className={popover === "eq" || eqEnabled ? GHOST : GHOST_IDLE}
-                  style={popover === "eq" || eqEnabled ? accentActive : undefined}
-                >
-                  <SlidersHorizontal className="h-[18px] w-[18px]" />
-                </HapticButton>
+                    <HapticButton
+                      onClick={() => setPopover((p) => (p === "eq" ? null : "eq"))}
+                      aria-label={getString("music_equalizer")}
+                      aria-pressed={popover === "eq"}
+                      className={popover === "eq" || eqEnabled ? GHOST : GHOST_IDLE}
+                      style={popover === "eq" || eqEnabled ? accentActive : undefined}
+                    >
+                      <SlidersHorizontal className="h-[18px] w-[18px]" />
+                    </HapticButton>
+                  </>
+                )}
               </div>
 
               {/* EDGE PROGRESS — pinned to the bottom of the pill */}
-              <div data-sheet-drag-ignore className="absolute inset-x-0 bottom-0">
-                <MusicScrubber variant="edge" />
-              </div>
+              {away ? (
+                <RemoteProgress device={away} />
+              ) : (
+                <div data-sheet-drag-ignore className="absolute inset-x-0 bottom-0">
+                  <MusicScrubber variant="edge" />
+                </div>
+              )}
             </div>
 
             {/* Popovers — rendered outside the clipped pill so they aren't cut off. */}

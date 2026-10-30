@@ -1888,7 +1888,7 @@
   "play_on_here_pc": "On this PC",
   "play_on_here_computer": "On this computer",
   "play_on_another_device": "Another device",
-  "play_on_playing_on": "Playing on %s",
+  "play_on_on_device": "On %s",
   "play_on_active": "Active device",
   "play_on_seek": "Seek",
   "play_on_failed": "Couldn't play on %s: %s",

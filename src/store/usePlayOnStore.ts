@@ -14,11 +14,12 @@ import {
   type Now,
 } from "../lib/api/live";
 import { getString } from "../lib/i18n/index";
-import { nowOf } from "../lib/live/now";
+import { nowOf, queueWindow } from "../lib/live/now";
 import { overrideFor, stillControlled, withOverrides, type Override } from "../lib/live/optimistic";
 import { applyCommand, pauseHere, playing, startSession } from "../lib/live/players";
 import { activeDevice, positionOf } from "../lib/live/position";
 import { useMusicPlayerStore } from "./useMusicPlayerStore";
+import { useRemoteControlStore } from "./useRemoteControlStore";
 import { usePlayerStore } from "./usePlayerStore";
 import { useUiStore } from "./useUiStore";
 
@@ -58,7 +59,7 @@ interface PlayOnState {
   /** Controls `did`, which plays already, from the remote dock. */
   control: (did: string) => void;
   /** Drives the player here, or on `did`. */
-  drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number }) => Promise<void>;
+  drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number; queue?: string[] }) => Promise<void>;
   /** Answers the oldest question in `asking`. */
   answer: (choice: ConsentChoice) => Promise<void>;
 }
@@ -75,6 +76,8 @@ async function act(request: LiveRequest): Promise<void> {
   const { message } = request;
   let result: Answer;
   if (message.type === "play") {
+    // Playback handed here is played here, not passed on to a device this one controlled.
+    usePlayOnStore.setState({ controlling: null });
     // The sender's last `now` names what it hands over, so the page has a title at once.
     const sent = usePlayOnStore.getState().status?.devices[request.from]?.now;
     const named = sent?.video === message.video ? { title: sent.title, by: sent.by } : {};
@@ -242,4 +245,37 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       await act(request);
     },
   };
+});
+
+/** Starts `queue` from `index` on the device controlled, and says so when it refuses. */
+async function playThere(queue: string[], index: number, music: boolean): Promise<void> {
+  const { controlling, linked } = usePlayOnStore.getState();
+  const window = queueWindow(queue, index);
+  const video = window.queue[window.index];
+  if (!controlling || !video) return;
+  try {
+    await handOff(controlling, { ...nowOf(null), video, music, queue: window.queue, index: window.index }, 0);
+  } catch {
+    const name = linked.find((device) => device.id === controlling)?.name || getString("play_on_another_device");
+    useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", name) });
+  }
+}
+
+useRemoteControlStore.setState({
+  command: (cmd, value) => {
+    const { controlling, drive } = usePlayOnStore.getState();
+    if (controlling) void drive(controlling, cmd, value);
+  },
+  play: (queue, index, music) => void playThere(queue, index, music),
+});
+
+/** Keeps the players' remote control on the device controlled, with what it plays. */
+usePlayOnStore.subscribe(({ controlling, status }) => {
+  const now = controlling ? status?.devices[controlling]?.now : null;
+  useRemoteControlStore.setState({
+    target: controlling,
+    queue: now?.queue ?? [],
+    index: now?.index ?? 0,
+    playing: now?.state === "playing",
+  });
 });

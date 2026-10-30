@@ -7,6 +7,7 @@ import { Button } from "../../ui/Button";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { useBoolPref } from "../../../lib/usePreference";
 import { SETTINGS } from "../../../lib/settings/schema";
+import { confirmAction } from "../../../lib/dialogs";
 import { getString } from "../../../lib/i18n/index";
 import {
   BUILTIN_THEMES,
@@ -59,7 +60,13 @@ export function AppearanceTab() {
   };
 
   const deleteTheme = async (theme: CustomThemeDefinition) => {
-    if (!window.confirm(getString("theme_delete_confirm", theme.name))) return;
+    const confirmed = await confirmAction({
+      title: getString("settings_custom_theme_delete_title", theme.name),
+      message: getString("settings_custom_theme_delete_body"),
+      confirmLabel: getString("delete"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     const saved = await saveCustomThemes(customThemes.filter((item) => item.id !== theme.id));
     if (saved && themeId === theme.id) await setTheme("default");
   };

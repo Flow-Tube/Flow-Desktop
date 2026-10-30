@@ -66,14 +66,14 @@ export const Diagnostics: React.FC = () => {
   };
 
   const handleResetIdentity = async () => {
-    if (
-      !(await confirmAction(
-        getString("diagnostics_identity_reset_confirm"),
-        getString("diagnostics_identity_reset"),
-      ))
-    ) {
-      return;
-    }
+    const confirmed = await confirmAction({
+      title: getString("diagnostics_identity_reset_title"),
+      message: getString("diagnostics_identity_reset_body"),
+      icon: UserRoundX,
+      confirmLabel: getString("reset"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await resetVisitorIdentity();
       showToast({ message: getString("diagnostics_identity_reset_done"), variant: "success" });
@@ -83,9 +83,13 @@ export const Diagnostics: React.FC = () => {
   };
 
   const handleClear = async () => {
-    if (!(await confirmAction(getString("diagnostics_clear_confirm"), getString("diagnostics_clear")))) {
-      return;
-    }
+    const confirmed = await confirmAction({
+      title: getString("diagnostics_clear_confirm_title"),
+      message: getString("diagnostics_clear_confirm_body"),
+      confirmLabel: getString("clear"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     setBusy(true);
     try {
       await clear();

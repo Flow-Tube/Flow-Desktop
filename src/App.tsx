@@ -78,6 +78,7 @@ import { DownloadDialog } from "./components/downloads/DownloadDialog";
 import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
+import { ConfirmHost } from "./components/common/ConfirmHost";
 import { ThemeController } from "./lib/useTheme";
 import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
 import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
@@ -332,6 +333,7 @@ function App() {
       <DonationPromptHost enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <ProfileSwitchOverlay />
+      <ConfirmHost />
       <ToastHost />
     </div>
   );

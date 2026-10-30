@@ -14,7 +14,8 @@
   "extensions": {
     "title": "Extensions and integrations",
     "description": "Crowdsourced enhancements from the FOSS community: SponsorBlock skips, DeArrow titles and Return YouTube Dislike.",
-    "resetStatsConfirm": "Reset SponsorBlock statistics? This clears your saved-time and skipped-segment counts.",
+    "resetStatsTitle": "Reset SponsorBlock stats?",
+    "resetStatsBody": "This clears your saved-time and skipped-segment counts.",
     "impact": "Your SponsorBlock impact",
     "integrations": "Integrations",
     "sponsorBlock": "SponsorBlock",

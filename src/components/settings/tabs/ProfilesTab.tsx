@@ -38,7 +38,13 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
   };
 
   const onDelete = async () => {
-    if (!(await confirmAction(getString("profiles_delete_body"), getString("profiles_delete_title", name)))) return;
+    const confirmed = await confirmAction({
+      message: getString("profiles_delete_body"),
+      title: getString("profiles_delete_title", name),
+      confirmLabel: getString("profiles_delete"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await remove(profile.id);
       showToast({ message: getString("profiles_deleted", name), variant: "success" });

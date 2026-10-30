@@ -63,7 +63,6 @@ export function bindMusicAudioSettings(): void {
       (preview !== null && graphChangesSound(graphSpec(state, false, preview), REFERENCE_SAMPLE_RATE));
     musicAudioEngine.setEq(spec, engaged);
   };
-  musicAudioEngine.onGraphReady(() => useMusicPlayerStore.getState()._reloadForWebAudio());
   applyEq();
   useEqStore.subscribe((state, previous) => {
     if (state.state !== previous.state || state.bypass !== previous.bypass || state.preview !== previous.preview) {

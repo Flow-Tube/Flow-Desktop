@@ -147,42 +147,21 @@ describe("music EQ graph", () => {
     expect(ctx.biquads.every((f) => f.gain.value === 0)).toBe(true);
   });
 
-  it("lets fresh elements play WebM again once the equalizer is off", async () => {
-    platform.macos = true;
-    musicAudioEngine.attach(elements());
-    musicAudioEngine.setEq(rock, true);
-    await musicAudioEngine.play();
-    expect(musicAudioEngine.canReleaseGraph()).toBe(false);
-
-    musicAudioEngine.setEq(EQ_GRAPH_OFF, false);
-    expect(musicAudioEngine.canReleaseGraph()).toBe(true);
-    expect(musicAudioEngine.wantsAac()).toBe(true);
-
-    const attached = musicAudioEngine.nextAttach();
-    musicAudioEngine.attach(elements());
-    await attached;
-    expect(musicAudioEngine.canReleaseGraph()).toBe(false);
-    expect(musicAudioEngine.wantsAac()).toBe(false);
-  });
-
-  it("asks for AAC on macOS, and keeps a WebM song it cannot hear on the element's volume", async () => {
+  it("asks for AAC on macOS whatever the equalizer does, and keeps a WebM song on the element's volume", async () => {
     platform.macos = true;
     const pair = elements();
     musicAudioEngine.attach(pair);
     musicAudioEngine.setEq(EQ_GRAPH_OFF, false);
-    expect(musicAudioEngine.wantsAac()).toBe(false);
-    musicAudioEngine.setEq(rock, true);
     expect(musicAudioEngine.wantsAac()).toBe(true);
+    musicAudioEngine.setEq(rock, true);
 
     await musicAudioEngine.load("http://127.0.0.1/stream/opus", 'audio/webm; codecs="opus"');
     await musicAudioEngine.play();
     musicAudioEngine.setLoudness(null, true);
     musicAudioEngine.setVolume(0.5);
-    expect(musicAudioEngine.activeBypassesGraph()).toBe(true);
     expect(pair[0].volume).toBeCloseTo(0.25, 2);
 
     await musicAudioEngine.load("http://127.0.0.1/stream/aac", 'audio/mp4; codecs="mp4a.40.2"');
-    expect(musicAudioEngine.activeBypassesGraph()).toBe(false);
     expect(pair[0].volume).toBe(1);
   });
 

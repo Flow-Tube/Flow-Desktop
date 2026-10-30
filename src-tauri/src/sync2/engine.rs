@@ -70,6 +70,10 @@ impl EngineError {
         match self {
             Self::Store(StoreError::Insecure) => "linkedInsecure",
             Self::Store(StoreError::Network(_)) => "linkedUnreachable",
+            // A server reset to an empty database no longer has the group.
+            Self::Store(StoreError::Refused { code, .. }) if code == "unclaimed" => {
+                "linkedGroupMissing"
+            }
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
             Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",

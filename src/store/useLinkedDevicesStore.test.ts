@@ -28,6 +28,8 @@ const api = vi.hoisted(() => ({
   updateLogin: vi.fn(),
 }));
 vi.mock("../lib/api/linked", () => api);
+const confirmAction = vi.hoisted(() => vi.fn());
+vi.mock("../lib/dialogs", () => ({ confirmAction }));
 
 import { useLinkedDevicesStore } from "./useLinkedDevicesStore";
 
@@ -105,5 +107,19 @@ describe("useLinkedDevicesStore", () => {
     api.syncNow.mockResolvedValue([]);
     await useLinkedDevicesStore.getState().syncNow();
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it("forgets the group anyway when leaving fails and the user agrees, and says why otherwise", async () => {
+    api.getLinkedStatus.mockResolvedValue({ ...LINKED, kind: null });
+    api.leaveGroup.mockRejectedValue({ kind: "linkedGroupMissing", message: "unclaimed" });
+    confirmAction.mockResolvedValueOnce(true);
+    await useLinkedDevicesStore.getState().leave();
+    expect(api.forgetGroup).toHaveBeenCalledOnce();
+    expect(useLinkedDevicesStore.getState().error).toBeNull();
+
+    confirmAction.mockResolvedValueOnce(false);
+    await useLinkedDevicesStore.getState().leave();
+    expect(api.forgetGroup).toHaveBeenCalledOnce();
+    expect(useLinkedDevicesStore.getState().error).toContain("no longer has this group");
   });
 });

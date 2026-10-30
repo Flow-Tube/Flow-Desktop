@@ -9,6 +9,7 @@ import { usePreference } from '../../../lib/usePreference';
 import { getSetting, resetAppData, getWatchHistory } from '../../../lib/api/db';
 import { buildSettingsBackupJson, type SettingsBackupScope } from '../../../lib/settings/backup';
 import { confirmAction } from '../../../lib/dialogs';
+import { leaveGroupFirst } from '../../../lib/linked/leaveFirst';
 import { saveJsonFile } from '../../../lib/saveJsonFile';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
@@ -38,6 +39,7 @@ export function DataTab() {
     if (!(await confirmAction(getString('settings_clear_confirm'), getString('settings_clear_cache')))) return;
     setClearing(true);
     try {
+      if (!(await leaveGroupFirst())) return;
       await resetAppData();
       setHistoryCount(0);
       setSubCount(0);

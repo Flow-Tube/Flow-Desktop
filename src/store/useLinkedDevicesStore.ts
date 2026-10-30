@@ -33,6 +33,7 @@ import {
   type LinkedStatus,
   type WebdavLogin,
 } from "../lib/api/linked";
+import { forgetAfterFailedLeave } from "../lib/linked/leaveFirst";
 import { normalizeBackendError } from "../lib/api/errors";
 import { isTauriEnv } from "../lib/api/env";
 import { receivedMessage } from "../lib/linked/receivedMessage";
@@ -218,7 +219,11 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
 
     leave: () =>
       run(async () => {
-        await leaveGroup();
+        try {
+          await leaveGroup();
+        } catch (error) {
+          if (!(await forgetAfterFailedLeave(error))) throw error;
+        }
         await get().refresh();
       }),
 

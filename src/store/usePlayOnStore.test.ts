@@ -53,8 +53,8 @@ describe("usePlayOnStore", () => {
   });
 
   it("answers a command it can't apply with a reason", async () => {
-    players.applyCommand.mockReturnValue(false);
-    deliver({ ...PLAY, message: { type: "cmd", to: "me", cmd: "queue", queue: [] } });
+    players.applyCommand.mockResolvedValue(false);
+    deliver({ ...PLAY, message: { type: "cmd", to: "me", cmd: "seek" } });
     await flush();
     expect(api.sendLive).toHaveBeenCalledWith({ type: "result", to: "aa", ref: 4, ok: false, reason: "unsupported" });
   });

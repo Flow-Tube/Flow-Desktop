@@ -52,7 +52,9 @@ async function act(request: LiveRequest): Promise<void> {
       () => answerFor(request, false, "unavailable"),
     );
   } else if (message.type === "cmd") {
-    result = applyCommand(message) ? answerFor(request, true) : answerFor(request, false, "unsupported");
+    result = (await applyCommand(message).catch(() => false))
+      ? answerFor(request, true)
+      : answerFor(request, false, "unsupported");
   } else {
     return;
   }

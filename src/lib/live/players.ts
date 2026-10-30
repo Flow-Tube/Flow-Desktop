@@ -97,8 +97,8 @@ export function startSession(session: Session, watch: (videoId: string) => void)
   return session.music ? startMusic(session) : startVideo(session, watch);
 }
 
-/** Applies a remote command to the player in use. Returns false when it can't. */
-export function applyCommand(cmd: Cmd): boolean {
+/** Applies a remote command to the player in use. Resolves to false when it can't. */
+export async function applyCommand(cmd: Cmd): Promise<boolean> {
   const current = playing();
   if (!current) return false;
   const music = useMusicPlayerStore.getState();
@@ -131,6 +131,19 @@ export function applyCommand(cmd: Cmd): boolean {
       else video.setVolume(cmd.vol / 100);
       return true;
     case "queue":
-      return false;
+      if (!cmd.queue) return false;
+      await replaceQueue(current.music, cmd.queue);
+      return true;
   }
+}
+
+/** Replaces the queue of the player in use from video ids; the video playing carries on. */
+async function replaceQueue(music: boolean, ids: string[]): Promise<void> {
+  if (!music) {
+    usePlayerStore.getState().replaceQueue(ids.map((id): VideoSummary => ({ id, title: "", channelName: "" })));
+    return;
+  }
+  const page = ids.length > 0 ? await getMusicQueue(ids) : { items: [] };
+  const byId = new Map(page.items.map((track) => [track.videoId ?? track.id, track]));
+  useMusicPlayerStore.getState().replaceQueue(ids.flatMap((id) => byId.get(id) ?? []));
 }

@@ -8,6 +8,7 @@ use super::device::{device_keys, forget_device_keys, keychain, renew_device_keys
 use super::engine::{EngineError, Result, Session};
 use super::group_store::GroupStore;
 use super::held::HeldStore;
+use super::hybrid::HybridStore;
 use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
 use super::lan_runtime::{met, nearby};
@@ -70,15 +71,17 @@ pub async fn open_session<'a>(
     device: &'a MemberSecrets,
 ) -> Result<Session<'a, GroupStore>> {
     let store = match record.kind {
-        StoreKind::Server => GroupStore::Server(Box::new(
-            ServerStore::connect(
+        StoreKind::Server => {
+            let server = ServerStore::connect(
                 &record.store_url,
                 device.clone(),
                 record.instance.clone(),
                 Some(record.group_id.clone()),
             )
-            .await?,
-        )),
+            .await?;
+            let me = hex::encode(device.did);
+            GroupStore::Server(Box::new(HybridStore::new(server, pool.clone(), me).await?))
+        }
         StoreKind::WebDav => GroupStore::WebDav(Box::new(
             WebDavStore::connect(
                 &record.store_url,

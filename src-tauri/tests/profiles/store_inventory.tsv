@@ -23,6 +23,7 @@ table	sync2_held_keys	DEFAULT_ONLY	sync	Only Default syncs; wraps and chain boxe
 table	sync2_held_objects	DEFAULT_ONLY	sync	Only Default syncs; log objects and blobs a LAN group keeps
 table	sync2_live_seen	DEFAULT_ONLY	sync	Only Default syncs; the highest live counter accepted from each device
 table	sync2_consent	DEFAULT_ONLY	sync	Only Default syncs; which devices may control playback here
+table	sync2_pending	DEFAULT_ONLY	sync	Only Default syncs; objects written while the server was out of reach
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log

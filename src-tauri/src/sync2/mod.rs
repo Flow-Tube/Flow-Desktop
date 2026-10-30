@@ -19,6 +19,7 @@ pub mod gc;
 pub mod group_store;
 pub mod held;
 pub mod http;
+pub mod hybrid;
 pub mod join_requests;
 pub mod kdf;
 pub mod keys;

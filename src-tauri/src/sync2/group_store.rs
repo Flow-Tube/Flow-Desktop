@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 use super::held::HeldStore;
+use super::hybrid::HybridStore;
 use super::mailbox::Mailbox;
 use super::roster::Entry;
 use super::server::{Appended, ChangedObject, Result, ServerStore};
@@ -11,7 +12,7 @@ use super::store::Store;
 use super::webdav::WebDavStore;
 
 pub enum GroupStore {
-    Server(Box<ServerStore>),
+    Server(Box<HybridStore<ServerStore>>),
     WebDav(Box<WebDavStore>),
     Held(HeldStore),
 }
@@ -31,8 +32,16 @@ impl GroupStore {
     /// The Flow server, for a server group.
     pub fn server(&self) -> Option<&ServerStore> {
         match self {
-            Self::Server(store) => Some(store),
+            Self::Server(store) => Some(&store.store),
             Self::WebDav(_) | Self::Held(_) => None,
+        }
+    }
+
+    /// Uploads what a server group wrote while its server was out of reach.
+    pub async fn upload_pending(&self) -> Result<()> {
+        match self {
+            Self::Server(store) => store.upload_pending().await,
+            Self::WebDav(_) | Self::Held(_) => Ok(()),
         }
     }
 }

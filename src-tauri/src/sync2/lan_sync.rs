@@ -108,7 +108,7 @@ pub async fn meet(
         .await
         .map_err(|_| EngineError::LanUnreachable)?;
     let held = HeldStore::new(pool.clone());
-    let session = Session::open(pool, held.clone(), device).await?;
+    let session = Session::open_as_peer(pool, held.clone(), device).await?;
     let (framed, peer) = hello_as_client(WsChannel::new(socket), &session, device).await?;
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
     for envelope in live {
@@ -150,7 +150,7 @@ async fn answer(
         .await
         .map_err(|_| EngineError::LanUnreachable)?;
     let held = HeldStore::new(pool.clone());
-    let mut session = Session::open(pool, held.clone(), device).await?;
+    let mut session = Session::open_as_peer(pool, held.clone(), device).await?;
     let (framed, peer) = hello_as_server(WsChannel::new(socket), &mut session, device).await?;
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
     let taken = pull_from(&held, &link, session.group()).await?;

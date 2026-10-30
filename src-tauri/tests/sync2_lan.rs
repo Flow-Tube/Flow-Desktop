@@ -29,7 +29,7 @@ use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group
 use flow_desktop_lib::sync2::state::{StoreKind, load_group};
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{Group, LINK, empty_pool, exported, group};
+use sync2_common::{Group, LINK, empty_pool, exported, group, watch};
 use tokio::net::TcpListener;
 
 /// A device that holds the group as pairing leaves it: the roster and the wraps, no objects.
@@ -50,18 +50,6 @@ async fn holding(g: &Group) -> SqlitePool {
     let record = GroupRecord::on_lan(hex::encode(g.group), LINK.into());
     save_group(&pool, &record).await.unwrap();
     pool
-}
-
-async fn watch(pool: &SqlitePool, id: &str) {
-    sqlx::query(
-        "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds,
-             total_duration_seconds, is_music, is_short, updated_hlc)
-         VALUES (?, 'title', NULL, NULL, '2025-01-01T00:00:00+00:00', 10, 600, 0, 0, '100:0:dA')",
-    )
-    .bind(id)
-    .execute(pool)
-    .await
-    .unwrap();
 }
 
 async fn push(pool: &SqlitePool, device: &MemberSecrets) {

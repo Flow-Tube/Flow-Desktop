@@ -121,6 +121,7 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     flush_brains(app).await;
     let mut exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
     enrich_outgoing_albums(app, &mut exported).await;
+    session.store().upload_pending().await?;
     session.push(pool, exported).await?;
 
     let pulled = session.pull(pool).await?;

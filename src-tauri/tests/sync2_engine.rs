@@ -18,26 +18,7 @@ use flow_desktop_lib::sync2::roster::{Op, Role};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{MemoryStore, device_pool, draft, exported, group, head, wraps};
-
-async fn watch(pool: &SqlitePool, id: &str) {
-    sqlx::query(
-        "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds,
-             total_duration_seconds, is_music, is_short, updated_hlc)
-         VALUES (?, 'title', NULL, NULL, '2025-01-01T00:00:00+00:00', 10, 600, 0, 0, '100:0:dA')",
-    )
-    .bind(id)
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-async fn watched(pool: &SqlitePool) -> Vec<String> {
-    sqlx::query_scalar("SELECT video_id FROM watch_history ORDER BY video_id")
-        .fetch_all(pool)
-        .await
-        .unwrap()
-}
+use sync2_common::{MemoryStore, device_pool, draft, exported, group, head, watch, watched, wraps};
 
 /// One full sync: push, pull, apply what was read, finish.
 async fn sync(

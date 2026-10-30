@@ -178,6 +178,18 @@ impl<'a, S: Store> Session<'a, S> {
     /// Brings the roster up to date, unwraps the current epoch key, and starts the next epoch
     /// when a device left.
     pub async fn open(pool: &SqlitePool, store: S, device: &'a MemberSecrets) -> Result<Self> {
+        let mut session = Self::open_as_peer(pool, store, device).await?;
+        session.rotate_if_due(pool).await?;
+        Ok(session)
+    }
+
+    /// Like [`Session::open`], but never appends: a LAN session of a group on a store must leave
+    /// roster changes to the store.
+    pub async fn open_as_peer(
+        pool: &SqlitePool,
+        store: S,
+        device: &'a MemberSecrets,
+    ) -> Result<Self> {
         let record = load_group(pool).await?.ok_or(EngineError::NotLinked)?;
         let group = array(&hex::decode(&record.group_id).map_err(|_| Error::Group)?);
         let entries = roster_entries(pool).await?;
@@ -193,7 +205,6 @@ impl<'a, S: Store> Session<'a, S> {
             keys: BTreeMap::new(),
         };
         session.refresh(pool).await?;
-        session.rotate_if_due(pool).await?;
         Ok(session)
     }
 

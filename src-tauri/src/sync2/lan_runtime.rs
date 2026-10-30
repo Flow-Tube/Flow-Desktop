@@ -20,7 +20,7 @@ use super::keys::MemberSecrets;
 use super::lan::lan_tag;
 use super::lan_link::LiveSink;
 use super::lan_sync::{Met, meet, serve};
-use super::live_hub::{forget_keys, receive, subscribe};
+use super::live_hub::{announce, changed, forget_keys, receive, subscribe};
 use super::sealed::random_bytes;
 use super::service::sync_soon;
 use super::state::{StoreKind, load_group};
@@ -201,6 +201,20 @@ fn advertise(
     }
 }
 
+/// Without the server's live socket the LAN is what makes "Play on" available: the page hears
+/// when members come and go, and newcomers hear what this device is and plays.
+async fn follow_nearby(app: &AppHandle, near: &mut BTreeSet<String>) {
+    let now = nearby(app);
+    if now == *near {
+        return;
+    }
+    changed(app);
+    if !now.is_subset(near) {
+        let _ = announce(app).await;
+    }
+    *near = now;
+}
+
 async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
     let local = local(app).await?;
     // Dropped with the run, which aborts the tasks holding its keys.
@@ -227,6 +241,7 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
     let browse = || daemon.and_then(|daemon| daemon.browse(SERVICE_TYPE).ok());
     let mut events = browse();
     let mut found: BTreeMap<String, Found> = BTreeMap::new();
+    let mut near = nearby(app);
     let mut timer = tokio::time::interval(CHECK_EVERY);
     loop {
         let event = tokio::select! {
@@ -275,22 +290,24 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
                 },
             );
         }
-        let Some(tags) = tags else { continue };
-        for member in found.values_mut().filter(|f| tags.contains(&f.tag)) {
-            if now_ms() - member.met_ms < MEET_EVERY_MS {
-                continue;
-            }
-            member.met_ms = now_ms();
-            for address in &member.addresses {
-                let reached = (address.as_str(), member.port);
-                if let Ok(met) =
-                    meet(&local.pool, &local.device, reached, &[], live_sink(app)).await
-                {
-                    note(app, &met, Some((address.clone(), member.port)));
-                    break;
+        if let Some(tags) = tags {
+            for member in found.values_mut().filter(|f| tags.contains(&f.tag)) {
+                if now_ms() - member.met_ms < MEET_EVERY_MS {
+                    continue;
+                }
+                member.met_ms = now_ms();
+                for address in &member.addresses {
+                    let reached = (address.as_str(), member.port);
+                    if let Ok(met) =
+                        meet(&local.pool, &local.device, reached, &[], live_sink(app)).await
+                    {
+                        note(app, &met, Some((address.clone(), member.port)));
+                        break;
+                    }
                 }
             }
         }
+        follow_nearby(app, &mut near).await;
     }
     if let Some(daemon) = daemon {
         advertise(daemon, &instance, port, &mut advertised, None);

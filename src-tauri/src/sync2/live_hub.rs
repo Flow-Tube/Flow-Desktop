@@ -260,6 +260,7 @@ pub fn status(app: &AppHandle) -> LiveStatus {
     }
 }
 
-fn changed(app: &AppHandle) {
+/// Tells the page the live status changed.
+pub fn changed(app: &AppHandle) {
     let _ = app.emit(EVENT_LIVE, status(app));
 }

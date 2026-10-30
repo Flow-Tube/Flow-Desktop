@@ -63,12 +63,11 @@ pub struct QrCode {
 
 /// A code read from another device, checked for what this build can answer.
 pub enum Code {
-    /// A member's code, which a new device answers: its server, or `None` when it pairs over the
-    /// LAN only (a LAN group, or a `WebDAV` one whose credentials only the welcome carries), and
-    /// LAN addresses to try first.
+    /// A member's code, which a new device answers: where its group lives, and LAN addresses to
+    /// try first.
     Member {
         qr: QrCode,
-        store_url: Option<String>,
+        store: StoreLocation,
         lan: Vec<LanAddress>,
     },
     /// A new device's code, which a member answers over the LAN.
@@ -110,16 +109,12 @@ pub fn read_code(text: &str) -> Result<Code> {
     let qr: QrCode = serde_json::from_str(text.trim()).map_err(|_| EngineError::Unexpected)?;
     let lan = qr.l.clone().unwrap_or_default();
     match (qr.v, qr.r.as_str(), &qr.s) {
-        (2, "m", Some(store)) if store.k == "server" && store.u.is_some() => Ok(Code::Member {
-            store_url: store.u.clone(),
-            lan,
-            qr,
-        }),
         (2, "m", Some(store))
-            if matches!(store.k.as_str(), "lan" | "webdav") && !lan.is_empty() =>
+            if matches!(store.k.as_str(), "server" | "webdav") && store.u.is_some()
+                || store.k == "lan" && !lan.is_empty() =>
         {
             Ok(Code::Member {
-                store_url: None,
+                store: store.clone(),
                 lan,
                 qr,
             })

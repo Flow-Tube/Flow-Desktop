@@ -86,7 +86,15 @@ export const forgetGroup = () => invokeBackend<void>("linked_forget");
 export const syncNow = () => invokeBackend<Received[]>("linked_sync_now");
 export const addDevice = () => invokeBackend<void>("linked_add_device");
 /** Answers another device's code: a member's code joins its group, a new device's code adds it. */
-export const enterCode = (code: string) => invokeBackend<void>("linked_enter_code", { code });
+/** A WebDAV folder and its login, entered before scanning so pairing can use the folder's mailbox. */
+export interface FolderAccess {
+  url: string;
+  user: string;
+  password: string;
+}
+
+export const enterCode = (code: string, folder?: FolderAccess) =>
+  invokeBackend<void>("linked_enter_code", { code, folder: folder ?? null });
 /** Shows a code for a member on the same network to scan. */
 export const showCode = () => invokeBackend<void>("linked_show_code");
 /** Asks the group on `url` to let this device join; a linked device then accepts it. */

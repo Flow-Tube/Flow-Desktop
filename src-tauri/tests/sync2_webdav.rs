@@ -36,7 +36,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use sqlx::SqlitePool;
-use sync2_common::{Group, device_pool, empty_pool, exported, group, memory_welcome};
+use sync2_common::{Group, device_pool, empty_pool, exported, group};
 use tokio::net::TcpListener;
 
 const USER: &str = "flow";
@@ -221,6 +221,7 @@ async fn a_lost_concurrent_append_reports_the_winning_head() {
     assert_eq!(chain.len(), 3);
 }
 
+/// A new device that has the folder's login pairs through its mailbox when no LAN address answers.
 #[tokio::test]
 async fn pairing_runs_through_the_webdav_mailbox() {
     let g = group().await;
@@ -232,16 +233,23 @@ async fn pairing_runs_through_the_webdav_mailbox() {
         .unwrap();
     let newcomer = member_secrets(random_bytes(), random_bytes());
     let pool_n = empty_pool().await;
-    let offer = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None);
+    let offer = new_offer(Some(StoreLocation::webdav(&url)), "Desktop A", None);
     let code = read_code(&offer.qr).unwrap();
+    let welcome = WelcomeStore::WebDav {
+        u: url.clone(),
+        n: USER.into(),
+        w: PASSWORD.into(),
+    };
     let mailbox = store_for(&url, &newcomer.did).await;
     let yes = |_sas: String| async { true };
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, memory_welcome(), yes),
+        add_device(&session, offer, &g.a, welcome, yes),
         join(&pool_n, &mailbox, &code, &newcomer, named("New"), yes),
     );
     joined.unwrap();
     assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    let record = load_group(&pool_n).await.unwrap().unwrap();
+    assert_eq!(record.kind, StoreKind::WebDav);
 }
 
 #[tokio::test]

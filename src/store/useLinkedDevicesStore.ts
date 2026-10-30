@@ -23,6 +23,7 @@ import {
   removeDevice,
   renameDevice,
   restoreGroup,
+  retryKeychain,
   showCode,
   syncNow,
   updateLogin,
@@ -65,6 +66,7 @@ interface LinkedState {
   createOnLan: () => Promise<void>;
   createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
   updateLogin: (user: string, password: string) => Promise<void>;
+  retryKeychain: () => Promise<void>;
   /** Restores from a Flow server, or with `login` from a WebDAV folder. */
   restore: (url: string, words: string, login?: WebdavLogin) => Promise<void>;
   enterCode: (code: string, folder?: FolderAccess) => Promise<void>;
@@ -125,11 +127,9 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         set({ link });
         if (link.phase === "done") void get().refresh();
       });
-      await onSynced((lastSync) => {
-        const status = get().status;
-        if (!status) return;
-        set({ status: { ...status, lastSync } });
-        if (status.kind) void loadDevices();
+      // Read whole, since a sync can follow a keychain prompt answered while the page was open.
+      await onSynced(() => {
+        if (get().status) void get().refresh();
       });
       set({ link: await getLinkPhase() });
       await get().refresh();
@@ -173,6 +173,12 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     updateLogin: (user, password) =>
       run(async () => {
         await updateLogin(user, password);
+        await get().refresh();
+      }),
+
+    retryKeychain: () =>
+      run(async () => {
+        await retryKeychain();
         await get().refresh();
       }),
 

@@ -4,6 +4,7 @@ import { Link2 } from "lucide-react";
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { IconChip, Spinner } from "../SyncParts";
+import { KeychainBlocked } from "./KeychainBlocked";
 import { LinkPanel } from "./LinkPanel";
 import { LinkedOverview } from "./LinkedOverview";
 import { LinkedSetup } from "./LinkedSetup";
@@ -17,6 +18,7 @@ function Body() {
   if (words) return <RecoveryWords words={words} />;
   if (link.phase !== "idle") return <LinkPanel link={link} joining={!status.kind} />;
   if (status.stopped) return <StoppedNotice reason={status.stopped} />;
+  if (status.keychainBlocked) return <KeychainBlocked />;
   if (!status.kind) return <LinkedSetup />;
   if (status.loginRefused) return <LoginRefused />;
   return <LinkedOverview status={status} />;

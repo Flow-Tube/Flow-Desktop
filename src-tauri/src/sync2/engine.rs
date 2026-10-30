@@ -82,9 +82,8 @@ impl EngineError {
             Self::Store(StoreError::SignInRefused) => "linkedSignInRefused",
             Self::Store(StoreError::JoinDeclined) => "linkedJoinDeclined",
             Self::Store(StoreError::Unauthorized) => "linkedStoreUnauthorized",
-            Self::Store(StoreError::Local(_)) | Self::Keychain(_) | Self::Settings(_) => {
-                "linkedLocal"
-            }
+            Self::Store(StoreError::Local(_)) | Self::Settings(_) => "linkedLocal",
+            Self::Keychain(_) => "linkedKeychain",
             Self::Store(_) | Self::Protocol(_) | Self::Unexpected => "linkedProtocol",
             Self::Local(error) => error.kind(),
             Self::NotLinked => "linkedNotLinked",

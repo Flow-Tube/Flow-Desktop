@@ -56,6 +56,11 @@ pub async fn linked_restore(
 }
 
 #[tauri::command]
+pub async fn linked_retry_keychain(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::retry_keychain(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
 pub async fn linked_recovery_saved(app: AppHandle) -> Result<(), ErrorResponse> {
     actions::recovery_saved(&app).await.map_err(|e| err(&e))
 }

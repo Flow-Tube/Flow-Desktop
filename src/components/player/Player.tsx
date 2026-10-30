@@ -1810,9 +1810,9 @@ export const Player: React.FC<PlayerProps> = ({
       maxBufferLength: bufferConfig.maxSeconds,
       maxMaxBufferLength: bufferConfig.maxSeconds,
       backBufferLength: Math.max(30, bufferConfig.maxSeconds),
-      liveBackBufferLength: Math.max(900, bufferConfig.maxSeconds * 5),
-      liveSyncDurationCount: 4,
-      liveMaxLatencyDurationCount: 12,
+      liveBackBufferLength: null,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: Infinity,
       liveDurationInfinity: isLive,
       loader: ProxyLoader as unknown as typeof Hls.DefaultConfig.loader,
     });

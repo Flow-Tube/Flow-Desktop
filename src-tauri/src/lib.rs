@@ -67,7 +67,7 @@ use commands::linked::{
     linked_recovery_saved, linked_remove, linked_rename, linked_restore, linked_show_code,
     linked_status, linked_sync_now, linked_update_login,
 };
-use commands::live::{live_consents, live_now, live_set_consent, live_status};
+use commands::live::{live_consents, live_now, live_send, live_set_consent, live_status};
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
     put_cached_lyrics, save_download_lyrics,
@@ -814,6 +814,7 @@ pub fn run() {
             linked_leave,
             live_consents,
             live_now,
+            live_send,
             live_set_consent,
             live_status,
             linked_sync_now,

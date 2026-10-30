@@ -276,6 +276,8 @@ interface MusicPlayerState {
   removeFromQueue: (index: number) => void;
   reorderQueue: (from: number, to: number) => void;
   clearQueue: () => void;
+  /** Replaces the queue around the song playing, which carries on; it goes first when `tracks` leaves it out. */
+  replaceQueue: (tracks: SongItem[]) => void;
   /** Puts back the queue as it was before the last removal or clear. */
   undoQueueEdit: () => void;
   /** Shows the queue saved at the last session, paused, unless something already plays. */
@@ -840,6 +842,17 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       queueSource: null,
     });
     undoSnapshot = snapshot;
+  },
+
+  replaceQueue: (tracks) => {
+    const s = get();
+    const playing = s.queue[s.currentIndex];
+    if (!playing) return;
+    const at = tracks.findIndex((track) => videoIdOf(track) === videoIdOf(playing));
+    const queue = at >= 0 ? tracks.map((track, i) => (i === at ? playing : track)) : [playing, ...tracks];
+    resetRadioSession(queue.map(videoIdOf));
+    musicAudioEngine.clearPreload();
+    set({ ...freshQueue(queue, s.isShuffle ? queue : null), currentIndex: Math.max(0, at), queueSource: null });
   },
 
   undoQueueEdit: () => {

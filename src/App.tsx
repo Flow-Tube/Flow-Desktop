@@ -86,6 +86,7 @@ import { useSingleTabWhenOff } from "./lib/tabs/useSingleTabWhenOff";
 import { useCrossWindowSync } from "./lib/useCrossWindowSync";
 import { useLinkedSyncEvents } from "./lib/useLinkedSyncEvents";
 import { useLiveNow } from "./lib/live/useLiveNow";
+import { usePlayOnEvents } from "./lib/live/usePlayOnEvents";
 import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
@@ -119,6 +120,7 @@ function App() {
   useCrossWindowSync();
   useLinkedSyncEvents();
   useLiveNow();
+  usePlayOnEvents();
   useProfileSwitchListener(markSwitching);
 
   // Onboarding belongs to the main window; an extra window only exists once it is done.

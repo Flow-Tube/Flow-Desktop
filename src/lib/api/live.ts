@@ -22,6 +22,47 @@ export interface Now {
   index: number;
 }
 
+/** A whole playback session handed to device `to`. */
+export interface Play {
+  type: "play";
+  to: string;
+  video: string;
+  pos: number;
+  music: boolean;
+  link: string | null;
+  queue: string[];
+  index: number;
+  state: PlayState;
+}
+
+export type Command = "play" | "pause" | "seek" | "next" | "previous" | "volume" | "queue";
+
+export interface Cmd {
+  type: "cmd";
+  to: string;
+  cmd: Command;
+  pos?: number;
+  vol?: number;
+  queue?: string[];
+}
+
+/** The outcome of the `play` or `cmd` with counter `ref`. */
+export interface Answer {
+  type: "result";
+  to: string;
+  ref: number;
+  ok: boolean;
+  reason?: string;
+}
+
+/** A message for this device to act on; `ask` when the user must first allow its sender. */
+export interface LiveRequest {
+  from: string;
+  seq: number;
+  message: Play | Cmd | Answer;
+  ask: boolean;
+}
+
 export interface LiveDevice {
   kind: DeviceKind | null;
   can: Array<"play" | "remote">;
@@ -38,6 +79,8 @@ export interface LiveStatus {
 }
 
 export const publishNow = (now: Now) => invokeBackend<void>("live_now", { now });
+/** Sends a `play`, `cmd` or `result`; resolves to its counter, which the answer names. */
+export const sendLive = (message: Play | Cmd | Answer) => invokeBackend<number>("live_send", { message });
 export const getLiveStatus = () => invokeBackend<LiveStatus>("live_status");
 /** Remembered answers by device: `true` to allow always, `false` to decline. */
 export const getConsents = () => invokeBackend<Record<string, boolean>>("live_consents");
@@ -47,3 +90,6 @@ export const setConsent = (did: string, allowed: boolean | null) =>
 
 export const onLive = (handler: (status: LiveStatus) => void): Promise<UnlistenFn> =>
   listen<LiveStatus>("sync2://live", (event) => handler(event.payload));
+
+export const onLiveRequest = (handler: (request: LiveRequest) => void): Promise<UnlistenFn> =>
+  listen<LiveRequest>("sync2://live-request", (event) => handler(event.payload));

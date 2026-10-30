@@ -130,6 +130,16 @@ describe("shuffle", () => {
 });
 
 describe("queue editing", () => {
+  it("replaces the queue around the song playing, which carries on", async () => {
+    await store().playQueue([song("a"), song("b")], 1);
+    store().replaceQueue([song("x"), song("b"), song("y")]);
+    expect(ids(store().queue)).toEqual(["x", "b", "y"]);
+    expect(playing()).toBe("b");
+    store().replaceQueue([song("z")]);
+    expect(ids(store().queue)).toEqual(["b", "z"]);
+    expect(playing()).toBe("b");
+  });
+
   it("queues a song that already played", async () => {
     await store().playQueue([song("a"), song("b"), song("c")], 1);
     store().addToQueue(song("a"));

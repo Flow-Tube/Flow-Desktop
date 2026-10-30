@@ -37,7 +37,7 @@ fn view(state: &RosterState) -> Value {
         .iter()
         .map(|(did, m)| json!({ "did": did, "role": if m.role == Role::Device { "device" } else { "recovery" }, "used": m.used }))
         .collect();
-    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "members": members })
+    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "members": members })
 }
 
 #[test]

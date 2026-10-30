@@ -11,7 +11,9 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
-use super::actions::{default_link, local, login_refused, open_session, set_login_refused};
+use super::actions::{
+    default_link, local, login_refused, open_session, set_login_refused, stop_if_shut_out, stopped,
+};
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{EngineError, Result, now_ms};
 use super::names::device_names;
@@ -76,11 +78,19 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
     let state = app.state::<BackgroundSync>();
     let _running = state.running.lock().await;
     let pool = app.state::<SqlitePool>().inner().clone();
-    if load_group(&pool).await?.is_none() || login_refused(&pool).await? {
+    if load_group(&pool).await?.is_none()
+        || stopped(&pool).await?.is_some()
+        || login_refused(&pool).await?
+    {
         return Ok(Vec::new());
     }
     let _ = app.emit(EVENT_SYNCING, ());
     let result = run(app).await;
+    if let Err(error) = &result
+        && let Err(failed) = stop_if_shut_out(&pool, error).await
+    {
+        tracing::warn!(target: "flow::sync2", kind = failed.kind(), "could not stop syncing");
+    }
     if matches!(result, Err(EngineError::Store(StoreError::Unauthorized))) {
         set_login_refused(&pool, true).await?;
     }

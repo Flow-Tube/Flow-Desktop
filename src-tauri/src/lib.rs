@@ -63,7 +63,7 @@ use commands::files::{write_backup_file, write_lyrics_file};
 use commands::linked::{
     linked_accept_join, linked_add_device, linked_answer, linked_ask_to_join, linked_cancel,
     linked_create, linked_create_lan, linked_create_webdav, linked_decline_join, linked_devices,
-    linked_enter_code, linked_forget, linked_join_requests, linked_link_phase,
+    linked_enter_code, linked_forget, linked_join_requests, linked_leave, linked_link_phase,
     linked_recovery_saved, linked_remove, linked_rename, linked_restore, linked_show_code,
     linked_status, linked_sync_now, linked_update_login,
 };
@@ -809,6 +809,7 @@ pub fn run() {
             linked_rename,
             linked_remove,
             linked_forget,
+            linked_leave,
             linked_sync_now,
             linked_link_phase,
             linked_add_device,

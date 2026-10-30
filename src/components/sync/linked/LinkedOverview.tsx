@@ -47,7 +47,7 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
         <Button variant="tonal" className="mt-auto self-start" disabled={busy || syncing} onClick={() => void syncNow()}>
           <RefreshCw className={`h-4 w-4 ${busy || syncing ? "animate-spin" : ""}`} /> {getString("linked_sync_now")}
         </Button>
-        <LeaveGroup label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
+        <LeaveGroup action="leave" label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
       </Card>
       <Card title={getString("linked_devices_label")} className="col-span-12 lg:col-span-7">
         {devicesError ? (

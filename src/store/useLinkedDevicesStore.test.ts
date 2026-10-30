@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   getLinkPhase: vi.fn(),
   getLinkedDevices: vi.fn(),
   getLinkedStatus: vi.fn(),
+  leaveGroup: vi.fn(),
   enterCode: vi.fn(),
   showCode: vi.fn(),
   markRecoverySaved: vi.fn(),

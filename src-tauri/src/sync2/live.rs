@@ -15,7 +15,7 @@ use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 
-use super::actions::local;
+use super::actions::{local, stopped};
 use super::engine::Result;
 use super::sealed::random_bytes;
 use super::server::{self, ServerStore, StoreError};
@@ -89,7 +89,7 @@ async fn listen(app: &AppHandle) -> Result<()> {
     let Some(record) = load_group(&local.pool).await? else {
         return Ok(());
     };
-    if record.kind != StoreKind::Server {
+    if record.kind != StoreKind::Server || stopped(&local.pool).await?.is_some() {
         return Ok(());
     }
     let store = ServerStore::connect(

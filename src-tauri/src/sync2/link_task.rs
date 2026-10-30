@@ -9,7 +9,7 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
-use super::actions::{Local, ensure_unlinked, local, open_session};
+use super::actions::{Local, local, open_session, start_membership};
 use super::codes::{Code, StoreLocation, new_offer, read_code};
 use super::device::keychain;
 use super::engine::{EngineError, Result};
@@ -244,8 +244,8 @@ async fn finish_welcomed(local: &Local, welcomed: Welcomed<impl Pipe>) -> Result
 /// This device, in no group yet, asks a server group to let it join with the operator's admin
 /// token, and pairs once a linked device accepts.
 pub async fn start_asking(app: &AppHandle, url: &str, admin_token: &str) -> Result<()> {
-    let local = local(app).await?;
-    ensure_unlinked(&local.pool).await?;
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
     let (url, admin_token) = (url.trim().to_owned(), admin_token.trim().to_owned());
     let task = app.clone();
     start(app, async move {
@@ -269,8 +269,8 @@ pub async fn start_asking(app: &AppHandle, url: &str, admin_token: &str) -> Resu
 
 /// This device, in no group yet, shows a code for a member on the same network to scan.
 pub async fn start_showing(app: &AppHandle) -> Result<()> {
-    let local = local(app).await?;
-    ensure_unlinked(&local.pool).await?;
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
     let listening = listen().await?.ok_or(EngineError::LanUnreachable)?;
     let task = app.clone();
     start(app, async move {
@@ -306,11 +306,11 @@ pub async fn start_with_code(
     folder: Option<FolderAccess>,
 ) -> Result<()> {
     let code = read_code(text)?;
-    let local = local(app).await?;
+    let mut local = local(app).await?;
     let task = app.clone();
     match &code {
         Code::Member { store, .. } => {
-            ensure_unlinked(&local.pool).await?;
+            start_membership(&mut local).await?;
             let (kind, url) = (store.k.clone(), store.u.clone().unwrap_or_default());
             if let Some(folder) = &folder
                 && kind == "webdav"

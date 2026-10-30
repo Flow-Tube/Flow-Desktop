@@ -4,7 +4,7 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 
-use super::device::{device_keys, keychain};
+use super::device::{device_keys, forget_device_keys, keychain, renew_device_keys};
 use super::engine::{EngineError, Result, Session};
 use super::group_store::GroupStore;
 use super::held::HeldStore;
@@ -12,10 +12,10 @@ use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
 use super::lan_runtime::{met, nearby};
 use super::linking::DeviceMeta;
-use super::membership::{remove_device, rename_device};
+use super::membership::{leave_group, remove_device, rename_device};
 use super::names::device_names;
 use super::roster::Role;
-use super::server::ServerStore;
+use super::server::{ServerStore, StoreError};
 use super::service::{LastSync, is_syncing, last_sync, sync_soon};
 use super::setup::{
     create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
@@ -30,6 +30,7 @@ use crate::sync::error::SyncError;
 use crate::sync::{changes, ledger};
 
 const RECOVERY_SAVED: &str = "sync2_recovery_saved";
+const STOPPED: &str = "sync2_stopped";
 /// Set once the `WebDAV` folder refused its login: nothing is sent until the user enters a new
 /// one, because Nextcloud bans an address after repeated failures.
 const LOGIN_REFUSED: &str = "sync2_login_refused";
@@ -89,11 +90,33 @@ pub async fn open_session<'a>(
     Session::open(pool, store, device).await
 }
 
-pub async fn ensure_unlinked(pool: &SqlitePool) -> Result<()> {
-    match load_group(pool).await? {
-        Some(_) => Err(EngineError::AlreadyLinked),
-        None => Ok(()),
+/// Checks that this device is in no group, and gives it fresh keys for the one it is about to
+/// create or join.
+pub async fn start_membership(local: &mut Local) -> Result<()> {
+    if load_group(&local.pool).await?.is_some() {
+        return Err(EngineError::AlreadyLinked);
     }
+    local.device = renew_device_keys(&keychain())?;
+    Ok(())
+}
+
+/// Why syncing stopped by itself: the kind of the error that shut this device out.
+pub async fn stopped(pool: &SqlitePool) -> Result<Option<String>> {
+    Ok(get_setting(pool, STOPPED)
+        .await?
+        .filter(|kind| !kind.is_empty()))
+}
+
+/// Stops syncing once the group shut this device out (spec/protocol.md, Removal). A roster that
+/// no longer lists it also forgets the group and its keys; a server that refuses it a token
+/// leaves that to the user, because the roster can't be read then.
+pub async fn stop_if_shut_out(pool: &SqlitePool, error: &EngineError) -> Result<()> {
+    match error {
+        EngineError::Removed => forget_with_keys(pool).await?,
+        EngineError::Store(StoreError::SignInRefused) => {}
+        _ => return Ok(()),
+    }
+    Ok(set_setting(pool, STOPPED, error.kind()).await?)
 }
 
 async fn linked(pool: &SqlitePool) -> Result<GroupRecord> {
@@ -123,6 +146,8 @@ pub struct LinkedStatus {
     /// The group this device is in: on a server, in a `WebDAV` folder or on its devices; `None`
     /// when in no group.
     pub kind: Option<StoreKind>,
+    /// Set when syncing stopped because the group shut this device out.
+    pub stopped: Option<String>,
     /// The server or folder the group syncs through.
     pub store_url: Option<String>,
     /// The `WebDAV` folder refused its login, so nothing syncs until a new one is entered.
@@ -139,6 +164,7 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
     let record = load_group(&pool).await?;
     Ok(LinkedStatus {
         kind: record.as_ref().map(|r| r.kind),
+        stopped: stopped(&pool).await?,
         store_url: record
             .filter(|r| r.kind != StoreKind::Lan)
             .map(|r| r.store_url),
@@ -200,8 +226,8 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
 
 /// Starts a group on a fresh Flow server and returns the recovery words to show once.
 pub async fn create(app: &AppHandle, url: &str, admin_token: &str) -> Result<String> {
-    let local = local(app).await?;
-    ensure_unlinked(&local.pool).await?;
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
     let words = create_group(
         &local.pool,
         url.trim(),
@@ -222,8 +248,8 @@ pub async fn create_on_webdav(
     user: &str,
     password: &str,
 ) -> Result<String> {
-    let local = local(app).await?;
-    ensure_unlinked(&local.pool).await?;
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
     let url = url.trim();
     let login = WebDavLogin {
         user: user.trim().to_owned(),
@@ -266,8 +292,8 @@ pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result
 /// Starts a group that lives on this network's devices, with no server, and returns the recovery
 /// words to show once.
 pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
-    let local = local(app).await?;
-    ensure_unlinked(&local.pool).await?;
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
     let words =
         create_lan_group(&local.pool, &local.device, &local.meta, &default_link(app)).await?;
     set_recovery_saved(&local.pool, false).await?;
@@ -282,8 +308,8 @@ pub async fn restore(
     words: &str,
     login: Option<WebDavLogin>,
 ) -> Result<String> {
-    let local = local(app).await?;
-    ensure_unlinked(&local.pool).await?;
+    let mut local = local(app).await?;
+    start_membership(&mut local).await?;
     let (pool, url, device, meta) = (&local.pool, url.trim(), &local.device, &local.meta);
     let next = match login {
         Some(login) => {
@@ -344,10 +370,28 @@ pub async fn decline_join(app: &AppHandle, id: &str) -> Result<()> {
     Ok(server.decline_join(id).await?)
 }
 
-/// Stops syncing on this device. The group keeps it as a member until another device removes it.
+/// Leaves the group (spec/protocol.md, Leaving): appends a `leave` entry, then forgets the group
+/// and this device's keys. The last device of a group only forgets it.
+pub async fn leave(app: &AppHandle) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let session = open_session(&local.pool, &record, &local.device).await?;
+    let devices = session
+        .roster()
+        .members
+        .values()
+        .filter(|m| m.role == Role::Device)
+        .count();
+    if devices > 1 {
+        leave_group(&session, &local.device).await?;
+    }
+    forget(app).await
+}
+
+/// Forgets the group and this device's keys without telling the group, for a device it already
+/// shut out.
 pub async fn forget(app: &AppHandle) -> Result<()> {
-    leave(app.state::<SqlitePool>().inner()).await?;
-    Ok(forget_login(&keychain())?)
+    forget_with_keys(app.state::<SqlitePool>().inner()).await
 }
 
 /// Clears history, subscriptions and playlists. When this profile syncs, the device first leaves
@@ -355,7 +399,7 @@ pub async fn forget(app: &AppHandle) -> Result<()> {
 /// devices; linking again brings their data back.
 pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     if syncs {
-        leave(pool).await?;
+        forget_here(pool).await?;
     }
     crate::db::watch_history::clear_watch_history(pool).await?;
     for key in ["subscriptions", "user_playlists"] {
@@ -367,9 +411,17 @@ pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     Ok(())
 }
 
-/// [`forget`] on a database, for a reset that must not reach the other devices.
-pub async fn leave(pool: &SqlitePool) -> Result<()> {
+/// Forgets the group here, with the device keys and the `WebDAV` login kept for it.
+async fn forget_with_keys(pool: &SqlitePool) -> Result<()> {
+    forget_here(pool).await?;
+    forget_device_keys(&keychain())?;
+    Ok(forget_login(&keychain())?)
+}
+
+/// Forgets the group on a database, for a reset that must not reach the other devices.
+pub async fn forget_here(pool: &SqlitePool) -> Result<()> {
     forget_group(pool).await?;
+    set_setting(pool, STOPPED, "").await?;
     set_login_refused(pool, false).await?;
     set_recovery_saved(pool, true).await
 }

@@ -70,6 +70,11 @@ pub async fn linked_remove(app: AppHandle, id: String) -> Result<(), ErrorRespon
 }
 
 #[tauri::command]
+pub async fn linked_leave(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::leave(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
 pub async fn linked_forget(app: AppHandle) -> Result<(), ErrorResponse> {
     actions::forget(&app).await.map_err(|e| err(&e))
 }

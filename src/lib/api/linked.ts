@@ -12,6 +12,8 @@ export interface LastSync {
 export interface LinkedStatus {
   /** The group this device is in: on a Flow server, in a WebDAV folder, or on its devices on the network. */
   kind: "server" | "webdav" | "lan" | null;
+  /** Why syncing stopped by itself: the group shut this device out (an `EngineError::kind`). */
+  stopped?: "linkedRemoved" | "linkedSignInRefused" | null;
   /** The Flow server or WebDAV folder this device syncs with. */
   storeUrl?: string | null;
   /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
@@ -81,6 +83,9 @@ export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
 export const removeDevice = (id: string) => invokeBackend<void>("linked_remove", { id });
+/** Tells the group this device leaves, then forgets the group and this device's keys. */
+export const leaveGroup = () => invokeBackend<void>("linked_leave");
+/** Forgets the group and this device's keys without telling the group. */
 export const forgetGroup = () => invokeBackend<void>("linked_forget");
 /** Resolves to what the run applied, by device. */
 export const syncNow = () => invokeBackend<Received[]>("linked_sync_now");

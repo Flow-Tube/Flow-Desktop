@@ -34,6 +34,8 @@ pub enum StoreError {
     InstanceChanged,
     #[error("this server already has a group")]
     AlreadyClaimed,
+    #[error("the server no longer accepts this device")]
+    SignInRefused,
     #[error("a linked device declined the request to join")]
     JoinDeclined,
     #[error("the storage refused the user name or password")]
@@ -155,12 +157,17 @@ impl ServerStore {
             .map_err(|_| StoreError::Malformed)?;
         let message = [tag("auth"), bytes(&instance)?, bytes(&group)?, nonce_bytes].concat();
         let sig = URL_SAFE_NO_PAD.encode(sign(&self.member.sig_seed, &message));
+        // The server refuses a device that is no longer in the roster, which it can't read then.
         let token = self
             .post_json(
                 "v1/auth/token",
                 &json!({ "did": did, "challenge": nonce, "sig": sig }),
             )
-            .await?;
+            .await
+            .map_err(|error| match error {
+                StoreError::Refused { status: 401, .. } => StoreError::SignInRefused,
+                error => error,
+            })?;
         let value = token["token"]
             .as_str()
             .ok_or(StoreError::Malformed)?

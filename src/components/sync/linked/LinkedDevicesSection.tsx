@@ -9,15 +9,15 @@ import { LinkedOverview } from "./LinkedOverview";
 import { LinkedSetup } from "./LinkedSetup";
 import { LoginRefused } from "./LoginRefused";
 import { RecoveryWords } from "./RecoveryWords";
-import { RemovedNotice } from "./RemovedNotice";
+import { StoppedNotice } from "./StoppedNotice";
 
 function Body() {
   const { status, words, link } = useLinkedDevicesStore();
   if (!status) return <Spinner className="h-5 w-5 text-chrome-neutral-400" />;
   if (words) return <RecoveryWords words={words} />;
   if (link.phase !== "idle") return <LinkPanel link={link} joining={!status.kind} />;
+  if (status.stopped) return <StoppedNotice reason={status.stopped} />;
   if (!status.kind) return <LinkedSetup />;
-  if (status.lastSync?.error === "linkedRemoved") return <RemovedNotice />;
   if (status.loginRefused) return <LoginRefused />;
   return <LinkedOverview status={status} />;
 }

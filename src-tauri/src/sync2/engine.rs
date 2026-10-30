@@ -73,6 +73,7 @@ impl EngineError {
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
             Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
+            Self::Store(StoreError::SignInRefused) => "linkedSignInRefused",
             Self::Store(StoreError::JoinDeclined) => "linkedJoinDeclined",
             Self::Store(StoreError::Unauthorized) => "linkedStoreUnauthorized",
             Self::Store(StoreError::Local(_)) | Self::Keychain(_) | Self::Settings(_) => {
@@ -168,40 +169,55 @@ pub fn verify_logged<'b>(
 }
 
 impl<'a, S: Store> Session<'a, S> {
-    /// Brings the roster up to date and unwraps the current epoch key.
+    /// Brings the roster up to date, unwraps the current epoch key, and starts the next epoch
+    /// when a device left.
     pub async fn open(pool: &SqlitePool, store: S, device: &'a MemberSecrets) -> Result<Self> {
         let record = load_group(pool).await?.ok_or(EngineError::NotLinked)?;
         let group = array(&hex::decode(&record.group_id).map_err(|_| Error::Group)?);
-        let mut entries = roster_entries(pool).await?;
-        let mut state = replay_roster(&entries)?;
-        let after = i64::try_from(state.seq).map_err(|_| Error::RosterChain)?;
-        let fresh = store.roster_after(after).await?;
-        for entry in &fresh {
-            state = apply_entry(Some(&state), entry)?;
-        }
-        add_roster_entries(pool, &fresh).await?;
-        entries.extend(fresh);
-        if !state.members.contains_key(&hex::encode(device.did)) {
-            return Err(EngineError::Removed);
-        }
+        let entries = roster_entries(pool).await?;
         let mut session = Self {
             store,
             device,
             record,
             group,
-            state,
-            entries: Vec::new(),
+            state: replay_roster(&entries)?,
+            entries,
             signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
         };
-        session.signing_keys = signing_keys(&entries)?;
-        for epoch in entries.iter().filter_map(|e| e.epoch.as_ref()) {
-            session.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
-        }
-        session.entries = entries;
-        session.unwrap_current().await?;
+        session.refresh(pool).await?;
+        session.rotate_if_due(pool).await?;
         Ok(session)
+    }
+
+    /// Reads and checks the roster entries appended since, and unwraps the key of the epoch in
+    /// force.
+    pub(super) async fn refresh(&mut self, pool: &SqlitePool) -> Result<()> {
+        let after = i64::try_from(self.state.seq).map_err(|_| Error::RosterChain)?;
+        let fresh = self.store.roster_after(after).await?;
+        let mut state = self.state.clone();
+        for entry in &fresh {
+            state = apply_entry(Some(&state), entry)?;
+        }
+        add_roster_entries(pool, &fresh).await?;
+        self.state = state;
+        self.entries.extend(fresh);
+        if !self
+            .state
+            .members
+            .contains_key(&hex::encode(self.device.did))
+        {
+            return Err(EngineError::Removed);
+        }
+        self.signing_keys = signing_keys(&self.entries)?;
+        for epoch in self.entries.iter().filter_map(|e| e.epoch.as_ref()) {
+            self.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
+        }
+        if !self.keys.contains_key(&self.state.epoch) {
+            self.unwrap_current().await?;
+        }
+        Ok(())
     }
 
     pub fn store(&self) -> &S {

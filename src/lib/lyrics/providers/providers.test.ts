@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { convertLyricsPlus } from "./lyricsPlus";
 import { pickSearchHit } from "./lrclib";
-import { matchKuGou, normalizeKuGouLrc } from "./kugou";
+import { isInstrumentalNotice, matchKuGou, normalizeKuGouLrc } from "./kugou";
 import { matchAppleSongs, parseItunesSearch } from "./paxsenix";
 import { isUncachedMiss } from "./betterLyrics";
 import { lrcOffsetMs, parseOfflineLyrics } from "../offline";
+import { parseLyrics } from "../lyricsUtils";
 
 describe("BetterLyrics", () => {
   it("reads an uncached 401 as a miss for this song only", () => {
@@ -80,6 +81,14 @@ describe("KuGou", () => {
   it("drops untimed lines and the credit block at the head", () => {
     const lrc = ["[00:00.00]Song - Singer", "[00:01.00]作词：Someone", "plain", "[00:10.00]First", "[00:20.00]Second"].join("\n");
     expect(normalizeKuGouLrc(lrc)).toBe("[00:10.00]First\n[00:20.00]Second");
+  });
+
+  it("reads the instrumental notice as no lyrics, but not lyrics that contain it", () => {
+    const notice = ["﻿[id:$00000000]", "[ar:arkady sevidov]", "[ti:June]", "[total:320317]", "[00:01.58]纯音乐，请欣赏"].join("\n");
+    expect(isInstrumentalNotice(parseLyrics(normalizeKuGouLrc(notice)))).toBe(true);
+    expect(isInstrumentalNotice(parseLyrics("[00:01.58]纯音乐,请欣赏"))).toBe(true);
+    expect(isInstrumentalNotice(parseLyrics("[00:01.00]纯音乐，请欣赏\n[00:05.00]First"))).toBe(false);
+    expect(isInstrumentalNotice([])).toBe(false);
   });
 });
 

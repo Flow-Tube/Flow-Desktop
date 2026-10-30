@@ -9,13 +9,21 @@ use tauri::{AppHandle, State};
 use super::linked::err;
 use crate::errors::ErrorResponse;
 use crate::sync2::live_hub::{self, LiveStatus};
-use crate::sync2::live_message::Now;
+use crate::sync2::live_message::{LiveMessage, Now};
 use crate::sync2::live_state;
 
 /// Tells the other devices what this one plays now.
 #[tauri::command]
 pub async fn live_now(app: AppHandle, now: Now) -> Result<(), ErrorResponse> {
     live_hub::publish_now(&app, now).await.map_err(|e| err(&e))
+}
+
+/// Sends a `play`, `cmd` or `result`, and returns its counter, which the answer names.
+#[tauri::command]
+pub async fn live_send(app: AppHandle, message: LiveMessage) -> Result<u64, ErrorResponse> {
+    live_hub::send_request(&app, message)
+        .await
+        .map_err(|e| err(&e))
 }
 
 #[tauri::command]

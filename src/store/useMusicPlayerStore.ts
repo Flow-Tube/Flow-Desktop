@@ -249,6 +249,8 @@ interface MusicPlayerState {
 
   // --- stream resolution ---
   loadingStreamId: string | null;
+  /** Bumped to give the player fresh audio elements, free of a WebAudio graph no longer needed. */
+  audioGeneration: number;
   streamError: string | null;
   streamErrorKind: string | null;
 
@@ -354,6 +356,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   viewState: "dock",
 
   loadingStreamId: null,
+  audioGeneration: 0,
   streamError: null,
   streamErrorKind: null,
 
@@ -443,6 +446,12 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const videoId = videoIdOf(track);
     let resumeAt = options?.resumeAt ?? 0;
     const autoplay = options?.autoplay ?? true;
+    // Between songs, swap the elements for fresh ones once the equalizer and crossfade are off.
+    if (musicAudioEngine.canReleaseGraph()) {
+      const attached = musicAudioEngine.nextAttach();
+      set({ audioGeneration: get().audioGeneration + 1 });
+      await attached;
+    }
     awaitingFirstPlay = false;
     cancelNetworkWait();
     if (autoplay) userPaused = false;

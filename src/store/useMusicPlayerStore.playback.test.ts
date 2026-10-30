@@ -25,6 +25,8 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     setLoudness: vi.fn(),
     load: vi.fn(async () => {}),
     seekWhenReady: vi.fn(),
+    canReleaseGraph: vi.fn(() => false),
+    nextAttach: vi.fn(async () => {}),
     play: vi.fn(async () => {}),
     pause: vi.fn(),
     stop: vi.fn(),

@@ -797,6 +797,7 @@ async fn relay_remote(
     head_only: bool,
 ) -> std::io::Result<()> {
     let (range_start, range_end) = parse_range_spec(client_range);
+    let started = std::time::Instant::now();
     // Match the fetch UA to the URL's `c=` client (mobile parity); the target URL
     // is stable across recovery attempts, so resolve it once.
     let upstream_user_agent = user_agent_for_media_url(target_url, &session.user_agent);
@@ -1025,6 +1026,14 @@ async fn relay_remote(
 
             socket.write_all(response_headers.as_bytes()).await?;
             headers_written = true;
+            debug!(
+                range = ?client_range,
+                status = status.as_u16(),
+                content_range = ?content_range_value,
+                content_length = content_length_value,
+                first_byte_ms = started.elapsed().as_millis(),
+                "proxy answered"
+            );
 
             if head_only {
                 return Ok(());
@@ -1094,6 +1103,12 @@ async fn relay_remote(
         tokio::time::sleep(std::time::Duration::from_millis(150 * u64::from(attempt))).await;
     }
 
+    debug!(
+        range = ?client_range,
+        bytes = bytes_relayed,
+        total_ms = started.elapsed().as_millis(),
+        "proxy relay ended"
+    );
     if let Some(body) = cached_body {
         if body.len() == content_length_value && content_length_value > 0 {
             manager.store_cached_response(

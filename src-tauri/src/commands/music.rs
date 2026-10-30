@@ -29,6 +29,7 @@ use crate::models::music_stream::{MusicAudioQuality, MusicStreamInfo};
 use crate::music_brain::store::MusicBrainStore;
 use crate::security::validation::{validate_search_query, validate_video_id};
 use crate::services::music_service::{Freshness, MusicService};
+use crate::streaming::hls;
 use crate::streaming::images::{image_content_type, is_local_host, proxyable_image_url};
 use crate::streaming::proxy::StreamingManager;
 
@@ -412,7 +413,20 @@ pub async fn get_music_stream(
         info.user_agent.clone(),
     );
     let port = streaming_manager.get_port();
-    info.audio_url = format!("http://127.0.0.1:{port}/stream/{token}");
+    let media = format!("/stream/{token}");
+    info.audio_url = format!("http://127.0.0.1:{port}{media}");
+    if hls::SERVE_AAC_AS_HLS
+        && info.mime_type.starts_with("audio/mp4")
+        && let Some(playlist) = hls::aac_playlist(port, &media).await
+    {
+        let token = uuid::Uuid::new_v4().to_string();
+        streaming_manager.register_inline_session(
+            token.clone(),
+            playlist.into_bytes(),
+            "application/vnd.apple.mpegurl".into(),
+        );
+        info.audio_url = format!("http://127.0.0.1:{port}/stream/{token}");
+    }
     info.user_agent = String::new();
 
     Ok(info)

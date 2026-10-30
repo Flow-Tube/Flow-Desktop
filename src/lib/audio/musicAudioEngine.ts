@@ -81,6 +81,7 @@ class MusicAudioEngine {
   private eqEngaged = false;
   private speed = 1;
   private crossfadeEnabled = false;
+  private attachWaiters: Array<() => void> = [];
   private armedFadeSeconds: number | null = null;
   private fading: Fade | null = null;
 
@@ -111,6 +112,20 @@ class MusicAudioEngine {
     this.applySpeed();
     this.engageWhilePlaying();
     this.applyGain();
+    for (const waiter of this.attachWaiters.splice(0)) waiter();
+  }
+
+  /** Resolves once new elements are attached. */
+  nextAttach(): Promise<void> {
+    return new Promise((resolve) => this.attachWaiters.push(resolve));
+  }
+
+  /**
+   * Whether the elements are routed through WebAudio although nothing needs it any more: fresh
+   * elements would then play the faster-starting WebM again on macOS (see `wantsAac`).
+   */
+  canReleaseGraph(): boolean {
+    return this.graphReady && !this.needsGraph();
   }
 
   /** The element currently playing — the one whose events the player follows. */

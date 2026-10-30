@@ -15,9 +15,9 @@ import {
 } from "../lib/api/live";
 import { getString } from "../lib/i18n/index";
 import { nowOf } from "../lib/live/now";
-import { focusOf, overrideFor, withOverrides, type Override } from "../lib/live/optimistic";
+import { overrideFor, stillControlled, withOverrides, type Override } from "../lib/live/optimistic";
 import { applyCommand, pauseHere, playing, startSession } from "../lib/live/players";
-import { positionOf } from "../lib/live/position";
+import { activeDevice, positionOf } from "../lib/live/position";
 import { useMusicPlayerStore } from "./useMusicPlayerStore";
 import { usePlayerStore } from "./usePlayerStore";
 import { useUiStore } from "./useUiStore";
@@ -35,8 +35,11 @@ interface PlayOnState {
   /** The status as the devices last reported it. */
   reported: LiveStatus | null;
   overrides: Record<string, Override>;
-  /** The other device shown as playing, which stays shown once paused; `null` once this one plays. */
-  focus: string | null;
+  /**
+   * The other device the user chose to control from "Play on"; the remote dock follows it. It is
+   * cleared once playback comes back here or the device goes offline.
+   */
+  controlling: string | null;
   /** The group's devices with their names, loaded once another device can be reached. */
   linked: LinkedDevice[];
   /** Requests waiting until the user allows their sender, oldest first. */
@@ -52,6 +55,8 @@ interface PlayOnState {
    * which pauses once `did` answered that it plays.
    */
   moveTo: (did: string) => Promise<void>;
+  /** Controls `did`, which plays already, from the remote dock. */
+  control: (did: string) => void;
   /** Drives the player here, or on `did`. */
   drive: (did: string | null, cmd: Command, value?: { pos?: number; vol?: number }) => Promise<void>;
   /** Answers the oldest question in `asking`. */
@@ -123,10 +128,15 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     else void act(request);
   }
 
-  /** Shows the reported status with the overrides still waiting, and the device to focus on. */
+  /** Shows the reported status with the overrides still waiting, and drops a controlled device that went offline. */
   function show(reported: LiveStatus | null, overrides: Record<string, Override>) {
     const shown = withOverrides(reported, overrides);
-    set({ reported, overrides: shown.overrides, status: shown.status, focus: focusOf(shown.status, get().focus) });
+    set({
+      reported,
+      overrides: shown.overrides,
+      status: shown.status,
+      controlling: stillControlled(shown.status, get().controlling),
+    });
   }
 
   /** Takes the live status, and loads the devices' names when one isn't known yet. */
@@ -137,16 +147,16 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     if (unknown) getLinkedDevices().then((linked) => set({ linked }), () => undefined);
   }
 
-  /** Playing here takes the focus back from the other devices. */
+  /** Playing here takes control back from the other devices. */
   function playingHere(isPlaying: boolean) {
-    if (isPlaying) set({ focus: null });
+    if (isPlaying) set({ controlling: null });
   }
 
   return {
     status: null,
     reported: null,
     overrides: {},
-    focus: null,
+    controlling: null,
     linked: [],
     asking: [],
 
@@ -166,6 +176,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       if (!now.video) return;
       await handOff(did, { ...now, video: now.video }, now.pos);
       pauseHere();
+      set({ controlling: did });
     },
 
     pullFrom: async (did) => {
@@ -174,18 +185,22 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       if (!device || !now?.video) return;
       await sendLive({ type: "cmd", to: did, cmd: "pause" });
       const session = { ...now, video: now.video, pos: positionOf(device, Date.now()), state: "playing" as const };
+      set({ controlling: null });
       await startSession(session, watch);
     },
 
     moveTo: async (did) => {
       if (playing()?.playing) return get().transferTo(did);
-      const active = get().focus;
+      const active = get().controlling ?? activeDevice(get().status);
       const device = active ? get().status?.devices[active] : undefined;
       const now = device?.now;
       if (!active || active === did || !device || !now?.video) return;
       await handOff(did, { ...now, video: now.video }, positionOf(device, Date.now()));
       await sendLive({ type: "cmd", to: active, cmd: "pause" });
+      set({ controlling: did });
     },
+
+    control: (did) => set({ controlling: did }),
 
     drive: async (did, cmd, value = {}) => {
       if (!did) {

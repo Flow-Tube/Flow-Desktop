@@ -1,4 +1,4 @@
-import { MonitorSpeaker } from "lucide-react";
+import { Speaker } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
@@ -23,7 +23,7 @@ export function ConsentDialog() {
       >
         <div className="flex items-start gap-4">
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-surface-container-high">
-            <MonitorSpeaker className="h-6 w-6 text-[var(--color-primary)]" />
+            <Speaker className="h-6 w-6 text-[var(--color-primary)]" />
           </span>
           <div className="min-w-0">
             <h2 id="play-on-consent-title" className="text-lg font-bold tracking-tight text-chrome-neutral-100">

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LiveDevice, LiveStatus, Now } from "../api/live";
 import { nowOf } from "./now";
-import { focusOf, overrideFor, withOverrides } from "./optimistic";
+import { overrideFor, stillControlled, withOverrides } from "./optimistic";
 
 const playing: Now = { ...nowOf(null), video: "v", state: "playing", pos: 10_000, dur: 60_000, vol: 50, queue: ["v"] };
 const phone: LiveDevice = { kind: "phone", can: ["play", "remote"], now: playing, nowAtMs: 1000 };
@@ -32,12 +32,11 @@ describe("withOverrides", () => {
   });
 });
 
-describe("focusOf", () => {
-  it("keeps showing a device that was playing once it pauses", () => {
+describe("stillControlled", () => {
+  it("keeps the device the user chose, paused or not, until it goes offline", () => {
     const pausedPhone = { ...phone, now: { ...playing, state: "paused" as const } };
-    expect(focusOf(status(phone), null)).toBe("phone");
-    expect(focusOf(status(pausedPhone), "phone")).toBe("phone");
-    expect(focusOf(status(pausedPhone), null)).toBeNull();
-    expect(focusOf({ ...status(pausedPhone), online: [] }, "phone")).toBeNull();
+    expect(stillControlled(status(phone), null)).toBeNull();
+    expect(stillControlled(status(pausedPhone), "phone")).toBe("phone");
+    expect(stillControlled({ ...status(pausedPhone), online: [] }, "phone")).toBeNull();
   });
 });

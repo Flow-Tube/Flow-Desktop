@@ -1,5 +1,5 @@
 import type { Command, LiveDevice, LiveStatus, Now } from "../api/live";
-import { activeDevice, positionOf } from "./position";
+import { positionOf } from "./position";
 
 /** What a device should show after a command, until its next `now` says what it really does. */
 export interface Override {
@@ -49,13 +49,7 @@ export function withOverrides(
   return { status: { ...status, devices }, overrides: waiting };
 }
 
-/**
- * The other device this one shows as playing: the active one, or else the one it last showed,
- * while that device is online and still has its video loaded (paused, say).
- */
-export function focusOf(status: LiveStatus | null, last: string | null): string | null {
-  const active = activeDevice(status);
-  if (active) return active;
-  if (!last || !status?.online.includes(last)) return null;
-  return status.devices[last]?.now?.video ? last : null;
+/** The device the user chose to control, while it stays online. */
+export function stillControlled(status: LiveStatus | null, did: string | null): string | null {
+  return did && status?.online.includes(did) ? did : null;
 }

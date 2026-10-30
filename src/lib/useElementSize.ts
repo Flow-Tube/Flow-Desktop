@@ -21,8 +21,8 @@ export function useElementSize(ref: RefObject<HTMLElement | null>): ElementSize 
     };
     const scheduler = createFrameScheduler(measure);
     const observer = new ResizeObserver(() => scheduler.schedule());
+    // No immediate read: painting size 0 first lets the artwork grow in on mount.
     observer.observe(element);
-    measure();
     return () => {
       observer.disconnect();
       scheduler.cancel();

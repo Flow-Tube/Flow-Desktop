@@ -74,17 +74,18 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
       className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center"
     >
       <MusicArtwork
-        layoutId="album-art"
+        layout
+        transition={LAYOUT_SPRING}
         src={track.thumbnail}
         alt={track.title}
         loading={loading}
         iconClassName="h-16 w-16"
-        // Visibility, not opacity: the shared-layout morph writes its own inline opacity.
         className={`aspect-square shrink-0 rounded-2xl ${artworkHidden ? "invisible" : ""}`}
         style={{ width: artSize }}
       />
 
-      <div className="mt-8 flex w-full max-w-2xl flex-col gap-5">
+      {/* Its own layout lets framer undo the column's resize scale, which would otherwise stretch the text. */}
+      <motion.div layout transition={LAYOUT_SPRING} className="mt-8 flex w-full max-w-2xl flex-col gap-5">
         <div ref={menu.cardRef} onContextMenu={menu.openMenuFromContext} className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1
@@ -125,7 +126,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
 
         <MusicScrubber size="lg" showTimes countdown expressive />
         <PlayerTransport />
-      </div>
+      </motion.div>
     </motion.div>
   );
 }

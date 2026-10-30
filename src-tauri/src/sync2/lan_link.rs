@@ -2,6 +2,7 @@
 //! hello under the group's LAN key, then sealed, numbered frames carrying requests both ways.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine as _;
@@ -317,19 +318,24 @@ where
     Ok((framed, peer))
 }
 
+/// Where live envelopes that arrive in `live` requests go.
+pub type LiveSink = Arc<dyn Fn(Vec<u8>) + Send + Sync>;
+
 /// What a device serves: the group it holds, and the keys to check an object before taking it.
 pub struct Holder {
     pub store: HeldStore,
     pub group: [u8; 16],
     pub signing_keys: BTreeMap<String, [u8; 32]>,
+    pub live: LiveSink,
 }
 
 impl Holder {
-    pub fn of<T: Store>(store: HeldStore, session: &Session<'_, T>) -> Self {
+    pub fn of<T: Store>(store: HeldStore, session: &Session<'_, T>, live: LiveSink) -> Self {
         Self {
             store,
             group: *session.group(),
             signing_keys: session.signing_keys().clone(),
+            live,
         }
     }
 
@@ -418,7 +424,9 @@ impl Link {
                         if framed.send(&frame_content(&header, &bytes)).await.is_err() {
                             break;
                         }
-                        waiting.insert(next_id, reply);
+                        if request != Request::Live {
+                            waiting.insert(next_id, reply);
+                        }
                         next_id += 1;
                         continue;
                     }
@@ -441,7 +449,10 @@ impl Link {
                 }
                 let id = header["id"].as_u64().unwrap_or_default();
                 let answer = match serde_json::from_value::<Request>(header) {
-                    Ok(Request::Live) => continue,
+                    Ok(Request::Live) => {
+                        (holder.live)(bytes.to_vec());
+                        continue;
+                    }
                     Ok(request) => holder.answer(request, bytes).await,
                     Err(_) => Ok((
                         Response {
@@ -479,6 +490,15 @@ impl Link {
             .await
             .map_err(|_| EngineError::LanUnreachable)?;
         answer.await.map_err(|_| EngineError::LanUnreachable)?
+    }
+
+    /// Sends a live envelope, which gets no answer.
+    pub async fn live(&self, envelope: Vec<u8>) -> Result<()> {
+        let (reply, _) = oneshot::channel();
+        self.outgoing
+            .send((Request::Live, envelope, reply))
+            .await
+            .map_err(|_| EngineError::LanUnreachable)
     }
 
     /// The bytes a `key` or `get` answered with, or `None` when the peer doesn't hold them.

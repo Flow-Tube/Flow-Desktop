@@ -16,6 +16,7 @@ use super::actions::{
 };
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{EngineError, Result, now_ms};
+use super::live_hub::forget_keys;
 use super::names::device_names;
 use super::server::StoreError;
 use super::snapshot::snapshot_due;
@@ -86,6 +87,7 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
     }
     let _ = app.emit(EVENT_SYNCING, ());
     let result = run(app).await;
+    forget_keys(app).await;
     if let Err(error) = &result
         && let Err(failed) = stop_if_shut_out(&pool, error).await
     {

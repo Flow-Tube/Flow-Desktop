@@ -12,6 +12,7 @@ use super::hybrid::HybridStore;
 use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
 use super::lan_peers::{met, nearby};
+use super::lan_runtime::spread_leave;
 use super::linking::DeviceMeta;
 use super::membership::{leave_group, remove_device, rename_device};
 use super::names::device_names;
@@ -405,7 +406,12 @@ pub async fn leave(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
     let session = open_session(&local.pool, &record, &local.device).await?;
-    depart(&local.pool, &session, &local.device).await?;
+    let spread = async {
+        if record.kind == StoreKind::Lan {
+            spread_leave(app, &session, &local).await;
+        }
+    };
+    depart(&local.pool, &session, &local.device, spread).await?;
     forget_keys().await
 }
 
@@ -417,12 +423,13 @@ pub async fn leave_if_linked(app: &AppHandle) -> Result<()> {
     }
 }
 
-/// Appends `leave` unless this is the group's last device, which can only forget it, then forgets
-/// the group here.
+/// Appends `leave` unless this is the group's last device, which can only forget it, waits for
+/// `spread` to pass it on, then forgets the group here.
 pub async fn depart<S: Store>(
     pool: &SqlitePool,
     session: &Session<'_, S>,
     device: &MemberSecrets,
+    spread: impl Future<Output = ()>,
 ) -> Result<()> {
     let devices = session
         .roster()
@@ -432,6 +439,7 @@ pub async fn depart<S: Store>(
         .count();
     if devices > 1 {
         leave_group(session, device).await?;
+        spread.await;
     }
     forget_here(pool).await
 }

@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
+use flow_desktop_lib::sync2::engine::EngineError;
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
 use flow_desktop_lib::sync2::group_store::GroupStore;
 use flow_desktop_lib::sync2::held::HeldStore;
@@ -15,16 +16,16 @@ use flow_desktop_lib::sync2::keys::MemberSecrets;
 use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan_link::LiveSink;
 use flow_desktop_lib::sync2::lan_peers::listen;
-use flow_desktop_lib::sync2::lan_sync::{Met, meet, serve};
+use flow_desktop_lib::sync2::lan_sync::{Met, meet, meet_as, serve};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, add_scanned, answer_shown, finish_lan_join, join_on_lan,
 };
 use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
-use flow_desktop_lib::sync2::membership::rename_device;
+use flow_desktop_lib::sync2::membership::{leave_group, rename_device};
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::listen_on;
-use flow_desktop_lib::sync2::roster::{Entry, fork_winner};
+use flow_desktop_lib::sync2::roster::{Entry, Op, fork_winner};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
 use flow_desktop_lib::sync2::state::{StoreKind, load_group};
@@ -279,6 +280,40 @@ async fn a_device_whose_entry_lost_learns_the_winner_from_a_peer_holding_both() 
     .await
     .unwrap();
     assert_eq!(head_of(loser).await, head_of(winner).await);
+}
+
+#[tokio::test]
+async fn a_leaving_member_passes_its_leave_to_a_member_it_reaches() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let held_a = HeldStore::new(pool_a.clone());
+    let session = Session::open(&pool_a, held_a.clone(), &g.a).await.unwrap();
+    leave_group(&session, &g.a).await.unwrap();
+    let port = listening(&pool_b, &g.b).await;
+    // Its roster no longer lists it, so only the session it left from can still meet.
+    assert!(matches!(
+        meet(&pool_a, &g.a, ("127.0.0.1", port), None, &[], no_live()).await,
+        Err(EngineError::Removed)
+    ));
+
+    meet_as(
+        &session,
+        held_a,
+        &g.a,
+        ("127.0.0.1", port),
+        None,
+        &[],
+        no_live(),
+    )
+    .await
+    .unwrap();
+    for _ in 0..50 {
+        if head_of(&pool_b).await.op == Op::Leave {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the member never pulled the leave");
 }
 
 fn loopback() -> Vec<String> {

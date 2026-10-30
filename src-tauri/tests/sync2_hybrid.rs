@@ -144,9 +144,16 @@ async fn a_change_crosses_the_lan_while_the_server_is_down_and_reaches_it_later(
         |_| {},
         Arc::new(|_| {}),
     ));
-    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), &[], Arc::new(|_| {}))
-        .await
-        .unwrap();
+    let met = meet(
+        &pool_b,
+        &g.b,
+        ("127.0.0.1", port),
+        None,
+        &[],
+        Arc::new(|_| {}),
+    )
+    .await
+    .unwrap();
     assert_eq!(i64::try_from(met.taken).unwrap(), kept);
 
     let mut b = Session::open(

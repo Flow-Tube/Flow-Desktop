@@ -14,7 +14,8 @@ use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::keys::MemberSecrets;
 use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan_link::LiveSink;
-use flow_desktop_lib::sync2::lan_sync::{meet, serve};
+use flow_desktop_lib::sync2::lan_peers::listen;
+use flow_desktop_lib::sync2::lan_sync::{Met, meet, serve};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, add_scanned, answer_shown, finish_lan_join, join_on_lan,
 };
@@ -115,7 +116,7 @@ async fn two_members_exchange_their_objects_in_one_session() {
     push(&pool_b, &g.b).await;
 
     let port = listening(&pool_a, &g.a).await;
-    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), &[], no_live())
+    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
         .await
         .unwrap();
     assert_eq!(met.peer, hex::encode(g.a.did));
@@ -138,6 +139,56 @@ async fn two_members_exchange_their_objects_in_one_session() {
             .await
             .unwrap();
     assert_eq!(ids, ["aaaaaaaaaaa", "bbbbbbbbbbb"]);
+}
+
+#[tokio::test]
+async fn the_answering_member_learns_where_the_dialing_one_listens() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (told, mut heard) = tokio::sync::mpsc::unbounded_channel();
+    let met = move |met: Met| {
+        let _ = told.send(met.reach);
+    };
+    tokio::spawn(serve(listener, pool_a, g.a.clone(), met, no_live()));
+
+    let met = meet(
+        &pool_b,
+        &g.b,
+        ("127.0.0.1", port),
+        Some(4321),
+        &[],
+        no_live(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(met.reach, Some(("127.0.0.1".to_owned(), port)));
+    assert_eq!(
+        heard.recv().await.unwrap(),
+        Some(("127.0.0.1".to_owned(), 4321))
+    );
+}
+
+#[tokio::test]
+async fn a_member_that_does_not_answer_is_given_up_on_within_seconds() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    // TEST-NET-1 (RFC 5737) routes nowhere.
+    let dialed = tokio::time::timeout(
+        Duration::from_secs(5),
+        meet(&pool, &g.b, ("192.0.2.1", 40_000), None, &[], no_live()),
+    )
+    .await;
+    assert!(matches!(dialed, Ok(Err(_))));
+}
+
+#[tokio::test]
+async fn a_device_listens_again_on_the_port_it_used_last() {
+    let pool = empty_pool().await;
+    let first = listen(&pool).await.unwrap().local_addr().unwrap().port();
+    let again = listen(&pool).await.unwrap().local_addr().unwrap().port();
+    assert_eq!(first, again);
 }
 
 fn named(name: &str) -> DeviceMeta {
@@ -191,7 +242,7 @@ async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
     let g = group().await;
     let (pool_a, pool_b) = concurrent_renames(&g).await;
     let port = listening(&pool_a, &g.a).await;
-    meet(&pool_b, &g.b, ("127.0.0.1", port), &[], no_live())
+    meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
         .await
         .unwrap();
     let (on_a, on_b) = eventually_agree(&pool_a, &pool_b).await;
@@ -217,9 +268,16 @@ async fn a_device_whose_entry_lost_learns_the_winner_from_a_peer_holding_both() 
         .unwrap();
 
     let port = listening(winner, winner_device).await;
-    meet(loser, loser_device, ("127.0.0.1", port), &[], no_live())
-        .await
-        .unwrap();
+    meet(
+        loser,
+        loser_device,
+        ("127.0.0.1", port),
+        None,
+        &[],
+        no_live(),
+    )
+    .await
+    .unwrap();
     assert_eq!(head_of(loser).await, head_of(winner).await);
 }
 
@@ -237,7 +295,7 @@ async fn joined_and_synced(g: &Group, pool_a: &SqlitePool, pool_n: &SqlitePool, 
             .is_ok()
     );
     let port = listening(pool_a, &g.a).await;
-    let met = meet(pool_n, n, ("127.0.0.1", port), &[], no_live())
+    let met = meet(pool_n, n, ("127.0.0.1", port), None, &[], no_live())
         .await
         .unwrap();
     assert!(met.taken > 0, "the member's objects arrive once they meet");
@@ -344,9 +402,16 @@ async fn a_live_message_crosses_a_lan_session_and_opens_on_the_other_side() {
         index: 0,
     });
     let sealed = keys_b.seal(7, &now).unwrap();
-    meet(&pool_b, &g.b, ("127.0.0.1", port), &[sealed], no_live())
-        .await
-        .unwrap();
+    meet(
+        &pool_b,
+        &g.b,
+        ("127.0.0.1", port),
+        None,
+        &[sealed],
+        no_live(),
+    )
+    .await
+    .unwrap();
 
     let envelope = arrived.lock().unwrap().pop().expect("the envelope arrived");
     let received = keys_a.open(&envelope).unwrap();

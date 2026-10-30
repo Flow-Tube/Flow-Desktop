@@ -495,7 +495,7 @@ pub fn run() {
             )));
             app.manage(sync2::service::BackgroundSync::default());
             app.manage(sync2::link_task::LinkTask::default());
-            app.manage(sync2::lan_runtime::LanPeers::default());
+            app.manage(sync2::lan_peers::LanPeers::default());
             app.manage(sync2::live_hub::LiveHub::default());
             if active_profile.is_default {
                 sync2::service::spawn(app.handle().clone());

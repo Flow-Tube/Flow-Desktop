@@ -96,8 +96,12 @@ const SABR_UPGRADE_CLIENTS: &[&clients::YouTubeClient] = &[&clients::MWEB, &clie
 /// Clients asked for a live broadcast's HLS/DASH manifest when the winning
 /// client returned none. A live stream plays from its manifest, so this only
 /// needs a client that exposes one, not one with a usable direct ladder.
-const LIVE_MANIFEST_CLIENTS: &[&clients::YouTubeClient] =
-    &[&clients::ANDROID_VR_1_65_10, &clients::VISIONOS];
+const LIVE_MANIFEST_CLIENTS: &[&clients::YouTubeClient] = &[
+    &clients::ANDROID,
+    &clients::ANDROID_VR_1_65_10,
+    &clients::ANDROID_VR,
+    &clients::VISIONOS,
+];
 
 /// The winning client of a ladder walk, plus what it was attested with.
 #[derive(Clone)]
@@ -1305,10 +1309,7 @@ fn has_live_manifest(response: &Value) -> bool {
     let streaming_data = &response["streamingData"];
     let has_manifest = streaming_data["hlsManifestUrl"].is_string()
         || streaming_data["dashManifestUrl"].is_string();
-    let details = &response["videoDetails"];
-    let says_live = details["isLive"].as_bool().unwrap_or(false)
-        || details["isPostLiveDvr"].as_bool().unwrap_or(false)
-        || response["playabilityStatus"]["liveStreamability"].is_object();
+    let says_live = is_live_response(response);
     let no_adaptive = streaming_data["adaptiveFormats"]
         .as_array()
         .is_none_or(Vec::is_empty);
@@ -1320,6 +1321,10 @@ fn is_live_response(response: &Value) -> bool {
     let details = &response["videoDetails"];
     details["isLive"].as_bool().unwrap_or(false)
         || details["isPostLiveDvr"].as_bool().unwrap_or(false)
+        || response["playabilityStatus"]["liveStreamability"].is_object()
+        || response["microformat"]["playerMicroformatRenderer"]["liveBroadcastDetails"]["isLiveNow"]
+            .as_bool()
+            .unwrap_or(false)
 }
 
 impl InnertubeClient {
@@ -1859,7 +1864,7 @@ impl InnertubeClient {
             chapters,
             auto_chapters,
             heatmap: watch_next::heatmap(next),
-            is_live: details["isLive"].as_bool().unwrap_or(false),
+            is_live: is_live_response(&res),
             category: res["microformat"]["playerMicroformatRenderer"]["category"]
                 .as_str()
                 .map(str::to_string),
@@ -1927,7 +1932,7 @@ impl InnertubeClient {
             .as_ref()
             .and_then(|attempt| attempt.visitor_data.clone());
 
-        let winning_client = attempt
+        let mut winning_client = attempt
             .as_ref()
             .map_or(&clients::VISIONOS, |attempt| attempt.client);
         let po_token_used = attempt
@@ -1984,6 +1989,7 @@ impl InnertubeClient {
                 )
                 .await
             {
+                winning_client = live.client;
                 if let Some(hls) = live.response["streamingData"]["hlsManifestUrl"].as_str() {
                     hls_manifest_url = Some(hls.to_string());
                 }

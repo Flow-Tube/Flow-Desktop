@@ -558,8 +558,8 @@ export const Player: React.FC<PlayerProps> = ({
     return () => clearInterval(timer);
   }, [qualitySwitchPending]);
 
-  const isDashPlayback = !!dashManifestUrl;
-  const isHlsPlayback = !!hlsManifestUrl && !isDashPlayback;
+  const isDashPlayback = !isLive && !!dashManifestUrl;
+  const isHlsPlayback = !!hlsManifestUrl && (isLive || !isDashPlayback);
   const dashProxyPrefix = useMemo(() => {
     if (!dashManifestUrl) return null;
     const marker = "?url=";
@@ -1773,7 +1773,10 @@ export const Player: React.FC<PlayerProps> = ({
     }
 
     const rewrite = (url: string) =>
-      hlsProxyPrefix && !url.startsWith("http://127.0.0.1:") && !url.startsWith("blob:")
+      hlsProxyPrefix &&
+      !url.startsWith("http://127.0.0.1:") &&
+      !url.startsWith("http://localhost:") &&
+      !url.startsWith("blob:")
         ? `${hlsProxyPrefix}${encodeURIComponent(url)}`
         : url;
 
@@ -1808,8 +1811,11 @@ export const Player: React.FC<PlayerProps> = ({
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       fatalRecoveryAttempts = 0;
+      setHasStartedPlayback(true);
+      sourceSwitchingRef.current = false;
+      setIsSourceSwitching(false);
       logPlayerEventRef.current("hls-manifest-parsed", { levels: hls.levels.length });
-      if (desiredPlayingRef.current) void video.play().catch(() => {});
+      if (desiredPlayingRef.current || isPlaying) void video.play().catch(() => {});
     });
     hls.on(Hls.Events.FRAG_LOADED, () => {
       fatalRecoveryAttempts = 0;
@@ -1838,7 +1844,7 @@ export const Player: React.FC<PlayerProps> = ({
                 : null;
           if (target != null && Number.isFinite(target) && target > video.currentTime) {
             video.currentTime = target;
-            if (desiredPlayingRef.current) void video.play().catch(() => {});
+            if (desiredPlayingRef.current || isPlaying) void video.play().catch(() => {});
           }
         }
         return;
@@ -1875,7 +1881,7 @@ export const Player: React.FC<PlayerProps> = ({
       if (!destroyedAfterFatal) hls.destroy();
       if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
     };
-  }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
+  }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive, isPlaying]);
 
   useEffect(() => {
     if (!isDashPlayback) return;
@@ -2093,7 +2099,7 @@ export const Player: React.FC<PlayerProps> = ({
       video.pause();
       audio?.pause();
     }
-  }, [error, isDashPlayback, isPlaying, isSourceSwitching, setIsPlaying, src, usesExternalAudio]);
+  }, [error, isDashPlayback, isHlsPlayback, isPlaying, isSourceSwitching, setIsPlaying, src, usesExternalAudio]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2342,18 +2348,16 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-    if (pendingResumeTime > 0) {
-      setHasStartedPlayback(true);
-      sourceSwitchingRef.current = false;
-      setIsSourceSwitching(false);
-      requestAnimationFrame(() => {
-        syncExternalAudio(true);
-        if (desiredPlayingRef.current || isPlaying) {
-          void videoRef.current?.play().catch(() => {});
-          if (usesExternalAudio) void audioRef.current?.play().catch(() => {});
-        }
-      });
-    }
+    setHasStartedPlayback(true);
+    sourceSwitchingRef.current = false;
+    setIsSourceSwitching(false);
+    requestAnimationFrame(() => {
+      syncExternalAudio(true);
+      if (desiredPlayingRef.current || isPlaying) {
+        void videoRef.current?.play().catch(() => {});
+        if (usesExternalAudio) void audioRef.current?.play().catch(() => {});
+      }
+    });
     updateBuffered();
   };
 

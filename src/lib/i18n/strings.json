@@ -1889,6 +1889,7 @@
   "play_on_active": "Active device",
   "play_on_seek": "Seek",
   "play_on_failed": "Couldn't play on %s: %s",
+  "play_on_control_failed": "%s didn't respond, so nothing changed there.",
   "play_on_consent_play": "%s wants to play on this device",
   "play_on_consent_control": "%s wants to control playback here",
   "play_on_consent_body": "Your answer is remembered for this device. You can change it under Linked devices.",

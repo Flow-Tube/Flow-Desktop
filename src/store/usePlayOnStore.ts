@@ -13,17 +13,30 @@ import {
   type LiveStatus,
   type Now,
 } from "../lib/api/live";
+import { getString } from "../lib/i18n/index";
 import { nowOf } from "../lib/live/now";
+import { focusOf, overrideFor, withOverrides, type Override } from "../lib/live/optimistic";
 import { applyCommand, pauseHere, playing, startSession } from "../lib/live/players";
-import { activeDevice, positionOf } from "../lib/live/position";
+import { positionOf } from "../lib/live/position";
+import { useMusicPlayerStore } from "./useMusicPlayerStore";
+import { usePlayerStore } from "./usePlayerStore";
+import { useUiStore } from "./useUiStore";
 
 /** How long a handoff waits for the target's answer. */
-const ANSWER_WITHIN_MS = 15_000;
+const HANDOFF_WITHIN_MS = 15_000;
+/** How long a remote command waits for its answer before what it showed is taken back. */
+const COMMAND_WITHIN_MS = 5_000;
 
 export type ConsentChoice = "always" | "once" | "decline";
 
 interface PlayOnState {
+  /** The live status, with the commands sent to other devices shown before they report them. */
   status: LiveStatus | null;
+  /** The status as the devices last reported it. */
+  reported: LiveStatus | null;
+  overrides: Record<string, Override>;
+  /** The other device shown as playing, which stays shown once paused; `null` once this one plays. */
+  focus: string | null;
   /** The group's devices with their names, loaded once another device can be reached. */
   linked: LinkedDevice[];
   /** Requests waiting until the user allows their sender, oldest first. */
@@ -84,16 +97,16 @@ async function handOff(to: string, now: Now & { video: string }, pos: number): P
     index: now.index,
     state: "playing",
   });
-  const answer = await waitForAnswer(seq);
+  const answer = await waitForAnswer(seq, HANDOFF_WITHIN_MS);
   if (!answer.ok) throw new Error(answer.reason ?? "refused");
 }
 
-function waitForAnswer(seq: number): Promise<Answer> {
+function waitForAnswer(seq: number, withinMs: number): Promise<Answer> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       waiting.delete(seq);
       resolve({ type: "result", to: "", ref: seq, ok: false, reason: "timeout" });
-    }, ANSWER_WITHIN_MS);
+    }, withinMs);
     waiting.set(seq, (answer) => {
       clearTimeout(timer);
       waiting.delete(seq);
@@ -110,22 +123,40 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
     else void act(request);
   }
 
+  /** Shows the reported status with the overrides still waiting, and the device to focus on. */
+  function show(reported: LiveStatus | null, overrides: Record<string, Override>) {
+    const shown = withOverrides(reported, overrides);
+    set({ reported, overrides: shown.overrides, status: shown.status, focus: focusOf(shown.status, get().focus) });
+  }
+
   /** Takes the live status, and loads the devices' names when one isn't known yet. */
   function track(status: LiveStatus | null) {
-    set({ status });
+    show(status, get().overrides);
     const known = new Set(get().linked.map((device) => device.id));
     const unknown = status?.online.some((did) => !known.has(did)) || (status?.available && known.size === 0);
     if (unknown) getLinkedDevices().then((linked) => set({ linked }), () => undefined);
   }
 
+  /** Playing here takes the focus back from the other devices. */
+  function playingHere(isPlaying: boolean) {
+    if (isPlaying) set({ focus: null });
+  }
+
   return {
     status: null,
+    reported: null,
+    overrides: {},
+    focus: null,
     linked: [],
     asking: [],
 
     init: async (open) => {
       watch = open;
       const stops = await Promise.all([onLive(track), onLiveRequest(take)]);
+      stops.push(
+        useMusicPlayerStore.subscribe((state) => playingHere(state.isPlaying)),
+        usePlayerStore.subscribe((state) => playingHere(state.isPlaying)),
+      );
       track(await getLiveStatus().catch(() => null));
       return () => stops.forEach((stop) => stop());
     },
@@ -148,7 +179,7 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
 
     moveTo: async (did) => {
       if (playing()?.playing) return get().transferTo(did);
-      const active = activeDevice(get().status);
+      const active = get().focus;
       const device = active ? get().status?.devices[active] : undefined;
       const now = device?.now;
       if (!active || active === did || !device || !now?.video) return;
@@ -156,9 +187,28 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       await sendLive({ type: "cmd", to: active, cmd: "pause" });
     },
 
-    drive: async (did, cmd, value) => {
-      if (did) await sendLive({ type: "cmd", to: did, cmd, ...value });
-      else await applyCommand({ type: "cmd", to: "", cmd, ...value });
+    drive: async (did, cmd, value = {}) => {
+      if (!did) {
+        await applyCommand({ type: "cmd", to: "", cmd, ...value });
+        return;
+      }
+      const device = get().reported?.devices[did];
+      const override = device ? overrideFor(device, cmd, value, Date.now()) : null;
+      if (override) show(get().reported, { ...get().overrides, [did]: override });
+      const answer = await sendLive({ type: "cmd", to: did, cmd, ...value }).then(
+        (seq) => waitForAnswer(seq, COMMAND_WITHIN_MS),
+        (): Answer => ({ type: "result", to: "", ref: 0, ok: false }),
+      );
+      // A `now` that arrived meanwhile already replaced what was shown; a command that changed
+      // nothing shown is still told about when it failed.
+      const shown = get().overrides[did] === override;
+      if (answer.ok || (override && !shown)) return;
+      if (override) {
+        const { [did]: _, ...rest } = get().overrides;
+        show(get().reported, rest);
+      }
+      const name = get().linked.find((linked) => linked.id === did)?.name || getString("play_on_another_device");
+      useUiStore.getState().showToast({ variant: "error", message: getString("play_on_control_failed", name) });
     },
 
     answer: async (choice) => {

@@ -249,8 +249,6 @@ interface MusicPlayerState {
 
   // --- stream resolution ---
   loadingStreamId: string | null;
-  /** Bumped to give the player fresh audio elements, free of a WebAudio graph no longer needed. */
-  audioGeneration: number;
   streamError: string | null;
   streamErrorKind: string | null;
 
@@ -309,8 +307,6 @@ interface MusicPlayerState {
   _loadIndex: (index: number, options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
   _prefetchUpcoming: () => void;
   _preloadUpcoming: () => void;
-  /** Loads the song playing again as AAC once WebAudio is in use, when it cannot hear it. */
-  _reloadForWebAudio: () => void;
   _onPreloadError: () => void;
   _syncTime: (progress: number, duration: number) => void;
   _reflectPlaying: (isPlaying: boolean) => void;
@@ -356,7 +352,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   viewState: "dock",
 
   loadingStreamId: null,
-  audioGeneration: 0,
   streamError: null,
   streamErrorKind: null,
 
@@ -446,12 +441,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const videoId = videoIdOf(track);
     let resumeAt = options?.resumeAt ?? 0;
     const autoplay = options?.autoplay ?? true;
-    // Between songs, swap the elements for fresh ones once the equalizer and crossfade are off.
-    if (musicAudioEngine.canReleaseGraph()) {
-      const attached = musicAudioEngine.nextAttach();
-      set({ audioGeneration: get().audioGeneration + 1 });
-      await attached;
-    }
     awaitingFirstPlay = false;
     cancelNetworkWait();
     if (autoplay) userPaused = false;
@@ -673,19 +662,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       const nowTrack = now.queue[upcomingIndex(now)];
       return !!nowTrack && videoIdOf(nowTrack) === videoId;
     });
-  },
-
-  // On macOS WebAudio cannot hear Opus, so a song loaded before the graph existed loads again as
-  // AAC from where it is, and a next song buffered as Opus is dropped to be buffered again.
-  _reloadForWebAudio: () => {
-    if (!musicAudioEngine.wantsAac()) return;
-    musicAudioEngine.clearPreload();
-    const { currentTrack, currentIndex, loadingStreamId, isPlaying } = get();
-    if (!currentTrack || loadingStreamId !== null || !musicAudioEngine.activeBypassesGraph()) return;
-    const videoId = videoIdOf(currentTrack);
-    if (findDownloadedRecord(videoId, "audio")) return;
-    recordPlayerEvent(`music reloading as AAC for the equalizer: ${videoId}`);
-    void get()._loadIndex(currentIndex, { resumeAt: musicAudioEngine.getCurrentTime(), autoplay: isPlaying });
   },
 
   _onPreloadError: () => {

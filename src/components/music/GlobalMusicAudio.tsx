@@ -26,7 +26,6 @@ export function GlobalMusicAudio() {
   const firstRef = useRef<HTMLAudioElement | null>(null);
   const secondRef = useRef<HTMLAudioElement | null>(null);
 
-  const generation = useMusicPlayerStore((s) => s.audioGeneration);
   useEffect(() => {
     const first = firstRef.current;
     const second = secondRef.current;
@@ -36,7 +35,7 @@ export function GlobalMusicAudio() {
     musicAudioEngine.setVolume(s.volume);
     musicAudioEngine.setMuted(s.isMuted);
     bindMusicAudioSettings();
-  }, [generation]);
+  }, []);
 
   useMusicListenHistory();
   useMusicQueuePersistence();
@@ -113,8 +112,8 @@ export function GlobalMusicAudio() {
 
   return (
     <>
-      <audio key={`first-${generation}`} ref={firstRef} {...audioProps} />
-      <audio key={`second-${generation}`} ref={secondRef} {...audioProps} />
+      <audio ref={firstRef} {...audioProps} />
+      <audio ref={secondRef} {...audioProps} />
     </>
   );
 }

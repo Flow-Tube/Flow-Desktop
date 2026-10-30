@@ -1,9 +1,8 @@
 import type { Cmd } from "../api/live";
 import { getMusicQueue } from "../api/music";
-import { getVideoDetails } from "../api/youtube";
 import { seekToTime } from "../playerSeek";
 import { prefetchStreamInfo } from "../streamResolution";
-import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
+import { useMusicPlayerStore, warmMusicStream } from "../../store/useMusicPlayerStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import type { VideoSummary } from "../../types/video";
 import type { Playing } from "./now";
@@ -55,37 +54,37 @@ export interface Session {
   queue: string[];
   index: number;
   state: "playing" | "paused";
+  /** What the sender last said it plays, shown until the details arrive. */
+  title?: string;
+  by?: string;
 }
 
 async function startMusic(session: Session): Promise<void> {
+  // The stream resolves while the queue is looked up, instead of after it.
+  warmMusicStream(session.video);
   const page = await getMusicQueue(session.queue.length > 0 ? session.queue : [session.video]);
   const byId = new Map(page.items.map((track) => [track.videoId ?? track.id, track]));
   const tracks = session.queue.flatMap((id) => byId.get(id) ?? []);
   const index = tracks.findIndex((track) => (track.videoId ?? track.id) === session.video);
   if (index < 0) throw new Error("unavailable");
-  const music = useMusicPlayerStore.getState();
   usePlayerStore.getState().setIsPlaying(false);
-  await music.playQueue(tracks, index);
-  music.seek(session.pos / 1000);
-  if (session.state === "paused") music.pause();
+  await useMusicPlayerStore
+    .getState()
+    .playQueue(tracks, index, null, { at: session.pos / 1000, autoplay: session.state === "playing" });
 }
 
-async function startVideo(session: Session, watch: (videoId: string) => void): Promise<void> {
-  const details = await getVideoDetails(session.video);
-  const current: VideoSummary = {
-    id: details.id,
-    title: details.title,
-    channelName: details.channelName,
-    channelId: details.channelId,
-    thumbnailUrl: details.thumbnailUrl,
-    durationSeconds: details.durationSeconds,
-  };
-  // Only the current video comes with its details; the others get theirs when they play.
+/** Opens the watch page on the video at once; the page loads its details as it always does. */
+function startVideo(session: Session, watch: (videoId: string) => void): void {
+  prefetchStreamInfo(session.video);
   const ids = session.queue.length > 0 ? session.queue : [session.video];
-  const queue = ids.map((id): VideoSummary => (id === session.video ? current : { id, title: "", channelName: "" }));
+  const queue = ids.map(
+    (id): VideoSummary =>
+      id === session.video
+        ? { id, title: session.title ?? "", channelName: session.by ?? "" }
+        : { id, title: "", channelName: "" },
+  );
   const index = Math.max(0, ids.indexOf(session.video));
   useMusicPlayerStore.getState().pause();
-  prefetchStreamInfo(session.video);
   const player = usePlayerStore.getState();
   player.setQueue(queue, index);
   player.setPipHandoff(session.video, session.pos / 1000, session.state === "playing");
@@ -93,8 +92,9 @@ async function startVideo(session: Session, watch: (videoId: string) => void): P
 }
 
 /** Starts a session handed to this device; `watch` opens the video page. */
-export function startSession(session: Session, watch: (videoId: string) => void): Promise<void> {
-  return session.music ? startMusic(session) : startVideo(session, watch);
+export async function startSession(session: Session, watch: (videoId: string) => void): Promise<void> {
+  if (session.music) await startMusic(session);
+  else startVideo(session, watch);
 }
 
 /** Applies a remote command to the player in use. Resolves to false when it can't. */

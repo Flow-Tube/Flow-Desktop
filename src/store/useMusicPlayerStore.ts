@@ -131,7 +131,7 @@ let awaitingFirstPlay = false;
 let unplayableSkips = 0;
 
 // When the current load began, for the start-up timing in the diagnostics log.
-let loadStartedAt: { videoId: string; at: number } | null = null;
+let loadStartedAt: { videoId: string; at: number; resolvedAt?: number; hidden: boolean } | null = null;
 
 // A stall with no bytes arriving for this long is treated as a dead connection
 // and recovered; a slow one that is still receiving is left to finish.
@@ -253,7 +253,13 @@ interface MusicPlayerState {
 
   // --- intents (called by UI) ---
   playTrack: (track: SongItem) => Promise<void>;
-  playQueue: (tracks: SongItem[], startIndex?: number, source?: string | null) => Promise<void>;
+  /** `start` begins the first song at `at` seconds, and paused unless `autoplay`, in one load. */
+  playQueue: (
+    tracks: SongItem[],
+    startIndex?: number,
+    source?: string | null,
+    start?: { at: number; autoplay: boolean },
+  ) => Promise<void>;
   togglePlay: () => void;
   play: () => void;
   pause: () => void;
@@ -314,6 +320,12 @@ interface MusicPlayerState {
 export const selectRadioOn = (s: Pick<MusicPlayerState, "radioEnabled" | "radioStationActive">): boolean =>
   s.radioEnabled || s.radioStationActive;
 
+/** Resolves a song's stream ahead of playing it; a downloaded one plays from disk and needs none. */
+export function warmMusicStream(videoId: string): void {
+  if (findDownloadedRecord(videoId, "audio")) return;
+  prefetchMusicStream(videoId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
+}
+
 export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   currentTrack: null,
   queue: [],
@@ -352,17 +364,17 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     await get()._loadIndex(0);
   },
 
-  playQueue: async (tracks, startIndex = 0, source = null) => {
+  playQueue: async (tracks, startIndex = 0, source = null, start) => {
     if (tracks.length === 0) return;
     resetRadioSession(tracks.map(videoIdOf));
-    const start = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    const first = Math.max(0, Math.min(startIndex, tracks.length - 1));
     const shuffled = get().isShuffle;
     set({
-      ...freshQueue(shuffled ? shuffleFrom(tracks, start) : tracks, shuffled ? tracks : null),
+      ...freshQueue(shuffled ? shuffleFrom(tracks, first) : tracks, shuffled ? tracks : null),
       radioStationActive: false,
       queueSource: source,
     });
-    await get()._loadIndex(shuffled ? 0 : start);
+    await get()._loadIndex(shuffled ? 0 : first, start && { resumeAt: start.at, autoplay: start.autoplay });
   },
 
   _ensureRadio: async () => {
@@ -444,7 +456,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       streamErrorKind: null,
       loadingStreamId: videoId,
     });
-    loadStartedAt = { videoId, at: performance.now() };
+    loadStartedAt = { videoId, at: performance.now(), hidden: document.hidden };
     recordPlayerEvent(`music resolve start: ${videoId}`);
 
     // Radio top-up and next-track warming wait until this track is audible, so
@@ -535,6 +547,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       if (get().loadingStreamId !== videoId) return;
 
       set({ loudnessDb: info.loudnessDb, loadingStreamId: null });
+      if (loadStartedAt?.videoId === videoId) loadStartedAt.resolvedAt = performance.now();
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
       await musicAudioEngine.load(info.audioUrl, info.mimeType, listedSeconds(info, track));
       musicAudioEngine.seekWhenReady(resumeAt);
@@ -620,16 +633,12 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   // Which track plays next depends on shuffle and repeat, so ask the same
   // question the transport does rather than assuming the following index.
+  // Warms the next song, and the one before for Previous, so either starts from a cache read.
   _prefetchUpcoming: () => {
     const state = get();
-    const index = upcomingIndex(state);
-    const upcoming = index >= 0 ? state.queue[index] : null;
-    if (!upcoming) return;
-
-    const upcomingId = videoIdOf(upcoming);
-    // A downloaded track plays from disk; resolving it would be a wasted request.
-    if (findDownloadedRecord(upcomingId, "audio")) return;
-    prefetchMusicStream(upcomingId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
+    for (const track of [state.queue[upcomingIndex(state)], state.queue[state.currentIndex - 1]]) {
+      if (track) warmMusicStream(videoIdOf(track));
+    }
   },
 
   // Buffers the next track's audio on the standby element near the end of the
@@ -949,11 +958,23 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     if (!isBuffering && loadStartedAt) {
       const started = loadStartedAt;
       loadStartedAt = null;
-      const elapsedMs = Math.round(performance.now() - started.at);
+      const now = performance.now();
+      const elapsedMs = Math.round(now - started.at);
+      // Split into finding the stream and buffering it, with whether the window was hidden.
+      const resolveMs = started.resolvedAt === undefined ? null : Math.round(started.resolvedAt - started.at);
+      const bufferMs = started.resolvedAt === undefined ? null : Math.round(now - started.resolvedAt);
+      const hidden = started.hidden || document.hidden;
       const audioContext = musicAudioEngine.getContextState();
       recordPlayerEvent(`music first audio: ${started.videoId} after ${elapsedMs} ms (audio context ${audioContext})`);
       // One line per track in the log file, so slow starts can be measured.
-      void logToBackend("info", "music first audio", { videoId: started.videoId, elapsedMs, audioContext });
+      void logToBackend("info", "music first audio", {
+        videoId: started.videoId,
+        elapsedMs,
+        resolveMs,
+        bufferMs,
+        hidden,
+        audioContext,
+      });
     }
     set({ isBuffering });
   },

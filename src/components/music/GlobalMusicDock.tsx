@@ -38,6 +38,8 @@ import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { dockOpacity, registerSheetDock, sheetProgress } from "../../lib/musicSheet";
 import { useSheetDrag } from "../../lib/useSheetDrag";
+import { useRemoteActive } from "../../lib/live/usePlayOn";
+import { PlayOnButton } from "../playon/PlayOnButton";
 
 const GHOST = "grid h-9 w-9 place-items-center rounded-full transition-colors duration-200 ease-out";
 const GHOST_IDLE = `${GHOST} text-chrome-neutral-400 hover:text-chrome-neutral-100`;
@@ -80,10 +82,12 @@ export function GlobalMusicDock() {
   const docked = viewState === "dock";
   const sheetDrag = useSheetDrag();
   const opacity = useTransform(sheetProgress, dockOpacity);
+  // While another device plays and this one doesn't, the remote dock takes this place.
+  const remote = useRemoteActive();
 
   return (
     <AnimatePresence>
-      {currentTrack && (
+      {currentTrack && !remote && (
         <motion.div
           key="music-dock"
           initial={{ y: 96, opacity: 0 }}
@@ -238,6 +242,8 @@ export function GlobalMusicDock() {
                 >
                   {muted ? <VolumeX className="h-[18px] w-[18px]" /> : <Volume2 className="h-[18px] w-[18px]" />}
                 </HapticButton>
+
+                <PlayOnButton className={GHOST_IDLE} />
 
                 <HapticButton
                   onClick={() => openOverlay("queue")}

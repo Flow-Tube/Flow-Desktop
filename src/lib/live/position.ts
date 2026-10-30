@@ -1,7 +1,7 @@
 import type { LiveDevice, LiveStatus } from "../api/live";
 
 /** Where a device's video is now: its last `pos`, moved on by the time since, while it plays. */
-export function positionOf(device: LiveDevice, nowMs: number): number {
+export function positionOf(device: Pick<LiveDevice, "now" | "nowAtMs">, nowMs: number): number {
   const now = device.now;
   if (!now) return 0;
   if (now.state !== "playing") return now.pos;

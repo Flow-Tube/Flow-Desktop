@@ -75,8 +75,8 @@ export const updateLogin = (user: string, password: string) =>
   invokeBackend<void>("linked_update_login", { user, password });
 
 /** Resolves to the new recovery words, shown once. */
-export const restoreGroup = (url: string, words: string) =>
-  invokeBackend<string>("linked_restore", { url, words });
+export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
+  invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
@@ -86,11 +86,15 @@ export const forgetGroup = () => invokeBackend<void>("linked_forget");
 export const syncNow = () => invokeBackend<Received[]>("linked_sync_now");
 export const addDevice = () => invokeBackend<void>("linked_add_device");
 /** Answers another device's code: a member's code joins its group, a new device's code adds it. */
-/** A WebDAV folder and its login, entered before scanning so pairing can use the folder's mailbox. */
-export interface FolderAccess {
-  url: string;
+/** The user name and password of a WebDAV folder. */
+export interface WebdavLogin {
   user: string;
   password: string;
+}
+
+/** A WebDAV folder and its login, entered before scanning so pairing can use the folder's mailbox. */
+export interface FolderAccess extends WebdavLogin {
+  url: string;
 }
 
 export const enterCode = (code: string, folder?: FolderAccess) =>

@@ -203,3 +203,29 @@ pub async fn restore_group(
     .await?;
     Ok(restored.words)
 }
+
+/// Restores a group kept in a `WebDAV` folder from its recovery words (spec/protocol.md,
+/// Recovery), after checking the folder takes, returns and deletes a file.
+pub async fn restore_webdav_group(
+    pool: &SqlitePool,
+    store: &WebDavStore,
+    url: &str,
+    words: &str,
+    device: &MemberSecrets,
+    meta: &DeviceMeta,
+) -> Result<String> {
+    let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
+    store.probe().await?;
+    let group = store.group().await?.ok_or(EngineError::Unexpected)?;
+    let restored = restore(store, store, &recovery_keys(&secret), device, meta).await?;
+    if replay_roster(&restored.entries)?.group != group {
+        return Err(EngineError::Unexpected);
+    }
+    add_roster_entries(pool, &restored.entries).await?;
+    save_group(
+        pool,
+        &GroupRecord::on_webdav(group, url.to_owned(), String::new()),
+    )
+    .await?;
+    Ok(restored.words)
+}

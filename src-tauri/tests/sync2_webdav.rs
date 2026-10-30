@@ -28,7 +28,7 @@ use flow_desktop_lib::sync2::pipe::listen_on;
 use flow_desktop_lib::sync2::roster::entry_hash;
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::StoreError;
-use flow_desktop_lib::sync2::setup::create_webdav_group;
+use flow_desktop_lib::sync2::setup::{create_webdav_group, restore_webdav_group};
 use flow_desktop_lib::sync2::state::{StoreKind, load_group};
 use flow_desktop_lib::sync2::store::Store;
 use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
@@ -309,6 +309,37 @@ async fn a_group_created_in_a_folder_welcomes_a_device_paired_over_the_lan() {
         .await
         .unwrap();
     assert_eq!(joined.roster().members.len(), 3);
+}
+
+#[tokio::test]
+async fn a_group_in_a_folder_is_restored_with_its_recovery_words() {
+    let (url, _) = webdav_server().await;
+    let a = member_secrets(random_bytes(), random_bytes());
+    let folder = store_for(&url, &a.did).await;
+    let words = create_webdav_group(&empty_pool().await, &folder, &url, &a, &named("A"), "link")
+        .await
+        .unwrap();
+
+    let c = member_secrets(random_bytes(), random_bytes());
+    let pool_c = empty_pool().await;
+    let store_c = store_for(&url, &c.did).await;
+    let meta = named("C");
+    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta).await;
+    assert!(matches!(wrong, Err(EngineError::WrongWords)));
+    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta)
+        .await
+        .unwrap();
+    assert_ne!(next, words);
+
+    let record = load_group(&pool_c).await.unwrap().unwrap();
+    assert_eq!(record.kind, StoreKind::WebDav);
+    let session = Session::open(&pool_c, store_for(&url, &c.did).await, &c)
+        .await
+        .unwrap();
+    assert!(session.roster().members.contains_key(&hex::encode(c.did)));
+    let other = empty_pool().await;
+    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta).await;
+    assert!(matches!(used, Err(EngineError::RecoveryUsed)));
 }
 
 #[tokio::test]

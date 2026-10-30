@@ -30,6 +30,7 @@ import {
   type LinkPhase,
   type LinkedDevice,
   type LinkedStatus,
+  type WebdavLogin,
 } from "../lib/api/linked";
 import { normalizeBackendError } from "../lib/api/errors";
 import { isTauriEnv } from "../lib/api/env";
@@ -60,7 +61,8 @@ interface LinkedState {
   createOnLan: () => Promise<void>;
   createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
   updateLogin: (user: string, password: string) => Promise<void>;
-  restore: (url: string, words: string) => Promise<void>;
+  /** Restores from a Flow server, or with `login` from a WebDAV folder. */
+  restore: (url: string, words: string, login?: WebdavLogin) => Promise<void>;
   enterCode: (code: string, folder?: FolderAccess) => Promise<void>;
   askToJoin: (url: string, adminToken: string) => Promise<void>;
   loadJoinRequests: () => Promise<void>;
@@ -162,9 +164,9 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await get().refresh();
       }),
 
-    restore: (url, words) =>
+    restore: (url, words, login) =>
       run(async () => {
-        set({ words: await restoreGroup(url, words) });
+        set({ words: await restoreGroup(url, words, login) });
         await get().refresh();
       }),
 

@@ -17,7 +17,9 @@ use super::names::device_names;
 use super::roster::Role;
 use super::server::ServerStore;
 use super::service::{LastSync, is_syncing, last_sync, sync_soon};
-use super::setup::{create_group, create_lan_group, create_webdav_group, restore_group};
+use super::setup::{
+    create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
+};
 use super::snapshot::snapshot_soon;
 use super::state::{GroupRecord, StoreKind, forget_group, load_group};
 use super::webdav::{WebDavLogin, WebDavStore};
@@ -272,11 +274,25 @@ pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
     Ok(words)
 }
 
-/// Restores the group from its recovery words and returns the new words to show once.
-pub async fn restore(app: &AppHandle, url: &str, words: &str) -> Result<String> {
+/// Restores the group from its recovery words, on a Flow server or, with `login`, in a `WebDAV`
+/// folder, and returns the new words to show once.
+pub async fn restore(
+    app: &AppHandle,
+    url: &str,
+    words: &str,
+    login: Option<WebDavLogin>,
+) -> Result<String> {
     let local = local(app).await?;
     ensure_unlinked(&local.pool).await?;
-    let next = restore_group(&local.pool, url.trim(), words, &local.device, &local.meta).await?;
+    let (pool, url, device, meta) = (&local.pool, url.trim(), &local.device, &local.meta);
+    let next = match login {
+        Some(login) => {
+            let store = WebDavStore::connect(url, login.clone(), hex::encode(device.did)).await?;
+            save_login(&keychain(), &login)?;
+            restore_webdav_group(pool, &store, url, words, device, meta).await?
+        }
+        None => restore_group(pool, url, words, device, meta).await?,
+    };
     set_recovery_saved(&local.pool, false).await?;
     sync_soon(app);
     Ok(next)

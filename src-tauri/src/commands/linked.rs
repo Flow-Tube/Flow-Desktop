@@ -9,6 +9,7 @@ use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
 use crate::sync2::service::{self, Received};
+use crate::sync2::webdav::WebDavLogin;
 
 pub(crate) fn err(e: &EngineError) -> ErrorResponse {
     ErrorResponse {
@@ -46,8 +47,9 @@ pub async fn linked_restore(
     app: AppHandle,
     url: String,
     words: String,
+    login: Option<WebDavLogin>,
 ) -> Result<String, ErrorResponse> {
-    actions::restore(&app, &url, &words)
+    actions::restore(&app, &url, &words, login)
         .await
         .map_err(|e| err(&e))
 }

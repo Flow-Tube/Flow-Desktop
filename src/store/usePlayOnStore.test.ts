@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LiveRequest } from "../lib/api/live";
 
+vi.mock("../lib/api/linked", () => ({ getLinkedDevices: vi.fn(async () => []) }));
 const api = vi.hoisted(() => ({
   getLiveStatus: vi.fn(),
   onLive: vi.fn(),
@@ -39,7 +40,7 @@ beforeEach(async () => {
   });
   api.getLiveStatus.mockResolvedValue({ available: true, devices: {}, online: [] });
   api.sendLive.mockResolvedValue(9);
-  usePlayOnStore.setState({ status: null, asking: [] });
+  usePlayOnStore.setState({ status: null, linked: [], asking: [] });
   await usePlayOnStore.getState().init(() => undefined);
 });
 

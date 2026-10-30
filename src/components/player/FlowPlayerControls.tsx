@@ -34,6 +34,7 @@ import { PREVIEW_WIDTH, pickStoryboardLevel, storyboardFrameAt } from "../../lib
 import { proxiedImage } from "../../lib/imageProxy";
 import { useImageProxyStore } from "../../store/useImageProxyStore";
 import { PlayerSettingsMenu, qualityLabel, type SettingsPane } from "./PlayerSettingsMenu";
+import { PlayOnButton } from "../playon/PlayOnButton";
 import { PLAYER_MENU_OWNER_ATTR } from "../../lib/playerMenuDismiss";
 import { SponsorBlockSubmitDialog } from "./SponsorBlockSubmitDialog";
 import {
@@ -808,6 +809,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   }
                 />
               </button>
+              <PlayOnButton className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10" iconSize={19} />
               {showPipButton && (
                 <button
                   type="button"

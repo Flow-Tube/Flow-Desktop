@@ -91,6 +91,21 @@ async fn eventually_holds(pool: &SqlitePool, path: &str) -> bool {
 }
 
 #[tokio::test]
+async fn sessions_opened_together_keep_the_same_new_entry_once() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let fresh = HeldStore::new(pool.clone()).roster_after(0).await.unwrap();
+    // Both read the entry before either kept it.
+    add_roster_entries(&pool, &fresh).await.unwrap();
+    add_roster_entries(&pool, &fresh).await.unwrap();
+    assert!(
+        Session::open(&pool, HeldStore::new(pool.clone()), &g.b)
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
 async fn two_members_exchange_their_objects_in_one_session() {
     let g = group().await;
     let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);

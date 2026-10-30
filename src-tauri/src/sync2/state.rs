@@ -110,12 +110,14 @@ pub async fn roster_entries(pool: &SqlitePool) -> Result<Vec<Entry>, SyncError> 
         .collect()
 }
 
+/// Keeps verified entries. Sessions open at once (a sync, the LAN runtime, the live channel) read
+/// the same new entries, so one already kept is left as it is.
 pub async fn add_roster_entries(pool: &SqlitePool, entries: &[Entry]) -> Result<(), SyncError> {
     let mut tx = pool.begin().await?;
     for entry in entries {
         let seq =
             i64::try_from(entry.seq).map_err(|_| SyncError::Protocol("roster too long".into()))?;
-        sqlx::query("INSERT INTO sync2_roster (seq, entry) VALUES (?, ?)")
+        sqlx::query("INSERT OR IGNORE INTO sync2_roster (seq, entry) VALUES (?, ?)")
             .bind(seq)
             .bind(String::from_utf8_lossy(&to_canonical_json(entry)).into_owned())
             .execute(&mut *tx)

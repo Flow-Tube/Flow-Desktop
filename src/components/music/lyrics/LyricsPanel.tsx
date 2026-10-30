@@ -20,7 +20,9 @@ import {
   presenceSet,
   renderedRows,
   rowHeights,
+  rowOffset,
   rowTarget,
+  skipsALine,
   type TargetContext,
 } from "../../../lib/lyrics/display/panelLayout";
 import { LyricsScroller } from "../../../lib/lyrics/display/scroller";
@@ -129,6 +131,8 @@ export function LyricsPanel(props: LyricsPanelProps) {
   const presence = useRef({ key: "", set: new Set<number>() });
   const seenVersion = useRef(-1);
   const renderedKey = useRef("");
+  /** The manual scroll a tap just handed to the rows, which rows created by the next render start with too. */
+  const spawnShift = useRef(0);
   const live = useRef({ isPlaying, syncOffsetMs, active, motionEnabled });
   live.current = { isPlaying, syncOffsetMs, active, motionEnabled };
   const scroller = useRef<LyricsScroller | null>(null);
@@ -235,6 +239,11 @@ export function LyricsPanel(props: LyricsPanelProps) {
   };
   const heights = rowHeights(items, layouts, shownNow);
   const offsets = lyricsRowOffsets(items, heights, activeListIndex, ROW_METRICS);
+  // The cascade holds until the next line change; rows that appear with a line change start where they were.
+  const placement = useRef({ items, activeListIndex, offsets, cascade: true });
+  const last = placement.current;
+  const lineChanged = last.items === items && last.activeListIndex !== activeListIndex;
+  const cascade = last.items !== items || (lineChanged ? !skipsALine(items, last.activeListIndex, activeListIndex) : last.cascade);
   scroll.setBounds(
     lyricsMinScrollOffset(items, heights, activeListIndex, anchorY, BOTTOM_MARGIN, ROW_METRICS),
     lyricsMaxScrollOffset(items, heights, activeListIndex, anchorY, size.height, TOP_MARGIN, ROW_METRICS),
@@ -248,10 +257,12 @@ export function LyricsPanel(props: LyricsPanelProps) {
     presence: presence.current.set,
     isSynced,
     active,
+    cascade,
   };
-  const rendered = renderedRows(ctx, state.userManualOffset, size.height);
+  const currentOffset = (listIndex: number) => motions.current.get(listIndex)?.offset.value;
+  const rendered = renderedRows(ctx, state.userManualOffset, size.height, currentOffset);
   const windowKeyOf = (manual: number) => {
-    const rows = renderedRows(ctx, manual, size.height);
+    const rows = renderedRows(ctx, manual, size.height, currentOffset);
     return `${rows[0]}-${rows[rows.length - 1]}`;
   };
   const windowKeyRef = useRef(windowKeyOf);
@@ -266,7 +277,10 @@ export function LyricsPanel(props: LyricsPanelProps) {
     let motion = motions.current.get(listIndex);
     if (!motion) {
       const item = items[listIndex]!;
-      motion = new RowMotion(rowTarget(ctx, listIndex), item.kind === "indicator" ? "indicator" : item.entry.isBackground ? "background" : "line");
+      const target = rowTarget(ctx, listIndex);
+      const from = lineChanged ? rowOffset({ ...last, anchorY }, listIndex) : target.offset;
+      const start = { ...target, offset: from + spawnShift.current };
+      motion = new RowMotion(start, item.kind === "indicator" ? "indicator" : item.entry.isBackground ? "background" : "line");
       motions.current.set(listIndex, motion);
     }
     return motion;
@@ -276,8 +290,10 @@ export function LyricsPanel(props: LyricsPanelProps) {
   // Push this render's targets to the springs, then let the frame loop carry them.
   useLayoutEffect(() => {
     seenVersion.current = state.version;
+    placement.current = { items, activeListIndex, offsets, cascade };
     for (const listIndex of motions.current.keys()) if (!renderedMotions.has(listIndex)) motions.current.delete(listIndex);
     motionList.current = [...motions.current.values()];
+    spawnShift.current = 0;
     for (const [listIndex, motion] of motions.current) {
       motion.update(rowTarget(ctx, listIndex), { autoScroll: state.isAutoScrollEnabled, snap, blur: !IS_LINUX_RUNTIME });
     }
@@ -355,6 +371,12 @@ export function LyricsPanel(props: LyricsPanelProps) {
       const seekTarget = Math.max(0, line.time);
       const duration = clock.durationMs();
       if (duration <= 0 || seekTarget < duration + SEEK_SLACK_MS) onSeekTo(seekTarget);
+      // Hand the manual scroll to the rows before the jump's scroll bounds can clamp it, and so it doesn't ease home
+      // beside their slower springs: the screen stays put and only the tapped line moves, toward the anchor.
+      scroll.stop();
+      for (const motion of motions.current.values()) motion.offset.value += state.userManualOffset;
+      spawnShift.current = state.userManualOffset;
+      state.userManualOffset = 0;
       state.jumpTo(lineIndex);
       rerender();
     },

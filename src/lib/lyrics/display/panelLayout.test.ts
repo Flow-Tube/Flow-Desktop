@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LyricsEntry } from "../types";
 import { buildMergedLyricsList } from "./model";
 import { LyricsPanelState } from "./panelState";
-import { activeListIndexOf, presenceAt, presenceSet, renderedRows, rowTarget, type TargetContext } from "./panelLayout";
+import { activeListIndexOf, presenceAt, presenceSet, renderedRows, rowTarget, skipsALine, type TargetContext } from "./panelLayout";
 import { LyricsScroller } from "./scroller";
 import { RowMotion, cssBlurOf, staggerFor } from "./rowMotion";
 
@@ -23,6 +23,7 @@ function context(state: LyricsPanelState, overrides: Partial<TargetContext> = {}
     presence: new Set(),
     isSynced: true,
     active: true,
+    cascade: true,
     ...overrides,
   };
 }
@@ -46,6 +47,17 @@ describe("lyrics panel layout", () => {
     expect(target).toMatchObject({ alpha: 1, blurRadius: 0, scale: 0.92 });
   });
 
+  it("unblurs every line while the user scrolls the lyrics by hand", () => {
+    const state = new LyricsPanelState(0);
+    state.advance(lines, 7200, false);
+    state.onUserScroll(-400, 0);
+    const ctx = context(state);
+    expect(rowTarget(ctx, activeListIndexOf(ctx.items, 4)).blurRadius).toBe(0);
+    expect(rowTarget(ctx, activeListIndexOf(ctx.items, 8)).blurRadius).toBe(0);
+    state.resumeAutoScroll();
+    expect(rowTarget(ctx, activeListIndexOf(ctx.items, 8)).blurRadius).toBe(16);
+  });
+
   it("sings no line while the host keeps the panel hidden", () => {
     const state = new LyricsPanelState(0);
     state.advance(lines, 7200, false);
@@ -59,6 +71,34 @@ describe("lyrics panel layout", () => {
     expect(rowTarget(ctx, ctx.activeListIndex + 2).staggerMs).toBe(40);
     expect(rowTarget(ctx, ctx.activeListIndex + 7).staggerMs).toBe(140);
     expect(staggerFor(50)).toBe(200);
+  });
+
+  it("moves every row at once after a jump past other lines, so none overtakes another", () => {
+    const state = new LyricsPanelState(0);
+    const ctx = context(state, { cascade: false });
+    expect(rowTarget(ctx, ctx.activeListIndex + 7).staggerMs).toBe(0);
+  });
+
+  it("calls it a jump only when a main line lies between the old and new row", () => {
+    const withBackground: LyricsEntry[] = [
+      { time: 1000, text: "a" },
+      { time: 1500, text: "(echo)", isBackground: true },
+      { time: 4000, text: "b" },
+      { time: 7000, text: "c" },
+    ];
+    const items = buildMergedLyricsList(withBackground);
+    const a = activeListIndexOf(items, 0);
+    expect(skipsALine(items, a, activeListIndexOf(items, 2))).toBe(false);
+    expect(skipsALine(items, a, activeListIndexOf(items, 3))).toBe(true);
+    expect(skipsALine(items, activeListIndexOf(items, 3), a)).toBe(true);
+  });
+
+  it("keeps a row that is still sliding across the viewport", () => {
+    const many: LyricsEntry[] = Array.from({ length: 60 }, (_, i) => ({ time: 1000 + i * 3000, text: `l${i}` }));
+    const items = buildMergedLyricsList(many);
+    const ctx = { items, offsets: new Map(items.map((_, i) => [i, (i - 40) * 100])), activeListIndex: 40, anchorY: 0 };
+    expect(renderedRows(ctx, 0, 500)).not.toContain(2);
+    expect(renderedRows(ctx, 0, 500, (i) => (i === 2 ? 200 : undefined))).toContain(2);
   });
 
   it("renders the rows near the viewport and the fourteen either side of the line", () => {

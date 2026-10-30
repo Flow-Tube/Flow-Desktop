@@ -147,6 +147,63 @@ describe("lyrics panel", () => {
     expect(seeks).toEqual([5000]);
   });
 
+  it("moves a line clicked after a manual scroll straight to the anchor, never away first", () => {
+    render({ onSeekTo: (ms: number) => (audio.time = ms / 1000) });
+    audio.time = 1.2;
+    advance(1500);
+    const yOf = (row: HTMLElement) => Number.parseFloat(row.style.transform.split(",")[1]!);
+    const target = rows()[3]!;
+    const distance = yOf(target) - yOf(rows()[0]!);
+    act(() => {
+      host.querySelector(".touch-none")!.dispatchEvent(new WheelEvent("wheel", { deltaY: distance, bubbles: true }));
+    });
+    advance(100);
+    const start = yOf(target);
+    act(() => target.click());
+    const path: number[] = [];
+    // Within the line, before the song moves past it.
+    for (let i = 0; i < 60; i++) {
+      advance(16);
+      path.push(yOf(target));
+    }
+    const end = path[path.length - 1]!;
+    const direction = Math.sign(end - start);
+    expect(Math.abs(end - start)).toBeGreaterThan(20);
+    // The line must not swing past the anchor and back; the row spring alone overshoots by about a pixel.
+    expect(Math.max(...path.map((y) => (y - end) * direction))).toBeLessThan(3);
+  });
+
+  it("keeps a far line clicked after a long manual scroll where it is", () => {
+    const long: LyricsEntry[] = Array.from({ length: 30 }, (_, i) => ({ time: 1000 + i * 2000, text: `line ${i}` }));
+    render({ syncedLyrics: long, onSeekTo: (ms: number) => (audio.time = ms / 1000) });
+    audio.time = 1.2;
+    advance(600);
+    const yOf = (row: HTMLElement) => Number.parseFloat(row.style.transform.split(",")[1]!);
+    const surface = host.querySelector(".touch-none")!;
+    const byText = (text: string) => rows().find((r) => r.textContent === text);
+    const anchorY = 700 * 0.35;
+    const targetY = () => {
+      const row = byText("line 24");
+      return row ? yOf(row) : Number.POSITIVE_INFINITY;
+    };
+    for (let i = 0; i < 150 && targetY() > anchorY + 20; i++) {
+      act(() => surface.dispatchEvent(new WheelEvent("wheel", { deltaY: 30, bubbles: true })));
+      advance(16);
+    }
+    advance(100);
+    const target = byText("line 24")!;
+    const start = yOf(target);
+    expect(Math.abs(start - anchorY)).toBeLessThan(40);
+    act(() => target.click());
+    const path: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      advance(16);
+      path.push(yOf(target));
+    }
+    // Only the gap to the anchor animates; the jump's new scroll bounds don't throw the line elsewhere first.
+    for (const y of path) expect(Math.abs(y - anchorY)).toBeLessThanOrEqual(Math.abs(start - anchorY) + 3);
+  });
+
   it("stops following the song on a wheel scroll and offers to resync", () => {
     render();
     audio.time = 3.2;

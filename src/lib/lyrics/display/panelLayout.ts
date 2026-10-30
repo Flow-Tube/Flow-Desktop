@@ -85,6 +85,18 @@ export interface TargetContext {
   isSynced: boolean;
   /** False while the host keeps the panel hidden: no line is sung on screen. */
   active: boolean;
+  /** False after a jump past other lines: a staggered move that long makes rows overtake each other. */
+  cascade: boolean;
+}
+
+/** True when moving the anchor from one row to another passes over a main line, as a seek does. */
+export function skipsALine(items: LyricsListItem[], fromListIndex: number, toListIndex: number): boolean {
+  const [low, high] = fromListIndex < toListIndex ? [fromListIndex, toListIndex] : [toListIndex, fromListIndex];
+  for (let i = low + 1; i < high; i++) {
+    const item = items[i];
+    if (item?.kind === "line" && !item.entry.isBackground) return true;
+  }
+  return false;
 }
 
 export const isLineActive = (ctx: Pick<TargetContext, "state" | "active">, lineIndex: number): boolean =>
@@ -96,7 +108,7 @@ export const rowOffset = (ctx: Pick<TargetContext, "offsets" | "activeListIndex"
 export function rowTarget(ctx: TargetContext, listIndex: number): RowTarget {
   const item = ctx.items[listIndex]!;
   const offset = rowOffset(ctx, listIndex);
-  const staggerMs = staggerFor(Math.abs(listIndex - ctx.activeListIndex));
+  const staggerMs = ctx.cascade ? staggerFor(Math.abs(listIndex - ctx.activeListIndex)) : 0;
   if (item.kind === "indicator") {
     return { offset, staggerMs, scale: 1, alpha: 1, blurRadius: 0, active: false, presence: ctx.presence.has(listIndex) };
   }
@@ -115,22 +127,32 @@ export function rowTarget(ctx: TargetContext, listIndex: number): RowTarget {
     staggerMs,
     scale: isActive ? ACTIVE_SCALE : INACTIVE_SCALE,
     alpha,
-    blurRadius: !ctx.isSynced || isActive || isBackground ? 0 : Math.min(distance, MAX_BLUR_DISTANCE) * BLUR_PER_LINE,
+    blurRadius:
+      !ctx.isSynced || isActive || isBackground || !state.isAutoScrollEnabled ? 0 : Math.min(distance, MAX_BLUR_DISTANCE) * BLUR_PER_LINE,
     active: isActive,
     presence: !isBackground || ctx.presence.has(listIndex),
   };
 }
 
-/** The rows that exist: those within 420 px of the viewport, and always the fourteen either side of the line. */
+/**
+ * The rows that exist: those within 420 px of the viewport, and always the fourteen either side of the line.
+ * `currentOffset` gives where a row is now, so one still sliding across the viewport stays until it is gone.
+ */
 export function renderedRows(
   ctx: Pick<TargetContext, "items" | "offsets" | "activeListIndex" | "anchorY">,
   manualOffset: number,
   viewportHeight: number,
+  currentOffset: (listIndex: number) => number | undefined = () => undefined,
 ): number[] {
+  const near = (y: number) => y > -RENDER_PADDING && y < viewportHeight + RENDER_PADDING;
   const rows: number[] = [];
   for (let listIndex = 0; listIndex < ctx.items.length; listIndex++) {
-    const y = rowOffset(ctx, listIndex) + manualOffset;
-    if ((y > -RENDER_PADDING && y < viewportHeight + RENDER_PADDING) || Math.abs(listIndex - ctx.activeListIndex) <= RENDER_ROWS) {
+    const current = currentOffset(listIndex);
+    if (
+      near(rowOffset(ctx, listIndex) + manualOffset) ||
+      (current !== undefined && near(current + manualOffset)) ||
+      Math.abs(listIndex - ctx.activeListIndex) <= RENDER_ROWS
+    ) {
       rows.push(listIndex);
     }
   }

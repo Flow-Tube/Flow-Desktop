@@ -74,7 +74,7 @@ static IMAGE_FETCH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const
 const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\n\
 Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n\
 Access-Control-Allow-Headers: Range, Content-Type, Origin, Accept\r\n\
-Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges\r\n";
+Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Encoding\r\n";
 
 // googlevideo validates that the UA fetching a stream matches the client (`c=`)
 // that minted the URL; a mismatch (e.g. a web UA on a `c=IOS` URL) is a known
@@ -844,20 +844,12 @@ async fn relay_remote(
         let is_image = session.content_type.starts_with("image/");
         let stall_guarded = session.content_type.starts_with("video/")
             || session.content_type.starts_with("audio/");
-        // Media ranges must arrive byte-exact, but manifests and captions are text
-        // a live stream refetches every few seconds: a live playlist is about
-        // 880 KB as text and 12 KB compressed.
-        let ct_session = session.content_type.to_ascii_lowercase();
-        let compressible = ct_session.contains("mpegurl")
-            || ct_session.contains("dash+xml")
-            || ct_session.contains("text/vtt");
+        // Media ranges and manifests must arrive byte-exact and uncompressed
+        // so the proxy can relay exact Content-Length without chunked decoding mismatch.
         let mut req = client
             .get(target_url)
             .header("User-Agent", &upstream_user_agent)
-            .header(
-                "Accept-Encoding",
-                if compressible { "gzip, br" } else { "identity" },
-            );
+            .header("Accept-Encoding", "identity");
         if is_image {
             req = req
                 .header(
@@ -1012,6 +1004,9 @@ async fn relay_remote(
             }
             if let Some(range_val) = content_range_value.as_deref() {
                 response_headers.push_str(&format!("Content-Range: {range_val}\r\n"));
+            }
+            if let Some(encoding) = headers.get("Content-Encoding").and_then(|h| h.to_str().ok()) {
+                response_headers.push_str(&format!("Content-Encoding: {encoding}\r\n"));
             }
             response_headers.push_str(&format!("Accept-Ranges: {accept_ranges_value}\r\n"));
             response_headers.push_str(CORS_HEADERS);

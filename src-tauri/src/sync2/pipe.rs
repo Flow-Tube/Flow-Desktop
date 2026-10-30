@@ -43,6 +43,10 @@ pub trait Pipe {
     fn receive_key(&mut self) -> impl Future<Output = Result<[u8; KEY_SIZE]>> + Send;
     /// Ends pairing after the last message.
     fn close(&mut self) -> impl Future<Output = ()> + Send;
+    /// The other device's address, when the pipe runs over the LAN.
+    fn peer(&self) -> Option<String> {
+        None
+    }
 }
 
 fn split_key(bytes: &[u8]) -> Result<([u8; KEY_SIZE], &[u8])> {
@@ -126,6 +130,7 @@ impl<M: Mailbox + Sync> Pipe for MailboxPipe<'_, M> {
 pub struct LanPipe<S> {
     socket: WsChannel<S>,
     shower: bool,
+    peer: Option<String>,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
@@ -162,12 +167,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
         }
         self.socket.close().await;
     }
+
+    fn peer(&self) -> Option<String> {
+        self.peer.clone()
+    }
 }
 
 /// Whichever way the other device reached this one.
 pub enum AnyPipe<'m, M, S> {
     Mailbox(MailboxPipe<'m, M>),
-    Lan(LanPipe<S>),
+    Lan(Box<LanPipe<S>>),
 }
 
 impl<M, S> Pipe for AnyPipe<'_, M, S>
@@ -209,6 +218,13 @@ where
             Self::Lan(pipe) => pipe.close().await,
         }
     }
+
+    fn peer(&self) -> Option<String> {
+        match self {
+            Self::Mailbox(_) => None,
+            Self::Lan(pipe) => pipe.peer(),
+        }
+    }
 }
 
 /// Where this device listens while it shows a code.
@@ -248,7 +264,7 @@ impl Listening {
     /// Waits for one scanner and reads its key. Other connections stay unanswered.
     pub async fn accept(self) -> Result<(LanPipe<TcpStream>, [u8; KEY_SIZE])> {
         let deadline = Instant::now() + SLOT_LIFETIME;
-        let (stream, _) = timeout_at(deadline, self.listener.accept())
+        let (stream, peer) = timeout_at(deadline, self.listener.accept())
             .await
             .map_err(|_| EngineError::TimedOut)?
             .map_err(crate::sync::error::SyncError::from)?;
@@ -259,6 +275,7 @@ impl Listening {
         let mut pipe = LanPipe {
             socket: WsChannel::new(socket),
             shower: true,
+            peer: Some(peer.ip().to_string()),
         };
         let key = pipe.receive_key().await?;
         Ok((pipe, key))
@@ -273,6 +290,7 @@ pub async fn dial(addresses: &[LanAddress]) -> Option<LanPipe<ClientStream>> {
             return Some(LanPipe {
                 socket: WsChannel::new(socket),
                 shower: false,
+                peer: Some(address.a.clone()),
             });
         }
     }

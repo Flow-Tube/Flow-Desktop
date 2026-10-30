@@ -56,7 +56,7 @@ async fn a_new_device_pairs_and_then_syncs() {
         add_device(&session, offer, &g.a, memory_welcome(), &shown),
         join(&pool_n, &store, &code, &newcomer, meta(), &shown),
     );
-    let did = added.unwrap();
+    let did = added.unwrap().0;
     joined.unwrap();
     let codes = codes.into_inner().unwrap();
     assert_eq!(codes.len(), 2);
@@ -156,7 +156,7 @@ async fn a_member_scans_a_new_device_code_over_the_lan() {
     );
     joined.unwrap();
     assert_same_digits(codes);
-    let did = added.unwrap();
+    let did = added.unwrap().0;
     assert_eq!(did, hex::encode(newcomer.did));
     assert!(head(&g.store).members.contains_key(&did));
     assert!(Session::open(&pool_n, &g.store, &newcomer).await.is_ok());
@@ -188,7 +188,7 @@ async fn a_new_device_reaches_a_member_over_the_lan_first() {
     );
     joined.unwrap();
     assert_same_digits(codes);
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
 }
 
 #[tokio::test]
@@ -216,5 +216,5 @@ async fn a_new_device_falls_back_to_the_mailbox_when_the_lan_does_not_answer() {
     );
     joined.unwrap();
     assert_same_digits(codes);
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
 }

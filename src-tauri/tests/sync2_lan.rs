@@ -366,8 +366,52 @@ async fn a_new_device_scans_a_lan_group_member_and_then_syncs() {
         },
     );
     joined.unwrap();
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
     joined_and_synced(&g, &pool_a, &pool_n, &newcomer).await;
+}
+
+#[tokio::test]
+async fn devices_paired_over_the_lan_learn_where_each_other_listens() {
+    listen(&empty_pool().await).await.unwrap();
+    let g = group().await;
+    let pool_a = holding(&g).await;
+    let session = Session::open(
+        &pool_a,
+        GroupStore::Held(HeldStore::new(pool_a.clone())),
+        &g.a,
+    )
+    .await
+    .unwrap();
+    let newcomer = member_secrets(random_bytes(), random_bytes());
+    let offer = new_offer(
+        Some(StoreLocation::lan()),
+        "Desktop A",
+        Some(listen_on(loopback()).await.unwrap()),
+    );
+    let code = read_code(&offer.qr).unwrap();
+    let shown = |_sas: String| async { true };
+    let (added, member) = tokio::join!(
+        add_device(&session, offer, &g.a, WelcomeStore::Lan, shown),
+        async {
+            let welcomed = join_on_lan(&code, &newcomer, named("New"), shown).await?;
+            let member = welcomed.reach.clone();
+            finish_lan_join(&empty_pool().await, &newcomer, welcomed).await?;
+            Ok::<_, EngineError>(member)
+        },
+    );
+    let reach = member.unwrap().expect("the member said where it listens");
+    assert_eq!(
+        (reach.did.as_str(), reach.address.0.as_str()),
+        (hex::encode(g.a.did).as_str(), "127.0.0.1")
+    );
+    let reach = added
+        .unwrap()
+        .1
+        .expect("the new device said where it listens");
+    assert_eq!(
+        (reach.did, reach.address.0.as_str()),
+        (hex::encode(newcomer.did), "127.0.0.1")
+    );
 }
 
 #[tokio::test]
@@ -396,7 +440,7 @@ async fn a_lan_group_member_scans_a_new_device_code() {
         }
     );
     joined.unwrap();
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
     joined_and_synced(&g, &pool_a, &pool_n, &newcomer).await;
 }
 

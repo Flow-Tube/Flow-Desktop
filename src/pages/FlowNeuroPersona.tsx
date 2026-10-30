@@ -5,6 +5,7 @@ import {
   type UserBrain,
 } from "../lib/api/recommendation";
 import { usePersonaData } from "../lib/usePersonaData";
+import { leaveGroupFirst } from "../lib/linked/leaveFirst";
 import { clearHomeFeed } from "../lib/api/homeFeed";
 import { useFeedActionsStore } from "../store/useFeedActionsStore";
 
@@ -60,6 +61,7 @@ export function FlowNeuroPersona() {
 
   const handleResetBrain = async () => {
     try {
+      if (!(await leaveGroupFirst())) return;
       await resetBrain();
       await clearHomeFeed();
       await refresh(true);

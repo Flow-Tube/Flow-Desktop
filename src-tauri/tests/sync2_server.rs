@@ -361,3 +361,20 @@ async fn the_server_says_when_it_last_heard_from_each_device() {
     assert_eq!(seen.get("aa"), Some(&1000));
     assert_eq!(seen.get("bb"), Some(&2000));
 }
+
+#[tokio::test]
+async fn a_server_reset_to_empty_says_the_group_is_gone() {
+    use flow_desktop_lib::sync2::engine::EngineError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/challenge"))
+        .respond_with(ResponseTemplate::new(503).set_body_json(json!({ "error": "unclaimed" })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let error = EngineError::from(store.roster_after(-1).await.unwrap_err());
+    assert_eq!(error.kind(), "linkedGroupMissing");
+}

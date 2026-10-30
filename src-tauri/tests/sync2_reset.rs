@@ -1,12 +1,14 @@
-//! Resetting a linked device's data leaves its group first and records no deletions, so the reset
-//! never reaches the other devices.
+//! Resetting a linked device's data leaves its group first, as Leave does, and records no
+//! deletions, so the reset never reaches the other devices.
 
 mod sync2_common;
 
 use flow_desktop_lib::sync::canonical::Collection;
 use flow_desktop_lib::sync::export::export_collections;
 use flow_desktop_lib::sync::local_edits;
-use flow_desktop_lib::sync2::actions::reset_local_data;
+use flow_desktop_lib::sync2::actions::{depart, reset_local_data};
+use flow_desktop_lib::sync2::engine::{EngineError, Session};
+use flow_desktop_lib::sync2::roster::Op;
 use flow_desktop_lib::sync2::state::load_group;
 use sync2_common::{device_pool, group};
 
@@ -29,8 +31,20 @@ async fn a_reset_leaves_the_group_and_announces_no_deletions() {
     .await
     .unwrap();
 
+    assert!(matches!(
+        reset_local_data(&pool, true).await,
+        Err(EngineError::AlreadyLinked)
+    ));
+    let session = Session::open(&pool, &g.store, &g.a).await.unwrap();
+    depart(&pool, &session, &g.a).await.unwrap();
     reset_local_data(&pool, true).await.unwrap();
 
+    let roster = g.store.0.lock().unwrap().roster.clone();
+    let last = roster.last().unwrap();
+    assert_eq!(
+        (last.op, last.signer.as_str()),
+        (Op::Leave, hex::encode(g.a.did).as_str())
+    );
     assert!(load_group(&pool).await.unwrap().is_none());
     let recorded: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync_changes")
         .fetch_one(&pool)

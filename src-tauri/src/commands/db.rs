@@ -7,7 +7,7 @@ use crate::errors::ErrorResponse;
 use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
 use crate::sync::local_edits;
-use crate::sync2::actions::reset_local_data;
+use crate::sync2::actions::{leave_if_linked, reset_local_data};
 use crate::sync2::service::push_soon;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, State};
@@ -99,9 +99,13 @@ pub async fn clear_watch_history(
 
 #[tauri::command]
 pub async fn reset_app_data(
+    app: AppHandle,
     pool: State<'_, SqlitePool>,
     profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
+    if profile.is_default {
+        leave_if_linked(&app).await.map_err(|e| linked_err(&e))?;
+    }
     reset_local_data(&pool, profile.is_default)
         .await
         .map_err(|e| linked_err(&e))

@@ -38,7 +38,7 @@ const LINKED = { kind: "server", storeUrl: "https://sync.example.com", recoveryS
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useLinkedDevicesStore.setState({ status: null, devices: null, words: null, error: null, busy: false });
+  useLinkedDevicesStore.setState({ status: null, devices: null, words: null, serverTaken: false, error: null, busy: false });
 });
 
 describe("useLinkedDevicesStore", () => {
@@ -48,7 +48,7 @@ describe("useLinkedDevicesStore", () => {
     api.getLinkedDevices.mockResolvedValue([{ id: "a", name: "Mac", platform: "macos", thisDevice: true }]);
 
     await useLinkedDevicesStore.getState().create("https://sync.example.com", "token");
-    expect(api.createGroup).toHaveBeenCalledWith("https://sync.example.com", "token");
+    expect(api.createGroup).toHaveBeenCalledWith("https://sync.example.com", "token", undefined);
     expect(useLinkedDevicesStore.getState().words).toBe(WORDS);
     expect(useLinkedDevicesStore.getState().devices).toHaveLength(1);
 
@@ -121,5 +121,18 @@ describe("useLinkedDevicesStore", () => {
     await useLinkedDevicesStore.getState().leave();
     expect(api.forgetGroup).toHaveBeenCalledOnce();
     expect(useLinkedDevicesStore.getState().error).toContain("no longer has this group");
+  });
+
+  it("offers a server that already has a group instead of failing, and resets it only when asked", async () => {
+    api.createGroup.mockRejectedValueOnce({ kind: "linkedAlreadyClaimed", message: "this server already has a group" });
+    await useLinkedDevicesStore.getState().create("https://sync.example.com", "admin");
+    expect(useLinkedDevicesStore.getState()).toMatchObject({ serverTaken: true, error: null, words: null });
+    expect(api.createGroup).toHaveBeenLastCalledWith("https://sync.example.com", "admin", undefined);
+
+    api.createGroup.mockResolvedValueOnce(WORDS);
+    api.getLinkedStatus.mockResolvedValue(LINKED);
+    await useLinkedDevicesStore.getState().create("https://sync.example.com", "admin", true);
+    expect(api.createGroup).toHaveBeenLastCalledWith("https://sync.example.com", "admin", true);
+    expect(useLinkedDevicesStore.getState()).toMatchObject({ serverTaken: false, words: WORDS });
   });
 });

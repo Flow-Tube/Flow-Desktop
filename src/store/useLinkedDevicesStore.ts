@@ -54,12 +54,14 @@ interface LinkedState {
   link: LinkPhase;
   /** Recovery words to show once, until the user proves they saved them. */
   words: string | null;
+  /** Creating a group found the server already holds one. */
+  serverTaken: boolean;
   busy: boolean;
   error: string | null;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
-  create: (url: string, adminToken: string) => Promise<void>;
+  create: (url: string, adminToken: string, resetServer?: boolean) => Promise<void>;
   createOnLan: () => Promise<void>;
   createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
   updateLogin: (user: string, password: string) => Promise<void>;
@@ -111,6 +113,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     joinRequests: [],
     link: { phase: "idle" },
     words: null,
+    serverTaken: false,
     busy: false,
     error: null,
 
@@ -143,9 +146,15 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       }
     },
 
-    create: (url, adminToken) =>
+    create: (url, adminToken, resetServer) =>
       run(async () => {
-        set({ words: await createGroup(url, adminToken) });
+        try {
+          set({ words: await createGroup(url, adminToken, resetServer), serverTaken: false });
+        } catch (error) {
+          if (normalizeBackendError(error).kind !== "linkedAlreadyClaimed") throw error;
+          set({ serverTaken: true });
+          return;
+        }
         await get().refresh();
       }),
 

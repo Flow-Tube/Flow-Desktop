@@ -35,8 +35,9 @@ pub async fn linked_create(
     app: AppHandle,
     url: String,
     admin_token: String,
+    reset_server: bool,
 ) -> Result<String, ErrorResponse> {
-    actions::create(&app, &url, &admin_token)
+    actions::create(&app, &url, &admin_token, reset_server)
         .await
         .map_err(|e| err(&e))
 }

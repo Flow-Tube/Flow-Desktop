@@ -34,6 +34,10 @@ pub enum StoreError {
     InstanceChanged,
     #[error("this server already has a group")]
     AlreadyClaimed,
+    #[error("the server refused the admin token")]
+    AdminRefused,
+    #[error("the server refuses this address for a while after too many wrong admin tokens")]
+    AdminBanned,
     #[error("the server no longer accepts this device")]
     SignInRefused,
     #[error("a linked device declined the request to join")]
@@ -240,16 +244,37 @@ impl ServerStore {
     }
 
     /// A request with the operator's admin token instead of a device token.
-    pub(super) fn as_admin(
+    /// Sends a request with the operator's admin token. The server bans an address for a while
+    /// after a few wrong tokens, so a refused token and a ban are told apart.
+    pub(super) async fn as_admin(
         &self,
         method: Method,
         path: &str,
         admin_token: &str,
-    ) -> Result<reqwest::RequestBuilder> {
-        Ok(self
+        body: Option<&Value>,
+    ) -> Result<reqwest::Response> {
+        let mut request = self
             .client
             .request(method, self.url(path)?)
-            .bearer_auth(admin_token))
+            .bearer_auth(admin_token);
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        let response = request.send().await.map_err(StoreError::Network)?;
+        match response.status() {
+            StatusCode::UNAUTHORIZED => Err(StoreError::AdminRefused),
+            StatusCode::TOO_MANY_REQUESTS => Err(StoreError::AdminBanned),
+            _ => Ok(response),
+        }
+    }
+
+    /// Deletes the group and everything stored for it, leaving the server unclaimed.
+    pub async fn reset_server(&self, admin_token: &str) -> Result<()> {
+        let body = json!({ "confirm": "reset" });
+        let response = self
+            .as_admin(Method::POST, "v1/admin/reset", admin_token, Some(&body))
+            .await?;
+        decode_empty(response).await
     }
 
     /// Creates the group on an unclaimed server with the operator's admin token.
@@ -259,12 +284,10 @@ impl ServerStore {
         genesis: &Entry,
         wraps: &BTreeMap<String, String>,
     ) -> Result<()> {
+        let body = json!({ "entry": genesis, "wraps": wraps });
         let response = self
-            .as_admin(Method::POST, "v1/claim", admin_token)?
-            .json(&json!({ "entry": genesis, "wraps": wraps }))
-            .send()
-            .await
-            .map_err(StoreError::Network)?;
+            .as_admin(Method::POST, "v1/claim", admin_token, Some(&body))
+            .await?;
         if response.status() == StatusCode::CONFLICT {
             return Err(StoreError::AlreadyClaimed);
         }

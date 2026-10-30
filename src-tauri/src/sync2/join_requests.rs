@@ -28,22 +28,18 @@ pub struct JoinRequest {
 impl ServerStore {
     pub async fn ask_to_join(&self, admin_token: &str, id: &str, name: &str) -> server::Result<()> {
         let name: String = name.chars().take(NAME_LIMIT).collect();
+        let body = json!({ "id": id, "name": name });
         let response = self
-            .as_admin(Method::POST, "v1/join", admin_token)?
-            .json(&json!({ "id": id, "name": name }))
-            .send()
-            .await
-            .map_err(StoreError::Network)?;
+            .as_admin(Method::POST, "v1/join", admin_token, Some(&body))
+            .await?;
         server::decode_empty(response).await
     }
 
     /// The code a member answered with, or `None` while no member has.
     pub async fn join_answer(&self, admin_token: &str, id: &str) -> server::Result<Option<String>> {
         let response = self
-            .as_admin(Method::GET, &format!("v1/join/{id}"), admin_token)?
-            .send()
-            .await
-            .map_err(StoreError::Network)?;
+            .as_admin(Method::GET, &format!("v1/join/{id}"), admin_token, None)
+            .await?;
         match response.status() {
             StatusCode::NOT_FOUND => return Ok(None),
             StatusCode::GONE => return Err(StoreError::JoinDeclined),

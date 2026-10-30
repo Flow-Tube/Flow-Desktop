@@ -77,6 +77,8 @@ impl EngineError {
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
             Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
+            Self::Store(StoreError::AdminRefused) => "linkedAdminRefused",
+            Self::Store(StoreError::AdminBanned) => "linkedAdminBanned",
             Self::Store(StoreError::SignInRefused) => "linkedSignInRefused",
             Self::Store(StoreError::JoinDeclined) => "linkedJoinDeclined",
             Self::Store(StoreError::Unauthorized) => "linkedStoreUnauthorized",

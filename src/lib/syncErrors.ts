@@ -21,6 +21,7 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedRefused: "linked_error_refused",
   linkedInstanceChanged: "linked_error_instance_changed",
   linkedAlreadyClaimed: "linked_error_already_claimed",
+  linkedJoinDeclined: "linked_error_join_declined",
   linkedStoreUnauthorized: "linked_error_store_unauthorized",
   linkedProtocol: "linked_error_protocol",
   linkedLocal: "linked_error_local",

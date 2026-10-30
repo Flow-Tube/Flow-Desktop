@@ -34,6 +34,8 @@ pub enum StoreError {
     InstanceChanged,
     #[error("this server already has a group")]
     AlreadyClaimed,
+    #[error("a linked device declined the request to join")]
+    JoinDeclined,
     #[error("the storage refused the user name or password")]
     Unauthorized,
     #[error("this device's copy of the group could not be read")]

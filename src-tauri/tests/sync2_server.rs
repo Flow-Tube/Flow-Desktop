@@ -278,6 +278,34 @@ async fn a_join_request_waits_for_a_member_s_code() {
 }
 
 #[tokio::test]
+async fn a_declined_join_request_stops_waiting() {
+    use flow_desktop_lib::sync2::engine::EngineError;
+    use flow_desktop_lib::sync2::join_requests::wait_for_code;
+    use wiremock::matchers::path_regex;
+
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/join"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "expires": 1 })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/v1/join/[0-9a-f]{32}$"))
+        .respond_with(ResponseTemplate::new(410).set_body_json(json!({ "error": "declined" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let waited = wait_for_code(&store, "admin", "New desktop").await;
+    assert!(matches!(
+        waited,
+        Err(EngineError::Store(StoreError::JoinDeclined))
+    ));
+}
+
+#[tokio::test]
 async fn members_list_answer_and_decline_join_requests_with_their_token() {
     let (server, _) = server(INSTANCE).await;
     let id = "ab".repeat(16);

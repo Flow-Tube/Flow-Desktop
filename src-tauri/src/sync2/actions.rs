@@ -11,7 +11,7 @@ use super::held::HeldStore;
 use super::hybrid::HybridStore;
 use super::join_requests::JoinRequest;
 use super::keys::MemberSecrets;
-use super::lan_runtime::{met, nearby};
+use super::lan_peers::{met, nearby};
 use super::linking::DeviceMeta;
 use super::membership::{leave_group, remove_device, rename_device};
 use super::names::device_names;

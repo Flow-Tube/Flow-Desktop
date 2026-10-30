@@ -12,7 +12,7 @@ use tokio::sync::broadcast;
 
 use super::actions::{local, open_session};
 use super::engine::{EngineError, Result, now_ms};
-use super::lan_runtime::nearby;
+use super::lan_peers::nearby;
 use super::live_message::{Ability, Answer, DeviceKind, LiveMessage, Now};
 use super::live_seal::{LiveKeys, Received};
 use super::live_state::{accept_live_seq, consents, next_live_seq};

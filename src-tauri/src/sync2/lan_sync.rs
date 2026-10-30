@@ -2,6 +2,7 @@
 //! keys and the objects it lacks from the other, and holds them to serve in turn.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 use sqlx::SqlitePool;
 use tokio::net::TcpListener;
@@ -89,33 +90,46 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
     Ok(taken)
 }
 
-/// A session that ended: the member met, and how many objects this device took from it.
+/// How long dialing a member may take (spec/live.md, Discovery).
+const CONNECT_WITHIN: Duration = Duration::from_secs(3);
+
+/// A session that ended: the member met, how many objects this device took from it, and where
+/// the member can be reached for the next one, when known.
 pub struct Met {
     pub peer: String,
     pub taken: usize,
+    pub reach: Option<(String, u16)>,
 }
 
-/// Opens a session to a member at `address`:`port`, sends it the `live` envelopes, and pulls
-/// from it. The session also serves the member's requests until the pull is done.
+/// Opens a session to a member at `address`:`port`, telling it the port this device `listening`
+/// on, sends it the `live` envelopes, and pulls from it. The session also serves the member's
+/// requests until the pull is done.
 pub async fn meet(
     pool: &SqlitePool,
     device: &MemberSecrets,
     (address, port): (&str, u16),
+    listening: Option<u16>,
     live: &[Vec<u8>],
     sink: LiveSink,
 ) -> Result<Met> {
-    let (socket, _) = connect_async(ws_url(address, port, SESSION_PATH).as_str())
-        .await
-        .map_err(|_| EngineError::LanUnreachable)?;
+    let connect = connect_async(ws_url(address, port, SESSION_PATH));
+    let Ok(Ok((socket, _))) = tokio::time::timeout(CONNECT_WITHIN, connect).await else {
+        return Err(EngineError::LanUnreachable);
+    };
     let held = HeldStore::new(pool.clone());
     let session = Session::open_as_peer(pool, held.clone(), device).await?;
-    let (framed, peer) = hello_as_client(WsChannel::new(socket), &session, device).await?;
+    let (framed, peer) =
+        hello_as_client(WsChannel::new(socket), &session, device, listening).await?;
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
     for envelope in live {
         link.live(envelope.clone()).await?;
     }
     let taken = pull_from(&held, &link, session.group()).await?;
-    Ok(Met { peer, taken })
+    Ok(Met {
+        peer,
+        taken,
+        reach: Some((address.to_owned(), port)),
+    })
 }
 
 /// Answers sessions from other members for as long as `listener` lives, pulling from each and
@@ -146,13 +160,19 @@ async fn answer(
     device: &MemberSecrets,
     sink: LiveSink,
 ) -> Result<Met> {
+    let address = stream.peer_addr().ok().map(|peer| peer.ip().to_string());
     let socket = accept_async(stream)
         .await
         .map_err(|_| EngineError::LanUnreachable)?;
     let held = HeldStore::new(pool.clone());
     let mut session = Session::open_as_peer(pool, held.clone(), device).await?;
-    let (framed, peer) = hello_as_server(WsChannel::new(socket), &mut session, device).await?;
+    let (framed, peer, listening) =
+        hello_as_server(WsChannel::new(socket), &mut session, device).await?;
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
     let taken = pull_from(&held, &link, session.group()).await?;
-    Ok(Met { peer, taken })
+    Ok(Met {
+        peer,
+        taken,
+        reach: address.zip(listening),
+    })
 }

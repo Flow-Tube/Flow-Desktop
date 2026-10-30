@@ -25,6 +25,7 @@ pub mod kdf;
 pub mod keys;
 pub mod lan;
 pub mod lan_link;
+pub mod lan_peers;
 pub mod lan_runtime;
 pub mod lan_sync;
 pub mod link_task;

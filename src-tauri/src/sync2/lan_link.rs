@@ -185,11 +185,13 @@ fn did_bytes(did: &str) -> Result<[u8; 16]> {
         .ok_or(EngineError::Unexpected)
 }
 
-/// The connecting side: says hello under the current epoch and checks the advertiser.
+/// The connecting side: says hello under the current epoch, with the port it listens on, and
+/// checks the advertiser.
 pub async fn hello_as_client<S, T>(
     mut socket: WsChannel<S>,
     session: &Session<'_, T>,
     device: &MemberSecrets,
+    listening: Option<u16>,
 ) -> Result<(Framed<S>, String)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -199,7 +201,10 @@ where
     let lan_key = purpose_key(session.current_key(), session.group(), epoch, Purpose::Lan);
     let me = hex::encode(device.did);
     let client_nonce = random_bytes::<NONCE_SIZE>();
-    let hello = json!({ "did": me, "n": URL_SAFE_NO_PAD.encode(client_nonce) });
+    let mut hello = json!({ "did": me, "n": URL_SAFE_NO_PAD.encode(client_nonce) });
+    if let Some(port) = listening {
+        hello["p"] = port.into();
+    }
     socket
         .send_binary(hello_frame(epoch, &lan_key, 1, &hello)?)
         .await?;
@@ -253,11 +258,12 @@ where
 }
 
 /// The advertising side: answers a hello under any epoch this device has a key for.
+/// The advertising side; returns the peer and the port it listens on, when it said.
 pub async fn hello_as_server<S, T>(
     mut socket: WsChannel<S>,
     session: &mut Session<'_, T>,
     device: &MemberSecrets,
-) -> Result<(Framed<S>, String)>
+) -> Result<(Framed<S>, String, Option<u16>)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: Store,
@@ -276,6 +282,7 @@ where
         .to_owned();
     let peer_key = device_key(session, &peer)?;
     let client_nonce = field::<NONCE_SIZE>(&hello, "n")?;
+    let listening = hello["p"].as_u64().and_then(|p| u16::try_from(p).ok());
     let (client, server) = (did_bytes(&peer)?, device.did);
 
     let server_nonce = random_bytes::<NONCE_SIZE>();
@@ -315,7 +322,7 @@ where
         sent: 0,
         received: 0,
     };
-    Ok((framed, peer))
+    Ok((framed, peer, listening))
 }
 
 /// Where live envelopes that arrive in `live` requests go.

@@ -234,7 +234,7 @@ async fn pairing_runs_through_the_webdav_mailbox() {
         join(&pool_n, &mailbox, &code, &newcomer, named("New"), yes),
     );
     joined.unwrap();
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
     let record = load_group(&pool_n).await.unwrap().unwrap();
     assert_eq!(record.kind, StoreKind::WebDav);
 }
@@ -286,7 +286,7 @@ async fn a_group_created_in_a_folder_welcomes_a_device_paired_over_the_lan() {
         finish_join(&pool_n, &store, welcomed).await
     });
     joined.unwrap();
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
     let record = load_group(&pool_n).await.unwrap().unwrap();
     assert_eq!(
         (record.kind, record.store_url.as_str()),

@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU16, Ordering};
 
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
@@ -20,6 +21,15 @@ const PORT: &str = "sync2_lan_port";
 const NEARBY_MS: i64 = 10 * 60 * 1000;
 
 pub type Addresses = BTreeMap<String, (String, u16)>;
+
+/// The port this device's LAN service listens on, 0 until it started.
+static SERVICE_PORT: AtomicU16 = AtomicU16::new(0);
+
+/// The port this device's LAN service listens on, which pairing over the LAN tells the other
+/// device.
+pub fn service_port() -> Option<u16> {
+    Some(SERVICE_PORT.load(Ordering::Relaxed)).filter(|port| *port != 0)
+}
 
 #[derive(Default)]
 pub struct LanPeers {
@@ -65,13 +75,18 @@ pub fn note(app: &AppHandle, met: &Met) {
     if let Ok(mut seen) = peers.seen.lock() {
         seen.insert(met.peer.clone(), now_ms());
     }
-    if let Some(reach) = &met.reach
-        && let Ok(mut addresses) = peers.addresses.lock()
-    {
-        addresses.insert(met.peer.clone(), reach.clone());
+    if let Some(reach) = &met.reach {
+        remember(app, &met.peer, reach.clone());
     }
     if met.taken > 0 {
         sync_soon(app);
+    }
+}
+
+/// Keeps where `did` can be reached: the address of its last session, or of the pairing with it.
+pub fn remember(app: &AppHandle, did: &str, address: (String, u16)) {
+    if let Ok(mut addresses) = peers(app).addresses.lock() {
+        addresses.insert(did.to_owned(), address);
     }
 }
 
@@ -93,8 +108,9 @@ pub fn keep_only(app: &AppHandle, members: &BTreeSet<String>) {
     }
 }
 
-/// Takes the addresses kept by the last launch.
-pub async fn load_addresses(app: &AppHandle, pool: &SqlitePool) {
+/// Takes the addresses kept by the last launch, under the newer ones learned since, and returns
+/// what was kept.
+pub async fn load_addresses(app: &AppHandle, pool: &SqlitePool) -> Addresses {
     let kept: Addresses = get_setting(pool, ADDRESSES)
         .await
         .ok()
@@ -102,8 +118,13 @@ pub async fn load_addresses(app: &AppHandle, pool: &SqlitePool) {
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default();
     if let Ok(mut addresses) = peers(app).addresses.lock() {
-        addresses.extend(kept);
+        for (did, address) in &kept {
+            addresses
+                .entry(did.clone())
+                .or_insert_with(|| address.clone());
+        }
     }
+    kept
 }
 
 /// Keeps the addresses for the next launch when they changed since `saved`.
@@ -133,6 +154,7 @@ pub async fn listen(pool: &SqlitePool) -> std::io::Result<TcpListener> {
         None => TcpListener::bind("0.0.0.0:0").await?,
     };
     let port = listener.local_addr()?.port();
+    SERVICE_PORT.store(port, Ordering::Relaxed);
     if last != Some(port) {
         let _ = set_setting(pool, PORT, &port.to_string()).await;
     }

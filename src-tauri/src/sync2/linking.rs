@@ -17,6 +17,7 @@ use super::entries::{Draft, build_entry, member_subject};
 use super::epoch::check_epoch_key;
 use super::held::HeldStore;
 use super::keys::{MemberSecrets, member_id};
+use super::lan_peers::service_port;
 use super::mailbox::Mailbox;
 use super::meta::seal_device_meta;
 use super::pairing::{pairing_aad, pairing_keys, pairing_slot};
@@ -57,6 +58,8 @@ enum Message {
         sig: String,
         kem: String,
         meta: DeviceMeta,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        p: Option<u16>,
     },
     Entry {
         entry: Box<Entry>,
@@ -74,8 +77,18 @@ enum Message {
         entries: Option<Vec<Entry>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        p: Option<u16>,
     },
     Done,
+}
+
+/// The other device of a pairing over the LAN, and where its LAN service listens, so the two can
+/// meet again where mDNS doesn't reach (spec/protocol.md, Messages).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reach {
+    pub did: String,
+    pub address: (String, u16),
 }
 
 /// Sealed pairing messages over a pipe, numbered from 0 in each direction.
@@ -119,6 +132,17 @@ impl<P: Pipe> Channel<P> {
         Ok((channel, keys.sas))
     }
 
+    /// The port of this device's LAN service, sent only over the LAN.
+    fn own_port(&self) -> Option<u16> {
+        self.pipe.peer().and(service_port())
+    }
+
+    /// Where `did` can be reached, from the `p` it sent over the LAN.
+    fn reach(&self, did: String, p: Option<u16>) -> Option<Reach> {
+        let address = (self.pipe.peer()?, p?);
+        Some(Reach { did, address })
+    }
+
     async fn send(&mut self, message: &Message) -> Result<()> {
         let payload = encode_payload(&to_canonical_json(message))?;
         let sealed = seal(&self.keys.0, &pairing_aad(&self.token, self.sent), &payload);
@@ -140,14 +164,15 @@ impl<P: Pipe> Channel<P> {
 }
 
 /// The member's side, on a code it shows: waits for the scanner on the mailbox and, when the code
-/// lists LAN addresses, on the LAN too. Returns the new device's id.
+/// lists LAN addresses, on the LAN too. Returns the new device's id, and where it can be reached
+/// when it paired over the LAN.
 pub async fn add_device<S, F>(
     session: &Session<'_, S>,
     mut offer: Offer,
     device: &MemberSecrets,
     store: WelcomeStore,
     confirm: impl FnOnce(String) -> F,
-) -> Result<String>
+) -> Result<(String, Option<Reach>)>
 where
     S: Store + Mailbox + Sync,
     F: Future<Output = bool>,
@@ -164,7 +189,7 @@ where
     };
     let result = match first {
         Ok((lan, key)) => {
-            let pipe = lan.map_or(AnyPipe::Mailbox(mailbox), AnyPipe::Lan);
+            let pipe = lan.map_or(AnyPipe::Mailbox(mailbox), |lan| AnyPipe::Lan(Box::new(lan)));
             match Channel::shower(pipe, &offer, &key) {
                 Ok((channel, sas)) => {
                     member_side(session, channel, sas, device, store, confirm).await
@@ -187,7 +212,7 @@ pub async fn add_scanned<S, F>(
     device: &MemberSecrets,
     store: WelcomeStore,
     confirm: impl FnOnce(String) -> F,
-) -> Result<String>
+) -> Result<(String, Option<Reach>)>
 where
     S: Store,
     F: Future<Output = bool>,
@@ -208,13 +233,13 @@ async fn member_side<S, P, F>(
     device: &MemberSecrets,
     store: WelcomeStore,
     confirm: impl FnOnce(String) -> F,
-) -> Result<String>
+) -> Result<(String, Option<Reach>)>
 where
     S: Store,
     P: Pipe,
     F: Future<Output = bool>,
 {
-    let Message::Join { sig, kem, meta } = channel.receive().await? else {
+    let Message::Join { sig, kem, meta, p } = channel.receive().await? else {
         return Err(EngineError::Unexpected);
     };
     if !confirm(sas).await {
@@ -288,12 +313,14 @@ where
         store,
         entries,
         wrap,
+        p: channel.own_port(),
     };
     channel.send(&welcome).await?;
     let done = channel.receive().await?;
     channel.pipe.close().await;
+    let did = hex::encode(did);
     match done {
-        Message::Done => Ok(hex::encode(did)),
+        Message::Done => Ok((did.clone(), channel.reach(did, p))),
         _ => Err(EngineError::Unexpected),
     }
 }
@@ -316,6 +343,8 @@ pub struct Welcomed<P> {
     channel: Channel<P>,
     me: Subject,
     pub welcome: Welcome,
+    /// Where the member's LAN service listens, when it said over the LAN.
+    pub reach: Option<Reach>,
 }
 
 async fn new_side<P, F>(
@@ -333,6 +362,7 @@ where
         sig: URL_SAFE_NO_PAD.encode(device.sig_public),
         kem: URL_SAFE_NO_PAD.encode(device.kem_public),
         meta,
+        p: channel.own_port(),
     };
     channel.send(&join).await?;
     if !confirm(sas).await {
@@ -360,6 +390,7 @@ where
         store,
         entries,
         wrap,
+        p,
     } = channel.receive().await?
     else {
         return Err(EngineError::Unexpected);
@@ -368,6 +399,7 @@ where
         return Err(EngineError::Unexpected);
     }
     Ok(Welcomed {
+        reach: channel.reach(entry.signer.clone(), p),
         channel,
         me,
         welcome: Welcome {
@@ -415,6 +447,7 @@ pub async fn finish_join<S: Store, P: Pipe>(
         channel,
         me,
         welcome,
+        ..
     } = welcomed;
     let roster = store.roster_after(-1).await?;
     check_pinned(&roster, &welcome, &me)?;
@@ -440,6 +473,7 @@ pub async fn finish_lan_join<P: Pipe>(
         channel,
         me,
         welcome,
+        ..
     } = welcomed;
     let (WelcomeStore::Lan, Some(roster), Some(wrap)) =
         (&welcome.store, &welcome.entries, &welcome.wrap)
@@ -468,7 +502,8 @@ pub async fn finish_lan_join<P: Pipe>(
 }
 
 /// The new device's side, on a member's code: tries the LAN addresses it lists, then the mailbox
-/// of the store the code names, and saves the group once accepted.
+/// of the store the code names, and saves the group once accepted. Returns where the member can be
+/// reached when they paired over the LAN.
 pub async fn join<S, F>(
     pool: &SqlitePool,
     store: &S,
@@ -476,7 +511,7 @@ pub async fn join<S, F>(
     device: &MemberSecrets,
     meta: DeviceMeta,
     confirm: impl FnOnce(String) -> F,
-) -> Result<()>
+) -> Result<Option<Reach>>
 where
     S: Store + Mailbox + Sync,
     F: Future<Output = bool>,
@@ -488,7 +523,7 @@ where
         return Err(EngineError::Unexpected);
     };
     let pipe = if let Some(pipe) = dial(lan).await {
-        AnyPipe::Lan(pipe)
+        AnyPipe::Lan(Box::new(pipe))
     } else {
         let slot = hex::encode(pairing_slot(&code.token()?));
         AnyPipe::Mailbox(MailboxPipe::new(store, slot, false))
@@ -503,7 +538,9 @@ where
     if !same {
         return Err(EngineError::Unexpected);
     }
-    finish_join(pool, store, welcomed).await
+    let reach = welcomed.reach.clone();
+    finish_join(pool, store, welcomed).await?;
+    Ok(reach)
 }
 
 /// The new device's side, on the code of a member it can reach only over the LAN: pairs there.

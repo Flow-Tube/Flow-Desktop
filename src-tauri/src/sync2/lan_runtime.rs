@@ -313,7 +313,7 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
         .local_addr()
         .map_err(crate::sync::error::SyncError::from)?
         .port();
-    load_addresses(app, &local.pool).await;
+    let mut saved = load_addresses(app, &local.pool).await;
     tracing::info!(target: "flow::sync2", "LAN sync started");
     // Dropped with the run, which aborts the tasks holding its keys.
     let mut tasks = JoinSet::new();
@@ -339,7 +339,6 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
     let mut network = daemon.and_then(|daemon| daemon.monitor().ok());
     let mut found: BTreeMap<String, Found> = BTreeMap::new();
     let mut near = nearby(app);
-    let mut saved = addresses(app);
     let (mut tried, mut network_changed_at) = (BTreeMap::new(), 0);
     let mut timer = tokio::time::interval(CHECK_EVERY);
     loop {

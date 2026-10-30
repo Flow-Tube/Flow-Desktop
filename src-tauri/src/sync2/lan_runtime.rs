@@ -12,7 +12,7 @@ use tokio::net::TcpListener;
 use tokio::task::JoinSet;
 
 use super::actions::{Local, local};
-use super::device::{keychain, stored_device_keys};
+use super::device::DEVICE_KEYS;
 use super::engine::{Result, Session, now_ms};
 use super::epoch::{Purpose, purpose_key};
 use super::held::HeldStore;
@@ -129,10 +129,11 @@ pub fn spawn(app: AppHandle) {
     });
 }
 
-/// Whether the keychain holds other keys than `device`: this device created or joined a group.
+/// Whether this device has other keys than `device`: it created or joined a group.
 fn renewed(device: &MemberSecrets) -> bool {
-    stored_device_keys(&keychain())
-        .is_ok_and(|keys| keys.is_some_and(|keys| keys.did != device.did))
+    DEVICE_KEYS
+        .loaded()
+        .is_some_and(|keys| keys.did != device.did)
 }
 
 /// The next service event, `None` once the browse ended, and never without one.

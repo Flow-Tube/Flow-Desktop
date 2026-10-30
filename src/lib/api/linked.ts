@@ -18,6 +18,8 @@ export interface LinkedStatus {
   storeUrl?: string | null;
   /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
   loginRefused: boolean;
+  /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
+  keychainBlocked: boolean;
   recoverySaved: boolean;
   lastSync?: LastSync | null;
   /** A run is under way. */
@@ -82,6 +84,8 @@ export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
   invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
+/** Asks the keychain again after it refused, and resolves once it answered. */
+export const retryKeychain = () => invokeBackend<void>("linked_retry_keychain");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
 export const removeDevice = (id: string) => invokeBackend<void>("linked_remove", { id });
 /** Tells the group this device leaves, then forgets the group and this device's keys. */

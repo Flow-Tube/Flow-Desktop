@@ -11,7 +11,6 @@ use tokio::sync::oneshot;
 
 use super::actions::{Local, local, open_session, start_membership};
 use super::codes::{Code, StoreLocation, new_offer, read_code};
-use super::device::keychain;
 use super::engine::{EngineError, Result};
 use super::join_requests::wait_for_code;
 use super::linking::{
@@ -174,7 +173,7 @@ async fn add(app: &AppHandle, request: Option<String>) -> Result<()> {
             Some(listen().await?.ok_or(EngineError::LanUnreachable)?),
         ),
     };
-    let welcome = welcome_store(&record)?;
+    let welcome = welcome_store(&record).await?;
     let task = app.clone();
     start(app, async move {
         let session = open_session(&local.pool, &record, &local.device).await?;
@@ -196,14 +195,14 @@ async fn add(app: &AppHandle, request: Option<String>) -> Result<()> {
 }
 
 /// Where this device's group lives, as a welcome names it to a new device.
-fn welcome_store(record: &GroupRecord) -> Result<WelcomeStore> {
+async fn welcome_store(record: &GroupRecord) -> Result<WelcomeStore> {
     Ok(match record.kind {
         StoreKind::Server => WelcomeStore::Server {
             u: record.store_url.clone(),
             i: record.instance.clone().unwrap_or_default(),
         },
         StoreKind::WebDav => {
-            let login = load_login(&keychain())?;
+            let login = load_login().await?;
             WelcomeStore::WebDav {
                 u: record.store_url.clone(),
                 n: login.user,
@@ -234,7 +233,7 @@ async fn finish_welcomed(local: &Local, welcomed: Welcomed<impl Pipe>) -> Result
             if store.group().await?.as_deref() != Some(group.as_str()) {
                 return Err(EngineError::Unexpected);
             }
-            save_login(&keychain(), &login)?;
+            save_login(&login).await?;
             finish_join(&local.pool, &store, welcomed).await
         }
         WelcomeStore::Lan => finish_lan_join(&local.pool, &local.device, welcomed).await,
@@ -330,7 +329,7 @@ pub async fn start_with_code(
                         let did = hex::encode(device.did);
                         let store = WebDavStore::connect(&url, folder.login.clone(), did).await?;
                         store.probe().await?;
-                        save_login(&keychain(), &folder.login)?;
+                        save_login(&folder.login).await?;
                         join(pool, &store, &code, device, meta, confirm).await
                     }
                     _ => {
@@ -344,7 +343,7 @@ pub async fn start_with_code(
             let record = load_group(&local.pool)
                 .await?
                 .ok_or(EngineError::NotLinked)?;
-            let welcome = welcome_store(&record)?;
+            let welcome = welcome_store(&record).await?;
             start(app, async move {
                 let session = open_session(&local.pool, &record, &local.device).await?;
                 add_scanned(&session, &code, &local.device, welcome, |sas| {

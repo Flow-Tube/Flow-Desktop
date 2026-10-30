@@ -18,15 +18,16 @@ use super::epoch::{Purpose, purpose_key};
 use super::held::HeldStore;
 use super::keys::MemberSecrets;
 use super::lan::lan_tag;
-use super::lan_link::LiveSink;
+use super::lan_link::{IDLE, LiveSink};
 use super::lan_peers::{
     addresses, keep_only, listen, load_addresses, met, nearby, note, save_addresses, unreached,
 };
-use super::lan_sync::{meet, serve};
+use super::lan_sync::{meet, meet_as, serve};
 use super::live_hub::{announce, changed, forget_keys, receive, subscribe};
 use super::roster::Role;
 use super::sealed::random_bytes;
 use super::state::{StoreKind, load_group};
+use super::store::Store;
 use crate::sync::qr::is_local_ip;
 
 const SERVICE_TYPE: &str = "_flow._tcp.local.";
@@ -34,6 +35,8 @@ const CHECK_EVERY: Duration = Duration::from_mins(1);
 const MEET_EVERY_MS: i64 = 5 * 60 * 1000;
 /// How often a member not met lately is dialed at the address kept for it.
 const DIAL_EVERY_MS: i64 = 60 * 1000;
+/// How long a device that leaves a LAN group spends passing its `leave` on.
+const LEAVE_WITHIN: Duration = Duration::from_secs(10);
 
 /// The group this device meets members of on the LAN, a LAN group or a server group: this
 /// hour's tag with the ones before and after it, and the group's other devices.
@@ -141,6 +144,28 @@ impl Dialer<'_> {
             }
         }
     }
+}
+
+/// Meets every member this device can reach, so they pull the `leave` that `session` just
+/// appended before the group is forgotten here (spec/live.md, LAN groups, Leaving).
+pub async fn spread_leave<T: Store>(app: &AppHandle, session: &Session<'_, T>, local: &Local) {
+    let held = HeldStore::new(local.pool.clone());
+    let meets = addresses(app).into_values().map(|(address, port)| {
+        let (held, sink) = (held.clone(), live_sink(app));
+        async move {
+            let reached = (address.as_str(), port);
+            meet_as(session, held, &local.device, reached, None, &[], sink)
+                .await
+                .is_ok()
+        }
+    });
+    let spread = async {
+        let reached = futures_util::future::join_all(meets).await;
+        tracing::info!(target: "flow::sync2", reached = reached.iter().filter(|r| **r).count(), "LAN leave passed on");
+        // A member's session closes once it stopped asking, which includes pulling the entry.
+        tokio::time::sleep(IDLE).await;
+    };
+    let _ = tokio::time::timeout(LEAVE_WITHIN, spread).await;
 }
 
 /// Hands live envelopes that arrive in LAN sessions to the live channel.

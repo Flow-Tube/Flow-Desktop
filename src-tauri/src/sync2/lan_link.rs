@@ -31,7 +31,7 @@ pub const SESSION_PATH: &str = "/flow-sync/2";
 const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
 const NONCE_SIZE: usize = 32;
 /// Once this side has no more requests, the session closes when the peer stops sending.
-const IDLE: Duration = Duration::from_secs(3);
+pub const IDLE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]

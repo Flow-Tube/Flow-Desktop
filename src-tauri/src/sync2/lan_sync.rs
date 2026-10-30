@@ -107,6 +107,21 @@ pub struct Met {
 pub async fn meet(
     pool: &SqlitePool,
     device: &MemberSecrets,
+    address: (&str, u16),
+    listening: Option<u16>,
+    live: &[Vec<u8>],
+    sink: LiveSink,
+) -> Result<Met> {
+    let held = HeldStore::new(pool.clone());
+    let session = Session::open_as_peer(pool, held.clone(), device).await?;
+    meet_as(&session, held, device, address, listening, live, sink).await
+}
+
+/// [`meet`] as `session` sees the group, as a device that just appended its `leave` still does.
+pub async fn meet_as<T: Store>(
+    session: &Session<'_, T>,
+    held: HeldStore,
+    device: &MemberSecrets,
     (address, port): (&str, u16),
     listening: Option<u16>,
     live: &[Vec<u8>],
@@ -116,11 +131,9 @@ pub async fn meet(
     let Ok(Ok((socket, _))) = tokio::time::timeout(CONNECT_WITHIN, connect).await else {
         return Err(EngineError::LanUnreachable);
     };
-    let held = HeldStore::new(pool.clone());
-    let session = Session::open_as_peer(pool, held.clone(), device).await?;
     let (framed, peer) =
-        hello_as_client(WsChannel::new(socket), &session, device, listening).await?;
-    let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
+        hello_as_client(WsChannel::new(socket), session, device, listening).await?;
+    let link = Link::spawn(framed, Holder::of(held.clone(), session, sink));
     for envelope in live {
         link.live(envelope.clone()).await?;
     }

@@ -36,7 +36,7 @@ async fn a_reset_leaves_the_group_and_announces_no_deletions() {
         Err(EngineError::AlreadyLinked)
     ));
     let session = Session::open(&pool, &g.store, &g.a).await.unwrap();
-    depart(&pool, &session, &g.a).await.unwrap();
+    depart(&pool, &session, &g.a, async {}).await.unwrap();
     reset_local_data(&pool, true).await.unwrap();
 
     let roster = g.store.0.lock().unwrap().roster.clone();

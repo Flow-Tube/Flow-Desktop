@@ -147,6 +147,24 @@ describe("music EQ graph", () => {
     expect(ctx.biquads.every((f) => f.gain.value === 0)).toBe(true);
   });
 
+  it("lets fresh elements play WebM again once the equalizer is off", async () => {
+    platform.macos = true;
+    musicAudioEngine.attach(elements());
+    musicAudioEngine.setEq(rock, true);
+    await musicAudioEngine.play();
+    expect(musicAudioEngine.canReleaseGraph()).toBe(false);
+
+    musicAudioEngine.setEq(EQ_GRAPH_OFF, false);
+    expect(musicAudioEngine.canReleaseGraph()).toBe(true);
+    expect(musicAudioEngine.wantsAac()).toBe(true);
+
+    const attached = musicAudioEngine.nextAttach();
+    musicAudioEngine.attach(elements());
+    await attached;
+    expect(musicAudioEngine.canReleaseGraph()).toBe(false);
+    expect(musicAudioEngine.wantsAac()).toBe(false);
+  });
+
   it("asks for AAC on macOS, and keeps a WebM song it cannot hear on the element's volume", async () => {
     platform.macos = true;
     const pair = elements();

@@ -99,6 +99,15 @@ describe("starting a track", () => {
     expect(calls).toContain("radio");
   });
 
+  it("starts a handed-over queue at its position in one load, paused when asked", async () => {
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 1, null, { at: 42, autoplay: false });
+
+    expect(resolveMusicStream).toHaveBeenCalledTimes(1);
+    expect(engine.seekWhenReady).toHaveBeenCalledWith(42);
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(useMusicPlayerStore.getState()).toMatchObject({ isPlaying: false, progress: 42 });
+  });
+
   it("retries a failed lookup once before showing an error", async () => {
     resolveMusicStream.mockRejectedValueOnce({ kind: "streaming", message: "timed out" });
     await useMusicPlayerStore.getState().playTrack(song("flaky"));

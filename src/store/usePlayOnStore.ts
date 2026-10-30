@@ -75,7 +75,10 @@ async function act(request: LiveRequest): Promise<void> {
   const { message } = request;
   let result: Answer;
   if (message.type === "play") {
-    result = await startSession(message, watch).then(
+    // The sender's last `now` names what it hands over, so the page has a title at once.
+    const sent = usePlayOnStore.getState().status?.devices[request.from]?.now;
+    const named = sent?.video === message.video ? { title: sent.title, by: sent.by } : {};
+    result = await startSession({ ...message, ...named }, watch).then(
       () => answerFor(request, true),
       () => answerFor(request, false, "unavailable"),
     );

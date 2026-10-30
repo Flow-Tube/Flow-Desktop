@@ -38,6 +38,7 @@ const LOGIN_REFUSED: &str = "sync2_login_refused";
 const NAME_LIMIT: usize = 64;
 
 /// This installation as the group sees it.
+#[derive(Clone)]
 pub struct Local {
     pub pool: SqlitePool,
     pub device: MemberSecrets,

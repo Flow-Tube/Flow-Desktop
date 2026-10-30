@@ -3,6 +3,7 @@
 
 mod sync2_common;
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use flow_desktop_lib::sync2::batches::apply_batches;
@@ -12,10 +13,13 @@ use flow_desktop_lib::sync2::group_store::GroupStore;
 use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::keys::MemberSecrets;
 use flow_desktop_lib::sync2::keys::member_secrets;
+use flow_desktop_lib::sync2::lan_link::LiveSink;
 use flow_desktop_lib::sync2::lan_sync::{meet, serve};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, add_scanned, answer_shown, finish_lan_join, join_on_lan,
 };
+use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
+use flow_desktop_lib::sync2::live_seal::LiveKeys;
 use flow_desktop_lib::sync2::membership::rename_device;
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::listen_on;
@@ -70,12 +74,20 @@ async fn push(pool: &SqlitePool, device: &MemberSecrets) {
         .unwrap();
 }
 
-/// Starts `device` answering sessions on a loopback port.
-async fn listening(pool: &SqlitePool, device: &MemberSecrets) -> u16 {
+fn no_live() -> LiveSink {
+    Arc::new(|_| {})
+}
+
+/// Starts `device` answering sessions on a loopback port, handing live envelopes to `sink`.
+async fn listening_with(pool: &SqlitePool, device: &MemberSecrets, sink: LiveSink) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    tokio::spawn(serve(listener, pool.clone(), device.clone(), |_| {}));
+    tokio::spawn(serve(listener, pool.clone(), device.clone(), |_| {}, sink));
     port
+}
+
+async fn listening(pool: &SqlitePool, device: &MemberSecrets) -> u16 {
+    listening_with(pool, device, no_live()).await
 }
 
 /// Waits until `pool` holds `path`, which the answering side pulls on its own schedule.
@@ -100,7 +112,9 @@ async fn two_members_exchange_their_objects_in_one_session() {
     push(&pool_b, &g.b).await;
 
     let port = listening(&pool_a, &g.a).await;
-    let met = meet(&pool_b, &g.b, "127.0.0.1", port).await.unwrap();
+    let met = meet(&pool_b, &g.b, ("127.0.0.1", port), &[], no_live())
+        .await
+        .unwrap();
     assert_eq!(met.peer, hex::encode(g.a.did));
     assert!(met.taken > 0);
     assert!(eventually_holds(&pool_a, &log_path(&hex::encode(g.b.did), 1)).await);
@@ -174,7 +188,9 @@ async fn concurrent_renames_resolve_to_the_same_winner_on_both_devices() {
     let g = group().await;
     let (pool_a, pool_b) = concurrent_renames(&g).await;
     let port = listening(&pool_a, &g.a).await;
-    meet(&pool_b, &g.b, "127.0.0.1", port).await.unwrap();
+    meet(&pool_b, &g.b, ("127.0.0.1", port), &[], no_live())
+        .await
+        .unwrap();
     let (on_a, on_b) = eventually_agree(&pool_a, &pool_b).await;
     assert_eq!(on_a.seq, 2);
     assert_eq!(on_a, on_b);
@@ -198,7 +214,9 @@ async fn a_device_whose_entry_lost_learns_the_winner_from_a_peer_holding_both() 
         .unwrap();
 
     let port = listening(winner, winner_device).await;
-    meet(loser, loser_device, "127.0.0.1", port).await.unwrap();
+    meet(loser, loser_device, ("127.0.0.1", port), &[], no_live())
+        .await
+        .unwrap();
     assert_eq!(head_of(loser).await, head_of(winner).await);
 }
 
@@ -216,7 +234,9 @@ async fn joined_and_synced(g: &Group, pool_a: &SqlitePool, pool_n: &SqlitePool, 
             .is_ok()
     );
     let port = listening(pool_a, &g.a).await;
-    let met = meet(pool_n, n, "127.0.0.1", port).await.unwrap();
+    let met = meet(pool_n, n, ("127.0.0.1", port), &[], no_live())
+        .await
+        .unwrap();
     assert!(met.taken > 0, "the member's objects arrive once they meet");
 }
 
@@ -282,4 +302,57 @@ async fn a_lan_group_member_scans_a_new_device_code() {
     joined.unwrap();
     assert_eq!(added.unwrap(), hex::encode(newcomer.did));
     joined_and_synced(&g, &pool_a, &pool_n, &newcomer).await;
+}
+
+#[tokio::test]
+async fn a_live_message_crosses_a_lan_session_and_opens_on_the_other_side() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let keys = |pool: &SqlitePool, device| {
+        let pool = pool.clone();
+        async move {
+            let session = Session::open(&pool, HeldStore::new(pool.clone()), device)
+                .await
+                .unwrap();
+            LiveKeys::of(&session)
+        }
+    };
+    let (keys_a, keys_b) = (keys(&pool_a, &g.a).await, keys(&pool_b, &g.b).await);
+    let arrived = Arc::new(Mutex::new(Vec::new()));
+    let into = Arc::clone(&arrived);
+    let port = listening_with(
+        &pool_a,
+        &g.a,
+        Arc::new(move |envelope| into.lock().unwrap().push(envelope)),
+    )
+    .await;
+
+    let now = LiveMessage::Now(Now {
+        video: Some("aaaaaaaaaaa".into()),
+        title: "Title".into(),
+        by: "Channel".into(),
+        music: false,
+        link: None,
+        pos: 1000,
+        dur: 60_000,
+        state: PlayState::Playing,
+        vol: 80,
+        queue: vec!["aaaaaaaaaaa".into()],
+        index: 0,
+    });
+    let sealed = keys_b.seal(7, &now).unwrap();
+    meet(&pool_b, &g.b, ("127.0.0.1", port), &[sealed], no_live())
+        .await
+        .unwrap();
+
+    let envelope = arrived.lock().unwrap().pop().expect("the envelope arrived");
+    let received = keys_a.open(&envelope).unwrap();
+    assert_eq!(
+        (received.from, received.seq, received.message),
+        (hex::encode(g.b.did), 7, now)
+    );
+    assert!(
+        keys_b.open(&envelope).is_err(),
+        "a device doesn't take its own messages"
+    );
 }

@@ -1,9 +1,9 @@
 //! LAN sync while the app is open (spec/live.md, Discovery and LAN groups): answer sessions from
-//! other members, advertise `_flow._tcp` with this hour's group tag, and meet every member whose
-//! tag matches.
+//! other members, advertise `_flow._tcp` with this hour's group tag, meet every member whose tag
+//! matches, and carry live messages to the members met lately.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
@@ -15,7 +15,9 @@ use super::engine::{Result, Session, now_ms};
 use super::epoch::{Purpose, purpose_key};
 use super::held::HeldStore;
 use super::lan::lan_tag;
+use super::lan_link::LiveSink;
 use super::lan_sync::{Met, meet, serve};
+use super::live_hub::{receive, subscribe};
 use super::sealed::random_bytes;
 use super::service::sync_soon;
 use super::state::{StoreKind, load_group};
@@ -27,10 +29,11 @@ const MEET_EVERY_MS: i64 = 5 * 60 * 1000;
 /// A member met this recently counts as on the same network.
 const NEARBY_MS: i64 = 10 * 60 * 1000;
 
-/// When this device last met each member on the LAN.
+/// When this device last met each member on the LAN, and where it reached the ones it called.
 #[derive(Default)]
 pub struct LanPeers {
     seen: Mutex<BTreeMap<String, i64>>,
+    addresses: Mutex<BTreeMap<String, (String, u16)>>,
 }
 
 /// When this device last met each member on the LAN.
@@ -52,9 +55,15 @@ pub fn nearby(app: &AppHandle) -> BTreeSet<String> {
         .collect()
 }
 
-fn note(app: &AppHandle, met: &Met) {
-    if let Ok(mut seen) = app.state::<LanPeers>().seen.lock() {
+fn note(app: &AppHandle, met: &Met, address: Option<(String, u16)>) {
+    let peers = app.state::<LanPeers>();
+    if let Ok(mut seen) = peers.seen.lock() {
         seen.insert(met.peer.clone(), now_ms());
+    }
+    if let Some(address) = address
+        && let Ok(mut addresses) = peers.addresses.lock()
+    {
+        addresses.insert(met.peer.clone(), address);
     }
     if met.taken > 0 {
         sync_soon(app);
@@ -89,6 +98,15 @@ struct Found {
     met_ms: i64,
 }
 
+/// Hands live envelopes that arrive in LAN sessions to the live channel.
+fn live_sink(app: &AppHandle) -> LiveSink {
+    let app = app.clone();
+    Arc::new(move |envelope| {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { receive(&app, &envelope).await });
+    })
+}
+
 /// Runs for the app's lifetime in the Default profile.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
@@ -98,8 +116,41 @@ pub fn spawn(app: AppHandle) {
     });
 }
 
+/// Sends every live envelope this device seals to the members it met on the LAN lately, each
+/// in a session of its own.
+async fn deliver_live(app: AppHandle, local: Local) {
+    let mut outgoing = subscribe(&app);
+    loop {
+        let envelope = match outgoing.recv().await {
+            Ok(envelope) => envelope,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+        };
+        let near = nearby(&app);
+        let addresses = app
+            .state::<LanPeers>()
+            .addresses
+            .lock()
+            .map(|addresses| addresses.clone())
+            .unwrap_or_default();
+        for (did, (address, port)) in addresses.into_iter().filter(|(did, _)| near.contains(did)) {
+            let (app, local, envelope) = (app.clone(), local.clone(), envelope.clone());
+            tokio::spawn(async move {
+                let sink = live_sink(&app);
+                let reached = (address.as_str(), port);
+                if let Err(error) =
+                    meet(&local.pool, &local.device, reached, &[envelope], sink).await
+                {
+                    tracing::debug!(target: "flow::sync2", kind = error.kind(), %did, "LAN live message not delivered");
+                }
+            });
+        }
+    }
+}
+
 async fn run(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
+    tokio::spawn(deliver_live(app.clone(), local.clone()));
     let listener = TcpListener::bind("0.0.0.0:0")
         .await
         .map_err(crate::sync::error::SyncError::from)?;
@@ -112,7 +163,8 @@ async fn run(app: &AppHandle) -> Result<()> {
         listener,
         local.pool.clone(),
         local.device.clone(),
-        move |met| note(&answered, &met),
+        move |met| note(&answered, &met, None),
+        live_sink(app),
     ));
 
     let Ok(daemon) = ServiceDaemon::new() else {
@@ -176,8 +228,11 @@ async fn run(app: &AppHandle) -> Result<()> {
             }
             member.met_ms = now_ms();
             for address in &member.addresses {
-                if let Ok(met) = meet(&local.pool, &local.device, address, member.port).await {
-                    note(app, &met);
+                let reached = (address.as_str(), member.port);
+                if let Ok(met) =
+                    meet(&local.pool, &local.device, reached, &[], live_sink(app)).await
+                {
+                    note(app, &met, Some((address.clone(), member.port)));
                     break;
                 }
             }

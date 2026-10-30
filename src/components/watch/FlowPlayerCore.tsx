@@ -113,14 +113,14 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       if (!currentVideo || currentVideo.id !== videoId || stream.loadingStream) return;
       if (!progressTickBelongsTo(currentVideo.id, stream.streamVideoId)) return;
       stream.notePlaybackTime(time);
-      const nextDuration = mediaDuration || currentVideo.durationSeconds || 1;
+      const nextDuration = stream.isLive ? 0 : mediaDuration || currentVideo.durationSeconds || 1;
       setCurrentTime(time);
       setDuration(nextDuration);
-      prefetchNextVideo(time, nextDuration);
+      if (!stream.isLive) prefetchNextVideo(time, nextDuration);
 
       reportWatchTime(time, mediaDuration);
       latestProgressRef.current = { videoId: currentVideo.id, time, duration: nextDuration };
-      if (!shouldRecordWatchHistory()) return;
+      if (!shouldRecordWatchHistory() || stream.isLive) return;
 
       const now = Date.now();
       if (now - lastProgressPersistedAtRef.current < 5000) return;
@@ -145,6 +145,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       currentVideo,
       videoId,
       stream.loadingStream,
+      stream.isLive,
       prefetchNextVideo,
       reportWatchTime,
       setCurrentTime,

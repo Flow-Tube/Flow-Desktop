@@ -1242,7 +1242,15 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
-    const nextTime = Math.min(Math.max(time, 0), video.duration || duration || 0);
+    let nextTime: number;
+    if (isLive && video.seekable.length) {
+      const start = video.seekable.start(0);
+      const end = video.seekable.end(video.seekable.length - 1);
+      nextTime = Math.min(Math.max(time, start), end);
+    } else {
+      const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration || 0;
+      nextTime = dur > 0 ? Math.min(Math.max(time, 0), dur) : Math.max(time, 0);
+    }
     video.currentTime = nextTime;
     if (audio) {
       audioHoldRef.current = false;
@@ -1253,10 +1261,12 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
     setCurrentTime(nextTime);
-  }, [duration, setCurrentTime]);
+  }, [duration, isLive, setCurrentTime]);
 
   const seekBy = useCallback((delta: number) => {
-    seekTo(currentTime + delta);
+    const video = videoRef.current;
+    const baseTime = video ? video.currentTime : currentTime;
+    seekTo(baseTime + delta);
     showSeekFeedback(delta > 0 ? "forward" : "backward", Math.abs(delta));
   }, [currentTime, seekTo, showSeekFeedback]);
 
@@ -1800,6 +1810,7 @@ export const Player: React.FC<PlayerProps> = ({
       maxBufferLength: bufferConfig.maxSeconds,
       maxMaxBufferLength: bufferConfig.maxSeconds,
       backBufferLength: Math.max(30, bufferConfig.maxSeconds),
+      liveBackBufferLength: Math.max(900, bufferConfig.maxSeconds * 5),
       liveSyncDurationCount: 4,
       liveMaxLatencyDurationCount: 12,
       liveDurationInfinity: isLive,
@@ -1815,7 +1826,7 @@ export const Player: React.FC<PlayerProps> = ({
       sourceSwitchingRef.current = false;
       setIsSourceSwitching(false);
       logPlayerEventRef.current("hls-manifest-parsed", { levels: hls.levels.length });
-      if (desiredPlayingRef.current || isPlaying) void video.play().catch(() => {});
+      if (desiredPlayingRef.current) void video.play().catch(() => {});
     });
     hls.on(Hls.Events.FRAG_LOADED, () => {
       fatalRecoveryAttempts = 0;
@@ -1834,17 +1845,13 @@ export const Player: React.FC<PlayerProps> = ({
       });
       if (!data.fatal) {
         if (isLive && data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-          const syncPos = hls.liveSyncPosition;
           const seekable = video.seekable;
-          const target =
-            syncPos != null && Number.isFinite(syncPos)
-              ? syncPos
-              : seekable.length
-                ? seekable.end(seekable.length - 1) - 4
-                : null;
-          if (target != null && Number.isFinite(target) && target > video.currentTime) {
-            video.currentTime = target;
-            if (desiredPlayingRef.current || isPlaying) void video.play().catch(() => {});
+          if (seekable.length) {
+            const start = seekable.start(0);
+            if (video.currentTime < start) {
+              video.currentTime = start + 1;
+              if (desiredPlayingRef.current) void video.play().catch(() => {});
+            }
           }
         }
         return;
@@ -1881,7 +1888,7 @@ export const Player: React.FC<PlayerProps> = ({
       if (!destroyedAfterFatal) hls.destroy();
       if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
     };
-  }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive, isPlaying]);
+  }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
 
   useEffect(() => {
     if (!isDashPlayback) return;
@@ -2285,11 +2292,19 @@ export const Player: React.FC<PlayerProps> = ({
           break;
         case "home":
           event.preventDefault();
-          seekTo(0);
+          if (isLive && videoRef.current?.seekable.length) {
+            seekTo(videoRef.current.seekable.start(0));
+          } else {
+            seekTo(0);
+          }
           break;
         case "end":
           event.preventDefault();
-          seekTo(duration);
+          if (isLive && videoRef.current?.seekable.length) {
+            seekTo(videoRef.current.seekable.end(videoRef.current.seekable.length - 1) - 1);
+          } else {
+            seekTo(duration);
+          }
           break;
         default: {
           const digit = Number(event.key);

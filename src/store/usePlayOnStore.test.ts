@@ -22,6 +22,7 @@ vi.mock("../lib/live/players", () => players);
 vi.mock("./useUiStore", () => ({ useUiStore: { getState: () => ({ showToast }) } }));
 
 import { usePlayOnStore } from "./usePlayOnStore";
+import { useRemoteControlStore } from "./useRemoteControlStore";
 
 let deliver: (request: LiveRequest) => void = () => undefined;
 let report: (status: LiveStatus) => void = () => undefined;
@@ -136,6 +137,17 @@ describe("usePlayOnStore", () => {
       expect(usePlayOnStore.getState().controlling).toBe("bb");
       report({ ...phone(NOW, Date.now()), online: [] });
       expect(usePlayOnStore.getState().controlling).toBeNull();
+    });
+
+    it("routes the players to the device controlled, until a session is handed here", async () => {
+      report(phone(NOW, Date.now()));
+      usePlayOnStore.getState().control("bb");
+      expect(useRemoteControlStore.getState()).toMatchObject({ target: "bb", queue: ["v1"], playing: true });
+      players.startSession.mockResolvedValue(undefined);
+      deliver(PLAY);
+      await flush();
+      expect(useRemoteControlStore.getState().target).toBeNull();
+      expect(players.startSession).toHaveBeenCalledOnce();
     });
 
     it("takes the pause back and says so when the device refuses", async () => {

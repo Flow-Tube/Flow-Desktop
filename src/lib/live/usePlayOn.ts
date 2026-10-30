@@ -4,6 +4,7 @@ import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { activeOf, playOnDevices, type PlayOnDevice } from "./devices";
+import type { DeviceKind, Now } from "../api/live";
 import { nowOf } from "./now";
 import { playing } from "./players";
 
@@ -39,4 +40,22 @@ export function usePlayOn(): { devices: PlayOnDevice[]; active: PlayOnDevice | n
 
   const devices = useMemo(() => playOnDevices(status, linked, nowOf(playing()), tick), [status, linked, tick]);
   return { devices, active: activeOf(devices) ?? devices.find((device) => device.did === controlling) ?? null };
+}
+
+/** The device controlled from here, with what it plays; `null` while playback is here. */
+export interface ControlledDevice {
+  did: string;
+  name: string;
+  kind: DeviceKind;
+  now: Now & { video: string };
+  nowAtMs: number;
+}
+
+export function useControlledDevice(): ControlledDevice | null {
+  const did = usePlayOnStore((state) => state.controlling);
+  const device = usePlayOnStore((state) => (did ? state.status?.devices[did] : undefined));
+  const name = usePlayOnStore((state) => state.linked.find((linked) => linked.id === did)?.name ?? "");
+  const now = device?.now;
+  if (!did || !device || !now?.video) return null;
+  return { did, name, kind: device.kind ?? "phone", now: { ...now, video: now.video }, nowAtMs: device.nowAtMs };
 }

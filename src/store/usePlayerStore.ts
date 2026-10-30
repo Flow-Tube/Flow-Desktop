@@ -4,6 +4,7 @@ import { prefetchStreamInfo } from "../lib/streamResolution";
 import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
+import { queueWith, remoteControl } from "./useRemoteControlStore";
 import { profileStorage } from "../lib/storage/profileStorage";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
@@ -309,6 +310,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (rawQueue, startIndex = 0, playlistContext = null, unshuffledQueue = null) => {
+    const remote = remoteControl();
+    if (remote) return remote.play(rawQueue.map((item) => item.id), startIndex, false);
     // Rows and drag handles are keyed by video id, and a YouTube playlist can list one twice.
     const queue = appendUniqueVideos([], rawQueue);
     const startId = rawQueue[startIndex]?.id;
@@ -346,6 +349,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   addToQueue: (video) => {
+    const remote = remoteControl();
+    if (remote) {
+      remote.command("queue", { queue: queueWith(remote, [video.id], false) });
+      return "added";
+    }
     const { queue, currentVideo, currentIndex, playlistContext, manualQueueIds } = get();
     if (queue.some((item) => item.id === video.id) || currentVideo?.id === video.id) {
       return "duplicate";
@@ -463,6 +471,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: (allowAutoplayFallback = false) => {
+    const remote = remoteControl();
+    if (remote) {
+      remote.command("next");
+      return null;
+    }
     const { queue, currentIndex, repeatMode, autoplayCandidates } = get();
     if (queue.length === 0) return null;
 
@@ -502,6 +515,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playPrevious: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command("previous");
     const { queue, currentIndex, currentTime, repeatMode } = get();
     if (queue.length === 0) return;
 

@@ -10,12 +10,14 @@ use super::roster::{Entry, parse_entry};
 use crate::sync::canonical::to_canonical_json;
 use crate::sync::error::SyncError;
 
-/// Where a group keeps its objects: a Flow server, or only its devices on the LAN.
+/// Where a group keeps its objects: a Flow server, a `WebDAV` folder, or only its devices on the
+/// LAN.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize)]
 #[sqlx(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum StoreKind {
     Server,
+    WebDav,
     Lan,
 }
 
@@ -52,6 +54,13 @@ impl GroupRecord {
     }
 
     /// A LAN group this device has just joined or created.
+    pub fn on_webdav(group_id: String, url: String, link: String) -> Self {
+        Self {
+            kind: StoreKind::WebDav,
+            ..Self::new(group_id, url, None, link)
+        }
+    }
+
     pub fn on_lan(group_id: String, link: String) -> Self {
         Self {
             kind: StoreKind::Lan,

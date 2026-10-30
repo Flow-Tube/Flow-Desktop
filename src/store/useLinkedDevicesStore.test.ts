@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   cancelLink: vi.fn(),
   createGroup: vi.fn(),
   createLanGroup: vi.fn(),
+  createWebdavGroup: vi.fn(),
   forgetGroup: vi.fn(),
   getLinkPhase: vi.fn(),
   getLinkedDevices: vi.fn(),
@@ -23,6 +24,7 @@ const api = vi.hoisted(() => ({
   renameDevice: vi.fn(),
   restoreGroup: vi.fn(),
   syncNow: vi.fn(),
+  updateLogin: vi.fn(),
 }));
 vi.mock("../lib/api/linked", () => api);
 

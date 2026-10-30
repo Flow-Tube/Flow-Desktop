@@ -8,6 +8,7 @@ import {
   cancelLink,
   createGroup,
   createLanGroup,
+  createWebdavGroup,
   declineJoin,
   enterCode,
   forgetGroup,
@@ -23,6 +24,7 @@ import {
   restoreGroup,
   showCode,
   syncNow,
+  updateLogin,
   type JoinRequest,
   type LinkPhase,
   type LinkedDevice,
@@ -55,6 +57,8 @@ interface LinkedState {
   refresh: () => Promise<void>;
   create: (url: string, adminToken: string) => Promise<void>;
   createOnLan: () => Promise<void>;
+  createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
+  updateLogin: (user: string, password: string) => Promise<void>;
   restore: (url: string, words: string) => Promise<void>;
   enterCode: (code: string) => Promise<void>;
   askToJoin: (url: string, adminToken: string) => Promise<void>;
@@ -142,6 +146,18 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     createOnLan: () =>
       run(async () => {
         set({ words: await createLanGroup() });
+        await get().refresh();
+      }),
+
+    createOnWebdav: (url, user, password) =>
+      run(async () => {
+        set({ words: await createWebdavGroup(url, user, password) });
+        await get().refresh();
+      }),
+
+    updateLogin: (user, password) =>
+      run(async () => {
+        await updateLogin(user, password);
         await get().refresh();
       }),
 

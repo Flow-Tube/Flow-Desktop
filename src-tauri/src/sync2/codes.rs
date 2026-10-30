@@ -14,7 +14,8 @@ use crate::sync::canonical::to_canonical_json;
 
 const NAME_LIMIT: usize = 64;
 
-/// Where a member's group lives: `{"k":"server","u":url}` or `{"k":"lan"}`.
+/// Where a member's group lives: `{"k":"server","u":url}`, `{"k":"webdav","u":url}` or
+/// `{"k":"lan"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoreLocation {
@@ -27,6 +28,13 @@ impl StoreLocation {
     pub fn server(url: &str) -> Self {
         Self {
             k: "server".into(),
+            u: Some(url.into()),
+        }
+    }
+
+    pub fn webdav(url: &str) -> Self {
+        Self {
+            k: "webdav".into(),
             u: Some(url.into()),
         }
     }
@@ -55,7 +63,8 @@ pub struct QrCode {
 
 /// A code read from another device, checked for what this build can answer.
 pub enum Code {
-    /// A member's code, which a new device answers: its server (`None` for a LAN group), and
+    /// A member's code, which a new device answers: its server, or `None` when it pairs over the
+    /// LAN only (a LAN group, or a `WebDAV` one whose credentials only the welcome carries), and
     /// LAN addresses to try first.
     Member {
         qr: QrCode,
@@ -96,7 +105,7 @@ pub fn b64_key(value: &str) -> Result<[u8; KEY_SIZE]> {
         .ok_or(EngineError::Unexpected)
 }
 
-/// Reads a FLOW-SYNC/2 code; FLOW-SYNC/1 codes and stores other than a Flow server are refused.
+/// Reads a FLOW-SYNC/2 code; FLOW-SYNC/1 codes and stores this build doesn't keep are refused.
 pub fn read_code(text: &str) -> Result<Code> {
     let qr: QrCode = serde_json::from_str(text.trim()).map_err(|_| EngineError::Unexpected)?;
     let lan = qr.l.clone().unwrap_or_default();
@@ -106,11 +115,15 @@ pub fn read_code(text: &str) -> Result<Code> {
             lan,
             qr,
         }),
-        (2, "m", Some(store)) if store.k == "lan" && !lan.is_empty() => Ok(Code::Member {
-            store_url: None,
-            lan,
-            qr,
-        }),
+        (2, "m", Some(store))
+            if matches!(store.k.as_str(), "lan" | "webdav") && !lan.is_empty() =>
+        {
+            Ok(Code::Member {
+                store_url: None,
+                lan,
+                qr,
+            })
+        }
         (2, "n", None) if !lan.is_empty() => Ok(Code::New { qr, lan }),
         _ => Err(EngineError::Unexpected),
     }

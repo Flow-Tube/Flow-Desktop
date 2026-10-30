@@ -17,21 +17,26 @@ use dav_server::memfs::MemFs;
 use flow_desktop_lib::sync::canonical::to_canonical_json;
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
-use flow_desktop_lib::sync2::engine::{Session, now_ms};
+use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
 use flow_desktop_lib::sync2::keys::member_secrets;
-use flow_desktop_lib::sync2::linking::{DeviceMeta, add_device, join};
+use flow_desktop_lib::sync2::linking::{
+    DeviceMeta, WelcomeStore, add_device, finish_join, join, join_on_lan,
+};
 use flow_desktop_lib::sync2::membership::rename_device;
 use flow_desktop_lib::sync2::paths::{roster_path, wrap_path};
+use flow_desktop_lib::sync2::pipe::listen_on;
 use flow_desktop_lib::sync2::roster::entry_hash;
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::StoreError;
+use flow_desktop_lib::sync2::setup::create_webdav_group;
+use flow_desktop_lib::sync2::state::{StoreKind, load_group};
 use flow_desktop_lib::sync2::store::Store;
 use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use sqlx::SqlitePool;
-use sync2_common::{Group, device_pool, empty_pool, exported, group};
+use sync2_common::{Group, device_pool, empty_pool, exported, group, memory_welcome};
 use tokio::net::TcpListener;
 
 const USER: &str = "flow";
@@ -232,11 +237,70 @@ async fn pairing_runs_through_the_webdav_mailbox() {
     let mailbox = store_for(&url, &newcomer.did).await;
     let yes = |_sas: String| async { true };
     let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, yes),
+        add_device(&session, offer, &g.a, memory_welcome(), yes),
         join(&pool_n, &mailbox, &code, &newcomer, named("New"), yes),
     );
     joined.unwrap();
     assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+}
+
+#[tokio::test]
+async fn a_group_created_in_a_folder_welcomes_a_device_paired_over_the_lan() {
+    let (url, _) = webdav_server().await;
+    let login = WebDavLogin {
+        user: USER.into(),
+        password: PASSWORD.into(),
+    };
+    let a = member_secrets(random_bytes(), random_bytes());
+    let pool_a = empty_pool().await;
+    let folder = store_for(&url, &a.did).await;
+    create_webdav_group(&pool_a, &folder, &url, &a, &named("A"), "link")
+        .await
+        .unwrap();
+    let other = empty_pool().await;
+    let again = create_webdav_group(&other, &folder, &url, &a, &named("A"), "link").await;
+    assert!(matches!(
+        again,
+        Err(EngineError::Store(StoreError::AlreadyClaimed))
+    ));
+
+    let session = Session::open(&pool_a, store_for(&url, &a.did).await, &a)
+        .await
+        .unwrap();
+    let listening = listen_on(vec!["127.0.0.1".into()]).await.unwrap();
+    let offer = new_offer(Some(StoreLocation::webdav(&url)), "A", Some(listening));
+    let code = read_code(&offer.qr).unwrap();
+    let welcome = WelcomeStore::WebDav {
+        u: url.clone(),
+        n: login.user.clone(),
+        w: login.password.clone(),
+    };
+    let newcomer = member_secrets(random_bytes(), random_bytes());
+    let pool_n = empty_pool().await;
+    let yes = |_sas: String| async { true };
+    let (added, joined) = tokio::join!(add_device(&session, offer, &a, welcome, yes), async {
+        let welcomed = join_on_lan(&code, &newcomer, named("New"), yes).await?;
+        let WelcomeStore::WebDav { u, n, w } = welcomed.welcome.store.clone() else {
+            panic!("the welcome names the folder");
+        };
+        let login = WebDavLogin {
+            user: n,
+            password: w,
+        };
+        let store = WebDavStore::connect(&u, login, hex::encode(newcomer.did)).await?;
+        finish_join(&pool_n, &store, welcomed).await
+    });
+    joined.unwrap();
+    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    let record = load_group(&pool_n).await.unwrap().unwrap();
+    assert_eq!(
+        (record.kind, record.store_url.as_str()),
+        (StoreKind::WebDav, url.as_str())
+    );
+    let joined = Session::open(&pool_n, store_for(&url, &newcomer.did).await, &newcomer)
+        .await
+        .unwrap();
+    assert_eq!(joined.roster().members.len(), 3);
 }
 
 #[tokio::test]

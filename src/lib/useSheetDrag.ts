@@ -49,8 +49,10 @@ export function useSheetDrag(): SheetDragBind {
   useEffect(() => () => clearTimeout(wheelTimer.current), []);
 
   const begin = (): boolean => {
+    // Chromium keeps sending a wheel gesture to the element it began on, so the dock still gets
+    // wheels once the player it opened covers it, and taking the sheet then would sink an open player.
     const dock = sheetDockBox();
-    if (!dock) return false;
+    if (!dock || useMusicPlayerStore.getState().viewState !== "dock") return false;
     holdSheet();
     drag.current = { travel: 0, span: Math.max(1, dock.top - sheetBox().top), samples: [] };
     useMusicSheetStore.getState().setPeeking(true);

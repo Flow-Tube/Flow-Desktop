@@ -1005,7 +1005,10 @@ async fn relay_remote(
             if let Some(range_val) = content_range_value.as_deref() {
                 response_headers.push_str(&format!("Content-Range: {range_val}\r\n"));
             }
-            if let Some(encoding) = headers.get("Content-Encoding").and_then(|h| h.to_str().ok()) {
+            if let Some(encoding) = headers
+                .get("Content-Encoding")
+                .and_then(|h| h.to_str().ok())
+            {
                 response_headers.push_str(&format!("Content-Encoding: {encoding}\r\n"));
             }
             response_headers.push_str(&format!("Accept-Ranges: {accept_ranges_value}\r\n"));

@@ -17,7 +17,8 @@ import { getString } from "../lib/i18n/index";
 import { nowOf, queueWindow } from "../lib/live/now";
 import { overrideFor, stillControlled, withOverrides, type Override } from "../lib/live/optimistic";
 import { applyCommand, pauseHere, playing, startSession } from "../lib/live/players";
-import { activeDevice, positionOf } from "../lib/live/position";
+import type { PlayOnDevice } from "../lib/live/devices";
+import { controlledDevice, positionOf } from "../lib/live/position";
 import { useMusicPlayerStore } from "./useMusicPlayerStore";
 import { useRemoteControlStore } from "./useRemoteControlStore";
 import { usePlayerStore } from "./usePlayerStore";
@@ -27,6 +28,8 @@ import { useUiStore } from "./useUiStore";
 const HANDOFF_WITHIN_MS = 15_000;
 /** How long a remote command waits for its answer before what it showed is taken back. */
 const COMMAND_WITHIN_MS = 5_000;
+/** Answers kept for a request whose wait has not started yet; more than this are old. */
+const EARLY_LIMIT = 32;
 
 export type ConsentChoice = "always" | "once" | "decline";
 
@@ -47,14 +50,17 @@ interface PlayOnState {
   asking: LiveRequest[];
   /** Listens to the live channel; `watch` opens a video's page. Resolves to a function that stops. */
   init: (watch: (videoId: string) => void) => Promise<() => void>;
-  /** Hands what plays here to `did`, and pauses here only once it answered that it plays. */
-  transferTo: (did: string) => Promise<void>;
-  /** Pauses `did` and plays its session here, from where it is now. */
-  pullFrom: (did: string) => Promise<void>;
   /**
-   * Moves playback to `did`: from here when this device plays, otherwise from the active device,
-   * which pauses once `did` answered that it plays.
+   * Picks `device` in "Play on", as Android does: this device brings playback back; another one,
+   * while a device is driven from here, takes that device's session; one with a session, while
+   * nothing plays here, is driven from here; any other gets this device's session.
    */
+  pick: (device: PlayOnDevice) => Promise<void>;
+  /** Hands this device's session to `did`, and pauses here only once it answered that it plays. */
+  transferTo: (did: string) => Promise<void>;
+  /** Pauses `chosen`, or else the device that last had a session, and plays that session here. */
+  pullFrom: (chosen: string | null) => Promise<void>;
+  /** Moves the session of the device driven from here, or else the current one, to `did`, which then pauses. */
   moveTo: (did: string) => Promise<void>;
   /** Controls `did`, which plays already, from the remote dock. */
   control: (did: string) => void;
@@ -66,6 +72,8 @@ interface PlayOnState {
 
 let watch: (videoId: string) => void = () => undefined;
 const waiting = new Map<number, (answer: Answer) => void>();
+/** Answers that arrived before their wait started, as a fast device's can. */
+const early = new Map<number, Answer>();
 
 function answerFor(request: LiveRequest, ok: boolean, reason?: string): Answer {
   return { type: "result", to: request.from, ref: request.seq, ok, ...(reason ? { reason } : {}) };
@@ -96,7 +104,7 @@ async function act(request: LiveRequest): Promise<void> {
 }
 
 /** Sends `now`'s session to `to` from `pos`, and resolves once it answered that it plays. */
-async function handOff(to: string, now: Now & { video: string }, pos: number): Promise<void> {
+async function handOff(to: string, now: Now & { video: string }, pos: number, state: Now["state"] = "playing"): Promise<void> {
   const seq = await sendLive({
     type: "play",
     to,
@@ -106,13 +114,18 @@ async function handOff(to: string, now: Now & { video: string }, pos: number): P
     link: null,
     queue: now.queue,
     index: now.index,
-    state: "playing",
+    state,
   });
   const answer = await waitForAnswer(seq, HANDOFF_WITHIN_MS);
   if (!answer.ok) throw new Error(answer.reason ?? "refused");
 }
 
 function waitForAnswer(seq: number, withinMs: number): Promise<Answer> {
+  const arrived = early.get(seq);
+  if (arrived) {
+    early.delete(seq);
+    return Promise.resolve(arrived);
+  }
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       waiting.delete(seq);
@@ -126,10 +139,21 @@ function waitForAnswer(seq: number, withinMs: number): Promise<Answer> {
   });
 }
 
+/** Hands `answer` to its wait, or keeps it for a wait that has not started yet. */
+function answered(answer: Answer) {
+  const wait = waiting.get(answer.ref);
+  if (wait) {
+    wait(answer);
+    return;
+  }
+  early.set(answer.ref, answer);
+  if (early.size > EARLY_LIMIT) early.delete(early.keys().next().value as number);
+}
+
 export const usePlayOnStore = create<PlayOnState>((set, get) => {
   function take(request: LiveRequest) {
     const { message } = request;
-    if (message.type === "result") waiting.get(message.ref)?.(message);
+    if (message.type === "result") answered(message);
     else if (request.ask) set({ asking: [...get().asking, request] });
     else void act(request);
   }
@@ -177,6 +201,17 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       return () => stops.forEach((stop) => stop());
     },
 
+    pick: async (device) => {
+      const driven = get().controlling;
+      if (device.thisDevice) return get().pullFrom(driven);
+      if (driven && driven !== device.did) return get().moveTo(device.did);
+      if (!playing()?.playing && device.now?.video) {
+        get().control(device.did);
+        return;
+      }
+      return get().transferTo(device.did);
+    },
+
     transferTo: async (did) => {
       const now = nowOf(playing());
       if (!now.video) return;
@@ -185,24 +220,26 @@ export const usePlayOnStore = create<PlayOnState>((set, get) => {
       set({ controlling: did });
     },
 
-    pullFrom: async (did) => {
-      const device = get().status?.devices[did];
+    pullFrom: async (chosen) => {
+      const at = Date.now();
+      const from = controlledDevice(get().status, chosen, at);
+      const device = from ? get().status?.devices[from] : undefined;
       const now = device?.now;
-      if (!device || !now?.video) return;
-      await sendLive({ type: "cmd", to: did, cmd: "pause" });
-      const session = { ...now, video: now.video, pos: positionOf(device, Date.now()), state: "playing" as const };
+      if (!from || !device || !now?.video) return;
+      await sendLive({ type: "cmd", to: from, cmd: "pause" });
+      const session = { ...now, video: now.video, pos: positionOf(device, at), state: "playing" as const };
       set({ controlling: null });
       await startSession(session, watch);
     },
 
     moveTo: async (did) => {
-      if (playing()?.playing) return get().transferTo(did);
-      const active = get().controlling ?? activeDevice(get().status);
-      const device = active ? get().status?.devices[active] : undefined;
+      const at = Date.now();
+      const from = controlledDevice(get().status, get().controlling, at);
+      const device = from ? get().status?.devices[from] : undefined;
       const now = device?.now;
-      if (!active || active === did || !device || !now?.video) return;
-      await handOff(did, { ...now, video: now.video }, positionOf(device, Date.now()));
-      await sendLive({ type: "cmd", to: active, cmd: "pause" });
+      if (!from || from === did || !device || !now?.video) return;
+      await handOff(did, { ...now, video: now.video }, positionOf(device, at), now.state);
+      await sendLive({ type: "cmd", to: from, cmd: "pause" });
       set({ controlling: did });
     },
 

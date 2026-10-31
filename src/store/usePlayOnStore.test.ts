@@ -109,12 +109,78 @@ describe("usePlayOnStore", () => {
     expect(players.pauseHere).not.toHaveBeenCalled();
   });
 
+  it("takes an answer that arrived before its wait started", async () => {
+    players.playing.mockReturnValue(PLAYING);
+    deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
+    await usePlayOnStore.getState().transferTo("bb");
+    expect(players.pauseHere).toHaveBeenCalledOnce();
+  });
+
+  describe("picking a device", () => {
+    const SONG: Now = { video: "s1", title: "S", by: "A", music: true, link: null, pos: 2000, dur: 60_000, state: "paused", vol: 100, queue: ["s1"], index: 0 };
+    const at = (devices: Record<string, Now | null>): LiveStatus => ({
+      available: true,
+      online: Object.keys(devices),
+      devices: Object.fromEntries(
+        Object.entries(devices).map(([did, now]) => [did, { kind: "phone", can: ["play", "remote"], now, nowAtMs: Date.now(), heardAtMs: Date.now() }]),
+      ),
+    });
+    const device = (did: string, now: Now | null, thisDevice = false) => ({
+      did,
+      name: did,
+      kind: "phone" as const,
+      thisDevice,
+      group: now?.state === "playing" ? ("playing" as const) : ("available" as const),
+      now,
+      nowAtMs: Date.now(),
+      lastSeenMs: null,
+    });
+
+    it("drives a device with a session, playing or not, while nothing plays here", async () => {
+      report(at({ bb: SONG }));
+      await usePlayOnStore.getState().pick(device("bb", SONG));
+      expect(usePlayOnStore.getState().controlling).toBe("bb");
+      expect(api.sendLive).not.toHaveBeenCalled();
+    });
+
+    it("hands what plays here to a device that plays something else", async () => {
+      players.playing.mockReturnValue(PLAYING);
+      report(at({ bb: { ...SONG, state: "playing" } }));
+      const picking = usePlayOnStore.getState().pick(device("bb", { ...SONG, state: "playing" }));
+      await flush();
+      expect(api.sendLive).toHaveBeenCalledWith(expect.objectContaining({ type: "play", to: "bb", video: "v1" }));
+      deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
+      await picking;
+      expect(players.pauseHere).toHaveBeenCalledOnce();
+    });
+
+    it("brings back a paused session from the device that last had one when none is chosen", async () => {
+      players.startSession.mockResolvedValue(undefined);
+      report(at({ bb: SONG }));
+      await usePlayOnStore.getState().pick(device("me", null, true));
+      expect(api.sendLive).toHaveBeenCalledWith({ type: "cmd", to: "bb", cmd: "pause" });
+      expect(players.startSession).toHaveBeenCalledWith(expect.objectContaining({ video: "s1", pos: 2000, state: "playing" }), expect.any(Function));
+    });
+
+    it("moves the driven device's session to another one in its own state, then pauses it", async () => {
+      report(at({ bb: SONG, cc: null }));
+      usePlayOnStore.getState().control("bb");
+      const picking = usePlayOnStore.getState().pick(device("cc", null));
+      await flush();
+      expect(api.sendLive).toHaveBeenCalledWith(expect.objectContaining({ type: "play", to: "cc", video: "s1", state: "paused" }));
+      deliver({ from: "cc", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
+      await picking;
+      expect(api.sendLive).toHaveBeenLastCalledWith({ type: "cmd", to: "bb", cmd: "pause" });
+      expect(usePlayOnStore.getState().controlling).toBe("cc");
+    });
+  });
+
   describe("remote commands", () => {
     const NOW: Now = { video: "v1", title: "T", by: "C", music: false, link: null, pos: 1000, dur: 60_000, state: "playing", vol: 50, queue: ["v1"], index: 0 };
-    const phone = (now: Now, nowAtMs: number): LiveStatus => ({
+    const phone = (now: Now, nowAtMs: number, heardAtMs = nowAtMs): LiveStatus => ({
       available: true,
       online: ["bb"],
-      devices: { bb: { kind: "phone", can: ["play", "remote"], now, nowAtMs } },
+      devices: { bb: { kind: "phone", can: ["play", "remote"], now, nowAtMs, heardAtMs } },
     });
     const shownState = () => usePlayOnStore.getState().status?.devices.bb?.now?.state;
 
@@ -130,12 +196,14 @@ describe("usePlayOnStore", () => {
       expect(shownState()).toBe("playing");
     });
 
-    it("follows a device only once the user chose it, until it goes offline", () => {
+    it("follows a device only once the user chose it, until it is gone for 90 s", () => {
       report(phone(NOW, Date.now()));
       expect(usePlayOnStore.getState().controlling).toBeNull();
       usePlayOnStore.getState().control("bb");
       expect(usePlayOnStore.getState().controlling).toBe("bb");
       report({ ...phone(NOW, Date.now()), online: [] });
+      expect(usePlayOnStore.getState().controlling).toBe("bb");
+      report({ ...phone(NOW, Date.now(), Date.now() - 91_000), online: [] });
       expect(usePlayOnStore.getState().controlling).toBeNull();
     });
 

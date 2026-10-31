@@ -115,17 +115,20 @@ fn chunks(ndjson: &[u8]) -> Vec<Vec<&[u8]>> {
 }
 
 impl<S: Store> Session<'_, S> {
-    /// Writes `exported`, the whole state of this link, as blobs and then a manifest naming the
-    /// last object of every log merged into it.
+    /// Writes `exported`, the whole state of the running profile's link, as blobs and then a
+    /// manifest naming the last object of every log merged into it. The caller first applies
+    /// every batch kept for that link.
     pub async fn write_snapshot(
         &mut self,
         pool: &SqlitePool,
         exported: Vec<OutgoingCollection>,
     ) -> Result<()> {
+        let Some(link) = self.reading().active.clone() else {
+            return Ok(());
+        };
         let group = *self.group();
         let epoch = self.roster().epoch;
         let did = self.device().did;
-        let link = self.record().link.clone();
         let head = self.roster().head.clone();
         let key = purpose_key(
             self.current_key(),

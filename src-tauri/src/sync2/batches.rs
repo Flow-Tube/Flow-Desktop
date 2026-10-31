@@ -199,6 +199,23 @@ pub struct IncomingBatch {
     records: Vec<u8>,
 }
 
+impl IncomingBatch {
+    /// A batch this device kept for a profile that wasn't running, read back.
+    pub(super) fn kept(collection: &str, link: String, head: String, records: Vec<u8>) -> Self {
+        Self {
+            collection: collection_from_key(collection),
+            link: Some(link),
+            head,
+            size: records.len(),
+            records,
+        }
+    }
+
+    pub(super) fn records(&self) -> &[u8] {
+        &self.records
+    }
+}
+
 pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, SyncError> {
     let (header, records) = content.split_at(
         content

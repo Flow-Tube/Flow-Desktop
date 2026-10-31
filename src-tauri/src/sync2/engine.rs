@@ -1,27 +1,31 @@
 //! One sync with a store: verify the roster, push this device's changes, pull everyone else's.
 //! It holds no secrets beyond the session: epoch keys are unwrapped from the store each time.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::SqlitePool;
 
 use super::batches::{IncomingBatch, mark_sent, outgoing_batches, parse_batch};
+use super::bootstrap::Snapshot;
 use super::envelope::{
     Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
     seal_object, verify_object,
 };
 use super::epoch::{check_epoch_key, open_chain, purpose_key};
 use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
+use super::kept::{Kept, keep};
 use super::keys::MemberSecrets;
 use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
+use super::profile_links::{Reading, link_profile};
 use super::roster::{Entry, RosterState, apply_entry, replay_roster};
 use super::server::StoreError;
 use super::snapshot::{Manifest, note_merged};
 use super::state::{
-    GroupRecord, add_roster_entries, load_group, roster_entries, save_group, save_streams, streams,
+    Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, save_floors,
+    save_group, save_streams, streams,
 };
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
@@ -108,7 +112,12 @@ pub fn now_ms() -> i64 {
 /// Batches read from other devices, not applied yet, and how far reading got.
 #[derive(Default)]
 pub struct Pulled {
+    /// The running profile's batches, by sender, to apply before [`Session::finish`].
     pub batches: BTreeMap<String, Vec<IncomingBatch>>,
+    /// Batches of linked profiles that aren't running, kept by [`Session::finish`].
+    pub kept: Vec<Kept>,
+    /// Where the snapshots started from stop including each link's batches.
+    floors: Floors,
     positions: BTreeMap<String, StreamPosition>,
     cursor: i64,
     /// Batches and snapshot manifests read. Acks aren't acknowledged, so two idle devices don't
@@ -120,6 +129,73 @@ pub struct Pulled {
     links: Vec<Option<String>>,
     acks: BTreeMap<String, VersionVector>,
     manifests: Vec<Logged>,
+}
+
+impl Pulled {
+    /// Takes the records of a snapshot this device starts from, as a batch of its writer's.
+    fn start_from(&mut self, me: &str, snapshot: Snapshot, reading: Option<&Reading>) {
+        self.links.push(snapshot.manifest.link.clone());
+        let Some(link) = snapshot.manifest.link else {
+            return;
+        };
+        for (did, tip) in snapshot.manifest.vv.iter().filter(|(did, _)| *did != me) {
+            self.floors.insert((link.clone(), did.clone()), tip.seq);
+        }
+        let writer = snapshot.writer;
+        match reading {
+            Some(reading) if reading.active.as_deref() != Some(link.as_str()) => {
+                for (part, batch) in (1..).zip(snapshot.batches) {
+                    self.kept.push(Kept {
+                        link: link.clone(),
+                        sender: writer.clone(),
+                        seq: snapshot.seq,
+                        part,
+                        batch,
+                    });
+                }
+            }
+            _ => self
+                .batches
+                .entry(writer)
+                .or_default()
+                .extend(snapshot.batches),
+        }
+    }
+
+    /// Takes a batch `did` wrote at `seq`: to apply, to keep, or to skip, as `reading` asks.
+    fn take(
+        &mut self,
+        did: String,
+        seq: u64,
+        batch: IncomingBatch,
+        reading: Option<&Reading>,
+        floors: &Floors,
+    ) {
+        let Some(reading) = reading else {
+            self.batches.entry(did).or_default().push(batch);
+            return;
+        };
+        let Some(link) = batch.link.clone() else {
+            return;
+        };
+        if floors
+            .get(&(link.clone(), did.clone()))
+            .is_some_and(|floor| seq <= *floor)
+        {
+            return;
+        }
+        if reading.active.as_deref() == Some(link.as_str()) {
+            self.batches.entry(did).or_default().push(batch);
+        } else if reading.kept.contains(&link) {
+            self.kept.push(Kept {
+                link,
+                sender: did,
+                seq,
+                part: 0,
+                batch,
+            });
+        }
+    }
 }
 
 /// What a log object carries, once checked and opened.
@@ -139,6 +215,7 @@ pub struct Session<'a, S> {
     signing_keys: BTreeMap<String, [u8; 32]>,
     commitments: BTreeMap<u32, Vec<u8>>,
     keys: BTreeMap<u32, Vec<u8>>,
+    reading: Reading,
 }
 
 fn decode_b64(value: &str) -> Result<Vec<u8>> {
@@ -195,6 +272,7 @@ impl<'a, S: Store> Session<'a, S> {
         let mut session = Self {
             store,
             device,
+            reading: Reading::single(&record.link),
             record,
             group,
             state: replay_roster(&entries)?,
@@ -250,6 +328,15 @@ impl<'a, S: Store> Session<'a, S> {
 
     pub fn record(&self) -> &GroupRecord {
         &self.record
+    }
+
+    /// The links this session pushes, applies and keeps; at first only the link Default joined.
+    pub fn reading(&self) -> &Reading {
+        &self.reading
+    }
+
+    pub fn set_reading(&mut self, reading: Reading) {
+        self.reading = reading;
     }
 
     pub fn device(&self) -> &MemberSecrets {
@@ -342,40 +429,36 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(())
     }
 
-    /// Uploads what changed in `exported` since the last upload.
+    /// Uploads what changed in `exported`, the running profile's data, since the last upload.
     pub async fn push(
         &mut self,
         pool: &SqlitePool,
         exported: Vec<OutgoingCollection>,
     ) -> Result<usize> {
-        let outgoing = outgoing_batches(
-            pool,
-            exported,
-            &self.state.head,
-            &self.record.link,
-            now_ms(),
-        )
-        .await?;
+        let Some(link) = self.reading.active.clone() else {
+            return Ok(0);
+        };
+        let outgoing = outgoing_batches(pool, exported, &self.state.head, &link, now_ms()).await?;
         for batch in &outgoing.batches {
             self.write(pool, ObjectType::Changes, &batch.content)
                 .await?;
         }
         mark_sent(pool, &outgoing).await?;
         let bytes = outgoing.batches.iter().map(|b| b.content.len()).sum();
-        note_merged(pool, &self.record.link, bytes).await?;
+        note_merged(pool, &link, bytes).await?;
         Ok(outgoing.batches.len())
     }
 
     /// Reads other devices' new objects in stream order, checking each one. Nothing is applied:
     /// the caller applies [`Pulled::batches`] and then calls [`Session::finish`].
     pub async fn pull(&mut self, pool: &SqlitePool) -> Result<Pulled> {
-        let link = self.record.link.clone();
-        self.read_new(pool, Some(&link)).await
+        let reading = self.reading.clone();
+        self.read_new(pool, Some(&reading)).await
     }
 
-    /// Links a restored device's profile (spec/protocol.md, Recovery): to the link other devices'
-    /// batches name, or to `own` when they name none. False while the logs can't be read to the
-    /// end yet; nothing may be pushed or pulled until this returns true.
+    /// Links a restored device's profile `own` (spec/protocol.md, Recovery): to the link other
+    /// devices' batches name, or to its own id when they name none. False while the logs can't be
+    /// read to the end yet; nothing may be pushed or pulled until this returns true.
     pub async fn adopt_link(&mut self, pool: &SqlitePool, own: &str) -> Result<bool> {
         if !self.record.link.is_empty() {
             return Ok(true);
@@ -384,34 +467,39 @@ impl<'a, S: Store> Session<'a, S> {
         if read.stalled {
             return Ok(false);
         }
-        self.record.link = read
+        let link = read
             .links
             .into_iter()
             .flatten()
             .next()
             .unwrap_or_else(|| own.to_owned());
+        link_profile(pool, own, &link).await?;
+        self.record.link.clone_from(&link);
         save_group(pool, &self.record).await?;
+        self.reading.active = Some(link);
         Ok(true)
     }
 
-    /// Batches of `link` only, or every batch when `link` is `None`.
-    async fn read_new(&mut self, pool: &SqlitePool, link: Option<&str>) -> Result<Pulled> {
+    /// The batches `reading` asks for, or every batch when it is `None`.
+    async fn read_new(&mut self, pool: &SqlitePool, reading: Option<&Reading>) -> Result<Pulled> {
         let me = hex::encode(self.device.did);
         let mut pulled = Pulled {
             positions: streams(pool).await?,
             cursor: self.record.cursor,
             ..Pulled::default()
         };
+        let links = reading.map(|r| r.links().map(str::to_owned).collect::<BTreeSet<_>>());
         if pulled.positions.is_empty()
             && pulled.cursor == 0
-            && let Some(start) = self.bootstrap().await?
+            && let Some(start) = self.bootstrap(links.as_ref()).await?
         {
-            pulled.links.push(start.manifest.link.clone());
-            if link.is_none_or(|l| start.manifest.link.as_deref() == Some(l)) {
-                pulled.batches.insert(start.writer, start.batches);
+            for snapshot in start.snapshots {
+                pulled.start_from(&me, snapshot, reading);
             }
             pulled.positions = start.positions;
         }
+        let mut floors = floors(pool).await?;
+        floors.extend(pulled.floors.clone());
         loop {
             let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
             let read: BTreeMap<String, u64> = pulled
@@ -450,9 +538,7 @@ impl<'a, S: Store> Session<'a, S> {
                             match content {
                                 Content::Batch(batch) => {
                                     pulled.links.push(batch.link.clone());
-                                    if link.is_none_or(|l| batch.link.as_deref() == Some(l)) {
-                                        pulled.batches.entry(did).or_default().push(batch);
-                                    }
+                                    pulled.take(did, seq, batch, reading, &floors);
                                 }
                                 Content::Snapshot(manifest) => {
                                     pulled.links.push(manifest.link.clone());
@@ -542,11 +628,16 @@ impl<'a, S: Store> Session<'a, S> {
         })
     }
 
-    /// Saves how far reading got, after the caller applied the batches, and acknowledges it.
+    /// Keeps the batches of profiles that aren't running, saves how far reading got, after the
+    /// caller applied the running profile's, and acknowledges it.
     pub async fn finish(&mut self, pool: &SqlitePool, pulled: Pulled) -> Result<()> {
+        keep(pool, &pulled.kept).await?;
+        save_floors(pool, &pulled.floors).await?;
         save_streams(pool, &pulled.positions, pulled.cursor).await?;
-        let merged = pulled.batches.values().flatten().map(|b| b.size).sum();
-        note_merged(pool, &self.record.link, merged).await?;
+        if let Some(link) = &self.reading.active {
+            let merged = pulled.batches.values().flatten().map(|b| b.size).sum();
+            note_merged(pool, link, merged).await?;
+        }
         self.record.cursor = pulled.cursor;
         for (did, vv) in &pulled.acks {
             record_ack(pool, did, vv).await?;

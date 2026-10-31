@@ -16,8 +16,8 @@ use super::lan_peers::nearby;
 use super::live_message::{Ability, Answer, DeviceKind, LiveMessage, Now};
 use super::live_seal::{LiveKeys, Received};
 use super::live_state::{accept_live_seq, consents, next_live_seq};
+use super::profile_links::reading;
 use super::state::load_group;
-use crate::profiles::ActiveProfile;
 
 /// The devices' presence and what they play, whenever either changes.
 pub const EVENT_LIVE: &str = "sync2://live";
@@ -141,13 +141,14 @@ pub async fn announce(app: &AppHandle) -> Result<()> {
 
 /// The profile link the running profile syncs, which `now` and `play` name.
 async fn own_link(app: &AppHandle) -> Result<Option<String>> {
-    if !app.state::<ActiveProfile>().is_default {
+    let local = local(app).await?;
+    let Some(record) = load_group(&local.pool).await? else {
         return Ok(None);
-    }
-    Ok(load_group(&state_pool(app))
+    };
+    let (running, default) = (&local.running_profile, &local.default_profile);
+    Ok(reading(&local.pool, &record.link, running, default)
         .await?
-        .map(|record| record.link)
-        .filter(|link| !link.is_empty()))
+        .active)
 }
 
 /// Sends a `play`, `cmd` or `result` from the player, and returns its counter.

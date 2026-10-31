@@ -376,6 +376,10 @@ impl ProfileService {
         Ok(self.running_id(&self.load()?))
     }
 
+    pub fn default_profile_id(&self) -> AppResult<String> {
+        Ok(self.load()?.default_id().to_string())
+    }
+
     /// Opens a profile that isn't running. Default's file is the app data folder's own.
     pub async fn open_closed(&self, id: &str) -> AppResult<(SqlitePool, bool)> {
         let state = self.load()?;

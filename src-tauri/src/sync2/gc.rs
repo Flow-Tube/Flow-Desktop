@@ -87,6 +87,16 @@ async fn links(pool: &SqlitePool) -> Result<BTreeSet<Option<String>>> {
         .collect()
 }
 
+/// Links whose `profiles` record is deleted: their batches no longer need a snapshot.
+async fn deleted_links(pool: &SqlitePool) -> Result<Vec<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT link FROM sync2_profiles WHERE deleted = 1")
+            .fetch_all(pool)
+            .await
+            .map_err(SyncError::from)?,
+    )
+}
+
 async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
     let rows: Vec<(String, String)> = sqlx::query_as("SELECT did, vv FROM sync2_acks")
         .fetch_all(pool)
@@ -97,7 +107,7 @@ async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
         .collect()
 }
 
-async fn manifests(pool: &SqlitePool) -> Result<Vec<Logged>> {
+pub(super) async fn manifests(pool: &SqlitePool) -> Result<Vec<Logged>> {
     let rows: Vec<(String, i64, String)> =
         sqlx::query_as("SELECT did, seq, manifest FROM sync2_manifests")
             .fetch_all(pool)
@@ -301,7 +311,10 @@ impl<S: Store> Session<'_, S> {
             collected(pool).await?,
         );
         let mut links = links(pool).await?;
-        links.insert(Some(self.record().link.clone()));
+        links.extend(self.reading().links().map(|link| Some(link.to_owned())));
+        for link in deleted_links(pool).await? {
+            links.remove(&Some(link));
+        }
         let plan = Facts {
             current: &current,
             collectable: &collectable,

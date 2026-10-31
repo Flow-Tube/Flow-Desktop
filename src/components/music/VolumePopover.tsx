@@ -3,6 +3,7 @@ import { Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { getString } from "../../lib/i18n/index";
+import { useWheelVolume } from "../../lib/useWheelVolume";
 import { MENU_ENTER_TRANSITION, MENU_EXIT_TRANSITION } from "../../lib/motion";
 import { Slider } from "../ui/Slider";
 
@@ -12,12 +13,22 @@ export function VolumePopover({ open }: { open: boolean }) {
   const setVolume = useMusicPlayerStore((s) => s.setVolume);
   const toggleMute = useMusicPlayerStore((s) => s.toggleMute);
 
+  const volumeRef = useWheelVolume<HTMLDivElement>({
+    volume,
+    muted: isMuted,
+    onVolumeChange: setVolume,
+    onMuteChange: (nextMuted) => {
+      if (isMuted !== nextMuted) toggleMute();
+    },
+  });
+
   const shown = isMuted ? 0 : volume;
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
+          ref={volumeRef}
           key="vol-popover"
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
@@ -38,7 +49,10 @@ export function VolumePopover({ open }: { open: boolean }) {
             max={1}
             step={0.01}
             value={shown}
-            onChange={setVolume}
+            onChange={(val) => {
+              if (isMuted && val > 0) toggleMute();
+              setVolume(val);
+            }}
             aria-label={getString("music_volume")}
             className="flex-1"
           />

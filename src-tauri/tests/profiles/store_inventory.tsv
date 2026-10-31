@@ -9,7 +9,7 @@ table	sync_identity	DEVICE	-	The sync device id; stays in Default's file where o
 table	sync_peers	DEFAULT_ONLY	sync	Only Default syncs
 table	sync_log	DEFAULT_ONLY	sync	Only Default syncs
 table	sync_changes	DEFAULT_ONLY	sync	Only Default syncs; local edits are not recorded elsewhere
-table	sync2_sent	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 upload ledger
+table	sync2_sent	DEAD	-	Replaced by sync2_sent_links; still cleared when a group is forgotten
 table	sync2_group	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 group and log positions
 table	sync2_roster	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster
 table	sync2_streams	DEVICE	-	The group's state, in Default's file whichever profile runs: how far each device's log was read
@@ -24,6 +24,12 @@ table	sync2_held_objects	DEVICE	-	The group's state, in Default's file whichever
 table	sync2_live_seen	DEVICE	-	The group's state, in Default's file whichever profile runs: the highest live counter accepted from each device
 table	sync2_consent	DEVICE	-	The group's state, in Default's file whichever profile runs: which devices may control playback here
 table	sync2_pending	DEVICE	-	The group's state, in Default's file whichever profile runs: objects written while the server was out of reach
+table	sync2_sent_links	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 upload ledger, per link
+table	sync2_profile_links	DEVICE	-	The group's state, in Default's file whichever profile runs: which local profile syncs which link
+table	sync2_kept	DEVICE	-	The group's state, in Default's file whichever profile runs: batches kept for a linked profile that isn't running
+table	sync2_profiles	DEVICE	-	The group's state, in Default's file whichever profile runs: the profiles collection, each link's name
+table	sync2_floors	DEVICE	-	The group's state, in Default's file whichever profile runs: how far a link read from a snapshot already goes
+table	sync2_reading	DEVICE	-	The group's state, in Default's file whichever profile runs: links still to be read from their snapshot
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log

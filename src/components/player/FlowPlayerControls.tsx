@@ -48,7 +48,7 @@ import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
 import { Slider } from "../ui/Slider";
-import { volumeAfterWheel } from "../../lib/musicPlayerKeys";
+import { useWheelVolume } from "../../lib/useWheelVolume";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -195,6 +195,13 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     setFullscreenPanel,
     isLiveChatAvailable,
   } = usePlayerStore();
+
+  const volumeRef = useWheelVolume<HTMLDivElement>({
+    volume,
+    muted,
+    onVolumeChange: setVolume,
+    onMuteChange: setMuted,
+  });
 
   // In fullscreen the panel buttons drive the side panel beside the video instead of the sidebar.
   const panelOpen = (panel: FullscreenPanel) =>
@@ -637,14 +644,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               </button>
 
               <div
+                ref={volumeRef}
                 className="group/volume hidden items-center sm:flex bg-chrome-black/20 rounded-full hover:pr-2"
-                onWheel={(event) => {
-                  event.stopPropagation();
-                  const current = muted ? 0 : volume;
-                  const next = volumeAfterWheel(current, event.deltaY);
-                  setVolume(next);
-                  setMuted(next === 0);
-                }}
               >
                 <button
                   type="button"

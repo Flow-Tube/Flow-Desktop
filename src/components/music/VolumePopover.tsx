@@ -3,6 +3,7 @@ import { Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { getString } from "../../lib/i18n/index";
+import { volumeAfterWheel } from "../../lib/musicPlayerKeys";
 import { MENU_ENTER_TRANSITION, MENU_EXIT_TRANSITION } from "../../lib/motion";
 import { Slider } from "../ui/Slider";
 
@@ -23,6 +24,12 @@ export function VolumePopover({ open }: { open: boolean }) {
           animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
           exit={{ opacity: 0, scale: 0.98, transition: MENU_EXIT_TRANSITION }}
           style={{ transformOrigin: "bottom center" }}
+          onWheel={(event) => {
+            event.stopPropagation();
+            const next = volumeAfterWheel(shown, event.deltaY);
+            setVolume(next);
+            if (isMuted && next > 0) toggleMute();
+          }}
           className="flex w-60 items-center gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-3"
         >
           <button
@@ -38,7 +45,10 @@ export function VolumePopover({ open }: { open: boolean }) {
             max={1}
             step={0.01}
             value={shown}
-            onChange={setVolume}
+            onChange={(val) => {
+              if (isMuted && val > 0) toggleMute();
+              setVolume(val);
+            }}
             aria-label={getString("music_volume")}
             className="flex-1"
           />

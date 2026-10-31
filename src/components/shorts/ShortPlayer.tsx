@@ -13,6 +13,7 @@ import { ShortMetadata } from "./ShortMetadata";
 import { ShortActionBar } from "./ShortActionBar";
 import { ShortSidePanel } from "./ShortSidePanel";
 import { Slider } from "../ui/Slider";
+import { volumeAfterWheel } from "../../lib/musicPlayerKeys";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 
 const SIDE_PANEL_WIDTH = 560;
@@ -174,7 +175,17 @@ export function ShortPlayer({
             )}
 
             {active && (
-              <div className="group/volume absolute right-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pr-3">
+              <div
+                className="group/volume absolute right-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pr-3"
+                onWheel={(event) => {
+                  event.stopPropagation();
+                  const current = muted ? 0 : volume;
+                  const next = volumeAfterWheel(current, event.deltaY);
+                  if (muted && next > 0) onToggleMute();
+                  else if (!muted && next === 0) onToggleMute();
+                  onVolumeChange(next);
+                }}
+              >
                 <button
                   type="button"
                   aria-label={muted ? "Unmute" : "Mute"}

@@ -1,4 +1,5 @@
 import type { Command, LiveDevice, LiveStatus, Now } from "../api/live";
+import { reachable } from "./freshness";
 import { positionOf } from "./position";
 
 /** What a device should show after a command, until its next `now` says what it really does. */
@@ -49,7 +50,7 @@ export function withOverrides(
   return { status: { ...status, devices }, overrides: waiting };
 }
 
-/** The device the user chose to control, while it stays online. */
-export function stillControlled(status: LiveStatus | null, did: string | null): string | null {
-  return did && status?.online.includes(did) ? did : null;
+/** The device the user chose to control, while it can be reached. */
+export function stillControlled(status: LiveStatus | null, did: string | null, nowMs = Date.now()): string | null {
+  return did && reachable(status, did, nowMs) ? did : null;
 }

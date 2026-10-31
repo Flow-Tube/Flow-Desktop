@@ -1,5 +1,6 @@
 import type { LinkedDevice } from "../api/linked";
 import type { DeviceKind, LiveStatus, Now } from "../api/live";
+import { playingNow, reachable as reachableNow } from "./freshness";
 
 export type DeviceGroup = "playing" | "available" | "offline";
 
@@ -24,7 +25,8 @@ function kindOf(platform: string): DeviceKind {
 
 /**
  * The group's devices for "Play on": this one, from what it plays (`here`), and the others from
- * the live channel. A device the live channel and the LAN can't reach is offline.
+ * the live channel. A device the live channel and the LAN can't reach, and that hasn't spoken
+ * lately, is offline; one whose last playing `now` is too old no longer counts as playing.
  */
 export function playOnDevices(
   status: LiveStatus | null,
@@ -32,7 +34,6 @@ export function playOnDevices(
   here: Now,
   nowMs: number,
 ): PlayOnDevice[] {
-  const online = new Set(status?.online ?? []);
   return linked
     .map((device): PlayOnDevice => {
       if (device.thisDevice) {
@@ -48,13 +49,13 @@ export function playOnDevices(
         };
       }
       const live = status?.devices[device.id];
-      const reachable = online.has(device.id);
+      const reachable = reachableNow(status, device.id, nowMs);
       return {
         did: device.id,
         name: device.name,
         kind: live?.kind ?? kindOf(device.platform),
         thisDevice: false,
-        group: !reachable ? "offline" : live?.now?.state === "playing" ? "playing" : "available",
+        group: !reachable ? "offline" : playingNow(live, nowMs) ? "playing" : "available",
         now: reachable ? (live?.now ?? null) : null,
         nowAtMs: live?.nowAtMs ?? 0,
         lastSeenMs: device.lastSyncMs ?? null,

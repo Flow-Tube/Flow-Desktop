@@ -20,6 +20,8 @@ SYNC
 - Data synced before comes back if this computer lost it. Music playlists from your phone no longer return under a new name, history sent to the phone has thumbnails, and subscription groups are sent when Flow Desktop scans the phone's code.
 - Play on: moving playback between Flow Desktop and your phone works again. A phone that paused or stopped no longer stays listed as playing, and a phone at full volume no longer shows its volume at 0.
 - Play on: picking a device now works as on Android. This computer takes playback back from the device you control, picking another device moves that device's session there, and a device that stops answering stops showing as playing.
+- Linked devices: choose which profiles sync. A profile starts its own synced profile or joins one from your other devices, and Profiles under Linked devices adds one that only your other devices have.
+- A synced profile that isn't open keeps what arrives and catches up when you switch to it. Stopping a profile on every device keeps its data on each one.
 
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.

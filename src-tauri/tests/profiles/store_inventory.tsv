@@ -8,7 +8,7 @@ table	download_jobs	DEVICE	-	The orphan-partial sweep deletes .flowpart files no
 table	sync_identity	DEVICE	-	The sync device id; stays in Default's file where older builds read it
 table	sync_peers	DEFAULT_ONLY	sync	Only Default syncs
 table	sync_log	DEFAULT_ONLY	sync	Only Default syncs
-table	sync_changes	DEFAULT_ONLY	sync	Only Default syncs; local edits are not recorded elsewhere
+table	sync_changes	PROFILE	sync	Each profile that syncs records its own local edits
 table	sync2_sent	DEAD	-	Replaced by sync2_sent_links; still cleared when a group is forgotten
 table	sync2_group	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 group and log positions
 table	sync2_roster	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster

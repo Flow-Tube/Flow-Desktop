@@ -511,7 +511,8 @@ function MessageScreen({ icon, title, message }: { icon: React.ReactNode; title:
 // Page
 // --------------------------------------------------------------------------------------------
 
-/** Only Default syncs (FLOW-SYNC/1 carries no profile), so other profiles offer the switch. */
+/** Nearby sync (FLOW-SYNC/1) carries no profile and syncs Default only, so other profiles offer the
+ * switch; Linked devices below sync any profile. */
 function DefaultOnlyScreen({ defaultProfile }: { defaultProfile: Profile }) {
   const switchTo = useProfilesStore((state) => state.switchTo);
   const switching = useProfilesStore((state) => state.switchingTo !== null);
@@ -631,7 +632,7 @@ export default function Sync() {
         </motion.div>
       </AnimatePresence>
 
-      {screenKey === "setup" && <LinkedDevicesSection />}
+      {(screenKey === "setup" || screenKey === "defaultOnly") && <LinkedDevicesSection />}
     </div>
   );
 }

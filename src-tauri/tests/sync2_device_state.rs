@@ -41,7 +41,12 @@ async fn applied_records_count_as_sent_in_defaults_database() {
         .find(|c| c.collection == Collection::WatchHistory)
         .unwrap();
     let records: Vec<&[u8]> = history.ndjson.split(|&b| b == b'\n').collect();
-    let content = batch_content(Collection::WatchHistory, "head", "link", &records);
+    let content = batch_content(
+        Collection::WatchHistory.key(),
+        "head",
+        Some("link"),
+        &records,
+    );
     let batch = parse_batch(&content).unwrap();
     apply_batches(&pool, "app-b", "sender", &[batch], 0)
         .await

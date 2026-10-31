@@ -39,6 +39,8 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedAlreadyLinked: "linked_error_already_linked",
   linkedLanUnreachable: "linked_error_lan_unreachable",
   linkedOtherFolder: "linked_error_other_folder",
+  linkedLastProfile: "linked_error_last_profile",
+  linkedProfileTaken: "linked_error_profile_taken",
 };
 
 /** The actionable, translated message for a sync failure, falling back to the backend's text. */

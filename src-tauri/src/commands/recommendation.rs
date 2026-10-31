@@ -11,10 +11,10 @@ use crate::flow_neuro::bootstrap::ImportedVideo;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
-use crate::profiles::ActiveProfile;
 use crate::services::blocked_channel_names::{self, BlockedChannelNames};
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync2::actions::leave_if_linked;
+use crate::sync2::profile_actions::syncs_link;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -436,9 +436,8 @@ pub async fn import_brain(
 pub async fn reset_brain(
     app: AppHandle,
     recommendation_service: State<'_, RecommendationService>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    if profile.is_default {
+    if syncs_link(&app).await {
         leave_if_linked(&app).await.map_err(|e| linked_err(&e))?;
     }
     recommendation_service

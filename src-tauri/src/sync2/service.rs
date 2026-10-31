@@ -20,9 +20,10 @@ use super::group_store::GroupStore;
 use super::kept::{applied as applied_kept, has_kept, keep, kept};
 use super::live_hub::forget_keys;
 use super::names::device_names;
+use super::profile_actions::name_linked;
 use super::profile_links::reading;
 use super::server::StoreError;
-use super::snapshot::{note_merged, snapshot_due};
+use super::snapshot::{PROFILES_KEY, note_merged, snapshot_due};
 use super::state::{link_read, links_to_read, load_group, save_floors};
 use crate::sync::canonical::Collection;
 use crate::sync::export::export_collections;
@@ -115,7 +116,7 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     let Some(record) = load_group(&local.pool).await? else {
         return Ok(Vec::new());
     };
-    let mut session = open_session(&local.pool, &record, &local.device).await?;
+    let mut session = open_session(&local, &record).await?;
     let Some(received) = exchange(app, &local, &mut session).await? else {
         return Ok(Vec::new());
     };
@@ -165,6 +166,8 @@ async fn exchange(
     };
     session.store().upload_pending().await?;
     session.push(pool, exported).await?;
+    name_linked(app, pool, &local.meta.app).await?;
+    session.push_profiles(pool).await?;
 
     let pulled = session.pull(pool).await?;
     let groups: Vec<_> = pulled
@@ -185,6 +188,9 @@ async fn exchange(
     {
         let exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;
         session.write_snapshot(pool, exported).await?;
+    }
+    if snapshot_due(pool, PROFILES_KEY).await? {
+        session.write_profiles_snapshot(pool).await?;
     }
     Ok(Some(received))
 }

@@ -8,6 +8,7 @@ use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
 use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
+use crate::sync2::profile_actions::{self, LinkedProfiles};
 use crate::sync2::service::{self, Received};
 use crate::sync2::webdav::WebDavLogin;
 
@@ -180,4 +181,46 @@ pub async fn linked_answer(app: AppHandle, accept: bool) {
 #[tauri::command]
 pub async fn linked_cancel(app: AppHandle) {
     link_task::cancel(&app);
+}
+
+#[tauri::command]
+pub async fn linked_profiles(app: AppHandle) -> Result<LinkedProfiles, ErrorResponse> {
+    profile_actions::profiles(&app).await.map_err(|e| err(&e))
+}
+
+/// Syncs `profile` under its own link, or joining `link`.
+#[tauri::command]
+pub async fn linked_sync_profile(
+    app: AppHandle,
+    profile: String,
+    link: Option<String>,
+) -> Result<(), ErrorResponse> {
+    profile_actions::sync_profile(&app, &profile, link.as_deref())
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_stop_profile(app: AppHandle, profile: String) -> Result<(), ErrorResponse> {
+    profile_actions::stop_profile(&app, &profile)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_delete_profile(app: AppHandle, link: String) -> Result<(), ErrorResponse> {
+    profile_actions::delete_everywhere(&app, &link)
+        .await
+        .map_err(|e| err(&e))
+}
+
+/// A restored device's Default joins `link`, or starts its own when `None`.
+#[tauri::command]
+pub async fn linked_choose_profile(
+    app: AppHandle,
+    link: Option<String>,
+) -> Result<(), ErrorResponse> {
+    profile_actions::choose_for_default(&app, link.as_deref())
+        .await
+        .map_err(|e| err(&e))
 }

@@ -12,10 +12,12 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 use super::actions::{
-    default_link, local, login_refused, open_session, set_login_refused, stop_if_shut_out, stopped,
+    Local, default_link, local, login_refused, open_session, set_login_refused, state_pool,
+    stop_if_shut_out, stopped,
 };
 use super::batches::{IncomingBatch, apply_batches};
-use super::engine::{EngineError, Result, now_ms};
+use super::engine::{EngineError, Result, Session, now_ms};
+use super::group_store::GroupStore;
 use super::live_hub::forget_keys;
 use super::names::device_names;
 use super::server::StoreError;
@@ -78,7 +80,7 @@ pub fn last_sync(app: &AppHandle) -> Option<LastSync> {
 pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
     let state = app.state::<BackgroundSync>();
     let _running = state.running.lock().await;
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let pool = state_pool(app);
     if load_group(&pool).await?.is_none()
         || stopped(&pool).await?.is_some()
         || login_refused(&pool).await?
@@ -112,14 +114,42 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     let Some(record) = load_group(&local.pool).await? else {
         return Ok(Vec::new());
     };
-    let pool = &local.pool;
-    let mut session = open_session(pool, &record, &local.device).await?;
+    let mut session = open_session(&local.pool, &record, &local.device).await?;
+    // Only the linked profile's data is exchanged; other profiles keep the group going.
+    let received = if local.profile.is_default {
+        let Some(received) = exchange(app, &local, &mut session).await? else {
+            return Ok(Vec::new());
+        };
+        received
+    } else {
+        session.store().upload_pending().await?;
+        Vec::new()
+    };
+    session.collect_garbage(&local.pool).await?;
+    // A server without join requests (older than flow-sync#41) shouldn't fail the sync.
+    if let Some(server) = session.store().server()
+        && let Ok(requests) = server.join_requests().await
+        && !requests.is_empty()
+    {
+        let _ = app.emit(EVENT_JOIN_REQUESTS, requests);
+    }
+    Ok(received)
+}
+
+/// Pushes the running profile's changes and applies everyone else's. `None` while a restored
+/// device can't choose its link yet.
+async fn exchange(
+    app: &AppHandle,
+    local: &Local,
+    session: &mut Session<'_, GroupStore>,
+) -> Result<Option<Vec<Received>>> {
+    let (pool, data) = (&local.pool, &local.data);
     if !session.adopt_link(pool, &default_link(app)).await? {
-        return Ok(Vec::new());
+        return Ok(None);
     }
 
     flush_brains(app).await;
-    let mut exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
+    let mut exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;
     enrich_outgoing_albums(app, &mut exported).await;
     session.store().upload_pending().await?;
     session.push(pool, exported).await?;
@@ -128,7 +158,7 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     let (changed, received) = if pulled.batches.is_empty() {
         (Vec::new(), BTreeMap::new())
     } else {
-        apply(app, pool, &local.meta.app, &pulled.batches).await?
+        apply(app, data, &local.meta.app, &pulled.batches).await?
     };
     if !changed.is_empty() {
         let _ = app.emit(EVENT_REFRESH, &changed);
@@ -137,9 +167,9 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     let names = if received.is_empty() {
         BTreeMap::new()
     } else {
-        device_names(&mut session).await.unwrap_or_default()
+        device_names(session).await.unwrap_or_default()
     };
-    let received: Vec<Received> = received
+    let received = received
         .into_iter()
         .map(|(sender, count)| Received {
             name: names
@@ -150,18 +180,10 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
         })
         .collect();
     if snapshot_due(pool, &session.record().link).await? {
-        let exported = export_collections(pool, &local.meta.app, &Collection::ALL).await?;
+        let exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;
         session.write_snapshot(pool, exported).await?;
     }
-    session.collect_garbage(pool).await?;
-    // A server without join requests (older than flow-sync#41) shouldn't fail the sync.
-    if let Some(server) = session.store().server()
-        && let Ok(requests) = server.join_requests().await
-        && !requests.is_empty()
-    {
-        let _ = app.emit(EVENT_JOIN_REQUESTS, requests);
-    }
-    Ok(received)
+    Ok(Some(received))
 }
 
 /// Applies each sender's batches, and returns the collections they touched and how many records

@@ -165,12 +165,14 @@ pub async fn mark_sent(pool: &SqlitePool, outgoing: &Outgoing) -> Result<(), Syn
     remember(pool, &outgoing.sent, outgoing.now_ms).await
 }
 
+/// The record of what was sent is the device's, in Default's database like the rest of the group's
+/// state, while `pool` may be the running profile's.
 async fn remember(
     pool: &SqlitePool,
     records: &[(Collection, String, String)],
     now_ms: i64,
 ) -> Result<(), SyncError> {
-    let mut tx = pool.begin().await?;
+    let mut tx = crate::db::device::pool(pool).begin().await?;
     for (collection, key, hash) in records {
         sqlx::query("INSERT INTO sync2_sent (collection, record_key, hash, sent_at) VALUES (?, ?, ?, ?) ON CONFLICT (collection, record_key) DO UPDATE SET hash = excluded.hash, sent_at = excluded.sent_at")
             .bind(collection.key())

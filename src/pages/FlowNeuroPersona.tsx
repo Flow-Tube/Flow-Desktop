@@ -26,10 +26,35 @@ import { LearningActivity } from "../components/persona/LearningActivity";
 import { ProfileData } from "../components/persona/ProfileData";
 
 import { RefreshCw, BrainCog  } from "lucide-react";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getString } from "../lib/i18n/index";
+import { interestChoices } from "../lib/linked/interestChoices";
+import { useLinkedProfiles } from "../lib/linked/useLinkedProfiles";
+import { profileDisplayName } from "../lib/profiles/display";
+import { useProfilesStore } from "../store/useProfilesStore";
+import { Select } from "../components/ui/Select";
+
+/** Which profile's interests to show: `?profile=` names a synced profile other than the running one. */
+function useViewedProfile() {
+  const [params, setParams] = useSearchParams();
+  const view = useProfilesStore((state) => state.view);
+  const loadProfiles = useProfilesStore((state) => state.load);
+  const { profiles: linked } = useLinkedProfiles();
+  useEffect(() => {
+    if (!view) void loadProfiles();
+  }, [view, loadProfiles]);
+  const choices = view && linked ? interestChoices(view, linked.local) : [];
+  const requested = params.get("profile");
+  const viewing = choices.find((profile) => profile.id === requested && profile.id !== view?.activeId) ?? null;
+  const choose = (id: string) => setParams(id === view?.activeId ? {} : { profile: id });
+  return { choices, viewing, choose, activeId: view?.activeId ?? "" };
+}
 
 export function FlowNeuroPersona() {
-  const { brain, persona, musicProfile, loading, refreshing, failed, refresh } = usePersonaData();
+  const { choices, viewing, choose, activeId } = useViewedProfile();
+  const readOnly = viewing !== null;
+  const { brain, persona, musicProfile, loading, refreshing, failed, refresh } = usePersonaData(viewing?.id ?? null);
 
   const handleUnblockTopic = async (topic: string) => {
     try {
@@ -125,9 +150,22 @@ export function FlowNeuroPersona() {
               {getString("persona_title")}
             </h1>
             <p className="text-sm text-[var(--color-on-surface-variant)] mt-1">
-              {getString("persona_subtitle")}
+              {viewing ? getString("persona_read_only", profileDisplayName(viewing)) : getString("persona_subtitle")}
             </p>
           </div>
+
+          {choices.length > 1 && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs font-semibold text-[var(--color-on-surface-variant)]">
+                {getString("persona_profile_label")}
+              </span>
+              <Select
+                value={viewing?.id ?? activeId}
+                onChange={choose}
+                options={choices.map((profile) => ({ value: profile.id, label: profileDisplayName(profile) }))}
+              />
+            </div>
+          )}
 
           <button
             onClick={() => refresh(true)}
@@ -172,8 +210,8 @@ export function FlowNeuroPersona() {
           <div className="col-span-12 lg:col-span-6">
             <BlockedContent
               brain={activeBrain}
-              onUnblockTopic={handleUnblockTopic}
-              onUnblockChannel={handleUnblockChannel}
+              onUnblockTopic={readOnly ? undefined : handleUnblockTopic}
+              onUnblockChannel={readOnly ? undefined : handleUnblockChannel}
             />
           </div>
         )}
@@ -196,20 +234,18 @@ export function FlowNeuroPersona() {
           </>
         )}
 
-        <div className="col-span-12 gap-6 flex flex-col">
-          {/* Blocked music artists */}
-          <MusicBlockedArtists />
-
-          <LearningActivity />
-        </div>
-
-        <div className="col-span-12">
-          <ProfileData
-            brain={activeBrain}
-            onImport={handleImportBrain}
-            onReset={handleResetBrain}
-          />
-        </div>
+        {/* The running profile's own lists and actions; another profile's view is read only. */}
+        {!readOnly && (
+          <>
+            <div className="col-span-12 gap-6 flex flex-col">
+              <MusicBlockedArtists />
+              <LearningActivity />
+            </div>
+            <div className="col-span-12">
+              <ProfileData brain={activeBrain} onImport={handleImportBrain} onReset={handleResetBrain} />
+            </div>
+          </>
+        )}
 
       </div>
     </div>

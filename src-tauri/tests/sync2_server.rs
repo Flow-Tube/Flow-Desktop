@@ -363,6 +363,33 @@ async fn the_server_says_when_it_last_heard_from_each_device() {
 }
 
 #[tokio::test]
+async fn the_server_reports_its_storage_and_what_it_speaks() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "used": 2048, "quota": 4096, "objects": 7, "devices": {}
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/info"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "api": ["v1"], "protocol": ["FLOW-SYNC/2"], "claimed": true, "live": true, "limits": {}
+        })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let status = store.status().await.unwrap();
+    assert_eq!((status.used, status.quota, status.objects), (2048, 4096, 7));
+    let info = store.info().await.unwrap();
+    assert_eq!(info.protocols, ["FLOW-SYNC/2"]);
+    assert!(info.live);
+}
+
+#[tokio::test]
 async fn a_server_reset_to_empty_says_the_group_is_gone() {
     use flow_desktop_lib::sync2::engine::EngineError;
 

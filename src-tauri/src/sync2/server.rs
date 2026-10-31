@@ -233,14 +233,44 @@ impl ServerStore {
         unreachable!("the loop returns on its second pass")
     }
 
-    /// When the server last heard from each device, by `did` (`GET /v1/status`).
-    pub async fn last_seen(&self) -> Result<BTreeMap<String, i64>> {
+    /// The group's storage and when the server last heard from each device (`GET /v1/status`).
+    pub async fn status(&self) -> Result<ServerStatus> {
         let status = decode(self.authorized(Method::GET, "v1/status", None).await?).await?;
         let devices = status["devices"].as_object().ok_or(StoreError::Malformed)?;
-        Ok(devices
-            .iter()
-            .filter_map(|(did, device)| Some((did.clone(), device["seen"].as_i64()?)))
-            .collect())
+        let number = |name: &str| status[name].as_u64().ok_or(StoreError::Malformed);
+        Ok(ServerStatus {
+            used: number("used")?,
+            quota: number("quota")?,
+            objects: number("objects")?,
+            seen: devices
+                .iter()
+                .filter_map(|(did, device)| Some((did.clone(), device["seen"].as_i64()?)))
+                .collect(),
+        })
+    }
+
+    /// When the server last heard from each device, by `did`.
+    pub async fn last_seen(&self) -> Result<BTreeMap<String, i64>> {
+        Ok(self.status().await?.seen)
+    }
+
+    /// What the server speaks (`GET /v1/info`, no token needed).
+    pub async fn info(&self) -> Result<ServerInfo> {
+        let response = self
+            .client
+            .get(self.url("v1/info")?)
+            .send()
+            .await
+            .map_err(StoreError::Network)?;
+        let info = decode(response).await?;
+        let protocols = info["protocol"].as_array().ok_or(StoreError::Malformed)?;
+        Ok(ServerInfo {
+            protocols: protocols
+                .iter()
+                .filter_map(|p| p.as_str().map(str::to_owned))
+                .collect(),
+            live: info["live"].as_bool().unwrap_or(false),
+        })
     }
 
     /// A request with the operator's admin token instead of a device token.
@@ -463,6 +493,22 @@ async fn check(response: reqwest::Response) -> Result<reqwest::Response> {
         status,
         code: code.unwrap_or_else(|| "unknown".to_owned()),
     })
+}
+
+/// The group's storage on a Flow server, and when it last heard from each device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerStatus {
+    pub used: u64,
+    pub quota: u64,
+    pub objects: u64,
+    pub seen: BTreeMap<String, i64>,
+}
+
+/// The protocols a Flow server speaks, and whether it relays live messages.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ServerInfo {
+    pub protocols: Vec<String>,
+    pub live: bool,
 }
 
 pub(super) async fn decode(response: reqwest::Response) -> Result<Value> {

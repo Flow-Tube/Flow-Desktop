@@ -16,8 +16,9 @@ use super::actions::{
 };
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{EngineError, Result, Session, now_ms};
+use super::error_log;
 use super::group_store::GroupStore;
-use super::kept::{applied as applied_kept, has_kept, keep, kept};
+use super::kept::{applied as applied_kept, keep, kept, kept_count};
 use super::live_hub::forget_keys;
 use super::names::device_names;
 use super::profile_actions::name_linked;
@@ -104,6 +105,11 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
         at_ms: now_ms(),
         error: result.as_ref().err().map(|e| e.kind().to_owned()),
     };
+    if let Some(kind) = &last.error
+        && let Err(failed) = error_log::note(&pool, kind, last.at_ms).await
+    {
+        tracing::warn!(target: "flow::sync2", kind = failed.kind(), "sync error not logged");
+    }
     if let Ok(mut slot) = state.last.lock() {
         *slot = Some(last.clone());
     }
@@ -183,7 +189,7 @@ async fn exchange(
     let received = applied.received(session).await;
     if let Some(link) = &reading.active
         && snapshot_due(pool, link).await?
-        && !has_kept(pool, link).await?
+        && kept_count(pool, link).await? == 0
         && !links_to_read(pool).await?.contains(link)
     {
         let exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;

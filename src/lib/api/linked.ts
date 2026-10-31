@@ -79,7 +79,29 @@ export interface LinkedProfiles {
   chooseForDefault: boolean;
 }
 
+/** The Sync page's dashboard (`src-tauri/src/sync2/dashboard.rs`). */
+export interface Dashboard {
+  kind: "server" | "webdav" | "lan";
+  storeUrl?: string | null;
+  /** What a Flow server speaks, when it answered. */
+  server?: { protocols: string[]; live: boolean } | null;
+  /** A Flow server's usage in bytes and objects, when it answered. */
+  storage?: { used: number; quota: number; objects: number } | null;
+  /** Recent sync failures, newest first: the error kind and when. */
+  errors: { kind: string; atMs: number }[];
+  profiles: SyncedProfileState[];
+}
+
+/** A profile that syncs here: batches waiting for it to run, and this device's last snapshot. */
+export interface SyncedProfileState {
+  profile: string;
+  link: string;
+  kept: number;
+  ownSnapshotMs?: number | null;
+}
+
 export const getLinkedStatus = () => invokeBackend<LinkedStatus>("linked_status");
+export const getDashboard = () => invokeBackend<Dashboard>("linked_dashboard");
 export const getLinkedProfiles = () => invokeBackend<LinkedProfiles>("linked_profiles");
 /** Syncs `profile` under a link of its own, or joining `link`. */
 export const syncProfile = (profile: string, link: string | null) =>

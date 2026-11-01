@@ -5,6 +5,7 @@ import type { Profile } from "../../../lib/api/profiles";
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedProfiles } from "../../../lib/linked/useLinkedProfiles";
 import { profileDisplayName } from "../../../lib/profiles/display";
+import { profileErrorMessage } from "../../../lib/profiles/profileErrors";
 import { useProfilesStore } from "../../../store/useProfilesStore";
 import { Button } from "../../ui/Button";
 import { ProfileAvatar } from "../../ui/ProfileAvatar";
@@ -21,22 +22,33 @@ function syncedName(profile: SyncedProfile): string {
 
 type Controls = ReturnType<typeof useLinkedProfiles>;
 
-/** One profile here: whether it syncs, how it starts, and how it stops. */
+/** One profile here: whether it syncs, how it starts, and how it stops. A profile's data goes
+ * out only while it runs, so one that isn't running switches before it can start. */
 function ProfileRow({
   profile,
   link,
+  running,
   synced,
   controls,
 }: {
   profile: Profile;
   link: string | null;
+  running: boolean;
   synced: SyncedProfile[];
   controls: Controls;
 }) {
   const photo = useProfilesStore((state) => state.view?.photos[profile.id]);
+  const switchTo = useProfilesStore((state) => state.switchTo);
+  const switching = useProfilesStore((state) => state.switchingTo !== null);
   const [choosing, setChoosing] = useState<"start" | "stop" | null>(null);
   const [joining, setJoining] = useState(NEW_LINK);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const name = profileDisplayName(profile);
+
+  const onSwitch = () => {
+    setSwitchError(null);
+    switchTo(profile).catch((reason: unknown) => setSwitchError(profileErrorMessage(reason, "profiles_switch_failed")));
+  };
 
   const onToggle = (on: boolean) => {
     if (on && synced.length === 0) void controls.start(profile.id, null);
@@ -60,8 +72,15 @@ function ProfileRow({
             {getString(link ? "linked_profile_syncs" : "linked_profile_local")}
           </div>
         </div>
-        <ToggleSwitch checked={link !== null} disabled={controls.busy} onChange={onToggle} />
+        {link === null && !running ? (
+          <Button size="sm" variant="tonal" disabled={controls.busy || switching} onClick={onSwitch}>
+            {getString("linked_profile_switch_to_sync")}
+          </Button>
+        ) : (
+          <ToggleSwitch checked={link !== null} disabled={controls.busy} onChange={onToggle} />
+        )}
       </div>
+      {switchError && <p className="pl-12 text-sm text-chrome-red-400">{switchError}</p>}
       {choosing === "start" && (
         <div className="flex flex-wrap items-center gap-2 pl-12">
           <span className="text-sm text-chrome-neutral-400">{getString("linked_profile_as")}</span>
@@ -145,6 +164,7 @@ export function ProfilesCard({ className = "" }: { className?: string }) {
             key={local.id}
             profile={profile}
             link={local.link ?? null}
+            running={local.id === view.activeId}
             synced={profiles.synced}
             controls={controls}
           />

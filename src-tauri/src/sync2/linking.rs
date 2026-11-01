@@ -311,9 +311,9 @@ where
         seq: after.seq,
         link: session
             .reading()
-            .welcome_link()
-            .ok_or(EngineError::LastProfile)?
-            .to_owned(),
+            .welcome
+            .clone()
+            .ok_or(EngineError::LastProfile)?,
         store,
         entries,
         wrap,

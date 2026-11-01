@@ -71,6 +71,8 @@ pub enum EngineError {
     LastProfile,
     #[error("that profile already syncs on this device")]
     ProfileTaken,
+    #[error("only the running profile can start syncing")]
+    NotRunning,
 }
 
 impl EngineError {
@@ -106,6 +108,7 @@ impl EngineError {
             Self::OtherFolder => "linkedOtherFolder",
             Self::LastProfile => "linkedLastProfile",
             Self::ProfileTaken => "linkedProfileTaken",
+            Self::NotRunning => "linkedProfileNotRunning",
         }
     }
 }

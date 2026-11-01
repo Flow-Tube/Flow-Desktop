@@ -12,14 +12,18 @@ use crate::sync::error::SyncError;
 pub struct Reading {
     pub active: Option<String>,
     pub kept: BTreeSet<String>,
+    /// The link a new device's Default joins: Default's here, else the first one synced.
+    pub welcome: Option<String>,
 }
 
 impl Reading {
     /// Only `link`, for the running profile; nothing when it is empty (a restored device that
     /// hasn't chosen yet).
     pub fn single(link: &str) -> Self {
+        let active = (!link.is_empty()).then(|| link.to_owned());
         Self {
-            active: (!link.is_empty()).then(|| link.to_owned()),
+            welcome: active.clone(),
+            active,
             kept: BTreeSet::new(),
         }
     }
@@ -30,11 +34,6 @@ impl Reading {
 
     pub fn reads(&self, link: &str) -> bool {
         self.active.as_deref() == Some(link) || self.kept.contains(link)
-    }
-
-    /// The link a new device's Default joins: the running profile's, else the first one synced.
-    pub fn welcome_link(&self) -> Option<&str> {
-        self.links().next()
     }
 }
 
@@ -100,7 +99,14 @@ pub async fn reading(
         link_profile(pool, default, joined).await?;
         rows.push((default.to_owned(), joined.to_owned()));
     }
-    let mut reading = Reading::default();
+    let mut reading = Reading {
+        welcome: rows
+            .iter()
+            .find(|(profile, _)| profile == default)
+            .or(rows.first())
+            .map(|(_, link)| link.clone()),
+        ..Reading::default()
+    };
     for (profile, link) in rows {
         if profile == running {
             reading.active = Some(link);

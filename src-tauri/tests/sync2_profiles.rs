@@ -10,7 +10,7 @@ use flow_desktop_lib::sync2::batches::{IncomingBatch, apply_batches};
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
 use flow_desktop_lib::sync2::kept::kept;
 use flow_desktop_lib::sync2::paths::log_path;
-use flow_desktop_lib::sync2::profile_links::Reading;
+use flow_desktop_lib::sync2::profile_links::{Reading, link_profile, reading, unlink};
 use flow_desktop_lib::sync2::profile_names::set;
 use sqlx::SqlitePool;
 use sync2_common::{Group, MemoryStore, device_pool, empty_pool, exported, group, watch, watched};
@@ -25,6 +25,7 @@ fn running(active: &str, kept: &[&str]) -> Reading {
             .iter()
             .map(|l| (*l).to_owned())
             .collect::<BTreeSet<_>>(),
+        welcome: Some(active.to_owned()),
     }
 }
 
@@ -243,4 +244,22 @@ async fn a_deleted_profile_no_longer_holds_back_garbage_collection() {
     read_each_other(&mut a, &mut b).await;
     a.collect_garbage(&a_state).await.unwrap();
     assert!((1..=pushed).all(|seq| !has(&g, seq)));
+}
+
+#[tokio::test]
+async fn a_new_device_joins_defaults_link_whichever_profile_runs() {
+    let state = empty_pool().await;
+    link_profile(&state, "default", HOME).await.unwrap();
+    link_profile(&state, "kids", KIDS).await.unwrap();
+    let kids_running = reading(&state, HOME, "kids", "default").await.unwrap();
+    assert_eq!(kids_running.active.as_deref(), Some(KIDS));
+    assert_eq!(kids_running.welcome.as_deref(), Some(HOME));
+
+    unlink(&state, "default").await.unwrap();
+    let only_kids = reading(&state, HOME, "kids", "default").await.unwrap();
+    assert_eq!(
+        only_kids.welcome.as_deref(),
+        Some(KIDS),
+        "else the first synced"
+    );
 }

@@ -182,7 +182,7 @@ type AmbientSample = {
 };
 
 const AMBIENT_BASE_WIDTH = 36;
-const AMBIENT_SAMPLE_INTERVAL_MS = 1500;
+const AMBIENT_SAMPLE_INTERVAL_MS = 2500;
 // Applied to the sampled colors in place of a CSS saturate() filter, which would
 // re-rasterize the whole window-wide glow layer on every repaint.
 const AMBIENT_SATURATION = 1.5;
@@ -270,11 +270,11 @@ function extractAmbientSample(context: CanvasRenderingContext2D, width: number, 
     .join(",");
 
   return {
-    top: ambientRgba(top, 0.92),
-    right: ambientRgba(right, 0.82),
-    bottom: ambientRgba(bottom, 0.92),
-    left: ambientRgba(left, 0.82),
-    center: ambientRgba(center, 0.5),
+    top: ambientRgba(top, 0.45),
+    right: ambientRgba(right, 0.4),
+    bottom: ambientRgba(bottom, 0.45),
+    left: ambientRgba(left, 0.4),
+    center: ambientRgba(center, 0.25),
     raw: [top, right, bottom, left, center],
     key,
   };
@@ -282,11 +282,11 @@ function extractAmbientSample(context: CanvasRenderingContext2D, width: number, 
 
 function makeAmbientGradient(sample: AmbientSample): string {
   return [
-    `radial-gradient(ellipse 65% 55% at 50% 0%, ${sample.top} 0%, transparent 75%)`,
-    `radial-gradient(ellipse 65% 55% at 50% 100%, ${sample.bottom} 0%, transparent 75%)`,
-    `radial-gradient(ellipse 55% 65% at 0% 50%, ${sample.left} 0%, transparent 75%)`,
-    `radial-gradient(ellipse 55% 65% at 100% 50%, ${sample.right} 0%, transparent 75%)`,
-    `radial-gradient(ellipse 70% 60% at 50% 50%, ${sample.center} 0%, transparent 80%)`,
+    `radial-gradient(ellipse 45% 30% at 50% 0%, ${sample.top} 0%, transparent 60%)`,
+    `radial-gradient(ellipse 45% 30% at 50% 100%, ${sample.bottom} 0%, transparent 60%)`,
+    `radial-gradient(ellipse 30% 45% at 0% 50%, ${sample.left} 0%, transparent 55%)`,
+    `radial-gradient(ellipse 30% 45% at 100% 50%, ${sample.right} 0%, transparent 55%)`,
+    `radial-gradient(ellipse 50% 40% at 50% 50%, ${sample.center} 0%, transparent 65%)`,
   ].join(", ");
 }
 
@@ -300,7 +300,7 @@ function isColorDeltaSignificant(prev: AmbientSample | null, next: AmbientSample
     if (!c1 || !c2) continue;
     totalDelta += Math.abs(c1[0] - c2[0]) + Math.abs(c1[1] - c2[1]) + Math.abs(c1[2] - c2[2]);
   }
-  return totalDelta >= 36;
+  return totalDelta >= 50;
 }
 
 function extractCodecMimeType(mimeType?: string | null) {
@@ -543,14 +543,14 @@ export const Player: React.FC<PlayerProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
-  const [ambientLayers, setAmbientLayers] = useState<{
-    layerA: string;
-    layerB: string;
-    activeLayer: "A" | "B";
+  const [ambientGradients, setAmbientGradients] = useState<{
+    base: string;
+    crossfade: string;
+    isFading: boolean;
   }>({
-    layerA: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-    layerB: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-    activeLayer: "A",
+    base: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+    crossfade: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+    isFading: false,
   });
   const lastSampleRef = useRef<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
 
@@ -560,20 +560,21 @@ export const Player: React.FC<PlayerProps> = ({
     }
     lastSampleRef.current = nextSample;
     const nextGradient = makeAmbientGradient(nextSample);
-    setAmbientLayers((current) => {
-      if (current.activeLayer === "A") {
-        return {
-          layerA: current.layerA,
-          layerB: nextGradient,
-          activeLayer: "B",
-        };
-      } else {
-        return {
-          layerA: nextGradient,
-          layerB: current.layerB,
-          activeLayer: "A",
-        };
-      }
+    setAmbientGradients((prev) => ({
+      base: prev.isFading ? prev.crossfade : prev.base,
+      crossfade: nextGradient,
+      isFading: true,
+    }));
+  }, []);
+
+  const handleAmbientCrossfadeEnd = useCallback(() => {
+    setAmbientGradients((current) => {
+      if (!current.isFading) return current;
+      return {
+        base: current.crossfade,
+        crossfade: current.crossfade,
+        isFading: false,
+      };
     });
   }, []);
   const {
@@ -680,10 +681,10 @@ export const Player: React.FC<PlayerProps> = ({
     if (!showAmbient) {
       ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
       lastSampleRef.current = DEFAULT_AMBIENT_SAMPLE;
-      setAmbientLayers({
-        layerA: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-        layerB: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-        activeLayer: "A",
+      setAmbientGradients({
+        base: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+        crossfade: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+        isFading: false,
       });
       return;
     }
@@ -2624,24 +2625,25 @@ export const Player: React.FC<PlayerProps> = ({
             isFullscreen
               ? "inset-0 rounded-none"
               : isTheaterSurface
-              ? "-inset-x-8 -inset-y-12 sm:-inset-x-14 sm:-inset-y-16 rounded-none"
-              : "-inset-8 sm:-inset-12 md:-inset-16 rounded-3xl",
-            !IS_LINUX_RUNTIME && (isFullscreen ? "blur-3xl" : "blur-2xl")
+              ? "-inset-x-4 -inset-y-6 sm:-inset-x-6 sm:-inset-y-8 rounded-none"
+              : "-inset-2 sm:-inset-3 rounded-2xl",
+            !IS_LINUX_RUNTIME && (isFullscreen ? "blur-2xl" : "blur-xl")
           )}
+          style={{ opacity: 0.48 }}
         >
+          {/* Base Layer: maintains 100% steady background light without luminance dips */}
           <div
-            className="absolute inset-0 rounded-[inherit] transition-opacity duration-1000 ease-in-out pointer-events-none"
-            style={{
-              background: ambientLayers.layerA,
-              opacity: ambientLayers.activeLayer === "A" ? 0.85 : 0,
-            }}
+            className="absolute inset-0 rounded-[inherit] pointer-events-none"
+            style={{ background: ambientGradients.base }}
           />
+          {/* Dissolve Layer: softly transitions on top over 1800ms when scene color shifts */}
           <div
-            className="absolute inset-0 rounded-[inherit] transition-opacity duration-1000 ease-in-out pointer-events-none"
-            style={{
-              background: ambientLayers.layerB,
-              opacity: ambientLayers.activeLayer === "B" ? 0.85 : 0,
-            }}
+            className={cx(
+              "absolute inset-0 rounded-[inherit] pointer-events-none",
+              ambientGradients.isFading ? "transition-opacity duration-[1800ms] ease-out opacity-100" : "opacity-0"
+            )}
+            style={{ background: ambientGradients.crossfade }}
+            onTransitionEnd={handleAmbientCrossfadeEnd}
           />
         </div>
       )}

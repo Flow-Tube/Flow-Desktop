@@ -8,9 +8,11 @@ use tauri::{AppHandle, Manager};
 
 use super::actions::{local, state_pool};
 use super::engine::{EngineError, Result};
-use super::profile_links::{Reading, forget_link, link_profile, linked, reading, unlink};
+use super::profile_links::{
+    Reading, catching_up, forget_link, link_profile, linked, reading, unlink,
+};
 use super::profile_names::{name_missing, records, set};
-use super::service::{push_soon, sync_soon};
+use super::service::{push_soon, sync_now, sync_soon};
 use super::state::{load_group, read_from_snapshot, save_group};
 use crate::services::profile_service::ProfileService;
 use crate::sync::error::SyncError;
@@ -44,6 +46,18 @@ pub struct LinkedProfiles {
 /// The link the running profile syncs. Reads no keys, so local edits can ask it.
 pub async fn running_link(app: &AppHandle) -> Result<Option<String>> {
     Ok(current(app).await?.and_then(|(reading, _)| reading.active))
+}
+
+/// Syncs now while the running profile's link waits on data other devices sent, so a profile
+/// added from another device doesn't first show empty.
+pub async fn catch_up(app: &AppHandle) -> Result<()> {
+    let Some(link) = running_link(app).await? else {
+        return Ok(());
+    };
+    if catching_up(&state_pool(app), &link).await? {
+        sync_now(app).await?;
+    }
+    Ok(())
 }
 
 /// The running profile's view of the links, and Default's id; `None` outside a group.

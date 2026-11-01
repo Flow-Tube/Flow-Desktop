@@ -212,6 +212,12 @@ pub async fn linked_sync_added_profile(
         .map_err(|e| err(&e))
 }
 
+/// Returns once the running profile has what other devices sent for it.
+#[tauri::command]
+pub async fn linked_catch_up(app: AppHandle) -> Result<(), ErrorResponse> {
+    profile_actions::catch_up(&app).await.map_err(|e| err(&e))
+}
+
 #[tauri::command]
 pub async fn linked_stop_profile(app: AppHandle, profile: String) -> Result<(), ErrorResponse> {
     profile_actions::stop_profile(&app, &profile)

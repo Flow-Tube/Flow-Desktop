@@ -87,6 +87,8 @@ export const syncProfile = (profile: string, link: string | null) =>
 /** Links `profile`, just created for `link`, another device's profile. */
 export const syncAddedProfile = (profile: string, link: string) =>
   invokeBackend<void>("linked_sync_added_profile", { profile, link });
+/** Resolves once the running profile has what other devices sent for it. */
+export const catchUpLinkedProfile = () => invokeBackend<void>("linked_catch_up");
 export const stopProfile = (profile: string) => invokeBackend<void>("linked_stop_profile", { profile });
 /** Stops `link` syncing on every device; each keeps its data. */
 export const deleteSyncedProfile = (link: string) => invokeBackend<void>("linked_delete_profile", { link });

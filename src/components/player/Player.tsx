@@ -720,6 +720,9 @@ export const Player: React.FC<PlayerProps> = ({
       const videoWidth = video.videoWidth;
       const videoHeight = video.videoHeight;
       const aspectRatio = videoWidth / videoHeight;
+      if (usePlayerStore.getState().videoAspectRatio !== aspectRatio) {
+        usePlayerStore.getState().setVideoAspectRatio(aspectRatio);
+      }
 
       // Aspect-ratio-aware sampling: compute canvas dimensions matching video intrinsic aspect ratio
       const sampleWidth = Math.max(20, Math.min(48, Math.round(aspectRatio >= 1 ? AMBIENT_BASE_WIDTH : AMBIENT_BASE_WIDTH * aspectRatio)));
@@ -2665,6 +2668,10 @@ export const Player: React.FC<PlayerProps> = ({
         onProgress={updateBuffered}
         onTimeUpdate={handleTimeUpdate}
         onPlaying={() => {
+          const video = videoRef.current;
+          if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+            usePlayerStore.getState().setVideoAspectRatio(video.videoWidth / video.videoHeight);
+          }
           const activeVideoId = usePlayerStore.getState().currentVideo?.id;
           if (activeVideoId) usePlayerStore.getState().markPlaybackStarted(activeVideoId);
         }}

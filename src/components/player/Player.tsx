@@ -270,11 +270,11 @@ function extractAmbientSample(context: CanvasRenderingContext2D, width: number, 
     .join(",");
 
   return {
-    top: ambientRgba(top, 0.85),
-    right: ambientRgba(right, 0.75),
-    bottom: ambientRgba(bottom, 0.85),
-    left: ambientRgba(left, 0.75),
-    center: ambientRgba(center, 0.45),
+    top: ambientRgba(top, 0.9),
+    right: ambientRgba(right, 0.8),
+    bottom: ambientRgba(bottom, 0.9),
+    left: ambientRgba(left, 0.8),
+    center: ambientRgba(center, 0.5),
     raw: [top, right, bottom, left, center],
     key,
   };
@@ -282,11 +282,11 @@ function extractAmbientSample(context: CanvasRenderingContext2D, width: number, 
 
 function makeAmbientGradient(sample: AmbientSample): string {
   return [
-    `radial-gradient(ellipse 45% 30% at 50% 0%, ${sample.top} 0%, transparent 60%)`,
-    `radial-gradient(ellipse 45% 30% at 50% 100%, ${sample.bottom} 0%, transparent 60%)`,
-    `radial-gradient(ellipse 30% 45% at 0% 50%, ${sample.left} 0%, transparent 55%)`,
-    `radial-gradient(ellipse 30% 45% at 100% 50%, ${sample.right} 0%, transparent 55%)`,
-    `radial-gradient(ellipse 50% 40% at 50% 50%, ${sample.center} 0%, transparent 65%)`,
+    `radial-gradient(ellipse 70% 60% at 50% 0%, ${sample.top} 0%, transparent 100%)`,
+    `radial-gradient(ellipse 70% 60% at 50% 100%, ${sample.bottom} 0%, transparent 100%)`,
+    `radial-gradient(ellipse 60% 70% at 0% 50%, ${sample.left} 0%, transparent 100%)`,
+    `radial-gradient(ellipse 60% 70% at 100% 50%, ${sample.right} 0%, transparent 100%)`,
+    `radial-gradient(ellipse 75% 65% at 50% 50%, ${sample.center} 0%, transparent 100%)`,
   ].join(", ");
 }
 
@@ -545,7 +545,7 @@ export const Player: React.FC<PlayerProps> = ({
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
   const ambientIntensity = useAppSettingsStore((state) => {
     const val = Number(state.values[SETTINGS.AMBIENT_MODE_INTENSITY]);
-    return Number.isFinite(val) && val >= 10 && val <= 100 ? val : 60;
+    return Number.isFinite(val) && val >= 0 && val <= 100 ? val : 60;
   });
   const [ambientGradients, setAmbientGradients] = useState<{
     base: string;
@@ -678,7 +678,7 @@ export const Player: React.FC<PlayerProps> = ({
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
   // Ambient glow radiates around the player in normal view and in letterboxed fullscreen;
   // disabled only in pip mode or on error.
-  const showAmbient = ambientMode && !isPipMode && !error;
+  const showAmbient = ambientMode && ambientIntensity > 0 && !isPipMode && !error;
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
 
   useEffect(() => {
@@ -2629,11 +2629,11 @@ export const Player: React.FC<PlayerProps> = ({
             isFullscreen
               ? "inset-0 rounded-none"
               : isTheaterSurface
-              ? "-inset-x-4 -inset-y-6 sm:-inset-x-6 sm:-inset-y-8 rounded-none"
-              : "-inset-2 sm:-inset-3 rounded-2xl",
-            !IS_LINUX_RUNTIME && (isFullscreen ? "blur-2xl" : "blur-xl")
+              ? "-inset-x-6 -inset-y-8 sm:-inset-x-8 sm:-inset-y-12 rounded-none"
+              : "-inset-6 sm:-inset-8 md:-inset-10 rounded-3xl",
+            !IS_LINUX_RUNTIME && (isFullscreen ? "blur-3xl" : "blur-2xl")
           )}
-          style={{ opacity: ambientIntensity / 100 }}
+          style={{ opacity: (ambientIntensity / 100) * 0.85 }}
         >
           {/* Base Layer: maintains 100% steady background light without luminance dips */}
           <div

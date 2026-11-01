@@ -4,6 +4,7 @@ import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { TextInput } from '../../ui/TextInput';
 import { Slider } from '../../ui/Slider';
+import { Sparkles } from 'lucide-react';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
@@ -169,26 +170,46 @@ export function PlayerTab() {
           <ToggleSwitch checked={fullscreenTitle} onChange={setFullscreenTitle} />
         </SettingItem>
         <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
-          <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
-        </SettingItem>
-        <SettingItem
-          title={getString('settings_ambient_intensity')}
-          description={getString('settings_ambient_intensity_desc')}
-          disabled={!ambientMode}
-        >
-          <div className="flex items-center gap-3 w-48">
-            <Slider
-              min={10}
-              max={100}
-              step={5}
-              value={ambientIntensity}
-              onChange={setAmbientIntensity}
-              disabled={!ambientMode}
-              aria-label={getString('settings_ambient_intensity')}
-              className="flex-1"
-            />
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              aria-label={!ambientMode || ambientIntensity === 0 ? "Enable ambient mode" : "Disable ambient mode"}
+              title={!ambientMode || ambientIntensity === 0 ? "Enable" : "Disable"}
+              onClick={() => {
+                if (ambientMode && ambientIntensity > 0) {
+                  setAmbientMode(false);
+                } else {
+                  setAmbientMode(true);
+                  if (ambientIntensity === 0) setAmbientIntensity(60);
+                }
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 hover:text-chrome-neutral-100 hover:bg-chrome-white/10 transition-colors"
+            >
+              {!ambientMode || ambientIntensity === 0 ? (
+                <Sparkles size={18} className="opacity-35" />
+              ) : (
+                <Sparkles size={18} className="text-primary" />
+              )}
+            </button>
+            <div className="w-28 sm:w-36">
+              <Slider
+                aria-label={getString('settings_ambient_mode')}
+                min={0}
+                max={100}
+                step={5}
+                value={ambientMode ? ambientIntensity : 0}
+                onChange={(value) => {
+                  if (value === 0) {
+                    setAmbientMode(false);
+                  } else {
+                    if (!ambientMode) setAmbientMode(true);
+                    setAmbientIntensity(value);
+                  }
+                }}
+              />
+            </div>
             <span className="w-10 text-right font-mono text-xs text-chrome-neutral-400">
-              {ambientIntensity}%
+              {ambientMode && ambientIntensity > 0 ? `${ambientIntensity}%` : "Off"}
             </span>
           </div>
         </SettingItem>

@@ -449,7 +449,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, "player", true, "wired"),
   bool(SETTINGS.SHOW_FULLSCREEN_TITLE, "player", false, "wired"),
   bool(SETTINGS.AMBIENT_MODE_ENABLED, "player", true, "wired"),
-  num(SETTINGS.AMBIENT_MODE_INTENSITY, "player", 60, "wired", 10, 100),
+  num(SETTINGS.AMBIENT_MODE_INTENSITY, "player", 60, "wired", 0, 100),
   bool(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, "player", true, "wired"),
   bool(SETTINGS.AUTO_PIP_ENABLED, "player", true, "wired"),
   bool(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, "player", true, "wired"),

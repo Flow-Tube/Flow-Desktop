@@ -42,18 +42,22 @@ const NAME_LIMIT: usize = 64;
 /// This installation as the group sees it.
 #[derive(Clone)]
 pub struct Local {
+    /// The group's state on this device, in Default's database whichever profile runs.
     pub pool: SqlitePool,
+    /// The running profile's database, which batches are exported from and applied to.
+    pub data: SqlitePool,
+    pub profile: ActiveProfile,
     pub device: MemberSecrets,
     pub meta: DeviceMeta,
 }
 
-/// Like FLOW-SYNC/1, only the Default profile syncs until profiles get their own links.
+/// The database holding the group's state: Default's, whichever profile runs.
+pub fn state_pool(app: &AppHandle) -> SqlitePool {
+    crate::db::device::pool(app.state::<SqlitePool>().inner()).clone()
+}
+
 pub async fn local(app: &AppHandle) -> Result<Local> {
-    let profile = app.state::<ActiveProfile>();
-    if !profile.is_default {
-        return Err(SyncError::NotDefaultProfile(profile.default_name.clone()).into());
-    }
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let pool = state_pool(app);
     let meta = DeviceMeta {
         app: ledger::get_or_create_device_id(&pool).await?,
         name: ledger::device_name(&pool).await?,
@@ -61,6 +65,8 @@ pub async fn local(app: &AppHandle) -> Result<Local> {
     };
     Ok(Local {
         device: DEVICE_KEYS.get().await?,
+        data: app.state::<SqlitePool>().inner().clone(),
+        profile: app.state::<ActiveProfile>().inner().clone(),
         pool,
         meta,
     })
@@ -97,8 +103,12 @@ pub async fn open_session<'a>(
 }
 
 /// Checks that this device is in no group, and gives it fresh keys for the one it is about to
-/// create or join.
+/// create or join. Like FLOW-SYNC/1, only the Default profile links until profiles choose links.
 pub async fn start_membership(local: &mut Local) -> Result<()> {
+    if !local.profile.is_default {
+        let name = local.profile.default_name.clone();
+        return Err(SyncError::NotDefaultProfile(name).into());
+    }
     if load_group(&local.pool).await?.is_some() {
         return Err(EngineError::AlreadyLinked);
     }
@@ -168,7 +178,7 @@ pub struct LinkedStatus {
 
 /// What can be shown without reaching the server.
 pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let pool = state_pool(app);
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
     let record = load_group(&pool).await?;
     Ok(LinkedStatus {
@@ -355,7 +365,7 @@ pub async fn retry_keychain(app: &AppHandle) -> Result<()> {
 }
 
 pub async fn recovery_saved(app: &AppHandle) -> Result<()> {
-    set_recovery_saved(app.state::<SqlitePool>().inner(), true).await
+    set_recovery_saved(&state_pool(app), true).await
 }
 
 pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {
@@ -417,7 +427,7 @@ pub async fn leave(app: &AppHandle) -> Result<()> {
 
 /// [`leave`], when this device is in a group.
 pub async fn leave_if_linked(app: &AppHandle) -> Result<()> {
-    match load_group(app.state::<SqlitePool>().inner()).await? {
+    match load_group(&state_pool(app)).await? {
         Some(_) => leave(app).await,
         None => Ok(()),
     }
@@ -447,14 +457,14 @@ pub async fn depart<S: Store>(
 /// Forgets the group and this device's keys without telling the group, for a device it already
 /// shut out.
 pub async fn forget(app: &AppHandle) -> Result<()> {
-    forget_with_keys(app.state::<SqlitePool>().inner()).await
+    forget_with_keys(&state_pool(app)).await
 }
 
 /// Clears history, subscriptions and playlists. When this profile syncs, the caller first leaves
 /// the group ([`leave_if_linked`]), and the deletions recorded here are dropped, so a reset never
 /// reaches the other devices; linking again brings their data back.
 pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
-    if syncs && load_group(pool).await?.is_some() {
+    if syncs && load_group(crate::db::device::pool(pool)).await?.is_some() {
         return Err(EngineError::AlreadyLinked);
     }
     crate::db::watch_history::clear_watch_history(pool).await?;

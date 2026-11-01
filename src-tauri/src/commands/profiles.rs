@@ -75,10 +75,11 @@ pub async fn profiles_delete(
 #[tauri::command]
 pub async fn profiles_prepare_switch(
     id: String,
+    app: AppHandle,
     service: State<'_, ProfileService>,
     sync: State<'_, Arc<SyncManager>>,
 ) -> Result<(), ErrorResponse> {
-    let sync_busy = sync.is_busy().await;
+    let sync_busy = sync.is_busy().await || crate::sync2::service::is_syncing(&app);
     service
         .prepare_switch(&id, sync_busy)
         .map_err(ErrorResponse::from)

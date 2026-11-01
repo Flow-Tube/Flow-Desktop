@@ -10,13 +10,14 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::broadcast;
 
-use super::actions::{local, open_session};
+use super::actions::{local, open_session, state_pool};
 use super::engine::{EngineError, Result, now_ms};
 use super::lan_peers::nearby;
 use super::live_message::{Ability, Answer, DeviceKind, LiveMessage, Now};
 use super::live_seal::{LiveKeys, Received};
 use super::live_state::{accept_live_seq, consents, next_live_seq};
 use super::state::load_group;
+use crate::profiles::ActiveProfile;
 
 /// The devices' presence and what they play, whenever either changes.
 pub const EVENT_LIVE: &str = "sync2://live";
@@ -98,7 +99,7 @@ pub async fn forget_keys(app: &AppHandle) {
 
 async fn keys(app: &AppHandle) -> Result<(LiveKeys, SqlitePool)> {
     let mut cached = hub(app).keys.lock().await;
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let pool = state_pool(app);
     if let Some(keys) = cached.as_ref() {
         return Ok((keys.clone(), pool));
     }
@@ -138,10 +139,12 @@ pub async fn announce(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// The profile link this device syncs, which `now` and `play` name.
+/// The profile link the running profile syncs, which `now` and `play` name.
 async fn own_link(app: &AppHandle) -> Result<Option<String>> {
-    let pool = app.state::<SqlitePool>().inner().clone();
-    Ok(load_group(&pool)
+    if !app.state::<ActiveProfile>().is_default {
+        return Ok(None);
+    }
+    Ok(load_group(&state_pool(app))
         .await?
         .map(|record| record.link)
         .filter(|link| !link.is_empty()))

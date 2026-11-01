@@ -497,11 +497,9 @@ pub fn run() {
             app.manage(sync2::link_task::LinkTask::default());
             app.manage(sync2::lan_peers::LanPeers::default());
             app.manage(sync2::live_hub::LiveHub::default());
-            if active_profile.is_default {
-                sync2::service::spawn(app.handle().clone());
-                sync2::lan_runtime::spawn(app.handle().clone());
-                sync2::live::spawn(app.handle().clone());
-            }
+            sync2::service::spawn(app.handle().clone());
+            sync2::lan_runtime::spawn(app.handle().clone());
+            sync2::live::spawn(app.handle().clone());
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
             app.manage(ShortsService::new());

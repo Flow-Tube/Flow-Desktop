@@ -14,7 +14,7 @@ async fn sent_rows(path: &std::path::Path) -> i64 {
     let pool = SqlitePool::connect(&format!("sqlite://{}", path.display()))
         .await
         .unwrap();
-    let rows = sqlx::query_scalar("SELECT COUNT(*) FROM sync2_sent")
+    let rows = sqlx::query_scalar("SELECT COUNT(*) FROM sync2_sent_links")
         .fetch_one(&pool)
         .await
         .unwrap();

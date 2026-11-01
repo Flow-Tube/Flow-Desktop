@@ -41,6 +41,7 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedOtherFolder: "linked_error_other_folder",
   linkedLastProfile: "linked_error_last_profile",
   linkedProfileTaken: "linked_error_profile_taken",
+  linkedProfileNotRunning: "linked_error_profile_not_running",
 };
 
 /** The actionable, translated message for a sync failure, falling back to the backend's text. */

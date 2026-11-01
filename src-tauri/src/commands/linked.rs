@@ -201,6 +201,18 @@ pub async fn linked_sync_profile(
         .map_err(|e| err(&e))
 }
 
+/// Links `profile`, just created for `link`.
+#[tauri::command]
+pub async fn linked_sync_added_profile(
+    app: AppHandle,
+    profile: String,
+    link: String,
+) -> Result<(), ErrorResponse> {
+    profile_actions::sync_added_profile(&app, &profile, &link)
+        .await
+        .map_err(|e| err(&e))
+}
+
 #[tauri::command]
 pub async fn linked_stop_profile(app: AppHandle, profile: String) -> Result<(), ErrorResponse> {
     profile_actions::stop_profile(&app, &profile)

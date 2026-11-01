@@ -6,6 +6,7 @@ import {
   getLinkedProfiles,
   onSynced,
   stopProfile,
+  syncAddedProfile,
   syncProfile,
   type LinkedProfiles,
 } from "../api/linked";
@@ -81,7 +82,7 @@ export function useLinkedProfiles() {
           { name, colorKey, avatar: { kind: "initial", emoji: "", photoVersion: 0 } },
           { settings: false, subscriptions: false, recommendations: false },
         );
-      await syncProfile(profile.id, link);
+      await syncAddedProfile(profile.id, link);
     });
 
   return {

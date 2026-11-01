@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 
 import type { Dashboard as DashboardData, SyncedProfileState } from "../../../lib/api/linked";
 import { onSynced } from "../../../lib/api/linked";
@@ -84,6 +85,12 @@ function ProfileStateRow({ state }: { state: SyncedProfileState }) {
             : getString("linked_dashboard_no_snapshot")}
         </div>
       </div>
+      <Link
+        to={profile.id === view?.activeId ? "/feed" : `/feed?profile=${encodeURIComponent(profile.id)}`}
+        className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium text-primary transition-colors duration-200 ease-out hover:bg-surface-container-high"
+      >
+        {getString("linked_dashboard_view_interests")}
+      </Link>
     </div>
   );
 }

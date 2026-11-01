@@ -68,7 +68,7 @@ impl Drop for MusicBrainWriteGuard<'_> {
 
 impl MusicBrainStore {
     pub async fn load(pool: SqlitePool) -> AppResult<Arc<Self>> {
-        let mut brain = get_or_create(&pool).await?;
+        let mut brain = stored_brain(&pool).await?;
         // One-time warm start from existing music watch history.
         if let Err(error) = backfill_if_needed(&pool, &mut brain).await {
             warn!(%error, "[MusicBrain] backfill failed; starting cold");
@@ -235,7 +235,7 @@ impl MusicBrainStore {
     /// Replace the resident brain with the latest copy persisted in the DB (after the sync merge
     /// wrote `user_music_brain` directly). Clears dirty + ephemeral session state.
     pub async fn reload(&self) -> AppResult<()> {
-        let fresh = get_or_create(&self.pool).await?;
+        let fresh = stored_brain(&self.pool).await?;
         *self.brain.write().await = fresh;
         self.dirty.store(false, Ordering::Relaxed);
         self.live_progress.lock().unwrap().clear();
@@ -256,7 +256,8 @@ impl MusicBrainStore {
     }
 }
 
-async fn get_or_create(pool: &SqlitePool) -> AppResult<MusicBrain> {
+/// The brain kept in a profile's database, or a fresh one when there is none; it only reads.
+pub async fn stored_brain(pool: &SqlitePool) -> AppResult<MusicBrain> {
     if let Some(json) = settings::get_setting(pool, SETTINGS_KEY).await? {
         match serde_json::from_str::<MusicBrain>(&json) {
             Ok(mut brain) => {

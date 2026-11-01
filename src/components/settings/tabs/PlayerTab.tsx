@@ -38,7 +38,7 @@ export function PlayerTab() {
 
   const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
-  const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, true);
+  const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, false);
 
   const [autoPip, setAutoPip] = useBoolPref(SETTINGS.AUTO_PIP_ENABLED, false);
   const [pipButton, setPipButton] = useBoolPref(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, true);

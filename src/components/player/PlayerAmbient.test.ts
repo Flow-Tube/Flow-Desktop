@@ -77,5 +77,30 @@ describe("Ambient Mode", () => {
       expect(isAmbientActive(true, false, true)).toBe(false);
       expect(isAmbientActive(false, false, false)).toBe(false);
     });
+
+    it("respects ambient mode setting in shorts", () => {
+      const isShortsAmbientActive = (
+        ambientMode: boolean,
+        thumbnail: string | null,
+        active: boolean,
+        isLinuxRuntime: boolean,
+      ) => Boolean(ambientMode && thumbnail && active && !isLinuxRuntime);
+
+      expect(isShortsAmbientActive(true, "thumb.jpg", true, false)).toBe(true);
+      expect(isShortsAmbientActive(false, "thumb.jpg", true, false)).toBe(false);
+      expect(isShortsAmbientActive(true, "thumb.jpg", true, true)).toBe(false);
+      expect(isShortsAmbientActive(true, null, true, false)).toBe(false);
+      expect(isShortsAmbientActive(true, "thumb.jpg", false, false)).toBe(false);
+    });
+  });
+
+  describe("Adaptive Player Size setting", () => {
+    it("defaults to false in setting definitions", async () => {
+      const { SETTING_DEFINITIONS } = await import("../../lib/settings/schema");
+      const def = SETTING_DEFINITIONS.find((d) => d.key === SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED);
+      expect(def).toBeDefined();
+      expect(def?.defaultValue).toBe("false");
+      expect(def?.readiness).toBe("persisted-only");
+    });
   });
 });

@@ -8,6 +8,8 @@ import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { useShortStream } from "../../lib/useShortStream";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import { useSettingsStore } from "../../store/useSettingsStore";
+import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { SETTINGS } from "../../lib/settings/schema";
 import { ShortVideoSurface } from "./ShortVideoSurface";
 import { ShortMetadata } from "./ShortMetadata";
 import { ShortActionBar } from "./ShortActionBar";
@@ -55,6 +57,9 @@ export function ShortPlayer({
   const { details } = useShortDetails(short.id, active);
   const { countText: fetchedCommentCountText } = useVideoComments(active ? short.id : undefined);
   const rytdEnabled = useSettingsStore((s) => s.rytdEnabled);
+  const ambientMode = useAppSettingsStore(
+    (state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false",
+  );
   const [rydData, setRydData] = useState<RydData | null>(null);
   const commentCountText = short.commentCountText ?? fetchedCommentCountText;
 
@@ -110,15 +115,17 @@ export function ShortPlayer({
       className="short-stage relative h-full w-full overflow-hidden flex items-end justify-center py-6"
       style={{ "--short-panel": panelOpen ? `${SIDE_PANEL_WIDTH}px` : "0px" } as CSSProperties}
     >
-      {thumbnail && active && !IS_LINUX_RUNTIME && (
-        <img
-          src={thumbnail}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover blur-[120px] scale-125 opacity-50 saturate-[1.5] pointer-events-none"
-        />
+      {ambientMode && thumbnail && active && !IS_LINUX_RUNTIME && (
+        <>
+          <img
+            src={thumbnail}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover blur-[120px] scale-125 opacity-50 saturate-[1.5] pointer-events-none"
+          />
+          <div className="absolute inset-0 bg-chrome-neutral-950/60 pointer-events-none" />
+        </>
       )}
-      <div className="absolute inset-0 bg-chrome-neutral-950/60 pointer-events-none" />
 
       <motion.div
         layout={active}

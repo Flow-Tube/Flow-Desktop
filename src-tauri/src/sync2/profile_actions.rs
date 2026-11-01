@@ -137,12 +137,24 @@ fn name_of(app: &AppHandle, profile: &str) -> Result<String> {
         .unwrap_or_default())
 }
 
-/// Syncs `profile`: under a link of its own, or joining `link`, another device's profile.
+/// Syncs the running `profile`: under a link of its own, or joining `link`, another device's
+/// profile. A profile's data goes out only while it runs, so another profile switches first.
 pub async fn sync_profile(app: &AppHandle, profile: &str, link: Option<&str>) -> Result<()> {
+    if app.state::<ProfileService>().running_profile_id()? != profile {
+        return Err(EngineError::NotRunning);
+    }
+    link_to(app, profile, link.unwrap_or(profile)).await
+}
+
+/// Links a profile just created for `link`; it has no data of its own to send.
+pub async fn sync_added_profile(app: &AppHandle, profile: &str, link: &str) -> Result<()> {
+    link_to(app, profile, link).await
+}
+
+async fn link_to(app: &AppHandle, profile: &str, link: &str) -> Result<()> {
     let local = local(app).await?;
     let pool = &local.pool;
     let links = links_now(app, pool).await?;
-    let link = link.unwrap_or(profile);
     if links.iter().any(|(id, l)| id == profile || l == link) {
         return Err(EngineError::ProfileTaken);
     }

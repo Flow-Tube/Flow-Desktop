@@ -66,7 +66,8 @@ use commands::linked::{
     linked_decline_join, linked_delete_profile, linked_devices, linked_enter_code, linked_forget,
     linked_join_requests, linked_leave, linked_link_phase, linked_profiles, linked_recovery_saved,
     linked_remove, linked_rename, linked_restore, linked_retry_keychain, linked_show_code,
-    linked_status, linked_stop_profile, linked_sync_now, linked_sync_profile, linked_update_login,
+    linked_status, linked_stop_profile, linked_sync_added_profile, linked_sync_now,
+    linked_sync_profile, linked_update_login,
 };
 use commands::live::{live_consents, live_now, live_send, live_set_consent, live_status};
 use commands::lyrics::{
@@ -820,6 +821,7 @@ pub fn run() {
             linked_sync_now,
             linked_profiles,
             linked_sync_profile,
+            linked_sync_added_profile,
             linked_stop_profile,
             linked_delete_profile,
             linked_choose_profile,

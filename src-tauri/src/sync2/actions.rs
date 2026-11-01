@@ -29,6 +29,7 @@ use super::webdav::{WebDavLogin, WebDavStore};
 use super::webdav_login::{forget_login, load_login, save_login};
 use crate::db::settings::{get_setting, set_setting};
 use crate::profiles::ActiveProfile;
+use crate::services::profile_service::ProfileService;
 use crate::sync::error::SyncError;
 use crate::sync::{changes, ledger};
 
@@ -47,6 +48,8 @@ pub struct Local {
     /// The running profile's database, which batches are exported from and applied to.
     pub data: SqlitePool,
     pub profile: ActiveProfile,
+    pub running_profile: String,
+    pub default_profile: String,
     pub device: MemberSecrets,
     pub meta: DeviceMeta,
 }
@@ -57,6 +60,11 @@ pub fn state_pool(app: &AppHandle) -> SqlitePool {
 }
 
 pub async fn local(app: &AppHandle) -> Result<Local> {
+    let profiles = app.state::<ProfileService>();
+    let (running_profile, default_profile) = (
+        profiles.running_profile_id()?,
+        profiles.default_profile_id()?,
+    );
     let pool = state_pool(app);
     let meta = DeviceMeta {
         app: ledger::get_or_create_device_id(&pool).await?,
@@ -67,6 +75,8 @@ pub async fn local(app: &AppHandle) -> Result<Local> {
         device: DEVICE_KEYS.get().await?,
         data: app.state::<SqlitePool>().inner().clone(),
         profile: app.state::<ActiveProfile>().inner().clone(),
+        running_profile,
+        default_profile,
         pool,
         meta,
     })

@@ -1,8 +1,8 @@
-//! Starting a device that has read nothing from a snapshot (spec/protocol.md, Snapshots), once
-//! garbage collection has removed the beginning of some logs. Each log goes on from the object the
-//! snapshot names, chained to its hash.
+//! Starting a device that has read nothing from snapshots (spec/protocol.md, Reading a link from
+//! its snapshot), once garbage collection has removed the beginning of some logs. Each log goes on
+//! from the lowest object the snapshots name, chained to its hash.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::batches::{IncomingBatch, parse_batch};
 use super::blob::open_blob;
@@ -11,21 +11,55 @@ use super::envelope::{ObjectType, StreamPosition};
 use super::epoch::purpose_key;
 use super::paths::{blob_path, log_path, parse_log_path};
 use super::payload::decode_payload;
-use super::snapshot::Manifest;
+use super::snapshot::{Manifest, Tip};
 use super::store::Store;
 use super::{Error, array};
 
-/// The snapshot a device starts from: its writer, its records, and where each log goes on.
-pub struct Start {
+/// A snapshot a device starts from: its writer, where it sits in the writer's log, and its
+/// records.
+pub struct Snapshot {
     pub writer: String,
+    pub seq: u64,
     pub manifest: Manifest,
     pub batches: Vec<IncomingBatch>,
+}
+
+/// The snapshots a device starts from, one per link, and where each log goes on.
+pub struct Start {
+    pub snapshots: Vec<Snapshot>,
     pub positions: BTreeMap<String, StreamPosition>,
 }
 
 /// How many objects of all logs the snapshot includes.
-fn merged(manifest: &Manifest) -> u64 {
+pub(super) fn merged(manifest: &Manifest) -> u64 {
     manifest.vv.values().map(|tip| tip.seq).sum()
+}
+
+/// Where each log goes on: right after the lowest object the snapshots include. A log one of them
+/// doesn't name is read from its first object.
+fn lowest_tips(manifests: &[&Manifest], me: &str) -> Result<BTreeMap<String, StreamPosition>> {
+    let mut positions = BTreeMap::new();
+    let dids: BTreeSet<&String> = manifests.iter().flat_map(|m| m.vv.keys()).collect();
+    for did in dids.into_iter().filter(|did| *did != me) {
+        let tips: Option<Vec<_>> = manifests.iter().map(|m| m.vv.get(did)).collect();
+        let Some(tip) = tips.and_then(|tips| tips.into_iter().min_by_key(|tip| tip.seq)) else {
+            continue;
+        };
+        positions.insert(did.clone(), position(tip)?);
+    }
+    Ok(positions)
+}
+
+/// The place in a log right after the object a snapshot names.
+pub(super) fn position(tip: &Tip) -> Result<StreamPosition> {
+    let hash = hex::decode(&tip.hash)
+        .ok()
+        .filter(|h| h.len() == 32)
+        .ok_or(Error::Prev)?;
+    Ok(StreamPosition {
+        seq: tip.seq,
+        hash: array(&hash),
+    })
 }
 
 /// Whether `manifest` covers every log that no longer starts at its first object.
@@ -37,9 +71,13 @@ fn covers(manifest: &Manifest, first: &BTreeMap<String, u64>) -> bool {
 }
 
 impl<S: Store> Session<'_, S> {
-    /// The snapshot to start from, or `None` when every log still starts at its first object, or
-    /// when no snapshot covers the logs that don't.
-    pub(super) async fn bootstrap(&mut self) -> Result<Option<Start>> {
+    /// The snapshots to start from, the newest covering one of each of `links` (of any link when
+    /// `None`), or `None` when every log still starts at its first object, or when no snapshot
+    /// covers the logs that don't.
+    pub(super) async fn bootstrap(
+        &mut self,
+        links: Option<&BTreeSet<String>>,
+    ) -> Result<Option<Start>> {
         let me = hex::encode(self.device().did);
         let mut logs: BTreeMap<String, Vec<u64>> = BTreeMap::new();
         let mut cursor = 0;
@@ -62,50 +100,63 @@ impl<S: Store> Session<'_, S> {
             return Ok(None);
         }
 
-        let mut best: Option<(String, u32, Manifest)> = None;
+        // Per link (`None` standing for any), the best covering snapshot: writer, seq, epoch.
+        let mut best: BTreeMap<Option<String>, (String, u64, u32, Manifest)> = BTreeMap::new();
         for (did, seqs) in &mut logs {
             seqs.sort_unstable();
-            if let Some((epoch, manifest)) = self.newest_manifest(did, seqs).await?
-                && covers(&manifest, &first)
-                && best
-                    .as_ref()
-                    .is_none_or(|(_, _, b)| merged(b) < merged(&manifest))
-            {
-                best = Some((did.clone(), epoch, manifest));
+            for (seq, epoch, manifest) in self.manifests_from_newest(did, seqs, links).await? {
+                let Some(link) = manifest.link.clone() else {
+                    continue;
+                };
+                let key = match links {
+                    Some(links) if links.contains(&link) => Some(link),
+                    Some(_) => continue,
+                    None => None,
+                };
+                if covers(&manifest, &first)
+                    && best
+                        .get(&key)
+                        .is_none_or(|(_, _, _, b)| merged(b) < merged(&manifest))
+                {
+                    best.insert(key, (did.clone(), seq, epoch, manifest));
+                }
             }
         }
-        let Some((writer, epoch, manifest)) = best else {
+        if best.is_empty() {
             return Ok(None);
-        };
-        let batches = self.snapshot_batches(&writer, epoch, &manifest).await?;
-        let mut positions = BTreeMap::new();
-        for (did, tip) in manifest.vv.iter().filter(|(did, _)| **did != me) {
-            let hash = hex::decode(&tip.hash)
-                .ok()
-                .filter(|h| h.len() == 32)
-                .ok_or(Error::Prev)?;
-            let position = StreamPosition {
-                seq: tip.seq,
-                hash: array(&hash),
-            };
-            positions.insert(did.clone(), position);
+        }
+        let chosen: Vec<&Manifest> = best.values().map(|(_, _, _, m)| m).collect();
+        let positions = lowest_tips(&chosen, &me)?;
+        let mut snapshots = Vec::new();
+        for (writer, seq, epoch, manifest) in best.into_values() {
+            let batches = self.snapshot_batches(&writer, epoch, &manifest).await?;
+            snapshots.push(Snapshot {
+                writer,
+                seq,
+                manifest,
+                batches,
+            });
         }
         Ok(Some(Start {
-            writer,
-            manifest,
-            batches,
+            snapshots,
             positions,
         }))
     }
 
-    /// The newest snapshot manifest in `did`'s log, searched from its last object back, and the
-    /// epoch it was written in.
-    async fn newest_manifest(
+    /// The newest snapshot manifest of each of `links` in `did`'s log (only the newest of any link
+    /// when `None`): where it sits and the epoch it was written in.
+    async fn manifests_from_newest(
         &mut self,
         did: &str,
         seqs: &[u64],
-    ) -> Result<Option<(u32, Manifest)>> {
+        links: Option<&BTreeSet<String>>,
+    ) -> Result<Vec<(u64, u32, Manifest)>> {
+        let wanted = links.map_or(1, BTreeSet::len);
+        let mut found: Vec<(u64, u32, Manifest)> = Vec::new();
         for &seq in seqs.iter().rev() {
+            if found.len() >= wanted {
+                break;
+            }
             let Some(bytes) = self.store().get_object(&log_path(did, seq)).await? else {
                 continue;
             };
@@ -113,14 +164,16 @@ impl<S: Store> Session<'_, S> {
             if object.header.object_type != ObjectType::Snapshot {
                 continue;
             }
-            if let Content::Snapshot(manifest) = self.open_content(&object).await? {
-                return Ok(Some((object.header.epoch, manifest)));
+            if let Content::Snapshot(manifest) = self.open_content(&object).await?
+                && found.iter().all(|(_, _, m)| m.link != manifest.link)
+            {
+                found.push((seq, object.header.epoch, manifest));
             }
         }
-        Ok(None)
+        Ok(found)
     }
 
-    async fn snapshot_batches(
+    pub(super) async fn snapshot_batches(
         &mut self,
         writer: &str,
         epoch: u32,

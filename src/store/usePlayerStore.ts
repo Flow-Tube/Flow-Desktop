@@ -130,6 +130,8 @@ export interface PlayerState {
   dearrowData: DeArrowOverride | null;
   rydData: RydData | null;
   captions: CaptionTrack[];
+  videoAspectRatio: number | null;
+  setVideoAspectRatio: (ratio: number | null) => void;
 
   setCurrentVideo: (video: VideoSummary | null) => void;
   /** Fill in fields of the playing video that arrived after playback started —
@@ -245,6 +247,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isQueuePanelOpen: false,
   fullscreenPanel: null,
   isLiveChatAvailable: false,
+  videoAspectRatio: null,
+  setVideoAspectRatio: (ratio) => set({ videoAspectRatio: ratio }),
 
   setCurrentVideo: (video) => {
     const isNew = get().currentVideo?.id !== video?.id;
@@ -254,7 +258,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isChaptersPanelOpen: false,
       isQueuePanelOpen: false,
       fullscreenPanel: null,
-      ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
+      ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null, videoAspectRatio: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
       ...(isNew ? { playbackStartedVideoId: null } : {}),

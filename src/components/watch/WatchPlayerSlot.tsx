@@ -1,5 +1,7 @@
 import { PictureInPicture2 } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
+import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { SETTINGS } from "../../lib/settings/schema";
 import { requestPopoutReturn } from "../../lib/pipHandoff";
 import { getString } from "../../lib/i18n/index";
 
@@ -7,8 +9,17 @@ export function WatchPlayerSlot() {
   const isTheaterMode = usePlayerStore((s) => s.isTheaterMode);
   const videoPlayerMode = usePlayerStore((s) => s.videoPlayerMode);
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
+  const videoAspectRatio = usePlayerStore((s) => s.videoAspectRatio);
+  const adaptivePlayerSize = useAppSettingsStore(
+    (s) => s.values[SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED] !== "false",
+  );
   const isFloating = videoPlayerMode === "pip";
   const isPoppedOut = videoPlayerMode === "window";
+
+  const effectiveRatio =
+    !isTheaterMode && adaptivePlayerSize && videoAspectRatio
+      ? Math.min(2.4, Math.max(1.2, videoAspectRatio))
+      : 16 / 9;
 
   const overlayClass =
     "absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[inherit] bg-chrome-black/85 text-sm font-medium text-chrome-zinc-300 transition-colors hover:text-chrome-white";
@@ -16,13 +27,13 @@ export function WatchPlayerSlot() {
   return (
     <div
       data-flow-watch-player-slot="true"
+      style={{ aspectRatio: `${effectiveRatio}` }}
       className={
         isTheaterMode
-          ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black"
-          : "relative w-full aspect-video overflow-hidden rounded-xl bg-chrome-black"
+          ? "relative w-full max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black"
+          : "relative w-full max-h-[calc(100vh-160px)] overflow-hidden rounded-xl bg-chrome-black"
       }
     >
-
       {isFloating && (
         <button type="button" onClick={expandVideoPlayer} className={overlayClass}>
           <PictureInPicture2 className="h-7 w-7" />

@@ -48,7 +48,7 @@ export function WatchLayout({ player, metadata, description, comments, sidebar }
         <div
           ref={mainRef}
           className={cx(
-            "flex w-full min-w-0 flex-col gap-5 lg:row-start-2",
+            "relative z-40 flex w-full min-w-0 flex-col gap-5 lg:row-start-2",
             isTheaterMode ? "lg:col-start-2" : "lg:col-start-1",
           )}
         >
@@ -60,7 +60,7 @@ export function WatchLayout({ player, metadata, description, comments, sidebar }
         <div
           ref={sideRef}
           className={cx(
-            "flex w-full min-h-0 flex-col gap-5 overscroll-contain lg:sticky lg:top-6 lg:max-h-[calc(100vh-6.5rem)] lg:self-start lg:overflow-y-auto lg:p-2 hide-scrollbar",
+            "relative z-40 flex w-full min-h-0 flex-col gap-5 overscroll-contain lg:sticky lg:top-6 lg:max-h-[calc(100vh-6.5rem)] lg:self-start lg:overflow-y-auto lg:p-2 hide-scrollbar",
             isTheaterMode ? "lg:col-start-3 lg:row-start-2" : "lg:col-start-2 lg:row-span-2 lg:row-start-1",
           )}
         >

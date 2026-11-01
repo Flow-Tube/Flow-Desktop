@@ -180,8 +180,7 @@ type AmbientSample = {
   key: string;
 };
 
-const AMBIENT_SAMPLE_WIDTH = 36;
-const AMBIENT_SAMPLE_HEIGHT = 20;
+const AMBIENT_BASE_WIDTH = 36;
 const AMBIENT_SAMPLE_INTERVAL_MS = 1500;
 // Applied to the sampled colors in place of a CSS saturate() filter, which would
 // re-rasterize the whole window-wide glow layer on every repaint.
@@ -231,6 +230,12 @@ function sampleRegion(
       const min = Math.min(r, g, b);
       const saturation = max === 0 ? 0 : (max - min) / max;
       const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+      // Filter out pure black border pixels if video stream has hardcoded letterboxing
+      if (luminance < 0.03 && saturation < 0.05) {
+        continue;
+      }
+
       const weight = (0.2 + saturation * 1.35) * (0.35 + clamp(luminance, 0, 1) * 0.65);
 
       red += r * weight;
@@ -244,19 +249,19 @@ function sampleRegion(
   return [red / totalWeight, green / totalWeight, blue / totalWeight];
 }
 
-function extractAmbientSample(context: CanvasRenderingContext2D): AmbientSample {
-  const imageData = context.getImageData(0, 0, AMBIENT_SAMPLE_WIDTH, AMBIENT_SAMPLE_HEIGHT);
-  const edgeHeight = Math.max(4, Math.floor(AMBIENT_SAMPLE_HEIGHT * 0.32));
-  const edgeWidth = Math.max(6, Math.floor(AMBIENT_SAMPLE_WIDTH * 0.26));
-  const centerX = AMBIENT_SAMPLE_WIDTH * 0.22;
-  const centerY = AMBIENT_SAMPLE_HEIGHT * 0.22;
-  const centerWidth = AMBIENT_SAMPLE_WIDTH * 0.56;
-  const centerHeight = AMBIENT_SAMPLE_HEIGHT * 0.56;
+function extractAmbientSample(context: CanvasRenderingContext2D, width: number, height: number): AmbientSample {
+  const imageData = context.getImageData(0, 0, width, height);
+  const edgeHeight = Math.max(3, Math.floor(height * 0.28));
+  const edgeWidth = Math.max(4, Math.floor(width * 0.26));
+  const centerX = Math.floor(width * 0.22);
+  const centerY = Math.floor(height * 0.22);
+  const centerWidth = Math.max(4, Math.floor(width * 0.56));
+  const centerHeight = Math.max(4, Math.floor(height * 0.56));
 
-  const top = sampleRegion(imageData, 0, 0, AMBIENT_SAMPLE_WIDTH, edgeHeight);
-  const right = sampleRegion(imageData, AMBIENT_SAMPLE_WIDTH - edgeWidth, 0, AMBIENT_SAMPLE_WIDTH, AMBIENT_SAMPLE_HEIGHT);
-  const bottom = sampleRegion(imageData, 0, AMBIENT_SAMPLE_HEIGHT - edgeHeight, AMBIENT_SAMPLE_WIDTH, AMBIENT_SAMPLE_HEIGHT);
-  const left = sampleRegion(imageData, 0, 0, edgeWidth, AMBIENT_SAMPLE_HEIGHT);
+  const top = sampleRegion(imageData, 0, 0, width, edgeHeight);
+  const right = sampleRegion(imageData, width - edgeWidth, 0, width, height);
+  const bottom = sampleRegion(imageData, 0, height - edgeHeight, width, height);
+  const left = sampleRegion(imageData, 0, 0, edgeWidth, height);
   const center = sampleRegion(imageData, centerX, centerY, centerX + centerWidth, centerY + centerHeight);
 
   const key = [top, right, bottom, left, center]
@@ -635,9 +640,9 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
-  // Ambient glow radiates around the player in both default and theater views;
-  // disabled in pip, fullscreen, or on error.
-  const showAmbient = ambientMode && !isPipMode && !error && !isFullscreen;
+  // Ambient glow radiates around the player in normal view and in letterboxed fullscreen;
+  // disabled only in pip mode or on error.
+  const showAmbient = ambientMode && !isPipMode && !error;
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
 
   useEffect(() => {
@@ -676,17 +681,25 @@ export const Player: React.FC<PlayerProps> = ({
       if (!force && now - lastSampleAt < AMBIENT_SAMPLE_INTERVAL_MS) return;
       lastSampleAt = now;
 
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+      const aspectRatio = videoWidth / videoHeight;
+
+      // Aspect-ratio-aware sampling: compute canvas dimensions matching video intrinsic aspect ratio
+      const sampleWidth = Math.max(20, Math.min(48, Math.round(aspectRatio >= 1 ? AMBIENT_BASE_WIDTH : AMBIENT_BASE_WIDTH * aspectRatio)));
+      const sampleHeight = Math.max(12, Math.min(48, Math.round(aspectRatio >= 1 ? AMBIENT_BASE_WIDTH / aspectRatio : AMBIENT_BASE_WIDTH)));
+
       const canvas = ambientCanvasRef.current ?? document.createElement("canvas");
       ambientCanvasRef.current = canvas;
-      if (canvas.width !== AMBIENT_SAMPLE_WIDTH) canvas.width = AMBIENT_SAMPLE_WIDTH;
-      if (canvas.height !== AMBIENT_SAMPLE_HEIGHT) canvas.height = AMBIENT_SAMPLE_HEIGHT;
+      if (canvas.width !== sampleWidth) canvas.width = sampleWidth;
+      if (canvas.height !== sampleHeight) canvas.height = sampleHeight;
 
       const context = canvas.getContext("2d", { willReadFrequently: true });
       if (!context) return;
 
       try {
-        context.drawImage(video, 0, 0, AMBIENT_SAMPLE_WIDTH, AMBIENT_SAMPLE_HEIGHT);
-        const nextSample = extractAmbientSample(context);
+        context.drawImage(video, 0, 0, sampleWidth, sampleHeight);
+        const nextSample = extractAmbientSample(context, sampleWidth, sampleHeight);
         if (nextSample.key !== ambientSampleKeyRef.current) {
           ambientSampleKeyRef.current = nextSample.key;
           updateAmbientSample(nextSample);
@@ -2534,11 +2547,13 @@ export const Player: React.FC<PlayerProps> = ({
   };
 
   const playerRootClasses = cx(
-    "relative w-full aspect-video outline-none",
-    isTheaterSurface
-      ? "max-h-[calc(100vh-160px)] min-h-[480px] flex items-center justify-center rounded-none"
-      : "rounded-xl",
-    isFullscreen && "rounded-none",
+    "relative w-full isolate outline-none",
+    isFullscreen
+      ? "h-full aspect-auto rounded-none"
+      : isTheaterSurface
+      ? "aspect-video max-h-[calc(100vh-160px)] min-h-[480px] flex items-center justify-center rounded-none"
+      : "aspect-video rounded-xl",
+    cursorHidden && "cursor-none [&_*]:!cursor-none",
     className
   );
 
@@ -2549,7 +2564,6 @@ export const Player: React.FC<PlayerProps> = ({
       data-fullscreen={isFullscreen || undefined}
       className={cx(
         "group/player",
-        cursorHidden && "cursor-none [&_*]:!cursor-none",
         playerRootClasses,
       )}
       tabIndex={0}
@@ -2564,11 +2578,13 @@ export const Player: React.FC<PlayerProps> = ({
         <div
           aria-hidden="true"
           className={cx(
-            "pointer-events-none absolute -z-10 overflow-visible",
-            isTheaterSurface
-              ? "-inset-x-8 -inset-y-12 sm:-inset-x-14 sm:-inset-y-16"
+            "pointer-events-none absolute z-0 overflow-visible",
+            isFullscreen
+              ? "inset-0 rounded-none"
+              : isTheaterSurface
+              ? "-inset-x-8 -inset-y-12 sm:-inset-x-14 sm:-inset-y-16 rounded-none"
               : "-inset-8 sm:-inset-12 md:-inset-16 rounded-3xl",
-            !IS_LINUX_RUNTIME && "blur-2xl"
+            !IS_LINUX_RUNTIME && (isFullscreen ? "blur-3xl" : "blur-2xl")
           )}
         >
           {ambientLayers.prev && (
@@ -2588,7 +2604,8 @@ export const Player: React.FC<PlayerProps> = ({
 
       <div
         className={cx(
-          "relative h-full w-full bg-chrome-black text-chrome-white overflow-hidden outline-none",
+          "relative z-10 h-full w-full text-chrome-white overflow-hidden outline-none",
+          !showAmbient && "bg-chrome-black",
           isTheaterSurface ? "rounded-none flex items-center justify-center" : "rounded-xl",
           isFullscreen && "rounded-none"
         )}

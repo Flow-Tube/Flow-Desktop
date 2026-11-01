@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties, type WheelEvent } from 'react';
 import { useExpressiveSliders } from '../../lib/useExpressiveSliders';
 
 export interface SliderProps {
@@ -7,6 +7,7 @@ export interface SliderProps {
   max: number;
   step?: number;
   onChange: (value: number) => void;
+  onWheel?: (event: WheelEvent<HTMLElement>) => void;
   'aria-label': string;
   disabled?: boolean;
   className?: string;
@@ -23,6 +24,7 @@ export function Slider({
   max,
   step = 1,
   onChange,
+  onWheel,
   disabled,
   className = '',
   orientation = 'horizontal',
@@ -50,6 +52,7 @@ export function Slider({
       onPointerUp={() => setPressed(false)}
       onPointerCancel={() => setPressed(false)}
       onBlur={() => setPressed(false)}
+      onWheel={onWheel}
     />
   );
 
@@ -61,6 +64,7 @@ export function Slider({
       data-pressed={pressed && !disabled}
       data-disabled={Boolean(disabled)}
       style={{ '--m3-fill': fill } as CSSProperties}
+      onWheel={onWheel}
     >
       <span className="m3-slider__track m3-slider__track--active" />
       <span className="m3-slider__track m3-slider__track--inactive" />

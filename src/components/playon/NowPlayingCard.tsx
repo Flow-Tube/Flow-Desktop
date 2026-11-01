@@ -88,7 +88,14 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
           onTogglePlay={() => void drive(target, playingHere ? "pause" : "play")}
           onNext={() => void drive(target, "next")}
         />
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400">
+        <label
+          className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400"
+          onWheel={(event) => {
+            event.stopPropagation();
+            const delta = event.deltaY < 0 ? 5 : -5;
+            setVolume(Math.min(100, Math.max(0, volume + delta)));
+          }}
+        >
           <Volume2 className="h-4 w-4 shrink-0" aria-hidden />
           <Slider value={volume} min={0} max={100} onChange={setVolume} aria-label={getString("music_volume")} className="flex-1" />
         </label>

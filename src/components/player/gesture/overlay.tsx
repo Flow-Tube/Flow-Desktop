@@ -42,6 +42,8 @@ export type PlayerVolumeFeedback = {
   muted: boolean;
 };
 
+const SINGLE_CLICK_DELAY_MS = 220;
+
 type CenterFeedback = {
   id: number;
   icon: "play" | "pause";
@@ -147,6 +149,16 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   // A press that closed a menu also eats the click after it, so closing never pauses.
   const menuClosingPressRef = useRef(false);
   const layerRef = useRef<HTMLDivElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
+  const clearClickTimer = () => {
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     if (!centerFeedback) return;
@@ -162,6 +174,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
       if (previousRateRef.current) setPlaybackRate(previousRateRef.current);
+      clearClickTimer();
     };
   }, [setPlaybackRate]);
 
@@ -181,6 +194,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   };
 
   const restorePlaybackRate = () => {
+    clearClickTimer();
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -202,6 +216,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    clearClickTimer();
     onRevealControls();
     menuClosingPressRef.current = Boolean(contextMenu) || settingsOpen;
     if (menuClosingPressRef.current) {
@@ -245,26 +260,39 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     if (event.button !== 0) return;
     if (draggedRef.current) {
       draggedRef.current = false;
+      clearClickTimer();
       return;
     }
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
+      clearClickTimer();
       return;
     }
     if (menuClosingPressRef.current) {
       menuClosingPressRef.current = false;
+      clearClickTimer();
       return;
     }
 
-    togglePlay();
-    setCenterFeedback({
-      id: Date.now(),
-      icon: isPlaying ? "play" : "pause",
-    });
-    onRevealControls();
+    if (event.detail > 1) {
+      clearClickTimer();
+      return;
+    }
+
+    clearClickTimer();
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      togglePlay();
+      setCenterFeedback({
+        id: Date.now(),
+        icon: isPlayingRef.current ? "play" : "pause",
+      });
+      onRevealControls();
+    }, SINGLE_CLICK_DELAY_MS);
   };
 
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    clearClickTimer();
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
     if (x < rect.width * 0.35) {
@@ -280,6 +308,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
+    clearClickTimer();
     restorePlaybackRate();
     onCloseSettings();
     const rect = event.currentTarget.getBoundingClientRect();

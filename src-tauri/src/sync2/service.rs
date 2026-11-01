@@ -361,11 +361,16 @@ fn log_failure<T>(result: Result<T>) {
     }
 }
 
-/// Runs [`sync_now`] shortly after start and then every few minutes for the app's lifetime.
+/// Runs [`sync_now`] shortly after start, unless a catch-up already ran, and then every few
+/// minutes for the app's lifetime.
 pub fn spawn(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_RUN_DELAY).await;
         let mut timer = tokio::time::interval(INTERVAL);
+        timer.tick().await;
+        if !is_syncing(&app) && last_sync(&app).is_none() {
+            log_failure(sync_now(&app).await);
+        }
         loop {
             timer.tick().await;
             log_failure(sync_now(&app).await);

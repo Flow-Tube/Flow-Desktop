@@ -10,8 +10,9 @@ use flow_desktop_lib::sync2::batches::{IncomingBatch, apply_batches};
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
 use flow_desktop_lib::sync2::kept::kept;
 use flow_desktop_lib::sync2::paths::log_path;
-use flow_desktop_lib::sync2::profile_links::{Reading, link_profile, reading, unlink};
+use flow_desktop_lib::sync2::profile_links::{Reading, catching_up, link_profile, reading, unlink};
 use flow_desktop_lib::sync2::profile_names::set;
+use flow_desktop_lib::sync2::state::{link_read, read_from_snapshot};
 use sqlx::SqlitePool;
 use sync2_common::{Group, MemoryStore, device_pool, empty_pool, exported, group, watch, watched};
 
@@ -262,4 +263,28 @@ async fn a_new_device_joins_defaults_link_whichever_profile_runs() {
         Some(KIDS),
         "else the first synced"
     );
+}
+
+#[tokio::test]
+async fn a_link_catches_up_while_its_snapshot_or_kept_batches_wait() {
+    let state = empty_pool().await;
+    assert!(!catching_up(&state, KIDS).await.unwrap());
+
+    read_from_snapshot(&state, KIDS).await.unwrap();
+    assert!(catching_up(&state, KIDS).await.unwrap());
+    assert!(
+        !catching_up(&state, HOME).await.unwrap(),
+        "only the link that waits"
+    );
+    link_read(&state, KIDS).await.unwrap();
+
+    sqlx::query(
+        "INSERT INTO sync2_kept (link, sender, seq, collection, head, records)
+         VALUES (?, 'a', 1, 'likes', 'h', x'')",
+    )
+    .bind(KIDS)
+    .execute(&state)
+    .await
+    .unwrap();
+    assert!(catching_up(&state, KIDS).await.unwrap());
 }

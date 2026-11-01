@@ -10,10 +10,13 @@ import {
   Pause,
   Sliders,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import type { PlaybackRate } from "../../store/usePlayerStore";
 import type { AudioTrack, CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
+import { useBoolPref } from "../../lib/usePreference";
+import { SETTINGS } from "../../lib/settings/schema";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
@@ -123,6 +126,7 @@ export function PlayerSettingsMenu({
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
+  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
 
   const panesRef = useRef<HTMLDivElement>(null);
   const shownPaneRef = useRef(pane);
@@ -192,6 +196,35 @@ export function PlayerSettingsMenu({
     </button>
   );
 
+  const toggleRow = (label: string, checked: boolean, icon: React.ReactNode, onToggle: () => void) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onToggle}
+      className={cx(ROW, "h-10 py-0 text-chrome-zinc-100 hover:bg-chrome-white/10")}
+    >
+      <span className="grid h-6 w-6 shrink-0 place-items-center text-chrome-zinc-300">{icon}</span>
+      <span className="min-w-0 flex-1">{label}</span>
+      <span className="text-right font-normal text-chrome-zinc-400">
+        {getString(checked ? "eq_state_on" : "eq_state_off")}
+      </span>
+      <div
+        className={cx(
+          "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ease-out",
+          checked ? "bg-primary" : "bg-chrome-white/20",
+        )}
+      >
+        <span
+          className={cx(
+            "absolute top-0.5 h-4 w-4 rounded-full bg-chrome-white transition-transform duration-200 ease-out",
+            checked ? "left-[18px]" : "left-0.5",
+          )}
+        />
+      </div>
+    </button>
+  );
+
   const check = (on: boolean) => (on ? <Check size={17} className="shrink-0 text-chrome-white" /> : null);
 
   return (
@@ -236,6 +269,12 @@ export function PlayerSettingsMenu({
         {pane === "root" && (
           <div className="space-y-0.5">
             {settingRow(getString("player_menu_speed"), speedLabel(playbackRate), <Gauge size={18} />, () => onPaneChange("speed"))}
+            {toggleRow(
+              getString("settings_ambient_mode"),
+              ambientMode,
+              <Sparkles size={18} />,
+              () => setAmbientMode(!ambientMode),
+            )}
             {settingRow(
               getString("player_menu_quality"),
               qualityLabel(selectedQualityId, qualities, activeQualityLabel),

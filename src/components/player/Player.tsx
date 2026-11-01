@@ -608,10 +608,8 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
-  // Never on Linux: WebKitGTK repaints large filtered layers on the CPU, and the
-  // glow sat almost black there because sampling video frames is too costly.
   // Not in fullscreen either, where the video covers it.
-  const showAmbient = ambientMode && isTheaterSurface && !error && !isFullscreen && !IS_LINUX_RUNTIME;
+  const showAmbient = ambientMode && isTheaterSurface && !error && !isFullscreen;
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
   const ambientBackdropStyle = useMemo<React.CSSProperties>(() => ({
     background: [

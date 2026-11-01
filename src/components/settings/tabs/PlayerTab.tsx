@@ -8,7 +8,6 @@ import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
-import { IS_LINUX_RUNTIME } from '../../../lib/platform';
 import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
 
 export function PlayerTab() {
@@ -167,12 +166,9 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_fullscreen_title')} description={getString('settings_fullscreen_title_desc')}>
           <ToggleSwitch checked={fullscreenTitle} onChange={setFullscreenTitle} />
         </SettingItem>
-        {/* The glow is never drawn on Linux, where WebKitGTK repaints large blurs on the CPU. */}
-        {!IS_LINUX_RUNTIME && (
-          <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
-            <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
-          </SettingItem>
-        )}
+        <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
+          <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
+        </SettingItem>
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
         </SettingItem>

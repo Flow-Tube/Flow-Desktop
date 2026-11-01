@@ -250,6 +250,19 @@
   animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes ambient-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.85;
+  }
+}
+
+.animate-ambient-fade {
+  animation: ambient-fade-in 1s ease-out forwards;
+}
+
 @keyframes shimmer {
   100% {
     transform: translateX(100%);

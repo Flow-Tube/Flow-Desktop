@@ -738,7 +738,7 @@
   "settings_next_previous_desc": "Show track navigation in mini player",
   "settings_group_pip": "Picture-in-Picture",
   "settings_ambient_mode": "Ambient mode",
-  "settings_ambient_mode_desc": "Glow the colors of the video around the player in theater mode",
+  "settings_ambient_mode_desc": "Glow the colors of the video around the player",
   "settings_auto_pip": "Auto PiP",
   "settings_auto_pip_desc": "Enter PiP when navigating away from the player",
   "settings_pip_toggle": "PiP Toggle Button",

@@ -273,6 +273,16 @@ function extractAmbientSample(context: CanvasRenderingContext2D): AmbientSample 
   };
 }
 
+function makeAmbientGradient(sample: AmbientSample): string {
+  return [
+    `radial-gradient(ellipse 65% 55% at 50% 0%, ${sample.top} 0%, transparent 75%)`,
+    `radial-gradient(ellipse 65% 55% at 50% 100%, ${sample.bottom} 0%, transparent 75%)`,
+    `radial-gradient(ellipse 55% 65% at 0% 50%, ${sample.left} 0%, transparent 75%)`,
+    `radial-gradient(ellipse 55% 65% at 100% 50%, ${sample.right} 0%, transparent 75%)`,
+    `radial-gradient(ellipse 70% 60% at 50% 50%, ${sample.center} 0%, transparent 80%)`,
+  ].join(", ");
+}
+
 function extractCodecMimeType(mimeType?: string | null) {
   if (!mimeType) return null;
   const [baseType, ...rest] = mimeType.split(";");
@@ -386,6 +396,7 @@ export const Player: React.FC<PlayerProps> = ({
   const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const ambientSampleKeyRef = useRef(DEFAULT_AMBIENT_SAMPLE.key);
+  const ambientSampleErrorsRef = useRef(0);
   // Stall watchdog / source-fallback bookkeeping.
   const waitingSinceRef = useRef<number | null>(null);
   const stallCountRef = useRef(0);
@@ -512,7 +523,23 @@ export const Player: React.FC<PlayerProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
-  const [ambientSample, setAmbientSample] = useState<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
+  const [ambientLayers, setAmbientLayers] = useState<{
+    current: AmbientSample;
+    prev: AmbientSample | null;
+  }>({
+    current: DEFAULT_AMBIENT_SAMPLE,
+    prev: null,
+  });
+
+  const updateAmbientSample = useCallback((nextSample: AmbientSample) => {
+    setAmbientLayers((existing) => {
+      if (nextSample.key === existing.current.key) return existing;
+      return {
+        current: nextSample,
+        prev: existing.current,
+      };
+    });
+  }, []);
   const {
     sponsorBlockEnabled,
     sponsorBlockActions,
@@ -608,26 +635,15 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
-  // Not in fullscreen either, where the video covers it.
-  const showAmbient = ambientMode && isTheaterSurface && !error && !isFullscreen;
+  // Ambient glow radiates around the player in both default and theater views;
+  // disabled in pip, fullscreen, or on error.
+  const showAmbient = ambientMode && !isPipMode && !error && !isFullscreen;
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
-  const ambientBackdropStyle = useMemo<React.CSSProperties>(() => ({
-    background: [
-      // Stops reach further than they did under the old CSS blur, which spread
-      // each color past its stop; a gradient is already soft on its own.
-      `radial-gradient(ellipse at 50% -6%, ${ambientSample.top} 0%, transparent 72%)`,
-      `radial-gradient(ellipse at 50% 106%, ${ambientSample.bottom} 0%, transparent 72%)`,
-      `radial-gradient(ellipse at -6% 50%, ${ambientSample.left} 0%, transparent 68%)`,
-      `radial-gradient(ellipse at 106% 50%, ${ambientSample.right} 0%, transparent 68%)`,
-      `radial-gradient(circle at 50% 50%, ${ambientSample.center} 0%, transparent 60%)`,
-      "linear-gradient(180deg, color-mix(in srgb, var(--color-chrome-black) 88%, transparent) 0%, color-mix(in srgb, var(--color-chrome-black) 50%, transparent) 45%, color-mix(in srgb, var(--color-chrome-black) 88%, transparent) 100%)",
-    ].join(", "),
-  }), [ambientSample]);
 
   useEffect(() => {
     if (!showAmbient) {
       ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
-      setAmbientSample(DEFAULT_AMBIENT_SAMPLE);
+      setAmbientLayers({ current: DEFAULT_AMBIENT_SAMPLE, prev: null });
       return;
     }
 
@@ -644,7 +660,7 @@ export const Player: React.FC<PlayerProps> = ({
       cancelVideoFrameCallback?: (handle: number) => void;
     };
 
-    const sampleFrame = () => {
+    const sampleFrame = (force = false) => {
       if (
         cancelled ||
         samplingBlocked ||
@@ -657,7 +673,7 @@ export const Player: React.FC<PlayerProps> = ({
       }
 
       const now = performance.now();
-      if (now - lastSampleAt < AMBIENT_SAMPLE_INTERVAL_MS) return;
+      if (!force && now - lastSampleAt < AMBIENT_SAMPLE_INTERVAL_MS) return;
       lastSampleAt = now;
 
       const canvas = ambientCanvasRef.current ?? document.createElement("canvas");
@@ -673,13 +689,17 @@ export const Player: React.FC<PlayerProps> = ({
         const nextSample = extractAmbientSample(context);
         if (nextSample.key !== ambientSampleKeyRef.current) {
           ambientSampleKeyRef.current = nextSample.key;
-          setAmbientSample(nextSample);
+          updateAmbientSample(nextSample);
         }
+        ambientSampleErrorsRef.current = 0;
       } catch (error) {
-        samplingBlocked = true;
-        ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
-        setAmbientSample(DEFAULT_AMBIENT_SAMPLE);
-        console.warn("Video ambient sampling unavailable; using neutral backdrop", error);
+        ambientSampleErrorsRef.current += 1;
+        if (ambientSampleErrorsRef.current >= 5) {
+          samplingBlocked = true;
+          ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
+          updateAmbientSample(DEFAULT_AMBIENT_SAMPLE);
+          console.warn("Video ambient sampling unavailable; using neutral backdrop", error);
+        }
       }
     };
 
@@ -691,7 +711,9 @@ export const Player: React.FC<PlayerProps> = ({
       });
     };
 
-    sampleFrame();
+    const handleImmediateSample = () => sampleFrame(true);
+
+    sampleFrame(true);
     if (frameVideo.requestVideoFrameCallback) {
       scheduleNextFrame();
     } else {
@@ -702,19 +724,21 @@ export const Player: React.FC<PlayerProps> = ({
       }, AMBIENT_SAMPLE_INTERVAL_MS);
     }
 
-    video.addEventListener("loadeddata", sampleFrame);
-    video.addEventListener("seeked", sampleFrame);
-    video.addEventListener("play", sampleFrame);
+    video.addEventListener("loadeddata", handleImmediateSample);
+    video.addEventListener("seeked", handleImmediateSample);
+    video.addEventListener("play", handleImmediateSample);
+    video.addEventListener("pause", handleImmediateSample);
 
     return () => {
       cancelled = true;
-      video.removeEventListener("loadeddata", sampleFrame);
-      video.removeEventListener("seeked", sampleFrame);
-      video.removeEventListener("play", sampleFrame);
+      video.removeEventListener("loadeddata", handleImmediateSample);
+      video.removeEventListener("seeked", handleImmediateSample);
+      video.removeEventListener("play", handleImmediateSample);
+      video.removeEventListener("pause", handleImmediateSample);
       if (intervalId !== null) window.clearInterval(intervalId);
       if (frameHandle !== null) frameVideo.cancelVideoFrameCallback?.(frameHandle);
     };
-  }, [dashManifestUrl, hlsManifestUrl, showAmbient, src]);
+  }, [dashManifestUrl, hlsManifestUrl, showAmbient, src, updateAmbientSample]);
 
   const logPlayerEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
     const entry = formatPlayerLogPayload({
@@ -2510,9 +2534,10 @@ export const Player: React.FC<PlayerProps> = ({
   };
 
   const playerRootClasses = cx(
+    "relative w-full aspect-video outline-none",
     isTheaterSurface
-      ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black flex items-center justify-center rounded-none overflow-hidden text-chrome-white outline-none"
-      : "relative w-full aspect-video bg-chrome-black rounded-xl overflow-hidden text-chrome-white outline-none",
+      ? "max-h-[calc(100vh-160px)] min-h-[480px] flex items-center justify-center rounded-none"
+      : "rounded-xl",
     isFullscreen && "rounded-none",
     className
   );
@@ -2538,15 +2563,36 @@ export const Player: React.FC<PlayerProps> = ({
       {showAmbient && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-chrome-black"
+          className={cx(
+            "pointer-events-none absolute -z-10 overflow-visible",
+            isTheaterSurface
+              ? "-inset-x-8 -inset-y-12 sm:-inset-x-14 sm:-inset-y-16"
+              : "-inset-8 sm:-inset-12 md:-inset-16 rounded-3xl",
+            !IS_LINUX_RUNTIME && "blur-2xl"
+          )}
         >
+          {ambientLayers.prev && (
+            <div
+              key={ambientLayers.prev.key}
+              className="absolute inset-0 rounded-[inherit] opacity-85"
+              style={{ background: makeAmbientGradient(ambientLayers.prev) }}
+            />
+          )}
           <div
-            className="absolute inset-[-18%] opacity-95"
-            style={ambientBackdropStyle}
+            key={ambientLayers.current.key}
+            className="absolute inset-0 rounded-[inherit] opacity-85 animate-ambient-fade"
+            style={{ background: makeAmbientGradient(ambientLayers.current) }}
           />
-          <div className="absolute inset-0 bg-chrome-black/25" />
         </div>
       )}
+
+      <div
+        className={cx(
+          "relative h-full w-full bg-chrome-black text-chrome-white overflow-hidden outline-none",
+          isTheaterSurface ? "rounded-none flex items-center justify-center" : "rounded-xl",
+          isFullscreen && "rounded-none"
+        )}
+      >
 
       <video
         ref={videoRef}
@@ -2858,6 +2904,7 @@ export const Player: React.FC<PlayerProps> = ({
         activeQualityLabel={isDashPlayback ? (activeQualityLabel || undefined) : (qualities.find(q => q.localUrl === src)?.qualityLabel || undefined)}
       />
       )}
+      </div>
     </div>
   );
 };

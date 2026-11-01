@@ -45,6 +45,8 @@ pub struct LiveDevice {
     pub now: Option<Now>,
     /// When `now` arrived, so its position can advance while it plays.
     pub now_at_ms: i64,
+    /// When any message from it last arrived; a device heard from lately counts as reachable.
+    pub heard_at_ms: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -182,8 +184,11 @@ async fn take(app: &AppHandle, bytes: &[u8]) -> Result<()> {
     let received = match keys.open(bytes) {
         Ok(received) => received,
         Err(error) => {
-            // Another device may already be in a newer epoch, or a new device may have joined.
-            forget_keys(app).await;
+            // Another device may already be in a newer epoch, or a new device may have joined. A
+            // message that opened but didn't parse says nothing about the keys, so they stay.
+            if !matches!(error, EngineError::Unexpected) {
+                forget_keys(app).await;
+            }
             return Err(error);
         }
     };
@@ -191,16 +196,20 @@ async fn take(app: &AppHandle, bytes: &[u8]) -> Result<()> {
         return Ok(());
     }
     let Received { from, message, .. } = &received;
+    let heard = now_ms();
     match message {
         LiveMessage::Presence { can, kind } => update(app, from, |device| {
             device.kind = Some(*kind);
             device.can.clone_from(can);
+            device.heard_at_ms = heard;
         }),
         LiveMessage::Now(now) => update(app, from, |device| {
             device.now = now.video.is_some().then(|| now.clone());
-            device.now_at_ms = now_ms();
+            device.now_at_ms = heard;
+            device.heard_at_ms = heard;
         }),
         _ if message.to() == Some(keys.me().as_str()) => {
+            update(app, from, |device| device.heard_at_ms = heard);
             let answer = match message {
                 LiveMessage::Result(_) => Some(true),
                 _ => consents(&pool).await?.get(from).copied(),

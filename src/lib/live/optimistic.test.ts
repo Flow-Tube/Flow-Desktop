@@ -5,7 +5,7 @@ import { nowOf } from "./now";
 import { overrideFor, stillControlled, withOverrides } from "./optimistic";
 
 const playing: Now = { ...nowOf(null), video: "v", state: "playing", pos: 10_000, dur: 60_000, vol: 50, queue: ["v"] };
-const phone: LiveDevice = { kind: "phone", can: ["play", "remote"], now: playing, nowAtMs: 1000 };
+const phone: LiveDevice = { kind: "phone", can: ["play", "remote"], now: playing, nowAtMs: 1000, heardAtMs: 1000 };
 const status = (device: LiveDevice): LiveStatus => ({ available: true, online: ["phone"], devices: { phone: device } });
 
 describe("overrideFor", () => {

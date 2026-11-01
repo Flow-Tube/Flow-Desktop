@@ -99,8 +99,8 @@ describe("Ambient Mode", () => {
       const { SETTING_DEFINITIONS } = await import("../../lib/settings/schema");
       const def = SETTING_DEFINITIONS.find((d) => d.key === SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED);
       expect(def).toBeDefined();
-      expect(def?.defaultValue).toBe("false");
-      expect(def?.readiness).toBe("persisted-only");
+      expect(def?.defaultValue).toBe("true");
+      expect(def?.readiness).toBe("wired");
     });
   });
 });

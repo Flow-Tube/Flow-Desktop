@@ -177,6 +177,7 @@ type AmbientSample = {
   bottom: string;
   left: string;
   center: string;
+  raw?: [number, number, number][];
   key: string;
 };
 
@@ -274,6 +275,7 @@ function extractAmbientSample(context: CanvasRenderingContext2D, width: number, 
     bottom: ambientRgba(bottom, 0.92),
     left: ambientRgba(left, 0.82),
     center: ambientRgba(center, 0.5),
+    raw: [top, right, bottom, left, center],
     key,
   };
 }
@@ -286,6 +288,19 @@ function makeAmbientGradient(sample: AmbientSample): string {
     `radial-gradient(ellipse 55% 65% at 100% 50%, ${sample.right} 0%, transparent 75%)`,
     `radial-gradient(ellipse 70% 60% at 50% 50%, ${sample.center} 0%, transparent 80%)`,
   ].join(", ");
+}
+
+function isColorDeltaSignificant(prev: AmbientSample | null, next: AmbientSample): boolean {
+  if (!prev?.raw || !next?.raw) return true;
+  let totalDelta = 0;
+  const count = Math.min(prev.raw.length, next.raw.length);
+  for (let i = 0; i < count; i++) {
+    const c1 = prev.raw[i];
+    const c2 = next.raw[i];
+    if (!c1 || !c2) continue;
+    totalDelta += Math.abs(c1[0] - c2[0]) + Math.abs(c1[1] - c2[1]) + Math.abs(c1[2] - c2[2]);
+  }
+  return totalDelta >= 36;
 }
 
 function extractCodecMimeType(mimeType?: string | null) {
@@ -529,20 +544,36 @@ export const Player: React.FC<PlayerProps> = ({
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
   const [ambientLayers, setAmbientLayers] = useState<{
-    current: AmbientSample;
-    prev: AmbientSample | null;
+    layerA: string;
+    layerB: string;
+    activeLayer: "A" | "B";
   }>({
-    current: DEFAULT_AMBIENT_SAMPLE,
-    prev: null,
+    layerA: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+    layerB: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+    activeLayer: "A",
   });
+  const lastSampleRef = useRef<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
 
   const updateAmbientSample = useCallback((nextSample: AmbientSample) => {
-    setAmbientLayers((existing) => {
-      if (nextSample.key === existing.current.key) return existing;
-      return {
-        current: nextSample,
-        prev: existing.current,
-      };
+    if (!isColorDeltaSignificant(lastSampleRef.current, nextSample)) {
+      return;
+    }
+    lastSampleRef.current = nextSample;
+    const nextGradient = makeAmbientGradient(nextSample);
+    setAmbientLayers((current) => {
+      if (current.activeLayer === "A") {
+        return {
+          layerA: current.layerA,
+          layerB: nextGradient,
+          activeLayer: "B",
+        };
+      } else {
+        return {
+          layerA: nextGradient,
+          layerB: current.layerB,
+          activeLayer: "A",
+        };
+      }
     });
   }, []);
   const {
@@ -648,7 +679,12 @@ export const Player: React.FC<PlayerProps> = ({
   useEffect(() => {
     if (!showAmbient) {
       ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
-      setAmbientLayers({ current: DEFAULT_AMBIENT_SAMPLE, prev: null });
+      lastSampleRef.current = DEFAULT_AMBIENT_SAMPLE;
+      setAmbientLayers({
+        layerA: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+        layerB: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
+        activeLayer: "A",
+      });
       return;
     }
 
@@ -2366,6 +2402,9 @@ export const Player: React.FC<PlayerProps> = ({
     if (!video) return;
     const nextDuration = video.duration || duration || 0;
     setDuration(nextDuration);
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      usePlayerStore.getState().setVideoAspectRatio(video.videoWidth / video.videoHeight);
+    }
     const pendingResumeTime = Math.max(resumeTime, pendingResumeTimeRef.current);
     if (pendingResumeTime > 0 && Math.abs(video.currentTime - pendingResumeTime) > 0.25) {
       const restoredTime = Math.min(pendingResumeTime, Math.max(0, nextDuration - 0.25));
@@ -2547,12 +2586,12 @@ export const Player: React.FC<PlayerProps> = ({
   };
 
   const playerRootClasses = cx(
-    "relative w-full isolate outline-none",
+    "relative h-full w-full isolate outline-none",
     isFullscreen
-      ? "h-full aspect-auto rounded-none"
+      ? "aspect-auto rounded-none"
       : isTheaterSurface
-      ? "aspect-video max-h-[calc(100vh-160px)] min-h-[480px] flex items-center justify-center rounded-none"
-      : "aspect-video rounded-xl",
+      ? "max-h-[calc(100vh-160px)] min-h-[480px] flex items-center justify-center rounded-none"
+      : "rounded-xl",
     cursorHidden && "cursor-none [&_*]:!cursor-none",
     className
   );
@@ -2587,17 +2626,19 @@ export const Player: React.FC<PlayerProps> = ({
             !IS_LINUX_RUNTIME && (isFullscreen ? "blur-3xl" : "blur-2xl")
           )}
         >
-          {ambientLayers.prev && (
-            <div
-              key={ambientLayers.prev.key}
-              className="absolute inset-0 rounded-[inherit] opacity-85"
-              style={{ background: makeAmbientGradient(ambientLayers.prev) }}
-            />
-          )}
           <div
-            key={ambientLayers.current.key}
-            className="absolute inset-0 rounded-[inherit] opacity-85 animate-ambient-fade"
-            style={{ background: makeAmbientGradient(ambientLayers.current) }}
+            className="absolute inset-0 rounded-[inherit] transition-opacity duration-1000 ease-in-out pointer-events-none"
+            style={{
+              background: ambientLayers.layerA,
+              opacity: ambientLayers.activeLayer === "A" ? 0.85 : 0,
+            }}
+          />
+          <div
+            className="absolute inset-0 rounded-[inherit] transition-opacity duration-1000 ease-in-out pointer-events-none"
+            style={{
+              background: ambientLayers.layerB,
+              opacity: ambientLayers.activeLayer === "B" ? 0.85 : 0,
+            }}
           />
         </div>
       )}

@@ -38,7 +38,7 @@ export function PlayerTab() {
 
   const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
-  const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, false);
+  const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, true);
 
   const [autoPip, setAutoPip] = useBoolPref(SETTINGS.AUTO_PIP_ENABLED, false);
   const [pipButton, setPipButton] = useBoolPref(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, true);
@@ -169,8 +169,8 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
           <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
         </SettingItem>
-        <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
-          <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
+        <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')}>
+          <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} />
         </SettingItem>
       </SettingsGroup>
     </div>

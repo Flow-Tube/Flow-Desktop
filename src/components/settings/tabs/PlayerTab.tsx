@@ -3,6 +3,7 @@ import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { TextInput } from '../../ui/TextInput';
+import { Slider } from '../../ui/Slider';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
@@ -38,6 +39,7 @@ export function PlayerTab() {
 
   const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
+  const [ambientIntensity, setAmbientIntensity] = useNumberPref(SETTINGS.AMBIENT_MODE_INTENSITY, 60);
   const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, true);
 
   const [autoPip, setAutoPip] = useBoolPref(SETTINGS.AUTO_PIP_ENABLED, false);
@@ -168,6 +170,27 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
           <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
+        </SettingItem>
+        <SettingItem
+          title={getString('settings_ambient_intensity')}
+          description={getString('settings_ambient_intensity_desc')}
+          disabled={!ambientMode}
+        >
+          <div className="flex items-center gap-3 w-48">
+            <Slider
+              min={10}
+              max={100}
+              step={5}
+              value={ambientIntensity}
+              onChange={setAmbientIntensity}
+              disabled={!ambientMode}
+              aria-label={getString('settings_ambient_intensity')}
+              className="flex-1"
+            />
+            <span className="w-10 text-right font-mono text-xs text-chrome-neutral-400">
+              {ambientIntensity}%
+            </span>
+          </div>
         </SettingItem>
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} />

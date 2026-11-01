@@ -60,6 +60,10 @@ export function ShortPlayer({
   const ambientMode = useAppSettingsStore(
     (state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false",
   );
+  const ambientIntensity = useAppSettingsStore((state) => {
+    const val = Number(state.values[SETTINGS.AMBIENT_MODE_INTENSITY]);
+    return Number.isFinite(val) && val >= 10 && val <= 100 ? val : 60;
+  });
   const [rydData, setRydData] = useState<RydData | null>(null);
   const commentCountText = short.commentCountText ?? fetchedCommentCountText;
 
@@ -121,7 +125,8 @@ export function ShortPlayer({
             src={thumbnail}
             alt=""
             aria-hidden="true"
-            className="absolute inset-0 h-full w-full object-cover blur-[120px] scale-125 opacity-50 saturate-[1.5] pointer-events-none"
+            className="absolute inset-0 h-full w-full object-cover blur-[120px] scale-125 saturate-[1.5] pointer-events-none"
+            style={{ opacity: (ambientIntensity / 100) * 0.7 }}
           />
           <div className="absolute inset-0 bg-chrome-neutral-950/60 pointer-events-none" />
         </>

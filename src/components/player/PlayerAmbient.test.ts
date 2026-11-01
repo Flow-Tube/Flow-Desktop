@@ -95,12 +95,40 @@ describe("Ambient Mode", () => {
   });
 
   describe("Adaptive Player Size setting", () => {
-    it("defaults to false in setting definitions", async () => {
+    it("defaults to true in setting definitions", async () => {
       const { SETTING_DEFINITIONS } = await import("../../lib/settings/schema");
       const def = SETTING_DEFINITIONS.find((d) => d.key === SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED);
       expect(def).toBeDefined();
       expect(def?.defaultValue).toBe("true");
       expect(def?.readiness).toBe("wired");
+    });
+  });
+
+  describe("Ambient Mode Intensity setting", () => {
+    it("is defined as wired number between 10 and 100 with default 60", async () => {
+      const { SETTING_DEFINITIONS } = await import("../../lib/settings/schema");
+      const def = SETTING_DEFINITIONS.find((d) => d.key === SETTINGS.AMBIENT_MODE_INTENSITY);
+      expect(def).toBeDefined();
+      expect(def?.defaultValue).toBe("60");
+      expect(def?.type).toBe("number");
+      expect(def?.readiness).toBe("wired");
+      expect(def?.min).toBe(10);
+      expect(def?.max).toBe(100);
+    });
+
+    it("clamps intensity value within valid 10-100 range", () => {
+      const clampIntensity = (raw: string | undefined): number => {
+        const val = Number(raw);
+        return Number.isFinite(val) && val >= 10 && val <= 100 ? val : 60;
+      };
+
+      expect(clampIntensity("80")).toBe(80);
+      expect(clampIntensity("10")).toBe(10);
+      expect(clampIntensity("100")).toBe(100);
+      expect(clampIntensity("0")).toBe(60);
+      expect(clampIntensity("150")).toBe(60);
+      expect(clampIntensity(undefined)).toBe(60);
+      expect(clampIntensity("invalid")).toBe(60);
     });
   });
 });

@@ -270,11 +270,11 @@ function extractAmbientSample(context: CanvasRenderingContext2D, width: number, 
     .join(",");
 
   return {
-    top: ambientRgba(top, 0.45),
-    right: ambientRgba(right, 0.4),
-    bottom: ambientRgba(bottom, 0.45),
-    left: ambientRgba(left, 0.4),
-    center: ambientRgba(center, 0.25),
+    top: ambientRgba(top, 0.85),
+    right: ambientRgba(right, 0.75),
+    bottom: ambientRgba(bottom, 0.85),
+    left: ambientRgba(left, 0.75),
+    center: ambientRgba(center, 0.45),
     raw: [top, right, bottom, left, center],
     key,
   };
@@ -543,6 +543,10 @@ export const Player: React.FC<PlayerProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
+  const ambientIntensity = useAppSettingsStore((state) => {
+    const val = Number(state.values[SETTINGS.AMBIENT_MODE_INTENSITY]);
+    return Number.isFinite(val) && val >= 10 && val <= 100 ? val : 60;
+  });
   const [ambientGradients, setAmbientGradients] = useState<{
     base: string;
     crossfade: string;
@@ -2629,7 +2633,7 @@ export const Player: React.FC<PlayerProps> = ({
               : "-inset-2 sm:-inset-3 rounded-2xl",
             !IS_LINUX_RUNTIME && (isFullscreen ? "blur-2xl" : "blur-xl")
           )}
-          style={{ opacity: 0.48 }}
+          style={{ opacity: ambientIntensity / 100 }}
         >
           {/* Base Layer: maintains 100% steady background light without luminance dips */}
           <div

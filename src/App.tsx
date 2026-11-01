@@ -13,6 +13,7 @@ import { useWatchLaterStore } from "./store/useWatchLaterStore";
 import { useSubscriptionStore } from "./store/useSubscriptionStore";
 import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
+import { catchUpOnce } from "./lib/linked/catchUp";
 import { useStartupHealth } from "./lib/useStartupHealth";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
@@ -149,6 +150,8 @@ function App() {
   useEffect(() => {
     if (!IS_MAIN_WINDOW) return;
     const checkOnboarding = async () => {
+      // A profile added from another device has its onboarding state in what that device sent.
+      await catchUpOnce();
       try {
         const completed = await getOnboardingStatus();
         if (!completed && location.pathname !== "/onboarding") {

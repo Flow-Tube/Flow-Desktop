@@ -62,7 +62,7 @@ use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::linked::{
     linked_accept_join, linked_add_device, linked_answer, linked_ask_to_join, linked_cancel,
-    linked_choose_profile, linked_create, linked_create_lan, linked_create_webdav,
+    linked_catch_up, linked_choose_profile, linked_create, linked_create_lan, linked_create_webdav,
     linked_dashboard, linked_decline_join, linked_delete_profile, linked_devices,
     linked_enter_code, linked_forget, linked_join_requests, linked_leave, linked_link_phase,
     linked_profiles, linked_recovery_saved, linked_remove, linked_rename, linked_restore,
@@ -822,6 +822,7 @@ pub fn run() {
             linked_profiles,
             linked_sync_profile,
             linked_sync_added_profile,
+            linked_catch_up,
             linked_stop_profile,
             linked_delete_profile,
             linked_choose_profile,

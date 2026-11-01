@@ -22,6 +22,7 @@ SYNC
 - Play on: picking a device now works as on Android. This computer takes playback back from the device you control, picking another device moves that device's session there, and a device that stops answering stops showing as playing.
 - Linked devices: choose which profiles sync. A profile starts its own synced profile or joins one from your other devices, and Profiles under Linked devices adds one that only your other devices have.
 - A synced profile that isn't open keeps what arrives and catches up when you switch to it. Stopping a profile on every device keeps its data on each one.
+- Linked devices has a Dashboard: where the group lives, how much of a Flow server's storage it uses, your devices, each synced profile's state and the latest sync errors.
 
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.

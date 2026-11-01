@@ -22,7 +22,7 @@ function lastSyncText(status: LinkedStatus, syncing: boolean): string {
   return getString("linked_last_sync", formatYouTubeRelativeTime(last.atMs));
 }
 
-const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
+export const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
 
 /** For a device in a group: where it lives, the last sync, and the devices it syncs with. */
 export function LinkedOverview({ status }: { status: LinkedStatus }) {

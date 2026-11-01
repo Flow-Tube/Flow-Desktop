@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use sqlx::SqlitePool;
 
-use super::kept::has_kept;
+use super::kept::kept_count;
 use super::state::links_to_read;
 use crate::sync::error::SyncError;
 
@@ -41,7 +41,7 @@ impl Reading {
 
 /// Whether `link` still waits here on data other devices sent: kept batches, or its snapshot.
 pub async fn catching_up(pool: &SqlitePool, link: &str) -> Result<bool, SyncError> {
-    Ok(has_kept(pool, link).await? || links_to_read(pool).await?.iter().any(|l| l == link))
+    Ok(kept_count(pool, link).await? > 0 || links_to_read(pool).await?.iter().any(|l| l == link))
 }
 
 /// Links `profile` to `link`.

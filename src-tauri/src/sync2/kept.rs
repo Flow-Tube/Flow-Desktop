@@ -78,13 +78,12 @@ pub async fn applied(pool: &SqlitePool, ids: &[i64]) -> Result<(), SyncError> {
     Ok(())
 }
 
-/// Whether batches of `link` wait to be applied.
-pub async fn has_kept(pool: &SqlitePool, link: &str) -> Result<bool, SyncError> {
+/// How many batches of `link` wait to be applied.
+pub async fn kept_count(pool: &SqlitePool, link: &str) -> Result<i64, SyncError> {
     Ok(
-        sqlx::query_scalar::<_, i64>("SELECT 1 FROM sync2_kept WHERE link = ? LIMIT 1")
+        sqlx::query_scalar("SELECT COUNT(*) FROM sync2_kept WHERE link = ?")
             .bind(link)
-            .fetch_optional(pool)
-            .await?
-            .is_some(),
+            .fetch_one(pool)
+            .await?,
     )
 }

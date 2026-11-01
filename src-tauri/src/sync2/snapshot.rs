@@ -11,7 +11,7 @@ use super::blob::seal_blob;
 use super::engine::{Result, Session, now_ms};
 use super::envelope::ObjectType;
 use super::epoch::purpose_key;
-use super::gc::{Logged, record_manifest};
+use super::gc::{Logged, manifests, record_manifest};
 use super::kdf::sha256;
 use super::paths::blob_path;
 use super::payload::encode_payload;
@@ -81,6 +81,25 @@ pub async fn snapshot_due(pool: &SqlitePool, link: &str) -> Result<bool> {
         .is_some_and(|(written, merged)| merged > MERGED_LIMIT || now_ms() - written >= MAX_AGE_MS))
 }
 
+/// When this device wrote the snapshot of `link` it still keeps, if it wrote one.
+pub async fn own_snapshot_ms(pool: &SqlitePool, me: &str, link: &str) -> Result<Option<i64>> {
+    let own = manifests(pool)
+        .await?
+        .iter()
+        .any(|logged| logged.did == me && logged.manifest.link.as_deref() == Some(link));
+    if !own {
+        return Ok(None);
+    }
+    let written: Option<i64> =
+        sqlx::query_scalar("SELECT written_ms FROM sync2_snapshots WHERE link = ?")
+            .bind(link)
+            .fetch_optional(pool)
+            .await
+            .map_err(SyncError::from)?;
+    // Zero asks for a snapshot soon, after a removal; it says nothing about the last one.
+    Ok(written.filter(|ms| *ms > 0))
+}
+
 /// After this device removed another, its next sync writes a snapshot under the new epoch.
 pub async fn snapshot_soon(pool: &SqlitePool) -> Result<()> {
     sqlx::query("UPDATE sync2_snapshots SET written_ms = 0")
@@ -91,12 +110,15 @@ pub async fn snapshot_soon(pool: &SqlitePool) -> Result<()> {
 }
 
 async fn snapshot_written(pool: &SqlitePool, link: &str) -> Result<()> {
-    sqlx::query("UPDATE sync2_snapshots SET written_ms = ?, merged_bytes = 0 WHERE link = ?")
-        .bind(now_ms())
-        .bind(link)
-        .execute(pool)
-        .await
-        .map_err(SyncError::from)?;
+    sqlx::query(
+        "INSERT INTO sync2_snapshots (link, written_ms, merged_bytes) VALUES (?, ?, 0)
+         ON CONFLICT (link) DO UPDATE SET written_ms = excluded.written_ms, merged_bytes = 0",
+    )
+    .bind(link)
+    .bind(now_ms())
+    .execute(pool)
+    .await
+    .map_err(SyncError::from)?;
     Ok(())
 }
 

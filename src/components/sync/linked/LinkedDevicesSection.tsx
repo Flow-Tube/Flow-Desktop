@@ -1,9 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link2 } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
+import type { LinkedStatus } from "../../../lib/api/linked";
+import { SegmentedControl } from "../../ui/SegmentedControl";
 import { IconChip, Spinner } from "../SyncParts";
+import { Dashboard } from "./Dashboard";
 import { KeychainBlocked } from "./KeychainBlocked";
 import { LinkPanel } from "./LinkPanel";
 import { LinkedOverview } from "./LinkedOverview";
@@ -21,7 +24,30 @@ function Body() {
   if (status.keychainBlocked) return <KeychainBlocked />;
   if (!status.kind) return <LinkedSetup />;
   if (status.loginRefused) return <LoginRefused />;
-  return <LinkedOverview status={status} />;
+  return <LinkedTabs status={status} />;
+}
+
+type Tab = "devices" | "dashboard";
+
+/** A device in a group: its devices and profiles, or the dashboard. */
+function LinkedTabs({ status }: { status: LinkedStatus }) {
+  const [tab, setTab] = useState<Tab>("devices");
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="self-start">
+        <SegmentedControl<Tab>
+          label={getString("linked_tabs_label")}
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "devices", label: getString("linked_tab_devices") },
+            { value: "dashboard", label: getString("linked_tab_dashboard") },
+          ]}
+        />
+      </div>
+      {tab === "devices" ? <LinkedOverview status={status} /> : <Dashboard />}
+    </div>
+  );
 }
 
 /** FLOW-SYNC/2: devices that stay in sync through a Flow server. */

@@ -85,6 +85,7 @@ setting	sponsorblock_server	PROFILE	settings	SponsorBlock preference
 setting	sync_neuro_merged	DEFAULT_ONLY	sync	FlowNeuro CRDT state
 setting	sync_music_merged	DEFAULT_ONLY	sync	MusicBrain CRDT state
 setting	sync_neuro_baseline	DEFAULT_ONLY	sync	FlowNeuro CRDT baseline
+setting	sync2_errors	DEFAULT_ONLY	sync	Recent linked-devices sync error kinds and times, kept with the group in Default's database
 setting	sync_music_baseline	DEFAULT_ONLY	sync	MusicBrain CRDT baseline
 setting	sync_last_backup	DEFAULT_ONLY	sync	Pre-apply snapshot of the last sync
 setting	sync_clock_hwm	DEFAULT_ONLY	sync	Newest stamp applied; local edits are stamped after it

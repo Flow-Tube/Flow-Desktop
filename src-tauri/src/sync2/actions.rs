@@ -500,6 +500,7 @@ async fn forget_with_keys(pool: &SqlitePool) -> Result<()> {
 /// Forgets the group on a database, keeping this device's keys.
 async fn forget_here(pool: &SqlitePool) -> Result<()> {
     forget_group(pool).await?;
+    super::error_log::clear(pool).await?;
     set_setting(pool, STOPPED, "").await?;
     set_login_refused(pool, false).await?;
     set_recovery_saved(pool, true).await

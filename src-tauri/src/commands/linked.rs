@@ -5,6 +5,7 @@ use tauri::AppHandle;
 
 use crate::errors::ErrorResponse;
 use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
+use crate::sync2::dashboard::{self, Dashboard};
 use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
@@ -241,4 +242,9 @@ pub async fn linked_choose_profile(
     profile_actions::choose_for_default(&app, link.as_deref())
         .await
         .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_dashboard(app: AppHandle) -> Result<Dashboard, ErrorResponse> {
+    dashboard::dashboard(&app).await.map_err(|e| err(&e))
 }

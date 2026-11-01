@@ -7,7 +7,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::SqlitePool;
 
-use super::batches::{IncomingBatch, mark_sent, outgoing_batches, parse_batch};
+use super::batches::{IncomingBatch, batch_content, mark_sent, outgoing_batches, parse_batch};
 use super::bootstrap::Snapshot;
 use super::envelope::{
     Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
@@ -19,10 +19,11 @@ use super::kept::{Kept, keep};
 use super::keys::MemberSecrets;
 use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
-use super::profile_links::{Reading, link_profile};
+use super::profile_links::{Reading, forget_link, link_profile};
+use super::profile_names::{self, PROFILES};
 use super::roster::{Entry, RosterState, apply_entry, replay_roster};
 use super::server::StoreError;
-use super::snapshot::{Manifest, note_merged};
+use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
     Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, save_floors,
     save_group, save_streams, streams,
@@ -66,6 +67,12 @@ pub enum EngineError {
     LanUnreachable,
     #[error("the code names another WebDAV folder")]
     OtherFolder,
+    #[error("a device in a group keeps at least one profile synced")]
+    LastProfile,
+    #[error("that profile already syncs on this device")]
+    ProfileTaken,
+    #[error("only the running profile can start syncing")]
+    NotRunning,
 }
 
 impl EngineError {
@@ -99,6 +106,9 @@ impl EngineError {
             Self::AlreadyLinked => "linkedAlreadyLinked",
             Self::LanUnreachable => "linkedLanUnreachable",
             Self::OtherFolder => "linkedOtherFolder",
+            Self::LastProfile => "linkedLastProfile",
+            Self::ProfileTaken => "linkedProfileTaken",
+            Self::NotRunning => "linkedProfileNotRunning",
         }
     }
 }
@@ -116,6 +126,8 @@ pub struct Pulled {
     pub batches: BTreeMap<String, Vec<IncomingBatch>>,
     /// Batches of linked profiles that aren't running, kept by [`Session::finish`].
     pub kept: Vec<Kept>,
+    /// `profiles` batches, merged by [`Session::finish`].
+    pub profiles: Vec<IncomingBatch>,
     /// Where the snapshots started from stop including each link's batches.
     floors: Floors,
     positions: BTreeMap<String, StreamPosition>,
@@ -136,6 +148,7 @@ impl Pulled {
     fn start_from(&mut self, me: &str, snapshot: Snapshot, reading: Option<&Reading>) {
         self.links.push(snapshot.manifest.link.clone());
         let Some(link) = snapshot.manifest.link else {
+            self.profiles.extend(snapshot.batches);
             return;
         };
         for (did, tip) in snapshot.manifest.vv.iter().filter(|(did, _)| *did != me) {
@@ -171,11 +184,12 @@ impl Pulled {
         reading: Option<&Reading>,
         floors: &Floors,
     ) {
-        let Some(reading) = reading else {
-            self.batches.entry(did).or_default().push(batch);
+        let Some(link) = batch.link.clone() else {
+            self.profiles.push(batch);
             return;
         };
-        let Some(link) = batch.link.clone() else {
+        let Some(reading) = reading else {
+            self.batches.entry(did).or_default().push(batch);
             return;
         };
         if floors
@@ -449,6 +463,19 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(outgoing.batches.len())
     }
 
+    /// Uploads the `profiles` records this device changed since it last sent them.
+    pub async fn push_profiles(&mut self, pool: &SqlitePool) -> Result<()> {
+        let unsent = profile_names::unsent(pool).await?;
+        if unsent.is_empty() {
+            return Ok(());
+        }
+        let lines: Vec<Vec<u8>> = unsent.iter().map(to_canonical_json).collect();
+        let content = batch_content(PROFILES, &self.state.head, None, &lines);
+        self.write(pool, ObjectType::Changes, &content).await?;
+        profile_names::mark_sent(pool, &unsent).await?;
+        note_merged(pool, PROFILES_KEY, content.len()).await
+    }
+
     /// Reads other devices' new objects in stream order, checking each one. Nothing is applied:
     /// the caller applies [`Pulled::batches`] and then calls [`Session::finish`].
     pub async fn pull(&mut self, pool: &SqlitePool) -> Result<Pulled> {
@@ -458,7 +485,8 @@ impl<'a, S: Store> Session<'a, S> {
 
     /// Links a restored device's profile `own` (spec/protocol.md, Recovery): to the link other
     /// devices' batches name, or to its own id when they name none. False while the logs can't be
-    /// read to the end yet; nothing may be pushed or pulled until this returns true.
+    /// read to the end yet, or while the user has to choose among several links (whose names it
+    /// keeps); nothing may be pushed or pulled until this returns true.
     pub async fn adopt_link(&mut self, pool: &SqlitePool, own: &str) -> Result<bool> {
         if !self.record.link.is_empty() {
             return Ok(true);
@@ -467,12 +495,18 @@ impl<'a, S: Store> Session<'a, S> {
         if read.stalled {
             return Ok(false);
         }
-        let link = read
-            .links
-            .into_iter()
-            .flatten()
-            .next()
-            .unwrap_or_else(|| own.to_owned());
+        let deleted = profile_names::merge(pool, &profile_names::parse(&read.profiles)).await?;
+        let mut links: Vec<String> = Vec::new();
+        for link in read.links.iter().flatten() {
+            if !links.contains(link) && !deleted.contains(link) {
+                links.push(link.clone());
+            }
+        }
+        if links.len() > 1 {
+            record_links(pool, &read.links).await?;
+            return Ok(false);
+        }
+        let link = links.pop().unwrap_or_else(|| own.to_owned());
         link_profile(pool, own, &link).await?;
         self.record.link.clone_from(&link);
         save_group(pool, &self.record).await?;
@@ -633,6 +667,10 @@ impl<'a, S: Store> Session<'a, S> {
     pub async fn finish(&mut self, pool: &SqlitePool, pulled: Pulled) -> Result<()> {
         keep(pool, &pulled.kept).await?;
         save_floors(pool, &pulled.floors).await?;
+        let records = profile_names::parse(&pulled.profiles);
+        for link in profile_names::merge(pool, &records).await? {
+            forget_link(pool, &link).await?;
+        }
         save_streams(pool, &pulled.positions, pulled.cursor).await?;
         if let Some(link) = &self.reading.active {
             let merged = pulled.batches.values().flatten().map(|b| b.size).sum();

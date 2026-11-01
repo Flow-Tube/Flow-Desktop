@@ -309,7 +309,11 @@ where
         group: record.group_id.clone(),
         head: after.head,
         seq: after.seq,
-        link: record.link.clone(),
+        link: session
+            .reading()
+            .welcome
+            .clone()
+            .ok_or(EngineError::LastProfile)?,
         store,
         entries,
         wrap,

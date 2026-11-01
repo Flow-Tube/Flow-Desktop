@@ -9,6 +9,7 @@ use sqlx::SqlitePool;
 
 use super::engine::{Result, Session};
 use super::paths::{blob_path, log_path};
+use super::profile_names;
 use super::roster::Role;
 use super::snapshot::Manifest;
 use super::store::Store;
@@ -314,6 +315,9 @@ impl<S: Store> Session<'_, S> {
         links.extend(self.reading().links().map(|link| Some(link.to_owned())));
         for link in deleted_links(pool).await? {
             links.remove(&Some(link));
+        }
+        if !profile_names::records(pool).await?.is_empty() {
+            links.insert(None);
         }
         let plan = Facts {
             current: &current,

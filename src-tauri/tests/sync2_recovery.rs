@@ -137,3 +137,26 @@ async fn a_restored_device_finds_the_link_in_a_snapshot() {
     assert!(session.adopt_link(&pool, "own-profile").await.unwrap());
     assert_eq!(load_group(&pool).await.unwrap().unwrap().link, LINK);
 }
+
+#[tokio::test]
+async fn a_restored_device_waits_for_a_choice_when_several_links_sync() {
+    let g = group().await;
+    let pool_a = device_pool(&g).await;
+    let mut session_a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    session_a
+        .write_snapshot(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    let mut kids = session_a.reading().clone();
+    kids.active = Some("link-kids".into());
+    session_a.set_reading(kids);
+    session_a
+        .write_snapshot(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+
+    let (device, pool) = restored_device(&g).await;
+    let mut session = Session::open(&pool, &g.store, &device).await.unwrap();
+    assert!(!session.adopt_link(&pool, "own-profile").await.unwrap());
+    assert!(load_group(&pool).await.unwrap().unwrap().link.is_empty());
+}

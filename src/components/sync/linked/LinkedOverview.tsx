@@ -12,6 +12,7 @@ import { Card } from "./Card";
 import { DeviceList } from "./DeviceList";
 import { JoinRequests } from "./JoinRequests";
 import { LeaveGroup } from "./LeaveGroup";
+import { ProfilesCard } from "./ProfilesCard";
 
 function lastSyncText(status: LinkedStatus, syncing: boolean): string {
   if (syncing) return getString("linked_syncing");
@@ -66,6 +67,7 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
           <Link2 className="h-4 w-4" /> {getString("linked_add_device")}
         </Button>
       </Card>
+      <ProfilesCard className="col-span-12" />
     </div>
   );
 }

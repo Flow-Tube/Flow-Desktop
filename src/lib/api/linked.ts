@@ -59,7 +59,41 @@ export interface JoinRequest {
   expires: number;
 }
 
+/** A profile on this computer, and the link it syncs (`src-tauri/src/sync2/profile_actions.rs`). */
+export interface LocalLinkedProfile {
+  id: string;
+  link?: string | null;
+}
+
+/** A profile other devices sync and no profile here does. */
+export interface SyncedProfile {
+  link: string;
+  /** Blank until a device names it. */
+  name: string;
+}
+
+export interface LinkedProfiles {
+  local: LocalLinkedProfile[];
+  synced: SyncedProfile[];
+  /** A restored device found several synced profiles: Default joins the one the user picks. */
+  chooseForDefault: boolean;
+}
+
 export const getLinkedStatus = () => invokeBackend<LinkedStatus>("linked_status");
+export const getLinkedProfiles = () => invokeBackend<LinkedProfiles>("linked_profiles");
+/** Syncs `profile` under a link of its own, or joining `link`. */
+export const syncProfile = (profile: string, link: string | null) =>
+  invokeBackend<void>("linked_sync_profile", { profile, link });
+/** Links `profile`, just created for `link`, another device's profile. */
+export const syncAddedProfile = (profile: string, link: string) =>
+  invokeBackend<void>("linked_sync_added_profile", { profile, link });
+/** Resolves once the running profile has what other devices sent for it. */
+export const catchUpLinkedProfile = () => invokeBackend<void>("linked_catch_up");
+export const stopProfile = (profile: string) => invokeBackend<void>("linked_stop_profile", { profile });
+/** Stops `link` syncing on every device; each keeps its data. */
+export const deleteSyncedProfile = (link: string) => invokeBackend<void>("linked_delete_profile", { link });
+/** A restored device's Default joins `link`, or starts its own with `null`. */
+export const chooseProfile = (link: string | null) => invokeBackend<void>("linked_choose_profile", { link });
 export const getLinkedDevices = () => invokeBackend<LinkedDevice[]>("linked_devices");
 export const getLinkPhase = () => invokeBackend<LinkPhase>("linked_link_phase");
 

@@ -10,7 +10,9 @@ use flow_desktop_lib::sync2::batches::{IncomingBatch, apply_batches};
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
 use flow_desktop_lib::sync2::kept::kept;
 use flow_desktop_lib::sync2::paths::log_path;
-use flow_desktop_lib::sync2::profile_links::Reading;
+use flow_desktop_lib::sync2::profile_links::{Reading, catching_up, link_profile, reading, unlink};
+use flow_desktop_lib::sync2::profile_names::set;
+use flow_desktop_lib::sync2::state::{link_read, read_from_snapshot};
 use sqlx::SqlitePool;
 use sync2_common::{Group, MemoryStore, device_pool, empty_pool, exported, group, watch, watched};
 
@@ -24,6 +26,7 @@ fn running(active: &str, kept: &[&str]) -> Reading {
             .iter()
             .map(|l| (*l).to_owned())
             .collect::<BTreeSet<_>>(),
+        welcome: Some(active.to_owned()),
     }
 }
 
@@ -224,20 +227,64 @@ async fn a_deleted_profile_no_longer_holds_back_garbage_collection() {
     let b_state = device_pool(&g).await;
     let mut b = Session::open(&b_state, &g.store, &g.b).await.unwrap();
     b.set_reading(running(HOME, &[KIDS]));
-    let pulled = b.pull(&b_state).await.unwrap();
-    b.finish(&b_state, pulled).await.unwrap();
     a.set_reading(running(HOME, &[KIDS]));
-    let pulled = a.pull(&a_state).await.unwrap();
-    a.finish(&a_state, pulled).await.unwrap();
-
+    let read_each_other = async |a: &mut Session<'_, &MemoryStore>,
+                                 b: &mut Session<'_, &MemoryStore>| {
+        let pulled = b.pull(&b_state).await.unwrap();
+        b.finish(&b_state, pulled).await.unwrap();
+        let pulled = a.pull(&a_state).await.unwrap();
+        a.finish(&a_state, pulled).await.unwrap();
+    };
+    read_each_other(&mut a, &mut b).await;
     a.collect_garbage(&a_state).await.unwrap();
     assert!(has(&g, 1), "kids has no snapshot yet");
 
-    sqlx::query("INSERT INTO sync2_profiles (link, name, hlc, deleted) VALUES (?, 'Kids', '1:0:aaaaaaaa', 1)")
-        .bind(KIDS)
-        .execute(&a_state)
-        .await
-        .unwrap();
+    set(&a_state, "device-a", KIDS, "Kids", true).await.unwrap();
+    a.push_profiles(&a_state).await.unwrap();
+    a.write_profiles_snapshot(&a_state).await.unwrap();
+    read_each_other(&mut a, &mut b).await;
     a.collect_garbage(&a_state).await.unwrap();
     assert!((1..=pushed).all(|seq| !has(&g, seq)));
+}
+
+#[tokio::test]
+async fn a_new_device_joins_defaults_link_whichever_profile_runs() {
+    let state = empty_pool().await;
+    link_profile(&state, "default", HOME).await.unwrap();
+    link_profile(&state, "kids", KIDS).await.unwrap();
+    let kids_running = reading(&state, HOME, "kids", "default").await.unwrap();
+    assert_eq!(kids_running.active.as_deref(), Some(KIDS));
+    assert_eq!(kids_running.welcome.as_deref(), Some(HOME));
+
+    unlink(&state, "default").await.unwrap();
+    let only_kids = reading(&state, HOME, "kids", "default").await.unwrap();
+    assert_eq!(
+        only_kids.welcome.as_deref(),
+        Some(KIDS),
+        "else the first synced"
+    );
+}
+
+#[tokio::test]
+async fn a_link_catches_up_while_its_snapshot_or_kept_batches_wait() {
+    let state = empty_pool().await;
+    assert!(!catching_up(&state, KIDS).await.unwrap());
+
+    read_from_snapshot(&state, KIDS).await.unwrap();
+    assert!(catching_up(&state, KIDS).await.unwrap());
+    assert!(
+        !catching_up(&state, HOME).await.unwrap(),
+        "only the link that waits"
+    );
+    link_read(&state, KIDS).await.unwrap();
+
+    sqlx::query(
+        "INSERT INTO sync2_kept (link, sender, seq, collection, head, records)
+         VALUES (?, 'a', 1, 'likes', 'h', x'')",
+    )
+    .bind(KIDS)
+    .execute(&state)
+    .await
+    .unwrap();
+    assert!(catching_up(&state, KIDS).await.unwrap());
 }

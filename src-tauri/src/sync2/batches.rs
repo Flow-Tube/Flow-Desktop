@@ -101,17 +101,17 @@ async fn sent_hashes(
 }
 
 /// A header line and then the records, one per line: the format of change batches and of
-/// snapshot blobs.
+/// snapshot blobs. `link` is `None` for the `profiles` collection.
 pub fn batch_content(
-    collection: Collection,
+    collection: &str,
     head: &str,
-    link: &str,
+    link: Option<&str>,
     records: &[impl AsRef<[u8]>],
 ) -> Vec<u8> {
     let header = BatchHeader {
-        collection: collection.key().to_owned(),
+        collection: collection.to_owned(),
         head: head.to_owned(),
-        link: Some(link.to_owned()),
+        link: link.map(str::to_owned),
     };
     let mut content = to_canonical_json(&header);
     for record in records {
@@ -159,7 +159,7 @@ pub async fn outgoing_batches(
         for records in changed.chunks(RECORDS_PER_BATCH) {
             outgoing.batches.push(Batch {
                 collection,
-                content: batch_content(collection, head, link, records),
+                content: batch_content(collection.key(), head, Some(link), records),
             });
         }
     }

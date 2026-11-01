@@ -30,6 +30,10 @@ pub struct Start {
     pub positions: BTreeMap<String, StreamPosition>,
 }
 
+/// Per link, and `profiles` as `Some(None)`, the best covering snapshot: writer, seq and epoch.
+/// Without links to look for, the one best snapshot of any link, as `None`.
+type Best = BTreeMap<Option<Option<String>>, (String, u64, u32, Manifest)>;
+
 /// How many objects of all logs the snapshot includes.
 pub(super) fn merged(manifest: &Manifest) -> u64 {
     manifest.vv.values().map(|tip| tip.seq).sum()
@@ -100,18 +104,15 @@ impl<S: Store> Session<'_, S> {
             return Ok(None);
         }
 
-        // Per link (`None` standing for any), the best covering snapshot: writer, seq, epoch.
-        let mut best: BTreeMap<Option<String>, (String, u64, u32, Manifest)> = BTreeMap::new();
+        let mut best: Best = BTreeMap::new();
         for (did, seqs) in &mut logs {
             seqs.sort_unstable();
             for (seq, epoch, manifest) in self.manifests_from_newest(did, seqs, links).await? {
-                let Some(link) = manifest.link.clone() else {
-                    continue;
-                };
-                let key = match links {
-                    Some(links) if links.contains(&link) => Some(link),
-                    Some(_) => continue,
-                    None => None,
+                let key = match (links, &manifest.link) {
+                    (None, Some(_)) => None,
+                    (Some(links), Some(link)) if !links.contains(link) => continue,
+                    (Some(_), link) => Some(link.clone()),
+                    (None, None) => continue,
                 };
                 if covers(&manifest, &first)
                     && best
@@ -143,15 +144,15 @@ impl<S: Store> Session<'_, S> {
         }))
     }
 
-    /// The newest snapshot manifest of each of `links` in `did`'s log (only the newest of any link
-    /// when `None`): where it sits and the epoch it was written in.
+    /// The newest snapshot manifest of each of `links` and of `profiles` in `did`'s log (only the
+    /// newest of any link when `None`): where it sits and the epoch it was written in.
     async fn manifests_from_newest(
         &mut self,
         did: &str,
         seqs: &[u64],
         links: Option<&BTreeSet<String>>,
     ) -> Result<Vec<(u64, u32, Manifest)>> {
-        let wanted = links.map_or(1, BTreeSet::len);
+        let wanted = links.map_or(1, |links| links.len() + 1);
         let mut found: Vec<(u64, u32, Manifest)> = Vec::new();
         for &seq in seqs.iter().rev() {
             if found.len() >= wanted {

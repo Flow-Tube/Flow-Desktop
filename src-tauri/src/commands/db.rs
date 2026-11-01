@@ -4,10 +4,10 @@ use crate::commands::linked::err as linked_err;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
 use crate::errors::ErrorResponse;
-use crate::profiles::ActiveProfile;
 use crate::sync::error::SyncError;
 use crate::sync::local_edits;
 use crate::sync2::actions::{leave_if_linked, reset_local_data};
+use crate::sync2::profile_actions::{edits_sync, syncs_link};
 use crate::sync2::service::push_soon;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, State};
@@ -39,12 +39,11 @@ pub async fn add_watch_record(
     app: AppHandle,
     record: WatchHistoryRecord,
     pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     watch_history::upsert_watch_record(&pool, &record)
         .await
         .map_err(ErrorResponse::from)?;
-    if profile.is_default {
+    if edits_sync(&app).await {
         push_soon(&app);
     }
     Ok(())
@@ -55,12 +54,11 @@ pub async fn add_watch_records_bulk(
     app: AppHandle,
     records: Vec<WatchHistoryRecord>,
     pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
     watch_history::upsert_watch_records_bulk(&pool, &records)
         .await
         .map_err(ErrorResponse::from)?;
-    if profile.is_default {
+    if edits_sync(&app).await {
         push_soon(&app);
     }
     Ok(())
@@ -71,9 +69,8 @@ pub async fn delete_watch_record(
     app: AppHandle,
     video_id: String,
     pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    if profile.is_default {
+    if edits_sync(&app).await {
         note_sync_failure(local_edits::record_watch_deletion(&pool, Some(&video_id)).await);
         push_soon(&app);
     }
@@ -86,9 +83,8 @@ pub async fn delete_watch_record(
 pub async fn clear_watch_history(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    if profile.is_default {
+    if edits_sync(&app).await {
         note_sync_failure(local_edits::record_watch_deletion(&pool, None).await);
         push_soon(&app);
     }
@@ -101,12 +97,11 @@ pub async fn clear_watch_history(
 pub async fn reset_app_data(
     app: AppHandle,
     pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    if profile.is_default {
+    if syncs_link(&app).await {
         leave_if_linked(&app).await.map_err(|e| linked_err(&e))?;
     }
-    reset_local_data(&pool, profile.is_default)
+    reset_local_data(&pool, edits_sync(&app).await)
         .await
         .map_err(|e| linked_err(&e))
 }
@@ -127,9 +122,8 @@ pub async fn set_setting(
     key: String,
     value: String,
     pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    if profile.is_default {
+    if edits_sync(&app).await {
         note_sync_failure(local_edits::record_blob_write(&pool, &key, &value).await);
         if local_edits::is_synced_setting(&key) {
             push_soon(&app);
@@ -160,7 +154,7 @@ pub(crate) fn apply_backend_setting(key: &str, value: Option<&str>) {
     }
 }
 
-/// Only Default syncs, so only Default records its edits for sync. Sync bookkeeping never blocks the user's own change; the worst case is that this one edit
+/// Only a profile that syncs records its edits for sync. Sync bookkeeping never blocks the user's own change; the worst case is that this one edit
 /// syncs the way it did before this was recorded (a deletion a peer may undo).
 fn note_sync_failure(result: Result<(), SyncError>) {
     if let Err(e) = result {

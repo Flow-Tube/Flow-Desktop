@@ -15,6 +15,7 @@ use super::gc::{Logged, record_manifest};
 use super::kdf::sha256;
 use super::paths::blob_path;
 use super::payload::encode_payload;
+use super::profile_names::{self, PROFILES};
 use super::state::streams;
 use super::store::Store;
 use crate::sync::canonical::to_canonical_json;
@@ -22,6 +23,8 @@ use crate::sync::error::SyncError;
 use crate::sync::protocol::OutgoingCollection;
 
 const MERGED_LIMIT: i64 = 1024 * 1024;
+/// How the `profiles` collection is named among links in this device's snapshot records.
+pub const PROFILES_KEY: &str = "";
 const MAX_AGE_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 /// spec/store.md asks for at most 2 MiB of payload per blob.
 const BLOB_CONTENT_LIMIT: usize = 2 * 1024 * 1024;
@@ -126,6 +129,26 @@ impl<S: Store> Session<'_, S> {
         let Some(link) = self.reading().active.clone() else {
             return Ok(());
         };
+        let collections = exported
+            .iter()
+            .map(|c| (c.collection.key(), c.ndjson.as_slice()))
+            .collect();
+        self.write_snapshot_of(pool, Some(link), collections).await
+    }
+
+    /// Writes the `profiles` collection as a snapshot of its own.
+    pub async fn write_profiles_snapshot(&mut self, pool: &SqlitePool) -> Result<()> {
+        let ndjson = profile_names::ndjson(pool).await?;
+        self.write_snapshot_of(pool, None, vec![(PROFILES, ndjson.as_slice())])
+            .await
+    }
+
+    async fn write_snapshot_of(
+        &mut self,
+        pool: &SqlitePool,
+        link: Option<String>,
+        collections: Vec<(&str, &[u8])>,
+    ) -> Result<()> {
         let group = *self.group();
         let epoch = self.roster().epoch;
         let did = self.device().did;
@@ -137,14 +160,14 @@ impl<S: Store> Session<'_, S> {
             ObjectType::Snapshot.purpose(),
         );
         let mut parts = Vec::new();
-        for collection in exported {
-            for records in chunks(&collection.ndjson) {
-                let content = batch_content(collection.collection, &head, &link, &records);
+        for (collection, ndjson) in collections {
+            for records in chunks(ndjson) {
+                let content = batch_content(collection, &head, link.as_deref(), &records);
                 let blob = seal_blob(&key, &group, epoch, &did, &encode_payload(&content)?);
                 let name = hex::encode(sha256(&blob));
                 parts.push(Part {
                     blob: name.clone(),
-                    collection: collection.collection.key().to_owned(),
+                    collection: collection.to_owned(),
                     size: blob.len() as u64,
                 });
                 self.store()
@@ -172,7 +195,7 @@ impl<S: Store> Session<'_, S> {
         );
         let manifest = Manifest {
             head,
-            link: Some(link.clone()),
+            link: link.clone(),
             parts,
             vv,
         };
@@ -184,7 +207,7 @@ impl<S: Store> Session<'_, S> {
             manifest,
         };
         record_manifest(pool, &logged).await?;
-        snapshot_written(pool, &link).await
+        snapshot_written(pool, link.as_deref().unwrap_or(PROFILES_KEY)).await
     }
 }
 

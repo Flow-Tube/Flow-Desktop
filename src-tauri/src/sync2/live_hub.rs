@@ -16,7 +16,7 @@ use super::lan_peers::nearby;
 use super::live_message::{Ability, Answer, DeviceKind, LiveMessage, Now};
 use super::live_seal::{LiveKeys, Received};
 use super::live_state::{accept_live_seq, consents, next_live_seq};
-use super::profile_links::reading;
+use super::profile_actions::running_link;
 use super::state::load_group;
 
 /// The devices' presence and what they play, whenever either changes.
@@ -105,7 +105,7 @@ async fn keys(app: &AppHandle) -> Result<(LiveKeys, SqlitePool)> {
     }
     let local = local(app).await?;
     let record = load_group(&pool).await?.ok_or(EngineError::NotLinked)?;
-    let session = open_session(&pool, &record, &local.device).await?;
+    let session = open_session(&local, &record).await?;
     let keys = LiveKeys::of(&session);
     *cached = Some(keys.clone());
     Ok((keys, pool))
@@ -139,22 +139,10 @@ pub async fn announce(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// The profile link the running profile syncs, which `now` and `play` name.
-async fn own_link(app: &AppHandle) -> Result<Option<String>> {
-    let local = local(app).await?;
-    let Some(record) = load_group(&local.pool).await? else {
-        return Ok(None);
-    };
-    let (running, default) = (&local.running_profile, &local.default_profile);
-    Ok(reading(&local.pool, &record.link, running, default)
-        .await?
-        .active)
-}
-
 /// Sends a `play`, `cmd` or `result` from the player, and returns its counter.
 pub async fn send_request(app: &AppHandle, mut message: LiveMessage) -> Result<u64> {
     match &mut message {
-        LiveMessage::Play(play) => play.link = own_link(app).await?,
+        LiveMessage::Play(play) => play.link = running_link(app).await?,
         LiveMessage::Cmd(_) | LiveMessage::Result(_) => {}
         LiveMessage::Presence { .. } | LiveMessage::Now(_) => return Err(EngineError::Unexpected),
     }
@@ -167,7 +155,7 @@ pub async fn send_request(app: &AppHandle, mut message: LiveMessage) -> Result<u
 /// Tells the other devices what this one plays now, in the profile link it syncs.
 pub async fn publish_now(app: &AppHandle, mut now: Now) -> Result<()> {
     if now.video.is_some() {
-        now.link = own_link(app).await?;
+        now.link = running_link(app).await?;
     }
     if let Ok(mut mine) = hub(app).mine.lock() {
         *mine = Some(now.clone());

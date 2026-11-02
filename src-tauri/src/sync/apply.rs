@@ -84,6 +84,12 @@ pub async fn apply_stream_payload(
     apply(pool, our_device_id, peer_device_id, staged, false).await
 }
 
+/// Takes the write lock at once. A deferred transaction that reads before it writes fails with
+/// `SQLITE_BUSY` when another connection commits in between, instead of waiting for the lock.
+async fn begin_merge(pool: &SqlitePool) -> Result<Transaction<'static, Sqlite>, sqlx::Error> {
+    pool.begin_with("BEGIN IMMEDIATE").await
+}
+
 async fn apply(
     pool: &SqlitePool,
     our_device_id: &str,
@@ -93,7 +99,7 @@ async fn apply(
 ) -> Result<ApplyReport, SyncError> {
     let backup = backup_snapshot(pool, staged).await?;
 
-    let mut tx = pool.begin().await?;
+    let mut tx = begin_merge(pool).await?;
     let mut stats = Vec::with_capacity(staged.len());
 
     for sc in staged {
@@ -972,4 +978,52 @@ fn now_iso() -> String {
 
 fn now_ms() -> u64 {
     chrono::Utc::now().timestamp_millis().max(0) as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use std::time::Duration;
+
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+
+    use super::*;
+
+    async fn wal_pool(path: &std::path::Path, busy: Duration) -> SqlitePool {
+        let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", path.display()))
+            .unwrap()
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(busy);
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap()
+    }
+
+    /// The app writes to the same database while a merge reads, so the merge holds the write lock
+    /// from its first statement: another writer waits for it instead of making it fail.
+    #[tokio::test]
+    async fn a_merge_holds_the_write_lock_from_its_start() {
+        let path = std::env::temp_dir().join(format!("merge-lock-{}.sqlite", std::process::id()));
+        let merge = wal_pool(&path, Duration::from_secs(5)).await;
+        sqlx::query("CREATE TABLE t (v INTEGER)")
+            .execute(&merge)
+            .await
+            .unwrap();
+        let other = wal_pool(&path, Duration::ZERO).await;
+
+        let tx = begin_merge(&merge).await.unwrap();
+        let write = sqlx::query("INSERT INTO t VALUES (1)")
+            .execute(&other)
+            .await;
+        assert!(write.is_err(), "another writer must wait for the merge");
+        tx.commit().await.unwrap();
+        sqlx::query("INSERT INTO t VALUES (1)")
+            .execute(&other)
+            .await
+            .unwrap();
+        let _ = std::fs::remove_file(&path);
+    }
 }

@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::SqlitePool;
 
 use super::engine::{Result, Session};
@@ -21,9 +21,38 @@ const BUDGET: usize = 100;
 
 pub type VersionVector = BTreeMap<String, u64>;
 
+/// The largest `seq` every platform reads exactly from JSON (spec/store.md, Untrusted input).
+const MAX_SEQ: u64 = (1 << 53) - 1;
+
+fn in_range<E: serde::de::Error>(seq: u64) -> std::result::Result<u64, E> {
+    if seq > MAX_SEQ {
+        return Err(E::custom("seq out of range"));
+    }
+    Ok(seq)
+}
+
+/// Reads a `seq`, refusing one above 2^53 - 1.
+pub fn bounded_seq<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<u64, D::Error> {
+    in_range(u64::deserialize(deserializer)?)
+}
+
+/// Reads a version vector, refusing one that names a `seq` above 2^53 - 1.
+pub fn bounded_vv<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<VersionVector, D::Error> {
+    let vv = VersionVector::deserialize(deserializer)?;
+    for seq in vv.values() {
+        in_range::<D::Error>(*seq)?;
+    }
+    Ok(vv)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ack {
+    #[serde(deserialize_with = "bounded_vv")]
     pub vv: VersionVector,
 }
 
@@ -378,6 +407,14 @@ impl<S: Store> Session<'_, S> {
 mod tests {
     use super::*;
     use crate::sync2::snapshot::Tip;
+
+    #[test]
+    fn an_ack_naming_a_seq_above_2_53_is_refused() {
+        let ack = |seq: u64| serde_json::from_str::<Ack>(&format!(r#"{{"vv":{{"a":{seq}}}}}"#));
+        assert!(ack((1 << 53) - 1).is_ok());
+        assert!(ack(1 << 53).is_err());
+        assert!(ack(u64::MAX).is_err());
+    }
 
     const LINK: &str = "link";
 

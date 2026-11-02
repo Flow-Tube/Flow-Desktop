@@ -29,8 +29,9 @@ pub struct WebDavStore {
     client: WebDav,
     /// This device's `did`: its own log is never something to read.
     me: String,
-    /// Roster entries already read, by store name; each is written once and never changes.
-    roster: Mutex<BTreeMap<String, Entry>>,
+    /// Roster files already read, by store name, with the entry each holds; each is written once
+    /// and never changes.
+    roster: Mutex<BTreeMap<String, Option<Entry>>>,
 }
 
 impl WebDavStore {
@@ -57,10 +58,13 @@ impl WebDavStore {
             let Some(bytes) = self.client.get(&path).await? else {
                 continue;
             };
-            let value: Value = serde_json::from_slice(&bytes).map_err(|_| StoreError::Malformed)?;
-            held.insert(path, parse_entry(&value)?);
+            // A file that isn't an entry is ignored, as a losing fork candidate would be.
+            let entry = serde_json::from_slice::<Value>(&bytes)
+                .ok()
+                .and_then(|value| parse_entry(&value).ok());
+            held.insert(path, entry);
         }
-        Ok(held.values().cloned().collect())
+        Ok(held.values().flatten().cloned().collect())
     }
 
     /// Checks that the storage takes, returns and deletes a file (spec/store.md, Setup probe).
@@ -232,17 +236,20 @@ impl Store for WebDavStore {
     ) -> Result<(Vec<ChangedObject>, u64)> {
         let mut objects = Vec::new();
         for did in self.senders().await? {
-            let next = read.get(&did).map_or(1, |seq| seq + 1);
+            let Some(next) = read.get(&did).map_or(Some(1), |seq| seq.checked_add(1)) else {
+                continue;
+            };
             let mut shard = next / SHARD;
             loop {
+                let last = shard * SHARD + (SHARD - 1);
                 let held = self.shard(&did, shard).await?;
-                let full = held.contains(&(shard * SHARD + SHARD - 1));
+                let full = held.contains(&last);
                 objects.extend(
                     held.into_iter()
                         .filter(|seq| *seq >= next)
                         .map(|seq| changed(&did, seq)),
                 );
-                if !full {
+                if !full || last == u64::MAX {
                     break;
                 }
                 shard += 1;

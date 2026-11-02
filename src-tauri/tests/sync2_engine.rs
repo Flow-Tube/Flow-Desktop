@@ -4,6 +4,9 @@
 
 mod sync2_common;
 
+use std::collections::BTreeMap;
+use std::time::Duration;
+
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync::canonical::Collection;
@@ -14,16 +17,17 @@ use flow_desktop_lib::sync2::entries::{build_entry, epoch_draft, member_subject}
 use flow_desktop_lib::sync2::epoch::seal_chain;
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::paths::log_path;
-use flow_desktop_lib::sync2::roster::{Op, Role};
+use flow_desktop_lib::sync2::roster::{Entry, Op, Role};
 use flow_desktop_lib::sync2::sealed::random_bytes;
+use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result};
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
 use sync2_common::{MemoryStore, device_pool, draft, exported, group, head, watch, watched, wraps};
 
 /// One full sync: push, pull, apply what was read, finish.
-async fn sync(
+async fn sync<S: Store>(
     pool: &SqlitePool,
-    store: &MemoryStore,
+    store: S,
     device: &MemberSecrets,
     app_id: &str,
 ) -> std::result::Result<usize, EngineError> {
@@ -172,4 +176,56 @@ async fn a_removed_device_stops_and_a_new_device_reads_the_old_epoch() {
     let pool_c = device_pool(&g).await;
     sync(&pool_c, &g.store, &c, "app-c").await.unwrap();
     assert_eq!(watched(&pool_c).await, ["aaaaaaaaaaa"]);
+}
+
+/// A store whose change cursor never moves: it hands out every object on each call.
+struct Repeating<'a>(&'a MemoryStore);
+
+impl Store for Repeating<'_> {
+    async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
+        self.0.roster_after(after).await
+    }
+    async fn append_roster(
+        &self,
+        head: &str,
+        entry: &Entry,
+        wraps: &BTreeMap<String, String>,
+        chain: Option<&str>,
+    ) -> Result<Appended> {
+        self.0.append_roster(head, entry, wraps, chain).await
+    }
+    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
+        self.0.key(epoch, name).await
+    }
+    async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+        self.0.put_object(path, bytes).await
+    }
+    async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        self.0.get_object(path).await
+    }
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        self.0.delete_object(path).await
+    }
+    async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
+        // Lets the test's timeout fire on a reader that never stops.
+        tokio::task::yield_now().await;
+        Ok((self.0.changes(0).await?.0, cursor))
+    }
+}
+
+#[tokio::test]
+async fn a_page_that_does_not_advance_ends_the_read() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    sync(&pool_a, &g.store, &g.a, "app-a").await.unwrap();
+
+    let read = tokio::time::timeout(
+        Duration::from_secs(10),
+        sync(&pool_b, Repeating(&g.store), &g.b, "app-b"),
+    )
+    .await
+    .expect("the read ends");
+    assert!(read.unwrap() > 0);
+    assert_eq!(watched(&pool_b).await, ["aaaaaaaaaaa"]);
 }

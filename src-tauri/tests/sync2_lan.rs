@@ -107,6 +107,18 @@ async fn sessions_opened_together_keep_the_same_new_entry_once() {
     );
 }
 
+/// A peer sends entries as JSON; one that isn't well formed must not make the held roster unreadable.
+#[tokio::test]
+async fn a_malformed_entry_from_a_peer_is_not_held() {
+    let g = group().await;
+    let held = HeldStore::new(holding(&g).await);
+    let mut entry = g.store.0.lock().unwrap().roster[1].clone();
+    entry.v = 3;
+    let refused = held.hold_entry(&entry).await.is_err();
+    assert_eq!(held.head().await.unwrap().0, 1);
+    assert!(refused);
+}
+
 #[tokio::test]
 async fn two_members_exchange_their_objects_in_one_session() {
     let g = group().await;

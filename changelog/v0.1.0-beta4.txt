@@ -25,6 +25,12 @@ SYNC
 - Linked devices has a Dashboard: where the group lives, how much of a Flow server's storage it uses, your devices, each synced profile's state and the latest sync errors.
 - The Flow Neuro page can show the interests of your other synced profiles, read on this computer without switching. From the Dashboard, View interests opens them.
 - Sync no longer hangs on a store that keeps answering with the same page. It stops reading and tries again at the next sync.
+- Sync stops reading an answer larger than it can be, from a Flow server, a WebDAV folder, the live channel or a device on your network, so a broken or hostile store can't use up memory.
+- A damaged or forged object from one device no longer fails the whole sync. Reading that device's changes pauses there, and the other devices' changes still arrive.
+- The same holds when a new device starts from a snapshot or a profile starts syncing: a damaged or forged object no longer fails the sync, and the profile is caught up once it can be read.
+- A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
+- A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
+- Joining a group over the local network now refuses a malformed welcome from the other device.
 
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.

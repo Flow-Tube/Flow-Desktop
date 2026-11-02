@@ -22,7 +22,9 @@ use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result};
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{MemoryStore, device_pool, draft, exported, group, head, watch, watched, wraps};
+use sync2_common::{
+    Group, MemoryStore, device_pool, draft, exported, group, head, watch, watched, wraps,
+};
 
 /// One full sync: push, pull, apply what was read, finish.
 async fn sync<S: Store>(
@@ -91,19 +93,51 @@ async fn idle_devices_stop_after_one_batch_and_one_ack_each() {
     assert_eq!(sync_history(&pool_b, &g.store, &g.b).await, 2);
 }
 
+/// Adds device C to the group, wrapping it the key of `epoch`.
+async fn add_device(g: &Group, epoch: u32, key: &[u8; 32]) -> MemberSecrets {
+    let c = member_secrets(random_bytes(), random_bytes());
+    let mut add = draft(Op::Add, &g.a);
+    add.add = Some(vec![member_subject(
+        &c.sig_public,
+        &c.kem_public,
+        Role::Device,
+    )]);
+    let state = head(&g.store);
+    let entry = build_entry(&g.group, Some(&state), add, &[&g.a, &c]);
+    (&g.store)
+        .append_roster(
+            &state.head,
+            &entry,
+            &wraps(&g.group, epoch, key, &[&c]).await,
+            None,
+        )
+        .await
+        .unwrap();
+    c
+}
+
 #[tokio::test]
-async fn a_tampered_object_is_refused() {
+async fn a_tampered_object_stops_only_its_sender_s_log() {
     let g = group().await;
-    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    let c = add_device(&g, 0, &g.epoch_key).await;
+    let (pool_a, pool_b, pool_c) = (
+        device_pool(&g).await,
+        device_pool(&g).await,
+        device_pool(&g).await,
+    );
     watch(&pool_a, "aaaaaaaaaaa").await;
     sync(&pool_a, &g.store, &g.a, "app-a").await.unwrap();
+    watch(&pool_c, "ccccccccccc").await;
+    sync(&pool_c, &g.store, &c, "app-c").await.unwrap();
     let path = log_path(&hex::encode(g.a.did), 1);
-    let mut bytes = g.store.take(&path);
-    bytes[150] ^= 1;
-    g.store.put(&path, bytes);
-    let error = sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap_err();
-    assert!(matches!(error, EngineError::Protocol(e) if e.code() == "signature"));
-    assert!(watched(&pool_b).await.is_empty());
+    let genuine = g.store.tamper(&path);
+
+    sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap();
+    assert_eq!(watched(&pool_b).await, ["ccccccccccc"]);
+
+    g.store.put(&path, genuine);
+    sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap();
+    assert_eq!(watched(&pool_b).await, ["aaaaaaaaaaa", "ccccccccccc"]);
 }
 
 #[tokio::test]
@@ -155,24 +189,7 @@ async fn a_removed_device_stops_and_a_new_device_reads_the_old_epoch() {
         Err(EngineError::Removed)
     ));
 
-    let c = member_secrets(random_bytes(), random_bytes());
-    let mut add = draft(Op::Add, &g.a);
-    add.add = Some(vec![member_subject(
-        &c.sig_public,
-        &c.kem_public,
-        Role::Device,
-    )]);
-    let state = head(&g.store);
-    let entry = build_entry(&g.group, Some(&state), add, &[&g.a, &c]);
-    (&g.store)
-        .append_roster(
-            &state.head,
-            &entry,
-            &wraps(&g.group, 1, &next_key, &[&c]).await,
-            None,
-        )
-        .await
-        .unwrap();
+    let c = add_device(&g, 1, &next_key).await;
     let pool_c = device_pool(&g).await;
     sync(&pool_c, &g.store, &c, "app-c").await.unwrap();
     assert_eq!(watched(&pool_c).await, ["aaaaaaaaaaa"]);

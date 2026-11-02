@@ -38,6 +38,8 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use sync2_common::{Group, device_pool, empty_pool, exported, group, watch};
 use tokio::net::TcpListener;
+use wiremock::matchers::method;
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const USER: &str = "flow";
 const PASSWORD: &str = "secret";
@@ -358,6 +360,25 @@ async fn the_probe_and_the_group_marker_work_on_a_fresh_folder() {
         store.group().await.unwrap().as_deref(),
         Some("00112233445566778899aabbccddeeff")
     );
+}
+
+#[tokio::test]
+async fn answers_past_their_limit_are_refused() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![0; (4 << 20) + 1]))
+        .mount(&server)
+        .await;
+    Mock::given(method("PROPFIND"))
+        .respond_with(ResponseTemplate::new(207).set_body_string(" ".repeat((16 << 20) + 1)))
+        .mount(&server)
+        .await;
+    let dav = webdav(&server.uri(), PASSWORD).await;
+    assert!(matches!(
+        dav.get("dev/x.o").await,
+        Err(StoreError::Malformed)
+    ));
+    assert!(matches!(dav.list("dev/").await, Err(StoreError::Malformed)));
 }
 
 /// A member's snapshot can place a log at its last possible `seq`; listing past it must hold.

@@ -24,15 +24,18 @@ use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
 use flow_desktop_lib::sync2::membership::{leave_group, rename_device};
 use flow_desktop_lib::sync2::paths::log_path;
-use flow_desktop_lib::sync2::pipe::listen_on;
+use flow_desktop_lib::sync2::pipe::{Pipe, listen_on};
 use flow_desktop_lib::sync2::roster::{Entry, Op, fork_winner};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
 use flow_desktop_lib::sync2::state::{StoreKind, load_group};
 use flow_desktop_lib::sync2::store::Store;
+use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
 use sync2_common::{Group, LINK, empty_pool, exported, group, watch};
 use tokio::net::TcpListener;
+use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message;
 
 /// A device that holds the group as pairing leaves it: the roster and the wraps, no objects.
 async fn holding(g: &Group) -> SqlitePool {
@@ -514,4 +517,23 @@ async fn a_live_message_crosses_a_lan_session_and_opens_on_the_other_side() {
         keys_b.open(&envelope).is_err(),
         "a device doesn't take its own messages"
     );
+}
+
+#[tokio::test]
+async fn a_lan_message_past_a_frame_s_limit_is_refused() {
+    let listening = listen_on(loopback()).await.unwrap();
+    let url = format!(
+        "ws://127.0.0.1:{}/flow-sync/2/pair",
+        listening.addresses[0].p
+    );
+    tokio::spawn(async move {
+        let (mut socket, _) = connect_async(url).await.unwrap();
+        for len in [32, 4 << 20, 5 << 20] {
+            let _ = socket.send(Message::Binary(vec![0; len].into())).await;
+        }
+        let _ = socket.next().await;
+    });
+    let (mut pipe, _) = listening.accept().await.unwrap();
+    assert_eq!(pipe.receive().await.unwrap().len(), 4 << 20);
+    assert!(pipe.receive().await.is_err());
 }

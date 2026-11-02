@@ -441,3 +441,38 @@ async fn a_server_reset_needs_the_admin_token_and_says_when_it_is_refused() {
         Err(StoreError::AdminBanned)
     ));
 }
+
+#[tokio::test]
+async fn answers_past_their_limit_are_refused() {
+    let (server, _) = server(INSTANCE).await;
+    let bytes = |len: usize| ResponseTemplate::new(200).set_body_bytes(vec![0; len]);
+    Mock::given(method("GET"))
+        .and(path("/v1/objects/fits"))
+        .respond_with(bytes(4 << 20))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/objects/big"))
+        .respond_with(bytes((4 << 20) + 1))
+        .mount(&server)
+        .await;
+    let listing = json!({ "objects": [], "cursor": "1", "pad": "x".repeat(16 << 20) });
+    Mock::given(method("GET"))
+        .and(path("/v1/changes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(listing))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store.get_object("fits").await.unwrap().unwrap().len(),
+        4 << 20
+    );
+    assert!(matches!(
+        store.get_object("big").await,
+        Err(StoreError::Malformed)
+    ));
+    assert!(matches!(store.changes(0).await, Err(StoreError::Malformed)));
+}

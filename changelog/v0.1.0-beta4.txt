@@ -37,6 +37,7 @@ SYNC
 - A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
 - A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
 - Joining a group over the local network now refuses a malformed welcome from the other device.
+- The Sync page now opens on Linked devices, which keep your devices in sync all the time. The one-time transfer to a nearby device moves below them, and Linked devices stay on screen while a transfer runs.
 
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.

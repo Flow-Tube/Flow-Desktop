@@ -485,7 +485,11 @@ pub async fn finish_lan_join<P: Pipe>(
         return Err(EngineError::Unexpected);
     };
     let state = check_pinned(roster, &welcome, &me)?;
-    let group: [u8; 16] = array(&hex::decode(&welcome.group).map_err(|_| Error::Group)?);
+    let group: [u8; 16] = hex::decode(&welcome.group)
+        .ok()
+        .filter(|g| g.len() == 16)
+        .map(|g| array(&g))
+        .ok_or(Error::Group)?;
     let wrap = URL_SAFE_NO_PAD
         .decode(wrap)
         .map_err(|_| EngineError::Unexpected)?;
@@ -585,4 +589,103 @@ where
     let (pipe, key) = listening.accept().await?;
     let (channel, sas) = Channel::shower(pipe, &offer, &key)?;
     new_side(channel, sas, device, meta, confirm).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sync2::entries::epoch_draft;
+    use crate::sync2::keys::member_secrets;
+
+    /// The join is refused before anything travels.
+    struct Unused;
+
+    impl Pipe for Unused {
+        fn send(&mut self, _: Vec<u8>) -> impl Future<Output = Result<()>> + Send {
+            refused()
+        }
+
+        fn receive(&mut self) -> impl Future<Output = Result<Vec<u8>>> + Send {
+            refused()
+        }
+
+        fn send_key(&mut self, _: [u8; KEY_SIZE]) -> impl Future<Output = Result<()>> + Send {
+            refused()
+        }
+
+        fn receive_key(&mut self) -> impl Future<Output = Result<[u8; KEY_SIZE]>> + Send {
+            refused()
+        }
+
+        fn close(&mut self) -> impl Future<Output = ()> + Send {
+            std::future::ready(())
+        }
+    }
+
+    fn refused<T>() -> std::future::Ready<Result<T>> {
+        std::future::ready(Err(EngineError::Unexpected))
+    }
+
+    /// A member signs its own roster, so the group id it names may have any length.
+    #[tokio::test]
+    async fn a_lan_welcome_naming_a_group_id_of_another_length_is_refused() {
+        let member = |n| member_secrets([n; 32], [n + 1; 32]);
+        let (device, recovery, me) = (member(1), member(3), member(5));
+        let subject = |m: &MemberSecrets, role| member_subject(&m.sig_public, &m.kem_public, role);
+        let group = [0xab, 0xcd];
+        let draft = |op, add| Draft {
+            op,
+            signer: hex::encode(device.did),
+            add: Some(add),
+            remove: None,
+            epoch: None,
+            meta: None,
+        };
+        let mut genesis = draft(
+            Op::Genesis,
+            vec![
+                subject(&device, Role::Device),
+                subject(&recovery, Role::Recovery),
+            ],
+        );
+        genesis.epoch = Some(epoch_draft(
+            &[9; 32],
+            &group,
+            0,
+            &[device.did, recovery.did],
+        ));
+        let genesis = build_entry(&group, None, genesis, &[&device, &recovery]);
+        let state = apply_entry(None, &genesis).unwrap();
+        let mine = subject(&me, Role::Device);
+        let add = build_entry(
+            &group,
+            Some(&state),
+            draft(Op::Add, vec![mine.clone()]),
+            &[&device, &me],
+        );
+        let after = apply_entry(Some(&state), &add).unwrap();
+        let welcomed = Welcomed {
+            channel: Channel {
+                pipe: Unused,
+                token: [0; 16],
+                keys: (Vec::new(), Vec::new()),
+                sent: 0,
+                received: 0,
+            },
+            me: mine,
+            welcome: Welcome {
+                group: hex::encode(group),
+                head: after.head,
+                seq: after.seq,
+                link: "link".into(),
+                store: WelcomeStore::Lan,
+                entries: Some(vec![genesis, add]),
+                wrap: Some(String::new()),
+            },
+            reach: None,
+        };
+        let pool = SqlitePool::connect_lazy("sqlite::memory:").unwrap();
+        let joined = finish_lan_join(&pool, &me, welcomed).await;
+        assert!(matches!(joined, Err(EngineError::Protocol(Error::Group))));
+    }
 }

@@ -418,7 +418,8 @@ where
     })
 }
 
-/// Checks that `roster` reaches the head the member named and lists this device.
+/// Checks that `roster` is the named group's, reaches the head the member named and lists this
+/// device.
 fn check_pinned(roster: &[Entry], welcome: &Welcome, me: &Subject) -> Result<RosterState> {
     let pinned = roster
         .iter()
@@ -426,6 +427,9 @@ fn check_pinned(roster: &[Entry], welcome: &Welcome, me: &Subject) -> Result<Ros
         .map(|end| replay_roster(&roster[..=end]))
         .transpose()?;
     let state = replay_roster(roster)?;
+    if state.group != welcome.group {
+        return Err(Error::Group.into());
+    }
     if pinned.is_none_or(|pinned| pinned.head != welcome.head)
         || !state.members.contains_key(&me.did)
     {
@@ -626,9 +630,10 @@ mod tests {
         std::future::ready(Err(EngineError::Unexpected))
     }
 
-    /// A member signs its own roster, so the group id it names may have any length.
+    /// A member signs its own roster, so the group id it names may have any length or differ
+    /// from the welcome's.
     #[tokio::test]
-    async fn a_lan_welcome_naming_a_group_id_of_another_length_is_refused() {
+    async fn a_welcome_must_name_the_rosters_group_as_16_bytes() {
         let member = |n| member_secrets([n; 32], [n + 1; 32]);
         let (device, recovery, me) = (member(1), member(3), member(5));
         let subject = |m: &MemberSecrets, role| member_subject(&m.sig_public, &m.kem_public, role);
@@ -664,6 +669,18 @@ mod tests {
             &[&device, &me],
         );
         let after = apply_entry(Some(&state), &add).unwrap();
+        let entries = vec![genesis, add];
+        let welcome = |group: [u8; 2]| Welcome {
+            group: hex::encode(group),
+            head: after.head.clone(),
+            seq: after.seq,
+            link: "link".into(),
+            store: WelcomeStore::Lan,
+            entries: Some(entries.clone()),
+            wrap: Some(String::new()),
+        };
+        let other = check_pinned(&entries, &welcome([0xab, 0xce]), &mine);
+        assert!(matches!(other, Err(EngineError::Protocol(Error::Group))));
         let welcomed = Welcomed {
             channel: Channel {
                 pipe: Unused,
@@ -673,15 +690,7 @@ mod tests {
                 received: 0,
             },
             me: mine,
-            welcome: Welcome {
-                group: hex::encode(group),
-                head: after.head,
-                seq: after.seq,
-                link: "link".into(),
-                store: WelcomeStore::Lan,
-                entries: Some(vec![genesis, add]),
-                wrap: Some(String::new()),
-            },
+            welcome: welcome(group),
             reach: None,
         };
         let pool = SqlitePool::connect_lazy("sqlite::memory:").unwrap();

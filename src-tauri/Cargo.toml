@@ -159,3 +159,4 @@ wiremock = "0.6"
 dav-server = { version = "0.11", default-features = false, features = ["memfs"] }
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
+proptest = { version = "1.12", default-features = false, features = ["std"] }

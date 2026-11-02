@@ -232,17 +232,20 @@ impl Store for WebDavStore {
     ) -> Result<(Vec<ChangedObject>, u64)> {
         let mut objects = Vec::new();
         for did in self.senders().await? {
-            let next = read.get(&did).map_or(1, |seq| seq + 1);
+            let Some(next) = read.get(&did).map_or(Some(1), |seq| seq.checked_add(1)) else {
+                continue;
+            };
             let mut shard = next / SHARD;
             loop {
+                let last = shard * SHARD + (SHARD - 1);
                 let held = self.shard(&did, shard).await?;
-                let full = held.contains(&(shard * SHARD + SHARD - 1));
+                let full = held.contains(&last);
                 objects.extend(
                     held.into_iter()
                         .filter(|seq| *seq >= next)
                         .map(|seq| changed(&did, seq)),
                 );
-                if !full {
+                if !full || last == u64::MAX {
                     break;
                 }
                 shard += 1;

@@ -601,7 +601,8 @@ impl<'a, S: Store> Session<'a, S> {
     }
 
     /// One log object, checked in the order of spec/store.md. `None` when an earlier object of
-    /// this sender is still missing.
+    /// this sender is still missing, or when this one is discarded: either stops reading this
+    /// sender's log here, and the other senders are still read.
     async fn read_object(
         &mut self,
         path: &str,
@@ -612,12 +613,21 @@ impl<'a, S: Store> Session<'a, S> {
         let Some(bytes) = self.store.get_object(path).await? else {
             return Ok(None);
         };
-        let object = self.verified(&bytes, did, seq)?;
-        let position = match next_in_stream(last, &object) {
-            Err(Error::Gap) => return Ok(None),
-            other => other?,
+        let read = async {
+            let object = self.verified(&bytes, did, seq)?;
+            let position = next_in_stream(last, &object)?;
+            Ok((position, self.open_content(&object).await?))
         };
-        Ok(Some((position, self.open_content(&object).await?)))
+        match read.await {
+            Ok(read) => Ok(Some(read)),
+            Err(EngineError::Protocol(error)) => {
+                if error != Error::Gap {
+                    tracing::warn!(target: "flow::sync2", kind = error.code(), "discarded a log object");
+                }
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     /// Steps 1 to 3 of reading an envelope: structure, sender, signature. The caller checks its

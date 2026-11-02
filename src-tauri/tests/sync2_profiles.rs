@@ -293,11 +293,7 @@ async fn a_new_device_joins_defaults_link_whichever_profile_runs() {
 
     unlink(&state, "default").await.unwrap();
     let only_kids = reading(&state, HOME, "kids", "default").await.unwrap();
-    assert_eq!(
-        only_kids.welcome.as_deref(),
-        Some(KIDS),
-        "else the first synced"
-    );
+    assert_eq!(only_kids.welcome, None, "never another profile's link");
 }
 
 #[tokio::test]

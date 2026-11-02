@@ -14,7 +14,7 @@ use crate::sync::error::SyncError;
 pub struct Reading {
     pub active: Option<String>,
     pub kept: BTreeSet<String>,
-    /// The link a new device's Default joins: Default's here, else the first one synced.
+    /// The link a new device's Default joins: Default's here, if it syncs.
     pub welcome: Option<String>,
 }
 
@@ -110,7 +110,6 @@ pub async fn reading(
         welcome: rows
             .iter()
             .find(|(profile, _)| profile == default)
-            .or(rows.first())
             .map(|(_, link)| link.clone()),
         ..Reading::default()
     };

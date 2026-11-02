@@ -48,7 +48,7 @@ impl<S: Store> Session<'_, S> {
             if let Some(tip) = &last {
                 read.floors.insert((link.to_owned(), did.clone()), tip.seq);
             }
-            let from = last.as_ref().map_or(1, |tip| tip.seq + 1);
+            let from = last.as_ref().map_or(1, |tip| tip.seq.saturating_add(1));
             for seq in from..=reached.seq {
                 let Some(bytes) = self.store().get_object(&log_path(did, seq)).await? else {
                     return Ok(None);

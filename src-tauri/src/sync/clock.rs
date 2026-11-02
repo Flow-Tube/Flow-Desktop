@@ -63,7 +63,7 @@ pub async fn edit_ms(pool: &SqlitePool) -> Result<u64, SyncError> {
         .await?;
     let seen = high_water.and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
     let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(0);
-    Ok(now.max(seen + 1))
+    Ok(now.max(seen.saturating_add(1)))
 }
 
 #[cfg(test)]

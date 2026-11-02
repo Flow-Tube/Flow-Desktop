@@ -16,6 +16,14 @@ use serde_json::Value;
 use super::keys::{MemberSecrets, member_secrets};
 use super::sealed::random_bytes;
 
+/// The largest `seq` the protocol allows (spec/store.md).
+pub(super) const MAX_PROTOCOL_SEQ: u64 = (1 << 53) - 1;
+
+/// A `seq` the protocol allows, edges included.
+pub(super) fn seq() -> impl Strategy<Value = u64> {
+    prop_oneof![Just(0), Just(MAX_PROTOCOL_SEQ), 0..=MAX_PROTOCOL_SEQ]
+}
+
 pub(super) fn member() -> MemberSecrets {
     member_secrets(random_bytes(), random_bytes())
 }

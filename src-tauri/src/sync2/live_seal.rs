@@ -111,7 +111,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::sync2::fuzz::{json, member, mutations};
+    use crate::sync2::fuzz::{json, member, mutations, seq};
     use crate::sync2::live_message::{Answer, DeviceKind};
 
     /// Two devices of one group, each with the other's signing key.
@@ -154,7 +154,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn live_messages_round_trip(seq: u64, message in message()) {
+        fn live_messages_round_trip(seq in seq(), message in message()) {
             let (a, b) = &*PAIR;
             let received = b.open(&a.seal(seq, &message).unwrap()).unwrap();
             prop_assert_eq!(received, Received { from: a.me(), seq, message });

@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use proptest::prelude::*;
 
-use super::{member, mutations};
+use super::{MAX_PROTOCOL_SEQ, member, mutations, seq};
 use crate::sync2::envelope::{
     Header, MIN_OBJECT_SIZE, ObjectType, StreamPosition, ZERO_HASH, next_in_stream,
     next_live_counter, open_object, parse_object, seal_object, verify_object,
@@ -59,18 +59,17 @@ fn plausible() -> impl Strategy<Value = Vec<u8>> {
         .prop_map(|(object_type, rest)| [&b"FS2\0"[..], &[object_type, 1], &GROUP, &rest].concat())
 }
 
-/// A sequence number around `base`, or anywhere.
+/// A sequence number around `base`, or anywhere the protocol allows.
 fn seq_near(base: u64) -> impl Strategy<Value = u64> {
     prop_oneof![
-        (-2i64..=2).prop_map(move |step| base.wrapping_add_signed(step)),
-        any::<u64>()
+        (-2i64..=2).prop_map(move |step| base.saturating_add_signed(step).min(MAX_PROTOCOL_SEQ)),
+        seq()
     ]
 }
 
 fn last_position() -> impl Strategy<Value = Option<StreamPosition>> {
-    let seq = prop_oneof![Just(u64::MAX), Just(u64::MAX - 1), Just(0), any::<u64>()];
     proptest::option::of(
-        (seq, any::<[u8; 32]>()).prop_map(|(seq, hash)| StreamPosition { seq, hash }),
+        (seq(), any::<[u8; 32]>()).prop_map(|(seq, hash)| StreamPosition { seq, hash }),
     )
 }
 
@@ -79,7 +78,7 @@ proptest! {
     fn objects_round_trip(
         object_type in object_type(),
         epoch: u32,
-        seq: u64,
+        seq in seq(),
         prev: [u8; 32],
         content in prop::collection::vec(any::<u8>(), 0..512),
     ) {
@@ -130,7 +129,7 @@ proptest! {
 
     #[test]
     fn a_live_counter_only_goes_up(
-        (last, seq) in proptest::option::of(any::<u64>())
+        (last, seq) in proptest::option::of(seq())
             .prop_flat_map(|last| (Just(last), seq_near(last.unwrap_or(0)))),
         prev in prop_oneof![Just(ZERO_HASH), any::<[u8; 32]>()],
     ) {

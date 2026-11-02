@@ -611,6 +611,14 @@ impl<'a, S: Store> Session<'a, S> {
                 pulled.stalled = true;
                 return Ok(pulled);
             }
+            let advanced = next > cursor
+                || pulled
+                    .positions
+                    .iter()
+                    .any(|(did, position)| read.get(did) != Some(&position.seq));
+            if !advanced {
+                return Ok(pulled);
+            }
             pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
         }
     }

@@ -90,11 +90,12 @@ impl<S: Store> Session<'_, S> {
         let mut cursor = 0;
         loop {
             let (changes, next) = self.store().changes(cursor).await?;
-            if changes.is_empty() {
-                break;
-            }
             for (did, seq) in changes.iter().filter_map(|c| parse_log_path(&c.path)) {
                 logs.entry(did).or_default().push(seq);
+            }
+            // A cursor that doesn't move would hand out the same page forever.
+            if changes.is_empty() || next <= cursor {
+                break;
             }
             cursor = next;
         }

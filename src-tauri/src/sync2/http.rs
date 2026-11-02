@@ -1,13 +1,29 @@
 //! The transport rules every HTTP store follows (spec/store.md, Transport security): HTTPS
-//! anywhere, plain HTTP only to a private address or a `.local` name, and no redirects.
+//! anywhere, plain HTTP only to a private address or a `.local` name, no redirects, and bounded
+//! responses (Untrusted input).
 
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
-use reqwest::{Client, ClientBuilder, Url, redirect};
+use reqwest::{Client, ClientBuilder, Response, Url, redirect};
 
 use super::server::{Result, StoreError};
 use crate::sync::qr::is_local_ip;
+
+/// The most a response other than an object or a blob may hold.
+pub const MAX_RESPONSE: usize = 16 * 1024 * 1024;
+
+/// Reads a body of at most `limit` bytes, failing as soon as more arrive.
+pub async fn read_body(mut response: Response, limit: usize) -> Result<Vec<u8>> {
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(StoreError::Network)? {
+        if body.len() + chunk.len() > limit {
+            return Err(StoreError::Malformed);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
 
 pub struct Transport {
     /// A `.local` name over plain HTTP, checked and pinned so DNS can't move it afterwards.

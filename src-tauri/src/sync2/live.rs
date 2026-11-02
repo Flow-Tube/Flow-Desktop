@@ -14,7 +14,7 @@ use serde::Deserialize;
 use tauri::AppHandle;
 use tokio_tungstenite::WebSocketStream;
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
-use tokio_tungstenite::tungstenite::protocol::Role;
+use tokio_tungstenite::tungstenite::protocol::{Role, WebSocketConfig};
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 
 use super::actions::{local, stopped};
@@ -27,6 +27,8 @@ use super::state::{StoreKind, load_group};
 use crate::sync::error::SyncError;
 
 const PROTOCOL: &str = "flow-sync.v1";
+/// The most a live message or a notice may hold (spec/api.md, Limits).
+const MAX_MESSAGE: usize = 64 * 1024;
 const PING_EVERY: Duration = Duration::from_secs(15);
 const RECONNECT_AFTER: Duration = Duration::from_secs(20);
 /// Several devices may store at once: one sync shortly after covers them all.
@@ -74,7 +76,10 @@ impl ServerStore {
             });
         }
         let upgraded = response.upgrade().await.map_err(StoreError::Network)?;
-        Ok(WebSocketStream::from_raw_socket(upgraded, Role::Client, None).await)
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(MAX_MESSAGE))
+            .max_frame_size(Some(MAX_MESSAGE));
+        Ok(WebSocketStream::from_raw_socket(upgraded, Role::Client, Some(config)).await)
     }
 }
 

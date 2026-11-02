@@ -4,6 +4,7 @@
 
 mod sync2_common;
 
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,7 +24,7 @@ use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, finish_join, join, join_on_lan,
 };
 use flow_desktop_lib::sync2::membership::rename_device;
-use flow_desktop_lib::sync2::paths::{roster_path, wrap_path};
+use flow_desktop_lib::sync2::paths::{log_path, roster_path, wrap_path};
 use flow_desktop_lib::sync2::pipe::listen_on;
 use flow_desktop_lib::sync2::roster::entry_hash;
 use flow_desktop_lib::sync2::sealed::random_bytes;
@@ -37,6 +38,8 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use sync2_common::{Group, device_pool, empty_pool, exported, group, watch};
 use tokio::net::TcpListener;
+use wiremock::matchers::method;
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const USER: &str = "flow";
 const PASSWORD: &str = "secret";
@@ -178,6 +181,32 @@ async fn concurrent_roster_entries_on_webdav_resolve_by_the_fork_rule() {
     let reader = store_for(&url, &g.b.did).await;
     let chain = reader.roster_after(-1).await.unwrap();
     assert_eq!(chain.len(), 3);
+}
+
+#[tokio::test]
+async fn a_roster_file_that_is_not_an_entry_is_ignored() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    let client = webdav(&url, PASSWORD).await;
+    client
+        .put(
+            "roster/0000000000000002-0123456789abcdef.r",
+            b"not json".to_vec(),
+        )
+        .await
+        .unwrap();
+    client
+        .put(
+            "roster/0000000000000002-fedcba9876543210.r",
+            br#"{"seq":2}"#.to_vec(),
+        )
+        .await
+        .unwrap();
+
+    let roster = g.store.0.lock().unwrap().roster.clone();
+    let reader = store_for(&url, &g.b.did).await;
+    assert_eq!(reader.roster_after(-1).await.unwrap(), roster);
 }
 
 #[tokio::test]
@@ -357,4 +386,48 @@ async fn the_probe_and_the_group_marker_work_on_a_fresh_folder() {
         store.group().await.unwrap().as_deref(),
         Some("00112233445566778899aabbccddeeff")
     );
+}
+
+#[tokio::test]
+async fn answers_past_their_limit_are_refused() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(vec![0; (4 << 20) + 1]))
+        .mount(&server)
+        .await;
+    Mock::given(method("PROPFIND"))
+        .respond_with(ResponseTemplate::new(207).set_body_string(" ".repeat((16 << 20) + 1)))
+        .mount(&server)
+        .await;
+    let dav = webdav(&server.uri(), PASSWORD).await;
+    assert!(matches!(
+        dav.get("dev/x.o").await,
+        Err(StoreError::Malformed)
+    ));
+    assert!(matches!(dav.list("dev/").await, Err(StoreError::Malformed)));
+}
+
+/// A member's snapshot can place a log at its last possible `seq`; listing past it must hold.
+#[tokio::test]
+async fn a_log_read_up_to_its_last_possible_seq_lists_nothing_more() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    let client = webdav(&url, PASSWORD).await;
+    let a = hex::encode(g.a.did);
+    for seq in [1, u64::MAX] {
+        client.put(&log_path(&a, seq), vec![0]).await.unwrap();
+    }
+    let store = store_for(&url, &g.b.did).await;
+    let listed = |read: u64| {
+        let store = &store;
+        let read = BTreeMap::from([(a.clone(), read)]);
+        async move { store.new_objects(1, &read).await.unwrap().0 }
+    };
+    let last: Vec<String> = listed(u64::MAX - 1)
+        .await
+        .into_iter()
+        .map(|c| c.path)
+        .collect();
+    assert_eq!(last, [log_path(&a, u64::MAX)]);
+    assert!(listed(u64::MAX).await.is_empty());
 }

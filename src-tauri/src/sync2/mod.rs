@@ -65,6 +65,9 @@ pub mod webdav;
 pub mod webdav_login;
 pub mod wrap;
 
+#[cfg(test)]
+mod fuzz;
+
 pub use error::{Error, Result};
 
 /// Copies a slice whose length the caller has already fixed.

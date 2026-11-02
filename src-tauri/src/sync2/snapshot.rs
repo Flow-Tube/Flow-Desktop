@@ -11,7 +11,7 @@ use super::blob::seal_blob;
 use super::engine::{Result, Session, now_ms};
 use super::envelope::ObjectType;
 use super::epoch::purpose_key;
-use super::gc::{Logged, manifests, record_manifest};
+use super::gc::{Logged, bounded_seq, manifests, record_manifest};
 use super::kdf::sha256;
 use super::paths::blob_path;
 use super::payload::encode_payload;
@@ -42,6 +42,7 @@ pub struct Part {
 #[serde(deny_unknown_fields)]
 pub struct Tip {
     pub hash: String,
+    #[serde(deserialize_with = "bounded_seq")]
     pub seq: u64,
 }
 
@@ -236,6 +237,17 @@ impl<S: Store> Session<'_, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_manifest_naming_a_seq_above_2_53_is_refused() {
+        let manifest = |seq: u64| {
+            serde_json::from_str::<Manifest>(&format!(
+                r#"{{"head":"","link":null,"parts":[],"vv":{{"a":{{"hash":"","seq":{seq}}}}}}}"#
+            ))
+        };
+        assert!(manifest((1 << 53) - 1).is_ok());
+        assert!(manifest(1 << 53).is_err());
+    }
 
     #[test]
     fn records_are_split_below_the_blob_limit() {

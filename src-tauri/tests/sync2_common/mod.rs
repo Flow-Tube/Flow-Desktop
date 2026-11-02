@@ -53,6 +53,15 @@ impl MemoryStore {
     pub fn take(&self, path: &str) -> Vec<u8> {
         self.0.lock().unwrap().objects.remove(path).unwrap().1
     }
+
+    /// Replaces the object at `path` with one whose signature fails, and returns the genuine one.
+    pub fn tamper(&self, path: &str) -> Vec<u8> {
+        let genuine = self.take(path);
+        let mut tampered = genuine.clone();
+        tampered[150] ^= 1;
+        self.put(path, tampered);
+        genuine
+    }
 }
 
 impl Store for &MemoryStore {

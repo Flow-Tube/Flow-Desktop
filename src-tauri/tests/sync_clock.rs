@@ -75,3 +75,15 @@ async fn the_clock_keeps_what_it_saw_across_a_restart() {
     reopened.close().await;
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[tokio::test]
+async fn a_stamp_at_the_end_of_time_still_lets_this_device_edit() {
+    let dir = std::env::temp_dir().join(format!("flow-clock-{}", uuid::Uuid::new_v4()));
+    let pool = open_database(&dir, &default_profile()).await.unwrap();
+    clock::observe(&mut pool.acquire().await.unwrap(), u64::MAX)
+        .await
+        .unwrap();
+    assert_eq!(clock::edit_ms(&pool).await.unwrap(), u64::MAX);
+    pool.close().await;
+    std::fs::remove_dir_all(dir).unwrap();
+}

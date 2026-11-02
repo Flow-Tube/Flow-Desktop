@@ -247,6 +247,21 @@ pub fn signing_keys(entries: &[Entry]) -> Result<BTreeMap<String, [u8; 32]>> {
     Ok(keys)
 }
 
+/// `None` when reading an object fails a protocol check: that object is discarded, which stops
+/// only its sender's log (spec/store.md, Untrusted input), not the run.
+pub(super) fn contained<T>(read: Result<T>) -> Result<Option<T>> {
+    match read {
+        Ok(read) => Ok(Some(read)),
+        Err(EngineError::Protocol(error)) => {
+            if error != Error::Gap {
+                tracing::warn!(target: "flow::sync2", kind = error.code(), "discarded an object");
+            }
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 /// Steps 1 to 3 of reading an envelope (spec/store.md): structure, sender, signature, for the
 /// object at `did`'s `seq`.
 pub fn verify_logged<'b>(
@@ -596,13 +611,22 @@ impl<'a, S: Store> Session<'a, S> {
                 pulled.stalled = true;
                 return Ok(pulled);
             }
+            let advanced = next > cursor
+                || pulled
+                    .positions
+                    .iter()
+                    .any(|(did, position)| read.get(did) != Some(&position.seq));
+            if !advanced {
+                return Ok(pulled);
+            }
             pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
         }
     }
 
     /// One log object, checked in the order of spec/store.md. `None` when an earlier object of
-    /// this sender is still missing.
-    async fn read_object(
+    /// this sender is still missing, or when this one is discarded: either stops reading this
+    /// sender's log here, and the other senders are still read.
+    pub(super) async fn read_object(
         &mut self,
         path: &str,
         did: &str,
@@ -612,12 +636,12 @@ impl<'a, S: Store> Session<'a, S> {
         let Some(bytes) = self.store.get_object(path).await? else {
             return Ok(None);
         };
-        let object = self.verified(&bytes, did, seq)?;
-        let position = match next_in_stream(last, &object) {
-            Err(Error::Gap) => return Ok(None),
-            other => other?,
+        let read = async {
+            let object = self.verified(&bytes, did, seq)?;
+            let position = next_in_stream(last, &object)?;
+            Ok((position, self.open_content(&object).await?))
         };
-        Ok(Some((position, self.open_content(&object).await?)))
+        contained(read.await)
     }
 
     /// Steps 1 to 3 of reading an envelope: structure, sender, signature. The caller checks its

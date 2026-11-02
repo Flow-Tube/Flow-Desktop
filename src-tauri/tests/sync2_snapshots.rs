@@ -5,14 +5,17 @@ mod sync2_common;
 use std::collections::BTreeMap;
 
 use flow_desktop_lib::sync::canonical::Collection;
+use flow_desktop_lib::sync::canonical::to_canonical_json;
 use flow_desktop_lib::sync2::batches::{IncomingBatch, apply_batches, parse_batch};
 use flow_desktop_lib::sync2::blob::open_blob;
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
-use flow_desktop_lib::sync2::envelope::{ObjectType, open_object, parse_object};
+use flow_desktop_lib::sync2::envelope::{
+    Header, ObjectType, ZERO_HASH, open_object, parse_object, seal_object,
+};
 use flow_desktop_lib::sync2::epoch::purpose_key;
 use flow_desktop_lib::sync2::paths::{blob_path, log_path};
-use flow_desktop_lib::sync2::payload::decode_payload;
-use flow_desktop_lib::sync2::snapshot::{Manifest, note_merged, snapshot_due, snapshot_soon};
+use flow_desktop_lib::sync2::payload::{decode_payload, encode_payload};
+use flow_desktop_lib::sync2::snapshot::{Manifest, Tip, note_merged, snapshot_due, snapshot_soon};
 use sqlx::SqlitePool;
 use sync2_common::{Group, LINK, device_pool, exported, group};
 
@@ -236,4 +239,44 @@ async fn without_a_snapshot_a_log_missing_its_start_is_not_read() {
     let pool_b = device_pool(&g).await;
     let mut reader = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
     assert!(reader.pull(&pool_b).await.unwrap().batches.is_empty());
+}
+
+/// A member's manifest may name any `seq`; the last possible one must not stop a link's read.
+#[tokio::test]
+async fn a_snapshot_naming_the_last_possible_seq_is_read() {
+    let g = group().await;
+    let a = hex::encode(g.a.did);
+    let manifest = Manifest {
+        head: String::new(),
+        link: Some("kids".into()),
+        parts: Vec::new(),
+        vv: BTreeMap::from([(
+            a.clone(),
+            Tip {
+                hash: hex::encode(ZERO_HASH),
+                seq: u64::MAX,
+            },
+        )]),
+    };
+    let header = Header {
+        object_type: ObjectType::Snapshot,
+        group: g.group,
+        epoch: 0,
+        sender: g.a.did,
+        seq: 1,
+        prev: ZERO_HASH,
+    };
+    let key = purpose_key(&g.epoch_key, &g.group, 0, ObjectType::Snapshot.purpose());
+    let payload = encode_payload(&to_canonical_json(&manifest)).unwrap();
+    g.store.put(
+        &log_path(&a, 1),
+        seal_object(&header, &key, &payload, &g.a.sig_seed),
+    );
+
+    let pool = device_pool(&g).await;
+    let mut reader = Session::open(&pool, &g.store, &g.b).await.unwrap();
+    let pulled = reader.pull(&pool).await.unwrap();
+    reader.finish(&pool, pulled).await.unwrap();
+    let read = reader.read_link(&pool, "kids").await.unwrap().unwrap();
+    assert!(read.batches.is_empty());
 }

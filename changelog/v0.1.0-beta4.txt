@@ -25,6 +25,7 @@ SYNC
 - Linked devices has a Dashboard: where the group lives, how much of a Flow server's storage it uses, your devices, each synced profile's state and the latest sync errors.
 - The Flow Neuro page can show the interests of your other synced profiles, read on this computer without switching. From the Dashboard, View interests opens them.
 - A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
+- Joining a group over the local network now refuses a malformed welcome from the other device.
 
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.

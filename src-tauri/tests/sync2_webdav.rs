@@ -4,6 +4,7 @@
 
 mod sync2_common;
 
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,7 +24,7 @@ use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, finish_join, join, join_on_lan,
 };
 use flow_desktop_lib::sync2::membership::rename_device;
-use flow_desktop_lib::sync2::paths::{roster_path, wrap_path};
+use flow_desktop_lib::sync2::paths::{log_path, roster_path, wrap_path};
 use flow_desktop_lib::sync2::pipe::listen_on;
 use flow_desktop_lib::sync2::roster::entry_hash;
 use flow_desktop_lib::sync2::sealed::random_bytes;
@@ -378,4 +379,29 @@ async fn answers_past_their_limit_are_refused() {
         Err(StoreError::Malformed)
     ));
     assert!(matches!(dav.list("dev/").await, Err(StoreError::Malformed)));
+}
+
+/// A member's snapshot can place a log at its last possible `seq`; listing past it must hold.
+#[tokio::test]
+async fn a_log_read_up_to_its_last_possible_seq_lists_nothing_more() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    let client = webdav(&url, PASSWORD).await;
+    let a = hex::encode(g.a.did);
+    for seq in [1, u64::MAX] {
+        client.put(&log_path(&a, seq), vec![0]).await.unwrap();
+    }
+    let store = store_for(&url, &g.b.did).await;
+    let listed = |read: u64| {
+        let store = &store;
+        let read = BTreeMap::from([(a.clone(), read)]);
+        async move { store.new_objects(1, &read).await.unwrap().0 }
+    };
+    let last: Vec<String> = listed(u64::MAX - 1)
+        .await
+        .into_iter()
+        .map(|c| c.path)
+        .collect();
+    assert_eq!(last, [log_path(&a, u64::MAX)]);
+    assert!(listed(u64::MAX).await.is_empty());
 }

@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::batches::{IncomingBatch, parse_batch};
 use super::blob::open_blob;
-use super::engine::{Content, Result, Session};
+use super::engine::{Content, Result, Session, contained};
 use super::envelope::{ObjectType, StreamPosition};
 use super::epoch::purpose_key;
 use super::paths::{blob_path, log_path, parse_log_path};
@@ -36,7 +36,10 @@ type Best = BTreeMap<Option<Option<String>>, (String, u64, u32, Manifest)>;
 
 /// How many objects of all logs the snapshot includes.
 pub(super) fn merged(manifest: &Manifest) -> u64 {
-    manifest.vv.values().map(|tip| tip.seq).sum()
+    manifest
+        .vv
+        .values()
+        .fold(0, |sum, tip| sum.saturating_add(tip.seq))
 }
 
 /// Where each log goes on: right after the lowest object the snapshots include. A log one of them
@@ -71,7 +74,7 @@ fn covers(manifest: &Manifest, first: &BTreeMap<String, u64>) -> bool {
     first
         .iter()
         .filter(|(_, seq)| **seq > 1)
-        .all(|(did, seq)| manifest.vv.get(did).is_some_and(|tip| tip.seq + 1 >= *seq))
+        .all(|(did, seq)| manifest.vv.get(did).is_some_and(|tip| tip.seq >= *seq - 1))
 }
 
 impl<S: Store> Session<'_, S> {
@@ -161,14 +164,18 @@ impl<S: Store> Session<'_, S> {
             let Some(bytes) = self.store().get_object(&log_path(did, seq)).await? else {
                 continue;
             };
-            let object = self.verified(&bytes, did, seq)?;
-            if object.header.object_type != ObjectType::Snapshot {
-                continue;
-            }
-            if let Content::Snapshot(manifest) = self.open_content(&object).await?
+            let read = async {
+                let object = self.verified(&bytes, did, seq)?;
+                if object.header.object_type != ObjectType::Snapshot {
+                    return Ok(None);
+                }
+                let content = self.open_content(&object).await?;
+                Ok(Some((object.header.epoch, content)))
+            };
+            if let Some((epoch, Content::Snapshot(manifest))) = contained(read.await)?.flatten()
                 && found.iter().all(|(_, _, m)| m.link != manifest.link)
             {
-                found.push((seq, object.header.epoch, manifest));
+                found.push((seq, epoch, manifest));
             }
         }
         Ok(found)
@@ -199,5 +206,37 @@ impl<S: Store> Session<'_, S> {
             batches.push(parse_batch(&decode_payload(&payload)?)?);
         }
         Ok(batches)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manifest(tips: &[(&str, u64)]) -> Manifest {
+        let tip = |seq| Tip {
+            hash: String::new(),
+            seq,
+        };
+        Manifest {
+            head: String::new(),
+            link: None,
+            parts: Vec::new(),
+            vv: tips
+                .iter()
+                .map(|(d, s)| ((*d).to_owned(), tip(*s)))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn a_count_of_merged_objects_stops_at_the_largest_seq() {
+        assert_eq!(merged(&manifest(&[("a", u64::MAX), ("b", 1)])), u64::MAX);
+    }
+
+    #[test]
+    fn a_snapshot_at_the_largest_seq_covers_its_log() {
+        let first = BTreeMap::from([("a".to_owned(), u64::MAX)]);
+        assert!(covers(&manifest(&[("a", u64::MAX)]), &first));
     }
 }

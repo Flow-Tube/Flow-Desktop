@@ -103,3 +103,92 @@ impl LiveKeys {
         Ok(Received { from, seq, message })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::LazyLock;
+
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::sync2::fuzz::{json, member, mutations, seq};
+    use crate::sync2::live_message::{Answer, DeviceKind};
+
+    /// Two devices of one group, each with the other's signing key.
+    static PAIR: LazyLock<(LiveKeys, LiveKeys)> = LazyLock::new(|| {
+        let (a, b) = (member(), member());
+        let keys = |device: &MemberSecrets, other: &MemberSecrets| LiveKeys {
+            group: [7; 16],
+            epoch: 2,
+            live_key: vec![5; 32],
+            device: device.clone(),
+            others: BTreeMap::from([(hex::encode(other.did), other.sig_public)]),
+        };
+        (keys(&a, &b), keys(&b, &a))
+    });
+
+    fn presence() -> LiveMessage {
+        LiveMessage::Presence {
+            can: Vec::new(),
+            kind: DeviceKind::Desktop,
+        }
+    }
+
+    fn message() -> impl Strategy<Value = LiveMessage> {
+        prop_oneof![
+            Just(presence()),
+            (
+                any::<String>(),
+                any::<u64>(),
+                any::<bool>(),
+                any::<Option<String>>()
+            )
+                .prop_map(|(to, reference, ok, reason)| LiveMessage::Result(Answer {
+                    to,
+                    reference,
+                    ok,
+                    reason,
+                })),
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn live_messages_round_trip(seq in seq(), message in message()) {
+            let (a, b) = &*PAIR;
+            let received = b.open(&a.seal(seq, &message).unwrap()).unwrap();
+            prop_assert_eq!(received, Received { from: a.me(), seq, message });
+        }
+
+        #[test]
+        fn any_change_to_a_live_message_is_refused(
+            changed in mutations(PAIR.0.seal(1, &presence()).unwrap()),
+        ) {
+            prop_assert!(PAIR.1.open(&changed).is_err());
+        }
+
+        #[test]
+        fn arbitrary_live_messages_are_refused(
+            bytes in prop::collection::vec(any::<u8>(), 0..1024),
+        ) {
+            prop_assert!(PAIR.1.open(&bytes).is_err());
+        }
+
+        #[test]
+        fn sealed_json_that_is_no_valid_message_is_refused(value in json()) {
+            let (a, b) = &*PAIR;
+            let header = Header {
+                object_type: ObjectType::Live,
+                group: a.group,
+                epoch: a.epoch,
+                sender: a.device.did,
+                seq: 1,
+                prev: [0; 32],
+            };
+            let payload = encode_payload(&to_canonical_json(&value)).unwrap();
+            let opened = b.open(&seal_object(&header, &a.live_key, &payload, &a.device.sig_seed));
+            let valid = serde_json::from_value::<LiveMessage>(value).is_ok_and(|m| m.is_valid());
+            prop_assert_eq!(opened.is_ok(), valid);
+        }
+    }
+}

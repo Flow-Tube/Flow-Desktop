@@ -305,3 +305,22 @@ pub async fn dial(addresses: &[LanAddress]) -> Option<LanPipe<ClientStream>> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn the_scanner_key_is_the_first_32_bytes(
+            bytes in prop::collection::vec(any::<u8>(), 0..96),
+        ) {
+            let split = split_key(&bytes).ok().map(|(key, rest)| (key.to_vec(), rest.to_vec()));
+            let expected = (bytes.len() >= KEY_SIZE)
+                .then(|| (bytes[..KEY_SIZE].to_vec(), bytes[KEY_SIZE..].to_vec()));
+            prop_assert_eq!(split, expected);
+        }
+    }
+}

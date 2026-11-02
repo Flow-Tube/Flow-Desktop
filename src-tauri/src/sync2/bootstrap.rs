@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::batches::{IncomingBatch, parse_batch};
 use super::blob::open_blob;
-use super::engine::{Content, Result, Session};
+use super::engine::{Content, Result, Session, contained};
 use super::envelope::{ObjectType, StreamPosition};
 use super::epoch::purpose_key;
 use super::paths::{blob_path, log_path, parse_log_path};
@@ -161,14 +161,18 @@ impl<S: Store> Session<'_, S> {
             let Some(bytes) = self.store().get_object(&log_path(did, seq)).await? else {
                 continue;
             };
-            let object = self.verified(&bytes, did, seq)?;
-            if object.header.object_type != ObjectType::Snapshot {
-                continue;
-            }
-            if let Content::Snapshot(manifest) = self.open_content(&object).await?
+            let read = async {
+                let object = self.verified(&bytes, did, seq)?;
+                if object.header.object_type != ObjectType::Snapshot {
+                    return Ok(None);
+                }
+                let content = self.open_content(&object).await?;
+                Ok(Some((object.header.epoch, content)))
+            };
+            if let Some((epoch, Content::Snapshot(manifest))) = contained(read.await)?.flatten()
                 && found.iter().all(|(_, _, m)| m.link != manifest.link)
             {
-                found.push((seq, object.header.epoch, manifest));
+                found.push((seq, epoch, manifest));
             }
         }
         Ok(found)

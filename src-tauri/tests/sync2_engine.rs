@@ -126,10 +126,7 @@ async fn a_tampered_object_stops_only_its_sender_s_log() {
     watch(&pool_c, "ccccccccccc").await;
     sync(&pool_c, &g.store, &c, "app-c").await.unwrap();
     let path = log_path(&hex::encode(g.a.did), 1);
-    let genuine = g.store.take(&path);
-    let mut tampered = genuine.clone();
-    tampered[150] ^= 1;
-    g.store.put(&path, tampered);
+    let genuine = g.store.tamper(&path);
 
     sync(&pool_b, &g.store, &g.b, "app-b").await.unwrap();
     assert_eq!(watched(&pool_b).await, ["ccccccccccc"]);

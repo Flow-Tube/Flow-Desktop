@@ -5,8 +5,8 @@
 use sqlx::SqlitePool;
 
 use super::bootstrap::{merged, position};
-use super::engine::{Content, Result, Session};
-use super::envelope::{StreamPosition, next_in_stream};
+use super::engine::{Content, Result, Session, contained};
+use super::envelope::StreamPosition;
 use super::gc::{Logged, manifests};
 use super::kept::Kept;
 use super::paths::log_path;
@@ -22,7 +22,7 @@ pub struct LinkRead {
 
 impl<S: Store> Session<'_, S> {
     /// Reads `link` up to where this device has read the other logs; `None` while an object is
-    /// still missing from the store.
+    /// still missing from the store or is discarded.
     pub async fn read_link(&mut self, pool: &SqlitePool, link: &str) -> Result<Option<LinkRead>> {
         let me = hex::encode(self.device().did);
         let mut read = LinkRead {
@@ -35,9 +35,10 @@ impl<S: Store> Session<'_, S> {
             .map(|(logged, _)| logged.manifest.vv.clone())
             .unwrap_or_default();
         if let Some((logged, epoch)) = start {
-            let batches = self
-                .snapshot_batches(&logged.did, epoch, &logged.manifest)
-                .await?;
+            let batches = self.snapshot_batches(&logged.did, epoch, &logged.manifest);
+            let Some(batches) = contained(batches.await)? else {
+                return Ok(None);
+            };
             for (part, batch) in (1..).zip(batches) {
                 read.batches
                     .push(kept(link, &logged.did, logged.seq, part, batch));
@@ -50,12 +51,14 @@ impl<S: Store> Session<'_, S> {
             }
             let from = last.as_ref().map_or(1, |tip| tip.seq.saturating_add(1));
             for seq in from..=reached.seq {
-                let Some(bytes) = self.store().get_object(&log_path(did, seq)).await? else {
+                let path = log_path(did, seq);
+                let Some((position, content)) =
+                    self.read_object(&path, did, seq, last.as_ref()).await?
+                else {
                     return Ok(None);
                 };
-                let object = self.verified(&bytes, did, seq)?;
-                last = Some(next_in_stream(last.as_ref(), &object)?);
-                if let Content::Batch(batch) = self.open_content(&object).await?
+                last = Some(position);
+                if let Content::Batch(batch) = content
                     && batch.link.as_deref() == Some(link)
                 {
                     read.batches.push(kept(link, did, seq, 0, batch));
@@ -65,7 +68,7 @@ impl<S: Store> Session<'_, S> {
         Ok(Some(read))
     }
 
-    /// The newest snapshot of `link` seen that is still in the store, and its epoch.
+    /// The newest snapshot of `link` seen that is still in the store and verifies, and its epoch.
     async fn newest_snapshot(
         &mut self,
         pool: &SqlitePool,
@@ -85,8 +88,9 @@ impl<S: Store> Session<'_, S> {
             else {
                 continue;
             };
-            let epoch = self.verified(&bytes, &logged.did, logged.seq)?.header.epoch;
-            return Ok(Some((logged, epoch)));
+            if let Some(object) = contained(self.verified(&bytes, &logged.did, logged.seq))? {
+                return Ok(Some((logged, object.header.epoch)));
+            }
         }
         Ok(None)
     }

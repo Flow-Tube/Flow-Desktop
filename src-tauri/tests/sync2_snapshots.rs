@@ -144,8 +144,8 @@ async fn other_devices_read_past_a_snapshot_manifest() {
 }
 
 /// Device A's log after garbage collection: a batch, a snapshot, then a newer batch, with the
-/// first batch deleted.
-async fn collected_log(g: &Group) {
+/// first batch deleted. Returns the newest batch's `seq`.
+async fn collected_log(g: &Group) -> u64 {
     let pool = device_pool(g).await;
     watched(&pool, "aaaaaaaaaaa").await;
     let mut session = Session::open(&pool, &g.store, &g.a).await.unwrap();
@@ -166,6 +166,7 @@ async fn collected_log(g: &Group) {
     for seq in 1..=pushed {
         g.store.take(&log_path(&hex::encode(g.a.did), seq));
     }
+    u64::try_from(session.record().own_seq).unwrap()
 }
 
 async fn applied_videos(
@@ -198,6 +199,29 @@ async fn a_new_device_starts_from_the_snapshot_when_old_objects_are_gone() {
     reader.finish(&pool_b, pulled).await.unwrap();
     let again = reader.pull(&pool_b).await.unwrap();
     assert!(again.batches.is_empty());
+}
+
+#[tokio::test]
+async fn a_tampered_object_after_the_snapshot_stops_only_that_log() {
+    let g = group().await;
+    let newest = log_path(&hex::encode(g.a.did), collected_log(&g).await);
+    let genuine = g.store.tamper(&newest);
+
+    let pool_b = device_pool(&g).await;
+    let mut reader = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
+    let pulled = reader.pull(&pool_b).await.unwrap();
+    assert_eq!(
+        applied_videos(&pool_b, &pulled.batches).await,
+        ["aaaaaaaaaaa"]
+    );
+    reader.finish(&pool_b, pulled).await.unwrap();
+
+    g.store.put(&newest, genuine);
+    let pulled = reader.pull(&pool_b).await.unwrap();
+    assert_eq!(
+        applied_videos(&pool_b, &pulled.batches).await,
+        ["aaaaaaaaaaa", "bbbbbbbbbbb"]
+    );
 }
 
 #[tokio::test]

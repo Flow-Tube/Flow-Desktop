@@ -10,7 +10,8 @@ use quick_xml::events::Event;
 use reqwest::{Client, Method, RequestBuilder, Response, StatusCode, Url};
 use tokio::sync::Mutex;
 
-use crate::sync2::http::Transport;
+use crate::sync2::envelope::MAX_OBJECT_SIZE;
+use crate::sync2::http::{MAX_RESPONSE, Transport, read_body};
 use crate::sync2::server::{Result, StoreError};
 
 const PROPFIND_BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>"#;
@@ -149,13 +150,7 @@ impl WebDav {
         let response = self.send(self.request(Method::GET, path)?).await?;
         match response.status() {
             StatusCode::NOT_FOUND => Ok(None),
-            status if status.is_success() => Ok(Some(
-                response
-                    .bytes()
-                    .await
-                    .map_err(StoreError::Network)?
-                    .to_vec(),
-            )),
+            status if status.is_success() => Ok(Some(read_body(response, MAX_OBJECT_SIZE).await?)),
             _ => Err(refused(&response)),
         }
     }
@@ -184,8 +179,8 @@ impl WebDav {
             return Err(refused(&response));
         }
         let folder = self.base.join(dir).map_err(|_| StoreError::Malformed)?;
-        let xml = response.text().await.map_err(StoreError::Network)?;
-        Ok(parse_multistatus(&xml)
+        let xml = read_body(response, MAX_RESPONSE).await?;
+        Ok(parse_multistatus(&String::from_utf8_lossy(&xml))
             .into_iter()
             .filter_map(|(href, is_folder)| {
                 let path = folder.join(&href).ok()?.path().to_owned();

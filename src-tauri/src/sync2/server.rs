@@ -12,7 +12,8 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use super::curve::sign;
-use super::http::Transport;
+use super::envelope::MAX_OBJECT_SIZE;
+use super::http::{MAX_RESPONSE, Transport, read_body};
 use super::kdf::tag;
 use super::keys::MemberSecrets;
 use super::mailbox::Mailbox;
@@ -329,13 +330,8 @@ impl ServerStore {
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        let response = check(response).await?;
         Ok(Some(
-            response
-                .bytes()
-                .await
-                .map_err(StoreError::Network)?
-                .to_vec(),
+            read_body(check(response).await?, MAX_OBJECT_SIZE).await?,
         ))
     }
 }
@@ -371,7 +367,7 @@ impl Store for ServerStore {
             .authorized(Method::POST, "v1/roster", Some(body))
             .await?;
         if response.status() == StatusCode::CONFLICT {
-            let value: Value = response.json().await.map_err(|_| StoreError::Malformed)?;
+            let value = json(response).await?;
             let head = value["head"]
                 .as_str()
                 .ok_or(StoreError::Malformed)?
@@ -454,14 +450,7 @@ impl Mailbox for ServerStore {
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        Ok(Some(
-            check(response)
-                .await?
-                .bytes()
-                .await
-                .map_err(StoreError::Network)?
-                .to_vec(),
-        ))
+        Ok(Some(read_body(check(response).await?, MAX_RESPONSE).await?))
     }
 
     async fn close_slot(&self, slot: &str) -> Result<()> {
@@ -484,8 +473,7 @@ async fn check(response: reqwest::Response) -> Result<reqwest::Response> {
         return Ok(response);
     }
     let status = response.status().as_u16();
-    let code = response
-        .json::<Value>()
+    let code = json(response)
         .await
         .ok()
         .and_then(|v| v["error"].as_str().map(str::to_owned));
@@ -511,12 +499,13 @@ pub struct ServerInfo {
     pub live: bool,
 }
 
-pub(super) async fn decode(response: reqwest::Response) -> Result<Value> {
-    check(response)
-        .await?
-        .json()
-        .await
+async fn json(response: reqwest::Response) -> Result<Value> {
+    serde_json::from_slice(&read_body(response, MAX_RESPONSE).await?)
         .map_err(|_| StoreError::Malformed)
+}
+
+pub(super) async fn decode(response: reqwest::Response) -> Result<Value> {
+    json(check(response).await?).await
 }
 
 pub(super) async fn decode_empty(response: reqwest::Response) -> Result<()> {

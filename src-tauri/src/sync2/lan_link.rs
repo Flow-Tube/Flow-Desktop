@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use super::curve::{sign, verify};
 use super::engine::{EngineError, Result, Session, verify_logged};
@@ -29,6 +30,8 @@ use crate::sync::transport::WsChannel;
 
 pub const SESSION_PATH: &str = "/flow-sync/2";
 const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
+/// Room for a payload's gzip, padding (at most 1/32 at this size), box and `seq`.
+const MAX_FRAME: usize = MAX_PAYLOAD + MAX_PAYLOAD / 16;
 const NONCE_SIZE: usize = 32;
 /// Once this side has no more requests, the session closes when the peer stops sending.
 pub const IDLE: Duration = Duration::from_secs(3);
@@ -131,9 +134,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Framed<S> {
             &lan_frame_aad(self.received),
             sealed,
         )?)?;
+        if content.len() > MAX_PAYLOAD {
+            return Err(Error::Length.into());
+        }
         self.received += 1;
         Ok(content)
     }
+}
+
+/// What a LAN WebSocket reads before it gives up on a message.
+pub(super) fn lan_socket_config() -> WebSocketConfig {
+    WebSocketConfig::default()
+        .max_message_size(Some(MAX_FRAME))
+        .max_frame_size(Some(MAX_FRAME))
 }
 
 fn hello_frame(epoch: u32, lan_key: &[u8], message: u8, body: &Value) -> Result<Vec<u8>> {
@@ -545,7 +558,35 @@ impl Link {
 
 #[cfg(test)]
 mod tests {
+    use tokio_tungstenite::WebSocketStream;
+    use tokio_tungstenite::tungstenite::protocol::Role as WsRole;
+
     use super::*;
+
+    #[tokio::test]
+    async fn a_frame_whose_payload_inflates_past_the_limit_is_refused() {
+        let key = [1; 32];
+        let (near, _far) = tokio::io::duplex(64);
+        let mut framed = Framed {
+            socket: WsChannel::new(
+                WebSocketStream::from_raw_socket(near, WsRole::Client, None).await,
+            ),
+            send_key: key.to_vec(),
+            receive_key: key.to_vec(),
+            sent: 0,
+            received: 0,
+        };
+        let frame = |len| {
+            let payload = encode_payload(&vec![0; len]).unwrap();
+            [
+                &0u64.to_be_bytes()[..],
+                &seal(&key, &lan_frame_aad(0), &payload),
+            ]
+            .concat()
+        };
+        assert!(framed.open(&frame(MAX_PAYLOAD + 1)).is_err());
+        assert_eq!(framed.open(&frame(MAX_PAYLOAD)).unwrap().len(), MAX_PAYLOAD);
+    }
 
     #[test]
     fn headers_are_canonical_json_lines() {

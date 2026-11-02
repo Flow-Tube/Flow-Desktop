@@ -204,7 +204,26 @@ impl WebDav {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+    use crate::sync2::fuzz::mutations;
+
+    const ANSWER: &str = r#"<D:multistatus xmlns:D="DAV:"><D:response><D:href>/x/</D:href>
+<D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat>
+</D:response></D:multistatus>"#;
+
+    proptest! {
+        #[test]
+        fn changed_or_arbitrary_answers_are_read_without_panicking(
+            xml in prop_oneof![
+                any::<String>(),
+                mutations(ANSWER.as_bytes().to_vec()).prop_map(|b| String::from_utf8_lossy(&b).into_owned()),
+            ],
+        ) {
+            let _ = parse_multistatus(&xml);
+        }
+    }
 
     #[test]
     fn reads_a_propfind_answer_with_any_prefix() {

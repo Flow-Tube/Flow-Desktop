@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef } from "react";
 import {
+  AlertTriangle,
   AudioLines,
   Captions,
   Check,
@@ -20,6 +21,7 @@ import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
 import { useEqStore } from "../../store/useEqStore";
 import { videoCodecLabel } from "../../lib/settings/playerRuntime";
+import { useQualitySuitability } from "../../lib/qualitySuitability";
 import { getString } from "../../lib/i18n/index";
 import { MOTION_EASE, motionMs } from "../../lib/motion";
 import { PLAYER_MENU_ATTR } from "../../lib/playerMenuDismiss";
@@ -123,6 +125,7 @@ export function PlayerSettingsMenu({
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
+  const { suitabilityMap, hasDemandingQualities } = useQualitySuitability(qualities);
 
   const panesRef = useRef<HTMLDivElement>(null);
   const shownPaneRef = useRef(pane);
@@ -328,6 +331,10 @@ export function PlayerSettingsMenu({
             {qualities.map((quality) => {
               const codec = videoCodecLabel(quality.mimeType);
               const playable = audioPlayable(quality);
+              const suitability = suitabilityMap[quality.id];
+              const isRecommended = suitability?.isRecommended;
+              const isDemanding = suitability?.isDemanding;
+
               return (
                 <button
                   key={quality.id}
@@ -338,18 +345,55 @@ export function PlayerSettingsMenu({
                   }}
                   className={cx(
                     ROW,
-                    "text-chrome-zinc-100",
-                    playable ? "hover:bg-chrome-white/10" : "cursor-not-allowed text-chrome-zinc-500",
+                    playable
+                      ? isDemanding
+                        ? "text-chrome-red-400 hover:bg-chrome-red-950/20"
+                        : isRecommended
+                          ? "text-chrome-emerald-400 hover:bg-chrome-emerald-950/20"
+                          : "text-chrome-zinc-100 hover:bg-chrome-white/10"
+                      : "cursor-not-allowed text-chrome-zinc-500",
                   )}
                 >
-                  <span className="flex flex-col text-left leading-tight">
-                    <span>{quality.qualityLabel}</span>
-                    {codec && <span className="text-xs font-normal text-chrome-zinc-400">{codec}</span>}
+                  <span className="flex min-w-0 flex-col text-left leading-tight">
+                    <span className={cx(isRecommended && "font-semibold text-chrome-emerald-400", isDemanding && "font-semibold text-chrome-red-400")}>
+                      {quality.qualityLabel}
+                    </span>
+                    {codec && (
+                      <span className={cx(
+                        "text-xs font-normal",
+                        isDemanding
+                          ? "text-chrome-red-400/70"
+                          : isRecommended
+                            ? "text-chrome-emerald-400/70"
+                            : "text-chrome-zinc-400",
+                      )}>
+                        {codec}
+                      </span>
+                    )}
                   </span>
-                  {check(selectedQualityId === quality.id)}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {isRecommended && (
+                      <span className="rounded-full border border-chrome-emerald-800/80 bg-chrome-emerald-950/60 px-2 py-0.5 text-[11px] font-medium text-chrome-emerald-400">
+                        {getString("player_quality_recommended")}
+                      </span>
+                    )}
+                    {isDemanding && (
+                      <span className="rounded-full border border-chrome-red-800/80 bg-chrome-red-950/60 px-2 py-0.5 text-[11px] font-medium text-chrome-red-400">
+                        {getString("player_quality_demanding")}
+                      </span>
+                    )}
+                    {check(selectedQualityId === quality.id)}
+                  </div>
                 </button>
               );
             })}
+
+            {hasDemandingQualities && (
+              <div className="mt-2 flex items-center gap-1.5 border-t border-chrome-white/10 px-2 pt-2 text-[11px] text-chrome-zinc-400">
+                <AlertTriangle size={13} className="shrink-0 text-chrome-red-400" />
+                <span>{getString("player_quality_demanding_tip")}</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -10,7 +10,7 @@ import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { audioLanguageOptions } from '../../../lib/audioLanguages';
 
 const QUALITY_OPTIONS = [
-  { value: 'Auto', label: getString('quality_auto') }, { value: '2160p', label: '2160p (4K)' },
+  { value: 'Auto', label: getString('quality_auto') }, { value: '4320p', label: '4320p (8K)' }, { value: '2160p', label: '2160p (4K)' },
   { value: '1440p', label: '1440p' }, { value: '1080p', label: '1080p' },
   { value: '720p', label: '720p' }, { value: '480p', label: '480p' },
   { value: '360p', label: '360p' }, { value: '240p', label: '240p' }, { value: '144p', label: '144p' },

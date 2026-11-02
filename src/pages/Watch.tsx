@@ -6,8 +6,8 @@ import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { getPlaylistDetails } from "../lib/api/youtube";
-import { getSponsorBlockSegments, getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
-import { useDownloadedVideoRecord, downloadRecordToVideo, downloadSponsorSegments } from "../lib/useDownloads";
+import { getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
+import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
 import { useWatchVideoDetails } from "../lib/useWatchVideoDetails";
 import { usePlaybackSettled } from "../lib/usePlaybackSettled";
 import { useRelatedLane } from "../lib/useRelatedLane";
@@ -43,9 +43,7 @@ export function Watch() {
   const dearrowData = usePlayerStore((s) => s.dearrowData);
   const rydData = usePlayerStore((s) => s.rydData);
   const setDearrowData = usePlayerStore((s) => s.setDearrowData);
-  const setRydData = usePlayerStore((s) => s.setRydData);
-  const setSponsorBlockSegments = usePlayerStore((s) => s.setSponsorBlockSegments);
-  const setAutoplayCandidates = usePlayerStore((s) => s.setAutoplayCandidates);
+  const setRydData = usePlayerStore((s) => s.setRydData);  const setAutoplayCandidates = usePlayerStore((s) => s.setAutoplayCandidates);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
 
   const { loadSubscriptions } = useSubscriptionStore();
@@ -121,31 +119,6 @@ export function Watch() {
     if ((currentVideo.isLive ?? false) === (videoDetails.isLive ?? false)) return;
     enrichCurrentVideo(videoId, { isLive: videoDetails.isLive ?? false });
   }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
-
-  useEffect(() => {
-    if (!videoId) return;
-
-    const loadSponsorBlock = async () => {
-      try {
-        await loadSettings();
-        const settings = useSettingsStore.getState();
-        if (!settings.sponsorBlockEnabled) {
-          setSponsorBlockSegments([]);
-          return;
-        }
-        // A saved video skips with the segments stored when it was downloaded.
-        setSponsorBlockSegments(
-          offlineRecord
-            ? downloadSponsorSegments(offlineRecord)
-            : await getSponsorBlockSegments(videoId, settings.serverUrl).catch(() => []),
-        );
-      } catch (e) {
-        console.warn("Failed SponsorBlock loading process", e);
-      }
-    };
-
-    void loadSponsorBlock();
-  }, [videoId, retryNonce, setSponsorBlockSegments, loadSettings, offlineRecord]);
 
   // Page furniture, not playback: it waits until playback has actually started
   // rather than compete with the first media buffer.

@@ -89,6 +89,9 @@ export function usePipSession() {
     store.setHandoffSilent(session.silentUntilTakeover);
     store.setQueue(session.queue, index);
     store.setPipHandoff(video.id, session.positionSeconds, session.playing);
+    if (session.sponsorSegments && session.sponsorSegments.length > 0) {
+      store.setSponsorBlockSegments(session.sponsorSegments);
+    }
     // The pop-out *is* the mini player surface, so its whole viewport uses the
     // compact transport rather than the full watch-page controls.
     store.enterVideoPip("manual");

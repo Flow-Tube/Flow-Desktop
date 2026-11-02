@@ -97,6 +97,7 @@ export async function openPopoutPlayer(): Promise<boolean> {
       settings: settingsValues as Record<string, string>,
       stream: cachedStream ? { info: cachedStream.info, resolvedAt: cachedStream.resolvedAt } : null,
       silentUntilTakeover,
+      sponsorSegments: store.sponsorBlockSegments,
     });
     // Only one pop-out exists; another window that had it loses it to this one.
     void emit(PIP_EVENTS.claimed, { source: CURRENT_WINDOW_LABEL }).catch(() => {});

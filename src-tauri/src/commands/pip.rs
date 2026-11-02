@@ -47,6 +47,10 @@ pub struct PipSession {
     /// the calling window, never taken from the frontend.
     #[serde(default)]
     pub source_window: Option<String>,
+    /// SponsorBlock segments for current video, handed over so the pop-out
+    /// can skip/mute sponsor segments immediately without re-fetching from API.
+    #[serde(default)]
+    pub sponsor_segments: Vec<serde_json::Value>,
 }
 
 #[derive(Default)]

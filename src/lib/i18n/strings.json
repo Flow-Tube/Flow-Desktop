@@ -2268,5 +2268,8 @@
   "search_kind_profile": "Profile",
   "search_kind_playlist": "Playlist",
   "topbar_back": "Back",
-  "topbar_forward": "Forward"
+  "topbar_forward": "Forward",
+  "player_quality_recommended": "Recommended",
+  "player_quality_demanding": "Heavy",
+  "player_quality_demanding_tip": "8K or high-bitrate streams may cause stutter on some hardware."
 }

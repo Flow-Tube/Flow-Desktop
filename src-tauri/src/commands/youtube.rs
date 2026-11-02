@@ -9,7 +9,7 @@ use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoMetadata, VideoSummary};
+use crate::models::video::{RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata, VideoSummary};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -103,7 +103,6 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         |init_s: Option<u64>, init_e: Option<u64>, idx_s: Option<u64>, idx_e: Option<u64>| {
             init_s.is_some() && init_e.is_some() && idx_s.is_some() && idx_e.is_some()
         };
-    let is_mp4 = |mime: Option<&str>| mime.map(|m| m.contains("mp4")).unwrap_or(false);
 
     let audio_tracks: Vec<_> = stream_info
         .audio_tracks
@@ -139,33 +138,7 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         })
         .collect();
 
-    // Prefer H.264 outright: it's the only codec every platform can decode
-    // (Linux WebKitGTK frequently lacks VP9/AV1 plugins), and AV1 also ships
-    // in an MP4 container, so the container check alone doesn't exclude it.
-    let is_h264 = |mime: Option<&str>| {
-        mime.map(|m| m.contains("avc1") || m.contains("avc3"))
-            .unwrap_or(false)
-    };
-
-    let h264_video_variants: Vec<_> = all_video_variants
-        .iter()
-        .copied()
-        .filter(|variant| is_h264(variant.mime_type.as_deref()))
-        .collect();
-
-    let mp4_video_variants: Vec<_> = all_video_variants
-        .iter()
-        .copied()
-        .filter(|variant| is_mp4(variant.mime_type.as_deref()))
-        .collect();
-
-    let video_variants = if !h264_video_variants.is_empty() {
-        h264_video_variants
-    } else if !mp4_video_variants.is_empty() {
-        mp4_video_variants
-    } else {
-        all_video_variants
-    };
+    let video_variants = all_video_variants;
 
     if video_variants.is_empty() {
         return None;
@@ -207,19 +180,88 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         "synthetic DASH representation selection"
     );
 
-    let mut video_groups: Vec<(String, Vec<_>)> = Vec::new();
-    for variant in &video_variants {
-        let mime_type = extract_base_mime_type(variant.mime_type.as_deref())
-            .unwrap_or("video/mp4")
-            .to_string();
+    // Group video variants by codec family:
+    // 1. H.264 (video/mp4 with avc1/avc3): universally decodable baseline, placed first
+    //    so players defaulting to track 0 always succeed across all platforms.
+    // 2. AV1 (video/mp4 with av01): modern high-efficiency streams (including 4K/8K).
+    // 3. VP9 (video/webm with vp09/vp9): widely supported YouTube high-res streams (1440p/4K).
+    // 4. Other/fallback video streams.
+    //
+    // Keeping each codec family in its own AdaptationSet ensures MPEG-DASH compliance
+    // and allows dash.js to perform clean adaptation set switches.
+    let is_h264 = |mime: Option<&str>| {
+        let m = mime.unwrap_or("").to_ascii_lowercase();
+        m.contains("avc1") || m.contains("avc3") || m.contains("h264")
+    };
+    let is_av1 = |mime: Option<&str>| {
+        let m = mime.unwrap_or("").to_ascii_lowercase();
+        m.contains("av01") || m.contains("av1")
+    };
+    let is_vp9 = |mime: Option<&str>| {
+        let m = mime.unwrap_or("").to_ascii_lowercase();
+        m.contains("vp9") || m.contains("vp09")
+    };
 
-        if let Some((_, variants)) = video_groups
-            .iter_mut()
-            .find(|(group_mime_type, _)| *group_mime_type == mime_type)
-        {
-            variants.push(*variant);
+    struct VideoGroup<'a> {
+        id: String,
+        mime_type: String,
+        variants: Vec<&'a StreamVariant>,
+    }
+
+    let mut h264_variants = Vec::new();
+    let mut av1_variants = Vec::new();
+    let mut vp9_variants = Vec::new();
+    let mut other_variants = Vec::new();
+
+    for variant in &video_variants {
+        let mime = variant.mime_type.as_deref();
+        if is_h264(mime) {
+            h264_variants.push(*variant);
+        } else if is_av1(mime) {
+            av1_variants.push(*variant);
+        } else if is_vp9(mime) {
+            vp9_variants.push(*variant);
         } else {
-            video_groups.push((mime_type, vec![*variant]));
+            other_variants.push(*variant);
+        }
+    }
+
+    let mut video_groups: Vec<VideoGroup> = Vec::new();
+    if !h264_variants.is_empty() {
+        video_groups.push(VideoGroup {
+            id: "video-h264".to_string(),
+            mime_type: "video/mp4".to_string(),
+            variants: h264_variants,
+        });
+    }
+    if !av1_variants.is_empty() {
+        video_groups.push(VideoGroup {
+            id: "video-av1".to_string(),
+            mime_type: "video/mp4".to_string(),
+            variants: av1_variants,
+        });
+    }
+    if !vp9_variants.is_empty() {
+        video_groups.push(VideoGroup {
+            id: "video-vp9".to_string(),
+            mime_type: "video/webm".to_string(),
+            variants: vp9_variants,
+        });
+    }
+    if !other_variants.is_empty() {
+        for variant in other_variants {
+            let base_mime = extract_base_mime_type(variant.mime_type.as_deref())
+                .unwrap_or("video/mp4")
+                .to_string();
+            if let Some(group) = video_groups.iter_mut().find(|g| g.id.starts_with("video-other") && g.mime_type == base_mime) {
+                group.variants.push(variant);
+            } else {
+                video_groups.push(VideoGroup {
+                    id: format!("video-other-{}", video_groups.len()),
+                    mime_type: base_mime,
+                    variants: vec![variant],
+                });
+            }
         }
     }
 
@@ -277,24 +319,37 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         manifest.push_str("      </Representation>\n");
         manifest.push_str("    </AdaptationSet>\n");
     }
-    for (group_index, (video_mime_type, variants)) in video_groups.iter().enumerate() {
+    let all_video_group_ids = video_groups
+        .iter()
+        .map(|g| g.id.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+
+    for group in &video_groups {
         manifest.push_str(&format!(
-            "    <AdaptationSet id=\"video-{}\" contentType=\"video\" mimeType=\"{}\" startWithSAP=\"1\" subsegmentAlignment=\"true\">\n",
-            group_index,
-            video_mime_type
+            "    <AdaptationSet id=\"{}\" contentType=\"video\" mimeType=\"{}\" startWithSAP=\"1\" subsegmentAlignment=\"true\">\n",
+            escape_xml_attr(&group.id),
+            group.mime_type
         ));
 
-        for variant in variants {
+        if video_groups.len() > 1 {
+            manifest.push_str(&format!(
+                "      <SupplementalProperty schemeIdUri=\"urn:mpeg:dash:adaptation-set-switching:2016\" value=\"{}\" />\n",
+                escape_xml_attr(&all_video_group_ids)
+            ));
+        }
+
+        for variant in &group.variants {
             let codecs = extract_codecs(variant.mime_type.as_deref())
                 .unwrap_or_else(|| "avc1.640028".to_string());
             manifest.push_str(&format!(
                 "      <Representation id=\"{}\" bandwidth=\"{}\" width=\"{}\" height=\"{}\" frameRate=\"{}\" codecs=\"{}\">\n",
-                variant.id,
+                escape_xml_attr(&variant.id),
                 variant.bitrate.unwrap_or(1_000_000),
                 variant.width.unwrap_or(0),
                 variant.height.unwrap_or(0),
                 variant.fps.unwrap_or(30),
-                codecs
+                escape_xml_attr(&codecs)
             ));
             manifest.push_str(&format!(
                 "        <BaseURL>{}</BaseURL>\n",

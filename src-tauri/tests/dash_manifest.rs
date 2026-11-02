@@ -135,3 +135,35 @@ fn a_single_language_video_still_produces_a_manifest() {
     assert_eq!(manifest.matches("value=\"main\"").count(), 1);
     assert!(manifest.contains("contentType=\"video\""));
 }
+
+#[test]
+fn higher_resolution_vp9_and_av1_are_included_in_manifest() {
+    let mut info = stream_info_from("visionos_single_language_streaming_data.json");
+    let mut v4k = video_variant(2160, 15_000_000);
+    v4k.id = "video-2160-av1".to_string();
+    v4k.mime_type = Some("video/mp4; codecs=\"av01.0.12M.08\"".to_string());
+    info.variants.push(v4k);
+
+    let mut v1440 = video_variant(1440, 8_000_000);
+    v1440.id = "video-1440-vp9".to_string();
+    v1440.mime_type = Some("video/webm; codecs=\"vp09.00.51.08\"".to_string());
+    info.variants.push(v1440);
+
+    let manifest = build_synthetic_dash_manifest(&info).expect("a manifest");
+    assert!(
+        manifest.contains("video-2160-av1"),
+        "4K AV1 representation must be present in manifest"
+    );
+    assert!(
+        manifest.contains("video-1440-vp9"),
+        "1440p VP9 representation must be present in manifest"
+    );
+
+    // H.264 must be placed first to guarantee safe default track selection across all platforms
+    let h264_pos = manifest.find("id=\"video-h264\"").expect("video-h264 set");
+    let av1_pos = manifest.find("id=\"video-av1\"").expect("video-av1 set");
+    let vp9_pos = manifest.find("id=\"video-vp9\"").expect("video-vp9 set");
+
+    assert!(h264_pos < av1_pos, "h264 adaptation set must precede av1");
+    assert!(av1_pos < vp9_pos, "av1 adaptation set must precede vp9");
+}

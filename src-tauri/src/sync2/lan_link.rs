@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
@@ -20,7 +20,7 @@ use super::keys::MemberSecrets;
 use super::lan::{LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_transcript};
 use super::paths::parse_log_path;
 use super::payload::{decode_payload, encode_payload};
-use super::roster::{Entry, Role};
+use super::roster::{Entry, Role, parse_entry};
 use super::sealed::{open, random_bytes, seal};
 use super::store::Store;
 use super::{Error, array};
@@ -63,12 +63,25 @@ pub struct Response {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "parsed_entries"
+    )]
     pub entries: Option<Vec<Entry>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paths: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blobs: Option<Vec<String>>,
+}
+
+/// A peer's entry that doesn't parse is ignored like a losing fork candidate (spec/store.md,
+/// Untrusted input).
+fn parsed_entries<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Vec<Entry>>, D::Error> {
+    let values = Option::<Vec<Value>>::deserialize(deserializer)?;
+    Ok(values.map(|values| values.iter().filter_map(|v| parse_entry(v).ok()).collect()))
 }
 
 fn request_header(request: &Request, id: u64) -> Value {
@@ -546,6 +559,20 @@ impl Link {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_peer_entry_that_does_not_parse_is_left_out() {
+        let entry = |v: u8| {
+            json!({"group": "00".repeat(16), "op": "rename", "prev": "00".repeat(32), "seq": 1,
+                "signer": "11".repeat(16), "sigs": {}, "v": v})
+        };
+        let response =
+            json!({"entries": [entry(2), {"seq": "one"}, entry(3)], "ok": true, "re": 0});
+        let response: Response = serde_json::from_value(response).unwrap();
+        let entries = response.entries.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].v, 2);
+    }
 
     #[test]
     fn headers_are_canonical_json_lines() {

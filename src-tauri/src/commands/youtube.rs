@@ -9,7 +9,9 @@ use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata, VideoSummary};
+use crate::models::video::{
+    RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata, VideoSummary,
+};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -253,7 +255,10 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
             let base_mime = extract_base_mime_type(variant.mime_type.as_deref())
                 .unwrap_or("video/mp4")
                 .to_string();
-            if let Some(group) = video_groups.iter_mut().find(|g| g.id.starts_with("video-other") && g.mime_type == base_mime) {
+            if let Some(group) = video_groups
+                .iter_mut()
+                .find(|g| g.id.starts_with("video-other") && g.mime_type == base_mime)
+            {
                 group.variants.push(variant);
             } else {
                 video_groups.push(VideoGroup {

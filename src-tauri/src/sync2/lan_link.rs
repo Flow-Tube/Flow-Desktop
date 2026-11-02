@@ -15,6 +15,7 @@ use tokio::sync::{mpsc, oneshot};
 use super::curve::{sign, verify};
 use super::engine::{EngineError, Result, Session, verify_logged};
 use super::epoch::{Purpose, purpose_key};
+use super::gc::bounded_vv;
 use super::held::HeldStore;
 use super::keys::MemberSecrets;
 use super::lan::{LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_transcript};
@@ -46,6 +47,7 @@ pub enum Request {
         name: String,
     },
     List {
+        #[serde(deserialize_with = "bounded_vv")]
         vv: BTreeMap<String, u64>,
     },
     Get {
@@ -546,6 +548,15 @@ impl Link {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_listing_request_naming_a_seq_above_2_53_is_refused() {
+        let list = |seq: u64| {
+            serde_json::from_str::<Request>(&format!(r#"{{"op":"list","vv":{{"a":{seq}}}}}"#))
+        };
+        assert!(list((1 << 53) - 1).is_ok());
+        assert!(list(1 << 53).is_err());
+    }
 
     #[test]
     fn headers_are_canonical_json_lines() {

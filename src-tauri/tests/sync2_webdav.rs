@@ -181,6 +181,32 @@ async fn concurrent_roster_entries_on_webdav_resolve_by_the_fork_rule() {
 }
 
 #[tokio::test]
+async fn a_roster_file_that_is_not_an_entry_is_ignored() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    let client = webdav(&url, PASSWORD).await;
+    client
+        .put(
+            "roster/0000000000000002-0123456789abcdef.r",
+            b"not json".to_vec(),
+        )
+        .await
+        .unwrap();
+    client
+        .put(
+            "roster/0000000000000002-fedcba9876543210.r",
+            br#"{"seq":2}"#.to_vec(),
+        )
+        .await
+        .unwrap();
+
+    let roster = g.store.0.lock().unwrap().roster.clone();
+    let reader = store_for(&url, &g.b.did).await;
+    assert_eq!(reader.roster_after(-1).await.unwrap(), roster);
+}
+
+#[tokio::test]
 async fn a_lost_concurrent_append_reports_the_winning_head() {
     let g = group().await;
     let (url, _) = webdav_server().await;

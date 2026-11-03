@@ -1835,6 +1835,8 @@
   "linked_sync_failed": "Last sync failed: %s",
   "linked_sync_now": "Sync now",
   "linked_recovery_unsaved": "Your recovery key isn't confirmed. Without it you can't restore if you lose every device.",
+  "linked_replace_recovery": "Replace recovery words",
+  "linked_replace_recovery_confirm": "Replace the recovery words? The old words stop working, and your devices move to a new encryption key. Write down the new words Flow shows next.",
   "linked_devices_label": "Devices",
   "linked_join_requests": "Asking to join",
   "linked_join_request": "%s wants to join",

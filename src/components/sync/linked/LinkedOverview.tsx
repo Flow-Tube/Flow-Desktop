@@ -11,7 +11,7 @@ import { Spinner } from "../SyncParts";
 import { Card } from "./Card";
 import { DeviceList } from "./DeviceList";
 import { JoinRequests } from "./JoinRequests";
-import { LeaveGroup } from "./LeaveGroup";
+import { ConfirmedAction } from "./ConfirmedAction";
 import { ProfilesCard } from "./ProfilesCard";
 
 function lastSyncText(status: LinkedStatus, syncing: boolean): string {
@@ -48,7 +48,13 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
         <Button variant="tonal" className="mt-auto self-start" disabled={busy || syncing} onClick={() => void syncNow()}>
           <RefreshCw className={`h-4 w-4 ${busy || syncing ? "animate-spin" : ""}`} /> {getString("linked_sync_now")}
         </Button>
-        <LeaveGroup action="leave" label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
+        <ConfirmedAction
+          action="replaceRecovery"
+          variant="tonal"
+          label={getString("linked_replace_recovery")}
+          confirm={getString("linked_replace_recovery_confirm")}
+        />
+        <ConfirmedAction action="leave" label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
       </Card>
       <Card title={getString("linked_devices_label")} className="col-span-12 lg:col-span-7">
         {devicesError ? (

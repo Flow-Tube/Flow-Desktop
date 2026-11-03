@@ -3,7 +3,7 @@ import type { LinkedStatus } from "../../../lib/api/linked";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { Card } from "./Card";
-import { LeaveGroup } from "./LeaveGroup";
+import { ConfirmedAction } from "./ConfirmedAction";
 
 /**
  * Shown once the group shut this device out. A removal it verified already forgot the group;
@@ -22,7 +22,7 @@ export function StoppedNotice({ reason }: { reason: NonNullable<LinkedStatus["st
   }
   return (
     <Card title={getString("linked_refused_title")} subtitle={getString("linked_refused_body")}>
-      <LeaveGroup action="forget" label={getString("linked_forget")} confirm={getString("linked_forget_confirm")} />
+      <ConfirmedAction action="forget" label={getString("linked_forget")} confirm={getString("linked_forget_confirm")} />
     </Card>
   );
 }

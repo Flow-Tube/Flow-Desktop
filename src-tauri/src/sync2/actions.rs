@@ -17,6 +17,7 @@ use super::linking::DeviceMeta;
 use super::membership::{leave_group, remove_device, rename_device};
 use super::names::device_names;
 use super::profile_links::{link_profile, reading};
+use super::recovery_flow::replace_recovery_key;
 use super::roster::Role;
 use super::server::{ServerStore, StoreError};
 use super::service::{LastSync, is_syncing, last_sync, sync_soon};
@@ -379,6 +380,19 @@ pub async fn retry_keychain(app: &AppHandle) -> Result<()> {
 
 pub async fn recovery_saved(app: &AppHandle) -> Result<()> {
     set_recovery_saved(&state_pool(app), true).await
+}
+
+/// Replaces the recovery words from this device, so the old ones stop working, and returns the new
+/// words to show once.
+pub async fn replace_recovery(app: &AppHandle) -> Result<String> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let session = open_session(&local, &record).await?;
+    let words = replace_recovery_key(&session, &local.device).await?;
+    set_recovery_saved(&local.pool, false).await?;
+    snapshot_soon(&local.pool).await?;
+    sync_soon(app);
+    Ok(words)
 }
 
 pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {

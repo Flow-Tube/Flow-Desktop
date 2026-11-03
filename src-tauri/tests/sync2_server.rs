@@ -114,6 +114,30 @@ async fn requests_carry_a_token_from_a_signed_challenge() {
 }
 
 #[tokio::test]
+async fn a_token_is_reused_by_the_next_connection_until_it_expires() {
+    let (server, issued) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/roster"))
+        .and(header("authorization", "Bearer t1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "entries": [] })))
+        .expect(2)
+        .mount(&server)
+        .await;
+    for _ in 0..2 {
+        let store = ServerStore::connect(
+            &format!("{}/", server.uri()),
+            member(),
+            Some(INSTANCE.to_owned()),
+            Some(GROUP.to_owned()),
+        )
+        .await
+        .unwrap();
+        assert!(store.roster_after(-1).await.unwrap().is_empty());
+    }
+    assert_eq!(issued.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn a_different_instance_is_refused() {
     let (server, _) = server("ffffffffffffffffffffffffffffffff").await;
     let store = ServerStore::connect(

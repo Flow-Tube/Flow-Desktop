@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { GripHorizontal, Maximize2, X } from "lucide-react";
+import { useMiniPlayerDrag } from "../../lib/useMiniPlayerDrag";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
@@ -61,6 +62,10 @@ export function GlobalVideoPlayer() {
   const previousVideoIdRef = useRef(currentVideo?.id ?? null);
 
   const isFloating = videoPlayerMode === "pip";
+  const { isDragging, dragBinds } = useMiniPlayerDrag({
+    frameRef,
+    isFloating,
+  });
   // The pop-out window owns playback in this mode, so this window renders no
   // media element — two decoding the same video would double audio and CPU.
   const isPoppedOut = videoPlayerMode === "window";
@@ -227,11 +232,11 @@ export function GlobalVideoPlayer() {
 
     if (isFloating) {
       return {
-        top: "auto",
-        left: "auto",
-        height: "auto",
-        bottom: "24px",
-        right: "24px",
+        top: 0,
+        left: 0,
+        bottom: "auto",
+        right: "auto",
+        willChange: "transform",
         width: "min(420px, calc(100vw - 32px))",
         aspectRatio: "16 / 9",
       } as const;
@@ -272,30 +277,43 @@ export function GlobalVideoPlayer() {
           isVideoFullscreen
             ? "fixed z-[300] flex overflow-hidden bg-chrome-black"
             : isFloating
-            ? "group fixed z-50 overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-black"
+            ? `group fixed z-50 overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-black touch-none ${isDragging ? "cursor-grabbing select-none" : "cursor-grab"}`
             : "fixed z-30 bg-chrome-black"
         }
         style={frameStyle}
+        {...dragBinds}
       >
         {isFloating && (
-          <div className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
-            <button
+          <>
+            <div
+              className="pointer-events-none absolute left-2 top-2 z-40 flex items-center justify-center rounded-full bg-chrome-black/80 px-2 py-1 text-chrome-white/60 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+              aria-hidden="true"
+            >
+              <GripHorizontal size={14} />
+            </div>
+            <div
+              data-drag-ignore="true"
+              onPointerDown={(event) => event.stopPropagation()}
+              className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+            >
+              <button
               type="button"
               aria-label="Expand video"
               onClick={expandFromFloating}
               className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
             >
               <Maximize2 size={16} />
-            </button>
-            <button
+              </button>
+              <button
               type="button"
               aria-label="Close video"
               onClick={dismissVideoPlayer}
               className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
             >
               <X size={16} />
-            </button>
-          </div>
+              </button>
+            </div>
+          </>
         )}
         <div className={isVideoFullscreen ? "group h-full min-w-0 flex-1" : "group h-full w-full"}>{playerNode}</div>
         {isVideoFullscreen && <FullscreenPanelHost />}

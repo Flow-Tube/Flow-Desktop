@@ -93,7 +93,7 @@ export const MiniPlayerControls: React.FC<MiniPlayerControlsProps> = ({
         shouldShowControls ? "opacity-100" : "opacity-0",
       )}
     >
-      <div className="pointer-events-auto" onClick={(event) => event.stopPropagation()}>
+      <div className="pointer-events-auto" data-drag-ignore="true" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
         {/* Progress bar */}
         <div
           ref={trackRef}

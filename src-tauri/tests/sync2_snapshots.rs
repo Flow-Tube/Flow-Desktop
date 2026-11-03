@@ -202,6 +202,48 @@ async fn a_new_device_starts_from_the_snapshot_when_old_objects_are_gone() {
 }
 
 #[tokio::test]
+async fn a_new_device_starts_from_an_older_snapshot_when_the_newest_does_not_open() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    let mut session = Session::open(&pool, &g.store, &g.a).await.unwrap();
+    watched(&pool, "aaaaaaaaaaa").await;
+    session
+        .push(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    let pushed = u64::try_from(session.record().own_seq).unwrap();
+    session
+        .write_snapshot(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    watched(&pool, "bbbbbbbbbbb").await;
+    session
+        .push(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    session
+        .write_snapshot(&pool, exported(&pool, "app-a").await)
+        .await
+        .unwrap();
+    let newest = u64::try_from(session.record().own_seq).unwrap();
+    let a = hex::encode(g.a.did);
+    for seq in 1..=pushed {
+        g.store.take(&log_path(&a, seq));
+    }
+    let manifest: Manifest =
+        serde_json::from_slice(&open_log_object(&g, newest, ObjectType::Snapshot)).unwrap();
+    g.store.tamper(&blob_path(&a, &manifest.parts[0].blob));
+
+    let pool_b = device_pool(&g).await;
+    let mut reader = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
+    let pulled = reader.pull(&pool_b).await.unwrap();
+    assert_eq!(
+        applied_videos(&pool_b, &pulled.batches).await,
+        ["aaaaaaaaaaa", "bbbbbbbbbbb"]
+    );
+}
+
+#[tokio::test]
 async fn a_tampered_object_after_the_snapshot_stops_only_that_log() {
     let g = group().await;
     let newest = log_path(&hex::encode(g.a.did), collected_log(&g).await);

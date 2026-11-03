@@ -10,6 +10,8 @@ pub enum Error {
     Suite,
     #[error("object belongs to another group")]
     Group,
+    #[error("number out of range")]
+    Range,
     #[error("sender is not a member")]
     Sender,
     #[error("signature does not verify")]
@@ -57,6 +59,7 @@ impl Error {
             Self::Magic => "magic",
             Self::Suite => "suite",
             Self::Group => "group",
+            Self::Range => "range",
             Self::Sender => "sender",
             Self::Signature => "signature",
             Self::Replay => "replay",

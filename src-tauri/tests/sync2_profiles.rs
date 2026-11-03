@@ -212,6 +212,41 @@ async fn a_profile_that_joins_a_link_reads_it_from_its_snapshot() {
 }
 
 #[tokio::test]
+async fn a_tampered_object_holds_back_only_the_link_read() {
+    let g = group().await;
+    let a_state = device_pool(&g).await;
+    let a_kids = empty_pool().await;
+    watch(&a_kids, "k1k1k1k1k1k").await;
+    let mut a = Session::open(&a_state, &g.store, &g.a).await.unwrap();
+    snapshot_as(&mut a, &a_state, KIDS, &a_kids).await;
+    let snapshot = last(&a);
+    watch(&a_kids, "k2k2k2k2k2k").await;
+    push_as(&mut a, &a_state, KIDS, &a_kids).await;
+
+    let b_state = device_pool(&g).await;
+    let mut b = Session::open(&b_state, &g.store, &g.b).await.unwrap();
+    b.set_reading(running(HOME, &[]));
+    let pulled = b.pull(&b_state).await.unwrap();
+    b.finish(&b_state, pulled).await.unwrap();
+
+    for seq in [snapshot, last(&a)] {
+        let path = log_path(&hex::encode(g.a.did), seq);
+        let genuine = g.store.tamper(&path);
+        assert!(b.read_link(&b_state, KIDS).await.unwrap().is_none());
+        g.store.put(&path, genuine);
+    }
+    let read = b.read_link(&b_state, KIDS).await.unwrap().unwrap();
+    let batches: Vec<(String, IncomingBatch)> = read
+        .batches
+        .into_iter()
+        .map(|k| (k.sender, k.batch))
+        .collect();
+    let b_kids = empty_pool().await;
+    apply_each(&b_kids, &batches).await;
+    assert_eq!(watched(&b_kids).await, ["k1k1k1k1k1k", "k2k2k2k2k2k"]);
+}
+
+#[tokio::test]
 async fn a_deleted_profile_no_longer_holds_back_garbage_collection() {
     let g = group().await;
     let a_state = device_pool(&g).await;
@@ -258,11 +293,7 @@ async fn a_new_device_joins_defaults_link_whichever_profile_runs() {
 
     unlink(&state, "default").await.unwrap();
     let only_kids = reading(&state, HOME, "kids", "default").await.unwrap();
-    assert_eq!(
-        only_kids.welcome.as_deref(),
-        Some(KIDS),
-        "else the first synced"
-    );
+    assert_eq!(only_kids.welcome, None, "never another profile's link");
 }
 
 #[tokio::test]

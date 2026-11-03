@@ -1,7 +1,8 @@
 //! The Flow sync server as a store (spec/api.md). Requests are signed in with this member's
 //! roster key; the server never sees anything but sealed objects.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
@@ -68,7 +69,7 @@ pub struct ChangedObject {
     pub size: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct Session {
     instance: Option<String>,
     group: Option<String>,
@@ -82,6 +83,18 @@ pub struct ServerStore {
     pub(super) live: Client,
     member: MemberSecrets,
     session: Mutex<Session>,
+}
+
+/// Sessions by server URL and member, kept in memory only: every sync run connects again, and a
+/// token lasts 15 minutes (spec/api.md).
+type Sessions = HashMap<(String, [u8; 16]), Session>;
+
+static SESSIONS: LazyLock<std::sync::Mutex<Sessions>> = LazyLock::new(Default::default);
+
+fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
+    SESSIONS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn now_ms() -> u64 {
@@ -101,6 +114,15 @@ impl ServerStore {
     ) -> Result<Self> {
         let base = Url::parse(url).map_err(|_| StoreError::Insecure)?;
         let transport = Transport::for_url(&base).await?;
+        let session = sessions()
+            .get(&(base.to_string(), member.did))
+            .filter(|kept| kept.instance == instance && kept.group == group)
+            .cloned()
+            .unwrap_or(Session {
+                instance,
+                group,
+                token: None,
+            });
         Ok(Self {
             base,
             client: transport.client()?,
@@ -110,11 +132,7 @@ impl ServerStore {
                 .build()
                 .map_err(StoreError::Network)?,
             member,
-            session: Mutex::new(Session {
-                instance,
-                group,
-                token: None,
-            }),
+            session: Mutex::new(session),
         })
     }
 
@@ -183,6 +201,7 @@ impl ServerStore {
             group: Some(group),
             token: Some((value.clone(), expires)),
         };
+        sessions().insert((self.base.to_string(), self.member.did), session.clone());
         Ok(value)
     }
 

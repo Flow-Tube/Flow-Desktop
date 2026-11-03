@@ -80,6 +80,17 @@ pub async fn local(app: &AppHandle) -> Result<Local> {
     })
 }
 
+/// The group's Flow server, signed in as this device, without reading the roster.
+async fn server_store(local: &Local, record: &GroupRecord) -> Result<ServerStore> {
+    Ok(ServerStore::connect(
+        &record.store_url,
+        local.device.clone(),
+        record.instance.clone(),
+        Some(record.group_id.clone()),
+    )
+    .await?)
+}
+
 /// A session for this device, reading the links its profiles sync.
 pub async fn open_session<'a>(
     local: &'a Local,
@@ -88,13 +99,7 @@ pub async fn open_session<'a>(
     let (pool, device) = (&local.pool, &local.device);
     let store = match record.kind {
         StoreKind::Server => {
-            let server = ServerStore::connect(
-                &record.store_url,
-                device.clone(),
-                record.instance.clone(),
-                Some(record.group_id.clone()),
-            )
-            .await?;
+            let server = server_store(local, record).await?;
             let me = hex::encode(device.did);
             GroupStore::Server(Box::new(HybridStore::new(server, pool.clone(), me).await?))
         }
@@ -417,19 +422,22 @@ pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
 pub async fn join_requests(app: &AppHandle) -> Result<Vec<JoinRequest>> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let session = open_session(&local, &record).await?;
-    match session.store().server() {
-        Some(server) => Ok(server.join_requests().await?),
-        None => Ok(Vec::new()),
+    if record.kind != StoreKind::Server {
+        return Ok(Vec::new());
     }
+    Ok(server_store(&local, &record).await?.join_requests().await?)
 }
 
 pub async fn decline_join(app: &AppHandle, id: &str) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let session = open_session(&local, &record).await?;
-    let server = session.store().server().ok_or(EngineError::Unexpected)?;
-    Ok(server.decline_join(id).await?)
+    if record.kind != StoreKind::Server {
+        return Err(EngineError::Unexpected);
+    }
+    Ok(server_store(&local, &record)
+        .await?
+        .decline_join(id)
+        .await?)
 }
 
 /// Leaves the group (spec/protocol.md, Leaving): appends a `leave` entry, then forgets the group

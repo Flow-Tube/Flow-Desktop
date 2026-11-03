@@ -5,7 +5,7 @@ import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import type { LinkedStatus } from "../../../lib/api/linked";
 import { SegmentedControl } from "../../ui/SegmentedControl";
-import { IconChip, Spinner } from "../SyncParts";
+import { SectionHeader, Spinner } from "../SyncParts";
 import { Dashboard } from "./Dashboard";
 import { KeychainBlocked } from "./KeychainBlocked";
 import { LinkPanel } from "./LinkPanel";
@@ -57,16 +57,12 @@ export function LinkedDevicesSection() {
     void init();
   }, [init]);
   return (
-    <section className="mx-auto mt-12 max-w-5xl">
-      <div className="mb-6 flex items-center gap-3">
-        <IconChip>
-          <Link2 className="h-5 w-5" />
-        </IconChip>
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{getString("linked_title")}</h2>
-          <p className="max-w-2xl text-sm text-chrome-neutral-400">{getString("linked_subtitle")}</p>
-        </div>
-      </div>
+    <section className="mx-auto mt-10 max-w-5xl">
+      <SectionHeader
+        icon={<Link2 className="h-5 w-5" />}
+        title={getString("linked_title")}
+        subtitle={getString("linked_subtitle")}
+      />
       {error && (
         <div className="mb-4 rounded-xl border border-chrome-red-900/50 bg-chrome-red-950/30 px-4 py-3 text-sm text-chrome-red-400">
           {error}

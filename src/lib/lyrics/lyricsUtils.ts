@@ -54,6 +54,12 @@ export function filterCreditLines(entries: LyricsEntry[]): LyricsEntry[] {
   });
 }
 
+// KuGou answers instrumentals with one line, "纯音乐，请欣赏" ("pure music, please enjoy"), not with no lyrics.
+const INSTRUMENTAL_NOTICE = /^纯音乐[，,]?\s*请欣赏$/;
+
+export const isInstrumentalNotice = (entries: LyricsEntry[]): boolean =>
+  entries.length > 0 && entries.every((entry) => INSTRUMENTAL_NOTICE.test(entry.text.trim()));
+
 export function normalizeEntries(entries: LyricsEntry[]): LyricsEntry[] {
   return entries.map((e) => ({
     ...e,

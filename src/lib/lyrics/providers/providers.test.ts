@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { convertLyricsPlus } from "./lyricsPlus";
 import { pickSearchHit } from "./lrclib";
-import { isInstrumentalNotice, matchKuGou, normalizeKuGouLrc } from "./kugou";
+import { matchKuGou, normalizeKuGouLrc } from "./kugou";
 import { matchAppleSongs, parseItunesSearch } from "./paxsenix";
 import { isUncachedMiss } from "./betterLyrics";
 import { lrcOffsetMs, parseOfflineLyrics } from "../offline";
-import { parseLyrics } from "../lyricsUtils";
+import { isInstrumentalNotice, parseLyrics } from "../lyricsUtils";
 
 describe("BetterLyrics", () => {
   it("reads an uncached 401 as a miss for this song only", () => {

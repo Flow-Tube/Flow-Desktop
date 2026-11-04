@@ -1,6 +1,6 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { lyricsGetJson, enc } from "../http";
-import { parseLyrics } from "../lyricsUtils";
+import { isInstrumentalNotice, parseLyrics } from "../lyricsUtils";
 import { ranked, type MatchSong } from "../matching";
 
 const SONG_SEARCH = "https://mobileservice.kugou.com/api/v3/search/song";
@@ -99,12 +99,6 @@ export function matchKuGou<T>(
     return request.durationSec <= 0 || Math.abs(duration - request.durationSec) <= DURATION_TOLERANCE_SEC;
   });
 }
-
-// KuGou answers instrumentals with one line, "纯音乐，请欣赏" ("pure music, please enjoy"), not with no lyrics.
-const INSTRUMENTAL_NOTICE = /^纯音乐[，,]?\s*请欣赏$/;
-
-export const isInstrumentalNotice = (entries: LyricsEntry[]): boolean =>
-  entries.length > 0 && entries.every((entry) => INSTRUMENTAL_NOTICE.test(entry.text.trim()));
 
 async function download(id: number, accesskey: string): Promise<string | null> {
   const url = `${LYRIC_DOWNLOAD}?fmt=lrc&charset=utf8&client=pc&ver=1&id=${id}&accesskey=${enc(accesskey)}`;

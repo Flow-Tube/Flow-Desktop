@@ -1,7 +1,7 @@
 import type { LyricsEntry, LyricsProvider, LyricsResult } from "./types";
 import type { SongItem } from "../../types/music";
 import { getEnabledProviders, parseProviderEnabledStates } from "./registry";
-import { filterCreditLines, normalizeEntries, stripWordTimings } from "./lyricsUtils";
+import { filterCreditLines, isInstrumentalNotice, normalizeEntries, stripWordTimings } from "./lyricsUtils";
 import { cleanArtist, cleanTitle } from "./matching";
 import { entriesAreSynced, hasWordSync, hasReasonableTimestamps } from "./sync";
 import * as cache from "./cache";
@@ -125,11 +125,13 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   const disk = await cache.getDisk(videoId);
   if (disk && disk.length > 0) {
     const norm = normalizeEntries(sorted(disk));
-    if (hasWordSync(norm) && hasReasonableTimestamps(norm, durationSec)) {
+    // A notice saved before KuGou's was read as no lyrics would otherwise come back as the fallback.
+    const usable = !isInstrumentalNotice(norm) && hasReasonableTimestamps(norm, durationSec);
+    if (hasWordSync(norm) && usable) {
       cache.setMemory(videoId, norm);
       return { entries: norm, provider: "DiskCache" };
     }
-    if (hasReasonableTimestamps(norm, durationSec)) {
+    if (usable) {
       cachedFallback = { entries: stripWordTimings(norm), provider: "DiskCache" };
     } else {
       cache.evict(videoId);

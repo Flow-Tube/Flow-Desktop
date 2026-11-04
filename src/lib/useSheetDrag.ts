@@ -10,6 +10,8 @@ const START_SLOP_PX = 8;
 /** A trackpad swipe has no release event; it ends once the wheel goes quiet. */
 const WHEEL_END_MS = 140;
 
+const playerOpen = () => useMusicPlayerStore.getState().viewState !== "dock";
+
 interface Drag {
   travel: number;
   /** Pixels between the dock's top and the player's, the distance a full drag covers. */
@@ -50,8 +52,10 @@ export function useSheetDrag(): SheetDragBind {
   useEffect(() => () => clearTimeout(wheelTimer.current), []);
 
   const begin = (): boolean => {
+    // Chromium keeps sending a wheel gesture to the element it began on, so the dock still gets
+    // wheels once the player it opened covers it, and taking the sheet then would sink an open player.
     const dock = sheetDockBox();
-    if (!dock) return false;
+    if (!dock || playerOpen()) return false;
     holdSheet();
     drag.current = { travel: 0, span: Math.max(1, dock.top - sheetBox().top), samples: [] };
     useMusicSheetStore.getState().setPeeking(true);
@@ -60,7 +64,7 @@ export function useSheetDrag(): SheetDragBind {
 
   const move = (travel: number) => {
     const d = drag.current;
-    if (!d) return;
+    if (!d || playerOpen()) return;
     d.travel = travel;
     const now = performance.now();
     d.samples.push({ at: now, travel });
@@ -72,6 +76,11 @@ export function useSheetDrag(): SheetDragBind {
     const d = drag.current;
     drag.current = null;
     if (!d) return;
+    // A click on the dock can open the player while a wheel drag waits to end; the player's own settle stands.
+    if (playerOpen()) {
+      useMusicSheetStore.getState().setPeeking(false);
+      return;
+    }
     if (sheetTarget(sheetProgress.get(), upwardVelocity(d.samples)) === 1) {
       // The player takes it from here and finishes the growth itself.
       useMusicPlayerStore.getState().openOverlay("full");

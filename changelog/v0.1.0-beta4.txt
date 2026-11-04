@@ -58,6 +58,7 @@ PLAYER
 - Live streams start and play again.
 - You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
 - A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
+- Drag the mini player anywhere in the window. It stays where you put it, including after a restart, and keeps its place when the window is resized.
 
 FIXES
 - Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.

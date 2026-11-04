@@ -44,12 +44,23 @@ SYNC
 - A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
+MUSIC
+- Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
+
 PLAYER
+- Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
+- Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
+- Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
+- Live streams start and play again.
+- You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
+- A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
 
 FIXES
+- Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.

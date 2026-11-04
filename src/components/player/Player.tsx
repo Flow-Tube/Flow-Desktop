@@ -53,6 +53,16 @@ import {
 } from "../../lib/settings/playerRuntime";
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
+  clearLiveTiming,
+  isAtLiveEdge,
+  liveEdgePosition,
+  liveStallRecoveryTarget,
+  liveTimingFromPlaylist,
+  liveWindow,
+  readLiveTiming,
+  stampLiveTiming,
+} from "../../lib/liveEdge";
+import {
   createWindowFullscreenController,
   watchNativeFullscreen,
   type WindowFullscreenController,
@@ -279,6 +289,7 @@ export const Player: React.FC<PlayerProps> = ({
   const dashPlayerRef = useRef<DashPlayerController | null>(null);
   const dashReadyRef = useRef(false);
   const hlsPlayerRef = useRef<Hls | null>(null);
+  const liveSeekedBackRef = useRef(false);
   const qualitySwitchSnapshotRef = useRef<QualitySwitchSnapshot | null>(null);
   const qualitySwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaBufferingRef = useRef(false);
@@ -1039,7 +1050,15 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
-    const nextTime = Math.min(Math.max(time, 0), video.duration || duration || 0);
+    let nextTime: number;
+    if (isLive && video.seekable.length) {
+      const { start, end } = liveWindow(video);
+      nextTime = Math.min(Math.max(time, start), end);
+      liveSeekedBackRef.current = !isAtLiveEdge(nextTime, end, readLiveTiming(video));
+    } else {
+      const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration || 0;
+      nextTime = dur > 0 ? Math.min(Math.max(time, 0), dur) : Math.max(time, 0);
+    }
     video.currentTime = nextTime;
     if (audio) {
       audioHoldRef.current = false;
@@ -1050,10 +1069,12 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
     setCurrentTime(nextTime);
-  }, [duration, setCurrentTime]);
+  }, [duration, isLive, setCurrentTime]);
 
   const seekBy = useCallback((delta: number) => {
-    seekTo(currentTime + delta);
+    const video = videoRef.current;
+    const baseTime = video ? video.currentTime : currentTime;
+    seekTo(baseTime + delta);
     showSeekFeedback(delta > 0 ? "forward" : "backward", Math.abs(delta));
   }, [currentTime, seekTo, showSeekFeedback]);
 
@@ -1594,12 +1615,14 @@ export const Player: React.FC<PlayerProps> = ({
       maxBufferLength: bufferConfig.maxSeconds,
       maxMaxBufferLength: bufferConfig.maxSeconds,
       backBufferLength: Math.max(30, bufferConfig.maxSeconds),
-      liveSyncDurationCount: 4,
-      liveMaxLatencyDurationCount: 12,
+      liveBackBufferLength: null,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: Infinity,
       liveDurationInfinity: isLive,
       loader: ProxyLoader as unknown as typeof Hls.DefaultConfig.loader,
     });
     hlsPlayerRef.current = hls;
+    liveSeekedBackRef.current = false;
     let fatalRecoveryAttempts = 0;
     let destroyedAfterFatal = false;
 
@@ -1611,11 +1634,8 @@ export const Player: React.FC<PlayerProps> = ({
     hls.on(Hls.Events.FRAG_LOADED, () => {
       fatalRecoveryAttempts = 0;
     });
-    hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
-      const frag = data?.frag;
-      if (!frag || !Number.isFinite(frag.sn as number) || !(frag.duration > 0)) return;
-      const offset = (frag.sn as number) * frag.duration - frag.start;
-      if (Number.isFinite(offset)) video.dataset.liveOffset = String(offset);
+    hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
+      if (isLive) stampLiveTiming(video, liveTimingFromPlaylist(hls.targetLatency, data.details.targetduration));
     });
     hls.on(Hls.Events.ERROR, (_event, data) => {
       logPlayerEventRef.current("hls-error", {
@@ -1625,15 +1645,13 @@ export const Player: React.FC<PlayerProps> = ({
       });
       if (!data.fatal) {
         if (isLive && data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-          const syncPos = hls.liveSyncPosition;
-          const seekable = video.seekable;
-          const target =
-            syncPos != null && Number.isFinite(syncPos)
-              ? syncPos
-              : seekable.length
-                ? seekable.end(seekable.length - 1) - 4
-                : null;
-          if (target != null && Number.isFinite(target) && target > video.currentTime) {
+          const target = liveStallRecoveryTarget({
+            position: video.currentTime,
+            window: liveWindow(video),
+            syncPosition: hls.liveSyncPosition,
+            seekedBack: liveSeekedBackRef.current,
+          });
+          if (target !== null) {
             video.currentTime = target;
             if (desiredPlayingRef.current) void video.play().catch(() => {});
           }
@@ -1671,6 +1689,7 @@ export const Player: React.FC<PlayerProps> = ({
     return () => {
       if (!destroyedAfterFatal) hls.destroy();
       if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
+      clearLiveTiming(video);
     };
   }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
 
@@ -1890,7 +1909,7 @@ export const Player: React.FC<PlayerProps> = ({
       video.pause();
       audio?.pause();
     }
-  }, [error, isDashPlayback, isPlaying, isSourceSwitching, setIsPlaying, src, usesExternalAudio]);
+  }, [error, isDashPlayback, isHlsPlayback, isPlaying, isSourceSwitching, setIsPlaying, src, usesExternalAudio]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2076,11 +2095,19 @@ export const Player: React.FC<PlayerProps> = ({
           break;
         case "home":
           event.preventDefault();
-          seekTo(0);
+          if (isLive && videoRef.current?.seekable.length) {
+            seekTo(liveWindow(videoRef.current).start);
+          } else {
+            seekTo(0);
+          }
           break;
         case "end":
           event.preventDefault();
-          seekTo(duration);
+          if (isLive && videoRef.current?.seekable.length) {
+            seekTo(liveEdgePosition(liveWindow(videoRef.current), readLiveTiming(videoRef.current)));
+          } else {
+            seekTo(duration);
+          }
           break;
         default: {
           const digit = Number(event.key);
@@ -2139,7 +2166,7 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-    if (pendingResumeTime > 0) {
+    if (pendingResumeTime > 0 || isLive) {
       setHasStartedPlayback(true);
       sourceSwitchingRef.current = false;
       setIsSourceSwitching(false);

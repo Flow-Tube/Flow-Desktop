@@ -25,6 +25,7 @@ import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
 import { onBeforeProfileSwitch } from "../../lib/profiles/beforeSwitch";
+import { useSponsorBlockSegments } from "../../lib/useSponsorBlockSegments";
 
 /** How close to the end the next video is resolved. Long enough to cover a slow
  * client ladder, short enough that a video abandoned early never triggers it. */
@@ -49,6 +50,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const showToast = useUiStore((s) => s.showToast);
 
   const stream = useVideoStream(videoId);
+  useSponsorBlockSegments(videoId);
 
   const lastProgressPersistedAtRef = useRef(0);
   const latestProgressRef = useRef<{ videoId: string; time: number; duration: number } | null>(null);

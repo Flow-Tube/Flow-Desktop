@@ -140,6 +140,8 @@ export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
   invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
+/** Resolves to the new recovery words, shown once; the old ones stop working. */
+export const replaceRecovery = () => invokeBackend<string>("linked_replace_recovery");
 /** Asks the keychain again after it refused, and resolves once it answered. */
 export const retryKeychain = () => invokeBackend<void>("linked_retry_keychain");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });

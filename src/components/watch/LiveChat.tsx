@@ -222,7 +222,7 @@ function ChatPanel({
   return (
     <div
       className={`flex w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low ${
-        fill ? "h-full" : "h-[min(560px,70vh)]"
+        fill ? "h-full" : "h-[min(560px,70vh)] shrink-0"
       }`}
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800 px-4 py-3">

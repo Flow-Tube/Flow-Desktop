@@ -262,12 +262,50 @@ export function GlobalVideoPlayer() {
     [videoIdForPlayer, cachedDetails],
   );
 
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (isVideoFullscreen) return;
+
+    let el = e.target as HTMLElement | null;
+    const root = frameRef.current;
+    while (el && el !== root) {
+      if (el.scrollHeight > el.clientHeight) {
+        const style = window.getComputedStyle(el);
+        if (style.overflowY === "auto" || style.overflowY === "scroll") {
+          return;
+        }
+      }
+      el = el.parentElement;
+    }
+
+    const scroller =
+      document.querySelector<HTMLElement>("main.overflow-y-auto")
+      ?? document.querySelector<HTMLElement>("main");
+    if (!scroller) return;
+
+    let deltaY = e.deltaY;
+    let deltaX = e.deltaX;
+    if (e.deltaMode === 1) {
+      deltaY *= 20;
+      deltaX *= 20;
+    } else if (e.deltaMode === 2) {
+      deltaY *= scroller.clientHeight;
+      deltaX *= scroller.clientWidth;
+    }
+
+    scroller.scrollBy({
+      top: deltaY,
+      left: deltaX,
+      behavior: "auto",
+    });
+  }, [isVideoFullscreen]);
+
   if (!currentVideo || isPoppedOut) return null;
 
   return (
     <>
       <div
         ref={frameRef}
+        onWheel={handleWheel}
         className={
           isVideoFullscreen
             ? "fixed z-[300] flex overflow-hidden bg-chrome-black"

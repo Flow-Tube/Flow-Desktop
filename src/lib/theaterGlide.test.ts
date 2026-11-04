@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameKeyframes, isGlideTooSlow, meanFrameInterval } from "./theaterGlide";
+import { GLIDE_CHROME_SELECTOR, frameKeyframes, isGlideTooSlow, meanFrameInterval } from "./theaterGlide";
 
 const small = { top: 80, left: 24, width: 960, height: 540 };
 const wide = { top: 56, left: 0, width: 1600, height: 760 };
@@ -27,5 +27,22 @@ describe("frame timing", () => {
   it("keeps the glide at 60 fps and drops it below 40", () => {
     expect(isGlideTooSlow([0, 16.7, 33.4, 50.1, 66.8])).toBe(false);
     expect(isGlideTooSlow([0, 30, 60, 90, 120])).toBe(true);
+  });
+});
+
+describe("the chrome that fades during the glide", () => {
+  it("is the controls and the glow, and never the video or what holds it", () => {
+    const frame = document.createElement("div");
+    frame.innerHTML = `
+      <div id="flow-player-root">
+        <div data-player-ambient></div>
+        <div data-player-content>
+          <video></video>
+          <div data-controls></div>
+        </div>
+      </div>`;
+    const faded = Array.from(frame.querySelectorAll(GLIDE_CHROME_SELECTOR));
+    expect(faded.some((element) => element.querySelector("video") || element.tagName === "VIDEO")).toBe(false);
+    expect(faded.map((element) => element.getAttributeNames()[0])).toEqual(["data-player-ambient", "data-controls"]);
   });
 });

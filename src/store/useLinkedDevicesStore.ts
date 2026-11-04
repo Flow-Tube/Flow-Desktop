@@ -22,6 +22,7 @@ import {
   onSynced,
   removeDevice,
   renameDevice,
+  replaceRecovery,
   restoreGroup,
   retryKeychain,
   showCode,
@@ -79,6 +80,8 @@ interface LinkedState {
   answer: (accept: boolean) => Promise<void>;
   closeLink: () => Promise<void>;
   confirmSaved: () => Promise<void>;
+  /** Replaces the recovery key and shows the new words. */
+  replaceRecovery: () => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   leave: () => Promise<void>;
@@ -217,6 +220,12 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       run(async () => {
         await markRecoverySaved();
         set({ words: null });
+        await get().refresh();
+      }),
+
+    replaceRecovery: () =>
+      run(async () => {
+        set({ words: await replaceRecovery() });
         await get().refresh();
       }),
 

@@ -2,20 +2,18 @@ import { useEffect } from "react";
 import { Check, X } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
+import { pollWhileVisible } from "../../../lib/linked/visiblePoll";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
 import { Card } from "./Card";
 
-const POLL_MS = 3000;
+// A request waits 180 s for an answer (spec/protocol.md).
+const POLL_MS = 5000;
 
-/** Devices asking to join this server group, checked while the page is open. */
+/** Devices asking to join this server group, checked while the page is open and visible. */
 export function JoinRequests() {
   const { joinRequests, loadJoinRequests, acceptJoin, declineJoin, busy } = useLinkedDevicesStore();
-  useEffect(() => {
-    void loadJoinRequests();
-    const timer = window.setInterval(() => void loadJoinRequests(), POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [loadJoinRequests]);
+  useEffect(() => pollWhileVisible(() => void loadJoinRequests(), POLL_MS), [loadJoinRequests]);
   if (joinRequests.length === 0) return null;
   return (
     <Card title={getString("linked_join_requests")} subtitle={getString("linked_join_request_hint")} className="col-span-12">

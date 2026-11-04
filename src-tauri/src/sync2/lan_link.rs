@@ -15,6 +15,7 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use super::curve::{sign, verify};
 use super::engine::{EngineError, Result, Session, verify_logged};
+use super::envelope::MAX_OBJECT_SIZE;
 use super::epoch::{Purpose, purpose_key};
 use super::gc::bounded_vv;
 use super::held::HeldStore;
@@ -30,9 +31,10 @@ use crate::sync::canonical::to_canonical_json;
 use crate::sync::transport::WsChannel;
 
 pub const SESSION_PATH: &str = "/flow-sync/2";
-const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
-/// Room for a payload's gzip, padding (at most 1/32 at this size), box and `seq`.
-const MAX_FRAME: usize = MAX_PAYLOAD + MAX_PAYLOAD / 16;
+/// A whole object with its header line (spec/live.md, Requests).
+const MAX_CONTENT: usize = MAX_OBJECT_SIZE + 64 * 1024;
+/// Room for the content's gzip, padding (at most 1/32 at this size), box and `seq`.
+const MAX_FRAME: usize = MAX_OBJECT_SIZE + MAX_OBJECT_SIZE / 16;
 const NONCE_SIZE: usize = 32;
 /// Once this side has no more requests, the session closes when the peer stops sending.
 pub const IDLE: Duration = Duration::from_secs(3);
@@ -125,7 +127,7 @@ pub struct Framed<S> {
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Framed<S> {
     async fn send(&mut self, content: &[u8]) -> Result<()> {
-        if content.len() > MAX_PAYLOAD {
+        if content.len() > MAX_CONTENT {
             return Err(Error::Length.into());
         }
         let sealed = seal(
@@ -149,7 +151,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Framed<S> {
             &lan_frame_aad(self.received),
             sealed,
         )?)?;
-        if content.len() > MAX_PAYLOAD {
+        if content.len() > MAX_CONTENT {
             return Err(Error::Length.into());
         }
         self.received += 1;
@@ -703,8 +705,48 @@ mod tests {
             ]
             .concat()
         };
-        assert!(framed.open(&frame(MAX_PAYLOAD + 1)).is_err());
-        assert_eq!(framed.open(&frame(MAX_PAYLOAD)).unwrap().len(), MAX_PAYLOAD);
+        assert!(framed.open(&frame(MAX_CONTENT + 1)).is_err());
+        assert_eq!(framed.open(&frame(MAX_CONTENT)).unwrap().len(), MAX_CONTENT);
+    }
+
+    /// Both ends of a session over sockets with the LAN limits.
+    async fn session_pair() -> (Framed<DuplexStream>, Framed<DuplexStream>) {
+        let (a, b) = duplex(1 << 16);
+        let (a, b) = tokio::join!(
+            WebSocketStream::from_raw_socket(a, Role::Client, Some(lan_socket_config())),
+            WebSocketStream::from_raw_socket(b, Role::Server, Some(lan_socket_config())),
+        );
+        let framed = |socket, send_key: [u8; 32], receive_key: [u8; 32]| Framed {
+            socket: WsChannel::new(socket),
+            send_key: send_key.to_vec(),
+            receive_key: receive_key.to_vec(),
+            sent: 0,
+            received: 0,
+        };
+        (framed(a, [1; 32], [2; 32]), framed(b, [2; 32], [1; 32]))
+    }
+
+    #[tokio::test]
+    async fn a_get_answer_with_a_whole_object_crosses_a_session() {
+        let (mut sender, mut receiver) = session_pair().await;
+        let object: Vec<u8> = (0..MAX_OBJECT_SIZE / 32)
+            .flat_map(|_| random_bytes::<32>())
+            .collect();
+        let answer = frame_content(&json!({ "re": 0, "ok": true }), &object);
+        let receiving =
+            tokio::time::timeout(Duration::from_secs(30), receiver.socket.recv_binary());
+        let (sent, frame) = tokio::join!(sender.send(&answer), receiving);
+        sent.unwrap();
+        let content = receiver.open(&frame.unwrap().unwrap()).unwrap();
+        let (header, bytes) = split_content(&content).unwrap();
+        assert_eq!(header, json!({ "re": 0, "ok": true }));
+        assert_eq!(bytes, object.as_slice());
+    }
+
+    #[tokio::test]
+    async fn content_past_an_object_and_its_header_is_not_sent() {
+        let (mut sender, _receiver) = session_pair().await;
+        assert!(sender.send(&vec![0; MAX_CONTENT + 1]).await.is_err());
     }
 
     #[test]

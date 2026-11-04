@@ -30,9 +30,13 @@ pub struct Start {
     pub positions: BTreeMap<String, StreamPosition>,
 }
 
-/// Per link, and `profiles` as `Some(None)`, the best covering snapshot: writer, seq and epoch.
-/// Without links to look for, the one best snapshot of any link, as `None`.
-type Best = BTreeMap<Option<Option<String>>, (String, u64, u32, Manifest)>;
+/// Snapshots looked at per link in each log, newest first: the newest, and the one before, which
+/// garbage collection keeps until every device acked the newer one (spec/protocol.md).
+const SNAPSHOTS_PER_LINK: usize = 2;
+
+/// Per link, and `profiles` as `Some(None)`, the covering snapshots: writer, seq and epoch.
+/// Without links to look for, the snapshots of any link, as `None`.
+type Candidates = BTreeMap<Option<Option<String>>, Vec<(String, u64, u32, Manifest)>>;
 
 /// How many objects of all logs the snapshot includes.
 pub(super) fn merged(manifest: &Manifest) -> u64 {
@@ -108,7 +112,7 @@ impl<S: Store> Session<'_, S> {
             return Ok(None);
         }
 
-        let mut best: Best = BTreeMap::new();
+        let mut candidates: Candidates = BTreeMap::new();
         for (did, seqs) in &mut logs {
             seqs.sort_unstable();
             for (seq, epoch, manifest) in self.manifests_from_newest(did, seqs, links).await? {
@@ -118,45 +122,50 @@ impl<S: Store> Session<'_, S> {
                     (Some(_), link) => Some(link.clone()),
                     (None, None) => continue,
                 };
-                if covers(&manifest, &first)
-                    && best
-                        .get(&key)
-                        .is_none_or(|(_, _, _, b)| merged(b) < merged(&manifest))
-                {
-                    best.insert(key, (did.clone(), seq, epoch, manifest));
+                if covers(&manifest, &first) {
+                    candidates
+                        .entry(key)
+                        .or_default()
+                        .push((did.clone(), seq, epoch, manifest));
                 }
             }
         }
-        if best.is_empty() {
+        let mut snapshots = Vec::new();
+        for mut found in candidates.into_values() {
+            found.sort_by_key(|(_, _, _, manifest)| std::cmp::Reverse(merged(manifest)));
+            for (writer, seq, epoch, manifest) in found {
+                let batches = self.snapshot_batches(&writer, epoch, &manifest).await;
+                if let Some(batches) = contained(batches)? {
+                    snapshots.push(Snapshot {
+                        writer,
+                        seq,
+                        manifest,
+                        batches,
+                    });
+                    break;
+                }
+            }
+        }
+        if snapshots.is_empty() {
             return Ok(None);
         }
-        let chosen: Vec<&Manifest> = best.values().map(|(_, _, _, m)| m).collect();
+        let chosen: Vec<&Manifest> = snapshots.iter().map(|s| &s.manifest).collect();
         let positions = lowest_tips(&chosen, &me)?;
-        let mut snapshots = Vec::new();
-        for (writer, seq, epoch, manifest) in best.into_values() {
-            let batches = self.snapshot_batches(&writer, epoch, &manifest).await?;
-            snapshots.push(Snapshot {
-                writer,
-                seq,
-                manifest,
-                batches,
-            });
-        }
         Ok(Some(Start {
             snapshots,
             positions,
         }))
     }
 
-    /// The newest snapshot manifest of each of `links` and of `profiles` in `did`'s log (only the
-    /// newest of any link when `None`): where it sits and the epoch it was written in.
+    /// Up to [`SNAPSHOTS_PER_LINK`] newest snapshot manifests of each of `links` and of `profiles`
+    /// in `did`'s log (of any link when `None`): where each sits and the epoch it was written in.
     async fn manifests_from_newest(
         &mut self,
         did: &str,
         seqs: &[u64],
         links: Option<&BTreeSet<String>>,
     ) -> Result<Vec<(u64, u32, Manifest)>> {
-        let wanted = links.map_or(1, |links| links.len() + 1);
+        let wanted = links.map_or(1, |links| links.len() + 1) * SNAPSHOTS_PER_LINK;
         let mut found: Vec<(u64, u32, Manifest)> = Vec::new();
         for &seq in seqs.iter().rev() {
             if found.len() >= wanted {
@@ -174,7 +183,11 @@ impl<S: Store> Session<'_, S> {
                 Ok(Some((object.header.epoch, content)))
             };
             if let Some((epoch, Content::Snapshot(manifest))) = contained(read.await)?.flatten()
-                && found.iter().all(|(_, _, m)| m.link != manifest.link)
+                && found
+                    .iter()
+                    .filter(|(_, _, m)| m.link == manifest.link)
+                    .count()
+                    < SNAPSHOTS_PER_LINK
             {
                 found.push((seq, epoch, manifest));
             }

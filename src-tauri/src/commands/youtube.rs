@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use tauri::State;
 use tracing::{debug, info};
 
@@ -9,7 +11,9 @@ use crate::models::comment::CommentsResponse;
 use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
-use crate::models::video::{RelatedPage, StreamInfo, VideoDetails, VideoMetadata, VideoSummary};
+use crate::models::video::{
+    RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata, VideoSummary,
+};
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
     validate_video_id,
@@ -17,6 +21,7 @@ use crate::security::validation::{
 use crate::services::recommendation_service::RecommendationService;
 use crate::services::subscription_feed::{self, SubscriptionRssFeed};
 use crate::services::youtube_service::YoutubeService;
+use crate::streaming::codec::VideoCodecFamily;
 
 use crate::streaming::proxy::StreamingManager;
 
@@ -103,7 +108,6 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         |init_s: Option<u64>, init_e: Option<u64>, idx_s: Option<u64>, idx_e: Option<u64>| {
             init_s.is_some() && init_e.is_some() && idx_s.is_some() && idx_e.is_some()
         };
-    let is_mp4 = |mime: Option<&str>| mime.map(|m| m.contains("mp4")).unwrap_or(false);
 
     let audio_tracks: Vec<_> = stream_info
         .audio_tracks
@@ -123,7 +127,7 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         return None;
     }
 
-    let all_video_variants: Vec<_> = stream_info
+    let video_variants: Vec<_> = stream_info
         .variants
         .iter()
         .filter(|variant| {
@@ -138,34 +142,6 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
                 )
         })
         .collect();
-
-    // Prefer H.264 outright: it's the only codec every platform can decode
-    // (Linux WebKitGTK frequently lacks VP9/AV1 plugins), and AV1 also ships
-    // in an MP4 container, so the container check alone doesn't exclude it.
-    let is_h264 = |mime: Option<&str>| {
-        mime.map(|m| m.contains("avc1") || m.contains("avc3"))
-            .unwrap_or(false)
-    };
-
-    let h264_video_variants: Vec<_> = all_video_variants
-        .iter()
-        .copied()
-        .filter(|variant| is_h264(variant.mime_type.as_deref()))
-        .collect();
-
-    let mp4_video_variants: Vec<_> = all_video_variants
-        .iter()
-        .copied()
-        .filter(|variant| is_mp4(variant.mime_type.as_deref()))
-        .collect();
-
-    let video_variants = if !h264_video_variants.is_empty() {
-        h264_video_variants
-    } else if !mp4_video_variants.is_empty() {
-        mp4_video_variants
-    } else {
-        all_video_variants
-    };
 
     if video_variants.is_empty() {
         return None;
@@ -207,20 +183,20 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         "synthetic DASH representation selection"
     );
 
-    let mut video_groups: Vec<(String, Vec<_>)> = Vec::new();
+    // One AdaptationSet per codec family, H.264 first so `firstTrack` starts there, and HDR apart
+    // from SDR. Nothing links the sets, so ABR stays inside the set it is playing: it can't hop
+    // between containers or colour ranges mid-video. A manual pick crosses sets by representation
+    // id, and Auto chooses its set in the player.
+    let mut video_groups: BTreeMap<(VideoCodecFamily, bool, &str), Vec<&StreamVariant>> =
+        BTreeMap::new();
     for variant in &video_variants {
-        let mime_type = extract_base_mime_type(variant.mime_type.as_deref())
-            .unwrap_or("video/mp4")
-            .to_string();
-
-        if let Some((_, variants)) = video_groups
-            .iter_mut()
-            .find(|(group_mime_type, _)| *group_mime_type == mime_type)
-        {
-            variants.push(*variant);
-        } else {
-            video_groups.push((mime_type, vec![*variant]));
-        }
+        let mime = variant.mime_type.as_deref();
+        let key = (
+            VideoCodecFamily::from_mime(mime.unwrap_or("")),
+            variant.quality_label.contains("HDR"),
+            extract_base_mime_type(mime).unwrap_or("video/mp4"),
+        );
+        video_groups.entry(key).or_default().push(variant);
     }
 
     let mut manifest = String::new();
@@ -277,11 +253,12 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
         manifest.push_str("      </Representation>\n");
         manifest.push_str("    </AdaptationSet>\n");
     }
-    for (group_index, (video_mime_type, variants)) in video_groups.iter().enumerate() {
+    for ((family, is_hdr, mime_type), variants) in &video_groups {
+        let container = mime_type.rsplit('/').next().unwrap_or("mp4");
+        let hdr = if *is_hdr { "-hdr" } else { "" };
         manifest.push_str(&format!(
-            "    <AdaptationSet id=\"video-{}\" contentType=\"video\" mimeType=\"{}\" startWithSAP=\"1\" subsegmentAlignment=\"true\">\n",
-            group_index,
-            video_mime_type
+            "    <AdaptationSet id=\"video-{}{hdr}-{container}\" contentType=\"video\" mimeType=\"{mime_type}\" startWithSAP=\"1\" subsegmentAlignment=\"true\">\n",
+            family.slug(),
         ));
 
         for variant in variants {
@@ -289,12 +266,12 @@ pub fn build_synthetic_dash_manifest(stream_info: &StreamInfo) -> Option<String>
                 .unwrap_or_else(|| "avc1.640028".to_string());
             manifest.push_str(&format!(
                 "      <Representation id=\"{}\" bandwidth=\"{}\" width=\"{}\" height=\"{}\" frameRate=\"{}\" codecs=\"{}\">\n",
-                variant.id,
+                escape_xml_attr(&variant.id),
                 variant.bitrate.unwrap_or(1_000_000),
                 variant.width.unwrap_or(0),
                 variant.height.unwrap_or(0),
                 variant.fps.unwrap_or(30),
-                codecs
+                escape_xml_attr(&codecs)
             ));
             manifest.push_str(&format!(
                 "        <BaseURL>{}</BaseURL>\n",

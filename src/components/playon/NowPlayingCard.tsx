@@ -4,6 +4,7 @@ import { Volume2 } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import type { PlayOnDevice } from "../../lib/live/devices";
 import { positionOf } from "../../lib/live/position";
+import { useWheelVolume } from "../../lib/useWheelVolume";
 import { formatTime } from "../../lib/musicFormat";
 import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../../lib/platform";
 import { youtubeThumbnailUrl } from "../../lib/thumbnails";
@@ -26,6 +27,11 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
   const art = useProxiedImageUrl(now?.video ? youtubeThumbnailUrl(now.video) : null);
   const [volume, setVolume] = useState(now?.vol ?? 0);
   const settled = useDebounce(volume, 250);
+  const volumeWheelRef = useWheelVolume<HTMLLabelElement>({
+    volume: volume / 100,
+    muted: false,
+    onVolumeChange: (value) => setVolume(Math.round(value * 100)),
+  });
 
   // Runs only when the user's pick settles, not when `now` reports the volume back.
   useEffect(() => {
@@ -88,7 +94,7 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
           onTogglePlay={() => void drive(target, playingHere ? "pause" : "play")}
           onNext={() => void drive(target, "next")}
         />
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400">
+        <label ref={volumeWheelRef} className="flex min-w-0 flex-1 items-center gap-2 text-chrome-neutral-400">
           <Volume2 className="h-4 w-4 shrink-0" aria-hidden />
           <Slider value={volume} min={0} max={100} onChange={setVolume} aria-label={getString("music_volume")} className="flex-1" />
         </label>

@@ -1,18 +1,20 @@
 //! Restoring with the recovery key: a new device joins without any other device, the used key is
-//! replaced at once, and it can never be used again.
+//! replaced at once, and it can never be used again. Any device can replace the key too.
 
 mod sync2_common;
 
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
+use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::DeviceMeta;
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret};
-use flow_desktop_lib::sync2::recovery_flow::restore;
-use flow_desktop_lib::sync2::roster::Role;
+use flow_desktop_lib::sync2::recovery_flow::{replace_recovery_key, restore};
+use flow_desktop_lib::sync2::roster::{Op, Role, RosterState, apply_entry};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, load_group, save_group};
+use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{Group, LINK, device_pool, empty_pool, exported, group, head};
+use sync2_common::{Group, LINK, device_pool, draft, empty_pool, exported, group, head};
 
 fn meta() -> DeviceMeta {
     DeviceMeta {
@@ -159,4 +161,77 @@ async fn a_restored_device_waits_for_a_choice_when_several_links_sync() {
     let mut session = Session::open(&pool, &g.store, &device).await.unwrap();
     assert!(!session.adopt_link(&pool, "own-profile").await.unwrap());
     assert!(load_group(&pool).await.unwrap().unwrap().link.is_empty());
+}
+
+/// A `restore` signed by the fixture's first recovery key, adding `joining`.
+fn restore_entry(g: &Group, state: &RosterState, joining: &MemberSecrets) -> Draft {
+    let mut restore = draft(Op::Restore, &g.recovery);
+    restore.add = Some(vec![member_subject(
+        &joining.sig_public,
+        &joining.kem_public,
+        Role::Device,
+    )]);
+    let ids: Vec<[u8; 16]> = state
+        .members
+        .keys()
+        .map(|did| hex::decode(did).unwrap().try_into().unwrap())
+        .chain([joining.did])
+        .collect();
+    restore.epoch = Some(epoch_draft(
+        &random_bytes::<32>(),
+        &g.group,
+        state.epoch + 1,
+        &ids,
+    ));
+    restore
+}
+
+#[tokio::test]
+async fn a_device_replaces_the_recovery_key_and_the_old_words_stop_working() {
+    let g = group().await;
+    let joining = member_secrets(random_bytes(), random_bytes());
+    let before = head(&g.store);
+    let valid = build_entry(
+        &g.group,
+        Some(&before),
+        restore_entry(&g, &before, &joining),
+        &[&g.recovery, &joining],
+    );
+    assert!(apply_entry(Some(&before), &valid).is_ok());
+
+    let pool_a = device_pool(&g).await;
+    let session_a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    let words = replace_recovery_key(&session_a, &g.a).await.unwrap();
+
+    let state = head(&g.store);
+    assert_eq!(state.epoch, 1);
+    let next = recovery_keys(&recovery_secret(&words).unwrap());
+    let (old, new) = (hex::encode(g.recovery.did), hex::encode(next.did));
+    assert_eq!(state.members[&new].role, Role::Recovery);
+    assert!(!state.members.contains_key(&old));
+    let store = &&g.store;
+    assert!(store.key(1, &new).await.unwrap().is_some());
+    assert!(store.key(1, &old).await.unwrap().is_none());
+    for device in [&g.a, &g.b] {
+        assert!(
+            store
+                .key(1, &hex::encode(device.did))
+                .await
+                .unwrap()
+                .is_some()
+        );
+        let pool = device_pool(&g).await;
+        let session = Session::open(&pool, &g.store, device).await.unwrap();
+        assert_eq!(session.roster().epoch, 1);
+    }
+
+    let forged = build_entry(
+        &g.group,
+        Some(&state),
+        restore_entry(&g, &state, &joining),
+        &[&g.recovery, &joining],
+    );
+    assert!(apply_entry(Some(&state), &forged).is_err());
+    let again = restore(&&g.store, &&g.store, &g.recovery, &joining, &meta()).await;
+    assert!(matches!(again, Err(EngineError::RecoveryUsed)));
 }

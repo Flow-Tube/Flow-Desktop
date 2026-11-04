@@ -37,8 +37,38 @@ SYNC
 - A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
 - A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
 - Joining a group over the local network now refuses a malformed welcome from the other device.
+- Linked devices: Replace recovery words gives your group a new recovery key from any linked device. The old words stop working, and your devices move to a new encryption key.
+- The Sync page now opens on Linked devices, which keep your devices in sync all the time. The one-time transfer to a nearby device moves below them, and Linked devices stay on screen while a transfer runs.
+- On the local network, an object as large as a sync object can be is now passed between devices whole, instead of being refused for its size.
+- Linked devices check for devices asking to join every 5 seconds only while the Sync page is on screen, and the check no longer reads the whole device list from the server.
+- A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
+- Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
+
+MUSIC
+- Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
+
+PLAYER
+- Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
+- Moving the music volume while muted no longer leaves the song silent.
+- Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
+- A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
+- Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
+- Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
+- Live streams start and play again.
+- You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
+- A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
+- Drag the mini player anywhere in the window. It stays where you put it, including after a restart, and keeps its place when the window is resized.
+- Videos can now play above 1080p: 1440p, 4K and 8K in the quality menu really play at that resolution, using VP9 or AV1.
+- Auto now climbs as high as your connection allows, up to the top quality of the video. It keeps to one codec and leaves HDR for when you pick it yourself.
+- A default quality of 1440p or higher is now reached even with H.264 as the preferred codec, and 8K can be chosen as the default. Your phone gets 4K for that setting.
+- A new switch in Settings, Switch quality quickly, shows a new quality within a few seconds instead of after the loaded video plays out. It is off by default.
+- SponsorBlock now works in the pop-out player and for the next video in the mini player.
+- If SponsorBlock can't be reached, the next video plays without skips instead of skipping at the last video's times.
+- Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 
 FIXES
+- Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.

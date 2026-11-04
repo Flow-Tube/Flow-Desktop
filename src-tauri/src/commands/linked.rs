@@ -57,6 +57,12 @@ pub async fn linked_restore(
         .map_err(|e| err(&e))
 }
 
+/// Returns the new recovery words, shown once.
+#[tauri::command]
+pub async fn linked_replace_recovery(app: AppHandle) -> Result<String, ErrorResponse> {
+    actions::replace_recovery(&app).await.map_err(|e| err(&e))
+}
+
 #[tauri::command]
 pub async fn linked_retry_keychain(app: AppHandle) -> Result<(), ErrorResponse> {
     actions::retry_keychain(&app).await.map_err(|e| err(&e))

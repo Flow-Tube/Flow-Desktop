@@ -44,6 +44,11 @@ SYNC
 - A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
+PLAYER
+- Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
+- A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
+- Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
+
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.

@@ -82,6 +82,7 @@ function render(props: Partial<Parameters<typeof LyricsPanel>[0]> = {}) {
         textAlign: "center",
         showTranslation: true,
         showRomanization: true,
+        blurOtherLines: true,
         syncOffsetMs: 0,
         active: true,
         isPlaying: true,
@@ -202,6 +203,17 @@ describe("lyrics panel", () => {
     }
     // Only the gap to the anchor animates; the jump's new scroll bounds don't throw the line elsewhere first.
     for (const y of path) expect(Math.abs(y - anchorY)).toBeLessThanOrEqual(Math.abs(start - anchorY) + 3);
+  });
+
+  it("draws no blur on the other lines once the switch is off", () => {
+    const blurred = () => rows().filter((row) => row.style.filter.startsWith("blur(")).length;
+    render();
+    audio.time = 1.2;
+    advance(1500);
+    expect(blurred()).toBeGreaterThan(0);
+    render({ blurOtherLines: false });
+    advance(1500);
+    expect(blurred()).toBe(0);
   });
 
   it("stops following the song on a wheel scroll and offers to resync", () => {

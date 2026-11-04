@@ -83,6 +83,7 @@ export const SETTINGS = {
   LYRICS_TEXT_ALIGN: "lyrics_text_align",
   LYRICS_SHOW_TRANSLATION: "lyrics_show_translation",
   LYRICS_SHOW_ROMANIZATION: "lyrics_show_romanization",
+  LYRICS_BLUR_OTHER_LINES: "lyrics_blur_other_lines",
 
   VIDEO_TITLE_MAX_LINES: "video_title_max_lines",
   GRID_COLUMNS: "grid_columns",
@@ -242,6 +243,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.LYRICS_TEXT_ALIGN]: "profile",
   [SETTINGS.LYRICS_SHOW_TRANSLATION]: "profile",
   [SETTINGS.LYRICS_SHOW_ROMANIZATION]: "profile",
+  [SETTINGS.LYRICS_BLUR_OTHER_LINES]: "profile",
   [SETTINGS.VIDEO_TITLE_MAX_LINES]: "profile",
   [SETTINGS.GRID_COLUMNS]: "profile",
   [SETTINGS.HOME_FEED_ENABLED]: "profile",
@@ -478,6 +480,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.LYRICS_TEXT_ALIGN, "player", "center", "wired", ["left", "center", "right"]),
   bool(SETTINGS.LYRICS_SHOW_TRANSLATION, "player", true, "wired"),
   bool(SETTINGS.LYRICS_SHOW_ROMANIZATION, "player", true, "wired"),
+  bool(SETTINGS.LYRICS_BLUR_OTHER_LINES, "player", true, "wired"),
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
   num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),

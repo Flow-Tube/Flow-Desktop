@@ -7,6 +7,7 @@ import { LyricsProviderList } from '../LyricsProviderList';
 import { useBoolPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
+import { IS_LINUX_RUNTIME } from '../../../lib/platform';
 import {
   getOrderedProviders,
   parseProviderEnabledStates,
@@ -21,6 +22,7 @@ export function MusicLyricsSettings() {
   const [align, setAlign] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const cache = useLyricsCache();
 
   const providers = getOrderedProviders(providerOrder);
@@ -45,6 +47,12 @@ export function MusicLyricsSettings() {
       <SettingItem title={getString('lyrics_show_romanization')} description={getString('lyrics_show_romanization_summary')}>
         <ToggleSwitch checked={showRomanization} onChange={setShowRomanization} />
       </SettingItem>
+      {/* Linux never draws this blur, because the engine would do it on the CPU. */}
+      {!IS_LINUX_RUNTIME && (
+        <SettingItem title={getString('lyrics_blur_other_lines')} description={getString('lyrics_blur_other_lines_summary')}>
+          <ToggleSwitch checked={blurOtherLines} onChange={setBlurOtherLines} />
+        </SettingItem>
+      )}
       <SettingItem
         title={getString('settings_lyrics_providers')}
         description={`${enabledCount} / ${providers.length} ${getString('settings_lyrics_providers_enabled')}`}

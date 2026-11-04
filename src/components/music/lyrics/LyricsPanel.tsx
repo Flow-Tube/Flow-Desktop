@@ -76,6 +76,9 @@ export interface LyricsPanelProps {
 /**
  * Port of Android's InlineLyricsPanel. Rows spring on their own elements and the sung line draws on
  * its canvas from one frame loop; React re-renders only when the sung line or what shows changes.
+ * It differs from Android on purpose, so keep these in a re-port: a manual scroll unblurs the lines so
+ * they can be read, a jump past other lines drops the stagger so rows don't cross, and a tap hands the
+ * manual offset to the rows so the tapped line doesn't swing away first.
  */
 export function LyricsPanel(props: LyricsPanelProps) {
   const { lyrics, syncedLyrics, isLoading, providerName, accent, backdrop, baseTextSize, maxRowWidth, textAlign } = props;

@@ -70,6 +70,7 @@ PLAYER
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 
 FIXES
+- Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.
 - Removing a playlist from a card now always asks first. Deleting a playlist you made no longer offers an Undo, which only brought it back empty.
 - Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.

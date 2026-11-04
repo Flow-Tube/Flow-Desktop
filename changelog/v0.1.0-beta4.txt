@@ -45,6 +45,7 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC
+- Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
 
 PLAYER

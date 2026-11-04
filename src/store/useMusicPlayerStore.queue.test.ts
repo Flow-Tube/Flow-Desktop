@@ -219,6 +219,20 @@ describe("radio", () => {
     expect(store().radioExhausted).toBe(true);
   });
 
+  it("keeps topping up after a top-up served entirely from the pool", async () => {
+    useMusicPlayerStore.setState({ radioEnabled: true });
+    const mix = Array.from({ length: 40 }, (_, i) => song(`r${i}`));
+    getMusicWatchQueue.mockImplementation(async (_videoId: string, playlistId?: string) =>
+      playlistId ? page(mix) : page([]),
+    );
+    await store().playTrack(song("seed"));
+    for (let topUp = 0; topUp < 3; topUp++) {
+      useMusicPlayerStore.setState({ currentIndex: store().queue.length - 1 });
+      await store()._ensureRadio();
+    }
+    expect(store().radioQueuedIds).toHaveLength(30);
+  });
+
   it("lets one artist hold at most two songs of the station", async () => {
     useMusicPlayerStore.setState({ radioEnabled: true });
     getMusicWatchQueue.mockResolvedValue(page([song("x1", "X"), song("x2", "X"), song("x3", "X"), song("y1", "Y")]));

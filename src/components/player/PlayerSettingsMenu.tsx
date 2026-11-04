@@ -18,6 +18,7 @@ import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { useBoolPref } from "../../lib/usePreference";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { AmbientModeIcon } from "../ui/AmbientModeIcon";
+import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { SETTINGS } from "../../lib/settings/schema";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
@@ -199,33 +200,12 @@ export function PlayerSettingsMenu({
     </button>
   );
 
-  const toggleRow = (label: string, checked: boolean, icon: React.ReactNode, onToggle: () => void) => (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onToggle}
-      className={cx(ROW, "h-10 py-0 text-chrome-zinc-100 hover:bg-chrome-white/10")}
-    >
+  const toggleRow = (label: string, checked: boolean, icon: React.ReactNode, onChange: (next: boolean) => void) => (
+    <div className={cx(ROW, "text-chrome-zinc-100")}>
       <span className="grid h-6 w-6 shrink-0 place-items-center text-chrome-zinc-300">{icon}</span>
       <span className="min-w-0 flex-1">{label}</span>
-      <span className="text-right font-normal text-chrome-zinc-400">
-        {getString(checked ? "eq_state_on" : "eq_state_off")}
-      </span>
-      <span
-        className={cx(
-          "relative block h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ease-out",
-          checked ? "bg-primary" : "bg-chrome-white/20",
-        )}
-      >
-        <span
-          className={cx(
-            "absolute top-0.5 h-4 w-4 rounded-full bg-chrome-white transition-transform duration-200 ease-out",
-            checked ? "left-[18px]" : "left-0.5",
-          )}
-        />
-      </span>
-    </button>
+      <ToggleSwitch checked={checked} onChange={onChange} />
+    </div>
   );
 
   const check = (on: boolean) => (on ? <Check size={17} className="shrink-0 text-chrome-white" /> : null);
@@ -278,7 +258,7 @@ export function PlayerSettingsMenu({
                 getString("settings_ambient_mode"),
                 ambientMode,
                 <AmbientModeIcon size={18} />,
-                () => setAmbientMode(!ambientMode),
+                setAmbientMode,
               )}
             {IS_MAIN_WINDOW &&
               ambientMode &&
@@ -286,7 +266,7 @@ export function PlayerSettingsMenu({
                 getString("settings_ambient_glow"),
                 ambientGlow,
                 <SunDim size={18} />,
-                () => setAmbientGlow(!ambientGlow),
+                setAmbientGlow,
               )}
             {settingRow(
               getString("player_menu_quality"),

@@ -239,7 +239,7 @@ async fn a_store_that_drops_an_applied_entry_stops_the_device() {
     assert!(matches!(opened, Err(EngineError::RosterRolledBack)));
 }
 
-/// A server's answer holds a rival next to an entry the device applied, and the rival wins.
+/// A server's answer holds another entry next to one the device applied, and the other one wins.
 #[tokio::test]
 async fn a_linear_store_that_changes_an_applied_entry_stops_the_device() {
     let g = group().await;
@@ -250,8 +250,8 @@ async fn a_linear_store_that_changes_an_applied_entry_stops_the_device() {
     let roster = g.store.0.lock().unwrap().roster.clone();
     let before_c =
         flow_desktop_lib::sync2::roster::replay_roster(&roster[..roster.len() - 1]).unwrap();
-    let (rival, _) = removing(&g, &before_c, &g.a, &g.b, &[&g.a, &g.recovery]);
-    g.store.0.lock().unwrap().roster.push(rival);
+    let (other, _) = removing(&g, &before_c, &g.a, &g.b, &[&g.a, &g.recovery]);
+    g.store.0.lock().unwrap().roster.push(other);
 
     let opened = Session::open(&pool, &g.store, &g.b).await;
     assert!(matches!(

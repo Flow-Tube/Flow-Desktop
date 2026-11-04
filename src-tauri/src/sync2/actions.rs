@@ -221,7 +221,7 @@ pub async fn contest(app: &AppHandle) -> Result<Vec<ContestSide>> {
         session.entries(),
         &session.store().roster_view().await?,
         &pins,
-        session.store().is_linear() || record.kind == StoreKind::Server,
+        session.store().is_linear(),
     )?
     else {
         return Ok(Vec::new());

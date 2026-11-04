@@ -26,8 +26,8 @@ use super::roster::{Entry, RosterState, replay_roster};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, StoreKind, add_roster_entries, floors, load_group, roster_entries,
-    roster_pins, save_floors, save_group, save_streams, streams,
+    Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, roster_pins,
+    save_floors, save_group, save_streams, streams,
 };
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
@@ -343,8 +343,13 @@ impl<'a, S: Store> Session<'a, S> {
         let pins = roster_pins(pool).await?;
         self.store.use_pins(&pins);
         let view = self.store.roster_view().await?;
-        let linear = self.store.is_linear() || self.record.kind == StoreKind::Server;
-        let settled = settle_roster(&self.record.group_id, &self.entries, &view, &pins, linear)?;
+        let settled = settle_roster(
+            &self.record.group_id,
+            &self.entries,
+            &view,
+            &pins,
+            self.store.is_linear(),
+        )?;
         let (chain, extends_applied) = match settled {
             Settlement::Apply {
                 chain,

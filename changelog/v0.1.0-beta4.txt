@@ -58,6 +58,10 @@ PLAYER
 - Live streams start and play again.
 - You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
 - A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
+- Videos can now play above 1080p: 1440p, 4K and 8K in the quality menu really play at that resolution, using VP9 or AV1.
+- Auto now climbs as high as your connection allows, up to the top quality of the video. It keeps to one codec and leaves HDR for when you pick it yourself.
+- A default quality of 1440p or higher is now reached even with H.264 as the preferred codec, and 8K can be chosen as the default. Your phone gets 4K for that setting.
+- A new switch in Settings, Switch quality quickly, shows a new quality within a few seconds instead of after the loaded video plays out. It is off by default.
 - SponsorBlock now works in the pop-out player and for the next video in the mini player.
 - If SponsorBlock can't be reached, the next video plays without skips instead of skipping at the last video's times.
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.

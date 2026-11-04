@@ -441,6 +441,8 @@
   "share_video": "Share video",
   "related_videos": "Related Videos",
   "quality_auto": "Auto",
+  "settings_fast_quality_switch": "Switch quality quickly",
+  "settings_fast_quality_switch_desc": "Shows a new quality within a few seconds by replacing video already loaded, which downloads that part again. When off, what is loaded plays out first.",
   "video_marked_not_interested": "Video marked as not interested",
   "search_placeholder": "Search Flow...",
   "trending": "Trending",

@@ -2338,8 +2338,10 @@ export const Player: React.FC<PlayerProps> = ({
 
       <div
         data-player-content
+        // Inset, not h-full: WebKit resolves a percentage height against the root's uncapped aspect
+        // ratio, so in theater mode h-full ran past max-h and over the page below.
         className={cx(
-          "relative z-10 h-full w-full overflow-hidden text-chrome-white",
+          "absolute inset-0 z-10 overflow-hidden text-chrome-white",
           !showAmbient && "bg-chrome-black",
           isTheaterSurface ? "flex items-center justify-center rounded-none" : "rounded-xl",
           isFullscreen && "rounded-none",

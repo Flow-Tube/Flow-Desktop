@@ -8,7 +8,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::SqlitePool;
 
-use super::forks::winning_chain;
+use super::forks::resolve_forks;
 use super::paths::{parse_log_path, roster_path};
 use super::roster::{Entry, entry_hash, parse_entry};
 use super::server::{Appended, ChangedObject, Result, StoreError};
@@ -120,12 +120,19 @@ impl HeldStore {
             .collect())
     }
 
-    /// The chain the rule picks from what this device holds.
+    /// The chain the rule picks from what this device holds, within the group it has verified.
     pub async fn chain(&self) -> Result<Vec<Entry>> {
         let pins = roster_pins(&self.pool)
             .await
             .map_err(|_| StoreError::Malformed)?;
-        Ok(winning_chain(&self.candidates_after(-1).await?, &pins))
+        let group = load_group(&self.pool)
+            .await
+            .map_err(|_| StoreError::Malformed)?
+            .map(|record| record.group_id);
+        let held = self.candidates_after(-1).await?;
+        Ok(resolve_forks(group.as_deref(), &held, &pins, None)
+            .map(|resolved| resolved.chain)
+            .unwrap_or_default())
     }
 
     /// What a `roster` request names: the `seq` and hash of this device's head, or -1 and none.
@@ -142,10 +149,7 @@ impl HeldStore {
     /// Holding `head` isn't enough, since this device may have just fetched it from the asker.
     pub async fn roster_for(&self, after: i64, head: Option<&str>) -> Result<Vec<Entry>> {
         let all = self.candidates_after(-1).await?;
-        let pins = roster_pins(&self.pool)
-            .await
-            .map_err(|_| StoreError::Malformed)?;
-        let chain = winning_chain(&all, &pins);
+        let chain = self.chain().await?;
         let known = head.is_none_or(|head| chain.iter().any(|e| entry_hash(e) == head));
         Ok(all
             .into_iter()

@@ -48,6 +48,7 @@ MUSIC
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
 - Hiding or showing the Queue or Lyrics pane in the full player no longer stretches the title and controls, and the artwork moves with the text.
+- Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

@@ -50,9 +50,18 @@ import {
   parseCustomSpeedPresets,
   selectPreferredAudioTrackId,
   selectPreferredCaptionId,
-  videoCodecLabel,
 } from "../../lib/settings/playerRuntime";
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
+import {
+  clearLiveTiming,
+  isAtLiveEdge,
+  liveEdgePosition,
+  liveStallRecoveryTarget,
+  liveTimingFromPlaylist,
+  liveWindow,
+  readLiveTiming,
+  stampLiveTiming,
+} from "../../lib/liveEdge";
 import {
   createWindowFullscreenController,
   watchNativeFullscreen,
@@ -125,16 +134,6 @@ type DashTrackInfo = {
   labels?: Array<{ text?: string; lang?: string }>;
   roles?: Array<{ value?: string }>;
   audioChannelConfiguration?: Array<{ audioChannelConfiguration?: string }>;
-  bitrateList?: Array<{
-    id?: string;
-    width?: number;
-    height?: number;
-    bandwidth?: number;
-    bitrate?: number;
-    scanType?: string;
-  }>;
-  codec?: string | null;
-  mimeType?: string | null;
   [key: string]: unknown;
 };
 
@@ -158,6 +157,7 @@ type DashPlayerController = {
 
 type PendingQualitySwitch = {
   label: string;
+  etaSeconds: number | null;
 };
 
 type QualitySwitchSnapshot = {
@@ -167,25 +167,13 @@ type QualitySwitchSnapshot = {
   targetQualityId: string;
 };
 
-function formatResolutionLabel(
-  rep?: { id?: string | number; width?: number; height?: number; codecs?: string | null; mimeType?: string | null } | null,
-  fallbackLabel?: string,
-  fallbackCodec?: string | null,
-  qualitiesList?: StreamVariant[],
-): string {
-  const matched = qualitiesList && rep?.id != null
-    ? qualitiesList.find((q) => q.id === String(rep.id))
-    : undefined;
-  const baseLabel = fallbackLabel && fallbackLabel !== "Auto"
-    ? fallbackLabel
-    : matched?.qualityLabel
-      ? matched.qualityLabel
-      : rep?.height
-        ? `${rep.height}p`
-        : "Auto";
-  if (baseLabel === "Auto") return "Auto";
-  const codec = videoCodecLabel(matched?.mimeType || rep?.codecs || rep?.mimeType || fallbackCodec);
-  return codec ? `${baseLabel} (${codec})` : baseLabel;
+function readBufferedAheadSeconds(player: DashPlayerController): number | null {
+  try {
+    const level = player.getDashMetrics?.()?.getCurrentBufferLevel("video");
+    return typeof level === "number" && Number.isFinite(level) ? Math.round(level) : null;
+  } catch {
+    return null;
+  }
 }
 
 const FULLSCREEN_SETTLE_MS = 120;
@@ -301,6 +289,7 @@ export const Player: React.FC<PlayerProps> = ({
   const dashPlayerRef = useRef<DashPlayerController | null>(null);
   const dashReadyRef = useRef(false);
   const hlsPlayerRef = useRef<Hls | null>(null);
+  const liveSeekedBackRef = useRef(false);
   const qualitySwitchSnapshotRef = useRef<QualitySwitchSnapshot | null>(null);
   const qualitySwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaBufferingRef = useRef(false);
@@ -464,6 +453,19 @@ export const Player: React.FC<PlayerProps> = ({
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
   const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
 
+  const qualitySwitchPending = pendingQualitySwitch !== null;
+  useEffect(() => {
+    if (!qualitySwitchPending) return;
+    const timer = setInterval(() => {
+      const player = dashPlayerRef.current;
+      if (!player) return;
+      const etaSeconds = readBufferedAheadSeconds(player);
+      setPendingQualitySwitch((current) =>
+        !current || current.etaSeconds === etaSeconds ? current : { ...current, etaSeconds },
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [qualitySwitchPending]);
 
   const isDashPlayback = !!dashManifestUrl;
   const isHlsPlayback = !!hlsManifestUrl && !isDashPlayback;
@@ -486,8 +488,6 @@ export const Player: React.FC<PlayerProps> = ({
     if (!isDashPlayback) return qualities;
     return qualities.filter((quality) => isVariantSupported(quality.mimeType));
   }, [isDashPlayback, qualities]);
-  const supportedQualitiesRef = useRef(supportedQualities);
-  supportedQualitiesRef.current = supportedQualities;
 
   const selectedQuality = useMemo(() => {
     return (
@@ -557,22 +557,6 @@ export const Player: React.FC<PlayerProps> = ({
     if (!player || !video || !dashReadyRef.current) return;
 
     if (selectedQualityId === "auto") {
-      const videoTracks = player.getTracksFor?.("video") || [];
-      let highestSafeBitrateKbps = 0;
-
-      for (const track of videoTracks) {
-        for (const item of track.bitrateList || []) {
-          // Cap Auto mode to 4K (2160p) so ABR doesn't overload hardware with 8K unless explicitly chosen
-          if (item.height && item.height <= 2160) {
-            const bps = item.bitrate || item.bandwidth || 0;
-            const kbps = Math.round(bps / 1000);
-            if (kbps > highestSafeBitrateKbps) {
-              highestSafeBitrateKbps = kbps;
-            }
-          }
-        }
-      }
-
       player.updateSettings({
         streaming: {
           abr: {
@@ -580,51 +564,23 @@ export const Player: React.FC<PlayerProps> = ({
               video: true,
               audio: false,
             },
-            maxBitrate: {
-              video: highestSafeBitrateKbps > 0 ? highestSafeBitrateKbps : -1,
-            },
           },
         },
       });
       logPlayerEvent("dash-quality-auto-requested", {
         switchTime: video.currentTime,
-        maxSafeBitrateKbps: highestSafeBitrateKbps > 0 ? highestSafeBitrateKbps : -1,
       });
 
       const currentRep = player.getCurrentRepresentationForType("video");
       if (currentRep && currentRep.height) {
-        setActiveQualityLabel(formatResolutionLabel(currentRep, undefined, undefined, supportedQualitiesRef.current));
+        setActiveQualityLabel(`${currentRep.height}p`);
       }
       return;
     }
 
     if (!selectedQuality) return;
 
-    const activeRepresentations = player.getRepresentationsByType("video") || [];
-    const videoTracks = player.getTracksFor?.("video") || [];
-
-    const allRepresentationsMap = new Map<string, DashRepresentationInfo>();
-    for (const track of videoTracks) {
-      for (const item of track.bitrateList || []) {
-        if (item.id) {
-          allRepresentationsMap.set(String(item.id), {
-            id: String(item.id),
-            height: item.height,
-            width: item.width,
-            bandwidth: item.bandwidth,
-            codecs: track.codec,
-            mimeType: track.mimeType,
-          } as DashRepresentationInfo);
-        }
-      }
-    }
-    for (const rep of activeRepresentations) {
-      if (rep.id) {
-        allRepresentationsMap.set(String(rep.id), rep);
-      }
-    }
-    const representations = Array.from(allRepresentationsMap.values());
-
+    const representations = player.getRepresentationsByType("video") || [];
     const targetRepresentation = representations.find((representation) => representation.id === selectedQuality.id)
       || representations
         .filter((representation) => typeof representation.height === "number")
@@ -653,14 +609,11 @@ export const Player: React.FC<PlayerProps> = ({
               video: false,
               audio: false,
             },
-            maxBitrate: {
-              video: -1,
-            },
           },
         },
       });
       if (currentRepresentation.height) {
-        setActiveQualityLabel(formatResolutionLabel(currentRepresentation, selectedQuality.qualityLabel, selectedQuality.mimeType, supportedQualitiesRef.current));
+        setActiveQualityLabel(`${currentRepresentation.height}p`);
       }
       logPlayerEvent("dash-quality-already-selected", {
         targetRepresentationId: targetRepresentation.id,
@@ -675,7 +628,8 @@ export const Player: React.FC<PlayerProps> = ({
       targetQualityId: targetRepresentation.id,
     };
     setPendingQualitySwitch({
-      label: formatResolutionLabel(targetRepresentation, selectedQuality.qualityLabel, selectedQuality.mimeType, supportedQualitiesRef.current),
+      label: targetRepresentation.height ? `${targetRepresentation.height}p` : selectedQuality.qualityLabel,
+      etaSeconds: readBufferedAheadSeconds(player),
     });
     if (qualitySwitchTimeoutRef.current) {
       clearTimeout(qualitySwitchTimeoutRef.current);
@@ -698,13 +652,9 @@ export const Player: React.FC<PlayerProps> = ({
               video: false,
               audio: false,
             },
-            maxBitrate: {
-              video: -1,
-            },
           },
         },
       });
-
       player.setRepresentationForTypeById("video", targetRepresentation.id, false);
     } catch (switchError) {
       qualitySwitchSnapshotRef.current = null;
@@ -1100,7 +1050,15 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     const audio = audioRef.current;
     if (!video) return;
-    const nextTime = Math.min(Math.max(time, 0), video.duration || duration || 0);
+    let nextTime: number;
+    if (isLive && video.seekable.length) {
+      const { start, end } = liveWindow(video);
+      nextTime = Math.min(Math.max(time, start), end);
+      liveSeekedBackRef.current = !isAtLiveEdge(nextTime, end, readLiveTiming(video));
+    } else {
+      const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration || 0;
+      nextTime = dur > 0 ? Math.min(Math.max(time, 0), dur) : Math.max(time, 0);
+    }
     video.currentTime = nextTime;
     if (audio) {
       audioHoldRef.current = false;
@@ -1110,19 +1068,13 @@ export const Player: React.FC<PlayerProps> = ({
       } catch {
       }
     }
-    // If user seeks before previously skipped or notified segments, allow them to trigger again
-    for (const segment of sponsorBlockSegments) {
-      if (nextTime < segment.segment[0]) {
-        skippedSegmentsRef.current.delete(segment.UUID);
-        notifiedSegmentsRef.current.delete(segment.UUID);
-        mutedSegmentsRecordedRef.current.delete(segment.UUID);
-      }
-    }
     setCurrentTime(nextTime);
-  }, [duration, sponsorBlockSegments, setCurrentTime]);
+  }, [duration, isLive, setCurrentTime]);
 
   const seekBy = useCallback((delta: number) => {
-    seekTo(currentTime + delta);
+    const video = videoRef.current;
+    const baseTime = video ? video.currentTime : currentTime;
+    seekTo(baseTime + delta);
     showSeekFeedback(delta > 0 ? "forward" : "backward", Math.abs(delta));
   }, [currentTime, seekTo, showSeekFeedback]);
 
@@ -1459,7 +1411,7 @@ export const Player: React.FC<PlayerProps> = ({
           },
         },
         buffer: {
-          fastSwitchEnabled: true,
+          fastSwitchEnabled: false,
           bufferToKeep: BACK_BUFFER_SECONDS,
           bufferPruningInterval: 120,
           bufferTimeDefault: bufferConfig.minSeconds,
@@ -1498,7 +1450,7 @@ export const Player: React.FC<PlayerProps> = ({
 
       const currentRep = player.getCurrentRepresentationForType("video");
       if (currentRep && currentRep.height) {
-        setActiveQualityLabel(formatResolutionLabel(currentRep, undefined, undefined, supportedQualitiesRef.current));
+        setActiveQualityLabel(`${currentRep.height}p`);
       }
       setPendingQualitySwitch(null);
 
@@ -1585,7 +1537,7 @@ export const Player: React.FC<PlayerProps> = ({
 
       const currentRep = player.getCurrentRepresentationForType("video");
       if (currentRep && currentRep.height) {
-        setActiveQualityLabel(formatResolutionLabel(currentRep, undefined, undefined, supportedQualitiesRef.current));
+        setActiveQualityLabel(`${currentRep.height}p`);
       }
     };
 
@@ -1663,12 +1615,14 @@ export const Player: React.FC<PlayerProps> = ({
       maxBufferLength: bufferConfig.maxSeconds,
       maxMaxBufferLength: bufferConfig.maxSeconds,
       backBufferLength: Math.max(30, bufferConfig.maxSeconds),
-      liveSyncDurationCount: 4,
-      liveMaxLatencyDurationCount: 12,
+      liveBackBufferLength: null,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: Infinity,
       liveDurationInfinity: isLive,
       loader: ProxyLoader as unknown as typeof Hls.DefaultConfig.loader,
     });
     hlsPlayerRef.current = hls;
+    liveSeekedBackRef.current = false;
     let fatalRecoveryAttempts = 0;
     let destroyedAfterFatal = false;
 
@@ -1680,11 +1634,8 @@ export const Player: React.FC<PlayerProps> = ({
     hls.on(Hls.Events.FRAG_LOADED, () => {
       fatalRecoveryAttempts = 0;
     });
-    hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
-      const frag = data?.frag;
-      if (!frag || !Number.isFinite(frag.sn as number) || !(frag.duration > 0)) return;
-      const offset = (frag.sn as number) * frag.duration - frag.start;
-      if (Number.isFinite(offset)) video.dataset.liveOffset = String(offset);
+    hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
+      if (isLive) stampLiveTiming(video, liveTimingFromPlaylist(hls.targetLatency, data.details.targetduration));
     });
     hls.on(Hls.Events.ERROR, (_event, data) => {
       logPlayerEventRef.current("hls-error", {
@@ -1694,15 +1645,13 @@ export const Player: React.FC<PlayerProps> = ({
       });
       if (!data.fatal) {
         if (isLive && data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-          const syncPos = hls.liveSyncPosition;
-          const seekable = video.seekable;
-          const target =
-            syncPos != null && Number.isFinite(syncPos)
-              ? syncPos
-              : seekable.length
-                ? seekable.end(seekable.length - 1) - 4
-                : null;
-          if (target != null && Number.isFinite(target) && target > video.currentTime) {
+          const target = liveStallRecoveryTarget({
+            position: video.currentTime,
+            window: liveWindow(video),
+            syncPosition: hls.liveSyncPosition,
+            seekedBack: liveSeekedBackRef.current,
+          });
+          if (target !== null) {
             video.currentTime = target;
             if (desiredPlayingRef.current) void video.play().catch(() => {});
           }
@@ -1740,6 +1689,7 @@ export const Player: React.FC<PlayerProps> = ({
     return () => {
       if (!destroyedAfterFatal) hls.destroy();
       if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
+      clearLiveTiming(video);
     };
   }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
 
@@ -1959,7 +1909,7 @@ export const Player: React.FC<PlayerProps> = ({
       video.pause();
       audio?.pause();
     }
-  }, [error, isDashPlayback, isPlaying, isSourceSwitching, setIsPlaying, src, usesExternalAudio]);
+  }, [error, isDashPlayback, isHlsPlayback, isPlaying, isSourceSwitching, setIsPlaying, src, usesExternalAudio]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2145,11 +2095,19 @@ export const Player: React.FC<PlayerProps> = ({
           break;
         case "home":
           event.preventDefault();
-          seekTo(0);
+          if (isLive && videoRef.current?.seekable.length) {
+            seekTo(liveWindow(videoRef.current).start);
+          } else {
+            seekTo(0);
+          }
           break;
         case "end":
           event.preventDefault();
-          seekTo(duration);
+          if (isLive && videoRef.current?.seekable.length) {
+            seekTo(liveEdgePosition(liveWindow(videoRef.current), readLiveTiming(videoRef.current)));
+          } else {
+            seekTo(duration);
+          }
           break;
         default: {
           const digit = Number(event.key);
@@ -2208,7 +2166,7 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-    if (pendingResumeTime > 0) {
+    if (pendingResumeTime > 0 || isLive) {
       setHasStartedPlayback(true);
       sourceSwitchingRef.current = false;
       setIsSourceSwitching(false);
@@ -2533,7 +2491,9 @@ export const Player: React.FC<PlayerProps> = ({
 
       {pendingQualitySwitch && (
         <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full border border-chrome-neutral-800 bg-chrome-neutral-950/85 px-3.5 py-1 text-xs font-medium tracking-wide text-chrome-neutral-200 animate-fade-in">
-          {getString("player_quality_switching", pendingQualitySwitch.label)}
+          {pendingQualitySwitch.etaSeconds && pendingQualitySwitch.etaSeconds > 1
+            ? getString("player_quality_switch_in", pendingQualitySwitch.label, pendingQualitySwitch.etaSeconds)
+            : getString("player_quality_switching", pendingQualitySwitch.label)}
         </div>
       )}
 

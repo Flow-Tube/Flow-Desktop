@@ -748,7 +748,9 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     if (remote) return remote.command("volume", { vol: Math.round(clamp01(volume) * 100) });
     const vol = clamp01(volume);
     musicAudioEngine.setVolume(vol);
-    set({ volume: vol, isMuted: vol === 0 ? get().isMuted : false });
+    const isMuted = vol === 0 ? get().isMuted : false;
+    if (get().isMuted && !isMuted) musicAudioEngine.setMuted(false);
+    set({ volume: vol, isMuted });
     saveConfig(get);
   },
 

@@ -34,6 +34,8 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     getErrorCode: vi.fn((): number | null => null),
     wantsAac: vi.fn(() => false),
     getCurrentTime: vi.fn(() => 0),
+    setVolume: vi.fn(),
+    setMuted: vi.fn(),
   },
   resolveMusicStream: vi.fn(),
   getMusicWatchQueue: vi.fn(),
@@ -304,5 +306,29 @@ describe("a queue restored at launch", () => {
     await useMusicPlayerStore.getState().playTrack(song("chosen"));
     useMusicPlayerStore.getState().restoreSavedQueue(saved(["old"], 0, 0));
     expect(useMusicPlayerStore.getState().currentTrack?.id).toBe("chosen");
+  });
+});
+
+describe("setVolume while muted", () => {
+  it("unmutes the engine along with the store when the volume is raised", async () => {
+    const { useMusicPlayerStore } = await import("./useMusicPlayerStore");
+    useMusicPlayerStore.setState({ isMuted: true, volume: 0.5 });
+    engine.setMuted.mockClear();
+
+    useMusicPlayerStore.getState().setVolume(0.6);
+
+    expect(engine.setMuted).toHaveBeenCalledWith(false);
+    expect(useMusicPlayerStore.getState().isMuted).toBe(false);
+  });
+
+  it("stays muted at zero", async () => {
+    const { useMusicPlayerStore } = await import("./useMusicPlayerStore");
+    useMusicPlayerStore.setState({ isMuted: true, volume: 0.5 });
+    engine.setMuted.mockClear();
+
+    useMusicPlayerStore.getState().setVolume(0);
+
+    expect(engine.setMuted).not.toHaveBeenCalled();
+    expect(useMusicPlayerStore.getState().isMuted).toBe(true);
   });
 });

@@ -15,6 +15,7 @@ import { ShortMetadata } from "./ShortMetadata";
 import { ShortActionBar } from "./ShortActionBar";
 import { ShortSidePanel } from "./ShortSidePanel";
 import { Slider } from "../ui/Slider";
+import { useWheelVolume } from "../../lib/useWheelVolume";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 
 const SIDE_PANEL_WIDTH = 560;
@@ -60,6 +61,7 @@ export function ShortPlayer({
   const ambient = useAmbientSettings();
   const [rydData, setRydData] = useState<RydData | null>(null);
   const commentCountText = short.commentCountText ?? fetchedCommentCountText;
+  const volumeWheelRef = useWheelVolume({ volume, muted, onVolumeChange, onUnmute: onToggleMute });
 
   useEffect(() => {
     if (!active || !rytdEnabled) {
@@ -178,7 +180,7 @@ export function ShortPlayer({
             )}
 
             {active && (
-              <div className="group/volume absolute right-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pr-3">
+              <div ref={volumeWheelRef} className="group/volume absolute right-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pr-3">
                 <button
                   type="button"
                   aria-label={muted ? "Unmute" : "Mute"}

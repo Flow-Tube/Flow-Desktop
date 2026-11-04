@@ -4,7 +4,7 @@ import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { TextInput } from '../../ui/TextInput';
 import { Slider } from '../../ui/Slider';
-import { Sparkles } from 'lucide-react';
+import { AmbientModeIcon } from '../../ui/AmbientModeIcon';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
@@ -39,8 +39,9 @@ export function PlayerTab() {
   const [miniNextPrev, setMiniNextPrev] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, true);
 
   const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
-  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
-  const [ambientIntensity, setAmbientIntensity] = useNumberPref(SETTINGS.AMBIENT_MODE_INTENSITY, 60);
+  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
+  const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
+  const [ambientIntensity, setAmbientIntensity] = useNumberPref(SETTINGS.AMBIENT_MODE_INTENSITY);
   const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, true);
 
   const [autoPip, setAutoPip] = useBoolPref(SETTINGS.AUTO_PIP_ENABLED, false);
@@ -171,50 +172,27 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              aria-label={!ambientMode || ambientIntensity === 0 ? "Enable ambient mode" : "Disable ambient mode"}
-              title={!ambientMode || ambientIntensity === 0 ? "Enable" : "Disable"}
-              onClick={() => {
-                if (ambientMode && ambientIntensity > 0) {
-                  setAmbientMode(false);
-                } else {
-                  setAmbientMode(true);
-                  if (ambientIntensity === 0) setAmbientIntensity(60);
-                }
-              }}
-              className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 hover:text-chrome-neutral-100 hover:bg-chrome-white/10 transition-colors"
-            >
-              {!ambientMode || ambientIntensity === 0 ? (
-                <Sparkles size={18} className="opacity-35" />
-              ) : (
-                <Sparkles size={18} className="text-primary" />
-              )}
-            </button>
-            <div className="w-28 sm:w-36">
+            <AmbientModeIcon className={ambientMode ? 'text-primary' : 'text-chrome-neutral-500'} />
+            <div className="w-24 sm:w-32">
               <Slider
-                aria-label={getString('settings_ambient_mode')}
-                min={0}
+                aria-label={getString('settings_ambient_intensity')}
+                min={10}
                 max={100}
                 step={5}
-                value={ambientMode ? ambientIntensity : 0}
-                onChange={(value) => {
-                  if (value === 0) {
-                    setAmbientMode(false);
-                  } else {
-                    if (!ambientMode) setAmbientMode(true);
-                    setAmbientIntensity(value);
-                  }
-                }}
+                value={ambientIntensity}
+                onChange={setAmbientIntensity}
+                disabled={!ambientMode}
               />
             </div>
-            <span className="w-10 text-right font-mono text-xs text-chrome-neutral-400">
-              {ambientMode && ambientIntensity > 0 ? `${ambientIntensity}%` : "Off"}
-            </span>
+            <span className="w-9 text-right font-mono text-xs text-chrome-neutral-400">{ambientIntensity}%</span>
+            <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
           </div>
         </SettingItem>
-        <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')}>
-          <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} />
+        <SettingItem title={getString('settings_ambient_glow')} description={getString('settings_ambient_glow_desc')} disabled={!ambientMode}>
+          <ToggleSwitch checked={ambientMode && ambientGlow} onChange={setAmbientGlow} disabled={!ambientMode} />
+        </SettingItem>
+        <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
+          <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
         </SettingItem>
       </SettingsGroup>
     </div>

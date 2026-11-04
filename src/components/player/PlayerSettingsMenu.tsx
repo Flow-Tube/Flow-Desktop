@@ -10,12 +10,14 @@ import {
   Pause,
   Sliders,
   SlidersHorizontal,
-  Sparkles,
+  SunDim,
 } from "lucide-react";
 import type { PlaybackRate } from "../../store/usePlayerStore";
 import type { AudioTrack, CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { useBoolPref } from "../../lib/usePreference";
+import { IS_MAIN_WINDOW } from "../../lib/appWindow";
+import { AmbientModeIcon } from "../ui/AmbientModeIcon";
 import { SETTINGS } from "../../lib/settings/schema";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
@@ -126,7 +128,8 @@ export function PlayerSettingsMenu({
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
-  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
+  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
+  const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
 
   const panesRef = useRef<HTMLDivElement>(null);
   const shownPaneRef = useRef(pane);
@@ -209,9 +212,9 @@ export function PlayerSettingsMenu({
       <span className="text-right font-normal text-chrome-zinc-400">
         {getString(checked ? "eq_state_on" : "eq_state_off")}
       </span>
-      <div
+      <span
         className={cx(
-          "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ease-out",
+          "relative block h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ease-out",
           checked ? "bg-primary" : "bg-chrome-white/20",
         )}
       >
@@ -221,7 +224,7 @@ export function PlayerSettingsMenu({
             checked ? "left-[18px]" : "left-0.5",
           )}
         />
-      </div>
+      </span>
     </button>
   );
 
@@ -269,12 +272,22 @@ export function PlayerSettingsMenu({
         {pane === "root" && (
           <div className="space-y-0.5">
             {settingRow(getString("player_menu_speed"), speedLabel(playbackRate), <Gauge size={18} />, () => onPaneChange("speed"))}
-            {toggleRow(
-              getString("settings_ambient_mode"),
-              ambientMode,
-              <Sparkles size={18} />,
-              () => setAmbientMode(!ambientMode),
-            )}
+            {/* The pop-out draws no glow, and its settings copy never reaches the main window. */}
+            {IS_MAIN_WINDOW &&
+              toggleRow(
+                getString("settings_ambient_mode"),
+                ambientMode,
+                <AmbientModeIcon size={18} />,
+                () => setAmbientMode(!ambientMode),
+              )}
+            {IS_MAIN_WINDOW &&
+              ambientMode &&
+              toggleRow(
+                getString("settings_ambient_glow"),
+                ambientGlow,
+                <SunDim size={18} />,
+                () => setAmbientGlow(!ambientGlow),
+              )}
             {settingRow(
               getString("player_menu_quality"),
               qualityLabel(selectedQualityId, qualities, activeQualityLabel),

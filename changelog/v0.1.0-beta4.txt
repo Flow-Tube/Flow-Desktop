@@ -57,6 +57,7 @@ PLAYER
 - A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
 
 FIXES
+- Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.

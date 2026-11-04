@@ -127,6 +127,25 @@ pub async fn add_roster_entries(pool: &SqlitePool, entries: &[Entry]) -> Result<
     Ok(())
 }
 
+/// Replaces the verified roster with the chain a fork settled on.
+pub async fn replace_roster(pool: &SqlitePool, entries: &[Entry]) -> Result<(), SyncError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM sync2_roster")
+        .execute(&mut *tx)
+        .await?;
+    for entry in entries {
+        let seq =
+            i64::try_from(entry.seq).map_err(|_| SyncError::Protocol("roster too long".into()))?;
+        sqlx::query("INSERT INTO sync2_roster (seq, entry) VALUES (?, ?)")
+            .bind(seq)
+            .bind(String::from_utf8_lossy(&to_canonical_json(entry)).into_owned())
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// The entries the user kept between sides of a contested roster.
 pub async fn roster_pins(pool: &SqlitePool) -> Result<BTreeSet<String>, SyncError> {
     let rows: Vec<String> = sqlx::query_scalar("SELECT hash FROM sync2_roster_pins")

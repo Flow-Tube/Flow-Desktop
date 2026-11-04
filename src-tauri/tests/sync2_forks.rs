@@ -218,6 +218,55 @@ async fn a_device_that_removed_nobody_is_not_asked_about_a_removed_signer() {
     assert_eq!(session.roster().head, entry_hash(&removal));
 }
 
+/// B read an entry that later lost, so it returns to the last common entry and takes the winner.
+#[tokio::test]
+async fn a_device_that_applied_a_losing_entry_adopts_the_winner() {
+    let g = group().await;
+    let (c, state) = with_c(&g).await;
+    let (pool, held) = holding(&g).await;
+    let d = new_member();
+    let mut losing = draft(Op::Add, &c);
+    losing.add = Some(vec![member_subject(
+        &d.sig_public,
+        &d.kem_public,
+        Role::Device,
+    )]);
+    let losing = build_entry(&g.group, Some(&state), losing, &[&c, &d]);
+    held.hold_entry(&losing).await.unwrap();
+    Session::open_as_peer(&pool, held.clone(), &g.b)
+        .await
+        .unwrap();
+    assert_eq!(roster_entries(&pool).await.unwrap().last(), Some(&losing));
+
+    let (winner, key) = removing(&g, &state, &g.a, &c, &[&g.a, &g.b, &g.recovery]);
+    hold_wrap(&held, &g, 1, &key, &g.b).await;
+    held.hold_entry(&winner).await.unwrap();
+    let session = Session::open_as_peer(&pool, held, &g.b).await.unwrap();
+    assert_eq!(session.roster().head, entry_hash(&winner));
+    assert_eq!(roster_entries(&pool).await.unwrap().last(), Some(&winner));
+    assert_eq!(session.current_key(), key);
+}
+
+#[tokio::test]
+async fn a_device_left_out_by_a_changed_roster_deletes_nothing_by_itself() {
+    let g = group().await;
+    let (c, state) = with_c(&g).await;
+    let (pool, held) = holding(&g).await;
+    let mut applied = draft(Op::Rename, &g.b);
+    applied.meta = Some(std::iter::once((hex::encode(g.b.did), "x".to_owned())).collect());
+    let applied = build_entry(&g.group, Some(&state), applied, &[&g.b]);
+    held.hold_entry(&applied).await.unwrap();
+    Session::open_as_peer(&pool, held.clone(), &g.b)
+        .await
+        .unwrap();
+
+    let (removal, _) = removing(&g, &state, &g.a, &g.b, &[&g.a, &c, &g.recovery]);
+    held.hold_entry(&removal).await.unwrap();
+    let opened = Session::open_as_peer(&pool, held, &g.b).await;
+    assert!(matches!(opened, Err(EngineError::RemovalUnconfirmed)));
+    assert_eq!(roster_entries(&pool).await.unwrap().last(), Some(&applied));
+}
+
 #[tokio::test]
 async fn a_removal_that_extends_what_was_applied_says_removed() {
     let g = group().await;

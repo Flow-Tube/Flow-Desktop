@@ -26,8 +26,8 @@ use super::roster::{Entry, RosterState, replay_roster};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, roster_pins,
-    save_floors, save_group, save_streams, streams,
+    Floors, GroupRecord, add_roster_entries, floors, load_group, replace_roster, roster_entries,
+    roster_pins, save_floors, save_group, save_streams, streams,
 };
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
@@ -361,14 +361,16 @@ impl<'a, S: Store> Session<'a, S> {
         };
         let state = replay_roster(&chain)?;
         let member = state.members.contains_key(&hex::encode(self.device.did));
-        if !extends_applied {
-            return Err(if member {
-                EngineError::RosterRewritten
-            } else {
-                EngineError::RemovalUnconfirmed
-            });
+        if !extends_applied && !member {
+            return Err(EngineError::RemovalUnconfirmed);
         }
-        add_roster_entries(pool, &chain[self.entries.len()..]).await?;
+        if extends_applied {
+            add_roster_entries(pool, &chain[self.entries.len()..]).await?;
+        } else {
+            replace_roster(pool, &chain).await?;
+            self.keys.clear();
+            self.commitments.clear();
+        }
         self.state = state;
         self.entries = chain;
         if !member {

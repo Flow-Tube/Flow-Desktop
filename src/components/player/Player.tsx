@@ -21,6 +21,7 @@ import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
 import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
+import { segmentsToRearm } from "../../lib/sponsorBlockRearm";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import {
@@ -2263,6 +2264,12 @@ export const Player: React.FC<PlayerProps> = ({
     let muteSegmentCategoryName = "";
 
     if (sponsorBlockEnabled) {
+      for (const { UUID } of segmentsToRearm(sponsorBlockSegments, nextTime)) {
+        skippedSegmentsRef.current.delete(UUID);
+        mutedSegmentsRecordedRef.current.delete(UUID);
+        notifiedSegmentsRef.current.delete(UUID);
+      }
+
       for (const segment of sponsorBlockSegments) {
         const [start, end] = segment.segment;
         const action: SponsorBlockAction = sponsorBlockActions[segment.category as SponsorBlockCategory] || "ignore";

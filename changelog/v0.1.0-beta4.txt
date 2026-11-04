@@ -58,6 +58,9 @@ PLAYER
 - Live streams start and play again.
 - You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
 - A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
+- SponsorBlock now works in the pop-out player and for the next video in the mini player.
+- If SponsorBlock can't be reached, the next video plays without skips instead of skipping at the last video's times.
+- Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 
 FIXES
 - Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.

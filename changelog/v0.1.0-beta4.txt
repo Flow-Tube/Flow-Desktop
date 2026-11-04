@@ -44,6 +44,9 @@ SYNC
 - A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
+MUSIC
+- Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
+
 PLAYER
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.

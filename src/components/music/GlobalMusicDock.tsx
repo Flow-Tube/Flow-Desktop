@@ -138,7 +138,15 @@ export function GlobalMusicDock() {
             <div
               ref={registerSheetDock}
               {...sheetDrag}
-              className="relative flex h-full touch-none select-none items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high pl-3 pr-4"
+              onClick={(e) => {
+                if (away) return;
+                const target = e.target instanceof Element ? e.target : null;
+                if (target?.closest("button, [role='slider'], [data-sheet-drag-ignore], a, input, select, textarea")) {
+                  return;
+                }
+                openOverlay("full");
+              }}
+              className={`relative flex h-full touch-none select-none items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high pl-3 pr-4 ${away ? "" : "cursor-pointer"}`}
             >
               {/* Grab handle, shown on hover so the drag up is discoverable. */}
               <span

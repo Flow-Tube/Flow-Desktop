@@ -84,7 +84,7 @@ describe("KuGou", () => {
   });
 
   it("reads the instrumental notice as no lyrics, but not lyrics that contain it", () => {
-    const notice = ["﻿[id:$00000000]", "[ar:arkady sevidov]", "[ti:June]", "[total:320317]", "[00:01.58]纯音乐，请欣赏"].join("\n");
+    const notice = ["\uFEFF[id:$00000000]", "[ar:arkady sevidov]", "[ti:June]", "[total:320317]", "[00:01.58]纯音乐，请欣赏"].join("\n");
     expect(isInstrumentalNotice(parseLyrics(normalizeKuGouLrc(notice)))).toBe(true);
     expect(isInstrumentalNotice(parseLyrics("[00:01.58]纯音乐,请欣赏"))).toBe(true);
     expect(isInstrumentalNotice(parseLyrics("[00:01.00]纯音乐，请欣赏\n[00:05.00]First"))).toBe(false);

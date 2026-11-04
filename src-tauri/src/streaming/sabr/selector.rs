@@ -2,6 +2,7 @@
 // Desktop Chromium always supports H.264/AAC/Opus; VP9 and AV1 depend on the
 // build. Made for maximum compatibility (MP4/H.264 video, Opus/AAC
 // audio) unless the frontend tells us a richer codec is supported and stable.
+use crate::streaming::codec::VideoCodecFamily;
 
 #[derive(Debug, Clone, Default)]
 pub struct SabrFormat {
@@ -29,16 +30,13 @@ impl SabrFormat {
         self.mime_type.contains("mp4")
     }
     pub fn is_av1(&self) -> bool {
-        let m = self.mime_type.to_ascii_lowercase();
-        m.contains("av01") || m.contains("av1")
+        VideoCodecFamily::from_mime(&self.mime_type) == VideoCodecFamily::Av1
     }
     pub fn is_vp9(&self) -> bool {
-        let m = self.mime_type.to_ascii_lowercase();
-        m.contains("vp9") || m.contains("vp09")
+        VideoCodecFamily::from_mime(&self.mime_type) == VideoCodecFamily::Vp9
     }
     pub fn is_h264(&self) -> bool {
-        let m = self.mime_type.to_ascii_lowercase();
-        m.contains("avc1") || m.contains("avc3") || m.contains("h264")
+        VideoCodecFamily::from_mime(&self.mime_type) == VideoCodecFamily::H264
     }
 }
 

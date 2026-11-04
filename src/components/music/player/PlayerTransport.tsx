@@ -13,10 +13,56 @@ const SIDE_ACTIVE = `${SIDE} bg-[var(--player-primary-container)] text-[var(--pl
 const SIZES = {
   lg: { skip: "h-12 w-12", skipIcon: "h-7 w-7", play: "h-16 w-16", playIcon: "h-7 w-7", gap: "gap-6" },
   md: { skip: "h-11 w-11", skipIcon: "h-6 w-6", play: "h-14 w-14", playIcon: "h-6 w-6", gap: "gap-8" },
+  sm: { skip: "h-9 w-9", skipIcon: "h-5 w-5", play: "h-11 w-11", playIcon: "h-6 w-6", gap: "gap-4" },
 } as const;
 
+interface TransportButtonsProps {
+  size: keyof typeof SIZES;
+  playing: boolean;
+  loading?: boolean;
+  onPrevious: () => void;
+  onTogglePlay: () => void;
+  onNext: () => void;
+  /** What Next plays, named on hover. */
+  nextTitle?: string | null;
+}
+
+/** Previous, play/pause and next, for whichever player they drive. */
+export function TransportButtons({ size, playing, loading, onPrevious, onTogglePlay, onNext, nextTitle }: TransportButtonsProps) {
+  const sizes = SIZES[size];
+  const skipClass = `grid ${sizes.skip} place-items-center rounded-full text-chrome-neutral-100 transition-transform duration-200 ease-out hover:scale-110`;
+  return (
+    <div className={`flex items-center ${sizes.gap}`}>
+      <HapticButton onClick={onPrevious} aria-label={getString("music_previous")} className={skipClass}>
+        <SkipBack className={sizes.skipIcon} fill="currentColor" />
+      </HapticButton>
+      <HapticButton
+        onClick={onTogglePlay}
+        aria-label={getString(playing ? "music_pause" : "music_play")}
+        className={`grid ${sizes.play} place-items-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-transform duration-200 ease-out hover:scale-105`}
+      >
+        {loading ? (
+          <Loader2 className={`${sizes.playIcon} animate-spin`} />
+        ) : playing ? (
+          <Pause className={sizes.playIcon} fill="currentColor" />
+        ) : (
+          <Play className={`${sizes.playIcon} translate-x-px`} fill="currentColor" />
+        )}
+      </HapticButton>
+      <HapticButton
+        onClick={onNext}
+        aria-label={getString("music_next")}
+        title={nextTitle ? `${getString("music_up_next")}: ${nextTitle}` : undefined}
+        className={skipClass}
+      >
+        <SkipForward className={sizes.skipIcon} fill="currentColor" />
+      </HapticButton>
+    </div>
+  );
+}
+
 interface PlayerTransportProps {
-  size?: keyof typeof SIZES;
+  size?: "lg" | "md";
   /** Shuffle and repeat at the ends of the row. */
   withModes?: boolean;
 }
@@ -34,36 +80,16 @@ export function PlayerTransport({ size = "lg", withModes = true }: PlayerTranspo
   const cycleRepeat = useMusicPlayerStore((s) => s.cycleRepeat);
   // Hovering Next names the song it will play, in place of Android's press-and-hold preview.
   const nextTitle = useMusicPlayerStore((s) => s.queue[upcomingIndex(s)]?.title ?? null);
-  const sizes = SIZES[size];
-  const skipClass = `grid ${sizes.skip} place-items-center rounded-full text-chrome-neutral-100 transition-transform duration-200 ease-out hover:scale-110`;
-
   const center = (
-    <div className={`flex items-center ${sizes.gap}`}>
-      <HapticButton onClick={previous} aria-label={getString("music_previous")} className={skipClass}>
-        <SkipBack className={sizes.skipIcon} fill="currentColor" />
-      </HapticButton>
-      <HapticButton
-        onClick={togglePlay}
-        aria-label={getString(isPlaying ? "music_pause" : "music_play")}
-        className={`grid ${sizes.play} place-items-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] transition-transform duration-200 ease-out hover:scale-105`}
-      >
-        {loading ? (
-          <Loader2 className={`${sizes.playIcon} animate-spin`} />
-        ) : isPlaying ? (
-          <Pause className={sizes.playIcon} fill="currentColor" />
-        ) : (
-          <Play className={`${sizes.playIcon} translate-x-px`} fill="currentColor" />
-        )}
-      </HapticButton>
-      <HapticButton
-        onClick={next}
-        aria-label={getString("music_next")}
-        title={nextTitle ? `${getString("music_up_next")}: ${nextTitle}` : undefined}
-        className={skipClass}
-      >
-        <SkipForward className={sizes.skipIcon} fill="currentColor" />
-      </HapticButton>
-    </div>
+    <TransportButtons
+      size={size}
+      playing={isPlaying}
+      loading={loading}
+      onPrevious={previous}
+      onTogglePlay={togglePlay}
+      onNext={next}
+      nextTitle={nextTitle}
+    />
   );
 
   if (!withModes) return center;

@@ -44,6 +44,7 @@ export function useSheetDrag(): SheetDragBind {
   const drag = useRef<Drag | null>(null);
   const press = useRef<{ id: number; x: number; y: number } | null>(null);
   const swallowClick = useRef(false);
+  const wandered = useRef(false);
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(wheelTimer.current), []);
@@ -92,6 +93,7 @@ export function useSheetDrag(): SheetDragBind {
     onPointerDown: (event) => {
       if (event.button !== 0 || ignored(event.target)) return;
       swallowClick.current = false;
+      wandered.current = false;
       press.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
     },
     onPointerMove: (event) => {
@@ -102,8 +104,10 @@ export function useSheetDrag(): SheetDragBind {
         const dx = Math.abs(event.clientX - p.x);
         if (dx > START_SLOP_PX && dx >= Math.abs(up)) {
           press.current = null;
+          wandered.current = true;
           return;
         }
+        if (up < -START_SLOP_PX) wandered.current = true;
         if (up < START_SLOP_PX) return;
         if (!begin()) {
           press.current = null;
@@ -135,7 +139,10 @@ export function useSheetDrag(): SheetDragBind {
       wheelTimer.current = setTimeout(end, WHEEL_END_MS);
     },
     onClickCapture: (event) => {
-      if (!swallowClick.current) return;
+      // A press that drifted is not a tap on the dock itself, though a button under it still counts.
+      const drifted = wandered.current && (event.target as HTMLElement).closest("button") === null;
+      wandered.current = false;
+      if (!swallowClick.current && !drifted) return;
       swallowClick.current = false;
       event.preventDefault();
       event.stopPropagation();

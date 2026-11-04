@@ -18,7 +18,7 @@ import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore
 import { copyText } from "../../../lib/clipboard";
 import { getString } from "../../../lib/i18n/index";
 import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
-import { LONG_PRESS_MS, shouldStartWindowDrag } from "../../../lib/pointerGesture";
+import { LONG_PRESS_MS, shouldStartDrag } from "../../../lib/pointerGesture";
 import { startWindowDrag } from "../../../lib/api/pip";
 import { StatsForNerds } from "../StatsForNerds";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
@@ -41,6 +41,8 @@ export type PlayerVolumeFeedback = {
   volume: number;
   muted: boolean;
 };
+
+const SINGLE_CLICK_DELAY_MS = 220;
 
 type CenterFeedback = {
   id: number;
@@ -81,6 +83,8 @@ type PlayerGestureOverlayProps = {
   isCompact?: boolean;
   /** In the pop-out window, a press that moves drags the window. */
   canDragWindow?: boolean;
+  /** The mini player: `useMiniPlayerDrag` on the frame moves it, from these bubbling moves. */
+  canDragFrame?: boolean;
   /** The settings menu, which shares the "one menu at a time" rule with the right-click menu. */
   settingsOpen: boolean;
   onCloseSettings: () => void;
@@ -126,6 +130,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   onRevealControls,
   isCompact = false,
   canDragWindow = false,
+  canDragFrame = false,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -147,6 +152,18 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   // A press that closed a menu also eats the click after it, so closing never pauses.
   const menuClosingPressRef = useRef(false);
   const layerRef = useRef<HTMLDivElement>(null);
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A second click can arrive after the first one's toggle fired, and then has to undo it.
+  const toggledByFirstClickRef = useRef(false);
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
+  const clearClickTimer = () => {
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     if (!centerFeedback) return;
@@ -162,6 +179,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
       if (previousRateRef.current) setPlaybackRate(previousRateRef.current);
+      clearClickTimer();
     };
   }, [setPlaybackRate]);
 
@@ -202,6 +220,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
+    clearClickTimer();
     onRevealControls();
     menuClosingPressRef.current = Boolean(contextMenu) || settingsOpen;
     if (menuClosingPressRef.current) {
@@ -226,8 +245,13 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = pressStartRef.current;
     if (!start) return;
-    const drag = shouldStartWindowDrag({
-      canDragWindow,
+    // A press that sped playback up stays a speed-up, so the frame never hears it moved.
+    if (canDragFrame && longPressActiveRef.current) {
+      event.stopPropagation();
+      return;
+    }
+    const drag = shouldStartDrag({
+      canDrag: canDragWindow || canDragFrame,
       boosting: longPressActiveRef.current,
       dx: event.clientX - start.x,
       dy: event.clientY - start.y,
@@ -235,6 +259,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     if (!drag) return;
     restorePlaybackRate();
     draggedRef.current = true;
+    if (canDragFrame) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -245,26 +270,46 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     if (event.button !== 0) return;
     if (draggedRef.current) {
       draggedRef.current = false;
+      clearClickTimer();
       return;
     }
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
+      clearClickTimer();
       return;
     }
     if (menuClosingPressRef.current) {
       menuClosingPressRef.current = false;
+      clearClickTimer();
       return;
     }
 
-    togglePlay();
-    setCenterFeedback({
-      id: Date.now(),
-      icon: isPlaying ? "play" : "pause",
-    });
-    onRevealControls();
+    if (event.detail > 1) {
+      clearClickTimer();
+      if (toggledByFirstClickRef.current) {
+        toggledByFirstClickRef.current = false;
+        togglePlay();
+        setCenterFeedback(null);
+      }
+      return;
+    }
+
+    clearClickTimer();
+    toggledByFirstClickRef.current = false;
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null;
+      toggledByFirstClickRef.current = true;
+      togglePlay();
+      setCenterFeedback({
+        id: Date.now(),
+        icon: isPlayingRef.current ? "play" : "pause",
+      });
+      onRevealControls();
+    }, SINGLE_CLICK_DELAY_MS);
   };
 
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    clearClickTimer();
     const rect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - rect.left;
     if (x < rect.width * 0.35) {
@@ -280,6 +325,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
+    clearClickTimer();
     restorePlaybackRate();
     onCloseSettings();
     const rect = event.currentTarget.getBoundingClientRect();
@@ -379,7 +425,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       <div
         ref={layerRef}
         {...{ [PLAYER_VIDEO_LAYER_ATTR]: "" }}
-        className="absolute inset-0 z-[15] cursor-default"
+        className={`absolute inset-0 z-[15] ${canDragFrame ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={restorePlaybackRate}

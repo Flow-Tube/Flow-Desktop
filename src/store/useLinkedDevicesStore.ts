@@ -8,6 +8,7 @@ import {
   cancelLink,
   createGroup,
   createLanGroup,
+  createWebdavGroup,
   declineJoin,
   enterCode,
   forgetGroup,
@@ -15,19 +16,26 @@ import {
   getLinkPhase,
   getLinkedDevices,
   getLinkedStatus,
+  leaveGroup,
   markRecoverySaved,
   onLinkPhase,
   onSynced,
   removeDevice,
   renameDevice,
+  replaceRecovery,
   restoreGroup,
+  retryKeychain,
   showCode,
   syncNow,
+  updateLogin,
+  type FolderAccess,
   type JoinRequest,
   type LinkPhase,
   type LinkedDevice,
   type LinkedStatus,
+  type WebdavLogin,
 } from "../lib/api/linked";
+import { forgetAfterFailedLeave } from "../lib/linked/leaveFirst";
 import { normalizeBackendError } from "../lib/api/errors";
 import { isTauriEnv } from "../lib/api/env";
 import { receivedMessage } from "../lib/linked/receivedMessage";
@@ -48,15 +56,21 @@ interface LinkedState {
   link: LinkPhase;
   /** Recovery words to show once, until the user proves they saved them. */
   words: string | null;
+  /** Creating a group found the server already holds one. */
+  serverTaken: boolean;
   busy: boolean;
   error: string | null;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
-  create: (url: string, adminToken: string) => Promise<void>;
+  create: (url: string, adminToken: string, resetServer?: boolean) => Promise<void>;
   createOnLan: () => Promise<void>;
-  restore: (url: string, words: string) => Promise<void>;
-  enterCode: (code: string) => Promise<void>;
+  createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
+  updateLogin: (user: string, password: string) => Promise<void>;
+  retryKeychain: () => Promise<void>;
+  /** Restores from a Flow server, or with `login` from a WebDAV folder. */
+  restore: (url: string, words: string, login?: WebdavLogin) => Promise<void>;
+  enterCode: (code: string, folder?: FolderAccess) => Promise<void>;
   askToJoin: (url: string, adminToken: string) => Promise<void>;
   loadJoinRequests: () => Promise<void>;
   acceptJoin: (id: string) => Promise<void>;
@@ -66,8 +80,11 @@ interface LinkedState {
   answer: (accept: boolean) => Promise<void>;
   closeLink: () => Promise<void>;
   confirmSaved: () => Promise<void>;
+  /** Replaces the recovery key and shows the new words. */
+  replaceRecovery: () => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  leave: () => Promise<void>;
   forget: () => Promise<void>;
   syncNow: () => Promise<void>;
 }
@@ -101,6 +118,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     joinRequests: [],
     link: { phase: "idle" },
     words: null,
+    serverTaken: false,
     busy: false,
     error: null,
 
@@ -112,11 +130,9 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         set({ link });
         if (link.phase === "done") void get().refresh();
       });
-      await onSynced((lastSync) => {
-        const status = get().status;
-        if (!status) return;
-        set({ status: { ...status, lastSync } });
-        if (status.kind) void loadDevices();
+      // Read whole, since a sync can follow a keychain prompt answered while the page was open.
+      await onSynced(() => {
+        if (get().status) void get().refresh();
       });
       set({ link: await getLinkPhase() });
       await get().refresh();
@@ -133,9 +149,15 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       }
     },
 
-    create: (url, adminToken) =>
+    create: (url, adminToken, resetServer) =>
       run(async () => {
-        set({ words: await createGroup(url, adminToken) });
+        try {
+          set({ words: await createGroup(url, adminToken, resetServer), serverTaken: false });
+        } catch (error) {
+          if (normalizeBackendError(error).kind !== "linkedAlreadyClaimed") throw error;
+          set({ serverTaken: true });
+          return;
+        }
         await get().refresh();
       }),
 
@@ -145,13 +167,31 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await get().refresh();
       }),
 
-    restore: (url, words) =>
+    createOnWebdav: (url, user, password) =>
       run(async () => {
-        set({ words: await restoreGroup(url, words) });
+        set({ words: await createWebdavGroup(url, user, password) });
         await get().refresh();
       }),
 
-    enterCode: (code) => run(() => enterCode(code)),
+    updateLogin: (user, password) =>
+      run(async () => {
+        await updateLogin(user, password);
+        await get().refresh();
+      }),
+
+    retryKeychain: () =>
+      run(async () => {
+        await retryKeychain();
+        await get().refresh();
+      }),
+
+    restore: (url, words, login) =>
+      run(async () => {
+        set({ words: await restoreGroup(url, words, login) });
+        await get().refresh();
+      }),
+
+    enterCode: (code, folder) => run(() => enterCode(code, folder)),
     askToJoin: (url, adminToken) => run(() => askToJoin(url, adminToken)),
     // Polled while the page is open, so a failure (an older server, no network) stays quiet.
     loadJoinRequests: async () => {
@@ -183,6 +223,12 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await get().refresh();
       }),
 
+    replaceRecovery: () =>
+      run(async () => {
+        set({ words: await replaceRecovery() });
+        await get().refresh();
+      }),
+
     rename: (id, name) =>
       run(async () => {
         await renameDevice(id, name);
@@ -193,6 +239,16 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
       run(async () => {
         await removeDevice(id);
         await loadDevices();
+      }),
+
+    leave: () =>
+      run(async () => {
+        try {
+          await leaveGroup();
+        } catch (error) {
+          if (!(await forgetAfterFailedLeave(error))) throw error;
+        }
+        await get().refresh();
       }),
 
     forget: () =>

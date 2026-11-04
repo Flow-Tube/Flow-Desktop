@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Copy, Info } from "lucide-react";
+import { Check, Copy, Info, RotateCcw } from "lucide-react";
 import {
   DEFAULT_SB_COLORS,
   SPONSORBLOCK_CATEGORIES,
@@ -18,6 +18,8 @@ import { SB_CATEGORY_META } from "../lib/sponsorBlockCategories";
 import { useSponsorBlockCategoryStats } from "../lib/useSponsorBlockCategoryStats";
 import { SETTINGS } from "../lib/settings/schema";
 import { copyText } from "../lib/clipboard";
+import { confirmAction } from "../lib/dialogs";
+import { getString } from "../lib/i18n/index";
 import { isSettingDisabledUntilWired } from "../lib/settings/values";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -76,12 +78,15 @@ export const ExtensionsPage: React.FC = () => {
     setLocalUserId(sbUserId);
   }, [sbUserId]);
 
-  const handleResetStats = () => {
-    if (
-      confirm(t("extensions.resetStatsConfirm"))
-    ) {
-      void resetStats();
-    }
+  const handleResetStats = async () => {
+    const confirmed = await confirmAction({
+      title: t("extensions.resetStatsTitle"),
+      message: t("extensions.resetStatsBody"),
+      icon: RotateCcw,
+      confirmLabel: getString("reset"),
+      destructive: true,
+    });
+    if (confirmed) void resetStats();
   };
 
   const handleCopyUserId = async () => {

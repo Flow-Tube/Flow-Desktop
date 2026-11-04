@@ -11,7 +11,7 @@ use super::epoch::seal_chain;
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
 use super::meta::seal_device_meta;
-use super::roster::{Entry, EpochField, Op, apply_entry};
+use super::roster::{Entry, EpochField, Op, RosterState, apply_entry};
 use super::sealed::random_bytes;
 use super::server::Appended;
 use super::store::Store;
@@ -51,6 +51,17 @@ pub fn new_epoch(
     })
 }
 
+/// The ids and X25519 keys of every member, except `except`.
+pub fn member_keys(state: &RosterState, except: Option<&str>) -> Result<Vec<([u8; 16], [u8; 32])>> {
+    state
+        .members
+        .iter()
+        .filter(|(did, _)| Some(did.as_str()) != except)
+        .map(|(did, member)| hex::decode(did).map(|id| (array(&id), member.kem)))
+        .collect::<std::result::Result<_, _>>()
+        .map_err(|_| Error::RosterFormat.into())
+}
+
 /// Checks an entry against the roster this session verified, then appends it.
 pub async fn append_checked<S: Store>(
     session: &Session<'_, S>,
@@ -77,17 +88,10 @@ pub async fn remove_device<S: Store>(
     removed: &str,
 ) -> Result<()> {
     let state = session.roster();
-    let remaining: Vec<([u8; 16], [u8; 32])> = state
-        .members
-        .iter()
-        .filter(|(did, _)| did.as_str() != removed)
-        .map(|(did, member)| hex::decode(did).map(|id| (array(&id), member.kem)))
-        .collect::<std::result::Result<_, _>>()
-        .map_err(|_| Error::RosterFormat)?;
     let epoch = new_epoch(
         session.group(),
         state.epoch + 1,
-        &remaining,
+        &member_keys(state, Some(removed))?,
         session.current_key(),
     )?;
     let draft = Draft {
@@ -100,6 +104,22 @@ pub async fn remove_device<S: Store>(
     };
     let entry = build_entry(session.group(), Some(state), draft, &[device]);
     append_checked(session, &entry, &epoch.wraps, Some(&epoch.chain)).await
+}
+
+/// Takes this device out of the group with an entry that changes no keys: the devices that stay
+/// start the next epoch (spec/protocol.md, Leaving).
+pub async fn leave_group<S: Store>(session: &Session<'_, S>, device: &MemberSecrets) -> Result<()> {
+    let me = hex::encode(device.did);
+    let draft = Draft {
+        op: Op::Leave,
+        signer: me.clone(),
+        add: None,
+        remove: Some(vec![me]),
+        epoch: None,
+        meta: None,
+    };
+    let entry = build_entry(session.group(), Some(session.roster()), draft, &[device]);
+    append_checked(session, &entry, &BTreeMap::new(), None).await
 }
 
 /// Gives a device a new name; any device of the group may rename any other.

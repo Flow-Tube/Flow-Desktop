@@ -302,3 +302,28 @@ async fn an_android_sponsorblock_action_changes_one_category_here() {
     );
     assert_eq!(actions["selfpromo"], "notify", "other categories stay");
 }
+
+#[tokio::test]
+async fn an_8k_default_quality_reaches_android_as_4k_and_keeps_8k_here() {
+    let pool = memory_pool().await;
+    set_like_the_app(&pool, "default_quality_wifi", "4320p").await;
+
+    let out = export_collections(&pool, OUR, &[Collection::Settings])
+        .await
+        .unwrap();
+    let entries: Vec<SettingEntry> = String::from_utf8(out[0].ndjson.clone())
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let quality = entries
+        .iter()
+        .find(|e| e.key == "default_quality_wifi")
+        .expect("the quality travels");
+
+    assert_eq!(quality.value, json!("2160p"));
+    assert_eq!(
+        stored(&pool, "default_quality_wifi").await.as_deref(),
+        Some("4320p")
+    );
+}

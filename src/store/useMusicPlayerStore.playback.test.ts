@@ -33,8 +33,9 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     getBufferedEnd: vi.fn(() => 10),
     getErrorCode: vi.fn((): number | null => null),
     wantsAac: vi.fn(() => false),
-    activeBypassesGraph: vi.fn(() => false),
     getCurrentTime: vi.fn(() => 0),
+    setVolume: vi.fn(),
+    setMuted: vi.fn(),
   },
   resolveMusicStream: vi.fn(),
   getMusicWatchQueue: vi.fn(),
@@ -99,6 +100,15 @@ describe("starting a track", () => {
     expect(calls).toContain("radio");
   });
 
+  it("starts a handed-over queue at its position in one load, paused when asked", async () => {
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 1, null, { at: 42, autoplay: false });
+
+    expect(resolveMusicStream).toHaveBeenCalledTimes(1);
+    expect(engine.seekWhenReady).toHaveBeenCalledWith(42);
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(useMusicPlayerStore.getState()).toMatchObject({ isPlaying: false, progress: 42 });
+  });
+
   it("retries a failed lookup once before showing an error", async () => {
     resolveMusicStream.mockRejectedValueOnce({ kind: "streaming", message: "timed out" });
     await useMusicPlayerStore.getState().playTrack(song("flaky"));
@@ -106,26 +116,6 @@ describe("starting a track", () => {
     expect(resolveMusicStream).toHaveBeenCalledTimes(2);
     expect(engine.play).toHaveBeenCalledTimes(1);
     expect(useMusicPlayerStore.getState().streamError).toBeNull();
-  });
-});
-
-describe("the equalizer starting on macOS", () => {
-  it("loads the song playing again as AAC from where it is", async () => {
-    await useMusicPlayerStore.getState().playTrack(song("opus"));
-    engine.wantsAac.mockReturnValue(true);
-    engine.activeBypassesGraph.mockReturnValue(true);
-    engine.getCurrentTime.mockReturnValue(42);
-
-    useMusicPlayerStore.getState()._reloadForWebAudio();
-
-    await vi.waitFor(() =>
-      expect(resolveMusicStream).toHaveBeenLastCalledWith("opus", expect.anything(), { preferAac: true }),
-    );
-    await vi.waitFor(() => expect(engine.seekWhenReady).toHaveBeenLastCalledWith(42));
-    expect(engine.clearPreload).toHaveBeenCalled();
-    engine.wantsAac.mockReturnValue(false);
-    engine.activeBypassesGraph.mockReturnValue(false);
-    engine.getCurrentTime.mockReturnValue(0);
   });
 });
 
@@ -316,5 +306,29 @@ describe("a queue restored at launch", () => {
     await useMusicPlayerStore.getState().playTrack(song("chosen"));
     useMusicPlayerStore.getState().restoreSavedQueue(saved(["old"], 0, 0));
     expect(useMusicPlayerStore.getState().currentTrack?.id).toBe("chosen");
+  });
+});
+
+describe("setVolume while muted", () => {
+  it("unmutes the engine along with the store when the volume is raised", async () => {
+    const { useMusicPlayerStore } = await import("./useMusicPlayerStore");
+    useMusicPlayerStore.setState({ isMuted: true, volume: 0.5 });
+    engine.setMuted.mockClear();
+
+    useMusicPlayerStore.getState().setVolume(0.6);
+
+    expect(engine.setMuted).toHaveBeenCalledWith(false);
+    expect(useMusicPlayerStore.getState().isMuted).toBe(false);
+  });
+
+  it("stays muted at zero", async () => {
+    const { useMusicPlayerStore } = await import("./useMusicPlayerStore");
+    useMusicPlayerStore.setState({ isMuted: true, volume: 0.5 });
+    engine.setMuted.mockClear();
+
+    useMusicPlayerStore.getState().setVolume(0);
+
+    expect(engine.setMuted).not.toHaveBeenCalled();
+    expect(useMusicPlayerStore.getState().isMuted).toBe(true);
   });
 });

@@ -456,8 +456,8 @@ export const Player: React.FC<PlayerProps> = ({
     return () => clearInterval(timer);
   }, [qualitySwitchPending]);
 
-  const isDashPlayback = !isLive && !!dashManifestUrl;
-  const isHlsPlayback = !!hlsManifestUrl && (isLive || !isDashPlayback);
+  const isDashPlayback = !!dashManifestUrl;
+  const isHlsPlayback = !!hlsManifestUrl && !isDashPlayback;
   const dashProxyPrefix = useMemo(() => {
     if (!dashManifestUrl) return null;
     const marker = "?url=";

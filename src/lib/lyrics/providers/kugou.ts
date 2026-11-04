@@ -1,6 +1,6 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { lyricsGetJson, enc } from "../http";
-import { parseLyrics } from "../lyricsUtils";
+import { isInstrumentalNotice, parseLyrics } from "../lyricsUtils";
 import { ranked, type MatchSong } from "../matching";
 
 const SONG_SEARCH = "https://mobileservice.kugou.com/api/v3/search/song";
@@ -142,7 +142,8 @@ export const kugouProvider: LyricsProvider = {
       const entries = await fromCandidate(
         await firstCandidate(`${LYRIC_SEARCH}?ver=1&man=yes&client=pc&hash=${enc(song.hash)}`),
       );
-      if (entries.length > 0) return entries;
+      // The notice is KuGou's answer for this song; a later match could be a vocal version of it.
+      if (entries.length > 0) return isInstrumentalNotice(entries) ? [] : entries;
     }
 
     let url = `${LYRIC_SEARCH}?ver=1&man=yes&client=pc`;
@@ -154,6 +155,7 @@ export const kugouProvider: LyricsProvider = {
       request,
       (c) => ({ title: stripTags(c.song), artist: stripTags(c.singer), durationSec: Math.round((c.duration ?? 0) / 1000) }),
     );
-    return fromCandidate(candidates[0] ?? null);
+    const entries = await fromCandidate(candidates[0] ?? null);
+    return isInstrumentalNotice(entries) ? [] : entries;
   },
 };

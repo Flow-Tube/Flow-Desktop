@@ -10,6 +10,17 @@ vi.mock("./registry", () => ({
 }));
 vi.mock("../../store/useAppSettingsStore", () => ({ getSettingValue: () => "" }));
 
+const disk = vi.hoisted(() => new Map<string, string>());
+vi.mock("../api/lyrics", () => ({
+  getCachedLyrics: async (id: string) => disk.get(id) ?? null,
+  putCachedLyrics: async (id: string, entries: string) => {
+    disk.set(id, entries);
+  },
+  evictCachedLyrics: async (id: string) => {
+    disk.delete(id);
+  },
+}));
+
 const { getLyrics, forceRefresh } = await import("./lyricsHelper");
 const { seedOfflineLyrics } = await import("./offline");
 
@@ -40,6 +51,7 @@ const request = () => ({ videoId: `video-${++id}`, title: "Song", artist: "Band"
 
 beforeEach(() => {
   providers.length = 0;
+  disk.clear();
   localStorage.clear();
 });
 afterEach(() => {
@@ -47,6 +59,21 @@ afterEach(() => {
 });
 
 describe("lyrics helper", () => {
+  it("drops KuGou's instrumental notice saved in the disk cache", async () => {
+    const song = request();
+    disk.set(song.videoId, JSON.stringify([{ time: 1580, text: "纯音乐，请欣赏" }]));
+    expect(await getLyrics(song)).toBeNull();
+    expect(disk.has(song.videoId)).toBe(false);
+  });
+
+  it("still falls back to other line-synced lyrics from the disk cache", async () => {
+    const song = request();
+    disk.set(song.videoId, JSON.stringify(lineSynced));
+    const result = await getLyrics(song);
+    expect(result?.provider).toBe("DiskCache");
+    expect(disk.has(song.videoId)).toBe(true);
+  });
+
   it("returns word sync at once without asking later providers", async () => {
     const later = provider("Later", async () => lineSynced);
     providers.push(provider("Words", async () => wordSynced), later);

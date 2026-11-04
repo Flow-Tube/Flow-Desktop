@@ -48,6 +48,9 @@ MUSIC
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
 
 PLAYER
+- Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
+- Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
 - Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.

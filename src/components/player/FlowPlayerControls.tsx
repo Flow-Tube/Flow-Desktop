@@ -49,6 +49,7 @@ import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { getString } from "../../lib/i18n/index";
 import { isAtLiveEdge, liveEdgePosition, liveWindow, readLiveTiming, secondsBehindLive } from "../../lib/liveEdge";
 import { Slider } from "../ui/Slider";
+import { useWheelVolume } from "../../lib/useWheelVolume";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -188,6 +189,17 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     setFullscreenPanel,
     isLiveChatAvailable,
   } = usePlayerStore();
+
+  const changeVolume = (value: number) => {
+    setVolume(value);
+    setMuted(value === 0);
+  };
+  const volumeWheelRef = useWheelVolume({
+    volume,
+    muted,
+    onVolumeChange: changeVolume,
+    onUnmute: () => setMuted(false),
+  });
 
   // In fullscreen the panel buttons drive the side panel beside the video instead of the sidebar.
   const panelOpen = (panel: FullscreenPanel) =>
@@ -662,7 +674,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 <SkipForward size={19} fill="currentColor" />
               </button>
 
-              <div className="group/volume hidden items-center sm:flex bg-chrome-black/20 rounded-full hover:pr-2">
+              <div ref={volumeWheelRef} className="group/volume hidden items-center sm:flex bg-chrome-black/20 rounded-full hover:pr-2">
                 <button
                   type="button"
                   title="Mute"
@@ -684,10 +696,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                     max={1}
                     step={0.01}
                     value={muted ? 0 : volume}
-                    onChange={(value) => {
-                      setVolume(value);
-                      setMuted(value === 0);
-                    }}
+                    onChange={changeVolume}
                   />
                 </div>
 

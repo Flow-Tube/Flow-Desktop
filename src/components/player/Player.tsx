@@ -2533,6 +2533,7 @@ export const Player: React.FC<PlayerProps> = ({
         onRevealControls={revealControls}
         isCompact={isPipMode}
         canDragWindow={isPopOut}
+        canDragFrame={isPipMode && !isPopOut && !isFullscreen}
         settingsOpen={settingsOpen}
         onCloseSettings={closeSettings}
       />

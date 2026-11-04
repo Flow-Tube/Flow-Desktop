@@ -161,6 +161,43 @@ describe("GlobalMusicDock background click expansion", () => {
     expect(openOverlay).not.toHaveBeenCalled();
   });
 
+  const pressAndRelease = (pill: HTMLElement, dx: number, dy: number) => {
+    act(() => {
+      const at = { bubbles: true, pointerId: 1, button: 0 };
+      pill.dispatchEvent(new PointerEvent("pointerdown", { ...at, clientX: 100, clientY: 100 }));
+      pill.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: 100 + dx, clientY: 100 + dy }));
+      pill.dispatchEvent(new PointerEvent("pointerup", { ...at, clientX: 100 + dx, clientY: 100 + dy }));
+      pill.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+  };
+
+  it("still expands when the press moved only a little", () => {
+    const openOverlay = vi.fn();
+    useMusicPlayerStore.setState({ openOverlay });
+    act(() => {
+      root.render(createElement(GlobalMusicDock));
+    });
+
+    pressAndRelease(host.querySelector<HTMLDivElement>(".bg-surface-container-high")!, 3, 2);
+
+    expect(openOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["sideways", 30, 0],
+    ["down", 0, 30],
+  ])("does not expand after a drag %s", (_direction, dx, dy) => {
+    const openOverlay = vi.fn();
+    useMusicPlayerStore.setState({ openOverlay });
+    act(() => {
+      root.render(createElement(GlobalMusicDock));
+    });
+
+    pressAndRelease(host.querySelector<HTMLDivElement>(".bg-surface-container-high")!, dx, dy);
+
+    expect(openOverlay).not.toHaveBeenCalled();
+  });
+
   it("does not expand full player and has no cursor-pointer when remote playback (away) is active", () => {
     mockRemoteActive.mockReturnValue("remote-device-1");
     mockControlledDevice.mockReturnValue({

@@ -11,7 +11,8 @@ import { Spinner } from "../SyncParts";
 import { Card } from "./Card";
 import { DeviceList } from "./DeviceList";
 import { JoinRequests } from "./JoinRequests";
-import { LeaveGroup } from "./LeaveGroup";
+import { ConfirmedAction } from "./ConfirmedAction";
+import { ProfilesCard } from "./ProfilesCard";
 
 function lastSyncText(status: LinkedStatus, syncing: boolean): string {
   if (syncing) return getString("linked_syncing");
@@ -21,7 +22,7 @@ function lastSyncText(status: LinkedStatus, syncing: boolean): string {
   return getString("linked_last_sync", formatYouTubeRelativeTime(last.atMs));
 }
 
-const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
+export const STORE_TITLES = { server: "linked_server", webdav: "linked_webdav", lan: "linked_on_lan" } as const;
 
 /** For a device in a group: where it lives, the last sync, and the devices it syncs with. */
 export function LinkedOverview({ status }: { status: LinkedStatus }) {
@@ -47,7 +48,13 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
         <Button variant="tonal" className="mt-auto self-start" disabled={busy || syncing} onClick={() => void syncNow()}>
           <RefreshCw className={`h-4 w-4 ${busy || syncing ? "animate-spin" : ""}`} /> {getString("linked_sync_now")}
         </Button>
-        <LeaveGroup action="leave" label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
+        <ConfirmedAction
+          action="replaceRecovery"
+          variant="tonal"
+          label={getString("linked_replace_recovery")}
+          confirm={getString("linked_replace_recovery_confirm")}
+        />
+        <ConfirmedAction action="leave" label={getString("linked_leave")} confirm={getString("linked_leave_confirm")} />
       </Card>
       <Card title={getString("linked_devices_label")} className="col-span-12 lg:col-span-7">
         {devicesError ? (
@@ -66,6 +73,7 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
           <Link2 className="h-4 w-4" /> {getString("linked_add_device")}
         </Button>
       </Card>
+      <ProfilesCard className="col-span-12" />
     </div>
   );
 }

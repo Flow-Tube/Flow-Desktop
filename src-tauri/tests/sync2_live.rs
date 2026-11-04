@@ -34,8 +34,9 @@ async fn answer_http(mut stream: TcpStream, head: String) {
     let _ = stream.write_all(response.as_bytes()).await;
 }
 
-/// Serves sign-in and `/v1/live`, recording the subprotocols the live request offered.
-async fn stand_in(offered: Arc<Mutex<String>>) -> u16 {
+/// Serves sign-in and `/v1/live`, recording the subprotocols the live request offered and sending
+/// `messages` on the socket.
+async fn stand_in(offered: Arc<Mutex<String>>, messages: Vec<Message>) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     tokio::spawn(async move {
@@ -52,10 +53,12 @@ async fn stand_in(offered: Arc<Mutex<String>>) -> u16 {
                 .find_map(|line| line.strip_prefix("sec-websocket-protocol: "))
                 .unwrap_or_default()
                 .to_owned();
+            let messages = messages.clone();
             tokio::spawn(async move {
                 let mut socket = accept_async(stream).await.unwrap();
-                let changed = Utf8Bytes::from_static(r#"{"type":"changed"}"#);
-                socket.send(Message::Text(changed)).await.unwrap();
+                for message in messages {
+                    let _ = socket.send(message).await;
+                }
                 let _ = socket.next().await;
             });
         }
@@ -63,24 +66,36 @@ async fn stand_in(offered: Arc<Mutex<String>>) -> u16 {
     port
 }
 
-#[tokio::test]
-async fn the_live_socket_carries_the_token_and_the_changed_notice() {
-    let offered = Arc::new(Mutex::new(String::new()));
-    let port = stand_in(Arc::clone(&offered)).await;
-    let store = ServerStore::connect(
+async fn store(port: u16) -> ServerStore {
+    ServerStore::connect(
         &format!("http://127.0.0.1:{port}/"),
         member_secrets([7; 32], [9; 32]),
         None,
         None,
     )
     .await
-    .unwrap();
+    .unwrap()
+}
 
-    let mut socket = store.live_socket().await.unwrap();
-    let notice = socket.next().await.unwrap().unwrap();
-    assert_eq!(
-        notice,
-        Message::Text(Utf8Bytes::from_static(r#"{"type":"changed"}"#))
-    );
+#[tokio::test]
+async fn the_live_socket_carries_the_token_and_the_changed_notice() {
+    let offered = Arc::new(Mutex::new(String::new()));
+    let changed = Message::Text(Utf8Bytes::from_static(r#"{"type":"changed"}"#));
+    let port = stand_in(Arc::clone(&offered), vec![changed.clone()]).await;
+
+    let mut socket = store(port).await.live_socket().await.unwrap();
+    assert_eq!(socket.next().await.unwrap().unwrap(), changed);
     assert_eq!(*offered.lock().unwrap(), "flow-sync.v1, bearer.t1");
+}
+
+#[tokio::test]
+async fn a_live_message_past_64_kib_is_refused() {
+    let largest = Message::Binary(vec![0; 64 << 10].into());
+    let larger = Message::Binary(vec![0; (64 << 10) + 1].into());
+    let offered = Arc::new(Mutex::new(String::new()));
+    let port = stand_in(offered, vec![largest.clone(), larger]).await;
+
+    let mut socket = store(port).await.live_socket().await.unwrap();
+    assert_eq!(socket.next().await.unwrap().unwrap(), largest);
+    assert!(socket.next().await.unwrap().is_err());
 }

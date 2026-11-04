@@ -16,6 +16,8 @@ use super::lan_runtime::spread_leave;
 use super::linking::DeviceMeta;
 use super::membership::{leave_group, remove_device, rename_device};
 use super::names::device_names;
+use super::profile_links::{link_profile, reading};
+use super::recovery_flow::replace_recovery_key;
 use super::roster::Role;
 use super::server::{ServerStore, StoreError};
 use super::service::{LastSync, is_syncing, last_sync, sync_soon};
@@ -28,8 +30,7 @@ use super::store::Store;
 use super::webdav::{WebDavLogin, WebDavStore};
 use super::webdav_login::{forget_login, load_login, save_login};
 use crate::db::settings::{get_setting, set_setting};
-use crate::profiles::ActiveProfile;
-use crate::sync::error::SyncError;
+use crate::services::profile_service::ProfileService;
 use crate::sync::{changes, ledger};
 
 const RECOVERY_SAVED: &str = "sync2_recovery_saved";
@@ -42,18 +43,28 @@ const NAME_LIMIT: usize = 64;
 /// This installation as the group sees it.
 #[derive(Clone)]
 pub struct Local {
+    /// The group's state on this device, in Default's database whichever profile runs.
     pub pool: SqlitePool,
+    /// The running profile's database, which batches are exported from and applied to.
+    pub data: SqlitePool,
+    pub running_profile: String,
+    pub default_profile: String,
     pub device: MemberSecrets,
     pub meta: DeviceMeta,
 }
 
-/// Like FLOW-SYNC/1, only the Default profile syncs until profiles get their own links.
+/// The database holding the group's state: Default's, whichever profile runs.
+pub fn state_pool(app: &AppHandle) -> SqlitePool {
+    crate::db::device::pool(app.state::<SqlitePool>().inner()).clone()
+}
+
 pub async fn local(app: &AppHandle) -> Result<Local> {
-    let profile = app.state::<ActiveProfile>();
-    if !profile.is_default {
-        return Err(SyncError::NotDefaultProfile(profile.default_name.clone()).into());
-    }
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let profiles = app.state::<ProfileService>();
+    let (running_profile, default_profile) = (
+        profiles.running_profile_id()?,
+        profiles.default_profile_id()?,
+    );
+    let pool = state_pool(app);
     let meta = DeviceMeta {
         app: ledger::get_or_create_device_id(&pool).await?,
         name: ledger::device_name(&pool).await?,
@@ -61,25 +72,34 @@ pub async fn local(app: &AppHandle) -> Result<Local> {
     };
     Ok(Local {
         device: DEVICE_KEYS.get().await?,
+        data: app.state::<SqlitePool>().inner().clone(),
+        running_profile,
+        default_profile,
         pool,
         meta,
     })
 }
 
+/// The group's Flow server, signed in as this device, without reading the roster.
+async fn server_store(local: &Local, record: &GroupRecord) -> Result<ServerStore> {
+    Ok(ServerStore::connect(
+        &record.store_url,
+        local.device.clone(),
+        record.instance.clone(),
+        Some(record.group_id.clone()),
+    )
+    .await?)
+}
+
+/// A session for this device, reading the links its profiles sync.
 pub async fn open_session<'a>(
-    pool: &SqlitePool,
+    local: &'a Local,
     record: &GroupRecord,
-    device: &'a MemberSecrets,
 ) -> Result<Session<'a, GroupStore>> {
+    let (pool, device) = (&local.pool, &local.device);
     let store = match record.kind {
         StoreKind::Server => {
-            let server = ServerStore::connect(
-                &record.store_url,
-                device.clone(),
-                record.instance.clone(),
-                Some(record.group_id.clone()),
-            )
-            .await?;
+            let server = server_store(local, record).await?;
             let me = hex::encode(device.did);
             GroupStore::Server(Box::new(HybridStore::new(server, pool.clone(), me).await?))
         }
@@ -93,7 +113,10 @@ pub async fn open_session<'a>(
         )),
         StoreKind::Lan => GroupStore::Held(HeldStore::new(pool.clone())),
     };
-    Session::open(pool, store, device).await
+    let mut session = Session::open(pool, store, device).await?;
+    let (running, default) = (&local.running_profile, &local.default_profile);
+    session.set_reading(reading(pool, &record.link, running, default).await?);
+    Ok(session)
 }
 
 /// Checks that this device is in no group, and gives it fresh keys for the one it is about to
@@ -129,9 +152,13 @@ async fn linked(pool: &SqlitePool) -> Result<GroupRecord> {
     load_group(pool).await?.ok_or(EngineError::NotLinked)
 }
 
-/// The profile link this device's Default profile publishes under when it starts one: its own id.
-pub fn default_link(app: &AppHandle) -> String {
-    app.state::<ActiveProfile>().id.clone()
+/// A group this device just started syncs the running profile under its own id, and its
+/// recovery words are still to be confirmed.
+async fn started(local: &Local, words: String) -> Result<String> {
+    let profile = &local.running_profile;
+    link_profile(&local.pool, profile, profile).await?;
+    set_recovery_saved(&local.pool, false).await?;
+    Ok(words)
 }
 
 async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
@@ -168,7 +195,7 @@ pub struct LinkedStatus {
 
 /// What can be shown without reaching the server.
 pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let pool = state_pool(app);
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
     let record = load_group(&pool).await?;
     Ok(LinkedStatus {
@@ -203,7 +230,7 @@ pub struct LinkedDevice {
 pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let mut session = open_session(&local.pool, &record, &local.device).await?;
+    let mut session = open_session(&local, &record).await?;
     let names = device_names(&mut session).await?;
     let me = hex::encode(local.device.did);
     let nearby = nearby(app);
@@ -256,11 +283,10 @@ pub async fn create(
         admin_token.trim(),
         &local.device,
         &local.meta,
-        &default_link(app),
+        &local.running_profile,
     )
     .await?;
-    set_recovery_saved(&local.pool, false).await?;
-    Ok(words)
+    started(&local, words).await
 }
 
 /// Starts a group in a `WebDAV` folder and returns the recovery words to show once.
@@ -279,11 +305,10 @@ pub async fn create_on_webdav(
     };
     let store = WebDavStore::connect(url, login.clone(), hex::encode(local.device.did)).await?;
     save_login(&login).await?;
-    let link = default_link(app);
+    let link = &local.running_profile;
     let words =
-        create_webdav_group(&local.pool, &store, url, &local.device, &local.meta, &link).await?;
-    set_recovery_saved(&local.pool, false).await?;
-    Ok(words)
+        create_webdav_group(&local.pool, &store, url, &local.device, &local.meta, link).await?;
+    started(&local, words).await
 }
 
 /// Replaces a `WebDAV` login the folder refused, once the folder takes the new one and still
@@ -316,10 +341,9 @@ pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result
 pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
     let mut local = local(app).await?;
     start_membership(&mut local).await?;
-    let words =
-        create_lan_group(&local.pool, &local.device, &local.meta, &default_link(app)).await?;
-    set_recovery_saved(&local.pool, false).await?;
-    Ok(words)
+    let link = &local.running_profile;
+    let words = create_lan_group(&local.pool, &local.device, &local.meta, link).await?;
+    started(&local, words).await
 }
 
 /// Restores the group from its recovery words, on a Flow server or, with `login`, in a `WebDAV`
@@ -355,14 +379,27 @@ pub async fn retry_keychain(app: &AppHandle) -> Result<()> {
 }
 
 pub async fn recovery_saved(app: &AppHandle) -> Result<()> {
-    set_recovery_saved(app.state::<SqlitePool>().inner(), true).await
+    set_recovery_saved(&state_pool(app), true).await
+}
+
+/// Replaces the recovery words from this device, so the old ones stop working, and returns the new
+/// words to show once.
+pub async fn replace_recovery(app: &AppHandle) -> Result<String> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let session = open_session(&local, &record).await?;
+    let words = replace_recovery_key(&session, &local.device).await?;
+    set_recovery_saved(&local.pool, false).await?;
+    snapshot_soon(&local.pool).await?;
+    sync_soon(app);
+    Ok(words)
 }
 
 pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {
     let name: String = name.trim().chars().take(NAME_LIMIT).collect();
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let mut session = open_session(&local.pool, &record, &local.device).await?;
+    let mut session = open_session(&local, &record).await?;
     let current = device_names(&mut session)
         .await?
         .remove(id)
@@ -374,7 +411,7 @@ pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {
 pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let session = open_session(&local.pool, &record, &local.device).await?;
+    let session = open_session(&local, &record).await?;
     remove_device(&session, &local.device, id).await?;
     snapshot_soon(&local.pool).await?;
     sync_soon(app);
@@ -385,19 +422,22 @@ pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
 pub async fn join_requests(app: &AppHandle) -> Result<Vec<JoinRequest>> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let session = open_session(&local.pool, &record, &local.device).await?;
-    match session.store().server() {
-        Some(server) => Ok(server.join_requests().await?),
-        None => Ok(Vec::new()),
+    if record.kind != StoreKind::Server {
+        return Ok(Vec::new());
     }
+    Ok(server_store(&local, &record).await?.join_requests().await?)
 }
 
 pub async fn decline_join(app: &AppHandle, id: &str) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let session = open_session(&local.pool, &record, &local.device).await?;
-    let server = session.store().server().ok_or(EngineError::Unexpected)?;
-    Ok(server.decline_join(id).await?)
+    if record.kind != StoreKind::Server {
+        return Err(EngineError::Unexpected);
+    }
+    Ok(server_store(&local, &record)
+        .await?
+        .decline_join(id)
+        .await?)
 }
 
 /// Leaves the group (spec/protocol.md, Leaving): appends a `leave` entry, then forgets the group
@@ -405,7 +445,7 @@ pub async fn decline_join(app: &AppHandle, id: &str) -> Result<()> {
 pub async fn leave(app: &AppHandle) -> Result<()> {
     let local = local(app).await?;
     let record = linked(&local.pool).await?;
-    let session = open_session(&local.pool, &record, &local.device).await?;
+    let session = open_session(&local, &record).await?;
     let spread = async {
         if record.kind == StoreKind::Lan {
             spread_leave(app, &session, &local).await;
@@ -417,7 +457,7 @@ pub async fn leave(app: &AppHandle) -> Result<()> {
 
 /// [`leave`], when this device is in a group.
 pub async fn leave_if_linked(app: &AppHandle) -> Result<()> {
-    match load_group(app.state::<SqlitePool>().inner()).await? {
+    match load_group(&state_pool(app)).await? {
         Some(_) => leave(app).await,
         None => Ok(()),
     }
@@ -447,14 +487,14 @@ pub async fn depart<S: Store>(
 /// Forgets the group and this device's keys without telling the group, for a device it already
 /// shut out.
 pub async fn forget(app: &AppHandle) -> Result<()> {
-    forget_with_keys(app.state::<SqlitePool>().inner()).await
+    forget_with_keys(&state_pool(app)).await
 }
 
 /// Clears history, subscriptions and playlists. When this profile syncs, the caller first leaves
 /// the group ([`leave_if_linked`]), and the deletions recorded here are dropped, so a reset never
 /// reaches the other devices; linking again brings their data back.
 pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
-    if syncs && load_group(pool).await?.is_some() {
+    if syncs && load_group(crate::db::device::pool(pool)).await?.is_some() {
         return Err(EngineError::AlreadyLinked);
     }
     crate::db::watch_history::clear_watch_history(pool).await?;
@@ -482,6 +522,7 @@ async fn forget_with_keys(pool: &SqlitePool) -> Result<()> {
 /// Forgets the group on a database, keeping this device's keys.
 async fn forget_here(pool: &SqlitePool) -> Result<()> {
     forget_group(pool).await?;
+    super::error_log::clear(pool).await?;
     set_setting(pool, STOPPED, "").await?;
     set_login_refused(pool, false).await?;
     set_recovery_saved(pool, true).await

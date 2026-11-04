@@ -54,6 +54,10 @@ impl Respond for TokenIssuer {
 }
 
 async fn server(instance: &str) -> (MockServer, Arc<AtomicUsize>) {
+    server_for(instance, &member()).await
+}
+
+async fn server_for(instance: &str, member: &MemberSecrets) -> (MockServer, Arc<AtomicUsize>) {
     let server = MockServer::start().await;
     let challenge = json!({ "challenge": URL_SAFE_NO_PAD.encode([5; 32]), "instance": instance, "group": GROUP, "time": 0 });
     Mock::given(method("POST"))
@@ -63,7 +67,7 @@ async fn server(instance: &str) -> (MockServer, Arc<AtomicUsize>) {
         .await;
     let issued = Arc::new(AtomicUsize::new(0));
     let issuer = TokenIssuer {
-        member: member().sig_public,
+        member: member.sig_public,
         issued: Arc::clone(&issued),
     };
     Mock::given(method("POST"))
@@ -111,6 +115,32 @@ async fn requests_carry_a_token_from_a_signed_challenge() {
         store.identity().await,
         (Some(INSTANCE.to_owned()), Some(GROUP.to_owned()))
     );
+}
+
+#[tokio::test]
+async fn a_token_is_reused_by_the_next_connection_until_it_expires() {
+    // Keys no other test uses: wiremock reuses server addresses, and tokens are cached per address and device.
+    let own = || member_secrets([8; 32], [9; 32]);
+    let (server, issued) = server_for(INSTANCE, &own()).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/roster"))
+        .and(header("authorization", "Bearer t1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "entries": [] })))
+        .expect(2)
+        .mount(&server)
+        .await;
+    for _ in 0..2 {
+        let store = ServerStore::connect(
+            &format!("{}/", server.uri()),
+            own(),
+            Some(INSTANCE.to_owned()),
+            Some(GROUP.to_owned()),
+        )
+        .await
+        .unwrap();
+        assert!(store.roster_after(-1).await.unwrap().is_empty());
+    }
+    assert_eq!(issued.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -363,6 +393,33 @@ async fn the_server_says_when_it_last_heard_from_each_device() {
 }
 
 #[tokio::test]
+async fn the_server_reports_its_storage_and_what_it_speaks() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "used": 2048, "quota": 4096, "objects": 7, "devices": {}
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/info"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "api": ["v1"], "protocol": ["FLOW-SYNC/2"], "claimed": true, "live": true, "limits": {}
+        })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let status = store.status().await.unwrap();
+    assert_eq!((status.used, status.quota, status.objects), (2048, 4096, 7));
+    let info = store.info().await.unwrap();
+    assert_eq!(info.protocols, ["FLOW-SYNC/2"]);
+    assert!(info.live);
+}
+
+#[tokio::test]
 async fn a_server_reset_to_empty_says_the_group_is_gone() {
     use flow_desktop_lib::sync2::engine::EngineError;
 
@@ -413,4 +470,39 @@ async fn a_server_reset_needs_the_admin_token_and_says_when_it_is_refused() {
         store.reset_server("banned").await,
         Err(StoreError::AdminBanned)
     ));
+}
+
+#[tokio::test]
+async fn answers_past_their_limit_are_refused() {
+    let (server, _) = server(INSTANCE).await;
+    let bytes = |len: usize| ResponseTemplate::new(200).set_body_bytes(vec![0; len]);
+    Mock::given(method("GET"))
+        .and(path("/v1/objects/fits"))
+        .respond_with(bytes(4 << 20))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/objects/big"))
+        .respond_with(bytes((4 << 20) + 1))
+        .mount(&server)
+        .await;
+    let listing = json!({ "objects": [], "cursor": "1", "pad": "x".repeat(16 << 20) });
+    Mock::given(method("GET"))
+        .and(path("/v1/changes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(listing))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store.get_object("fits").await.unwrap().unwrap().len(),
+        4 << 20
+    );
+    assert!(matches!(
+        store.get_object("big").await,
+        Err(StoreError::Malformed)
+    ));
+    assert!(matches!(store.changes(0).await, Err(StoreError::Malformed)));
 }

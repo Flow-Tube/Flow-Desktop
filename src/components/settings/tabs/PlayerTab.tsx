@@ -3,12 +3,13 @@ import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { TextInput } from '../../ui/TextInput';
+import { Slider } from '../../ui/Slider';
+import { AmbientModeIcon } from '../../ui/AmbientModeIcon';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
-import { IS_LINUX_RUNTIME } from '../../../lib/platform';
 import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
 
 export function PlayerTab() {
@@ -38,7 +39,9 @@ export function PlayerTab() {
   const [miniNextPrev, setMiniNextPrev] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, true);
 
   const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
-  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED, true);
+  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
+  const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
+  const [ambientIntensity, setAmbientIntensity] = useNumberPref(SETTINGS.AMBIENT_MODE_INTENSITY);
   const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, true);
 
   const [autoPip, setAutoPip] = useBoolPref(SETTINGS.AUTO_PIP_ENABLED, false);
@@ -167,12 +170,27 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_fullscreen_title')} description={getString('settings_fullscreen_title_desc')}>
           <ToggleSwitch checked={fullscreenTitle} onChange={setFullscreenTitle} />
         </SettingItem>
-        {/* The glow is never drawn on Linux, where WebKitGTK repaints large blurs on the CPU. */}
-        {!IS_LINUX_RUNTIME && (
-          <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
+        <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
+          <div className="flex items-center gap-2.5">
+            <AmbientModeIcon className={ambientMode ? 'text-primary' : 'text-chrome-neutral-500'} />
+            <div className="w-24 sm:w-32">
+              <Slider
+                aria-label={getString('settings_ambient_intensity')}
+                min={10}
+                max={100}
+                step={5}
+                value={ambientIntensity}
+                onChange={setAmbientIntensity}
+                disabled={!ambientMode}
+              />
+            </div>
+            <span className="w-9 text-right font-mono text-xs text-chrome-neutral-400">{ambientIntensity}%</span>
             <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
-          </SettingItem>
-        )}
+          </div>
+        </SettingItem>
+        <SettingItem title={getString('settings_ambient_glow')} description={getString('settings_ambient_glow_desc')} disabled={!ambientMode}>
+          <ToggleSwitch checked={ambientMode && ambientGlow} onChange={setAmbientGlow} disabled={!ambientMode} />
+        </SettingItem>
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
         </SettingItem>

@@ -181,7 +181,7 @@ async fn add(app: &AppHandle, request: Option<String>) -> Result<()> {
     let welcome = welcome_store(&record).await?;
     let task = app.clone();
     start(app, async move {
-        let session = open_session(&local.pool, &record, &local.device).await?;
+        let session = open_session(&local, &record).await?;
         let offer = new_offer(Some(store), &local.meta.name, listening);
         match &request {
             Some(id) => {
@@ -351,7 +351,7 @@ pub async fn start_with_code(
                 .ok_or(EngineError::NotLinked)?;
             let welcome = welcome_store(&record).await?;
             start(app, async move {
-                let session = open_session(&local.pool, &record, &local.device).await?;
+                let session = open_session(&local, &record).await?;
                 let (_, reach) = add_scanned(&session, &code, &local.device, welcome, |sas| {
                     confirm(task.clone(), sas)
                 })

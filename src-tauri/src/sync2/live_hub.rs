@@ -10,12 +10,13 @@ use sqlx::SqlitePool;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::broadcast;
 
-use super::actions::{local, open_session};
+use super::actions::{local, open_session, state_pool};
 use super::engine::{EngineError, Result, now_ms};
 use super::lan_peers::nearby;
 use super::live_message::{Ability, Answer, DeviceKind, LiveMessage, Now};
 use super::live_seal::{LiveKeys, Received};
 use super::live_state::{accept_live_seq, consents, next_live_seq};
+use super::profile_actions::running_link;
 use super::state::load_group;
 
 /// The devices' presence and what they play, whenever either changes.
@@ -98,13 +99,13 @@ pub async fn forget_keys(app: &AppHandle) {
 
 async fn keys(app: &AppHandle) -> Result<(LiveKeys, SqlitePool)> {
     let mut cached = hub(app).keys.lock().await;
-    let pool = app.state::<SqlitePool>().inner().clone();
+    let pool = state_pool(app);
     if let Some(keys) = cached.as_ref() {
         return Ok((keys.clone(), pool));
     }
     let local = local(app).await?;
     let record = load_group(&pool).await?.ok_or(EngineError::NotLinked)?;
-    let session = open_session(&pool, &record, &local.device).await?;
+    let session = open_session(&local, &record).await?;
     let keys = LiveKeys::of(&session);
     *cached = Some(keys.clone());
     Ok((keys, pool))
@@ -138,19 +139,10 @@ pub async fn announce(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-/// The profile link this device syncs, which `now` and `play` name.
-async fn own_link(app: &AppHandle) -> Result<Option<String>> {
-    let pool = app.state::<SqlitePool>().inner().clone();
-    Ok(load_group(&pool)
-        .await?
-        .map(|record| record.link)
-        .filter(|link| !link.is_empty()))
-}
-
 /// Sends a `play`, `cmd` or `result` from the player, and returns its counter.
 pub async fn send_request(app: &AppHandle, mut message: LiveMessage) -> Result<u64> {
     match &mut message {
-        LiveMessage::Play(play) => play.link = own_link(app).await?,
+        LiveMessage::Play(play) => play.link = running_link(app).await?,
         LiveMessage::Cmd(_) | LiveMessage::Result(_) => {}
         LiveMessage::Presence { .. } | LiveMessage::Now(_) => return Err(EngineError::Unexpected),
     }
@@ -163,7 +155,7 @@ pub async fn send_request(app: &AppHandle, mut message: LiveMessage) -> Result<u
 /// Tells the other devices what this one plays now, in the profile link it syncs.
 pub async fn publish_now(app: &AppHandle, mut now: Now) -> Result<()> {
     if now.video.is_some() {
-        now.link = own_link(app).await?;
+        now.link = running_link(app).await?;
     }
     if let Ok(mut mine) = hub(app).mine.lock() {
         *mine = Some(now.clone());

@@ -7,7 +7,11 @@ export interface ElementSize {
   height: number;
 }
 
-/** An element's content size, re-read at most once per frame while it resizes. */
+/**
+ * An element's content size, re-read at most once per frame while it resizes.
+ * It starts at 0x0 and comes from the observer's first report a frame later, so
+ * the first paint is at size 0 and a caller can animate from there.
+ */
 export function useElementSize(ref: RefObject<HTMLElement | null>): ElementSize {
   const [size, setSize] = useState<ElementSize>({ width: 0, height: 0 });
 
@@ -21,7 +25,6 @@ export function useElementSize(ref: RefObject<HTMLElement | null>): ElementSize 
     };
     const scheduler = createFrameScheduler(measure);
     const observer = new ResizeObserver(() => scheduler.schedule());
-    // No immediate read: painting size 0 first lets the artwork grow in on mount.
     observer.observe(element);
     return () => {
       observer.disconnect();

@@ -11,12 +11,12 @@ use tokio::sync::oneshot;
 
 use super::actions::{Local, local, open_session, start_membership};
 use super::codes::{Code, StoreLocation, new_offer, read_code};
-use super::device::keychain;
 use super::engine::{EngineError, Result};
 use super::join_requests::wait_for_code;
+use super::lan_peers::remember;
 use super::linking::{
-    WelcomeStore, Welcomed, add_device, add_scanned, answer_shown, finish_join, finish_lan_join,
-    join, join_on_lan,
+    Reach, WelcomeStore, Welcomed, add_device, add_scanned, answer_shown, finish_join,
+    finish_lan_join, join, join_on_lan,
 };
 use super::pipe::{Pipe, listen};
 use super::server::ServerStore;
@@ -120,13 +120,17 @@ fn show(app: &AppHandle, code: &str) {
     );
 }
 
-fn start(app: &AppHandle, work: impl Future<Output = Result<()>> + Send + 'static) {
+/// Runs a pairing; one over the LAN leaves where the other device listens, to meet it there later.
+fn start(app: &AppHandle, work: impl Future<Output = Result<Option<Reach>>> + Send + 'static) {
     cancel(app);
     set_phase(app, LinkPhase::Waiting { code: None });
     let finished = app.clone();
     let handle = tauri::async_runtime::spawn(async move {
         let phase = match work.await {
-            Ok(()) => {
+            Ok(reach) => {
+                if let Some(Reach { did, address }) = reach {
+                    remember(&finished, &did, address);
+                }
                 sync_soon(&finished);
                 LinkPhase::Done
             }
@@ -174,10 +178,10 @@ async fn add(app: &AppHandle, request: Option<String>) -> Result<()> {
             Some(listen().await?.ok_or(EngineError::LanUnreachable)?),
         ),
     };
-    let welcome = welcome_store(&record)?;
+    let welcome = welcome_store(&record).await?;
     let task = app.clone();
     start(app, async move {
-        let session = open_session(&local.pool, &record, &local.device).await?;
+        let session = open_session(&local, &record).await?;
         let offer = new_offer(Some(store), &local.meta.name, listening);
         match &request {
             Some(id) => {
@@ -186,24 +190,24 @@ async fn add(app: &AppHandle, request: Option<String>) -> Result<()> {
             }
             None => show(&task, &offer.qr),
         }
-        add_device(&session, offer, &local.device, welcome, |sas| {
+        let (_, reach) = add_device(&session, offer, &local.device, welcome, |sas| {
             confirm(task.clone(), sas)
         })
         .await?;
-        Ok(())
+        Ok(reach)
     });
     Ok(())
 }
 
 /// Where this device's group lives, as a welcome names it to a new device.
-fn welcome_store(record: &GroupRecord) -> Result<WelcomeStore> {
+async fn welcome_store(record: &GroupRecord) -> Result<WelcomeStore> {
     Ok(match record.kind {
         StoreKind::Server => WelcomeStore::Server {
             u: record.store_url.clone(),
             i: record.instance.clone().unwrap_or_default(),
         },
         StoreKind::WebDav => {
-            let login = load_login(&keychain())?;
+            let login = load_login().await?;
             WelcomeStore::WebDav {
                 u: record.store_url.clone(),
                 n: login.user,
@@ -216,8 +220,8 @@ fn welcome_store(record: &GroupRecord) -> Result<WelcomeStore> {
 
 /// Saves the group a welcome names, once its roster checks out. A `WebDAV` login is kept first,
 /// so a saved group never lacks one.
-async fn finish_welcomed(local: &Local, welcomed: Welcomed<impl Pipe>) -> Result<()> {
-    let group = welcomed.welcome.group.clone();
+async fn finish_welcomed(local: &Local, welcomed: Welcomed<impl Pipe>) -> Result<Option<Reach>> {
+    let (group, reach) = (welcomed.welcome.group.clone(), welcomed.reach.clone());
     match welcomed.welcome.store.clone() {
         WelcomeStore::Server { u, i } => {
             let store =
@@ -234,11 +238,12 @@ async fn finish_welcomed(local: &Local, welcomed: Welcomed<impl Pipe>) -> Result
             if store.group().await?.as_deref() != Some(group.as_str()) {
                 return Err(EngineError::Unexpected);
             }
-            save_login(&keychain(), &login)?;
+            save_login(&login).await?;
             finish_join(&local.pool, &store, welcomed).await
         }
         WelcomeStore::Lan => finish_lan_join(&local.pool, &local.device, welcomed).await,
-    }
+    }?;
+    Ok(reach)
 }
 
 /// This device, in no group yet, asks a server group to let it join with the operator's admin
@@ -330,7 +335,7 @@ pub async fn start_with_code(
                         let did = hex::encode(device.did);
                         let store = WebDavStore::connect(&url, folder.login.clone(), did).await?;
                         store.probe().await?;
-                        save_login(&keychain(), &folder.login)?;
+                        save_login(&folder.login).await?;
                         join(pool, &store, &code, device, meta, confirm).await
                     }
                     _ => {
@@ -344,14 +349,14 @@ pub async fn start_with_code(
             let record = load_group(&local.pool)
                 .await?
                 .ok_or(EngineError::NotLinked)?;
-            let welcome = welcome_store(&record)?;
+            let welcome = welcome_store(&record).await?;
             start(app, async move {
-                let session = open_session(&local.pool, &record, &local.device).await?;
-                add_scanned(&session, &code, &local.device, welcome, |sas| {
+                let session = open_session(&local, &record).await?;
+                let (_, reach) = add_scanned(&session, &code, &local.device, welcome, |sas| {
                     confirm(task.clone(), sas)
                 })
                 .await?;
-                Ok(())
+                Ok(reach)
             });
         }
     }

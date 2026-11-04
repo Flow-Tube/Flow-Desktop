@@ -5,9 +5,11 @@ use tauri::AppHandle;
 
 use crate::errors::ErrorResponse;
 use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
+use crate::sync2::dashboard::{self, Dashboard};
 use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
+use crate::sync2::profile_actions::{self, LinkedProfiles};
 use crate::sync2::service::{self, Received};
 use crate::sync2::webdav::WebDavLogin;
 
@@ -53,6 +55,17 @@ pub async fn linked_restore(
     actions::restore(&app, &url, &words, login)
         .await
         .map_err(|e| err(&e))
+}
+
+/// Returns the new recovery words, shown once.
+#[tauri::command]
+pub async fn linked_replace_recovery(app: AppHandle) -> Result<String, ErrorResponse> {
+    actions::replace_recovery(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_retry_keychain(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::retry_keychain(&app).await.map_err(|e| err(&e))
 }
 
 #[tauri::command]
@@ -175,4 +188,69 @@ pub async fn linked_answer(app: AppHandle, accept: bool) {
 #[tauri::command]
 pub async fn linked_cancel(app: AppHandle) {
     link_task::cancel(&app);
+}
+
+#[tauri::command]
+pub async fn linked_profiles(app: AppHandle) -> Result<LinkedProfiles, ErrorResponse> {
+    profile_actions::profiles(&app).await.map_err(|e| err(&e))
+}
+
+/// Syncs `profile` under its own link, or joining `link`.
+#[tauri::command]
+pub async fn linked_sync_profile(
+    app: AppHandle,
+    profile: String,
+    link: Option<String>,
+) -> Result<(), ErrorResponse> {
+    profile_actions::sync_profile(&app, &profile, link.as_deref())
+        .await
+        .map_err(|e| err(&e))
+}
+
+/// Links `profile`, just created for `link`.
+#[tauri::command]
+pub async fn linked_sync_added_profile(
+    app: AppHandle,
+    profile: String,
+    link: String,
+) -> Result<(), ErrorResponse> {
+    profile_actions::sync_added_profile(&app, &profile, &link)
+        .await
+        .map_err(|e| err(&e))
+}
+
+/// Returns once the running profile has what other devices sent for it.
+#[tauri::command]
+pub async fn linked_catch_up(app: AppHandle) -> Result<(), ErrorResponse> {
+    profile_actions::catch_up(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_stop_profile(app: AppHandle, profile: String) -> Result<(), ErrorResponse> {
+    profile_actions::stop_profile(&app, &profile)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_delete_profile(app: AppHandle, link: String) -> Result<(), ErrorResponse> {
+    profile_actions::delete_everywhere(&app, &link)
+        .await
+        .map_err(|e| err(&e))
+}
+
+/// A restored device's Default joins `link`, or starts its own when `None`.
+#[tauri::command]
+pub async fn linked_choose_profile(
+    app: AppHandle,
+    link: Option<String>,
+) -> Result<(), ErrorResponse> {
+    profile_actions::choose_for_default(&app, link.as_deref())
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_dashboard(app: AppHandle) -> Result<Dashboard, ErrorResponse> {
+    dashboard::dashboard(&app).await.map_err(|e| err(&e))
 }

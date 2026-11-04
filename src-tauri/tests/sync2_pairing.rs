@@ -8,13 +8,17 @@ use std::sync::Mutex;
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::codes::{Code, StoreLocation, new_offer, read_code};
 use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
-use flow_desktop_lib::sync2::keys::member_secrets;
+use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, add_device, add_scanned, answer_shown, finish_join, join,
 };
 use flow_desktop_lib::sync2::pipe::listen_on;
+use flow_desktop_lib::sync2::profile_links::{link_profile, reading};
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use sync2_common::{device_pool, empty_pool, exported, group, head, memory_welcome};
+use sqlx::SqlitePool;
+use sync2_common::{
+    Group, MemoryStore, device_pool, empty_pool, exported, group, head, memory_welcome,
+};
 
 fn meta() -> DeviceMeta {
     DeviceMeta {
@@ -22,6 +26,35 @@ fn meta() -> DeviceMeta {
         name: "New desktop".into(),
         platform: "linux".into(),
     }
+}
+
+/// Pairs a new device through the mailbox, checking both sides showed the same digits.
+async fn pair_newcomer(
+    g: &Group,
+    session: &Session<'_, &MemoryStore>,
+) -> (SqlitePool, MemberSecrets) {
+    let newcomer = member_secrets(random_bytes(), random_bytes());
+    let pool_n = empty_pool().await;
+    let offer = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None);
+    let code = read_code(&offer.qr).unwrap();
+    let codes = Mutex::new(Vec::new());
+    let shown = |sas: String| {
+        codes.lock().unwrap().push(sas);
+        async { true }
+    };
+    let store = &g.store;
+    let (added, joined) = tokio::join!(
+        add_device(session, offer, &g.a, memory_welcome(), &shown),
+        join(&pool_n, &store, &code, &newcomer, meta(), &shown),
+    );
+    let did = added.unwrap().0;
+    joined.unwrap();
+    let codes = codes.into_inner().unwrap();
+    assert_eq!(codes.len(), 2);
+    assert_eq!(codes[0], codes[1]);
+    assert_eq!(did, hex::encode(newcomer.did));
+    assert!(head(&g.store).members.contains_key(&did));
+    (pool_n, newcomer)
 }
 
 #[tokio::test]
@@ -42,27 +75,7 @@ async fn a_new_device_pairs_and_then_syncs() {
         .await
         .unwrap();
 
-    let newcomer = member_secrets(random_bytes(), random_bytes());
-    let pool_n = empty_pool().await;
-    let offer = new_offer(Some(StoreLocation::server("memory")), "Desktop A", None);
-    let code = read_code(&offer.qr).unwrap();
-    let codes = Mutex::new(Vec::new());
-    let shown = |sas: String| {
-        codes.lock().unwrap().push(sas);
-        async { true }
-    };
-    let store = &g.store;
-    let (added, joined) = tokio::join!(
-        add_device(&session, offer, &g.a, memory_welcome(), &shown),
-        join(&pool_n, &store, &code, &newcomer, meta(), &shown),
-    );
-    let did = added.unwrap();
-    joined.unwrap();
-    let codes = codes.into_inner().unwrap();
-    assert_eq!(codes.len(), 2);
-    assert_eq!(codes[0], codes[1]);
-    assert_eq!(did, hex::encode(newcomer.did));
-    assert!(head(&g.store).members.contains_key(&did));
+    let (pool_n, newcomer) = pair_newcomer(&g, &session).await;
 
     let mut joined_session = Session::open(&pool_n, &g.store, &newcomer).await.unwrap();
     let pulled = joined_session.pull(&pool_n).await.unwrap();
@@ -77,6 +90,24 @@ async fn a_new_device_pairs_and_then_syncs() {
         .await
         .unwrap();
     assert_eq!(ids, ["aaaaaaaaaaa"]);
+}
+
+/// The new device's Default joins only the member's Default, never another profile it syncs.
+#[tokio::test]
+async fn a_new_device_s_default_never_joins_another_profile() {
+    let g = group().await;
+    let pool_a = device_pool(&g).await;
+    link_profile(&pool_a, "profile-2", "link-2").await.unwrap();
+    let mut session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    session.set_reading(reading(&pool_a, "", "profile-2", "default").await.unwrap());
+
+    let (pool_n, _) = pair_newcomer(&g, &session).await;
+    let link: String = sqlx::query_scalar("SELECT link FROM sync2_group")
+        .fetch_one(&pool_n)
+        .await
+        .unwrap();
+    assert!(!link.is_empty());
+    assert_ne!(link, "link-2");
 }
 
 #[tokio::test]
@@ -156,7 +187,7 @@ async fn a_member_scans_a_new_device_code_over_the_lan() {
     );
     joined.unwrap();
     assert_same_digits(codes);
-    let did = added.unwrap();
+    let did = added.unwrap().0;
     assert_eq!(did, hex::encode(newcomer.did));
     assert!(head(&g.store).members.contains_key(&did));
     assert!(Session::open(&pool_n, &g.store, &newcomer).await.is_ok());
@@ -188,7 +219,7 @@ async fn a_new_device_reaches_a_member_over_the_lan_first() {
     );
     joined.unwrap();
     assert_same_digits(codes);
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
 }
 
 #[tokio::test]
@@ -216,5 +247,5 @@ async fn a_new_device_falls_back_to_the_mailbox_when_the_lan_does_not_answer() {
     );
     joined.unwrap();
     assert_same_digits(codes);
-    assert_eq!(added.unwrap(), hex::encode(newcomer.did));
+    assert_eq!(added.unwrap().0, hex::encode(newcomer.did));
 }

@@ -1,3 +1,4 @@
+import { queueWith, remoteControl } from "./useRemoteControlStore";
 import { create } from "zustand";
 import { profileStorage } from "../lib/storage/profileStorage";
 
@@ -131,7 +132,7 @@ let awaitingFirstPlay = false;
 let unplayableSkips = 0;
 
 // When the current load began, for the start-up timing in the diagnostics log.
-let loadStartedAt: { videoId: string; at: number } | null = null;
+let loadStartedAt: { videoId: string; at: number; resolvedAt?: number; hidden: boolean } | null = null;
 
 // A stall with no bytes arriving for this long is treated as a dead connection
 // and recovered; a slow one that is still receiving is left to finish.
@@ -253,7 +254,13 @@ interface MusicPlayerState {
 
   // --- intents (called by UI) ---
   playTrack: (track: SongItem) => Promise<void>;
-  playQueue: (tracks: SongItem[], startIndex?: number, source?: string | null) => Promise<void>;
+  /** `start` begins the first song at `at` seconds, and paused unless `autoplay`, in one load. */
+  playQueue: (
+    tracks: SongItem[],
+    startIndex?: number,
+    source?: string | null,
+    start?: { at: number; autoplay: boolean },
+  ) => Promise<void>;
   togglePlay: () => void;
   play: () => void;
   pause: () => void;
@@ -276,6 +283,8 @@ interface MusicPlayerState {
   removeFromQueue: (index: number) => void;
   reorderQueue: (from: number, to: number) => void;
   clearQueue: () => void;
+  /** Replaces the queue around the song playing, which carries on; it goes first when `tracks` leaves it out. */
+  replaceQueue: (tracks: SongItem[]) => void;
   /** Puts back the queue as it was before the last removal or clear. */
   undoQueueEdit: () => void;
   /** Shows the queue saved at the last session, paused, unless something already plays. */
@@ -298,8 +307,6 @@ interface MusicPlayerState {
   _loadIndex: (index: number, options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
   _prefetchUpcoming: () => void;
   _preloadUpcoming: () => void;
-  /** Loads the song playing again as AAC once WebAudio is in use, when it cannot hear it. */
-  _reloadForWebAudio: () => void;
   _onPreloadError: () => void;
   _syncTime: (progress: number, duration: number) => void;
   _reflectPlaying: (isPlaying: boolean) => void;
@@ -311,6 +318,12 @@ interface MusicPlayerState {
 /** Whether the queue refills itself: the saved autoplay setting, or a station started by name. */
 export const selectRadioOn = (s: Pick<MusicPlayerState, "radioEnabled" | "radioStationActive">): boolean =>
   s.radioEnabled || s.radioStationActive;
+
+/** Resolves a song's stream ahead of playing it; a downloaded one plays from disk and needs none. */
+export function warmMusicStream(videoId: string): void {
+  if (findDownloadedRecord(videoId, "audio")) return;
+  prefetchMusicStream(videoId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
+}
 
 export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   currentTrack: null,
@@ -345,22 +358,26 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // --- intents ----------------------------------------------------------
 
   playTrack: async (track) => {
+    const remote = remoteControl();
+    if (remote) return remote.play([videoIdOf(track)], 0, true);
     resetRadioSession([videoIdOf(track)]);
     set({ ...freshQueue([track], get().isShuffle ? [track] : null), radioStationActive: false, queueSource: null });
     await get()._loadIndex(0);
   },
 
-  playQueue: async (tracks, startIndex = 0, source = null) => {
+  playQueue: async (tracks, startIndex = 0, source = null, start) => {
     if (tracks.length === 0) return;
+    const remote = remoteControl();
+    if (remote) return remote.play(tracks.map(videoIdOf), startIndex, true);
     resetRadioSession(tracks.map(videoIdOf));
-    const start = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    const first = Math.max(0, Math.min(startIndex, tracks.length - 1));
     const shuffled = get().isShuffle;
     set({
-      ...freshQueue(shuffled ? shuffleFrom(tracks, start) : tracks, shuffled ? tracks : null),
+      ...freshQueue(shuffled ? shuffleFrom(tracks, first) : tracks, shuffled ? tracks : null),
       radioStationActive: false,
       queueSource: source,
     });
-    await get()._loadIndex(shuffled ? 0 : start);
+    await get()._loadIndex(shuffled ? 0 : first, start && { resumeAt: start.at, autoplay: start.autoplay });
   },
 
   _ensureRadio: async () => {
@@ -442,7 +459,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       streamErrorKind: null,
       loadingStreamId: videoId,
     });
-    loadStartedAt = { videoId, at: performance.now() };
+    loadStartedAt = { videoId, at: performance.now(), hidden: document.hidden };
     recordPlayerEvent(`music resolve start: ${videoId}`);
 
     // Radio top-up and next-track warming wait until this track is audible, so
@@ -533,6 +550,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       if (get().loadingStreamId !== videoId) return;
 
       set({ loudnessDb: info.loudnessDb, loadingStreamId: null });
+      if (loadStartedAt?.videoId === videoId) loadStartedAt.resolvedAt = performance.now();
       musicAudioEngine.setLoudness(info.loudnessDb, get().normalizationEnabled);
       await musicAudioEngine.load(info.audioUrl, info.mimeType, listedSeconds(info, track));
       musicAudioEngine.seekWhenReady(resumeAt);
@@ -568,11 +586,15 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   },
 
   togglePlay: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command(remote.playing ? "pause" : "play");
     if (get().isPlaying) get().pause();
     else get().play();
   },
 
   play: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command("play");
     if (!get().currentTrack) return;
     if (awaitingFirstPlay) {
       void get()._loadIndex(get().currentIndex, { resumeAt: get().progress });
@@ -584,6 +606,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   },
 
   pause: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command("pause");
     userPaused = true;
     stopStallWatch();
     musicAudioEngine.pause();
@@ -618,16 +642,12 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
 
   // Which track plays next depends on shuffle and repeat, so ask the same
   // question the transport does rather than assuming the following index.
+  // Warms the next song, and the one before for Previous, so either starts from a cache read.
   _prefetchUpcoming: () => {
     const state = get();
-    const index = upcomingIndex(state);
-    const upcoming = index >= 0 ? state.queue[index] : null;
-    if (!upcoming) return;
-
-    const upcomingId = videoIdOf(upcoming);
-    // A downloaded track plays from disk; resolving it would be a wasted request.
-    if (findDownloadedRecord(upcomingId, "audio")) return;
-    prefetchMusicStream(upcomingId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
+    for (const track of [state.queue[upcomingIndex(state)], state.queue[state.currentIndex - 1]]) {
+      if (track) warmMusicStream(videoIdOf(track));
+    }
   },
 
   // Buffers the next track's audio on the standby element near the end of the
@@ -642,19 +662,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       const nowTrack = now.queue[upcomingIndex(now)];
       return !!nowTrack && videoIdOf(nowTrack) === videoId;
     });
-  },
-
-  // On macOS WebAudio cannot hear Opus, so a song loaded before the graph existed loads again as
-  // AAC from where it is, and a next song buffered as Opus is dropped to be buffered again.
-  _reloadForWebAudio: () => {
-    if (!musicAudioEngine.wantsAac()) return;
-    musicAudioEngine.clearPreload();
-    const { currentTrack, currentIndex, loadingStreamId, isPlaying } = get();
-    if (!currentTrack || loadingStreamId !== null || !musicAudioEngine.activeBypassesGraph()) return;
-    const videoId = videoIdOf(currentTrack);
-    if (findDownloadedRecord(videoId, "audio")) return;
-    recordPlayerEvent(`music reloading as AAC for the equalizer: ${videoId}`);
-    void get()._loadIndex(currentIndex, { resumeAt: musicAudioEngine.getCurrentTime(), autoplay: isPlaying });
   },
 
   _onPreloadError: () => {
@@ -683,6 +690,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   clearStreamError: () => set({ streamError: null, streamErrorKind: null }),
 
   next: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command("next");
     const { queue, currentIndex, repeatMode } = get();
     if (queue.length === 0) return;
 
@@ -714,6 +723,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   },
 
   previous: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command("previous");
     const { queue, currentIndex, progress, repeatMode } = get();
     if (queue.length === 0) return;
     if (progress > 3) {
@@ -726,11 +737,15 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   },
 
   seek: (seconds) => {
+    const remote = remoteControl();
+    if (remote) return remote.command("seek", { pos: Math.round(seconds * 1000) });
     musicAudioEngine.seek(seconds);
     set({ progress: Math.max(0, seconds) });
   },
 
   setVolume: (volume) => {
+    const remote = remoteControl();
+    if (remote) return remote.command("volume", { vol: Math.round(clamp01(volume) * 100) });
     const vol = clamp01(volume);
     musicAudioEngine.setVolume(vol);
     set({ volume: vol, isMuted: vol === 0 ? get().isMuted : false });
@@ -791,12 +806,16 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // Each queued entry is its own copy, so a song played earlier can be queued
   // again and shuffle can still tell the two apart.
   addToQueue: (track) => {
+    const remote = remoteControl();
+    if (remote) return remote.command("queue", { queue: queueWith(remote, [videoIdOf(track)], false) });
     const lists = queueListsOf(get());
     if (isUpcoming(lists, track)) return;
     set(appendTracks(lists, [{ ...track }]));
   },
 
   playNextInQueue: (track) => {
+    const remote = remoteControl();
+    if (remote) return remote.command("queue", { queue: queueWith(remote, [videoIdOf(track)], true) });
     const { currentTrack } = get();
     if (!currentTrack) {
       get().addToQueue(track);
@@ -840,6 +859,17 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       queueSource: null,
     });
     undoSnapshot = snapshot;
+  },
+
+  replaceQueue: (tracks) => {
+    const s = get();
+    const playing = s.queue[s.currentIndex];
+    if (!playing) return;
+    const at = tracks.findIndex((track) => videoIdOf(track) === videoIdOf(playing));
+    const queue = at >= 0 ? tracks.map((track, i) => (i === at ? playing : track)) : [playing, ...tracks];
+    resetRadioSession(queue.map(videoIdOf));
+    musicAudioEngine.clearPreload();
+    set({ ...freshQueue(queue, s.isShuffle ? queue : null), currentIndex: Math.max(0, at), queueSource: null });
   },
 
   undoQueueEdit: () => {
@@ -936,11 +966,23 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     if (!isBuffering && loadStartedAt) {
       const started = loadStartedAt;
       loadStartedAt = null;
-      const elapsedMs = Math.round(performance.now() - started.at);
+      const now = performance.now();
+      const elapsedMs = Math.round(now - started.at);
+      // Split into finding the stream and buffering it, with whether the window was hidden.
+      const resolveMs = started.resolvedAt === undefined ? null : Math.round(started.resolvedAt - started.at);
+      const bufferMs = started.resolvedAt === undefined ? null : Math.round(now - started.resolvedAt);
+      const hidden = started.hidden || document.hidden;
       const audioContext = musicAudioEngine.getContextState();
       recordPlayerEvent(`music first audio: ${started.videoId} after ${elapsedMs} ms (audio context ${audioContext})`);
       // One line per track in the log file, so slow starts can be measured.
-      void logToBackend("info", "music first audio", { videoId: started.videoId, elapsedMs, audioContext });
+      void logToBackend("info", "music first audio", {
+        videoId: started.videoId,
+        elapsedMs,
+        resolveMs,
+        bufferMs,
+        hidden,
+        audioContext,
+      });
     }
     set({ isBuffering });
   },

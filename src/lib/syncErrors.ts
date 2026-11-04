@@ -29,6 +29,7 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedStoreUnauthorized: "linked_error_store_unauthorized",
   linkedProtocol: "linked_error_protocol",
   linkedLocal: "linked_error_local",
+  linkedKeychain: "linked_error_keychain",
   linkedNotLinked: "linked_error_not_linked",
   linkedRemoved: "linked_error_removed",
   linkedDeclined: "linked_error_declined",
@@ -38,6 +39,9 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedAlreadyLinked: "linked_error_already_linked",
   linkedLanUnreachable: "linked_error_lan_unreachable",
   linkedOtherFolder: "linked_error_other_folder",
+  linkedLastProfile: "linked_error_last_profile",
+  linkedProfileTaken: "linked_error_profile_taken",
+  linkedProfileNotRunning: "linked_error_profile_not_running",
 };
 
 /** The actionable, translated message for a sync failure, falling back to the backend's text. */

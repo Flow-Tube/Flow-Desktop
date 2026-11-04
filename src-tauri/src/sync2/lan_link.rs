@@ -2,24 +2,28 @@
 //! hello under the group's LAN key, then sealed, numbered frames carrying requests both ways.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use super::curve::{sign, verify};
 use super::engine::{EngineError, Result, Session, verify_logged};
+use super::envelope::MAX_OBJECT_SIZE;
 use super::epoch::{Purpose, purpose_key};
+use super::gc::bounded_vv;
 use super::held::HeldStore;
 use super::keys::MemberSecrets;
 use super::lan::{LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_transcript};
 use super::paths::parse_log_path;
 use super::payload::{decode_payload, encode_payload};
-use super::roster::{Entry, Role};
+use super::roster::{Entry, Role, parse_entry};
 use super::sealed::{open, random_bytes, seal};
 use super::store::Store;
 use super::{Error, array};
@@ -27,10 +31,13 @@ use crate::sync::canonical::to_canonical_json;
 use crate::sync::transport::WsChannel;
 
 pub const SESSION_PATH: &str = "/flow-sync/2";
-const MAX_PAYLOAD: usize = 4 * 1024 * 1024;
+/// A whole object with its header line (spec/live.md, Requests).
+const MAX_CONTENT: usize = MAX_OBJECT_SIZE + 64 * 1024;
+/// Room for the content's gzip, padding (at most 1/32 at this size), box and `seq`.
+const MAX_FRAME: usize = MAX_OBJECT_SIZE + MAX_OBJECT_SIZE / 16;
 const NONCE_SIZE: usize = 32;
 /// Once this side has no more requests, the session closes when the peer stops sending.
-const IDLE: Duration = Duration::from_secs(3);
+pub const IDLE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
@@ -45,6 +52,7 @@ pub enum Request {
         name: String,
     },
     List {
+        #[serde(deserialize_with = "bounded_vv")]
         vv: BTreeMap<String, u64>,
     },
     Get {
@@ -62,12 +70,25 @@ pub struct Response {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "parsed_entries"
+    )]
     pub entries: Option<Vec<Entry>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paths: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blobs: Option<Vec<String>>,
+}
+
+/// A peer's entry that doesn't parse is ignored like a losing fork candidate (spec/store.md,
+/// Untrusted input).
+fn parsed_entries<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Vec<Entry>>, D::Error> {
+    let values = Option::<Vec<Value>>::deserialize(deserializer)?;
+    Ok(values.map(|values| values.iter().filter_map(|v| parse_entry(v).ok()).collect()))
 }
 
 fn request_header(request: &Request, id: u64) -> Value {
@@ -106,7 +127,7 @@ pub struct Framed<S> {
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Framed<S> {
     async fn send(&mut self, content: &[u8]) -> Result<()> {
-        if content.len() > MAX_PAYLOAD {
+        if content.len() > MAX_CONTENT {
             return Err(Error::Length.into());
         }
         let sealed = seal(
@@ -130,9 +151,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Framed<S> {
             &lan_frame_aad(self.received),
             sealed,
         )?)?;
+        if content.len() > MAX_CONTENT {
+            return Err(Error::Length.into());
+        }
         self.received += 1;
         Ok(content)
     }
+}
+
+/// What a LAN WebSocket reads before it gives up on a message.
+pub(super) fn lan_socket_config() -> WebSocketConfig {
+    WebSocketConfig::default()
+        .max_message_size(Some(MAX_FRAME))
+        .max_frame_size(Some(MAX_FRAME))
 }
 
 fn hello_frame(epoch: u32, lan_key: &[u8], message: u8, body: &Value) -> Result<Vec<u8>> {
@@ -184,11 +215,13 @@ fn did_bytes(did: &str) -> Result<[u8; 16]> {
         .ok_or(EngineError::Unexpected)
 }
 
-/// The connecting side: says hello under the current epoch and checks the advertiser.
+/// The connecting side: says hello under the current epoch, with the port it listens on, and
+/// checks the advertiser.
 pub async fn hello_as_client<S, T>(
     mut socket: WsChannel<S>,
     session: &Session<'_, T>,
     device: &MemberSecrets,
+    listening: Option<u16>,
 ) -> Result<(Framed<S>, String)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -198,7 +231,10 @@ where
     let lan_key = purpose_key(session.current_key(), session.group(), epoch, Purpose::Lan);
     let me = hex::encode(device.did);
     let client_nonce = random_bytes::<NONCE_SIZE>();
-    let hello = json!({ "did": me, "n": URL_SAFE_NO_PAD.encode(client_nonce) });
+    let mut hello = json!({ "did": me, "n": URL_SAFE_NO_PAD.encode(client_nonce) });
+    if let Some(port) = listening {
+        hello["p"] = port.into();
+    }
     socket
         .send_binary(hello_frame(epoch, &lan_key, 1, &hello)?)
         .await?;
@@ -252,11 +288,12 @@ where
 }
 
 /// The advertising side: answers a hello under any epoch this device has a key for.
+/// The advertising side; returns the peer and the port it listens on, when it said.
 pub async fn hello_as_server<S, T>(
     mut socket: WsChannel<S>,
     session: &mut Session<'_, T>,
     device: &MemberSecrets,
-) -> Result<(Framed<S>, String)>
+) -> Result<(Framed<S>, String, Option<u16>)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: Store,
@@ -275,6 +312,7 @@ where
         .to_owned();
     let peer_key = device_key(session, &peer)?;
     let client_nonce = field::<NONCE_SIZE>(&hello, "n")?;
+    let listening = hello["p"].as_u64().and_then(|p| u16::try_from(p).ok());
     let (client, server) = (did_bytes(&peer)?, device.did);
 
     let server_nonce = random_bytes::<NONCE_SIZE>();
@@ -314,22 +352,27 @@ where
         sent: 0,
         received: 0,
     };
-    Ok((framed, peer))
+    Ok((framed, peer, listening))
 }
+
+/// Where live envelopes that arrive in `live` requests go.
+pub type LiveSink = Arc<dyn Fn(Vec<u8>) + Send + Sync>;
 
 /// What a device serves: the group it holds, and the keys to check an object before taking it.
 pub struct Holder {
     pub store: HeldStore,
     pub group: [u8; 16],
     pub signing_keys: BTreeMap<String, [u8; 32]>,
+    pub live: LiveSink,
 }
 
 impl Holder {
-    pub fn of<T: Store>(store: HeldStore, session: &Session<'_, T>) -> Self {
+    pub fn of<T: Store>(store: HeldStore, session: &Session<'_, T>, live: LiveSink) -> Self {
         Self {
             store,
             group: *session.group(),
             signing_keys: session.signing_keys().clone(),
+            live,
         }
     }
 
@@ -418,7 +461,9 @@ impl Link {
                         if framed.send(&frame_content(&header, &bytes)).await.is_err() {
                             break;
                         }
-                        waiting.insert(next_id, reply);
+                        if request != Request::Live {
+                            waiting.insert(next_id, reply);
+                        }
                         next_id += 1;
                         continue;
                     }
@@ -441,7 +486,10 @@ impl Link {
                 }
                 let id = header["id"].as_u64().unwrap_or_default();
                 let answer = match serde_json::from_value::<Request>(header) {
-                    Ok(Request::Live) => continue,
+                    Ok(Request::Live) => {
+                        (holder.live)(bytes.to_vec());
+                        continue;
+                    }
                     Ok(request) => holder.answer(request, bytes).await,
                     Err(_) => Ok((
                         Response {
@@ -481,6 +529,15 @@ impl Link {
         answer.await.map_err(|_| EngineError::LanUnreachable)?
     }
 
+    /// Sends a live envelope, which gets no answer.
+    pub async fn live(&self, envelope: Vec<u8>) -> Result<()> {
+        let (reply, _) = oneshot::channel();
+        self.outgoing
+            .send((Request::Live, envelope, reply))
+            .await
+            .map_err(|_| EngineError::LanUnreachable)
+    }
+
     /// The bytes a `key` or `get` answered with, or `None` when the peer doesn't hold them.
     async fn bytes(&self, request: Request) -> Result<Option<Vec<u8>>> {
         let (response, bytes) = self.ask(request).await?;
@@ -518,7 +575,202 @@ impl Link {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+    use std::sync::LazyLock;
+
+    use proptest::prelude::*;
+    use proptest::test_runner::TestRunner;
+    use tokio::io::{DuplexStream, duplex};
+    use tokio_tungstenite::WebSocketStream;
+    use tokio_tungstenite::tungstenite::protocol::Role;
+
     use super::*;
+    use crate::sync2::fuzz::{json, mutations};
+
+    const LAN_KEY: [u8; 32] = [3; 32];
+
+    /// A frame sealed by one side of a session, and the other side that opens it.
+    fn sealed_frame() -> (Vec<u8>, Framed<DuplexStream>) {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let (a, b) = duplex(1 << 16);
+            let (a, b) = tokio::join!(
+                WebSocketStream::from_raw_socket(a, Role::Client, None),
+                WebSocketStream::from_raw_socket(b, Role::Server, None),
+            );
+            let framed = |socket, send_key: [u8; 32], receive_key: [u8; 32]| Framed {
+                socket: WsChannel::new(socket),
+                send_key: send_key.to_vec(),
+                receive_key: receive_key.to_vec(),
+                sent: 0,
+                received: 0,
+            };
+            let (mut sender, mut receiver) =
+                (framed(a, [1; 32], [2; 32]), framed(b, [2; 32], [1; 32]));
+            sender.send(br#"{"id":0,"op":"live"}"#).await.unwrap();
+            (receiver.socket.recv_binary().await.unwrap(), receiver)
+        })
+    }
+
+    #[test]
+    fn any_change_to_a_session_frame_is_refused() {
+        let (frame, receiver) = sealed_frame();
+        let receiver = RefCell::new(receiver);
+        let frames = prop_oneof![
+            mutations(frame.clone()),
+            prop::collection::vec(any::<u8>(), 0..256)
+        ];
+        TestRunner::default()
+            .run(&frames, |changed| {
+                prop_assert!(receiver.borrow_mut().open(&changed).is_err());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            receiver.borrow_mut().open(&frame).unwrap(),
+            br#"{"id":0,"op":"live"}"#
+        );
+    }
+
+    static HELLO: LazyLock<Vec<u8>> =
+        LazyLock::new(|| hello_frame(4, &LAN_KEY, 1, &json!({ "did": "ab", "n": "cd" })).unwrap());
+
+    proptest! {
+        /// The epoch in front of a hello picks the key; the box is what must not change.
+        #[test]
+        fn any_change_to_a_hello_box_is_refused(changed in mutations(HELLO.clone())) {
+            prop_assert!(open_hello(&changed, &LAN_KEY, 1).is_err() || changed[4..] == HELLO[4..]);
+        }
+
+        #[test]
+        fn arbitrary_hellos_are_refused(
+            frame in prop::collection::vec(any::<u8>(), 0..256),
+            message: u8,
+        ) {
+            prop_assert!(open_hello(&frame, &LAN_KEY, message).is_err());
+            let epoch = frame.first_chunk().map(|e| u32::from_be_bytes(*e));
+            prop_assert_eq!(frame_epoch(&frame).ok(), epoch);
+        }
+
+        #[test]
+        fn hello_fields_are_read_only_at_their_length(body in json(), name: String, did: String) {
+            let expected = body[&name]
+                .as_str()
+                .and_then(|v| URL_SAFE_NO_PAD.decode(v).ok())
+                .filter(|b| b.len() == 32);
+            prop_assert_eq!(field::<32>(&body, &name).ok().map(Vec::from), expected);
+            let expected = hex::decode(&did).ok().filter(|b| b.len() == 16);
+            prop_assert_eq!(did_bytes(&did).ok().map(Vec::from), expected);
+        }
+
+        #[test]
+        fn frame_contents_round_trip(
+            header: BTreeMap<String, String>,
+            bytes in prop::collection::vec(any::<u8>(), 0..64),
+        ) {
+            let content = frame_content(&header, &bytes);
+            let (read, rest) = split_content(&content).unwrap();
+            prop_assert_eq!((read, rest), (json!(header), bytes.as_slice()));
+        }
+
+        #[test]
+        fn arbitrary_requests_are_read_without_panicking(
+            content in prop::collection::vec(any::<u8>(), 0..256),
+            header in json(),
+        ) {
+            let _ = split_content(&content);
+            let _ = serde_json::from_value::<Request>(header.clone());
+            let _ = serde_json::from_value::<Response>(header);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_frame_whose_payload_inflates_past_the_limit_is_refused() {
+        let key = [1; 32];
+        let (near, _far) = tokio::io::duplex(64);
+        let mut framed = Framed {
+            socket: WsChannel::new(
+                WebSocketStream::from_raw_socket(near, Role::Client, None).await,
+            ),
+            send_key: key.to_vec(),
+            receive_key: key.to_vec(),
+            sent: 0,
+            received: 0,
+        };
+        let frame = |len| {
+            let payload = encode_payload(&vec![0; len]).unwrap();
+            [
+                &0u64.to_be_bytes()[..],
+                &seal(&key, &lan_frame_aad(0), &payload),
+            ]
+            .concat()
+        };
+        assert!(framed.open(&frame(MAX_CONTENT + 1)).is_err());
+        assert_eq!(framed.open(&frame(MAX_CONTENT)).unwrap().len(), MAX_CONTENT);
+    }
+
+    /// Both ends of a session over sockets with the LAN limits.
+    async fn session_pair() -> (Framed<DuplexStream>, Framed<DuplexStream>) {
+        let (a, b) = duplex(1 << 16);
+        let (a, b) = tokio::join!(
+            WebSocketStream::from_raw_socket(a, Role::Client, Some(lan_socket_config())),
+            WebSocketStream::from_raw_socket(b, Role::Server, Some(lan_socket_config())),
+        );
+        let framed = |socket, send_key: [u8; 32], receive_key: [u8; 32]| Framed {
+            socket: WsChannel::new(socket),
+            send_key: send_key.to_vec(),
+            receive_key: receive_key.to_vec(),
+            sent: 0,
+            received: 0,
+        };
+        (framed(a, [1; 32], [2; 32]), framed(b, [2; 32], [1; 32]))
+    }
+
+    #[tokio::test]
+    async fn a_get_answer_with_a_whole_object_crosses_a_session() {
+        let (mut sender, mut receiver) = session_pair().await;
+        let object: Vec<u8> = (0..MAX_OBJECT_SIZE / 32)
+            .flat_map(|_| random_bytes::<32>())
+            .collect();
+        let answer = frame_content(&json!({ "re": 0, "ok": true }), &object);
+        let receiving =
+            tokio::time::timeout(Duration::from_secs(30), receiver.socket.recv_binary());
+        let (sent, frame) = tokio::join!(sender.send(&answer), receiving);
+        sent.unwrap();
+        let content = receiver.open(&frame.unwrap().unwrap()).unwrap();
+        let (header, bytes) = split_content(&content).unwrap();
+        assert_eq!(header, json!({ "re": 0, "ok": true }));
+        assert_eq!(bytes, object.as_slice());
+    }
+
+    #[tokio::test]
+    async fn content_past_an_object_and_its_header_is_not_sent() {
+        let (mut sender, _receiver) = session_pair().await;
+        assert!(sender.send(&vec![0; MAX_CONTENT + 1]).await.is_err());
+    }
+
+    #[test]
+    fn a_listing_request_naming_a_seq_above_2_53_is_refused() {
+        let list = |seq: u64| {
+            serde_json::from_str::<Request>(&format!(r#"{{"op":"list","vv":{{"a":{seq}}}}}"#))
+        };
+        assert!(list((1 << 53) - 1).is_ok());
+        assert!(list(1 << 53).is_err());
+    }
+
+    #[test]
+    fn a_peer_entry_that_does_not_parse_is_left_out() {
+        let entry = |v: u8| {
+            json!({"group": "00".repeat(16), "op": "rename", "prev": "00".repeat(32), "seq": 1,
+                "signer": "11".repeat(16), "sigs": {}, "v": v})
+        };
+        let response =
+            json!({"entries": [entry(2), {"seq": "one"}, entry(3)], "ok": true, "re": 0});
+        let response: Response = serde_json::from_value(response).unwrap();
+        let entries = response.entries.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].v, 2);
+    }
 
     #[test]
     fn headers_are_canonical_json_lines() {

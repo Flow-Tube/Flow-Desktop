@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   removeDevice: vi.fn(),
   renameDevice: vi.fn(),
   restoreGroup: vi.fn(),
+  retryKeychain: vi.fn(),
   syncNow: vi.fn(),
   updateLogin: vi.fn(),
 }));
@@ -34,7 +35,14 @@ vi.mock("../lib/dialogs", () => ({ confirmAction }));
 import { useLinkedDevicesStore } from "./useLinkedDevicesStore";
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `word${i}`).join(" ");
-const LINKED = { kind: "server", storeUrl: "https://sync.example.com", recoverySaved: false, lastSync: null, syncing: false };
+const LINKED = {
+  kind: "server",
+  storeUrl: "https://sync.example.com",
+  keychainBlocked: false,
+  recoverySaved: false,
+  lastSync: null,
+  syncing: false,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -67,6 +75,21 @@ describe("useLinkedDevicesStore", () => {
     expect(state.error).toBe("These recovery words aren't valid. Check the spelling and the order.");
     expect(state.busy).toBe(false);
     expect(state.words).toBeNull();
+  });
+
+  it("asks the keychain again, and says it is still waiting when macOS has not answered", async () => {
+    api.retryKeychain.mockRejectedValueOnce({ kind: "linkedKeychain", message: "Waiting for access to the keychain" });
+    await useLinkedDevicesStore.getState().retryKeychain();
+    expect(useLinkedDevicesStore.getState().error).toBe(
+      "Flow is waiting for access to the keychain. Allow it when macOS asks, then try again.",
+    );
+
+    api.retryKeychain.mockResolvedValueOnce(undefined);
+    api.getLinkedStatus.mockResolvedValue(LINKED);
+    api.getLinkedDevices.mockResolvedValue([]);
+    await useLinkedDevicesStore.getState().retryKeychain();
+    expect(useLinkedDevicesStore.getState().error).toBeNull();
+    expect(useLinkedDevicesStore.getState().status?.keychainBlocked).toBe(false);
   });
 
   it("loads no devices for a device in no group", async () => {

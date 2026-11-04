@@ -18,6 +18,8 @@ export interface LinkedStatus {
   storeUrl?: string | null;
   /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
   loginRefused: boolean;
+  /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
+  keychainBlocked: boolean;
   recoverySaved: boolean;
   lastSync?: LastSync | null;
   /** A run is under way. */
@@ -57,7 +59,63 @@ export interface JoinRequest {
   expires: number;
 }
 
+/** A profile on this computer, and the link it syncs (`src-tauri/src/sync2/profile_actions.rs`). */
+export interface LocalLinkedProfile {
+  id: string;
+  link?: string | null;
+}
+
+/** A profile other devices sync and no profile here does. */
+export interface SyncedProfile {
+  link: string;
+  /** Blank until a device names it. */
+  name: string;
+}
+
+export interface LinkedProfiles {
+  local: LocalLinkedProfile[];
+  synced: SyncedProfile[];
+  /** A restored device found several synced profiles: Default joins the one the user picks. */
+  chooseForDefault: boolean;
+}
+
+/** The Sync page's dashboard (`src-tauri/src/sync2/dashboard.rs`). */
+export interface Dashboard {
+  kind: "server" | "webdav" | "lan";
+  storeUrl?: string | null;
+  /** What a Flow server speaks, when it answered. */
+  server?: { protocols: string[]; live: boolean } | null;
+  /** A Flow server's usage in bytes and objects, when it answered. */
+  storage?: { used: number; quota: number; objects: number } | null;
+  /** Recent sync failures, newest first: the error kind and when. */
+  errors: { kind: string; atMs: number }[];
+  profiles: SyncedProfileState[];
+}
+
+/** A profile that syncs here: batches waiting for it to run, and this device's last snapshot. */
+export interface SyncedProfileState {
+  profile: string;
+  link: string;
+  kept: number;
+  ownSnapshotMs?: number | null;
+}
+
 export const getLinkedStatus = () => invokeBackend<LinkedStatus>("linked_status");
+export const getDashboard = () => invokeBackend<Dashboard>("linked_dashboard");
+export const getLinkedProfiles = () => invokeBackend<LinkedProfiles>("linked_profiles");
+/** Syncs `profile` under a link of its own, or joining `link`. */
+export const syncProfile = (profile: string, link: string | null) =>
+  invokeBackend<void>("linked_sync_profile", { profile, link });
+/** Links `profile`, just created for `link`, another device's profile. */
+export const syncAddedProfile = (profile: string, link: string) =>
+  invokeBackend<void>("linked_sync_added_profile", { profile, link });
+/** Resolves once the running profile has what other devices sent for it. */
+export const catchUpLinkedProfile = () => invokeBackend<void>("linked_catch_up");
+export const stopProfile = (profile: string) => invokeBackend<void>("linked_stop_profile", { profile });
+/** Stops `link` syncing on every device; each keeps its data. */
+export const deleteSyncedProfile = (link: string) => invokeBackend<void>("linked_delete_profile", { link });
+/** A restored device's Default joins `link`, or starts its own with `null`. */
+export const chooseProfile = (link: string | null) => invokeBackend<void>("linked_choose_profile", { link });
 export const getLinkedDevices = () => invokeBackend<LinkedDevice[]>("linked_devices");
 export const getLinkPhase = () => invokeBackend<LinkPhase>("linked_link_phase");
 
@@ -82,6 +140,10 @@ export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
   invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
+/** Resolves to the new recovery words, shown once; the old ones stop working. */
+export const replaceRecovery = () => invokeBackend<string>("linked_replace_recovery");
+/** Asks the keychain again after it refused, and resolves once it answered. */
+export const retryKeychain = () => invokeBackend<void>("linked_retry_keychain");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
 export const removeDevice = (id: string) => invokeBackend<void>("linked_remove", { id });
 /** Tells the group this device leaves, then forgets the group and this device's keys. */

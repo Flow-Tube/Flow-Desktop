@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{Instant, timeout, timeout_at};
-use tokio_tungstenite::{accept_async, connect_async};
+use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
 use super::engine::{EngineError, Result};
+use super::lan_link::lan_socket_config;
 use super::mailbox::Mailbox;
 use super::paths::pair_message_name;
 use crate::sync::qr::is_local_address;
@@ -43,6 +44,10 @@ pub trait Pipe {
     fn receive_key(&mut self) -> impl Future<Output = Result<[u8; KEY_SIZE]>> + Send;
     /// Ends pairing after the last message.
     fn close(&mut self) -> impl Future<Output = ()> + Send;
+    /// The other device's address, when the pipe runs over the LAN.
+    fn peer(&self) -> Option<String> {
+        None
+    }
 }
 
 fn split_key(bytes: &[u8]) -> Result<([u8; KEY_SIZE], &[u8])> {
@@ -126,6 +131,7 @@ impl<M: Mailbox + Sync> Pipe for MailboxPipe<'_, M> {
 pub struct LanPipe<S> {
     socket: WsChannel<S>,
     shower: bool,
+    peer: Option<String>,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
@@ -162,12 +168,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
         }
         self.socket.close().await;
     }
+
+    fn peer(&self) -> Option<String> {
+        self.peer.clone()
+    }
 }
 
 /// Whichever way the other device reached this one.
 pub enum AnyPipe<'m, M, S> {
     Mailbox(MailboxPipe<'m, M>),
-    Lan(LanPipe<S>),
+    Lan(Box<LanPipe<S>>),
 }
 
 impl<M, S> Pipe for AnyPipe<'_, M, S>
@@ -209,6 +219,13 @@ where
             Self::Lan(pipe) => pipe.close().await,
         }
     }
+
+    fn peer(&self) -> Option<String> {
+        match self {
+            Self::Mailbox(_) => None,
+            Self::Lan(pipe) => pipe.peer(),
+        }
+    }
 }
 
 /// Where this device listens while it shows a code.
@@ -248,17 +265,21 @@ impl Listening {
     /// Waits for one scanner and reads its key. Other connections stay unanswered.
     pub async fn accept(self) -> Result<(LanPipe<TcpStream>, [u8; KEY_SIZE])> {
         let deadline = Instant::now() + SLOT_LIFETIME;
-        let (stream, _) = timeout_at(deadline, self.listener.accept())
+        let (stream, peer) = timeout_at(deadline, self.listener.accept())
             .await
             .map_err(|_| EngineError::TimedOut)?
             .map_err(crate::sync::error::SyncError::from)?;
-        let socket = timeout_at(deadline, accept_async(stream))
-            .await
-            .map_err(|_| EngineError::TimedOut)?
-            .map_err(crate::sync::error::SyncError::from)?;
+        let socket = timeout_at(
+            deadline,
+            accept_async_with_config(stream, Some(lan_socket_config())),
+        )
+        .await
+        .map_err(|_| EngineError::TimedOut)?
+        .map_err(crate::sync::error::SyncError::from)?;
         let mut pipe = LanPipe {
             socket: WsChannel::new(socket),
             shower: true,
+            peer: Some(peer.ip().to_string()),
         };
         let key = pipe.receive_key().await?;
         Ok((pipe, key))
@@ -269,12 +290,37 @@ impl Listening {
 pub async fn dial(addresses: &[LanAddress]) -> Option<LanPipe<ClientStream>> {
     for address in addresses.iter().filter(|a| is_local_address(&a.a)) {
         let url = ws_url(&address.a, address.p, PAIR_PATH);
-        if let Ok(Ok((socket, _))) = timeout(CONNECT_TIMEOUT, connect_async(url.as_str())).await {
+        if let Ok(Ok((socket, _))) = timeout(
+            CONNECT_TIMEOUT,
+            connect_async_with_config(url.as_str(), Some(lan_socket_config()), false),
+        )
+        .await
+        {
             return Some(LanPipe {
                 socket: WsChannel::new(socket),
                 shower: false,
+                peer: Some(address.a.clone()),
             });
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn the_scanner_key_is_the_first_32_bytes(
+            bytes in prop::collection::vec(any::<u8>(), 0..96),
+        ) {
+            let split = split_key(&bytes).ok().map(|(key, rest)| (key.to_vec(), rest.to_vec()));
+            let expected = (bytes.len() >= KEY_SIZE)
+                .then(|| (bytes[..KEY_SIZE].to_vec(), bytes[KEY_SIZE..].to_vec()));
+            prop_assert_eq!(split, expected);
+        }
+    }
 }

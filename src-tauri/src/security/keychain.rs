@@ -12,6 +12,16 @@ pub trait CredentialStore: Send + Sync {
     fn remove(&self, name: &str) -> Result<(), CredentialError>;
 }
 
+/// Runs a keychain call on a blocking thread: on macOS it waits for as long as an access prompt
+/// stays open, which must never hold an async worker.
+pub async fn off_thread<T: Send + 'static>(
+    job: impl FnOnce() -> Result<T, CredentialError> + Send + 'static,
+) -> Result<T, CredentialError> {
+    tokio::task::spawn_blocking(job)
+        .await
+        .unwrap_or(Err(CredentialError("The keychain call failed")))
+}
+
 /// The platform keychain through the `keyring` crate.
 pub struct Keychain {
     service: &'static str,

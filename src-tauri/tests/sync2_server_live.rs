@@ -167,7 +167,7 @@ async fn a_group_is_created_paired_with_and_restored_through_the_server() {
         add_device(&session, offer, &a, welcome, |_| async { true }),
         join(&pool_b, &store_b, &code, &b, meta("B"), |_| async { true }),
     );
-    assert_eq!(added.unwrap(), hex::encode(b.did));
+    assert_eq!(added.unwrap().0, hex::encode(b.did));
     joined.unwrap();
     let joined_record = load_group(&pool_b).await.unwrap().unwrap();
     assert_eq!(

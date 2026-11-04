@@ -1,4 +1,4 @@
-//! The group this device belongs to, kept in Default's database (only Default syncs).
+//! The group this device belongs to, kept in Default's database whichever profile runs.
 
 use std::collections::BTreeMap;
 
@@ -110,12 +110,14 @@ pub async fn roster_entries(pool: &SqlitePool) -> Result<Vec<Entry>, SyncError> 
         .collect()
 }
 
+/// Keeps verified entries. Sessions open at once (a sync, the LAN runtime, the live channel) read
+/// the same new entries, so one already kept is left as it is.
 pub async fn add_roster_entries(pool: &SqlitePool, entries: &[Entry]) -> Result<(), SyncError> {
     let mut tx = pool.begin().await?;
     for entry in entries {
         let seq =
             i64::try_from(entry.seq).map_err(|_| SyncError::Protocol("roster too long".into()))?;
-        sqlx::query("INSERT INTO sync2_roster (seq, entry) VALUES (?, ?)")
+        sqlx::query("INSERT OR IGNORE INTO sync2_roster (seq, entry) VALUES (?, ?)")
             .bind(seq)
             .bind(String::from_utf8_lossy(&to_canonical_json(entry)).into_owned())
             .execute(&mut *tx)
@@ -177,6 +179,12 @@ pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
         "DELETE FROM sync2_roster",
         "DELETE FROM sync2_streams",
         "DELETE FROM sync2_sent",
+        "DELETE FROM sync2_sent_links",
+        "DELETE FROM sync2_profile_links",
+        "DELETE FROM sync2_kept",
+        "DELETE FROM sync2_profiles",
+        "DELETE FROM sync2_floors",
+        "DELETE FROM sync2_reading",
         "DELETE FROM sync2_snapshots",
         "DELETE FROM sync2_acks",
         "DELETE FROM sync2_manifests",
@@ -185,9 +193,65 @@ pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
         "DELETE FROM sync2_held_roster",
         "DELETE FROM sync2_held_keys",
         "DELETE FROM sync2_held_objects",
+        "DELETE FROM sync2_pending",
+        "DELETE FROM sync2_live_seen",
+        "DELETE FROM sync2_consent",
     ] {
         sqlx::query(statement).execute(&mut *tx).await?;
     }
     tx.commit().await?;
+    Ok(())
+}
+
+/// Where each link read from a snapshot stops being included in it, by link and sender.
+pub type Floors = BTreeMap<(String, String), u64>;
+
+pub async fn floors(pool: &SqlitePool) -> Result<Floors, SyncError> {
+    let rows: Vec<(String, String, i64)> =
+        sqlx::query_as("SELECT link, did, seq FROM sync2_floors")
+            .fetch_all(pool)
+            .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(link, did, seq)| ((link, did), u64::try_from(seq).unwrap_or(0)))
+        .collect())
+}
+
+pub async fn save_floors(pool: &SqlitePool, floors: &Floors) -> Result<(), SyncError> {
+    let mut tx = pool.begin().await?;
+    for ((link, did), seq) in floors {
+        let seq = i64::try_from(*seq).map_err(|_| SyncError::Protocol("log too long".into()))?;
+        sqlx::query("INSERT INTO sync2_floors (link, did, seq) VALUES (?, ?, ?) ON CONFLICT (link, did) DO UPDATE SET seq = excluded.seq")
+            .bind(link)
+            .bind(did)
+            .bind(seq)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Asks the next run to read `link` from its snapshot, for a profile that just joined it.
+pub async fn read_from_snapshot(pool: &SqlitePool, link: &str) -> Result<(), SyncError> {
+    sqlx::query("INSERT OR IGNORE INTO sync2_reading (link) VALUES (?)")
+        .bind(link)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Links still to be read from their snapshot.
+pub async fn links_to_read(pool: &SqlitePool) -> Result<Vec<String>, SyncError> {
+    Ok(sqlx::query_scalar("SELECT link FROM sync2_reading")
+        .fetch_all(pool)
+        .await?)
+}
+
+pub async fn link_read(pool: &SqlitePool, link: &str) -> Result<(), SyncError> {
+    sqlx::query("DELETE FROM sync2_reading WHERE link = ?")
+        .bind(link)
+        .execute(pool)
+        .await?;
     Ok(())
 }

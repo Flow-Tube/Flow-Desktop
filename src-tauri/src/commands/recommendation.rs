@@ -1,4 +1,3 @@
-use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -11,19 +10,12 @@ use crate::flow_neuro::bootstrap::ImportedVideo;
 use crate::flow_neuro::signals::InteractionType;
 use crate::flow_neuro::watch_session::{END_GRACE_SECONDS, WatchReport};
 use crate::models::video::VideoSummary;
-use crate::profiles::ActiveProfile;
 use crate::services::blocked_channel_names::{self, BlockedChannelNames};
+use crate::services::profile_interests::{PersonaDetails, ProfileInterests, stored_interests};
+use crate::services::profile_service::ProfileService;
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync2::actions::leave_if_linked;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PersonaDetails {
-    pub name: String,
-    pub title: String,
-    pub description: String,
-    pub icon: String,
-}
+use crate::sync2::profile_actions::syncs_link;
 
 #[tauri::command]
 pub async fn log_interaction(
@@ -205,13 +197,22 @@ pub async fn get_flow_persona(
         .get_personality()
         .await
         .map_err(ErrorResponse::from)?;
+    Ok(persona.into())
+}
 
-    Ok(PersonaDetails {
-        name: persona.name().to_string(),
-        title: persona.title().to_string(),
-        description: persona.description().to_string(),
-        icon: persona.icon().to_string(),
-    })
+/// Another profile's brain, persona and music taste, read from its database on this device.
+#[tauri::command]
+pub async fn get_profile_interests(
+    profile: String,
+    profiles: State<'_, ProfileService>,
+) -> Result<ProfileInterests, ErrorResponse> {
+    let (pool, _) = profiles
+        .open_closed(&profile)
+        .await
+        .map_err(ErrorResponse::from)?;
+    let interests = stored_interests(&pool, now_ms()).await;
+    pool.close().await;
+    interests.map_err(ErrorResponse::from)
 }
 
 #[tauri::command]
@@ -436,9 +437,8 @@ pub async fn import_brain(
 pub async fn reset_brain(
     app: AppHandle,
     recommendation_service: State<'_, RecommendationService>,
-    profile: State<'_, ActiveProfile>,
 ) -> Result<(), ErrorResponse> {
-    if profile.is_default {
+    if syncs_link(&app).await {
         leave_if_linked(&app).await.map_err(|e| linked_err(&e))?;
     }
     recommendation_service

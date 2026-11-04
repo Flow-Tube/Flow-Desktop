@@ -33,7 +33,6 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     getBufferedEnd: vi.fn(() => 10),
     getErrorCode: vi.fn((): number | null => null),
     wantsAac: vi.fn(() => false),
-    activeBypassesGraph: vi.fn(() => false),
     getCurrentTime: vi.fn(() => 0),
   },
   resolveMusicStream: vi.fn(),
@@ -99,6 +98,15 @@ describe("starting a track", () => {
     expect(calls).toContain("radio");
   });
 
+  it("starts a handed-over queue at its position in one load, paused when asked", async () => {
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 1, null, { at: 42, autoplay: false });
+
+    expect(resolveMusicStream).toHaveBeenCalledTimes(1);
+    expect(engine.seekWhenReady).toHaveBeenCalledWith(42);
+    expect(engine.play).not.toHaveBeenCalled();
+    expect(useMusicPlayerStore.getState()).toMatchObject({ isPlaying: false, progress: 42 });
+  });
+
   it("retries a failed lookup once before showing an error", async () => {
     resolveMusicStream.mockRejectedValueOnce({ kind: "streaming", message: "timed out" });
     await useMusicPlayerStore.getState().playTrack(song("flaky"));
@@ -106,26 +114,6 @@ describe("starting a track", () => {
     expect(resolveMusicStream).toHaveBeenCalledTimes(2);
     expect(engine.play).toHaveBeenCalledTimes(1);
     expect(useMusicPlayerStore.getState().streamError).toBeNull();
-  });
-});
-
-describe("the equalizer starting on macOS", () => {
-  it("loads the song playing again as AAC from where it is", async () => {
-    await useMusicPlayerStore.getState().playTrack(song("opus"));
-    engine.wantsAac.mockReturnValue(true);
-    engine.activeBypassesGraph.mockReturnValue(true);
-    engine.getCurrentTime.mockReturnValue(42);
-
-    useMusicPlayerStore.getState()._reloadForWebAudio();
-
-    await vi.waitFor(() =>
-      expect(resolveMusicStream).toHaveBeenLastCalledWith("opus", expect.anything(), { preferAac: true }),
-    );
-    await vi.waitFor(() => expect(engine.seekWhenReady).toHaveBeenLastCalledWith(42));
-    expect(engine.clearPreload).toHaveBeenCalled();
-    engine.wantsAac.mockReturnValue(false);
-    engine.activeBypassesGraph.mockReturnValue(false);
-    engine.getCurrentTime.mockReturnValue(0);
   });
 });
 

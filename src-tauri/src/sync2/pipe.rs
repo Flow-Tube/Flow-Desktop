@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::{Instant, timeout, timeout_at};
-use tokio_tungstenite::{accept_async, connect_async};
+use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
 use super::engine::{EngineError, Result};
+use super::lan_link::lan_socket_config;
 use super::mailbox::Mailbox;
 use super::paths::pair_message_name;
 use crate::sync::qr::is_local_address;
@@ -268,10 +269,13 @@ impl Listening {
             .await
             .map_err(|_| EngineError::TimedOut)?
             .map_err(crate::sync::error::SyncError::from)?;
-        let socket = timeout_at(deadline, accept_async(stream))
-            .await
-            .map_err(|_| EngineError::TimedOut)?
-            .map_err(crate::sync::error::SyncError::from)?;
+        let socket = timeout_at(
+            deadline,
+            accept_async_with_config(stream, Some(lan_socket_config())),
+        )
+        .await
+        .map_err(|_| EngineError::TimedOut)?
+        .map_err(crate::sync::error::SyncError::from)?;
         let mut pipe = LanPipe {
             socket: WsChannel::new(socket),
             shower: true,
@@ -286,7 +290,12 @@ impl Listening {
 pub async fn dial(addresses: &[LanAddress]) -> Option<LanPipe<ClientStream>> {
     for address in addresses.iter().filter(|a| is_local_address(&a.a)) {
         let url = ws_url(&address.a, address.p, PAIR_PATH);
-        if let Ok(Ok((socket, _))) = timeout(CONNECT_TIMEOUT, connect_async(url.as_str())).await {
+        if let Ok(Ok((socket, _))) = timeout(
+            CONNECT_TIMEOUT,
+            connect_async_with_config(url.as_str(), Some(lan_socket_config()), false),
+        )
+        .await
+        {
             return Some(LanPipe {
                 socket: WsChannel::new(socket),
                 shower: false,
@@ -295,4 +304,23 @@ pub async fn dial(addresses: &[LanAddress]) -> Option<LanPipe<ClientStream>> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn the_scanner_key_is_the_first_32_bytes(
+            bytes in prop::collection::vec(any::<u8>(), 0..96),
+        ) {
+            let split = split_key(&bytes).ok().map(|(key, rest)| (key.to_vec(), rest.to_vec()));
+            let expected = (bytes.len() >= KEY_SIZE)
+                .then(|| (bytes[..KEY_SIZE].to_vec(), bytes[KEY_SIZE..].to_vec()));
+            prop_assert_eq!(split, expected);
+        }
+    }
 }

@@ -1,17 +1,18 @@
 //! Restoring a group with the recovery key (spec/protocol.md, Recovery): the recovery member adds
-//! a new device and starts an epoch, then the new device replaces the used key straight away.
+//! a new device and starts an epoch, then the new device replaces the used key straight away. Any
+//! device can replace the key the same way, so leaked words stop working.
 
 use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-use super::engine::{EngineError, Result};
+use super::engine::{EngineError, Result, Session};
 use super::entries::{Draft, build_entry, member_subject};
 use super::epoch::check_epoch_key;
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
-use super::membership::new_epoch;
+use super::membership::{append_checked, new_epoch};
 use super::meta::seal_device_meta;
 use super::recovery::{recovery_keys, recovery_words};
 use super::roster::{Entry, Op, Role, RosterState, apply_entry, replay_roster};
@@ -63,6 +64,73 @@ async fn append<S: Store>(
         Appended::Done => Ok(after),
         Appended::Conflict { .. } => Err(Error::RosterChain.into()),
     }
+}
+
+/// A `recovery` entry that replaces the recovery member `old` and starts an epoch it never
+/// receives, with its wraps and chain box, and the new key's words.
+struct Replacement {
+    entry: Entry,
+    wraps: BTreeMap<String, String>,
+    chain: String,
+    words: String,
+}
+
+fn replacement(
+    group: &[u8; 16],
+    state: &RosterState,
+    device: &MemberSecrets,
+    old: &str,
+    current_key: &[u8],
+) -> Result<Replacement> {
+    let secret: [u8; 32] = random_bytes();
+    let next = recovery_keys(&secret);
+    let epoch = new_epoch(
+        group,
+        state.epoch + 1,
+        &members_with(state, old, &[&next])?,
+        current_key,
+    )?;
+    let draft = Draft {
+        op: Op::Recovery,
+        signer: hex::encode(device.did),
+        add: Some(vec![member_subject(
+            &next.sig_public,
+            &next.kem_public,
+            Role::Recovery,
+        )]),
+        remove: Some(vec![old.to_owned()]),
+        epoch: Some(epoch.field),
+        meta: None,
+    };
+    Ok(Replacement {
+        entry: build_entry(group, Some(state), draft, &[device, &next]),
+        wraps: epoch.wraps,
+        chain: epoch.chain,
+        words: recovery_words(&secret),
+    })
+}
+
+/// Replaces the group's recovery key from this device and returns the new words to show once.
+pub async fn replace_recovery_key<S: Store>(
+    session: &Session<'_, S>,
+    device: &MemberSecrets,
+) -> Result<String> {
+    let state = session.roster();
+    let old = state
+        .members
+        .iter()
+        .find(|(_, member)| member.role == Role::Recovery)
+        .map(|(did, _)| did.clone())
+        .ok_or(Error::RosterFormat)?;
+    let replaced = replacement(session.group(), state, device, &old, session.current_key())?;
+    append_checked(
+        session,
+        &replaced.entry,
+        &replaced.wraps,
+        Some(&replaced.chain),
+    )
+    .await?;
+    Ok(replaced.words)
 }
 
 /// `as_recovery` is the store signed in as the recovery member, `as_device` as the new device.
@@ -139,31 +207,18 @@ pub async fn restore<S: Store>(
     )
     .await?;
 
-    let secret: [u8; 32] = random_bytes();
-    let next = recovery_keys(&secret);
-    let replaced = new_epoch(
-        &group,
-        state.epoch + 1,
-        &members_with(&state, &recovery_id, &[&next])?,
-        &restored.key,
-    )?;
-    let draft = Draft {
-        op: Op::Recovery,
-        signer: hex::encode(device.did),
-        add: Some(vec![member_subject(
-            &next.sig_public,
-            &next.kem_public,
-            Role::Recovery,
-        )]),
-        remove: Some(vec![recovery_id]),
-        epoch: Some(replaced.field),
-        meta: None,
-    };
-    let entry = build_entry(&group, Some(&state), draft, &[device, &next]);
-    append(as_device, &state, &entry, &replaced.wraps, &replaced.chain).await?;
+    let replaced = replacement(&group, &state, device, &recovery_id, &restored.key)?;
+    append(
+        as_device,
+        &state,
+        &replaced.entry,
+        &replaced.wraps,
+        &replaced.chain,
+    )
+    .await?;
 
     Ok(Restored {
         entries: as_device.roster_after(-1).await?,
-        words: recovery_words(&secret),
+        words: replaced.words,
     })
 }

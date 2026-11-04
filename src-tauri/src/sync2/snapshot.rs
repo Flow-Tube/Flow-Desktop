@@ -11,9 +11,11 @@ use super::blob::seal_blob;
 use super::engine::{Result, Session, now_ms};
 use super::envelope::ObjectType;
 use super::epoch::purpose_key;
+use super::gc::{Logged, bounded_seq, manifests, record_manifest};
 use super::kdf::sha256;
 use super::paths::blob_path;
 use super::payload::encode_payload;
+use super::profile_names::{self, PROFILES};
 use super::state::streams;
 use super::store::Store;
 use crate::sync::canonical::to_canonical_json;
@@ -21,6 +23,8 @@ use crate::sync::error::SyncError;
 use crate::sync::protocol::OutgoingCollection;
 
 const MERGED_LIMIT: i64 = 1024 * 1024;
+/// How the `profiles` collection is named among links in this device's snapshot records.
+pub const PROFILES_KEY: &str = "";
 const MAX_AGE_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 /// spec/store.md asks for at most 2 MiB of payload per blob.
 const BLOB_CONTENT_LIMIT: usize = 2 * 1024 * 1024;
@@ -38,6 +42,7 @@ pub struct Part {
 #[serde(deny_unknown_fields)]
 pub struct Tip {
     pub hash: String,
+    #[serde(deserialize_with = "bounded_seq")]
     pub seq: u64,
 }
 
@@ -77,6 +82,25 @@ pub async fn snapshot_due(pool: &SqlitePool, link: &str) -> Result<bool> {
         .is_some_and(|(written, merged)| merged > MERGED_LIMIT || now_ms() - written >= MAX_AGE_MS))
 }
 
+/// When this device wrote the snapshot of `link` it still keeps, if it wrote one.
+pub async fn own_snapshot_ms(pool: &SqlitePool, me: &str, link: &str) -> Result<Option<i64>> {
+    let own = manifests(pool)
+        .await?
+        .iter()
+        .any(|logged| logged.did == me && logged.manifest.link.as_deref() == Some(link));
+    if !own {
+        return Ok(None);
+    }
+    let written: Option<i64> =
+        sqlx::query_scalar("SELECT written_ms FROM sync2_snapshots WHERE link = ?")
+            .bind(link)
+            .fetch_optional(pool)
+            .await
+            .map_err(SyncError::from)?;
+    // Zero asks for a snapshot soon, after a removal; it says nothing about the last one.
+    Ok(written.filter(|ms| *ms > 0))
+}
+
 /// After this device removed another, its next sync writes a snapshot under the new epoch.
 pub async fn snapshot_soon(pool: &SqlitePool) -> Result<()> {
     sqlx::query("UPDATE sync2_snapshots SET written_ms = 0")
@@ -87,12 +111,15 @@ pub async fn snapshot_soon(pool: &SqlitePool) -> Result<()> {
 }
 
 async fn snapshot_written(pool: &SqlitePool, link: &str) -> Result<()> {
-    sqlx::query("UPDATE sync2_snapshots SET written_ms = ?, merged_bytes = 0 WHERE link = ?")
-        .bind(now_ms())
-        .bind(link)
-        .execute(pool)
-        .await
-        .map_err(SyncError::from)?;
+    sqlx::query(
+        "INSERT INTO sync2_snapshots (link, written_ms, merged_bytes) VALUES (?, ?, 0)
+         ON CONFLICT (link) DO UPDATE SET written_ms = excluded.written_ms, merged_bytes = 0",
+    )
+    .bind(link)
+    .bind(now_ms())
+    .execute(pool)
+    .await
+    .map_err(SyncError::from)?;
     Ok(())
 }
 
@@ -114,17 +141,40 @@ fn chunks(ndjson: &[u8]) -> Vec<Vec<&[u8]>> {
 }
 
 impl<S: Store> Session<'_, S> {
-    /// Writes `exported`, the whole state of this link, as blobs and then a manifest naming the
-    /// last object of every log merged into it.
+    /// Writes `exported`, the whole state of the running profile's link, as blobs and then a
+    /// manifest naming the last object of every log merged into it. The caller first applies
+    /// every batch kept for that link.
     pub async fn write_snapshot(
         &mut self,
         pool: &SqlitePool,
         exported: Vec<OutgoingCollection>,
     ) -> Result<()> {
+        let Some(link) = self.reading().active.clone() else {
+            return Ok(());
+        };
+        let collections = exported
+            .iter()
+            .map(|c| (c.collection.key(), c.ndjson.as_slice()))
+            .collect();
+        self.write_snapshot_of(pool, Some(link), collections).await
+    }
+
+    /// Writes the `profiles` collection as a snapshot of its own.
+    pub async fn write_profiles_snapshot(&mut self, pool: &SqlitePool) -> Result<()> {
+        let ndjson = profile_names::ndjson(pool).await?;
+        self.write_snapshot_of(pool, None, vec![(PROFILES, ndjson.as_slice())])
+            .await
+    }
+
+    async fn write_snapshot_of(
+        &mut self,
+        pool: &SqlitePool,
+        link: Option<String>,
+        collections: Vec<(&str, &[u8])>,
+    ) -> Result<()> {
         let group = *self.group();
         let epoch = self.roster().epoch;
         let did = self.device().did;
-        let link = self.record().link.clone();
         let head = self.roster().head.clone();
         let key = purpose_key(
             self.current_key(),
@@ -133,14 +183,14 @@ impl<S: Store> Session<'_, S> {
             ObjectType::Snapshot.purpose(),
         );
         let mut parts = Vec::new();
-        for collection in exported {
-            for records in chunks(&collection.ndjson) {
-                let content = batch_content(collection.collection, &head, &link, &records);
+        for (collection, ndjson) in collections {
+            for records in chunks(ndjson) {
+                let content = batch_content(collection, &head, link.as_deref(), &records);
                 let blob = seal_blob(&key, &group, epoch, &did, &encode_payload(&content)?);
                 let name = hex::encode(sha256(&blob));
                 parts.push(Part {
                     blob: name.clone(),
-                    collection: collection.collection.key().to_owned(),
+                    collection: collection.to_owned(),
                     size: blob.len() as u64,
                 });
                 self.store()
@@ -168,19 +218,36 @@ impl<S: Store> Session<'_, S> {
         );
         let manifest = Manifest {
             head,
-            link: Some(link.clone()),
+            link: link.clone(),
             parts,
             vv,
         };
         self.write(pool, ObjectType::Snapshot, &to_canonical_json(&manifest))
             .await?;
-        snapshot_written(pool, &link).await
+        let logged = Logged {
+            did: hex::encode(did),
+            seq: u64::try_from(self.record().own_seq).unwrap_or(0),
+            manifest,
+        };
+        record_manifest(pool, &logged).await?;
+        snapshot_written(pool, link.as_deref().unwrap_or(PROFILES_KEY)).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_manifest_naming_a_seq_above_2_53_is_refused() {
+        let manifest = |seq: u64| {
+            serde_json::from_str::<Manifest>(&format!(
+                r#"{{"head":"","link":null,"parts":[],"vv":{{"a":{{"hash":"","seq":{seq}}}}}}}"#
+            ))
+        };
+        assert!(manifest((1 << 53) - 1).is_ok());
+        assert!(manifest(1 << 53).is_err());
+    }
 
     #[test]
     fn records_are_split_below_the_blob_limit() {

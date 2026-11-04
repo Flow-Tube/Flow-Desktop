@@ -52,6 +52,20 @@ describe("enrichCurrentVideo", () => {
 });
 
 describe("video queue", () => {
+  it("replaces the queue around the video playing, which carries on", () => {
+    usePlayerStore.getState().setQueue([video("a"), video("b")], 1);
+    usePlayerStore.setState({ currentTime: 42 });
+    usePlayerStore.getState().replaceQueue([video("x"), video("b"), video("y")]);
+    let state = usePlayerStore.getState();
+    expect(state.queue.map((item) => item.id)).toEqual(["x", "b", "y"]);
+    expect([state.currentIndex, state.currentVideo?.id, state.currentTime]).toEqual([1, "b", 42]);
+
+    usePlayerStore.getState().replaceQueue([video("z")]);
+    state = usePlayerStore.getState();
+    expect(state.queue.map((item) => item.id)).toEqual(["b", "z"]);
+    expect(state.currentIndex).toBe(0);
+  });
+
   it("keeps the current video when the first upcoming item is added", () => {
     const current = video("current");
     const next = video("next");

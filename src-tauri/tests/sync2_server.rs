@@ -12,7 +12,7 @@ use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::server::{ServerStore, StoreError};
 use flow_desktop_lib::sync2::store::Store;
 use serde_json::{Value, json};
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 const INSTANCE: &str = "0102030405060708090a0b0c0d0e0f10";
@@ -54,6 +54,10 @@ impl Respond for TokenIssuer {
 }
 
 async fn server(instance: &str) -> (MockServer, Arc<AtomicUsize>) {
+    server_for(instance, &member()).await
+}
+
+async fn server_for(instance: &str, member: &MemberSecrets) -> (MockServer, Arc<AtomicUsize>) {
     let server = MockServer::start().await;
     let challenge = json!({ "challenge": URL_SAFE_NO_PAD.encode([5; 32]), "instance": instance, "group": GROUP, "time": 0 });
     Mock::given(method("POST"))
@@ -63,7 +67,7 @@ async fn server(instance: &str) -> (MockServer, Arc<AtomicUsize>) {
         .await;
     let issued = Arc::new(AtomicUsize::new(0));
     let issuer = TokenIssuer {
-        member: member().sig_public,
+        member: member.sig_public,
         issued: Arc::clone(&issued),
     };
     Mock::given(method("POST"))
@@ -111,6 +115,32 @@ async fn requests_carry_a_token_from_a_signed_challenge() {
         store.identity().await,
         (Some(INSTANCE.to_owned()), Some(GROUP.to_owned()))
     );
+}
+
+#[tokio::test]
+async fn a_token_is_reused_by_the_next_connection_until_it_expires() {
+    // Keys no other test uses: wiremock reuses server addresses, and tokens are cached per address and device.
+    let own = || member_secrets([8; 32], [9; 32]);
+    let (server, issued) = server_for(INSTANCE, &own()).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/roster"))
+        .and(header("authorization", "Bearer t1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "entries": [] })))
+        .expect(2)
+        .mount(&server)
+        .await;
+    for _ in 0..2 {
+        let store = ServerStore::connect(
+            &format!("{}/", server.uri()),
+            own(),
+            Some(INSTANCE.to_owned()),
+            Some(GROUP.to_owned()),
+        )
+        .await
+        .unwrap();
+        assert!(store.roster_after(-1).await.unwrap().is_empty());
+    }
+    assert_eq!(issued.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -201,4 +231,278 @@ async fn a_lost_append_reports_the_current_head() {
             head: "newer".to_owned()
         }
     );
+}
+
+#[tokio::test]
+async fn claiming_a_server_that_has_a_group_says_so() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/claim"))
+        .respond_with(ResponseTemplate::new(409).set_body_json(json!({ "error": "conflict" })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let genesis = serde_json::from_value(json!({
+        "v": 2, "group": GROUP, "seq": 0, "prev": "00".repeat(32), "op": "rename",
+        "signer": "00".repeat(16), "meta": { "00000000000000000000000000000000": "x" }, "sigs": {}
+    }))
+    .unwrap();
+    assert!(matches!(
+        store.claim("admin", &genesis, &Default::default()).await,
+        Err(StoreError::AlreadyClaimed)
+    ));
+}
+
+#[tokio::test]
+async fn a_join_request_waits_for_a_member_s_code() {
+    use flow_desktop_lib::sync2::codes::{Code, StoreLocation, new_offer};
+    use flow_desktop_lib::sync2::join_requests::wait_for_code;
+    use wiremock::matchers::path_regex;
+
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/join"))
+        .and(header("authorization", "Bearer admin"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "expires": 1 })))
+        .mount(&server)
+        .await;
+    let answer = "^/v1/join/[0-9a-f]{32}$";
+    Mock::given(method("GET"))
+        .and(path_regex(answer))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({ "error": "not_found" })))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    let code = new_offer(
+        Some(StoreLocation::server(&server.uri())),
+        "Desktop A",
+        None,
+    )
+    .qr;
+    Mock::given(method("GET"))
+        .and(path_regex(answer))
+        .and(header("authorization", "Bearer admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "code": code })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let answered = wait_for_code(&store, "admin", "New desktop").await.unwrap();
+    assert!(matches!(answered, Code::Member { .. }));
+    let posted: Value = serde_json::from_slice(
+        &server
+            .received_requests()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.url.path() == "/v1/join")
+            .unwrap()
+            .body,
+    )
+    .unwrap();
+    assert_eq!(posted["name"], "New desktop");
+    assert_eq!(posted["id"].as_str().unwrap().len(), 32);
+}
+
+#[tokio::test]
+async fn a_declined_join_request_stops_waiting() {
+    use flow_desktop_lib::sync2::engine::EngineError;
+    use flow_desktop_lib::sync2::join_requests::wait_for_code;
+    use wiremock::matchers::path_regex;
+
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/join"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "expires": 1 })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex("^/v1/join/[0-9a-f]{32}$"))
+        .respond_with(ResponseTemplate::new(410).set_body_json(json!({ "error": "declined" })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let waited = wait_for_code(&store, "admin", "New desktop").await;
+    assert!(matches!(
+        waited,
+        Err(EngineError::Store(StoreError::JoinDeclined))
+    ));
+}
+
+#[tokio::test]
+async fn members_list_answer_and_decline_join_requests_with_their_token() {
+    let (server, _) = server(INSTANCE).await;
+    let id = "ab".repeat(16);
+    Mock::given(method("GET"))
+        .and(path("/v1/join"))
+        .and(header("authorization", "Bearer t1"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(
+                json!({ "requests": [{ "id": id, "name": "Phone", "expires": 5 }] }),
+            ),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("PUT"))
+        .and(path(format!("/v1/join/{id}")))
+        .respond_with(ResponseTemplate::new(201))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path(format!("/v1/join/{id}")))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let requests = store.join_requests().await.unwrap();
+    assert_eq!(
+        (requests[0].id.as_str(), requests[0].name.as_str()),
+        (id.as_str(), "Phone")
+    );
+    store.answer_join(&id, "{}").await.unwrap();
+    store.decline_join(&id).await.unwrap();
+}
+
+#[tokio::test]
+async fn the_server_says_when_it_last_heard_from_each_device() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "used": 0, "quota": 1, "objects": 0,
+            "devices": { "aa": { "seen": 1000 }, "bb": { "seen": 2000 } }
+        })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let seen = store.last_seen().await.unwrap();
+    assert_eq!(seen.get("aa"), Some(&1000));
+    assert_eq!(seen.get("bb"), Some(&2000));
+}
+
+#[tokio::test]
+async fn the_server_reports_its_storage_and_what_it_speaks() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/status"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "used": 2048, "quota": 4096, "objects": 7, "devices": {}
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/info"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "api": ["v1"], "protocol": ["FLOW-SYNC/2"], "claimed": true, "live": true, "limits": {}
+        })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let status = store.status().await.unwrap();
+    assert_eq!((status.used, status.quota, status.objects), (2048, 4096, 7));
+    let info = store.info().await.unwrap();
+    assert_eq!(info.protocols, ["FLOW-SYNC/2"]);
+    assert!(info.live);
+}
+
+#[tokio::test]
+async fn a_server_reset_to_empty_says_the_group_is_gone() {
+    use flow_desktop_lib::sync2::engine::EngineError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/challenge"))
+        .respond_with(ResponseTemplate::new(503).set_body_json(json!({ "error": "unclaimed" })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    let error = EngineError::from(store.roster_after(-1).await.unwrap_err());
+    assert_eq!(error.kind(), "linkedGroupMissing");
+}
+
+#[tokio::test]
+async fn a_server_reset_needs_the_admin_token_and_says_when_it_is_refused() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/admin/reset"))
+        .and(header("authorization", "Bearer admin"))
+        .and(body_json(json!({ "confirm": "reset" })))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/admin/reset"))
+        .and(header("authorization", "Bearer wrong"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({ "error": "unauthorized" })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/admin/reset"))
+        .and(header("authorization", "Bearer banned"))
+        .respond_with(ResponseTemplate::new(429).set_body_json(json!({ "error": "rate_limited" })))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    store.reset_server("admin").await.unwrap();
+    assert!(matches!(
+        store.reset_server("wrong").await,
+        Err(StoreError::AdminRefused)
+    ));
+    assert!(matches!(
+        store.reset_server("banned").await,
+        Err(StoreError::AdminBanned)
+    ));
+}
+
+#[tokio::test]
+async fn answers_past_their_limit_are_refused() {
+    let (server, _) = server(INSTANCE).await;
+    let bytes = |len: usize| ResponseTemplate::new(200).set_body_bytes(vec![0; len]);
+    Mock::given(method("GET"))
+        .and(path("/v1/objects/fits"))
+        .respond_with(bytes(4 << 20))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/objects/big"))
+        .respond_with(bytes((4 << 20) + 1))
+        .mount(&server)
+        .await;
+    let listing = json!({ "objects": [], "cursor": "1", "pad": "x".repeat(16 << 20) });
+    Mock::given(method("GET"))
+        .and(path("/v1/changes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(listing))
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        store.get_object("fits").await.unwrap().unwrap().len(),
+        4 << 20
+    );
+    assert!(matches!(
+        store.get_object("big").await,
+        Err(StoreError::Malformed)
+    ));
+    assert!(matches!(store.changes(0).await, Err(StoreError::Malformed)));
 }

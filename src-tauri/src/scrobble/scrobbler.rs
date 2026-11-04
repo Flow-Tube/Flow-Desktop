@@ -19,7 +19,7 @@ use super::models::{Account, ScrobbleEntry, SendOutcome, Service};
 use super::queue::{self, Table};
 use super::rules::{self, TrackInfo};
 use crate::errors::{AppError, AppResult};
-use crate::security::keychain::{CredentialError, CredentialStore};
+use crate::security::keychain::{CredentialError, CredentialStore, off_thread};
 
 const LAST_FM: Client = Client::new(audioscrobbler::LASTFM_URL);
 const LIBRE_FM: Client = Client::new(audioscrobbler::LIBREFM_URL);
@@ -92,9 +92,8 @@ impl Scrobbler {
         job: impl FnOnce(&dyn CredentialStore) -> Result<T, CredentialError> + Send + 'static,
     ) -> AppResult<T> {
         let store = Arc::clone(&self.store);
-        tokio::task::spawn_blocking(move || job(store.as_ref()))
+        off_thread(move || job(store.as_ref()))
             .await
-            .map_err(|error| AppError::Internal(error.to_string()))?
             .map_err(|error| AppError::Keychain(error.to_string()))
     }
 

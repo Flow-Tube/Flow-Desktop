@@ -2,16 +2,17 @@
 //! since this device last uploaded them, in the FLOW-SYNC/1 canonical form, so the existing
 //! export and the existing transactional apply do the real work.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::SqlitePool;
 
-use crate::sync::apply::{ApplyReport, apply_payload};
+use crate::sync::apply::{ApplyReport, apply_stream_payload};
 use crate::sync::canonical::{Collection, to_canonical_json};
 use crate::sync::codec::sha256_hex;
 use crate::sync::error::SyncError;
+use crate::sync::export::export_collections;
 use crate::sync::frames::collection_from_key;
 use crate::sync::protocol::{OutgoingCollection, StagedCollection};
 
@@ -39,9 +40,12 @@ pub struct Batch {
 #[derive(Debug, Default)]
 pub struct Outgoing {
     pub batches: Vec<Batch>,
-    sent: Vec<(Collection, String, String)>,
+    sent: Vec<Sent>,
     now_ms: i64,
 }
+
+/// A record as uploaded or received: its link, collection, key and hash.
+type Sent = (String, Collection, String, String);
 
 fn record_key(collection: Collection, record: &Value) -> Option<String> {
     let field = |name: &str| record.get(name)?.as_str().map(str::to_owned);
@@ -80,13 +84,16 @@ fn record_hash(collection: Collection, record: &Value, line: &[u8]) -> String {
 
 async fn sent_hashes(
     pool: &SqlitePool,
+    link: &str,
     collection: Collection,
 ) -> Result<BTreeMap<String, (String, i64)>, SyncError> {
-    let rows: Vec<(String, String, i64)> =
-        sqlx::query_as("SELECT record_key, hash, sent_at FROM sync2_sent WHERE collection = ?")
-            .bind(collection.key())
-            .fetch_all(pool)
-            .await?;
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT record_key, hash, sent_at FROM sync2_sent_links WHERE link = ? AND collection = ?",
+    )
+    .bind(link)
+    .bind(collection.key())
+    .fetch_all(pool)
+    .await?;
     Ok(rows
         .into_iter()
         .map(|(key, hash, at)| (key, (hash, at)))
@@ -94,17 +101,17 @@ async fn sent_hashes(
 }
 
 /// A header line and then the records, one per line: the format of change batches and of
-/// snapshot blobs.
+/// snapshot blobs. `link` is `None` for the `profiles` collection.
 pub fn batch_content(
-    collection: Collection,
+    collection: &str,
     head: &str,
-    link: &str,
+    link: Option<&str>,
     records: &[impl AsRef<[u8]>],
 ) -> Vec<u8> {
     let header = BatchHeader {
-        collection: collection.key().to_owned(),
+        collection: collection.to_owned(),
         head: head.to_owned(),
-        link: Some(link.to_owned()),
+        link: link.map(str::to_owned),
     };
     let mut content = to_canonical_json(&header);
     for record in records {
@@ -129,7 +136,7 @@ pub async fn outgoing_batches(
     };
     for exported in exported {
         let collection = exported.collection;
-        let sent = sent_hashes(pool, collection).await?;
+        let sent = sent_hashes(pool, link, collection).await?;
         let mut changed = Vec::new();
         for line in exported
             .ndjson
@@ -146,13 +153,13 @@ pub async fn outgoing_batches(
                 && previous.is_some_and(|(_, at)| now_ms - at < BRAIN_INTERVAL_MS);
             if previous.map(|(h, _)| h) != Some(&hash) && !too_soon {
                 changed.push(line.to_vec());
-                outgoing.sent.push((collection, key, hash));
+                outgoing.sent.push((link.to_owned(), collection, key, hash));
             }
         }
         for records in changed.chunks(RECORDS_PER_BATCH) {
             outgoing.batches.push(Batch {
                 collection,
-                content: batch_content(collection, head, link, records),
+                content: batch_content(collection.key(), head, Some(link), records),
             });
         }
     }
@@ -164,14 +171,13 @@ pub async fn mark_sent(pool: &SqlitePool, outgoing: &Outgoing) -> Result<(), Syn
     remember(pool, &outgoing.sent, outgoing.now_ms).await
 }
 
-async fn remember(
-    pool: &SqlitePool,
-    records: &[(Collection, String, String)],
-    now_ms: i64,
-) -> Result<(), SyncError> {
-    let mut tx = pool.begin().await?;
-    for (collection, key, hash) in records {
-        sqlx::query("INSERT INTO sync2_sent (collection, record_key, hash, sent_at) VALUES (?, ?, ?, ?) ON CONFLICT (collection, record_key) DO UPDATE SET hash = excluded.hash, sent_at = excluded.sent_at")
+/// The record of what was sent is the device's, in Default's database like the rest of the group's
+/// state, while `pool` may be the running profile's.
+async fn remember(pool: &SqlitePool, records: &[Sent], now_ms: i64) -> Result<(), SyncError> {
+    let mut tx = crate::db::device::pool(pool).begin().await?;
+    for (link, collection, key, hash) in records {
+        sqlx::query("INSERT INTO sync2_sent_links (link, collection, record_key, hash, sent_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (link, collection, record_key) DO UPDATE SET hash = excluded.hash, sent_at = excluded.sent_at")
+            .bind(link)
             .bind(collection.key())
             .bind(key)
             .bind(hash)
@@ -191,6 +197,23 @@ pub struct IncomingBatch {
     /// The batch's length in bytes, which counts toward the next snapshot.
     pub size: usize,
     records: Vec<u8>,
+}
+
+impl IncomingBatch {
+    /// A batch this device kept for a profile that wasn't running, read back.
+    pub(super) fn kept(collection: &str, link: String, head: String, records: Vec<u8>) -> Self {
+        Self {
+            collection: collection_from_key(collection),
+            link: Some(link),
+            head,
+            size: records.len(),
+            records,
+        }
+    }
+
+    pub(super) fn records(&self) -> &[u8] {
+        &self.records
+    }
 }
 
 pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, SyncError> {
@@ -221,9 +244,9 @@ pub async fn apply_batches(
     now_ms: i64,
 ) -> Result<ApplyReport, SyncError> {
     let mut staged = Vec::new();
-    let mut known = Vec::new();
+    let mut received: BTreeMap<(&str, String), BTreeSet<&str>> = BTreeMap::new();
     for batch in batches {
-        let Some(collection) = batch.collection else {
+        let (Some(collection), Some(link)) = (batch.collection, batch.link.as_deref()) else {
             continue;
         };
         let lines: Vec<&[u8]> = batch
@@ -234,7 +257,10 @@ pub async fn apply_batches(
         for line in &lines {
             let record: Value = serde_json::from_slice(line)?;
             if let Some(key) = record_key(collection, &record) {
-                known.push((collection, key, record_hash(collection, &record, line)));
+                received
+                    .entry((collection.key(), key))
+                    .or_default()
+                    .insert(link);
             }
         }
         let ndjson = lines.join(&b'\n');
@@ -245,7 +271,37 @@ pub async fn apply_batches(
             ndjson,
         });
     }
-    let report = apply_payload(pool, our_device_id, sender, &staged).await?;
+    let report = apply_stream_payload(pool, our_device_id, sender, &staged).await?;
+    // Another app writes the same record in its own canonical form, so what counts as sent is this
+    // device's export of each received record, or the next push would send it straight back.
+    let mut collections: Vec<Collection> = Vec::new();
+    for collection in staged.iter().map(|s| s.collection) {
+        if !collections.contains(&collection) {
+            collections.push(collection);
+        }
+    }
+    let exported = export_collections(pool, our_device_id, &collections).await?;
+    let mut known = Vec::new();
+    for exported in exported {
+        let collection = exported.collection;
+        for line in exported
+            .ndjson
+            .split(|&b| b == b'\n')
+            .filter(|l| !l.is_empty())
+        {
+            let record: Value = serde_json::from_slice(line)?;
+            let Some(key) = record_key(collection, &record) else {
+                continue;
+            };
+            let Some(links) = received.get(&(collection.key(), key.clone())) else {
+                continue;
+            };
+            let hash = record_hash(collection, &record, line);
+            for link in links {
+                known.push(((*link).to_owned(), collection, key.clone(), hash.clone()));
+            }
+        }
+    }
     remember(pool, &known, now_ms).await?;
     Ok(report)
 }

@@ -1,26 +1,32 @@
 //! One sync with a store: verify the roster, push this device's changes, pull everyone else's.
 //! It holds no secrets beyond the session: epoch keys are unwrapped from the store each time.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::SqlitePool;
 
-use super::batches::{IncomingBatch, mark_sent, outgoing_batches, parse_batch};
+use super::batches::{IncomingBatch, batch_content, mark_sent, outgoing_batches, parse_batch};
+use super::bootstrap::Snapshot;
 use super::envelope::{
-    Header, ObjectType, StreamPosition, next_in_stream, open_object, parse_object, seal_object,
-    verify_object,
+    Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
+    seal_object, verify_object,
 };
 use super::epoch::{check_epoch_key, open_chain, purpose_key};
+use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
+use super::kept::{Kept, keep};
 use super::keys::MemberSecrets;
 use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
+use super::profile_links::{Reading, forget_link, link_profile};
+use super::profile_names::{self, PROFILES};
 use super::roster::{Entry, RosterState, apply_entry, replay_roster};
 use super::server::StoreError;
-use super::snapshot::{Manifest, note_merged};
+use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    GroupRecord, add_roster_entries, load_group, roster_entries, save_group, save_streams, streams,
+    Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, save_floors,
+    save_group, save_streams, streams,
 };
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
@@ -57,6 +63,16 @@ pub enum EngineError {
     RecoveryUsed,
     #[error("this device is already in a sync group")]
     AlreadyLinked,
+    #[error("the other device couldn't be reached on this network")]
+    LanUnreachable,
+    #[error("the code names another WebDAV folder")]
+    OtherFolder,
+    #[error("a device in a group keeps at least one profile synced")]
+    LastProfile,
+    #[error("that profile already syncs on this device")]
+    ProfileTaken,
+    #[error("only the running profile can start syncing")]
+    NotRunning,
 }
 
 impl EngineError {
@@ -65,11 +81,22 @@ impl EngineError {
         match self {
             Self::Store(StoreError::Insecure) => "linkedInsecure",
             Self::Store(StoreError::Network(_)) => "linkedUnreachable",
+            // A server reset to an empty database no longer has the group.
+            Self::Store(StoreError::Refused { code, .. }) if code == "unclaimed" => {
+                "linkedGroupMissing"
+            }
             Self::Store(StoreError::Refused { .. }) => "linkedRefused",
             Self::Store(StoreError::InstanceChanged) => "linkedInstanceChanged",
+            Self::Store(StoreError::AlreadyClaimed) => "linkedAlreadyClaimed",
+            Self::Store(StoreError::AdminRefused) => "linkedAdminRefused",
+            Self::Store(StoreError::AdminBanned) => "linkedAdminBanned",
+            Self::Store(StoreError::SignInRefused) => "linkedSignInRefused",
+            Self::Store(StoreError::JoinDeclined) => "linkedJoinDeclined",
+            Self::Store(StoreError::Unauthorized) => "linkedStoreUnauthorized",
+            Self::Store(StoreError::Local(_)) | Self::Settings(_) => "linkedLocal",
+            Self::Keychain(_) => "linkedKeychain",
             Self::Store(_) | Self::Protocol(_) | Self::Unexpected => "linkedProtocol",
             Self::Local(error) => error.kind(),
-            Self::Keychain(_) | Self::Settings(_) => "linkedLocal",
             Self::NotLinked => "linkedNotLinked",
             Self::Removed => "linkedRemoved",
             Self::Declined => "linkedDeclined",
@@ -77,6 +104,11 @@ impl EngineError {
             Self::WrongWords => "linkedWrongWords",
             Self::RecoveryUsed => "linkedRecoveryUsed",
             Self::AlreadyLinked => "linkedAlreadyLinked",
+            Self::LanUnreachable => "linkedLanUnreachable",
+            Self::OtherFolder => "linkedOtherFolder",
+            Self::LastProfile => "linkedLastProfile",
+            Self::ProfileTaken => "linkedProfileTaken",
+            Self::NotRunning => "linkedProfileNotRunning",
         }
     }
 }
@@ -90,22 +122,101 @@ pub fn now_ms() -> i64 {
 /// Batches read from other devices, not applied yet, and how far reading got.
 #[derive(Default)]
 pub struct Pulled {
+    /// The running profile's batches, by sender, to apply before [`Session::finish`].
     pub batches: BTreeMap<String, Vec<IncomingBatch>>,
+    /// Batches of linked profiles that aren't running, kept by [`Session::finish`].
+    pub kept: Vec<Kept>,
+    /// `profiles` batches, merged by [`Session::finish`].
+    pub profiles: Vec<IncomingBatch>,
+    /// Where the snapshots started from stop including each link's batches.
+    floors: Floors,
     positions: BTreeMap<String, StreamPosition>,
     cursor: i64,
     /// Batches and snapshot manifests read. Acks aren't acknowledged, so two idle devices don't
     /// answer each other's acks forever.
     consumed: usize,
     stalled: bool,
-    /// The profile links named by the batches and snapshot manifests read, in reading order.
-    links: Vec<String>,
+    /// The links named by the batches and snapshot manifests read, in reading order; `None` is
+    /// the `profiles` collection.
+    links: Vec<Option<String>>,
+    acks: BTreeMap<String, VersionVector>,
+    manifests: Vec<Logged>,
+}
+
+impl Pulled {
+    /// Takes the records of a snapshot this device starts from, as a batch of its writer's.
+    fn start_from(&mut self, me: &str, snapshot: Snapshot, reading: Option<&Reading>) {
+        self.links.push(snapshot.manifest.link.clone());
+        let Some(link) = snapshot.manifest.link else {
+            self.profiles.extend(snapshot.batches);
+            return;
+        };
+        for (did, tip) in snapshot.manifest.vv.iter().filter(|(did, _)| *did != me) {
+            self.floors.insert((link.clone(), did.clone()), tip.seq);
+        }
+        let writer = snapshot.writer;
+        match reading {
+            Some(reading) if reading.active.as_deref() != Some(link.as_str()) => {
+                for (part, batch) in (1..).zip(snapshot.batches) {
+                    self.kept.push(Kept {
+                        link: link.clone(),
+                        sender: writer.clone(),
+                        seq: snapshot.seq,
+                        part,
+                        batch,
+                    });
+                }
+            }
+            _ => self
+                .batches
+                .entry(writer)
+                .or_default()
+                .extend(snapshot.batches),
+        }
+    }
+
+    /// Takes a batch `did` wrote at `seq`: to apply, to keep, or to skip, as `reading` asks.
+    fn take(
+        &mut self,
+        did: String,
+        seq: u64,
+        batch: IncomingBatch,
+        reading: Option<&Reading>,
+        floors: &Floors,
+    ) {
+        let Some(link) = batch.link.clone() else {
+            self.profiles.push(batch);
+            return;
+        };
+        let Some(reading) = reading else {
+            self.batches.entry(did).or_default().push(batch);
+            return;
+        };
+        if floors
+            .get(&(link.clone(), did.clone()))
+            .is_some_and(|floor| seq <= *floor)
+        {
+            return;
+        }
+        if reading.active.as_deref() == Some(link.as_str()) {
+            self.batches.entry(did).or_default().push(batch);
+        } else if reading.kept.contains(&link) {
+            self.kept.push(Kept {
+                link,
+                sender: did,
+                seq,
+                part: 0,
+                batch,
+            });
+        }
+    }
 }
 
 /// What a log object carries, once checked and opened.
-enum Content {
+pub(super) enum Content {
     Batch(IncomingBatch),
     Snapshot(Manifest),
-    Ack,
+    Ack(Ack),
 }
 
 pub struct Session<'a, S> {
@@ -118,6 +229,7 @@ pub struct Session<'a, S> {
     signing_keys: BTreeMap<String, [u8; 32]>,
     commitments: BTreeMap<u32, Vec<u8>>,
     keys: BTreeMap<u32, Vec<u8>>,
+    reading: Reading,
 }
 
 fn decode_b64(value: &str) -> Result<Vec<u8>> {
@@ -126,47 +238,109 @@ fn decode_b64(value: &str) -> Result<Vec<u8>> {
         .map_err(|_| Error::RosterFormat.into())
 }
 
+/// The signing key of every device the roster ever added, by `did`.
+pub fn signing_keys(entries: &[Entry]) -> Result<BTreeMap<String, [u8; 32]>> {
+    let mut keys = BTreeMap::new();
+    for subject in entries.iter().flat_map(|e| e.add.iter().flatten()) {
+        keys.insert(subject.did.clone(), array(&decode_b64(&subject.sig)?));
+    }
+    Ok(keys)
+}
+
+/// `None` when reading an object fails a protocol check: that object is discarded, which stops
+/// only its sender's log (spec/store.md, Untrusted input), not the run.
+pub(super) fn contained<T>(read: Result<T>) -> Result<Option<T>> {
+    match read {
+        Ok(read) => Ok(Some(read)),
+        Err(EngineError::Protocol(error)) => {
+            if error != Error::Gap {
+                tracing::warn!(target: "flow::sync2", kind = error.code(), "discarded an object");
+            }
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// Steps 1 to 3 of reading an envelope (spec/store.md): structure, sender, signature, for the
+/// object at `did`'s `seq`.
+pub fn verify_logged<'b>(
+    bytes: &'b [u8],
+    group: &[u8; 16],
+    signing_keys: &BTreeMap<String, [u8; 32]>,
+    did: &str,
+    seq: u64,
+) -> std::result::Result<ParsedObject<'b>, Error> {
+    let object = parse_object(bytes, group)?;
+    verify_object(&object, signing_keys.get(did).ok_or(Error::Sender)?)?;
+    if hex::encode(object.header.sender) != did || object.header.seq != seq {
+        return Err(Error::Replay);
+    }
+    Ok(object)
+}
+
 impl<'a, S: Store> Session<'a, S> {
-    /// Brings the roster up to date and unwraps the current epoch key.
+    /// Brings the roster up to date, unwraps the current epoch key, and starts the next epoch
+    /// when a device left.
     pub async fn open(pool: &SqlitePool, store: S, device: &'a MemberSecrets) -> Result<Self> {
+        let mut session = Self::open_as_peer(pool, store, device).await?;
+        session.rotate_if_due(pool).await?;
+        Ok(session)
+    }
+
+    /// Like [`Session::open`], but never appends: a LAN session of a group on a store must leave
+    /// roster changes to the store.
+    pub async fn open_as_peer(
+        pool: &SqlitePool,
+        store: S,
+        device: &'a MemberSecrets,
+    ) -> Result<Self> {
         let record = load_group(pool).await?.ok_or(EngineError::NotLinked)?;
         let group = array(&hex::decode(&record.group_id).map_err(|_| Error::Group)?);
-        let mut entries = roster_entries(pool).await?;
-        let mut state = replay_roster(&entries)?;
-        let after = i64::try_from(state.seq).map_err(|_| Error::RosterChain)?;
-        let fresh = store.roster_after(after).await?;
-        for entry in &fresh {
-            state = apply_entry(Some(&state), entry)?;
-        }
-        add_roster_entries(pool, &fresh).await?;
-        entries.extend(fresh);
-        if !state.members.contains_key(&hex::encode(device.did)) {
-            return Err(EngineError::Removed);
-        }
+        let entries = roster_entries(pool).await?;
         let mut session = Self {
             store,
             device,
+            reading: Reading::single(&record.link),
             record,
             group,
-            state,
-            entries: Vec::new(),
+            state: replay_roster(&entries)?,
+            entries,
             signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
         };
-        for entry in &entries {
-            for subject in entry.add.iter().flatten() {
-                session
-                    .signing_keys
-                    .insert(subject.did.clone(), array(&decode_b64(&subject.sig)?));
-            }
-            if let Some(epoch) = &entry.epoch {
-                session.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
-            }
-        }
-        session.entries = entries;
-        session.unwrap_current().await?;
+        session.refresh(pool).await?;
         Ok(session)
+    }
+
+    /// Reads and checks the roster entries appended since, and unwraps the key of the epoch in
+    /// force.
+    pub(super) async fn refresh(&mut self, pool: &SqlitePool) -> Result<()> {
+        let after = i64::try_from(self.state.seq).map_err(|_| Error::RosterChain)?;
+        let fresh = self.store.roster_after(after).await?;
+        let mut state = self.state.clone();
+        for entry in &fresh {
+            state = apply_entry(Some(&state), entry)?;
+        }
+        add_roster_entries(pool, &fresh).await?;
+        self.state = state;
+        self.entries.extend(fresh);
+        if !self
+            .state
+            .members
+            .contains_key(&hex::encode(self.device.did))
+        {
+            return Err(EngineError::Removed);
+        }
+        self.signing_keys = signing_keys(&self.entries)?;
+        for epoch in self.entries.iter().filter_map(|e| e.epoch.as_ref()) {
+            self.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
+        }
+        if !self.keys.contains_key(&self.state.epoch) {
+            self.unwrap_current().await?;
+        }
+        Ok(())
     }
 
     pub fn store(&self) -> &S {
@@ -183,6 +357,15 @@ impl<'a, S: Store> Session<'a, S> {
 
     pub fn record(&self) -> &GroupRecord {
         &self.record
+    }
+
+    /// The links this session pushes, applies and keeps; at first only the link Default joined.
+    pub fn reading(&self) -> &Reading {
+        &self.reading
+    }
+
+    pub fn set_reading(&mut self, reading: Reading) {
+        self.reading = reading;
     }
 
     pub fn device(&self) -> &MemberSecrets {
@@ -275,40 +458,50 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(())
     }
 
-    /// Uploads what changed in `exported` since the last upload.
+    /// Uploads what changed in `exported`, the running profile's data, since the last upload.
     pub async fn push(
         &mut self,
         pool: &SqlitePool,
         exported: Vec<OutgoingCollection>,
     ) -> Result<usize> {
-        let outgoing = outgoing_batches(
-            pool,
-            exported,
-            &self.state.head,
-            &self.record.link,
-            now_ms(),
-        )
-        .await?;
+        let Some(link) = self.reading.active.clone() else {
+            return Ok(0);
+        };
+        let outgoing = outgoing_batches(pool, exported, &self.state.head, &link, now_ms()).await?;
         for batch in &outgoing.batches {
             self.write(pool, ObjectType::Changes, &batch.content)
                 .await?;
         }
         mark_sent(pool, &outgoing).await?;
         let bytes = outgoing.batches.iter().map(|b| b.content.len()).sum();
-        note_merged(pool, &self.record.link, bytes).await?;
+        note_merged(pool, &link, bytes).await?;
         Ok(outgoing.batches.len())
+    }
+
+    /// Uploads the `profiles` records this device changed since it last sent them.
+    pub async fn push_profiles(&mut self, pool: &SqlitePool) -> Result<()> {
+        let unsent = profile_names::unsent(pool).await?;
+        if unsent.is_empty() {
+            return Ok(());
+        }
+        let lines: Vec<Vec<u8>> = unsent.iter().map(to_canonical_json).collect();
+        let content = batch_content(PROFILES, &self.state.head, None, &lines);
+        self.write(pool, ObjectType::Changes, &content).await?;
+        profile_names::mark_sent(pool, &unsent).await?;
+        note_merged(pool, PROFILES_KEY, content.len()).await
     }
 
     /// Reads other devices' new objects in stream order, checking each one. Nothing is applied:
     /// the caller applies [`Pulled::batches`] and then calls [`Session::finish`].
     pub async fn pull(&mut self, pool: &SqlitePool) -> Result<Pulled> {
-        let link = self.record.link.clone();
-        self.read_new(pool, Some(&link)).await
+        let reading = self.reading.clone();
+        self.read_new(pool, Some(&reading)).await
     }
 
-    /// Links a restored device's profile (spec/protocol.md, Recovery): to the link other devices'
-    /// batches name, or to `own` when they name none. False while the logs can't be read to the
-    /// end yet; nothing may be pushed or pulled until this returns true.
+    /// Links a restored device's profile `own` (spec/protocol.md, Recovery): to the link other
+    /// devices' batches name, or to its own id when they name none. False while the logs can't be
+    /// read to the end yet, or while the user has to choose among several links (whose names it
+    /// keeps); nothing may be pushed or pulled until this returns true.
     pub async fn adopt_link(&mut self, pool: &SqlitePool, own: &str) -> Result<bool> {
         if !self.record.link.is_empty() {
             return Ok(true);
@@ -317,26 +510,53 @@ impl<'a, S: Store> Session<'a, S> {
         if read.stalled {
             return Ok(false);
         }
-        self.record.link = read
-            .links
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| own.to_owned());
+        let deleted = profile_names::merge(pool, &profile_names::parse(&read.profiles)).await?;
+        let mut links: Vec<String> = Vec::new();
+        for link in read.links.iter().flatten() {
+            if !links.contains(link) && !deleted.contains(link) {
+                links.push(link.clone());
+            }
+        }
+        if links.len() > 1 {
+            record_links(pool, &read.links).await?;
+            return Ok(false);
+        }
+        let link = links.pop().unwrap_or_else(|| own.to_owned());
+        link_profile(pool, own, &link).await?;
+        self.record.link.clone_from(&link);
         save_group(pool, &self.record).await?;
+        self.reading.active = Some(link);
         Ok(true)
     }
 
-    /// Batches of `link` only, or every batch when `link` is `None`.
-    async fn read_new(&mut self, pool: &SqlitePool, link: Option<&str>) -> Result<Pulled> {
+    /// The batches `reading` asks for, or every batch when it is `None`.
+    async fn read_new(&mut self, pool: &SqlitePool, reading: Option<&Reading>) -> Result<Pulled> {
         let me = hex::encode(self.device.did);
         let mut pulled = Pulled {
             positions: streams(pool).await?,
             cursor: self.record.cursor,
             ..Pulled::default()
         };
+        let links = reading.map(|r| r.links().map(str::to_owned).collect::<BTreeSet<_>>());
+        if pulled.positions.is_empty()
+            && pulled.cursor == 0
+            && let Some(start) = self.bootstrap(links.as_ref()).await?
+        {
+            for snapshot in start.snapshots {
+                pulled.start_from(&me, snapshot, reading);
+            }
+            pulled.positions = start.positions;
+        }
+        let mut floors = floors(pool).await?;
+        floors.extend(pulled.floors.clone());
         loop {
             let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
-            let (changes, next) = self.store.changes(cursor).await?;
+            let read: BTreeMap<String, u64> = pulled
+                .positions
+                .iter()
+                .map(|(did, position)| (did.clone(), position.seq))
+                .collect();
+            let (changes, next) = self.store.new_objects(cursor, &read).await?;
             if changes.is_empty() {
                 return Ok(pulled);
             }
@@ -359,19 +579,23 @@ impl<'a, S: Store> Session<'a, S> {
                         .await?
                     {
                         Some((position, content)) => {
+                            let seq = position.seq;
                             pulled.positions.insert(did.clone(), position);
-                            if !matches!(content, Content::Ack) {
+                            if !matches!(content, Content::Ack(_)) {
                                 pulled.consumed += 1;
                             }
                             match content {
                                 Content::Batch(batch) => {
-                                    pulled.links.extend(batch.link.clone());
-                                    if link.is_none_or(|l| batch.link.as_deref() == Some(l)) {
-                                        pulled.batches.entry(did).or_default().push(batch);
-                                    }
+                                    pulled.links.push(batch.link.clone());
+                                    pulled.take(did, seq, batch, reading, &floors);
                                 }
-                                Content::Snapshot(manifest) => pulled.links.extend(manifest.link),
-                                Content::Ack => {}
+                                Content::Snapshot(manifest) => {
+                                    pulled.links.push(manifest.link.clone());
+                                    pulled.manifests.push(Logged { did, seq, manifest });
+                                }
+                                Content::Ack(ack) => {
+                                    pulled.acks.insert(did, ack.vv);
+                                }
                             }
                         }
                         None => still.push((did, seq, path)),
@@ -387,13 +611,22 @@ impl<'a, S: Store> Session<'a, S> {
                 pulled.stalled = true;
                 return Ok(pulled);
             }
+            let advanced = next > cursor
+                || pulled
+                    .positions
+                    .iter()
+                    .any(|(did, position)| read.get(did) != Some(&position.seq));
+            if !advanced {
+                return Ok(pulled);
+            }
             pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
         }
     }
 
     /// One log object, checked in the order of spec/store.md. `None` when an earlier object of
-    /// this sender is still missing.
-    async fn read_object(
+    /// this sender is still missing, or when this one is discarded: either stops reading this
+    /// sender's log here, and the other senders are still read.
+    pub(super) async fn read_object(
         &mut self,
         path: &str,
         did: &str,
@@ -403,16 +636,36 @@ impl<'a, S: Store> Session<'a, S> {
         let Some(bytes) = self.store.get_object(path).await? else {
             return Ok(None);
         };
-        let object = parse_object(&bytes, &self.group)?;
-        let sender = self.signing_keys.get(did).ok_or(Error::Sender)?;
-        verify_object(&object, sender)?;
-        if hex::encode(object.header.sender) != did || object.header.seq != seq {
-            return Err(Error::Replay.into());
-        }
-        let position = match next_in_stream(last, &object) {
-            Err(Error::Gap) => return Ok(None),
-            other => other?,
+        let read = async {
+            let object = self.verified(&bytes, did, seq)?;
+            let position = next_in_stream(last, &object)?;
+            Ok((position, self.open_content(&object).await?))
         };
+        contained(read.await)
+    }
+
+    /// Steps 1 to 3 of reading an envelope: structure, sender, signature. The caller checks its
+    /// place in the stream before opening it.
+    pub(super) fn verified<'b>(
+        &self,
+        bytes: &'b [u8],
+        did: &str,
+        seq: u64,
+    ) -> Result<ParsedObject<'b>> {
+        Ok(verify_logged(
+            bytes,
+            &self.group,
+            &self.signing_keys,
+            did,
+            seq,
+        )?)
+    }
+
+    pub(super) fn signing_keys(&self) -> &BTreeMap<String, [u8; 32]> {
+        &self.signing_keys
+    }
+
+    pub(super) async fn open_content(&mut self, object: &ParsedObject<'_>) -> Result<Content> {
         let epoch = object.header.epoch;
         let key = purpose_key(
             &self.epoch_key(epoch).await?,
@@ -420,36 +673,52 @@ impl<'a, S: Store> Session<'a, S> {
             epoch,
             object.header.object_type.purpose(),
         );
-        let content = decode_payload(&open_object(&object, &key)?)?;
-        let content = match object.header.object_type {
+        let content = decode_payload(&open_object(object, &key)?)?;
+        Ok(match object.header.object_type {
             ObjectType::Changes => Content::Batch(parse_batch(&content)?),
             ObjectType::Snapshot => {
                 Content::Snapshot(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
             }
-            ObjectType::Ack => Content::Ack,
+            ObjectType::Ack => {
+                Content::Ack(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
+            }
             ObjectType::Live => return Err(Error::Suite.into()),
-        };
-        Ok(Some((position, content)))
+        })
     }
 
-    /// Saves how far reading got, after the caller applied the batches, and acknowledges it.
+    /// Keeps the batches of profiles that aren't running, saves how far reading got, after the
+    /// caller applied the running profile's, and acknowledges it.
     pub async fn finish(&mut self, pool: &SqlitePool, pulled: Pulled) -> Result<()> {
+        keep(pool, &pulled.kept).await?;
+        save_floors(pool, &pulled.floors).await?;
+        let records = profile_names::parse(&pulled.profiles);
+        for link in profile_names::merge(pool, &records).await? {
+            forget_link(pool, &link).await?;
+        }
         save_streams(pool, &pulled.positions, pulled.cursor).await?;
-        let merged = pulled.batches.values().flatten().map(|b| b.size).sum();
-        note_merged(pool, &self.record.link, merged).await?;
+        if let Some(link) = &self.reading.active {
+            let merged = pulled.batches.values().flatten().map(|b| b.size).sum();
+            note_merged(pool, link, merged).await?;
+        }
         self.record.cursor = pulled.cursor;
+        for (did, vv) in &pulled.acks {
+            record_ack(pool, did, vv).await?;
+        }
+        for logged in &pulled.manifests {
+            record_manifest(pool, logged).await?;
+        }
+        record_links(pool, &pulled.links).await?;
         if pulled.consumed > 0 {
-            let vv: BTreeMap<&String, u64> = pulled
-                .positions
-                .iter()
-                .map(|(did, p)| (did, p.seq))
-                .collect();
-            self.write(
-                pool,
-                ObjectType::Ack,
-                &to_canonical_json(&serde_json::json!({ "vv": vv })),
-            )
-            .await?;
+            let ack = Ack {
+                vv: pulled
+                    .positions
+                    .iter()
+                    .map(|(did, p)| (did.clone(), p.seq))
+                    .collect(),
+            };
+            self.write(pool, ObjectType::Ack, &to_canonical_json(&ack))
+                .await?;
+            record_ack(pool, &hex::encode(self.device.did), &ack.vv).await?;
         }
         Ok(())
     }

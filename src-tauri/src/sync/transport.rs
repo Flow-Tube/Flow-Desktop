@@ -142,15 +142,19 @@ pub async fn accept(listener: &TcpListener) -> Result<WsChannel<TcpStream>, Sync
     Ok(WsChannel::new(ws))
 }
 
+/// The `ws://` URL of `path` on a LAN peer, with an IPv6 literal in brackets.
+pub fn ws_url(ip: &str, port: u16, path: &str) -> String {
+    if ip.contains(':') {
+        format!("ws://[{ip}]:{port}{path}")
+    } else {
+        format!("ws://{ip}:{port}{path}")
+    }
+}
+
 /// Connect to a host and complete the WebSocket handshake (client role). Dials the fixed
 /// `/flow-sync` path so a host that enforces the path accepts us.
 pub async fn connect(ip: &str, port: u16) -> Result<WsChannel<ClientStream>, SyncError> {
-    let host = if ip.contains(':') {
-        format!("[{ip}]")
-    } else {
-        ip.to_string()
-    };
-    let url = format!("ws://{host}:{port}{WS_PATH}");
+    let url = ws_url(ip, port, WS_PATH);
     tracing::info!(target: "flow::sync::transport", %url, "dialing host");
     let (ws, _resp) = connect_async(&url).await.map_err(|e| {
         tracing::warn!(target: "flow::sync::transport", %url, "WebSocket connect failed: {e}");

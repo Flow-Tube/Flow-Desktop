@@ -14,6 +14,7 @@ use flow_desktop_lib::sync::export::export_collections;
 use flow_desktop_lib::sync::protocol::OutgoingCollection;
 use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
+use flow_desktop_lib::sync2::linking::WelcomeStore;
 use flow_desktop_lib::sync2::mailbox::Mailbox;
 use flow_desktop_lib::sync2::roster::{Entry, Op, Role, RosterState, replay_roster};
 use flow_desktop_lib::sync2::sealed::random_bytes;
@@ -32,6 +33,8 @@ pub struct Memory {
     pub keys: BTreeMap<(u32, String), Vec<u8>>,
     pub objects: BTreeMap<String, (u64, Vec<u8>)>,
     pub mailbox: BTreeMap<String, Vec<u8>>,
+    /// Every delete request made, found or not.
+    pub deletes: Vec<String>,
     cursor: u64,
 }
 
@@ -49,6 +52,15 @@ impl MemoryStore {
 
     pub fn take(&self, path: &str) -> Vec<u8> {
         self.0.lock().unwrap().objects.remove(path).unwrap().1
+    }
+
+    /// Replaces the object at `path` with one whose signature fails, and returns the genuine one.
+    pub fn tamper(&self, path: &str) -> Vec<u8> {
+        let genuine = self.take(path);
+        let mut tampered = genuine.clone();
+        tampered[150] ^= 1;
+        self.put(path, tampered);
+        genuine
     }
 }
 
@@ -117,6 +129,12 @@ impl Store for &MemoryStore {
             .objects
             .get(path)
             .map(|(_, bytes)| bytes.clone()))
+    }
+
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        let mut memory = self.0.lock().unwrap();
+        memory.deletes.push(path.to_owned());
+        Ok(memory.objects.remove(path).is_some())
     }
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
@@ -239,6 +257,14 @@ pub async fn group() -> Group {
     }
 }
 
+/// The store a member of this fixture's group names in its welcome.
+pub fn memory_welcome() -> WelcomeStore {
+    WelcomeStore::Server {
+        u: "memory".into(),
+        i: String::new(),
+    }
+}
+
 pub async fn device_pool(group: &Group) -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
@@ -301,6 +327,27 @@ pub async fn empty_pool() -> SqlitePool {
 /// Every collection, exported as the app would before a push.
 pub async fn exported(pool: &SqlitePool, app_id: &str) -> Vec<OutgoingCollection> {
     export_collections(pool, app_id, &Collection::ALL)
+        .await
+        .unwrap()
+}
+
+/// Records a watch of video `id`, as the app does.
+pub async fn watch(pool: &SqlitePool, id: &str) {
+    sqlx::query(
+        "INSERT INTO watch_history (video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds,
+             total_duration_seconds, is_music, is_short, updated_hlc)
+         VALUES (?, 'title', NULL, NULL, '2025-01-01T00:00:00+00:00', 10, 600, 0, 0, '100:0:dA')",
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// The videos watched, by id.
+pub async fn watched(pool: &SqlitePool) -> Vec<String> {
+    sqlx::query_scalar("SELECT video_id FROM watch_history ORDER BY video_id")
+        .fetch_all(pool)
         .await
         .unwrap()
 }

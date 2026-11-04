@@ -54,7 +54,9 @@ import {
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
   clearLiveTiming,
+  isAtLiveEdge,
   liveEdgePosition,
+  liveStallRecoveryTarget,
   liveTimingFromPlaylist,
   liveWindow,
   readLiveTiming,
@@ -287,6 +289,7 @@ export const Player: React.FC<PlayerProps> = ({
   const dashPlayerRef = useRef<DashPlayerController | null>(null);
   const dashReadyRef = useRef(false);
   const hlsPlayerRef = useRef<Hls | null>(null);
+  const liveSeekedBackRef = useRef(false);
   const qualitySwitchSnapshotRef = useRef<QualitySwitchSnapshot | null>(null);
   const qualitySwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mediaBufferingRef = useRef(false);
@@ -1051,6 +1054,7 @@ export const Player: React.FC<PlayerProps> = ({
     if (isLive && video.seekable.length) {
       const { start, end } = liveWindow(video);
       nextTime = Math.min(Math.max(time, start), end);
+      liveSeekedBackRef.current = !isAtLiveEdge(nextTime, end, readLiveTiming(video));
     } else {
       const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration || 0;
       nextTime = dur > 0 ? Math.min(Math.max(time, 0), dur) : Math.max(time, 0);
@@ -1618,6 +1622,7 @@ export const Player: React.FC<PlayerProps> = ({
       loader: ProxyLoader as unknown as typeof Hls.DefaultConfig.loader,
     });
     hlsPlayerRef.current = hls;
+    liveSeekedBackRef.current = false;
     let fatalRecoveryAttempts = 0;
     let destroyedAfterFatal = false;
 
@@ -1640,13 +1645,15 @@ export const Player: React.FC<PlayerProps> = ({
       });
       if (!data.fatal) {
         if (isLive && data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-          const seekable = video.seekable;
-          if (seekable.length) {
-            const start = seekable.start(0);
-            if (video.currentTime < start) {
-              video.currentTime = start + 1;
-              if (desiredPlayingRef.current) void video.play().catch(() => {});
-            }
+          const target = liveStallRecoveryTarget({
+            position: video.currentTime,
+            window: liveWindow(video),
+            syncPosition: hls.liveSyncPosition,
+            seekedBack: liveSeekedBackRef.current,
+          });
+          if (target !== null) {
+            video.currentTime = target;
+            if (desiredPlayingRef.current) void video.play().catch(() => {});
           }
         }
         return;

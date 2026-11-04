@@ -4,6 +4,7 @@ import {
   clearLiveTiming,
   isAtLiveEdge,
   liveEdgePosition,
+  liveStallRecoveryTarget,
   liveTimingFromPlaylist,
   liveWindow,
   readLiveTiming,
@@ -66,5 +67,29 @@ describe("live timing on the video", () => {
     expect(readLiveTiming(video)).toEqual(timing);
     clearLiveTiming(video);
     expect(readLiveTiming(video)).toEqual(defaults);
+  });
+});
+
+describe("liveStallRecoveryTarget", () => {
+  const window = { start: 100, end: 1000 };
+
+  it("catches up to live for a viewer who never seeked back", () => {
+    expect(liveStallRecoveryTarget({ position: 900, window, syncPosition: 985, seekedBack: false })).toBe(985);
+  });
+
+  it("uses the window's end when hls.js has no sync position", () => {
+    expect(liveStallRecoveryTarget({ position: 900, window, syncPosition: null, seekedBack: false })).toBe(996);
+  });
+
+  it("leaves a viewer who seeked back where they are", () => {
+    expect(liveStallRecoveryTarget({ position: 300, window, syncPosition: 985, seekedBack: true })).toBeNull();
+  });
+
+  it("never jumps backward", () => {
+    expect(liveStallRecoveryTarget({ position: 990, window, syncPosition: 985, seekedBack: false })).toBeNull();
+  });
+
+  it("moves back inside the window when playback fell off its start", () => {
+    expect(liveStallRecoveryTarget({ position: 50, window, syncPosition: 985, seekedBack: true })).toBe(101);
   });
 });

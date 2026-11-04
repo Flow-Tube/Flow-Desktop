@@ -59,3 +59,24 @@ export function secondsBehindLive(position: number, end: number, timing: LiveTim
 export function liveEdgePosition(window: LiveWindow, timing: LiveTiming): number {
   return Math.max(window.start, window.end - timing.holdBackSeconds);
 }
+
+/**
+ * Where a stalled live stream should jump to, if anywhere. Falling off the start of the window
+ * always needs a jump. Otherwise it catches up to live, unless the viewer chose to be behind.
+ */
+export function liveStallRecoveryTarget({
+  position,
+  window,
+  syncPosition,
+  seekedBack,
+}: {
+  position: number;
+  window: LiveWindow;
+  syncPosition: number | null;
+  seekedBack: boolean;
+}): number | null {
+  if (position < window.start) return window.start + 1;
+  if (seekedBack) return null;
+  const target = syncPosition != null && Number.isFinite(syncPosition) ? syncPosition : window.end - 4;
+  return target > position ? target : null;
+}

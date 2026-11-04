@@ -1,9 +1,10 @@
-import { useEffect, type ComponentType } from "react";
+import { useEffect, useRef, type ComponentType } from "react";
 import { motion, type Transition } from "framer-motion";
 import type { ConfirmItem } from "../../store/useConfirmStore";
 import { Button } from "./Button";
 
 const SURFACE_SPRING: Transition = { type: "spring", stiffness: 420, damping: 38, mass: 0.8 };
+const FOCUS_RING = "focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]";
 
 export interface ConfirmDialogProps {
   icon: ComponentType<{ className?: string }>;
@@ -30,12 +31,26 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
+      // Stopped on the way down, so the player and shortcuts behind never see the key.
+      // Enter and Space still press the focused button, since their default isn't cancelled.
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        const buttons = [...(cardRef.current?.querySelectorAll("button") ?? [])];
+        const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const step = event.shiftKey ? buttons.length - 1 : 1;
+        buttons[(current + step) % buttons.length]?.focus();
+      }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onCancel]);
 
   return (
@@ -49,6 +64,7 @@ export function ConfirmDialog({
       role="presentation"
     >
       <motion.div
+        ref={cardRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -77,7 +93,7 @@ export function ConfirmDialog({
                   <img
                     src={item.image}
                     alt=""
-                    className="aspect-video w-24 shrink-0 rounded-lg bg-surface-container-high object-cover"
+                    className="aspect-video w-24 shrink-0 rounded-xl bg-surface-container-high object-cover"
                   />
                 )}
                 <div className="min-w-0">
@@ -90,10 +106,10 @@ export function ConfirmDialog({
         </div>
         <div className="flex justify-end gap-2 border-t border-chrome-neutral-800 bg-surface-container-low px-6 py-3">
           {/* Enter on a destructive question lands on Cancel, so a stray key press can't delete anything. */}
-          <Button variant="ghost" onClick={onCancel} autoFocus={destructive}>
+          <Button variant="ghost" className={FOCUS_RING} onClick={onCancel} autoFocus={destructive}>
             {cancelLabel}
           </Button>
-          <Button variant={destructive ? "destructive" : "primary"} onClick={onConfirm} autoFocus={!destructive}>
+          <Button variant={destructive ? "destructive" : "primary"} className={FOCUS_RING} onClick={onConfirm} autoFocus={!destructive}>
             {confirmLabel}
           </Button>
         </div>

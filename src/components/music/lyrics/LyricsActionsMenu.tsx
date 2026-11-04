@@ -6,6 +6,7 @@ import {
   AlignLeft,
   AlignRight,
   Copy,
+  Droplets,
   Languages,
   MoreVertical,
   Pencil,
@@ -22,6 +23,7 @@ import { useLyricsStore } from "../../../store/useLyricsStore";
 import { useLyricsActions, currentLyricsText } from "../../../lib/lyrics/useLyricsActions";
 import { useBoolPref, usePreference } from "../../../lib/usePreference";
 import { SETTINGS } from "../../../lib/settings/schema";
+import { IS_LINUX_RUNTIME } from "../../../lib/platform";
 import { getString } from "../../../lib/i18n/index";
 import { lyricsSourceLabel } from "../../../lib/lyrics/offline";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
@@ -82,6 +84,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [align, setAlign] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const { copy, save } = useLyricsActions(track);
 
   useEffect(() => {
@@ -190,6 +193,16 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
               checked={showRomanization}
               onChange={setShowRomanization}
             />
+            {/* Linux never draws this blur, because the engine would do it on the CPU. */}
+            {!IS_LINUX_RUNTIME && (
+              <SwitchRow
+                icon={<Droplets className="h-5 w-5" />}
+                title={getString("lyrics_blur_other_lines")}
+                supporting={getString("lyrics_blur_other_lines_summary")}
+                checked={blurOtherLines}
+                onChange={setBlurOtherLines}
+              />
+            )}
             <div className="mt-1 border-t border-chrome-neutral-800 pt-1">
               <MenuRow
                 icon={<Timer className="h-5 w-5" />}

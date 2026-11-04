@@ -1422,6 +1422,8 @@
   "lyrics_show_translation_summary": "Show the translated line under each lyric",
   "lyrics_show_romanization": "Romanization",
   "lyrics_show_romanization_summary": "Show lyrics in other scripts in Latin letters too",
+  "lyrics_blur_other_lines": "Blur other lines",
+  "lyrics_blur_other_lines_summary": "Turn off to read every line clearly",
   "lyrics_adjust_sync": "Adjust sync offset",
   "lyrics_sync_offset_value": "%ss",
   "lyrics_sync_step": "Move lyrics by %s seconds",

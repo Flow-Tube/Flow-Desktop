@@ -87,6 +87,8 @@ export interface TargetContext {
   active: boolean;
   /** False after a jump past other lines: a staggered move that long makes rows overtake each other. */
   cascade: boolean;
+  /** The reader's choice; false keeps every line sharp. */
+  blurOtherLines: boolean;
 }
 
 /** True when moving the anchor from one row to another passes over a main line, as a seek does. */
@@ -128,7 +130,9 @@ export function rowTarget(ctx: TargetContext, listIndex: number): RowTarget {
     scale: isActive ? ACTIVE_SCALE : INACTIVE_SCALE,
     alpha,
     blurRadius:
-      !ctx.isSynced || isActive || isBackground || !state.isAutoScrollEnabled ? 0 : Math.min(distance, MAX_BLUR_DISTANCE) * BLUR_PER_LINE,
+      !ctx.blurOtherLines || !ctx.isSynced || isActive || isBackground || !state.isAutoScrollEnabled
+        ? 0
+        : Math.min(distance, MAX_BLUR_DISTANCE) * BLUR_PER_LINE,
     active: isActive,
     presence: !isBackground || ctx.presence.has(listIndex),
   };

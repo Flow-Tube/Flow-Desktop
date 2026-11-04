@@ -61,6 +61,7 @@ export interface LyricsPanelProps {
   textAlign: LyricsAlign;
   showTranslation: boolean;
   showRomanization: boolean;
+  blurOtherLines: boolean;
   /** Applied inside the sync loops, so a nudge takes effect mid-line. */
   syncOffsetMs: number;
   /** False while the host keeps the panel mounted but hidden: every loop stops. */
@@ -82,7 +83,7 @@ export interface LyricsPanelProps {
  */
 export function LyricsPanel(props: LyricsPanelProps) {
   const { lyrics, syncedLyrics, isLoading, providerName, accent, backdrop, baseTextSize, maxRowWidth, textAlign } = props;
-  const { showTranslation, showRomanization, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
+  const { showTranslation, showRomanization, blurOtherLines, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [family, setFamily] = useState(DEFAULT_FAMILY);
@@ -261,6 +262,7 @@ export function LyricsPanel(props: LyricsPanelProps) {
     isSynced,
     active,
     cascade,
+    blurOtherLines,
   };
   const currentOffset = (listIndex: number) => motions.current.get(listIndex)?.offset.value;
   const rendered = renderedRows(ctx, state.userManualOffset, size.height, currentOffset);

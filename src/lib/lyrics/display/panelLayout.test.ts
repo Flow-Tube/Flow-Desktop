@@ -24,6 +24,7 @@ function context(state: LyricsPanelState, overrides: Partial<TargetContext> = {}
     isSynced: true,
     active: true,
     cascade: true,
+    blurOtherLines: true,
     ...overrides,
   };
 }
@@ -56,6 +57,14 @@ describe("lyrics panel layout", () => {
     expect(rowTarget(ctx, activeListIndexOf(ctx.items, 8)).blurRadius).toBe(0);
     state.resumeAutoScroll();
     expect(rowTarget(ctx, activeListIndexOf(ctx.items, 8)).blurRadius).toBe(16);
+  });
+
+  it("keeps every line sharp when the blur is switched off", () => {
+    const state = new LyricsPanelState(0);
+    state.advance(lines, 7200, false);
+    const ctx = context(state, { blurOtherLines: false });
+    expect(rowTarget(ctx, activeListIndexOf(ctx.items, 8)).blurRadius).toBe(0);
+    expect(rowTarget(context(state), activeListIndexOf(ctx.items, 8)).blurRadius).toBe(16);
   });
 
   it("sings no line while the host keeps the panel hidden", () => {

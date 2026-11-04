@@ -74,7 +74,7 @@ static IMAGE_FETCH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const
 const CORS_HEADERS: &str = "Access-Control-Allow-Origin: *\r\n\
 Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n\
 Access-Control-Allow-Headers: Range, Content-Type, Origin, Accept\r\n\
-Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges, Content-Encoding\r\n";
+Access-Control-Expose-Headers: Content-Length, Content-Range, Accept-Ranges\r\n";
 
 // googlevideo validates that the UA fetching a stream matches the client (`c=`)
 // that minted the URL; a mismatch (e.g. a web UA on a `c=IOS` URL) is a known
@@ -115,6 +115,23 @@ pub(crate) fn remote_session_expiry(remote_url: &str, now: u64) -> u64 {
     crate::api::innertube::core::gate_tracker::url_expiry_secs(remote_url)
         .filter(|expire| *expire > now)
         .unwrap_or(now + UNDATED_SESSION_SECS)
+}
+
+/// Media ranges must arrive byte-exact, but manifests and captions are text a
+/// live stream refetches every few seconds: a live playlist is about 880 KB as
+/// text and 12 KB compressed. The proxy's client never decodes, so the response's
+/// `Content-Encoding` is relayed and the webview does. Only gzip is asked for
+/// because the webview sees plain http here, where brotli support is uncertain.
+fn upstream_accept_encoding(content_type: &str) -> &'static str {
+    let content_type = content_type.to_ascii_lowercase();
+    if content_type.contains("mpegurl")
+        || content_type.contains("dash+xml")
+        || content_type.contains("text/vtt")
+    {
+        "gzip"
+    } else {
+        "identity"
+    }
 }
 
 fn session_link_age(session: &StreamSession) -> std::time::Duration {
@@ -845,12 +862,13 @@ async fn relay_remote(
         let is_image = session.content_type.starts_with("image/");
         let stall_guarded = session.content_type.starts_with("video/")
             || session.content_type.starts_with("audio/");
-        // Media ranges and manifests must arrive byte-exact and uncompressed
-        // so the proxy can relay exact Content-Length without chunked decoding mismatch.
         let mut req = client
             .get(target_url)
             .header("User-Agent", &upstream_user_agent)
-            .header("Accept-Encoding", "identity");
+            .header(
+                "Accept-Encoding",
+                upstream_accept_encoding(&session.content_type),
+            );
         if is_image {
             req = req
                 .header(
@@ -1010,7 +1028,9 @@ async fn relay_remote(
                 .get("Content-Encoding")
                 .and_then(|h| h.to_str().ok())
             {
-                response_headers.push_str(&format!("Content-Encoding: {encoding}\r\n"));
+                response_headers.push_str("Content-Encoding: ");
+                response_headers.push_str(encoding);
+                response_headers.push_str("\r\n");
             }
             response_headers.push_str(&format!("Accept-Ranges: {accept_ranges_value}\r\n"));
             response_headers.push_str(CORS_HEADERS);
@@ -1482,6 +1502,83 @@ mod range_recovery_tests {
         .await;
         assert!(result.is_ok());
         assert_eq!(body, b"abcdef");
+    }
+
+    #[tokio::test]
+    async fn relays_a_compressed_playlist_with_its_encoding() {
+        let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/playlist", upstream.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = upstream.accept().await.unwrap();
+            let mut request = [0; 2048];
+            let count = socket.read(&mut request).await.unwrap();
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Encoding: gzip\r\nContent-Length: 4\r\nConnection: close\r\n\r\n\x1f\x8b\x08\x00")
+                .await
+                .unwrap();
+            String::from_utf8_lossy(&request[..count]).to_lowercase()
+        });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut downstream = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let relay = tokio::spawn(async move {
+            let (manager, _) = StreamingManager::new();
+            let session = StreamSession {
+                kind: StreamSessionKind::Remote {
+                    remote_url: url.clone(),
+                },
+                content_type: "application/vnd.apple.mpegurl".into(),
+                registered_at: 0,
+                expires_at: u64::MAX,
+                user_agent: "test".into(),
+            };
+            let client = reqwest::Client::builder()
+                .no_gzip()
+                .no_brotli()
+                .no_deflate()
+                .build()
+                .unwrap();
+            relay_remote(
+                &mut socket,
+                &client,
+                &manager,
+                &session,
+                &url,
+                None,
+                "/stream/test",
+                false,
+            )
+            .await
+        });
+        let mut received = Vec::new();
+        downstream.read_to_end(&mut received).await.unwrap();
+        relay.await.unwrap().unwrap();
+        assert!(server.await.unwrap().contains("accept-encoding: gzip"));
+        let body_start = received
+            .windows(4)
+            .position(|part| part == b"\r\n\r\n")
+            .unwrap()
+            + 4;
+        let head = String::from_utf8_lossy(&received[..body_start]);
+        assert!(head.contains("Content-Encoding: gzip\r\n"));
+        assert_eq!(&received[body_start..], b"\x1f\x8b\x08\x00");
+    }
+
+    #[test]
+    fn only_text_sessions_ask_for_compression() {
+        for text in [
+            "application/vnd.apple.mpegurl",
+            "application/x-mpegURL",
+            "application/dash+xml",
+            "text/vtt",
+        ] {
+            assert_eq!(super::upstream_accept_encoding(text), "gzip");
+        }
+        for media in ["video/mp4", "audio/webm", "image/jpeg"] {
+            assert_eq!(super::upstream_accept_encoding(media), "identity");
+        }
     }
 
     #[tokio::test]

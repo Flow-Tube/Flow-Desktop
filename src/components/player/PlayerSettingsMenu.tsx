@@ -10,10 +10,16 @@ import {
   Pause,
   Sliders,
   SlidersHorizontal,
+  SunDim,
 } from "lucide-react";
 import type { PlaybackRate } from "../../store/usePlayerStore";
 import type { AudioTrack, CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
+import { useBoolPref } from "../../lib/usePreference";
+import { IS_MAIN_WINDOW } from "../../lib/appWindow";
+import { AmbientModeIcon } from "../ui/AmbientModeIcon";
+import { ToggleSwitch } from "../ui/ToggleSwitch";
+import { SETTINGS } from "../../lib/settings/schema";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
@@ -123,6 +129,8 @@ export function PlayerSettingsMenu({
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
+  const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
+  const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
 
   const panesRef = useRef<HTMLDivElement>(null);
   const shownPaneRef = useRef(pane);
@@ -192,6 +200,14 @@ export function PlayerSettingsMenu({
     </button>
   );
 
+  const toggleRow = (label: string, checked: boolean, icon: React.ReactNode, onChange: (next: boolean) => void) => (
+    <div className={cx(ROW, "text-chrome-zinc-100")}>
+      <span className="grid h-6 w-6 shrink-0 place-items-center text-chrome-zinc-300">{icon}</span>
+      <span className="min-w-0 flex-1">{label}</span>
+      <ToggleSwitch checked={checked} onChange={onChange} />
+    </div>
+  );
+
   const check = (on: boolean) => (on ? <Check size={17} className="shrink-0 text-chrome-white" /> : null);
 
   return (
@@ -236,6 +252,22 @@ export function PlayerSettingsMenu({
         {pane === "root" && (
           <div className="space-y-0.5">
             {settingRow(getString("player_menu_speed"), speedLabel(playbackRate), <Gauge size={18} />, () => onPaneChange("speed"))}
+            {/* The pop-out draws no glow, and its settings copy never reaches the main window. */}
+            {IS_MAIN_WINDOW &&
+              toggleRow(
+                getString("settings_ambient_mode"),
+                ambientMode,
+                <AmbientModeIcon size={18} />,
+                setAmbientMode,
+              )}
+            {IS_MAIN_WINDOW &&
+              ambientMode &&
+              toggleRow(
+                getString("settings_ambient_glow"),
+                ambientGlow,
+                <SunDim size={18} />,
+                setAmbientGlow,
+              )}
             {settingRow(
               getString("player_menu_quality"),
               qualityLabel(selectedQualityId, qualities, activeQualityLabel),

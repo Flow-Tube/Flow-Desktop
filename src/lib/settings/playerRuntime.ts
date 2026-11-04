@@ -93,7 +93,7 @@ export function videoCodecLabel(mimeType: string | null | undefined): string | n
   return null;
 }
 
-const codecMatches = (mimeType: string | null | undefined, preferredCodec: string) => {
+export const codecMatches = (mimeType: string | null | undefined, preferredCodec: string) => {
   const normalizedMime = (mimeType || "").toLowerCase();
   switch (preferredCodec) {
     case "H.264":
@@ -134,21 +134,27 @@ export function selectPreferredStreamVariant(
   const playable = variants.filter((variant) => variant.isPlayable && (variant.hasAudio || canUseAdaptive));
   if (playable.length === 0) return null;
 
-  const candidates = filterByPreferredCodec(playable, preferredCodec);
+  // Resolution first and codec second: no H.264 exists above 1080p, so a codec
+  // filter here would hold a 4K preference at 1080p. HDR only wins when nothing
+  // else reaches that resolution: it has its own, higher bitrate row.
+  const codecOrder = (variant: StreamVariant) =>
+    (variant.qualityLabel?.includes("HDR") ? 100 : 0)
+    + (preferredCodec !== "Auto" && codecMatches(variant.mimeType, preferredCodec) ? 0 : 10)
+    + codecRank(variant.mimeType);
 
-  const belowOrEqual = candidates
+  const belowOrEqual = playable
     .filter((variant) => (variant.height || 0) <= targetHeight)
     .sort(
       (left, right) =>
         (right.height || 0) - (left.height || 0) ||
-        codecRank(left.mimeType) - codecRank(right.mimeType) ||
+        codecOrder(left) - codecOrder(right) ||
         (right.bitrate || 0) - (left.bitrate || 0),
     );
   if (belowOrEqual[0]) return belowOrEqual[0];
 
-  return [...candidates].sort(
+  return [...playable].sort(
     (left, right) =>
       Math.abs((left.height || 0) - targetHeight) - Math.abs((right.height || 0) - targetHeight) ||
-      codecRank(left.mimeType) - codecRank(right.mimeType),
+      codecOrder(left) - codecOrder(right),
   )[0] ?? null;
 }

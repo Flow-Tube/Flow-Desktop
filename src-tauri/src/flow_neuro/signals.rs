@@ -84,6 +84,15 @@ pub async fn settle_brain(pool: &SqlitePool, brain: &mut UserBrain) -> AppResult
     Ok(changed)
 }
 
+/// The brain kept in a profile's database as stored, for showing a profile that isn't running:
+/// it only reads, so an unreadable or missing brain shows as a fresh one.
+pub async fn stored_brain(pool: &SqlitePool) -> AppResult<UserBrain> {
+    Ok(settings::get_setting(pool, BRAIN_SETTING)
+        .await?
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default())
+}
+
 pub async fn get_or_create_brain(pool: &SqlitePool) -> AppResult<UserBrain> {
     if let Some(json_str) = settings::get_setting(pool, BRAIN_SETTING).await? {
         match serde_json::from_str::<UserBrain>(&json_str) {

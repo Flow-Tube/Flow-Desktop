@@ -130,6 +130,16 @@ describe("shuffle", () => {
 });
 
 describe("queue editing", () => {
+  it("replaces the queue around the song playing, which carries on", async () => {
+    await store().playQueue([song("a"), song("b")], 1);
+    store().replaceQueue([song("x"), song("b"), song("y")]);
+    expect(ids(store().queue)).toEqual(["x", "b", "y"]);
+    expect(playing()).toBe("b");
+    store().replaceQueue([song("z")]);
+    expect(ids(store().queue)).toEqual(["b", "z"]);
+    expect(playing()).toBe("b");
+  });
+
   it("queues a song that already played", async () => {
     await store().playQueue([song("a"), song("b"), song("c")], 1);
     store().addToQueue(song("a"));
@@ -207,6 +217,20 @@ describe("radio", () => {
     useMusicPlayerStore.setState({ currentIndex: store().queue.length - 1 });
     await store()._ensureRadio();
     expect(store().radioExhausted).toBe(true);
+  });
+
+  it("keeps topping up after a top-up served entirely from the pool", async () => {
+    useMusicPlayerStore.setState({ radioEnabled: true });
+    const mix = Array.from({ length: 40 }, (_, i) => song(`r${i}`));
+    getMusicWatchQueue.mockImplementation(async (_videoId: string, playlistId?: string) =>
+      playlistId ? page(mix) : page([]),
+    );
+    await store().playTrack(song("seed"));
+    for (let topUp = 0; topUp < 3; topUp++) {
+      useMusicPlayerStore.setState({ currentIndex: store().queue.length - 1 });
+      await store()._ensureRadio();
+    }
+    expect(store().radioQueuedIds).toHaveLength(30);
   });
 
   it("lets one artist hold at most two songs of the station", async () => {

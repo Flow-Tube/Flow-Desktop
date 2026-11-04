@@ -1,36 +1,16 @@
 import { useState } from "react";
-import { KeyRound, QrCode, Wifi } from "lucide-react";
+import { FolderKey, KeyRound, QrCode } from "lucide-react";
 
+import type { WebdavLogin } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
+import { SegmentedControl } from "../../ui/SegmentedControl";
 import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
-
-function CreateGroup() {
-  const { create, createOnLan, busy } = useLinkedDevicesStore();
-  const [url, setUrl] = useState("");
-  const [token, setToken] = useState("");
-  return (
-    <Card title={getString("linked_setup_title")} subtitle={getString("linked_setup_subtitle")} className="col-span-12 lg:col-span-6">
-      <Field label={getString("linked_server_url")}>
-        <TextInput value={url} onChange={setUrl} placeholder={getString("linked_server_url_placeholder")} spellCheck={false} />
-      </Field>
-      <Field label={getString("linked_admin_token")} hint={getString("linked_admin_token_hint")}>
-        <TextInput type="password" value={token} onChange={setToken} spellCheck={false} />
-      </Field>
-      <div className="mt-auto flex flex-wrap gap-2">
-        <Button disabled={busy || !url.trim() || !token.trim()} onClick={() => void create(url, token)}>
-          {getString("linked_create")}
-        </Button>
-        <Button variant="tonal" disabled={busy} onClick={() => void createOnLan()}>
-          <Wifi className="h-4 w-4" /> {getString("linked_create_lan")}
-        </Button>
-      </div>
-    </Card>
-  );
-}
+import { CreateGroup } from "./CreateGroup";
+import { WebdavLoginFields } from "./WebdavLoginFields";
 
 /** Joins a server group with its address and admin token instead of a code. */
 function AskToJoin() {
@@ -52,20 +32,40 @@ function AskToJoin() {
   );
 }
 
+/** Joins a WebDAV group from another network: the folder's login lets pairing use its mailbox. */
+function ThroughFolder() {
+  const [url, setUrl] = useState("");
+  const [login, setLogin] = useState<WebdavLogin>({ user: "", password: "" });
+  const ready = url.trim() && login.user.trim() && login.password;
+  return (
+    <>
+      <p className="text-sm text-chrome-neutral-400">{getString("linked_join_folder_hint")}</p>
+      <Field label={getString("linked_webdav_url")}>
+        <TextInput value={url} onChange={setUrl} placeholder={getString("linked_webdav_url_placeholder")} spellCheck={false} />
+      </Field>
+      <WebdavLoginFields login={login} onChange={setLogin} />
+      {ready && <CodeEntry folder={{ url, ...login }} />}
+    </>
+  );
+}
+
 function JoinGroup() {
   const { showCode, busy } = useLinkedDevicesStore();
-  const [withToken, setWithToken] = useState(false);
+  const [way, setWay] = useState<"code" | "token" | "folder">("code");
   return (
     <Card title={getString("linked_join_title")} subtitle={getString("linked_join_subtitle")} className="col-span-12 lg:col-span-6">
-      {withToken ? (
-        <AskToJoin />
-      ) : (
+      {way === "token" && <AskToJoin />}
+      {way === "folder" && <ThroughFolder />}
+      {way === "code" && (
         <CodeEntry>
           <Button variant="tonal" disabled={busy} onClick={() => void showCode()}>
             <QrCode className="h-4 w-4" /> {getString("linked_show_code")}
           </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => setWithToken(true)}>
+          <Button variant="ghost" disabled={busy} onClick={() => setWay("token")}>
             <KeyRound className="h-4 w-4" /> {getString("linked_use_admin_token")}
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setWay("folder")}>
+            <FolderKey className="h-4 w-4" /> {getString("linked_use_folder")}
           </Button>
         </CodeEntry>
       )}
@@ -75,15 +75,34 @@ function JoinGroup() {
 
 function RestoreGroup() {
   const { restore, busy } = useLinkedDevicesStore();
+  const [place, setPlace] = useState<"server" | "webdav">("server");
   const [url, setUrl] = useState("");
   const [words, setWords] = useState("");
+  const [login, setLogin] = useState<WebdavLogin>({ user: "", password: "" });
+  const onWebdav = place === "webdav";
+  const ready = url.trim() && words.trim() && (!onWebdav || (login.user.trim() && login.password));
   return (
     <Card title={getString("linked_restore_title")} subtitle={getString("linked_restore_subtitle")} className="col-span-12">
+      <SegmentedControl<"server" | "webdav">
+        label={getString("linked_store_choice")}
+        value={place}
+        onChange={setPlace}
+        options={[
+          { value: "server", label: getString("linked_store_server") },
+          { value: "webdav", label: getString("linked_store_webdav") },
+        ]}
+      />
       <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-12 lg:col-span-4">
-          <Field label={getString("linked_server_url")}>
-            <TextInput value={url} onChange={setUrl} placeholder={getString("linked_server_url_placeholder")} spellCheck={false} />
+        <div className="col-span-12 flex flex-col gap-4 lg:col-span-4">
+          <Field label={getString(onWebdav ? "linked_webdav_url" : "linked_server_url")}>
+            <TextInput
+              value={url}
+              onChange={setUrl}
+              placeholder={getString(onWebdav ? "linked_webdav_url_placeholder" : "linked_server_url_placeholder")}
+              spellCheck={false}
+            />
           </Field>
+          {onWebdav && <WebdavLoginFields login={login} onChange={setLogin} />}
         </div>
         <div className="col-span-12 lg:col-span-8">
           <Field label={getString("linked_restore_words")}>
@@ -91,7 +110,12 @@ function RestoreGroup() {
           </Field>
         </div>
       </div>
-      <Button variant="tonal" className="self-start" disabled={busy || !url.trim() || !words.trim()} onClick={() => void restore(url, words)}>
+      <Button
+        variant="tonal"
+        className="self-start"
+        disabled={busy || !ready}
+        onClick={() => void restore(url, words, onWebdav ? login : undefined)}
+      >
         {getString("linked_restore")}
       </Button>
     </Card>

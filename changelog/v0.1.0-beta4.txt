@@ -18,8 +18,61 @@ SYNC
 - When something stays on each device, the sync result now says what and why. After receiving, it lists what arrived.
 - SponsorBlock's action for each segment type now syncs with your phone. Synced SponsorBlock and DeArrow switches apply without a restart.
 - Data synced before comes back if this computer lost it. Music playlists from your phone no longer return under a new name, history sent to the phone has thumbnails, and subscription groups are sent when Flow Desktop scans the phone's code.
+- Play on: moving playback between Flow Desktop and your phone works again. A phone that paused or stopped no longer stays listed as playing, and a phone at full volume no longer shows its volume at 0.
+- Play on: picking a device now works as on Android. This computer takes playback back from the device you control, picking another device moves that device's session there, and a device that stops answering stops showing as playing.
+- Linked devices: choose which profiles sync. A profile starts its own synced profile or joins one from your other devices, and Profiles under Linked devices adds one that only your other devices have.
+- A synced profile that isn't open keeps what arrives and catches up when you switch to it. Stopping a profile on every device keeps its data on each one.
+- Linked devices has a Dashboard: where the group lives, how much of a Flow server's storage it uses, your devices, each synced profile's state and the latest sync errors.
+- The Flow Neuro page can show the interests of your other synced profiles, read on this computer without switching. From the Dashboard, View interests opens them.
+- A sync that arrives while Flow is busy saving something else, such as right after switching profiles, no longer fails and has to be run again.
+- A new device's Default profile now syncs only with Default here. If Default doesn't sync on this computer, the new device's Default starts its own synced profile instead of merging into another one.
+- On the local network, a device list entry from another device that can't be read is skipped, and the rest of the list still syncs.
+- Linked devices: a device name that can't be read is left out instead of hiding the device list or stopping a rename. The latest readable name is shown.
+- A snapshot, acknowledgement or LAN request that names a log position too large to read exactly is now refused as invalid.
+- A damaged file in a WebDAV folder's roster no longer stops every device from syncing. It is skipped and the rest of the roster is read.
+- Sync no longer hangs on a store that keeps answering with the same page. It stops reading and tries again at the next sync.
+- Sync stops reading an answer larger than it can be, from a Flow server, a WebDAV folder, the live channel or a device on your network, so a broken or hostile store can't use up memory.
+- A damaged or forged object from one device no longer fails the whole sync. Reading that device's changes pauses there, and the other devices' changes still arrive.
+- The same holds when a new device starts from a snapshot or a profile starts syncing: a damaged or forged object no longer fails the sync, and the profile is caught up once it can be read.
+- A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
+- A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
+- Joining a group over the local network now refuses a malformed welcome from the other device.
+- Linked devices: Replace recovery words gives your group a new recovery key from any linked device. The old words stop working, and your devices move to a new encryption key.
+- The Sync page now opens on Linked devices, which keep your devices in sync all the time. The one-time transfer to a nearby device moves below them, and Linked devices stay on screen while a transfer runs.
+- On the local network, an object as large as a sync object can be is now passed between devices whole, instead of being refused for its size.
+- Linked devices check for devices asking to join every 5 seconds only while the Sync page is on screen, and the check no longer reads the whole device list from the server.
+- A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
+- Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
+
+MUSIC
+- Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
+- Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
+- Hiding or showing the Queue or Lyrics pane in the full player no longer stretches the title and controls, and the artwork moves with the text.
+
+PLAYER
+- Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
+- Moving the music volume while muted no longer leaves the song silent.
+- Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
+- A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
+- Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
+- Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
+- Live streams start and play again.
+- You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
+- A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
+- Drag the mini player anywhere in the window. It stays where you put it, including after a restart, and keeps its place when the window is resized.
+- Videos can now play above 1080p: 1440p, 4K and 8K in the quality menu really play at that resolution, using VP9 or AV1.
+- Auto now climbs as high as your connection allows, up to the top quality of the video. It keeps to one codec and leaves HDR for when you pick it yourself.
+- A default quality of 1440p or higher is now reached even with H.264 as the preferred codec, and 8K can be chosen as the default. Your phone gets 4K for that setting.
+- A new switch in Settings, Switch quality quickly, shows a new quality within a few seconds instead of after the loaded video plays out. It is off by default.
+- SponsorBlock now works in the pop-out player and for the next video in the mini player.
+- If SponsorBlock can't be reached, the next video plays without skips instead of skipping at the last video's times.
+- Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 
 FIXES
+- Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.
+- Removing a playlist from a card now always asks first. Deleting a playlist you made no longer offers an Undo, which only brought it back empty.
+- Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.

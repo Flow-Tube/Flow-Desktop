@@ -197,6 +197,13 @@ fn decide(nodes: &mut [Node]) {
     }
 }
 
+fn lowest_genesis_group(held: &[Entry]) -> Option<&str> {
+    held.iter()
+        .filter(|entry| apply_entry(None, entry).is_ok())
+        .min_by_key(|entry| entry_hash(entry))
+        .map(|entry| entry.group.as_str())
+}
+
 /// The fork rule. Without a known `group`, the group of the lowest valid genesis held is taken: a
 /// device that just needs to read a store it isn't yet in checks what it finds afterwards.
 pub fn resolve_forks(
@@ -205,20 +212,8 @@ pub fn resolve_forks(
     pins: &BTreeSet<String>,
     genesis: Option<&str>,
 ) -> Result<ForkResolution> {
-    let found;
-    let group = match group {
-        Some(group) => group,
-        None => {
-            found = held
-                .iter()
-                .filter(|entry| apply_entry(None, entry).is_ok())
-                .min_by_key(|entry| entry_hash(entry))
-                .map(|entry| entry.group.clone());
-            let Some(group) = &found else {
-                return Ok(ForkResolution::default());
-            };
-            group
-        }
+    let Some(group) = group.or_else(|| lowest_genesis_group(held)) else {
+        return Ok(ForkResolution::default());
     };
     let mut nodes = valid_tree(group, held, genesis)?;
     number_tree(&mut nodes);

@@ -48,6 +48,9 @@ PLAYER
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
+- Live streams start and play again.
+- You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
+- A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
 
 FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.

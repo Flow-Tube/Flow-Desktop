@@ -60,4 +60,24 @@ describe("useSheetDrag", () => {
     expect(sheetProgress.get()).toBe(1);
     expect(useMusicSheetStore.getState().peeking).toBe(false);
   });
+
+  it("lets go of a running wheel drag when a click opens the player", () => {
+    wheel(90);
+    vi.advanceTimersByTime(80);
+    player.viewState = "full";
+    wheel(90);
+    expect(sheetProgress.get()).toBe(0.1);
+    vi.advanceTimersByTime(500);
+    expect(sheetProgress.get()).toBe(0.1);
+    expect(useMusicSheetStore.getState().peeking).toBe(false);
+  });
+
+  it("keeps the view a dock button opened when a running wheel drag ends far up", () => {
+    player.openOverlay.mockClear();
+    wheel(600);
+    player.viewState = "queue";
+    vi.advanceTimersByTime(500);
+    expect(player.openOverlay).not.toHaveBeenCalled();
+    expect(useMusicSheetStore.getState().peeking).toBe(false);
+  });
 });

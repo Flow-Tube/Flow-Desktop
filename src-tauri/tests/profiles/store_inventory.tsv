@@ -12,6 +12,7 @@ table	sync_changes	PROFILE	sync	Each profile that syncs records its own local ed
 table	sync2_sent	DEAD	-	Replaced by sync2_sent_links; still cleared when a group is forgotten
 table	sync2_group	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 group and log positions
 table	sync2_roster	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster
+table	sync2_roster_pins	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster
 table	sync2_streams	DEVICE	-	The group's state, in Default's file whichever profile runs: how far each device's log was read
 table	sync2_snapshots	DEVICE	-	The group's state, in Default's file whichever profile runs: when each link last got a snapshot
 table	sync2_acks	DEVICE	-	The group's state, in Default's file whichever profile runs: each device's latest FLOW-SYNC/2 ack

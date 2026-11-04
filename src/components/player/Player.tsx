@@ -53,6 +53,14 @@ import {
 } from "../../lib/settings/playerRuntime";
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
+  clearLiveTiming,
+  liveEdgePosition,
+  liveTimingFromPlaylist,
+  liveWindow,
+  readLiveTiming,
+  stampLiveTiming,
+} from "../../lib/liveEdge";
+import {
   createWindowFullscreenController,
   watchNativeFullscreen,
   type WindowFullscreenController,
@@ -1041,8 +1049,7 @@ export const Player: React.FC<PlayerProps> = ({
     if (!video) return;
     let nextTime: number;
     if (isLive && video.seekable.length) {
-      const start = video.seekable.start(0);
-      const end = video.seekable.end(video.seekable.length - 1);
+      const { start, end } = liveWindow(video);
       nextTime = Math.min(Math.max(time, start), end);
     } else {
       const dur = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration || 0;
@@ -1580,10 +1587,7 @@ export const Player: React.FC<PlayerProps> = ({
     }
 
     const rewrite = (url: string) =>
-      hlsProxyPrefix &&
-      !url.startsWith("http://127.0.0.1:") &&
-      !url.startsWith("http://localhost:") &&
-      !url.startsWith("blob:")
+      hlsProxyPrefix && !url.startsWith("http://127.0.0.1:") && !url.startsWith("blob:")
         ? `${hlsProxyPrefix}${encodeURIComponent(url)}`
         : url;
 
@@ -1625,11 +1629,8 @@ export const Player: React.FC<PlayerProps> = ({
     hls.on(Hls.Events.FRAG_LOADED, () => {
       fatalRecoveryAttempts = 0;
     });
-    hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
-      const frag = data?.frag;
-      if (!frag || !Number.isFinite(frag.sn as number) || !(frag.duration > 0)) return;
-      const offset = (frag.sn as number) * frag.duration - frag.start;
-      if (Number.isFinite(offset)) video.dataset.liveOffset = String(offset);
+    hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
+      if (isLive) stampLiveTiming(video, liveTimingFromPlaylist(hls.targetLatency, data.details.targetduration));
     });
     hls.on(Hls.Events.ERROR, (_event, data) => {
       logPlayerEventRef.current("hls-error", {
@@ -1681,6 +1682,7 @@ export const Player: React.FC<PlayerProps> = ({
     return () => {
       if (!destroyedAfterFatal) hls.destroy();
       if (hlsPlayerRef.current === hls) hlsPlayerRef.current = null;
+      clearLiveTiming(video);
     };
   }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
 
@@ -2087,7 +2089,7 @@ export const Player: React.FC<PlayerProps> = ({
         case "home":
           event.preventDefault();
           if (isLive && videoRef.current?.seekable.length) {
-            seekTo(videoRef.current.seekable.start(0));
+            seekTo(liveWindow(videoRef.current).start);
           } else {
             seekTo(0);
           }
@@ -2095,7 +2097,7 @@ export const Player: React.FC<PlayerProps> = ({
         case "end":
           event.preventDefault();
           if (isLive && videoRef.current?.seekable.length) {
-            seekTo(videoRef.current.seekable.end(videoRef.current.seekable.length - 1) - 1);
+            seekTo(liveEdgePosition(liveWindow(videoRef.current), readLiveTiming(videoRef.current)));
           } else {
             seekTo(duration);
           }

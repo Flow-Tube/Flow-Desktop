@@ -136,34 +136,64 @@ fn a_single_language_video_still_produces_a_manifest() {
     assert!(manifest.contains("contentType=\"video\""));
 }
 
-#[test]
-fn higher_resolution_vp9_and_av1_are_included_in_manifest() {
+fn codec_variant(height: u64, id: &str, label_suffix: &str, mime: &str) -> StreamVariant {
+    let mut variant = video_variant(height, height * 5_000);
+    variant.id = id.to_string();
+    variant.quality_label = format!("{height}p{label_suffix}");
+    variant.mime_type = Some(mime.to_string());
+    variant
+}
+
+fn multi_codec_manifest() -> String {
     let mut info = stream_info_from("visionos_single_language_streaming_data.json");
-    let mut v4k = video_variant(2160, 15_000_000);
-    v4k.id = "video-2160-av1".to_string();
-    v4k.mime_type = Some("video/mp4; codecs=\"av01.0.12M.08\"".to_string());
-    info.variants.push(v4k);
+    info.variants.extend([
+        codec_variant(2160, "401", "", "video/mp4; codecs=\"av01.0.12M.08\""),
+        codec_variant(2160, "701", " HDR", "video/mp4; codecs=\"av01.0.13M.10\""),
+        codec_variant(2160, "313", "", "video/webm; codecs=\"vp9\""),
+        codec_variant(2160, "337", " HDR", "video/webm; codecs=\"vp9.2\""),
+    ]);
+    build_synthetic_dash_manifest(&info).expect("a manifest")
+}
 
-    let mut v1440 = video_variant(1440, 8_000_000);
-    v1440.id = "video-1440-vp9".to_string();
-    v1440.mime_type = Some("video/webm; codecs=\"vp09.00.51.08\"".to_string());
-    info.variants.push(v1440);
+#[test]
+fn resolutions_above_1080p_reach_the_manifest() {
+    let manifest = multi_codec_manifest();
+    for id in ["401", "701", "313", "337"] {
+        assert!(
+            manifest.contains(&format!("<Representation id=\"{id}\"")),
+            "itag {id} must be offered"
+        );
+    }
+}
 
-    let manifest = build_synthetic_dash_manifest(&info).expect("a manifest");
-    assert!(
-        manifest.contains("video-2160-av1"),
-        "4K AV1 representation must be present in manifest"
-    );
-    assert!(
-        manifest.contains("video-1440-vp9"),
-        "1440p VP9 representation must be present in manifest"
-    );
+#[test]
+fn h264_is_the_first_video_set_so_first_track_starts_there() {
+    let manifest = multi_codec_manifest();
+    let first = manifest.find("contentType=\"video\"").expect("a video set");
+    assert!(manifest[..first].ends_with("id=\"video-h264-mp4\" "));
+}
 
-    // H.264 must be placed first to guarantee safe default track selection across all platforms
-    let h264_pos = manifest.find("id=\"video-h264\"").expect("video-h264 set");
-    let av1_pos = manifest.find("id=\"video-av1\"").expect("video-av1 set");
-    let vp9_pos = manifest.find("id=\"video-vp9\"").expect("video-vp9 set");
+#[test]
+fn each_family_and_colour_range_gets_its_own_set() {
+    let manifest = multi_codec_manifest();
+    for (set, itag) in [
+        ("video-vp9-webm", "313"),
+        ("video-av1-mp4", "401"),
+        ("video-vp9-hdr-webm", "337"),
+        ("video-av1-hdr-mp4", "701"),
+    ] {
+        let start = manifest
+            .find(&format!("id=\"{set}\""))
+            .unwrap_or_else(|| panic!("{set} set"));
+        let end = start + manifest[start..].find("</AdaptationSet>").expect("set end");
+        assert!(
+            manifest[start..end].contains(&format!("<Representation id=\"{itag}\"")),
+            "{itag} belongs in {set}"
+        );
+    }
+}
 
-    assert!(h264_pos < av1_pos, "h264 adaptation set must precede av1");
-    assert!(av1_pos < vp9_pos, "av1 adaptation set must precede vp9");
+#[test]
+fn video_sets_are_not_linked_so_abr_stays_in_one_set() {
+    assert!(!multi_codec_manifest().contains("adaptation-set-switching"));
 }

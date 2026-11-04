@@ -254,6 +254,12 @@ pub fn sb_actions_from_wire<'a>(
 #[must_use]
 pub fn to_wire(desktop_key: &str, stored: &str) -> Option<(String, Value)> {
     if let Some(s) = SHARED.iter().find(|s| s.desktop == desktop_key) {
+        // Android has no 8K setting and reads a label it doesn't know as Auto.
+        let stored = if desktop_key == "default_quality_wifi" && stored == "4320p" {
+            "2160p"
+        } else {
+            stored
+        };
         return Some((s.canonical.to_string(), typed(s.kind, stored)));
     }
     DESKTOP_ONLY.contains(&desktop_key).then(|| {

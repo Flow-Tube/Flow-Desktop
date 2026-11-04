@@ -17,10 +17,21 @@ import type {
 } from "../../types/video";
 import { FlowPlayerControls } from "./FlowPlayerControls";
 import { MiniPlayerControls } from "./MiniPlayerControls";
+import {
+  allVideoRepresentations,
+  autoRepresentationToSwitchTo,
+  droppedLastAdaptationSet,
+  nearestSupportedQuality,
+  pickAutoVideoTrack,
+  representationLabel,
+  representationLabelWithCodec,
+  type DashVideoTrack,
+} from "../../lib/dashVideoTrack";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
 import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
+import { segmentsToRearm } from "../../lib/sponsorBlockRearm";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import {
@@ -134,6 +145,9 @@ type DashTrackInfo = {
   labels?: Array<{ text?: string; lang?: string }>;
   roles?: Array<{ value?: string }>;
   audioChannelConfiguration?: Array<{ audioChannelConfiguration?: string }>;
+  bitrateList?: DashVideoTrack["bitrateList"];
+  codec?: string | null;
+  mimeType?: string | null;
   [key: string]: unknown;
 };
 
@@ -167,7 +181,12 @@ type QualitySwitchSnapshot = {
   targetQualityId: string;
 };
 
+const fastQualitySwitchEnabled = () =>
+  useAppSettingsStore.getState().values[SETTINGS.FAST_QUALITY_SWITCH_ENABLED] === "true";
+
+/** Null with fast switching on: the new quality no longer waits for the buffer to play out. */
 function readBufferedAheadSeconds(player: DashPlayerController): number | null {
+  if (fastQualitySwitchEnabled()) return null;
   try {
     const level = player.getDashMetrics?.()?.getCurrentBufferLevel("video");
     return typeof level === "number" && Number.isFinite(level) ? Math.round(level) : null;
@@ -453,6 +472,11 @@ export const Player: React.FC<PlayerProps> = ({
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
   const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
 
+  const fastQualitySwitch = useAppSettingsStore((s) => s.values[SETTINGS.FAST_QUALITY_SWITCH_ENABLED] === "true");
+  useEffect(() => {
+    dashPlayerRef.current?.updateSettings({ streaming: { buffer: { fastSwitchEnabled: fastQualitySwitch } } });
+  }, [fastQualitySwitch]);
+
   const qualitySwitchPending = pendingQualitySwitch !== null;
   useEffect(() => {
     if (!qualitySwitchPending) return;
@@ -488,15 +512,18 @@ export const Player: React.FC<PlayerProps> = ({
     if (!isDashPlayback) return qualities;
     return qualities.filter((quality) => isVariantSupported(quality.mimeType));
   }, [isDashPlayback, qualities]);
+  const supportedQualitiesRef = useRef(supportedQualities);
+  supportedQualitiesRef.current = supportedQualities;
 
   const selectedQuality = useMemo(() => {
     return (
       supportedQualities.find((quality) => quality.id === selectedQualityId) ||
+      nearestSupportedQuality(qualities.find((quality) => quality.id === selectedQualityId), supportedQualities) ||
       supportedQualities.find((quality) => quality.isDefault) ||
       supportedQualities[0] ||
       null
     );
-  }, [selectedQualityId, supportedQualities]);
+  }, [qualities, selectedQualityId, supportedQualities]);
 
   const selectedAudioTrack = audioTracks.find((track) => track.id === selectedAudioTrackId)
     || audioTracks.find((track) => track.isDefault)
@@ -556,7 +583,18 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     if (!player || !video || !dashReadyRef.current) return;
 
+    const videoTracks = player.getTracksFor?.("video") ?? [];
+
     if (selectedQualityId === "auto") {
+      const currentRep = player.getCurrentRepresentationForType("video");
+      const autoTrack = pickAutoVideoTrack(
+        videoTracks,
+        useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
+      );
+      const autoStart = autoRepresentationToSwitchTo(autoTrack, currentRep);
+      if (autoStart) {
+        player.setRepresentationForTypeById("video", autoStart, false);
+      }
       player.updateSettings({
         streaming: {
           abr: {
@@ -569,18 +607,18 @@ export const Player: React.FC<PlayerProps> = ({
       });
       logPlayerEvent("dash-quality-auto-requested", {
         switchTime: video.currentTime,
+        autoTrack: autoTrack?.id,
       });
 
-      const currentRep = player.getCurrentRepresentationForType("video");
       if (currentRep && currentRep.height) {
-        setActiveQualityLabel(`${currentRep.height}p`);
+        setActiveQualityLabel(representationLabel(currentRep, supportedQualitiesRef.current));
       }
       return;
     }
 
     if (!selectedQuality) return;
 
-    const representations = player.getRepresentationsByType("video") || [];
+    const representations: DashRepresentationInfo[] = allVideoRepresentations(videoTracks);
     const targetRepresentation = representations.find((representation) => representation.id === selectedQuality.id)
       || representations
         .filter((representation) => typeof representation.height === "number")
@@ -613,7 +651,7 @@ export const Player: React.FC<PlayerProps> = ({
         },
       });
       if (currentRepresentation.height) {
-        setActiveQualityLabel(`${currentRepresentation.height}p`);
+        setActiveQualityLabel(representationLabel(currentRepresentation, supportedQualitiesRef.current));
       }
       logPlayerEvent("dash-quality-already-selected", {
         targetRepresentationId: targetRepresentation.id,
@@ -628,7 +666,7 @@ export const Player: React.FC<PlayerProps> = ({
       targetQualityId: targetRepresentation.id,
     };
     setPendingQualitySwitch({
-      label: targetRepresentation.height ? `${targetRepresentation.height}p` : selectedQuality.qualityLabel,
+      label: representationLabelWithCodec(targetRepresentation, supportedQualitiesRef.current, selectedQuality.qualityLabel),
       etaSeconds: readBufferedAheadSeconds(player),
     });
     if (qualitySwitchTimeoutRef.current) {
@@ -1401,6 +1439,9 @@ export const Player: React.FC<PlayerProps> = ({
         capabilities: {
           useMediaCapabilitiesApi: false,
         },
+        // Its default picks the set with the fewest bits per pixel, usually AV1, however the
+        // manifest is ordered. The first set is H.264, the one every platform decodes.
+        selectionModeForInitialTrack: "firstTrack",
         // dash.js otherwise keeps these in localStorage, which every profile shares.
         lastBitrateCachingInfo: { enabled: false },
         lastMediaSettingsCachingInfo: { enabled: false },
@@ -1411,7 +1452,7 @@ export const Player: React.FC<PlayerProps> = ({
           },
         },
         buffer: {
-          fastSwitchEnabled: false,
+          fastSwitchEnabled: fastQualitySwitchEnabled(),
           bufferToKeep: BACK_BUFFER_SECONDS,
           bufferPruningInterval: 120,
           bufferTimeDefault: bufferConfig.minSeconds,
@@ -1450,7 +1491,7 @@ export const Player: React.FC<PlayerProps> = ({
 
       const currentRep = player.getCurrentRepresentationForType("video");
       if (currentRep && currentRep.height) {
-        setActiveQualityLabel(`${currentRep.height}p`);
+        setActiveQualityLabel(representationLabel(currentRep, supportedQualitiesRef.current));
       }
       setPendingQualitySwitch(null);
 
@@ -1518,7 +1559,8 @@ export const Player: React.FC<PlayerProps> = ({
     };
     const onCapabilitiesDrop = (event: unknown) => {
       logPlayerEventRef.current("dash-capabilities-dropped", { event });
-      fireRetrySourceRef.current("dash:capabilities-dropped");
+      // A machine without AV1 or VP9 still has the other sets, so only the last one is a failure.
+      if (droppedLastAdaptationSet(event)) fireRetrySourceRef.current("dash:capabilities-dropped");
     };
     const onStreamInitialized = () => {
       dashReadyRef.current = true;
@@ -1537,7 +1579,7 @@ export const Player: React.FC<PlayerProps> = ({
 
       const currentRep = player.getCurrentRepresentationForType("video");
       if (currentRep && currentRep.height) {
-        setActiveQualityLabel(`${currentRep.height}p`);
+        setActiveQualityLabel(representationLabel(currentRep, supportedQualitiesRef.current));
       }
     };
 
@@ -2263,6 +2305,12 @@ export const Player: React.FC<PlayerProps> = ({
     let muteSegmentCategoryName = "";
 
     if (sponsorBlockEnabled) {
+      for (const { UUID } of segmentsToRearm(sponsorBlockSegments, nextTime)) {
+        skippedSegmentsRef.current.delete(UUID);
+        mutedSegmentsRecordedRef.current.delete(UUID);
+        notifiedSegmentsRef.current.delete(UUID);
+      }
+
       for (const segment of sponsorBlockSegments) {
         const [start, end] = segment.segment;
         const action: SponsorBlockAction = sponsorBlockActions[segment.category as SponsorBlockCategory] || "ignore";

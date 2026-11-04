@@ -20,7 +20,7 @@ pub fn member_id(sig_public: &[u8; 32], kem_public: &[u8; 32]) -> [u8; 16] {
     labeled_id("device", &[&sig_public[..], &kem_public[..]].concat())
 }
 
-/// The id of a group: it commits to the keys of its genesis, so a store can't write a rival one.
+/// The id of a group commits to the keys of its genesis (spec/crypto.md, Group id).
 pub fn group_id(device: (&[u8; 32], &[u8; 32]), recovery: (&[u8; 32], &[u8; 32])) -> [u8; 16] {
     labeled_id(
         "group",

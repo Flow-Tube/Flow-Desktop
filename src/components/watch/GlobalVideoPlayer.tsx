@@ -273,7 +273,9 @@ export function GlobalVideoPlayer() {
             ? "fixed z-[300] flex overflow-hidden bg-chrome-black"
             : isFloating
             ? "group fixed z-50 overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-black"
-            : "fixed z-30"
+            : isTheaterMode
+            ? "fixed z-30 bg-chrome-black"
+            : "fixed z-30 rounded-xl bg-chrome-black"
         }
         style={frameStyle}
       >

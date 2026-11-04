@@ -100,9 +100,6 @@
 
 @layer base {
   :root {
-    --color-player-ambient-1: rgba(10, 10, 10, 0.95);
-    --color-player-ambient-2: rgba(8, 8, 8, 0.9);
-    --color-player-ambient-3: rgba(18, 18, 18, 0.65);
     --color-secondary-val: #606060;
     --color-background-val: #FFFFFF;
     --color-surface-val: #F9F9F9;
@@ -248,19 +245,6 @@
 
 .animate-fade-in {
   animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes ambient-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 0.85;
-  }
-}
-
-.animate-ambient-fade {
-  animation: ambient-fade-in 1s ease-out forwards;
 }
 
 @keyframes shimmer {
@@ -746,6 +730,27 @@
     calc((100cqw - var(--short-sides) - var(--short-panel, 0px)) * 16 / 9),
     100%
   );
+}
+
+/*
+  The glow fades to nothing before its box ends, so the box has no visible edge anywhere. The curve
+  follows Android's edge mask near the player (about half strength 70% of the way out), then eases
+  all the way to zero: Android stops at a screen edge, this one ends on the page.
+*/
+.ambient-glow-spread {
+  --ambient-spread: 160px;
+  --ambient-fade: rgb(0 0 0 / 0) 0, rgb(0 0 0 / 0.086) calc(var(--ambient-spread) * 0.125),
+    rgb(0 0 0 / 0.237) calc(var(--ambient-spread) * 0.25), rgb(0 0 0 / 0.415) calc(var(--ambient-spread) * 0.375),
+    rgb(0 0 0 / 0.595) calc(var(--ambient-spread) * 0.5), rgb(0 0 0 / 0.757) calc(var(--ambient-spread) * 0.625),
+    rgb(0 0 0 / 0.888) calc(var(--ambient-spread) * 0.75), rgb(0 0 0 / 0.971) calc(var(--ambient-spread) * 0.875),
+    rgb(0 0 0) var(--ambient-spread);
+  inset: calc(var(--ambient-spread) * -1);
+  -webkit-mask-image: linear-gradient(to right, var(--ambient-fade)), linear-gradient(to left, var(--ambient-fade)),
+    linear-gradient(to bottom, var(--ambient-fade)), linear-gradient(to top, var(--ambient-fade));
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, var(--ambient-fade)), linear-gradient(to left, var(--ambient-fade)),
+    linear-gradient(to bottom, var(--ambient-fade)), linear-gradient(to top, var(--ambient-fade));
+  mask-composite: intersect;
 }
 
 #flow-player-root[data-fullscreen="true"] {

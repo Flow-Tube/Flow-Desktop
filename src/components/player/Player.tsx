@@ -33,6 +33,9 @@ import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
 import { useVideoEq } from "../../lib/audio/useVideoEq";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { IS_MAIN_WINDOW } from "../../lib/appWindow";
+import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
+import { AmbientGlow } from "./AmbientGlow";
 import {
   AUDIO_DRIFT_TOLERANCE_SECONDS,
   AUDIO_RESYNC_MIN_INTERVAL_MS,
@@ -171,138 +174,6 @@ const PLAYER_LOG_MAX_CHARS = 500;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-type AmbientSample = {
-  top: string;
-  right: string;
-  bottom: string;
-  left: string;
-  center: string;
-  raw?: [number, number, number][];
-  key: string;
-};
-
-const AMBIENT_BASE_WIDTH = 36;
-const AMBIENT_SAMPLE_INTERVAL_MS = 2500;
-// Applied to the sampled colors in place of a CSS saturate() filter, which would
-// re-rasterize the whole window-wide glow layer on every repaint.
-const AMBIENT_SATURATION = 1.5;
-const DEFAULT_AMBIENT_SAMPLE: AmbientSample = {
-  top: "var(--color-player-ambient-1)",
-  right: "var(--color-player-ambient-2)",
-  bottom: "var(--color-player-ambient-1)",
-  left: "var(--color-player-ambient-2)",
-  center: "var(--color-player-ambient-3)",
-  key: "default",
-};
-
-function ambientRgba([r, g, b]: [number, number, number], alpha: number) {
-  const lift = 1.08;
-  const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  const channel = (value: number) =>
-    Math.round(clamp((gray + (value - gray) * AMBIENT_SATURATION) * lift, 0, 255));
-  return `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${alpha})`;
-}
-
-function sampleRegion(
-  imageData: ImageData,
-  startX: number,
-  startY: number,
-  endX: number,
-  endY: number,
-): [number, number, number] {
-  const { data, width, height } = imageData;
-  const x0 = Math.max(0, Math.min(width - 1, Math.floor(startX)));
-  const y0 = Math.max(0, Math.min(height - 1, Math.floor(startY)));
-  const x1 = Math.max(x0 + 1, Math.min(width, Math.ceil(endX)));
-  const y1 = Math.max(y0 + 1, Math.min(height, Math.ceil(endY)));
-
-  let red = 0;
-  let green = 0;
-  let blue = 0;
-  let totalWeight = 0;
-
-  for (let y = y0; y < y1; y += 1) {
-    for (let x = x0; x < x1; x += 1) {
-      const offset = (y * width + x) * 4;
-      const r = data[offset] ?? 0;
-      const g = data[offset + 1] ?? 0;
-      const b = data[offset + 2] ?? 0;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const saturation = max === 0 ? 0 : (max - min) / max;
-      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-
-      // Filter out pure black border pixels if video stream has hardcoded letterboxing
-      if (luminance < 0.03 && saturation < 0.05) {
-        continue;
-      }
-
-      const weight = (0.2 + saturation * 1.35) * (0.35 + clamp(luminance, 0, 1) * 0.65);
-
-      red += r * weight;
-      green += g * weight;
-      blue += b * weight;
-      totalWeight += weight;
-    }
-  }
-
-  if (totalWeight <= 0) return [10, 10, 10];
-  return [red / totalWeight, green / totalWeight, blue / totalWeight];
-}
-
-function extractAmbientSample(context: CanvasRenderingContext2D, width: number, height: number): AmbientSample {
-  const imageData = context.getImageData(0, 0, width, height);
-  const edgeHeight = Math.max(3, Math.floor(height * 0.28));
-  const edgeWidth = Math.max(4, Math.floor(width * 0.26));
-  const centerX = Math.floor(width * 0.22);
-  const centerY = Math.floor(height * 0.22);
-  const centerWidth = Math.max(4, Math.floor(width * 0.56));
-  const centerHeight = Math.max(4, Math.floor(height * 0.56));
-
-  const top = sampleRegion(imageData, 0, 0, width, edgeHeight);
-  const right = sampleRegion(imageData, width - edgeWidth, 0, width, height);
-  const bottom = sampleRegion(imageData, 0, height - edgeHeight, width, height);
-  const left = sampleRegion(imageData, 0, 0, edgeWidth, height);
-  const center = sampleRegion(imageData, centerX, centerY, centerX + centerWidth, centerY + centerHeight);
-
-  const key = [top, right, bottom, left, center]
-    .flatMap((color) => color.map((channel) => Math.round(channel / 6) * 6))
-    .join(",");
-
-  return {
-    top: ambientRgba(top, 0.9),
-    right: ambientRgba(right, 0.8),
-    bottom: ambientRgba(bottom, 0.9),
-    left: ambientRgba(left, 0.8),
-    center: ambientRgba(center, 0.5),
-    raw: [top, right, bottom, left, center],
-    key,
-  };
-}
-
-function makeAmbientGradient(sample: AmbientSample): string {
-  return [
-    `radial-gradient(ellipse 70% 60% at 50% 0%, ${sample.top} 0%, transparent 100%)`,
-    `radial-gradient(ellipse 70% 60% at 50% 100%, ${sample.bottom} 0%, transparent 100%)`,
-    `radial-gradient(ellipse 60% 70% at 0% 50%, ${sample.left} 0%, transparent 100%)`,
-    `radial-gradient(ellipse 60% 70% at 100% 50%, ${sample.right} 0%, transparent 100%)`,
-    `radial-gradient(ellipse 75% 65% at 50% 50%, ${sample.center} 0%, transparent 100%)`,
-  ].join(", ");
-}
-
-function isColorDeltaSignificant(prev: AmbientSample | null, next: AmbientSample): boolean {
-  if (!prev?.raw || !next?.raw) return true;
-  let totalDelta = 0;
-  const count = Math.min(prev.raw.length, next.raw.length);
-  for (let i = 0; i < count; i++) {
-    const c1 = prev.raw[i];
-    const c2 = next.raw[i];
-    if (!c1 || !c2) continue;
-    totalDelta += Math.abs(c1[0] - c2[0]) + Math.abs(c1[1] - c2[1]) + Math.abs(c1[2] - c2[2]);
-  }
-  return totalDelta >= 50;
-}
-
 function extractCodecMimeType(mimeType?: string | null) {
   if (!mimeType) return null;
   const [baseType, ...rest] = mimeType.split(";");
@@ -414,9 +285,6 @@ export const Player: React.FC<PlayerProps> = ({
   const bufferingStartedAtRef = useRef<number | null>(null);
   const seekFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const ambientCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const ambientSampleKeyRef = useRef(DEFAULT_AMBIENT_SAMPLE.key);
-  const ambientSampleErrorsRef = useRef(0);
   // Stall watchdog / source-fallback bookkeeping.
   const waitingSinceRef = useRef<number | null>(null);
   const stallCountRef = useRef(0);
@@ -542,45 +410,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [cursorHidden, setCursorHidden] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
-  const ambientMode = useAppSettingsStore((state) => state.values[SETTINGS.AMBIENT_MODE_ENABLED] !== "false");
-  const ambientIntensity = useAppSettingsStore((state) => {
-    const val = Number(state.values[SETTINGS.AMBIENT_MODE_INTENSITY]);
-    return Number.isFinite(val) && val >= 0 && val <= 100 ? val : 60;
-  });
-  const [ambientGradients, setAmbientGradients] = useState<{
-    base: string;
-    crossfade: string;
-    isFading: boolean;
-  }>({
-    base: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-    crossfade: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-    isFading: false,
-  });
-  const lastSampleRef = useRef<AmbientSample>(DEFAULT_AMBIENT_SAMPLE);
-
-  const updateAmbientSample = useCallback((nextSample: AmbientSample) => {
-    if (!isColorDeltaSignificant(lastSampleRef.current, nextSample)) {
-      return;
-    }
-    lastSampleRef.current = nextSample;
-    const nextGradient = makeAmbientGradient(nextSample);
-    setAmbientGradients((prev) => ({
-      base: prev.isFading ? prev.crossfade : prev.base,
-      crossfade: nextGradient,
-      isFading: true,
-    }));
-  }, []);
-
-  const handleAmbientCrossfadeEnd = useCallback(() => {
-    setAmbientGradients((current) => {
-      if (!current.isFading) return current;
-      return {
-        base: current.crossfade,
-        crossfade: current.crossfade,
-        isFading: false,
-      };
-    });
-  }, []);
+  const ambient = useAmbientSettings();
   const {
     sponsorBlockEnabled,
     sponsorBlockActions,
@@ -676,127 +506,15 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
-  // Ambient glow radiates around the player in normal view and in letterboxed fullscreen;
-  // disabled only in pip mode or on error.
-  const showAmbient = ambientMode && ambientIntensity > 0 && !isPipMode && !error;
+  // The pop-out holds a window of its own, with no page around the video to light.
+  const showAmbient =
+    ambient.enabled &&
+    IS_MAIN_WINDOW &&
+    !isPipMode &&
+    !isFullscreen &&
+    !error &&
+    (isTheaterSurface || ambient.glow);
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
-
-  useEffect(() => {
-    if (!showAmbient) {
-      ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
-      lastSampleRef.current = DEFAULT_AMBIENT_SAMPLE;
-      setAmbientGradients({
-        base: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-        crossfade: makeAmbientGradient(DEFAULT_AMBIENT_SAMPLE),
-        isFading: false,
-      });
-      return;
-    }
-
-    const video = videoRef.current;
-    if (!video) return;
-
-    let cancelled = false;
-    let frameHandle: number | null = null;
-    let intervalId: number | null = null;
-    let lastSampleAt = 0;
-    let samplingBlocked = false;
-    const frameVideo = video as {
-      requestVideoFrameCallback?: (callback: () => void) => number;
-      cancelVideoFrameCallback?: (handle: number) => void;
-    };
-
-    const sampleFrame = (force = false) => {
-      if (
-        cancelled ||
-        samplingBlocked ||
-        document.hidden ||
-        video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
-        video.videoWidth <= 0 ||
-        video.videoHeight <= 0
-      ) {
-        return;
-      }
-
-      const now = performance.now();
-      if (!force && now - lastSampleAt < AMBIENT_SAMPLE_INTERVAL_MS) return;
-      lastSampleAt = now;
-
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-      const aspectRatio = videoWidth / videoHeight;
-      if (usePlayerStore.getState().videoAspectRatio !== aspectRatio) {
-        usePlayerStore.getState().setVideoAspectRatio(aspectRatio);
-      }
-
-      // Aspect-ratio-aware sampling: compute canvas dimensions matching video intrinsic aspect ratio
-      const sampleWidth = Math.max(20, Math.min(48, Math.round(aspectRatio >= 1 ? AMBIENT_BASE_WIDTH : AMBIENT_BASE_WIDTH * aspectRatio)));
-      const sampleHeight = Math.max(12, Math.min(48, Math.round(aspectRatio >= 1 ? AMBIENT_BASE_WIDTH / aspectRatio : AMBIENT_BASE_WIDTH)));
-
-      const canvas = ambientCanvasRef.current ?? document.createElement("canvas");
-      ambientCanvasRef.current = canvas;
-      if (canvas.width !== sampleWidth) canvas.width = sampleWidth;
-      if (canvas.height !== sampleHeight) canvas.height = sampleHeight;
-
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) return;
-
-      try {
-        context.drawImage(video, 0, 0, sampleWidth, sampleHeight);
-        const nextSample = extractAmbientSample(context, sampleWidth, sampleHeight);
-        if (nextSample.key !== ambientSampleKeyRef.current) {
-          ambientSampleKeyRef.current = nextSample.key;
-          updateAmbientSample(nextSample);
-        }
-        ambientSampleErrorsRef.current = 0;
-      } catch (error) {
-        ambientSampleErrorsRef.current += 1;
-        if (ambientSampleErrorsRef.current >= 5) {
-          samplingBlocked = true;
-          ambientSampleKeyRef.current = DEFAULT_AMBIENT_SAMPLE.key;
-          updateAmbientSample(DEFAULT_AMBIENT_SAMPLE);
-          console.warn("Video ambient sampling unavailable; using neutral backdrop", error);
-        }
-      }
-    };
-
-    const scheduleNextFrame = () => {
-      if (!frameVideo.requestVideoFrameCallback || cancelled) return;
-      frameHandle = frameVideo.requestVideoFrameCallback(() => {
-        sampleFrame();
-        scheduleNextFrame();
-      });
-    };
-
-    const handleImmediateSample = () => sampleFrame(true);
-
-    sampleFrame(true);
-    if (frameVideo.requestVideoFrameCallback) {
-      scheduleNextFrame();
-    } else {
-      // requestVideoFrameCallback only fires for new frames; a timer has to
-      // skip a paused video itself.
-      intervalId = window.setInterval(() => {
-        if (!video.paused) sampleFrame();
-      }, AMBIENT_SAMPLE_INTERVAL_MS);
-    }
-
-    video.addEventListener("loadeddata", handleImmediateSample);
-    video.addEventListener("seeked", handleImmediateSample);
-    video.addEventListener("play", handleImmediateSample);
-    video.addEventListener("pause", handleImmediateSample);
-
-    return () => {
-      cancelled = true;
-      video.removeEventListener("loadeddata", handleImmediateSample);
-      video.removeEventListener("seeked", handleImmediateSample);
-      video.removeEventListener("play", handleImmediateSample);
-      video.removeEventListener("pause", handleImmediateSample);
-      if (intervalId !== null) window.clearInterval(intervalId);
-      if (frameHandle !== null) frameVideo.cancelVideoFrameCallback?.(frameHandle);
-    };
-  }, [dashManifestUrl, hlsManifestUrl, showAmbient, src, updateAmbientSample]);
-
   const logPlayerEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
     const entry = formatPlayerLogPayload({
       currentTime: videoRef.current?.currentTime,
@@ -2410,9 +2128,6 @@ export const Player: React.FC<PlayerProps> = ({
     if (!video) return;
     const nextDuration = video.duration || duration || 0;
     setDuration(nextDuration);
-    if (video.videoWidth > 0 && video.videoHeight > 0) {
-      usePlayerStore.getState().setVideoAspectRatio(video.videoWidth / video.videoHeight);
-    }
     const pendingResumeTime = Math.max(resumeTime, pendingResumeTimeRef.current);
     if (pendingResumeTime > 0 && Math.abs(video.currentTime - pendingResumeTime) > 0.25) {
       const restoredTime = Math.min(pendingResumeTime, Math.max(0, nextDuration - 0.25));
@@ -2593,14 +2308,11 @@ export const Player: React.FC<PlayerProps> = ({
     updateBuffered();
   };
 
+  // The root stays unclipped so the glow can leave it; what it used to clip lives in the content wrapper.
   const playerRootClasses = cx(
-    "relative h-full w-full isolate outline-none",
-    isFullscreen
-      ? "aspect-auto rounded-none"
-      : isTheaterSurface
-      ? "max-h-[calc(100vh-160px)] min-h-[480px] flex items-center justify-center rounded-none"
-      : "rounded-xl",
-    cursorHidden && "cursor-none [&_*]:!cursor-none",
+    "relative w-full aspect-video outline-none",
+    isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : "rounded-xl",
+    isFullscreen && "rounded-none",
     className
   );
 
@@ -2611,6 +2323,7 @@ export const Player: React.FC<PlayerProps> = ({
       data-fullscreen={isFullscreen || undefined}
       className={cx(
         "group/player",
+        cursorHidden && "cursor-none [&_*]:!cursor-none",
         playerRootClasses,
       )}
       tabIndex={0}
@@ -2621,46 +2334,17 @@ export const Player: React.FC<PlayerProps> = ({
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
     >
-      {showAmbient && (
-        <div
-          aria-hidden="true"
-          className={cx(
-            "pointer-events-none absolute z-0 overflow-visible",
-            isFullscreen
-              ? "inset-0 rounded-none"
-              : isTheaterSurface
-              ? "-inset-x-6 -inset-y-8 sm:-inset-x-8 sm:-inset-y-12 rounded-none"
-              : "-inset-6 sm:-inset-8 md:-inset-10 rounded-3xl",
-            !IS_LINUX_RUNTIME && (isFullscreen ? "blur-3xl" : "blur-2xl")
-          )}
-          style={{ opacity: (ambientIntensity / 100) * 0.85 }}
-        >
-          {/* Base Layer: maintains 100% steady background light without luminance dips */}
-          <div
-            className="absolute inset-0 rounded-[inherit] pointer-events-none"
-            style={{ background: ambientGradients.base }}
-          />
-          {/* Dissolve Layer: softly transitions on top over 1800ms when scene color shifts */}
-          <div
-            className={cx(
-              "absolute inset-0 rounded-[inherit] pointer-events-none",
-              ambientGradients.isFading ? "transition-opacity duration-[1800ms] ease-out opacity-100" : "opacity-0"
-            )}
-            style={{ background: ambientGradients.crossfade }}
-            onTransitionEnd={handleAmbientCrossfadeEnd}
-          />
-        </div>
-      )}
+      {showAmbient && <AmbientGlow videoRef={videoRef} intensity={ambient.intensity} spread={ambient.glow} />}
 
       <div
+        data-player-content
         className={cx(
-          "relative z-10 h-full w-full text-chrome-white overflow-hidden outline-none",
+          "relative z-10 h-full w-full overflow-hidden text-chrome-white",
           !showAmbient && "bg-chrome-black",
-          isTheaterSurface ? "rounded-none flex items-center justify-center" : "rounded-xl",
-          isFullscreen && "rounded-none"
+          isTheaterSurface ? "flex items-center justify-center rounded-none" : "rounded-xl",
+          isFullscreen && "rounded-none",
         )}
       >
-
       <video
         ref={videoRef}
         // Set before src: the equalizer can only read cross-origin audio fetched with CORS.
@@ -2674,10 +2358,6 @@ export const Player: React.FC<PlayerProps> = ({
         onProgress={updateBuffered}
         onTimeUpdate={handleTimeUpdate}
         onPlaying={() => {
-          const video = videoRef.current;
-          if (video && video.videoWidth > 0 && video.videoHeight > 0) {
-            usePlayerStore.getState().setVideoAspectRatio(video.videoWidth / video.videoHeight);
-          }
           const activeVideoId = usePlayerStore.getState().currentVideo?.id;
           if (activeVideoId) usePlayerStore.getState().markPlaybackStarted(activeVideoId);
         }}

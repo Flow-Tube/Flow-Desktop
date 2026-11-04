@@ -20,6 +20,20 @@ pub fn member_id(sig_public: &[u8; 32], kem_public: &[u8; 32]) -> [u8; 16] {
     labeled_id("device", &[&sig_public[..], &kem_public[..]].concat())
 }
 
+/// The id of a group: it commits to the keys of its genesis, so a store can't write a rival one.
+pub fn group_id(device: (&[u8; 32], &[u8; 32]), recovery: (&[u8; 32], &[u8; 32])) -> [u8; 16] {
+    labeled_id(
+        "group",
+        &[
+            &device.0[..],
+            &device.1[..],
+            &recovery.0[..],
+            &recovery.1[..],
+        ]
+        .concat(),
+    )
+}
+
 pub fn member_secrets(sig_seed: [u8; 32], kem_secret: [u8; 32]) -> MemberSecrets {
     let sig_public = signing_public_key(&sig_seed);
     let kem_public = agreement_public_key(&kem_secret);

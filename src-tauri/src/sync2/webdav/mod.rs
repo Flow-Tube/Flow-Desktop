@@ -4,8 +4,9 @@
 
 mod client;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
+use std::sync::Mutex as StdMutex;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -13,7 +14,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 pub use self::client::{WebDav, WebDavLogin};
-use super::held::winning_chain;
+use super::forks::winning_chain;
 use super::mailbox::Mailbox;
 use super::paths::{chain_path, log_path, roster_path, wrap_path};
 use super::roster::{Entry, entry_hash, parse_entry};
@@ -32,6 +33,7 @@ pub struct WebDavStore {
     /// Roster files already read, by store name, with the entry each holds; each is written once
     /// and never changes.
     roster: Mutex<BTreeMap<String, Option<Entry>>>,
+    pins: StdMutex<BTreeSet<String>>,
 }
 
 impl WebDavStore {
@@ -45,6 +47,7 @@ impl WebDavStore {
             client,
             me,
             roster: Mutex::new(BTreeMap::new()),
+            pins: StdMutex::new(BTreeSet::new()),
         }
     }
 
@@ -65,6 +68,12 @@ impl WebDavStore {
             held.insert(path, entry);
         }
         Ok(held.values().flatten().cloned().collect())
+    }
+
+    async fn chain(&self) -> Result<Vec<Entry>> {
+        let candidates = self.candidates().await?;
+        let pins = self.pins.lock().map(|p| p.clone()).unwrap_or_default();
+        Ok(winning_chain(&candidates, &pins))
     }
 
     /// Checks that the storage takes, returns and deletes a file (spec/store.md, Setup probe).
@@ -132,10 +141,26 @@ fn changed(did: &str, seq: u64) -> ChangedObject {
 
 impl Store for WebDavStore {
     async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
-        Ok(winning_chain(&self.candidates().await?)
+        Ok(self
+            .chain()
+            .await?
             .into_iter()
             .filter(|e| i64::try_from(e.seq).is_ok_and(|seq| seq > after))
             .collect())
+    }
+
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        self.candidates().await
+    }
+
+    fn is_linear(&self) -> bool {
+        false
+    }
+
+    fn use_pins(&self, pins: &BTreeSet<String>) {
+        if let Ok(mut held) = self.pins.lock() {
+            held.clone_from(pins);
+        }
     }
 
     /// Writes the wraps, then the entry, then reads the roster again: another device may have
@@ -147,7 +172,7 @@ impl Store for WebDavStore {
         wraps: &BTreeMap<String, String>,
         chain: Option<&str>,
     ) -> Result<Appended> {
-        let before = winning_chain(&self.candidates().await?);
+        let before = self.chain().await?;
         let current = before.last().map(entry_hash).unwrap_or_default();
         if current != head {
             return Ok(Appended::Conflict { head: current });
@@ -177,7 +202,7 @@ impl Store for WebDavStore {
         self.client
             .put(&roster_path(entry.seq, &hash), to_canonical_json(entry))
             .await?;
-        let after = winning_chain(&self.candidates().await?);
+        let after = self.chain().await?;
         match after.iter().find(|e| e.seq == entry.seq) {
             Some(winner) if entry_hash(winner) == hash => Ok(Appended::Done),
             _ => Ok(Appended::Conflict {

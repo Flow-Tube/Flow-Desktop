@@ -1,7 +1,7 @@
 //! What the sync engine needs from a store: the Flow server, what devices hold on the LAN, and a
 //! `WebDAV` folder.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 
 use super::roster::Entry;
@@ -9,6 +9,18 @@ use super::server::{Appended, ChangedObject, Result};
 
 pub trait Store {
     fn roster_after(&self, after: i64) -> impl Future<Output = Result<Vec<Entry>>> + Send;
+    /// Every roster entry the store shows, fork candidates included.
+    fn roster_view(&self) -> impl Future<Output = Result<Vec<Entry>>> + Send {
+        self.roster_after(-1)
+    }
+    /// Whether the store orders appends, so it has no honest way to change an entry it answered
+    /// with.
+    fn is_linear(&self) -> bool {
+        true
+    }
+    /// The entries this device chose between sides of a contested roster, for a store that picks
+    /// a winner itself when it appends.
+    fn use_pins(&self, _pins: &BTreeSet<String>) {}
     fn append_roster(
         &self,
         head: &str,

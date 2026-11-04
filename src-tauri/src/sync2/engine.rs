@@ -14,6 +14,7 @@ use super::envelope::{
     seal_object, verify_object,
 };
 use super::epoch::{check_epoch_key, open_chain, purpose_key};
+use super::forks::{Settlement, settle_roster};
 use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
 use super::kept::{Kept, keep};
 use super::keys::MemberSecrets;
@@ -21,12 +22,12 @@ use super::paths::{log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
-use super::roster::{Entry, RosterState, apply_entry, replay_roster};
+use super::roster::{Entry, RosterState, replay_roster};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, save_floors,
-    save_group, save_streams, streams,
+    Floors, GroupRecord, StoreKind, add_roster_entries, floors, load_group, roster_entries,
+    roster_pins, save_floors, save_group, save_streams, streams,
 };
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
@@ -51,6 +52,14 @@ pub enum EngineError {
     NotLinked,
     #[error("this device was removed from its sync group")]
     Removed,
+    #[error("the roster that leaves this device out replaces entries it had applied")]
+    RemovalUnconfirmed,
+    #[error("two sides of the roster removed each other")]
+    Contested,
+    #[error("the store no longer shows a roster entry this device applied")]
+    RosterRolledBack,
+    #[error("the store changed a roster entry this device applied")]
+    RosterRewritten,
     #[error("the six-digit code was not confirmed")]
     Declined,
     #[error("the other device didn't answer in time")]
@@ -95,10 +104,15 @@ impl EngineError {
             Self::Store(StoreError::Unauthorized) => "linkedStoreUnauthorized",
             Self::Store(StoreError::Local(_)) | Self::Settings(_) => "linkedLocal",
             Self::Keychain(_) => "linkedKeychain",
+            Self::Protocol(Error::RosterGroup) => "linkedGroupOutdated",
             Self::Store(_) | Self::Protocol(_) | Self::Unexpected => "linkedProtocol",
             Self::Local(error) => error.kind(),
             Self::NotLinked => "linkedNotLinked",
             Self::Removed => "linkedRemoved",
+            Self::RemovalUnconfirmed => "linkedRemovalUnconfirmed",
+            Self::Contested => "linkedContested",
+            Self::RosterRolledBack => "linkedRolledBack",
+            Self::RosterRewritten => "linkedRosterChanged",
             Self::Declined => "linkedDeclined",
             Self::TimedOut => "linkedTimedOut",
             Self::WrongWords => "linkedWrongWords",
@@ -295,10 +309,21 @@ impl<'a, S: Store> Session<'a, S> {
         store: S,
         device: &'a MemberSecrets,
     ) -> Result<Self> {
+        let mut session = Self::on_applied(pool, store, device).await?;
+        session.refresh(pool).await?;
+        Ok(session)
+    }
+
+    /// The chain this device has applied, without asking the store whether it still stands.
+    pub async fn on_applied(
+        pool: &SqlitePool,
+        store: S,
+        device: &'a MemberSecrets,
+    ) -> Result<Self> {
         let record = load_group(pool).await?.ok_or(EngineError::NotLinked)?;
         let group = array(&hex::decode(&record.group_id).map_err(|_| Error::Group)?);
         let entries = roster_entries(pool).await?;
-        let mut session = Self {
+        Ok(Self {
             store,
             device,
             reading: Reading::single(&record.link),
@@ -309,36 +334,60 @@ impl<'a, S: Store> Session<'a, S> {
             signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
-        };
-        session.refresh(pool).await?;
-        Ok(session)
+        })
     }
 
-    /// Reads and checks the roster entries appended since, and unwraps the key of the epoch in
-    /// force.
+    /// Settles the roster from the store's answer (spec/protocol.md, Forks), and unwraps the key of
+    /// the epoch in force.
     pub(super) async fn refresh(&mut self, pool: &SqlitePool) -> Result<()> {
-        let after = i64::try_from(self.state.seq).map_err(|_| Error::RosterChain)?;
-        let fresh = self.store.roster_after(after).await?;
-        let mut state = self.state.clone();
-        for entry in &fresh {
-            state = apply_entry(Some(&state), entry)?;
+        let pins = roster_pins(pool).await?;
+        self.store.use_pins(&pins);
+        let view = self.store.roster_view().await?;
+        let linear = self.store.is_linear() || self.record.kind == StoreKind::Server;
+        let settled = settle_roster(&self.record.group_id, &self.entries, &view, &pins, linear)?;
+        let (chain, extends_applied) = match settled {
+            Settlement::Apply {
+                chain,
+                extends_applied,
+            } => (chain, extends_applied),
+            Settlement::Contested { .. } => return Err(EngineError::Contested),
+            Settlement::Rollback => return Err(EngineError::RosterRolledBack),
+            Settlement::Rewritten => return Err(EngineError::RosterRewritten),
+        };
+        let state = replay_roster(&chain)?;
+        let member = state.members.contains_key(&hex::encode(self.device.did));
+        if !extends_applied {
+            return Err(if member {
+                EngineError::RosterRewritten
+            } else {
+                EngineError::RemovalUnconfirmed
+            });
         }
-        add_roster_entries(pool, &fresh).await?;
+        add_roster_entries(pool, &chain[self.entries.len()..]).await?;
         self.state = state;
-        self.entries.extend(fresh);
-        if !self
-            .state
-            .members
-            .contains_key(&hex::encode(self.device.did))
-        {
+        self.entries = chain;
+        if !member {
             return Err(EngineError::Removed);
         }
+        self.index_entries()?;
+        if !self.keys.contains_key(&self.state.epoch) {
+            self.unwrap_current().await?;
+        }
+        Ok(())
+    }
+
+    /// Readies a session opened with [`Session::on_applied`] to read device names, as far as the
+    /// store still has this device's wrap.
+    pub async fn prepare_names(&mut self) -> Result<()> {
+        self.index_entries()?;
+        self.unwrap_current().await
+    }
+
+    /// Finds the signing keys and epoch commitments in the entries applied.
+    pub(super) fn index_entries(&mut self) -> Result<()> {
         self.signing_keys = signing_keys(&self.entries)?;
         for epoch in self.entries.iter().filter_map(|e| e.epoch.as_ref()) {
             self.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
-        }
-        if !self.keys.contains_key(&self.state.epoch) {
-            self.unwrap_current().await?;
         }
         Ok(())
     }

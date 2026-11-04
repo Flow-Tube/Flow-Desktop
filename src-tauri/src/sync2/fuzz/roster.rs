@@ -6,15 +6,14 @@ use serde_json::Value;
 use super::{json, member, mutations};
 use crate::sync::canonical::to_canonical_json;
 use crate::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
-use crate::sync2::keys::MemberSecrets;
+use crate::sync2::keys::{MemberSecrets, group_id};
 use crate::sync2::roster::{
     Entry, Op, Role, RosterState, apply_entry, fork_winner, parse_entry, replay_roster,
 };
 use crate::sync2::{Error, Result, array};
 
-const GROUP: [u8; 16] = [7; 16];
-
 struct Roster {
+    group: [u8; 16],
     device: MemberSecrets,
     state: RosterState,
     add: Entry,
@@ -22,6 +21,10 @@ struct Roster {
 
 static ROSTER: LazyLock<Roster> = LazyLock::new(|| {
     let (device, recovery, joiner) = (member(), member(), member());
+    let group = group_id(
+        (&device.sig_public, &device.kem_public),
+        (&recovery.sig_public, &recovery.kem_public),
+    );
     let draft = |op, add| Draft {
         op,
         signer: hex::encode(device.did),
@@ -39,11 +42,11 @@ static ROSTER: LazyLock<Roster> = LazyLock::new(|| {
     );
     genesis.epoch = Some(epoch_draft(
         &[1; 32],
-        &GROUP,
+        &group,
         0,
         &[device.did, recovery.did],
     ));
-    let genesis = build_entry(&GROUP, None, genesis, &[&device, &recovery]);
+    let genesis = build_entry(&group, None, genesis, &[&device, &recovery]);
     let state = apply_entry(None, &genesis).unwrap();
     let joining = vec![member_subject(
         &joiner.sig_public,
@@ -51,12 +54,17 @@ static ROSTER: LazyLock<Roster> = LazyLock::new(|| {
         Role::Device,
     )];
     let add = build_entry(
-        &GROUP,
+        &group,
         Some(&state),
         draft(Op::Add, joining),
         &[&device, &joiner],
     );
-    Roster { device, state, add }
+    Roster {
+        group,
+        device,
+        state,
+        add,
+    }
 });
 
 fn add_value() -> Value {
@@ -136,10 +144,10 @@ proptest! {
             signer: hex::encode(device.did),
             add: None,
             remove: None,
-            epoch: Some(epoch_draft(&[2; 32], &GROUP, n, &members)),
+            epoch: Some(epoch_draft(&[2; 32], &ROSTER.group, n, &members)),
             meta: None,
         };
-        let applied = apply_entry(Some(state), &build_entry(&GROUP, Some(state), draft, &[device]));
+        let applied = apply_entry(Some(state), &build_entry(&ROSTER.group, Some(state), draft, &[device]));
         if n == 1 {
             prop_assert_eq!(applied.unwrap().epoch, 1);
         } else {

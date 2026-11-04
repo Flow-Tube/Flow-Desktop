@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
 use super::engine::{EngineError, Result, Session, signing_keys, verify_logged};
-use super::held::{HeldStore, winning_chain};
+use super::held::HeldStore;
 use super::kdf::sha256;
 use super::keys::MemberSecrets;
 use super::lan_link::{
@@ -53,7 +53,7 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
     for entry in link.roster(after, tip).await? {
         held.hold_entry(&entry).await?;
     }
-    let chain = winning_chain(&held.candidates_after(-1).await?);
+    let chain = held.chain().await?;
     for (epoch, names) in key_names(&chain) {
         for name in names {
             if held.key(epoch, &name).await?.is_none()

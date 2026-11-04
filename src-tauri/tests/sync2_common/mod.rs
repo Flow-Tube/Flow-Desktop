@@ -13,7 +13,7 @@ use flow_desktop_lib::sync::canonical::Collection;
 use flow_desktop_lib::sync::export::export_collections;
 use flow_desktop_lib::sync::protocol::OutgoingCollection;
 use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
-use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
+use flow_desktop_lib::sync2::keys::{MemberSecrets, group_id, member_secrets};
 use flow_desktop_lib::sync2::linking::WelcomeStore;
 use flow_desktop_lib::sync2::mailbox::Mailbox;
 use flow_desktop_lib::sync2::roster::{Entry, Op, Role, RosterState, replay_roster};
@@ -207,7 +207,11 @@ pub async fn group() -> Group {
         member_secrets(random_bytes(), random_bytes()),
     );
     let recovery = member_secrets(random_bytes(), random_bytes());
-    let (group, epoch_key): ([u8; 16], [u8; 32]) = (random_bytes(), random_bytes());
+    let group = group_id(
+        (&a.sig_public, &a.kem_public),
+        (&recovery.sig_public, &recovery.kem_public),
+    );
+    let epoch_key: [u8; 32] = random_bytes();
     let store = MemoryStore::default();
     let mut genesis = draft(Op::Genesis, &a);
     genesis.add = Some(vec![

@@ -4,7 +4,7 @@
 use tauri::AppHandle;
 
 use crate::errors::ErrorResponse;
-use crate::sync2::actions::{self, LinkedDevice, LinkedStatus};
+use crate::sync2::actions::{self, ContestSide, LinkedDevice, LinkedStatus};
 use crate::sync2::dashboard::{self, Dashboard};
 use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
@@ -86,6 +86,16 @@ pub async fn linked_remove(app: AppHandle, id: String) -> Result<(), ErrorRespon
 #[tauri::command]
 pub async fn linked_leave(app: AppHandle) -> Result<(), ErrorResponse> {
     actions::leave(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_contest(app: AppHandle) -> Result<Vec<ContestSide>, ErrorResponse> {
+    actions::contest(&app).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_keep_side(app: AppHandle, entry: String) -> Result<(), ErrorResponse> {
+    actions::keep_side(&app, &entry).await.map_err(|e| err(&e))
 }
 
 #[tauri::command]

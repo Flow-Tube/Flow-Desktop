@@ -107,6 +107,20 @@ impl<S: Store + Sync> Store for HybridStore<S> {
         }
     }
 
+    /// The server's answer decides while it answers. What arrived from LAN peers stays held.
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        match self.store.roster_view().await {
+            Ok(entries) => {
+                for entry in &entries {
+                    self.held.hold_entry(entry).await?;
+                }
+                Ok(entries)
+            }
+            Err(error) if unreachable(&error) => self.held.roster_view().await,
+            Err(error) => Err(error),
+        }
+    }
+
     async fn append_roster(
         &self,
         head: &str,

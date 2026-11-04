@@ -367,6 +367,25 @@ impl Store for ServerStore {
             .map(parse_entry)
             .collect::<std::result::Result<_, _>>()?)
     }
+
+    /// The whole roster, page by page. A page that doesn't advance ends the read.
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        let mut entries: Vec<Entry> = Vec::new();
+        let mut after = -1;
+        loop {
+            let page = self.roster_after(after).await?;
+            let Some(last) = page.last() else {
+                return Ok(entries);
+            };
+            let seq = i64::try_from(last.seq).map_err(|_| StoreError::Malformed)?;
+            if seq <= after {
+                return Err(StoreError::Malformed);
+            }
+            after = seq;
+            entries.extend(page);
+        }
+    }
+
     async fn append_roster(
         &self,
         head: &str,

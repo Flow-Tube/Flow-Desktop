@@ -1,6 +1,6 @@
 //! The group this device belongs to, kept in Default's database whichever profile runs.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use sqlx::SqlitePool;
 
@@ -127,6 +127,22 @@ pub async fn add_roster_entries(pool: &SqlitePool, entries: &[Entry]) -> Result<
     Ok(())
 }
 
+/// The entries the user kept between sides of a contested roster.
+pub async fn roster_pins(pool: &SqlitePool) -> Result<BTreeSet<String>, SyncError> {
+    let rows: Vec<String> = sqlx::query_scalar("SELECT hash FROM sync2_roster_pins")
+        .fetch_all(pool)
+        .await?;
+    Ok(rows.into_iter().collect())
+}
+
+pub async fn add_roster_pin(pool: &SqlitePool, hash: &str) -> Result<(), SyncError> {
+    sqlx::query("INSERT OR IGNORE INTO sync2_roster_pins (hash) VALUES (?)")
+        .bind(hash)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn streams(pool: &SqlitePool) -> Result<BTreeMap<String, StreamPosition>, SyncError> {
     let rows: Vec<(String, i64, String)> =
         sqlx::query_as("SELECT did, seq, hash FROM sync2_streams")
@@ -177,6 +193,7 @@ pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
     for statement in [
         "DELETE FROM sync2_group",
         "DELETE FROM sync2_roster",
+        "DELETE FROM sync2_roster_pins",
         "DELETE FROM sync2_streams",
         "DELETE FROM sync2_sent",
         "DELETE FROM sync2_sent_links",

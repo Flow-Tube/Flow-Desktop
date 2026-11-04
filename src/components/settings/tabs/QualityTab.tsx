@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { SettingsGroup } from '../SettingsGroup';
 import { SettingItem } from '../SettingItem';
 import { Select } from '../../ui/Select';
-import { usePreference } from '../../../lib/usePreference';
+import { ToggleSwitch } from '../../ui/ToggleSwitch';
+import { useBoolPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
@@ -19,6 +20,7 @@ const QUALITY_OPTIONS = [
 export function QualityTab() {
   const [qualityWifi, setQualityWifi] = usePreference(SETTINGS.DEFAULT_QUALITY_WIFI, '1080p');
   const [codec, setCodec] = usePreference(SETTINGS.DEFAULT_VIDEO_CODEC, 'H.264');
+  const [fastSwitch, setFastSwitch] = useBoolPref(SETTINGS.FAST_QUALITY_SWITCH_ENABLED);
   const [shortsQuality, setShortsQuality] = usePreference(SETTINGS.SHORTS_QUALITY_WIFI, '720p');
   const [audioLang, setAudioLang] = usePreference(SETTINGS.PREFERRED_AUDIO_LANGUAGE, 'original');
   const { i18n } = useTranslation();
@@ -38,6 +40,9 @@ export function QualityTab() {
             { value: 'Auto', label: getString('quality_auto') }, { value: 'H.264', label: 'H.264' },
             { value: 'VP9', label: 'VP9' }, { value: 'AV1', label: 'AV1' },
           ]} />
+        </SettingItem>
+        <SettingItem title={getString('settings_fast_quality_switch')} description={getString('settings_fast_quality_switch_desc')}>
+          <ToggleSwitch checked={fastSwitch} onChange={setFastSwitch} />
         </SettingItem>
       </SettingsGroup>
 

@@ -180,7 +180,12 @@ type QualitySwitchSnapshot = {
   targetQualityId: string;
 };
 
+const fastQualitySwitchEnabled = () =>
+  useAppSettingsStore.getState().values[SETTINGS.FAST_QUALITY_SWITCH_ENABLED] === "true";
+
+/** Null with fast switching on: the new quality no longer waits for the buffer to play out. */
 function readBufferedAheadSeconds(player: DashPlayerController): number | null {
+  if (fastQualitySwitchEnabled()) return null;
   try {
     const level = player.getDashMetrics?.()?.getCurrentBufferLevel("video");
     return typeof level === "number" && Number.isFinite(level) ? Math.round(level) : null;
@@ -465,6 +470,11 @@ export const Player: React.FC<PlayerProps> = ({
   const [volumeFeedback, setVolumeFeedback] = useState<PlayerVolumeFeedback | null>(null);
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
   const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
+
+  const fastQualitySwitch = useAppSettingsStore((s) => s.values[SETTINGS.FAST_QUALITY_SWITCH_ENABLED] === "true");
+  useEffect(() => {
+    dashPlayerRef.current?.updateSettings({ streaming: { buffer: { fastSwitchEnabled: fastQualitySwitch } } });
+  }, [fastQualitySwitch]);
 
   const qualitySwitchPending = pendingQualitySwitch !== null;
   useEffect(() => {
@@ -1441,7 +1451,7 @@ export const Player: React.FC<PlayerProps> = ({
           },
         },
         buffer: {
-          fastSwitchEnabled: false,
+          fastSwitchEnabled: fastQualitySwitchEnabled(),
           bufferToKeep: BACK_BUFFER_SECONDS,
           bufferPruningInterval: 120,
           bufferTimeDefault: bufferConfig.minSeconds,

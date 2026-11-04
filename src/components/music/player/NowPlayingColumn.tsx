@@ -84,8 +84,8 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
         style={{ width: artSize }}
       />
 
-      {/* Its own layout lets framer undo the column's resize scale, which would otherwise stretch the text. */}
-      <motion.div layout transition={LAYOUT_SPRING} className="mt-8 flex w-full max-w-2xl flex-col gap-5">
+      {/* Its own layout lets framer undo the column's resize scale. Position only, so a change in its own width can't squash the text either. */}
+      <motion.div layout="position" transition={LAYOUT_SPRING} className="mt-8 flex w-full max-w-2xl flex-col gap-5">
         <div ref={menu.cardRef} onContextMenu={menu.openMenuFromContext} className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1

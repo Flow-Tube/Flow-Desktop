@@ -8,6 +8,7 @@ export interface UseWheelVolumeOptions {
   muted: boolean;
   onVolumeChange: (volume: number) => void;
   onUnmute?: () => void;
+  onFeedback?: (volume: number, muted: boolean) => void;
 }
 
 /**
@@ -30,6 +31,7 @@ export function useWheelVolume<T extends HTMLElement = HTMLDivElement>(options: 
       const change = wheelVolumeChange(volume, muted, step);
       if (change.unmute) onUnmute?.();
       if (change.volume !== undefined) onVolumeChange(change.volume);
+      latest.current.onFeedback?.(change.volume ?? volume, change.unmute ? false : muted);
     };
     node.addEventListener("wheel", onWheel, { passive: false });
     return () => node.removeEventListener("wheel", onWheel);

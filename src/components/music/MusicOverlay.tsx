@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
-import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume1, Volume2, VolumeX } from "lucide-react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useMusicSheetStore } from "../../store/useMusicSheetStore";
@@ -54,7 +54,18 @@ export function MusicOverlay() {
   const volume = useMusicPlayerStore((s) => s.volume);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const queueSource = useMusicPlayerStore((s) => s.queueSource);
-  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>();
+  const [volumeFeedback, setVolumeFeedback] = useState<{ id: number; volume: number; muted: boolean } | null>(null);
+  const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showVolumeFeedback = useCallback((nextVolume: number, nextMuted: boolean) => {
+    setVolumeFeedback({ id: Date.now(), volume: nextVolume, muted: nextMuted });
+    if (volumeFeedbackTimerRef.current) clearTimeout(volumeFeedbackTimerRef.current);
+    volumeFeedbackTimerRef.current = setTimeout(() => {
+      setVolumeFeedback(null);
+    }, 1200);
+  }, []);
+
+  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>({ onFeedback: showVolumeFeedback });
   const setViewState = useMusicPlayerStore((s) => s.setViewState);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
 
@@ -261,7 +272,24 @@ export function MusicOverlay() {
                 {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </HapticButton>
               <div className="absolute right-0 top-full mt-2">
-                <VolumePopover open={volumeOpen} />
+              {volumeFeedback && !volumeOpen && (
+                <div
+                  key={volumeFeedback.id}
+                  className="pointer-events-none absolute right-0 top-full mt-2 z-50 flex items-center gap-2 rounded-full border border-chrome-neutral-800 bg-surface-container px-3 py-1.5 text-chrome-neutral-100 animate-fade-in"
+                >
+                  {volumeFeedback.muted || volumeFeedback.volume === 0 ? (
+                    <VolumeX className="h-4 w-4 text-chrome-neutral-400" />
+                  ) : volumeFeedback.volume < 0.55 ? (
+                    <Volume1 className="h-4 w-4 text-chrome-neutral-300" />
+                  ) : (
+                    <Volume2 className="h-4 w-4 text-chrome-neutral-300" />
+                  )}
+                  <span className="font-mono text-xs tabular-nums text-chrome-neutral-200">
+                    {volumeFeedback.muted ? 0 : Math.round(volumeFeedback.volume * 100)}%
+                  </span>
+                </div>
+              )}
+                <VolumePopover open={volumeOpen} onClose={() => setVolumeOpen(false)} />
               </div>
             </div>
 

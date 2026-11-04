@@ -33,7 +33,7 @@ import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useDockToggleColors } from "../../lib/usePlayerColors";
-import { volumeAfterWheel } from "../../lib/musicPlayerKeys";
+import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { dockOpacity, registerSheetDock, sheetProgress } from "../../lib/musicSheet";
@@ -59,7 +59,7 @@ export function GlobalMusicDock() {
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const volume = useMusicPlayerStore((s) => s.volume);
-  const setVolume = useMusicPlayerStore((s) => s.setVolume);
+  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>();
 
   const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
   const next = useMusicPlayerStore((s) => s.next);
@@ -258,9 +258,9 @@ export function GlobalMusicDock() {
               <div className="flex w-1/3 items-center justify-end gap-4">
                 {!away && (
                     <HapticButton
+                      ref={volumeWheelRef}
                       data-sheet-drag-ignore
                       onClick={() => setPopover((p) => (p === "vol" ? null : "vol"))}
-                      onWheel={(event) => setVolume(volumeAfterWheel(volume, event.deltaY))}
                       aria-label={getString("music_volume")}
                       aria-pressed={popover === "vol"}
                       className={popover === "vol" ? `${GHOST} text-chrome-neutral-100` : GHOST_IDLE}

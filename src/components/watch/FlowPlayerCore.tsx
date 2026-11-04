@@ -25,9 +25,6 @@ import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
 import { onBeforeProfileSwitch } from "../../lib/profiles/beforeSwitch";
-import { useSettingsStore } from "../../store/useSettingsStore";
-import { getSponsorBlockSegments, type SponsorBlockSegment } from "../../lib/api/foss";
-import { useDownloadedVideoRecord, downloadSponsorSegments } from "../../lib/useDownloads";
 
 /** How close to the end the next video is resolved. Long enough to cover a slow
  * client ladder, short enough that a video abandoned early never triggers it. */
@@ -52,45 +49,6 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const showToast = useUiStore((s) => s.showToast);
 
   const stream = useVideoStream(videoId);
-
-  const offlineRecord = useDownloadedVideoRecord(videoId);
-  const setSponsorBlockSegments = usePlayerStore((s) => s.setSponsorBlockSegments);
-
-  useEffect(() => {
-    if (!videoId) {
-      setSponsorBlockSegments([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSponsorBlock = async () => {
-      try {
-        await useSettingsStore.getState().loadSettings();
-        const settings = useSettingsStore.getState();
-        if (!settings.sponsorBlockEnabled) {
-          if (!cancelled) setSponsorBlockSegments([]);
-          return;
-        }
-
-        const segments = offlineRecord
-          ? downloadSponsorSegments<SponsorBlockSegment>(offlineRecord)
-          : await getSponsorBlockSegments(videoId, settings.serverUrl).catch(() => null);
-
-        if (!cancelled && segments !== null) {
-          setSponsorBlockSegments(segments);
-        }
-      } catch (e) {
-        console.warn("Failed SponsorBlock loading process", e);
-      }
-    };
-
-    void loadSponsorBlock();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [videoId, offlineRecord, setSponsorBlockSegments]);
 
   const lastProgressPersistedAtRef = useRef(0);
   const latestProgressRef = useRef<{ videoId: string; time: number; duration: number } | null>(null);

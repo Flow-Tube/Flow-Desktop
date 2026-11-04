@@ -1,6 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { StreamInfo, VideoSummary } from "../../types/video";
-import type { SponsorBlockSegment } from "./foss";
 import { invokeBackend } from "./errors";
 
 /** Window label of the pop-out player; must match `commands::pip::PIP_WINDOW_LABEL`. */
@@ -40,7 +39,6 @@ export interface PipSession {
   /** True when the main window is still playing and will hand over on cue: the
    * pop-out warms up silently rather than doubling the audio. */
   silentUntilTakeover: boolean;
-  sponsorSegments?: SponsorBlockSegment[];
 }
 
 /** Pop-out → main: playback state, so the watch page stays in step. */

@@ -1,4 +1,5 @@
 import { isTauriEnv } from './api/env';
+import { useConfirmStore, type ConfirmRequest } from '../store/useConfirmStore';
 
 export async function pickFolder(title: string): Promise<string | null> {
   if (await isTauriEnv()) {
@@ -46,14 +47,10 @@ export async function pickSaveFile(
   return null;
 }
 
-export async function confirmAction(message: string, title?: string): Promise<boolean> {
-  if (await isTauriEnv()) {
-    try {
-      const { confirm } = await import('@tauri-apps/plugin-dialog');
-      return await confirm(message, { title, kind: 'warning' });
-    } catch {
-      return false;
-    }
-  }
-  return window.confirm(message);
+/**
+ * Asks a yes/no question in the app's own dialog. Never use `window.confirm`: the Tauri dialog
+ * plugin replaces it with an async version, so its result is a Promise that always reads as yes.
+ */
+export function confirmAction(request: ConfirmRequest): Promise<boolean> {
+  return useConfirmStore.getState().ask(request);
 }

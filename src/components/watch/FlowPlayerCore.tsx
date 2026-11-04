@@ -25,6 +25,7 @@ import { youtubeWatchUrl } from "../../lib/youtubeUrl";
 import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
 import { onBeforeProfileSwitch } from "../../lib/profiles/beforeSwitch";
+import { useSponsorBlockSegments } from "../../lib/useSponsorBlockSegments";
 
 /** How close to the end the next video is resolved. Long enough to cover a slow
  * client ladder, short enough that a video abandoned early never triggers it. */
@@ -49,6 +50,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const showToast = useUiStore((s) => s.showToast);
 
   const stream = useVideoStream(videoId);
+  useSponsorBlockSegments(videoId);
 
   const lastProgressPersistedAtRef = useRef(0);
   const latestProgressRef = useRef<{ videoId: string; time: number; duration: number } | null>(null);
@@ -113,14 +115,14 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       if (!currentVideo || currentVideo.id !== videoId || stream.loadingStream) return;
       if (!progressTickBelongsTo(currentVideo.id, stream.streamVideoId)) return;
       stream.notePlaybackTime(time);
-      const nextDuration = mediaDuration || currentVideo.durationSeconds || 1;
+      const nextDuration = stream.isLive ? 0 : mediaDuration || currentVideo.durationSeconds || 1;
       setCurrentTime(time);
       setDuration(nextDuration);
-      prefetchNextVideo(time, nextDuration);
+      if (!stream.isLive) prefetchNextVideo(time, nextDuration);
 
       reportWatchTime(time, mediaDuration);
       latestProgressRef.current = { videoId: currentVideo.id, time, duration: nextDuration };
-      if (!shouldRecordWatchHistory()) return;
+      if (!shouldRecordWatchHistory() || stream.isLive) return;
 
       const now = Date.now();
       if (now - lastProgressPersistedAtRef.current < 5000) return;
@@ -145,6 +147,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       currentVideo,
       videoId,
       stream.loadingStream,
+      stream.isLive,
       prefetchNextVideo,
       reportWatchTime,
       setCurrentTime,

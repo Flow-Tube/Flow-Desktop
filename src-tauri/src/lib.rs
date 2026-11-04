@@ -62,10 +62,14 @@ use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::linked::{
     linked_accept_join, linked_add_device, linked_answer, linked_ask_to_join, linked_cancel,
-    linked_create, linked_create_lan, linked_decline_join, linked_devices, linked_enter_code,
-    linked_forget, linked_join_requests, linked_link_phase, linked_recovery_saved, linked_remove,
-    linked_rename, linked_restore, linked_show_code, linked_status, linked_sync_now,
+    linked_catch_up, linked_choose_profile, linked_create, linked_create_lan, linked_create_webdav,
+    linked_dashboard, linked_decline_join, linked_delete_profile, linked_devices,
+    linked_enter_code, linked_forget, linked_join_requests, linked_leave, linked_link_phase,
+    linked_profiles, linked_recovery_saved, linked_remove, linked_rename, linked_replace_recovery,
+    linked_restore, linked_retry_keychain, linked_show_code, linked_status, linked_stop_profile,
+    linked_sync_added_profile, linked_sync_now, linked_sync_profile, linked_update_login,
 };
+use commands::live::{live_consents, live_now, live_send, live_set_consent, live_status};
 use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
     put_cached_lyrics, save_download_lyrics,
@@ -111,11 +115,11 @@ use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
     bootstrap_from_subscriptions, clear_channel_memory, complete_onboarding, end_watch_session,
     forget_remembered_channel, get_brain_snapshot, get_flow_persona, get_onboarding_status,
-    get_recommendation_events, get_taste_overview, import_brain, learn_from_search,
-    log_interaction, mark_not_interested, note_subscription, observe_channel_uploads,
-    record_feed_impressions, record_seen_videos, remove_preferred_topic, report_watch_progress,
-    reset_brain, resolve_hidden_channel_names, seen_video_ids_among, unblock_channel,
-    unblock_topic,
+    get_profile_interests, get_recommendation_events, get_taste_overview, import_brain,
+    learn_from_search, log_interaction, mark_not_interested, note_subscription,
+    observe_channel_uploads, record_feed_impressions, record_seen_videos, remove_preferred_topic,
+    report_watch_progress, reset_brain, resolve_hidden_channel_names, seen_video_ids_among,
+    unblock_channel, unblock_topic,
 };
 use commands::scrobble::{
     scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing,
@@ -493,12 +497,11 @@ pub fn run() {
             )));
             app.manage(sync2::service::BackgroundSync::default());
             app.manage(sync2::link_task::LinkTask::default());
-            app.manage(sync2::lan_runtime::LanPeers::default());
-            if active_profile.is_default {
-                sync2::service::spawn(app.handle().clone());
-                sync2::lan_runtime::spawn(app.handle().clone());
-                sync2::live::spawn(app.handle().clone());
-            }
+            app.manage(sync2::lan_peers::LanPeers::default());
+            app.manage(sync2::live_hub::LiveHub::default());
+            sync2::service::spawn(app.handle().clone());
+            sync2::lan_runtime::spawn(app.handle().clone());
+            sync2::live::spawn(app.handle().clone());
 
             // Manage the Shorts feed service (prefetch buffer + session de-dup)
             app.manage(ShortsService::new());
@@ -687,6 +690,7 @@ pub fn run() {
             complete_onboarding,
             get_onboarding_status,
             get_flow_persona,
+            get_profile_interests,
             get_brain_snapshot,
             get_taste_overview,
             get_recommendation_events,
@@ -801,12 +805,30 @@ pub fn run() {
             linked_devices,
             linked_create,
             linked_create_lan,
+            linked_create_webdav,
+            linked_update_login,
             linked_restore,
+            linked_replace_recovery,
             linked_recovery_saved,
+            linked_retry_keychain,
             linked_rename,
             linked_remove,
             linked_forget,
+            linked_leave,
+            live_consents,
+            live_now,
+            live_send,
+            live_set_consent,
+            live_status,
             linked_sync_now,
+            linked_profiles,
+            linked_sync_profile,
+            linked_sync_added_profile,
+            linked_catch_up,
+            linked_stop_profile,
+            linked_delete_profile,
+            linked_choose_profile,
+            linked_dashboard,
             linked_link_phase,
             linked_add_device,
             linked_show_code,

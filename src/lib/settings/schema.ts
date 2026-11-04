@@ -58,8 +58,11 @@ export const SETTINGS = {
   SUBTITLE_BOLD: "subtitle_bold",
   MINI_PLAYER_SHOW_SKIP_CONTROLS: "mini_player_show_skip_controls",
   MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS: "mini_player_show_next_prev_controls",
+  MINI_PLAYER_POSITION: "mini_player_position",
   SHOW_FULLSCREEN_TITLE: "show_fullscreen_title",
   AMBIENT_MODE_ENABLED: "ambient_mode_enabled",
+  AMBIENT_GLOW_ENABLED: "ambient_glow_enabled",
+  AMBIENT_MODE_INTENSITY: "ambient_mode_intensity",
   ADAPTIVE_PLAYER_SIZE_ENABLED: "adaptive_player_size_enabled",
   AUTO_PIP_ENABLED: "auto_pip_enabled",
   MANUAL_PIP_BUTTON_ENABLED: "manual_pip_button_enabled",
@@ -121,6 +124,7 @@ export const SETTINGS = {
 
   DEFAULT_QUALITY_WIFI: "default_quality_wifi",
   DEFAULT_VIDEO_CODEC: "default_video_codec",
+  FAST_QUALITY_SWITCH_ENABLED: "fast_quality_switch_enabled",
   SHORTS_QUALITY_WIFI: "shorts_quality_wifi",
   MUSIC_AUDIO_QUALITY: "music_audio_quality",
   MUSIC_QUEUE_SWIPE_LEFT: "queue_swipe_left_action",
@@ -213,8 +217,11 @@ export const SETTING_SCOPES = {
   [SETTINGS.SUBTITLE_BOLD]: "profile",
   [SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS]: "profile",
   [SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS]: "profile",
+  [SETTINGS.MINI_PLAYER_POSITION]: "profile",
   [SETTINGS.SHOW_FULLSCREEN_TITLE]: "profile",
   [SETTINGS.AMBIENT_MODE_ENABLED]: "profile",
+  [SETTINGS.AMBIENT_GLOW_ENABLED]: "profile",
+  [SETTINGS.AMBIENT_MODE_INTENSITY]: "profile",
   [SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED]: "profile",
   [SETTINGS.AUTO_PIP_ENABLED]: "profile",
   [SETTINGS.MANUAL_PIP_BUTTON_ENABLED]: "profile",
@@ -274,6 +281,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.DEEP_FLOW_SAVE_HISTORY]: "profile",
   [SETTINGS.DEFAULT_QUALITY_WIFI]: "device",
   [SETTINGS.DEFAULT_VIDEO_CODEC]: "device",
+  [SETTINGS.FAST_QUALITY_SWITCH_ENABLED]: "device",
   [SETTINGS.SHORTS_QUALITY_WIFI]: "device",
   [SETTINGS.MUSIC_AUDIO_QUALITY]: "device",
   [SETTINGS.MUSIC_QUEUE_SWIPE_LEFT]: "device",
@@ -415,7 +423,7 @@ const json = (
 });
 
 const SPEED_VALUES = ["0.25", "0.5", "0.75", "1.0", "1.25", "1.5", "1.75", "2.0", "2.5", "3.0", "4.0"] as const;
-const QUALITY_VALUES = ["Auto", "2160p", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"] as const;
+const QUALITY_VALUES = ["Auto", "4320p", "2160p", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"] as const;
 
 export const SETTING_DEFINITIONS = [
   str(SETTINGS.THEME_ID, "appearance", "default", "wired"),
@@ -445,8 +453,11 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SUBTITLE_BOLD, "player", true, "wired"),
   bool(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS, "player", true, "wired"),
   bool(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, "player", true, "wired"),
+  json(SETTINGS.MINI_PLAYER_POSITION, "player", "null", "wired", "internal", "internal"),
   bool(SETTINGS.SHOW_FULLSCREEN_TITLE, "player", false, "wired"),
-  bool(SETTINGS.AMBIENT_MODE_ENABLED, "player", true, "wired"),
+  bool(SETTINGS.AMBIENT_MODE_ENABLED, "player", !IS_LINUX_RUNTIME, "wired"),
+  bool(SETTINGS.AMBIENT_GLOW_ENABLED, "player", false, "wired"),
+  num(SETTINGS.AMBIENT_MODE_INTENSITY, "player", 60, "wired", 10, 100),
   bool(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, "player", true, "persisted-only"),
   bool(SETTINGS.AUTO_PIP_ENABLED, "player", true, "wired"),
   bool(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, "player", true, "wired"),
@@ -510,6 +521,7 @@ export const SETTING_DEFINITIONS = [
 
   str(SETTINGS.DEFAULT_QUALITY_WIFI, "quality", "1080p", "wired", QUALITY_VALUES),
   str(SETTINGS.DEFAULT_VIDEO_CODEC, "quality", "H.264", "wired", ["Auto", "H.264", "VP9", "AV1"]),
+  bool(SETTINGS.FAST_QUALITY_SWITCH_ENABLED, "quality", false, "wired"),
   str(SETTINGS.SHORTS_QUALITY_WIFI, "quality", "720p", "wired", QUALITY_VALUES),
   str(SETTINGS.MUSIC_AUDIO_QUALITY, "quality", "Auto", "wired", ["Auto", "High", "Medium", "Low"]),
   str(SETTINGS.MUSIC_QUEUE_SWIPE_LEFT, "player", "PLAY_NEXT", "wired", ["PLAY_NEXT", "MOVE_TO_END", "REMOVE"]),

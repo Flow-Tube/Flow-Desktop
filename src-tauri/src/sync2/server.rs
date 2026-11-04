@@ -1,24 +1,25 @@
 //! The Flow sync server as a store (spec/api.md). Requests are signed in with this member's
 //! roster key; the server never sees anything but sealed objects.
 
-use std::collections::BTreeMap;
-use std::net::{IpAddr, SocketAddr};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::LazyLock;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use reqwest::{Client, Method, StatusCode, Url, redirect};
+use reqwest::{Client, Method, StatusCode, Url};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use super::curve::sign;
+use super::envelope::MAX_OBJECT_SIZE;
+use super::http::{MAX_RESPONSE, Transport, read_body};
 use super::kdf::tag;
 use super::keys::MemberSecrets;
 use super::mailbox::Mailbox;
 use super::roster::{Entry, parse_entry};
 use super::store::Store;
-use crate::sync::qr::is_local_ip;
 
 /// Refresh a token this long before it expires.
 const TOKEN_MARGIN_MS: u64 = 60_000;
@@ -35,6 +36,16 @@ pub enum StoreError {
     InstanceChanged,
     #[error("this server already has a group")]
     AlreadyClaimed,
+    #[error("the server refused the admin token")]
+    AdminRefused,
+    #[error("the server refuses this address for a while after too many wrong admin tokens")]
+    AdminBanned,
+    #[error("the server no longer accepts this device")]
+    SignInRefused,
+    #[error("a linked device declined the request to join")]
+    JoinDeclined,
+    #[error("the storage refused the user name or password")]
+    Unauthorized,
     #[error("this device's copy of the group could not be read")]
     Local(#[source] sqlx::Error),
     #[error("the server sent an invalid response")]
@@ -58,7 +69,7 @@ pub struct ChangedObject {
     pub size: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct Session {
     instance: Option<String>,
     group: Option<String>,
@@ -74,41 +85,22 @@ pub struct ServerStore {
     session: Mutex<Session>,
 }
 
+/// Sessions by server URL and member, kept in memory only: every sync run connects again, and a
+/// token lasts 15 minutes (spec/api.md).
+type Sessions = HashMap<(String, [u8; 16]), Session>;
+
+static SESSIONS: LazyLock<std::sync::Mutex<Sessions>> = LazyLock::new(Default::default);
+
+fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
+    SESSIONS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
-}
-
-/// HTTPS anywhere; plain HTTP only to a private address or a `.local` name, whose addresses are
-/// all checked and then pinned so DNS can't move the connection afterwards.
-async fn transport_for(url: &Url) -> Result<Option<(String, SocketAddr)>> {
-    match url.scheme() {
-        "https" => return Ok(None),
-        "http" => {}
-        _ => return Err(StoreError::Insecure),
-    }
-    let host = url
-        .host_str()
-        .ok_or(StoreError::Insecure)?
-        .trim_matches(['[', ']']);
-    if host.parse::<IpAddr>().is_ok_and(is_local_ip) {
-        return Ok(None);
-    }
-    if !host.to_ascii_lowercase().ends_with(".local") {
-        return Err(StoreError::Insecure);
-    }
-    let port = url.port_or_known_default().unwrap_or(80);
-    let addresses: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
-        .await
-        .map_err(|_| StoreError::Insecure)?
-        .collect();
-    match addresses.first() {
-        Some(first) if addresses.iter().all(|a| is_local_ip(a.ip())) => {
-            Ok(Some((host.to_owned(), *first)))
-        }
-        _ => Err(StoreError::Insecure),
-    }
 }
 
 impl ServerStore {
@@ -121,34 +113,26 @@ impl ServerStore {
         group: Option<String>,
     ) -> Result<Self> {
         let base = Url::parse(url).map_err(|_| StoreError::Insecure)?;
-        let pinned = transport_for(&base).await?;
-        let builder = || {
-            let builder = Client::builder()
-                .tls_backend_rustls()
-                .redirect(redirect::Policy::none())
-                .user_agent(concat!("FlowDesktop/", env!("CARGO_PKG_VERSION")))
-                .connect_timeout(Duration::from_secs(10));
-            match &pinned {
-                Some((host, address)) => builder.resolve(host, *address),
-                None => builder,
-            }
-        };
+        let transport = Transport::for_url(&base).await?;
+        let session = sessions()
+            .get(&(base.to_string(), member.did))
+            .filter(|kept| kept.instance == instance && kept.group == group)
+            .cloned()
+            .unwrap_or(Session {
+                instance,
+                group,
+                token: None,
+            });
         Ok(Self {
             base,
-            client: builder()
-                .timeout(Duration::from_secs(60))
-                .build()
-                .map_err(StoreError::Network)?,
-            live: builder()
+            client: transport.client()?,
+            live: transport
+                .builder()
                 .http1_only()
                 .build()
                 .map_err(StoreError::Network)?,
             member,
-            session: Mutex::new(Session {
-                instance,
-                group,
-                token: None,
-            }),
+            session: Mutex::new(session),
         })
     }
 
@@ -196,12 +180,17 @@ impl ServerStore {
             .map_err(|_| StoreError::Malformed)?;
         let message = [tag("auth"), bytes(&instance)?, bytes(&group)?, nonce_bytes].concat();
         let sig = URL_SAFE_NO_PAD.encode(sign(&self.member.sig_seed, &message));
+        // The server refuses a device that is no longer in the roster, which it can't read then.
         let token = self
             .post_json(
                 "v1/auth/token",
                 &json!({ "did": did, "challenge": nonce, "sig": sig }),
             )
-            .await?;
+            .await
+            .map_err(|error| match error {
+                StoreError::Refused { status: 401, .. } => StoreError::SignInRefused,
+                error => error,
+            })?;
         let value = token["token"]
             .as_str()
             .ok_or(StoreError::Malformed)?
@@ -212,6 +201,7 @@ impl ServerStore {
             group: Some(group),
             token: Some((value.clone(), expires)),
         };
+        sessions().insert((self.base.to_string(), self.member.did), session.clone());
         Ok(value)
     }
 
@@ -263,27 +253,78 @@ impl ServerStore {
         unreachable!("the loop returns on its second pass")
     }
 
-    /// When the server last heard from each device, by `did` (`GET /v1/status`).
-    pub async fn last_seen(&self) -> Result<BTreeMap<String, i64>> {
+    /// The group's storage and when the server last heard from each device (`GET /v1/status`).
+    pub async fn status(&self) -> Result<ServerStatus> {
         let status = decode(self.authorized(Method::GET, "v1/status", None).await?).await?;
         let devices = status["devices"].as_object().ok_or(StoreError::Malformed)?;
-        Ok(devices
-            .iter()
-            .filter_map(|(did, device)| Some((did.clone(), device["seen"].as_i64()?)))
-            .collect())
+        let number = |name: &str| status[name].as_u64().ok_or(StoreError::Malformed);
+        Ok(ServerStatus {
+            used: number("used")?,
+            quota: number("quota")?,
+            objects: number("objects")?,
+            seen: devices
+                .iter()
+                .filter_map(|(did, device)| Some((did.clone(), device["seen"].as_i64()?)))
+                .collect(),
+        })
+    }
+
+    /// When the server last heard from each device, by `did`.
+    pub async fn last_seen(&self) -> Result<BTreeMap<String, i64>> {
+        Ok(self.status().await?.seen)
+    }
+
+    /// What the server speaks (`GET /v1/info`, no token needed).
+    pub async fn info(&self) -> Result<ServerInfo> {
+        let response = self
+            .client
+            .get(self.url("v1/info")?)
+            .send()
+            .await
+            .map_err(StoreError::Network)?;
+        let info = decode(response).await?;
+        let protocols = info["protocol"].as_array().ok_or(StoreError::Malformed)?;
+        Ok(ServerInfo {
+            protocols: protocols
+                .iter()
+                .filter_map(|p| p.as_str().map(str::to_owned))
+                .collect(),
+            live: info["live"].as_bool().unwrap_or(false),
+        })
     }
 
     /// A request with the operator's admin token instead of a device token.
-    pub(super) fn as_admin(
+    /// Sends a request with the operator's admin token. The server bans an address for a while
+    /// after a few wrong tokens, so a refused token and a ban are told apart.
+    pub(super) async fn as_admin(
         &self,
         method: Method,
         path: &str,
         admin_token: &str,
-    ) -> Result<reqwest::RequestBuilder> {
-        Ok(self
+        body: Option<&Value>,
+    ) -> Result<reqwest::Response> {
+        let mut request = self
             .client
             .request(method, self.url(path)?)
-            .bearer_auth(admin_token))
+            .bearer_auth(admin_token);
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        let response = request.send().await.map_err(StoreError::Network)?;
+        match response.status() {
+            StatusCode::UNAUTHORIZED => Err(StoreError::AdminRefused),
+            StatusCode::TOO_MANY_REQUESTS => Err(StoreError::AdminBanned),
+            _ => Ok(response),
+        }
+    }
+
+    /// Deletes the group and everything stored for it, leaving the server unclaimed.
+    pub async fn reset_server(&self, admin_token: &str) -> Result<()> {
+        let body = json!({ "confirm": "reset" });
+        let response = self
+            .as_admin(Method::POST, "v1/admin/reset", admin_token, Some(&body))
+            .await?;
+        decode_empty(response).await
     }
 
     /// Creates the group on an unclaimed server with the operator's admin token.
@@ -293,12 +334,10 @@ impl ServerStore {
         genesis: &Entry,
         wraps: &BTreeMap<String, String>,
     ) -> Result<()> {
+        let body = json!({ "entry": genesis, "wraps": wraps });
         let response = self
-            .as_admin(Method::POST, "v1/claim", admin_token)?
-            .json(&json!({ "entry": genesis, "wraps": wraps }))
-            .send()
-            .await
-            .map_err(StoreError::Network)?;
+            .as_admin(Method::POST, "v1/claim", admin_token, Some(&body))
+            .await?;
         if response.status() == StatusCode::CONFLICT {
             return Err(StoreError::AlreadyClaimed);
         }
@@ -310,13 +349,8 @@ impl ServerStore {
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        let response = check(response).await?;
         Ok(Some(
-            response
-                .bytes()
-                .await
-                .map_err(StoreError::Network)?
-                .to_vec(),
+            read_body(check(response).await?, MAX_OBJECT_SIZE).await?,
         ))
     }
 }
@@ -352,7 +386,7 @@ impl Store for ServerStore {
             .authorized(Method::POST, "v1/roster", Some(body))
             .await?;
         if response.status() == StatusCode::CONFLICT {
-            let value: Value = response.json().await.map_err(|_| StoreError::Malformed)?;
+            let value = json(response).await?;
             let head = value["head"]
                 .as_str()
                 .ok_or(StoreError::Malformed)?
@@ -435,14 +469,7 @@ impl Mailbox for ServerStore {
         if response.status() == StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        Ok(Some(
-            check(response)
-                .await?
-                .bytes()
-                .await
-                .map_err(StoreError::Network)?
-                .to_vec(),
-        ))
+        Ok(Some(read_body(check(response).await?, MAX_RESPONSE).await?))
     }
 
     async fn close_slot(&self, slot: &str) -> Result<()> {
@@ -465,8 +492,7 @@ async fn check(response: reqwest::Response) -> Result<reqwest::Response> {
         return Ok(response);
     }
     let status = response.status().as_u16();
-    let code = response
-        .json::<Value>()
+    let code = json(response)
         .await
         .ok()
         .and_then(|v| v["error"].as_str().map(str::to_owned));
@@ -476,12 +502,29 @@ async fn check(response: reqwest::Response) -> Result<reqwest::Response> {
     })
 }
 
-pub(super) async fn decode(response: reqwest::Response) -> Result<Value> {
-    check(response)
-        .await?
-        .json()
-        .await
+/// The group's storage on a Flow server, and when it last heard from each device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerStatus {
+    pub used: u64,
+    pub quota: u64,
+    pub objects: u64,
+    pub seen: BTreeMap<String, i64>,
+}
+
+/// The protocols a Flow server speaks, and whether it relays live messages.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ServerInfo {
+    pub protocols: Vec<String>,
+    pub live: bool,
+}
+
+async fn json(response: reqwest::Response) -> Result<Value> {
+    serde_json::from_slice(&read_body(response, MAX_RESPONSE).await?)
         .map_err(|_| StoreError::Malformed)
+}
+
+pub(super) async fn decode(response: reqwest::Response) -> Result<Value> {
+    json(check(response).await?).await
 }
 
 pub(super) async fn decode_empty(response: reqwest::Response) -> Result<()> {

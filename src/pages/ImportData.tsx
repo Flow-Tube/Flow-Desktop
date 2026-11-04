@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
+import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
@@ -209,7 +209,12 @@ export const ImportData: React.FC = () => {
           const profiles = useProfilesStore.getState().view;
           const running = profiles?.profiles.find((profile) => profile.id === profiles.activeId);
           if (profiles && running && profiles.profiles.length > 1) {
-            const proceed = await confirmAction(getString("import_old_master_into", profileDisplayName(running)));
+            const proceed = await confirmAction({
+              title: getString("import_old_master_title", profileDisplayName(running)),
+              message: getString("import_old_master_body"),
+              icon: ArchiveRestore,
+              confirmLabel: getString("restore"),
+            });
             if (!proceed) { setImportState("idle"); setProgress(0); return; }
           }
         }

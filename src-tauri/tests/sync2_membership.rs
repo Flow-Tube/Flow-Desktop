@@ -3,11 +3,19 @@
 
 mod sync2_common;
 
+use std::collections::BTreeMap;
+
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
+use flow_desktop_lib::sync2::entries::build_entry;
 use flow_desktop_lib::sync2::linking::DeviceMeta;
 use flow_desktop_lib::sync2::membership::{remove_device, rename_device};
+use flow_desktop_lib::sync2::meta::seal_device_meta;
 use flow_desktop_lib::sync2::names::device_names;
-use sync2_common::{device_pool, group, head};
+use flow_desktop_lib::sync2::roster::Op;
+use flow_desktop_lib::sync2::store::Store;
+use sync2_common::{device_pool, draft, group, head};
 
 fn meta(name: &str) -> DeviceMeta {
     DeviceMeta {
@@ -74,4 +82,34 @@ async fn names_come_from_the_latest_entry_and_survive_a_new_epoch() {
     let names = device_names(&mut session).await.unwrap();
     assert_eq!(names[&hex::encode(g.a.did)].name, "Laptop");
     assert_eq!(names[&hex::encode(g.b.did)].name, "Studio");
+}
+
+#[tokio::test]
+async fn a_signed_name_that_can_not_be_read_is_left_out() {
+    let g = group().await;
+    let pool_a = device_pool(&g).await;
+    let a = hex::encode(g.a.did);
+    let session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    rename_device(&session, &g.a, &a, &meta("Laptop"))
+        .await
+        .unwrap();
+    let not_json = |seq| seal_device_meta(&g.epoch_key, &g.group, 0, seq, &g.a.did, b"name");
+    for sealed in [
+        "not base64url!".to_owned(),
+        URL_SAFE_NO_PAD.encode([0; 100]),
+        URL_SAFE_NO_PAD.encode(not_json(head(&g.store).seq + 1).unwrap()),
+    ] {
+        let state = head(&g.store);
+        let mut rename = draft(Op::Rename, &g.a);
+        rename.meta = Some(BTreeMap::from([(a.clone(), sealed)]));
+        let entry = build_entry(&g.group, Some(&state), rename, &[&g.a]);
+        (&g.store)
+            .append_roster(&state.head, &entry, &BTreeMap::new(), None)
+            .await
+            .unwrap();
+    }
+
+    let mut session = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    let names = device_names(&mut session).await.unwrap();
+    assert_eq!(names[&a].name, "Laptop");
 }

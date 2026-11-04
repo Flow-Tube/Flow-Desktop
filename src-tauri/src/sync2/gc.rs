@@ -4,11 +4,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::SqlitePool;
 
 use super::engine::{Result, Session};
 use super::paths::{blob_path, log_path};
+use super::profile_names;
 use super::roster::Role;
 use super::snapshot::Manifest;
 use super::store::Store;
@@ -20,9 +21,38 @@ const BUDGET: usize = 100;
 
 pub type VersionVector = BTreeMap<String, u64>;
 
+/// The largest `seq` every platform reads exactly from JSON (spec/store.md, Untrusted input).
+const MAX_SEQ: u64 = (1 << 53) - 1;
+
+fn in_range<E: serde::de::Error>(seq: u64) -> std::result::Result<u64, E> {
+    if seq > MAX_SEQ {
+        return Err(E::custom("seq out of range"));
+    }
+    Ok(seq)
+}
+
+/// Reads a `seq`, refusing one above 2^53 - 1.
+pub fn bounded_seq<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<u64, D::Error> {
+    in_range(u64::deserialize(deserializer)?)
+}
+
+/// Reads a version vector, refusing one that names a `seq` above 2^53 - 1.
+pub fn bounded_vv<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<VersionVector, D::Error> {
+    let vv = VersionVector::deserialize(deserializer)?;
+    for seq in vv.values() {
+        in_range::<D::Error>(*seq)?;
+    }
+    Ok(vv)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ack {
+    #[serde(deserialize_with = "bounded_vv")]
     pub vv: VersionVector,
 }
 
@@ -87,6 +117,16 @@ async fn links(pool: &SqlitePool) -> Result<BTreeSet<Option<String>>> {
         .collect()
 }
 
+/// Links whose `profiles` record is deleted: their batches no longer need a snapshot.
+async fn deleted_links(pool: &SqlitePool) -> Result<Vec<String>> {
+    Ok(
+        sqlx::query_scalar("SELECT link FROM sync2_profiles WHERE deleted = 1")
+            .fetch_all(pool)
+            .await
+            .map_err(SyncError::from)?,
+    )
+}
+
 async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
     let rows: Vec<(String, String)> = sqlx::query_as("SELECT did, vv FROM sync2_acks")
         .fetch_all(pool)
@@ -97,7 +137,7 @@ async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
         .collect()
 }
 
-async fn manifests(pool: &SqlitePool) -> Result<Vec<Logged>> {
+pub(super) async fn manifests(pool: &SqlitePool) -> Result<Vec<Logged>> {
     let rows: Vec<(String, i64, String)> =
         sqlx::query_as("SELECT did, seq, manifest FROM sync2_manifests")
             .fetch_all(pool)
@@ -301,7 +341,13 @@ impl<S: Store> Session<'_, S> {
             collected(pool).await?,
         );
         let mut links = links(pool).await?;
-        links.insert(Some(self.record().link.clone()));
+        links.extend(self.reading().links().map(|link| Some(link.to_owned())));
+        for link in deleted_links(pool).await? {
+            links.remove(&Some(link));
+        }
+        if !profile_names::records(pool).await?.is_empty() {
+            links.insert(None);
+        }
         let plan = Facts {
             current: &current,
             collectable: &collectable,
@@ -361,6 +407,14 @@ impl<S: Store> Session<'_, S> {
 mod tests {
     use super::*;
     use crate::sync2::snapshot::Tip;
+
+    #[test]
+    fn an_ack_naming_a_seq_above_2_53_is_refused() {
+        let ack = |seq: u64| serde_json::from_str::<Ack>(&format!(r#"{{"vv":{{"a":{seq}}}}}"#));
+        assert!(ack((1 << 53) - 1).is_ok());
+        assert!(ack(1 << 53).is_err());
+        assert!(ack(u64::MAX).is_err());
+    }
 
     const LINK: &str = "link";
 

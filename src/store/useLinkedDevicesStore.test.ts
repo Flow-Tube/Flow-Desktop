@@ -10,10 +10,12 @@ const api = vi.hoisted(() => ({
   cancelLink: vi.fn(),
   createGroup: vi.fn(),
   createLanGroup: vi.fn(),
+  createWebdavGroup: vi.fn(),
   forgetGroup: vi.fn(),
   getLinkPhase: vi.fn(),
   getLinkedDevices: vi.fn(),
   getLinkedStatus: vi.fn(),
+  leaveGroup: vi.fn(),
   enterCode: vi.fn(),
   showCode: vi.fn(),
   markRecoverySaved: vi.fn(),
@@ -22,18 +24,29 @@ const api = vi.hoisted(() => ({
   removeDevice: vi.fn(),
   renameDevice: vi.fn(),
   restoreGroup: vi.fn(),
+  retryKeychain: vi.fn(),
   syncNow: vi.fn(),
+  updateLogin: vi.fn(),
 }));
 vi.mock("../lib/api/linked", () => api);
+const confirmAction = vi.hoisted(() => vi.fn());
+vi.mock("../lib/dialogs", () => ({ confirmAction }));
 
 import { useLinkedDevicesStore } from "./useLinkedDevicesStore";
 
 const WORDS = Array.from({ length: 24 }, (_, i) => `word${i}`).join(" ");
-const LINKED = { kind: "server", storeUrl: "https://sync.example.com", recoverySaved: false, lastSync: null, syncing: false };
+const LINKED = {
+  kind: "server",
+  storeUrl: "https://sync.example.com",
+  keychainBlocked: false,
+  recoverySaved: false,
+  lastSync: null,
+  syncing: false,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useLinkedDevicesStore.setState({ status: null, devices: null, words: null, error: null, busy: false });
+  useLinkedDevicesStore.setState({ status: null, devices: null, words: null, serverTaken: false, error: null, busy: false });
 });
 
 describe("useLinkedDevicesStore", () => {
@@ -43,7 +56,7 @@ describe("useLinkedDevicesStore", () => {
     api.getLinkedDevices.mockResolvedValue([{ id: "a", name: "Mac", platform: "macos", thisDevice: true }]);
 
     await useLinkedDevicesStore.getState().create("https://sync.example.com", "token");
-    expect(api.createGroup).toHaveBeenCalledWith("https://sync.example.com", "token");
+    expect(api.createGroup).toHaveBeenCalledWith("https://sync.example.com", "token", undefined);
     expect(useLinkedDevicesStore.getState().words).toBe(WORDS);
     expect(useLinkedDevicesStore.getState().devices).toHaveLength(1);
 
@@ -62,6 +75,21 @@ describe("useLinkedDevicesStore", () => {
     expect(state.error).toBe("These recovery words aren't valid. Check the spelling and the order.");
     expect(state.busy).toBe(false);
     expect(state.words).toBeNull();
+  });
+
+  it("asks the keychain again, and says it is still waiting when macOS has not answered", async () => {
+    api.retryKeychain.mockRejectedValueOnce({ kind: "linkedKeychain", message: "Waiting for access to the keychain" });
+    await useLinkedDevicesStore.getState().retryKeychain();
+    expect(useLinkedDevicesStore.getState().error).toBe(
+      "Flow is waiting for access to the keychain. Allow it when macOS asks, then try again.",
+    );
+
+    api.retryKeychain.mockResolvedValueOnce(undefined);
+    api.getLinkedStatus.mockResolvedValue(LINKED);
+    api.getLinkedDevices.mockResolvedValue([]);
+    await useLinkedDevicesStore.getState().retryKeychain();
+    expect(useLinkedDevicesStore.getState().error).toBeNull();
+    expect(useLinkedDevicesStore.getState().status?.keychainBlocked).toBe(false);
   });
 
   it("loads no devices for a device in no group", async () => {
@@ -102,5 +130,32 @@ describe("useLinkedDevicesStore", () => {
     api.syncNow.mockResolvedValue([]);
     await useLinkedDevicesStore.getState().syncNow();
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it("forgets the group anyway when leaving fails and the user agrees, and says why otherwise", async () => {
+    api.getLinkedStatus.mockResolvedValue({ ...LINKED, kind: null });
+    api.leaveGroup.mockRejectedValue({ kind: "linkedGroupMissing", message: "unclaimed" });
+    confirmAction.mockResolvedValueOnce(true);
+    await useLinkedDevicesStore.getState().leave();
+    expect(api.forgetGroup).toHaveBeenCalledOnce();
+    expect(useLinkedDevicesStore.getState().error).toBeNull();
+
+    confirmAction.mockResolvedValueOnce(false);
+    await useLinkedDevicesStore.getState().leave();
+    expect(api.forgetGroup).toHaveBeenCalledOnce();
+    expect(useLinkedDevicesStore.getState().error).toContain("no longer has this group");
+  });
+
+  it("offers a server that already has a group instead of failing, and resets it only when asked", async () => {
+    api.createGroup.mockRejectedValueOnce({ kind: "linkedAlreadyClaimed", message: "this server already has a group" });
+    await useLinkedDevicesStore.getState().create("https://sync.example.com", "admin");
+    expect(useLinkedDevicesStore.getState()).toMatchObject({ serverTaken: true, error: null, words: null });
+    expect(api.createGroup).toHaveBeenLastCalledWith("https://sync.example.com", "admin", undefined);
+
+    api.createGroup.mockResolvedValueOnce(WORDS);
+    api.getLinkedStatus.mockResolvedValue(LINKED);
+    await useLinkedDevicesStore.getState().create("https://sync.example.com", "admin", true);
+    expect(api.createGroup).toHaveBeenLastCalledWith("https://sync.example.com", "admin", true);
+    expect(useLinkedDevicesStore.getState()).toMatchObject({ serverTaken: false, words: WORDS });
   });
 });

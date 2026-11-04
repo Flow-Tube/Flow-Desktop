@@ -4,6 +4,7 @@ import { prefetchStreamInfo } from "../lib/streamResolution";
 import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
+import { queueWith, remoteControl } from "./useRemoteControlStore";
 import { profileStorage } from "../lib/storage/profileStorage";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
@@ -145,6 +146,8 @@ export interface PlayerState {
     playlistContext?: PlaylistContext | null,
     unshuffledQueue?: VideoSummary[] | null,
   ) => void;
+  /** Replaces the queue around the video playing, which carries on; it goes first when `videos` leaves it out. */
+  replaceQueue: (videos: VideoSummary[]) => void;
   addToQueue: (video: VideoSummary) => QueueAddResult;
   removeFromQueue: (index: number) => void;
   /** Puts a removed video back at its old place, for Undo. */
@@ -291,7 +294,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setPlaybackRate: (playbackRate) => set({ playbackRate: Math.min(4, Math.max(0.25, playbackRate)) }),
 
+  replaceQueue: (videos) => {
+    const { currentVideo, isShuffle } = get();
+    if (!currentVideo) return;
+    const unique = appendUniqueVideos([], videos);
+    const at = unique.findIndex((item) => item.id === currentVideo.id);
+    const queue = at >= 0 ? unique.map((item, i) => (i === at ? currentVideo : item)) : [currentVideo, ...unique];
+    set({
+      queue,
+      currentIndex: Math.max(0, at),
+      playlistContext: null,
+      manualQueueIds: new Set<string>(),
+      unshuffledQueue: isShuffle ? queue : null,
+    });
+  },
+
   setQueue: (rawQueue, startIndex = 0, playlistContext = null, unshuffledQueue = null) => {
+    const remote = remoteControl();
+    if (remote) return remote.play(rawQueue.map((item) => item.id), startIndex, false);
     // Rows and drag handles are keyed by video id, and a YouTube playlist can list one twice.
     const queue = appendUniqueVideos([], rawQueue);
     const startId = rawQueue[startIndex]?.id;
@@ -329,6 +349,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   addToQueue: (video) => {
+    const remote = remoteControl();
+    if (remote) {
+      remote.command("queue", { queue: queueWith(remote, [video.id], false) });
+      return "added";
+    }
     const { queue, currentVideo, currentIndex, playlistContext, manualQueueIds } = get();
     if (queue.some((item) => item.id === video.id) || currentVideo?.id === video.id) {
       return "duplicate";
@@ -446,6 +471,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: (allowAutoplayFallback = false) => {
+    const remote = remoteControl();
+    if (remote) {
+      remote.command("next");
+      return null;
+    }
     const { queue, currentIndex, repeatMode, autoplayCandidates } = get();
     if (queue.length === 0) return null;
 
@@ -485,6 +515,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playPrevious: () => {
+    const remote = remoteControl();
+    if (remote) return remote.command("previous");
     const { queue, currentIndex, currentTime, repeatMode } = get();
     if (queue.length === 0) return;
 

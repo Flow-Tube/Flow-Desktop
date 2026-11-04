@@ -141,8 +141,6 @@ export const Playlists: React.FC<PlaylistsProps> = ({ onPlay: _onPlay }) => {
   };
 
   const handleRemoveFromLibrary = async (playlist: PlaylistSummary) => {
-    if (!confirm("Remove this playlist from your library?")) return false;
-
     const updated = await removePlaylistFromLibrary(playlist.id);
     setPlaylists(updated);
     return true;

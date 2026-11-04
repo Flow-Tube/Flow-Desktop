@@ -70,7 +70,6 @@ class MusicAudioEngine {
   private graphReady = false;
   private webAudioFailed = false;
   private availabilityListeners = new Set<(available: boolean) => void>();
-  private graphListeners = new Set<() => void>();
 
   private volume = 1;
   private muted = false;
@@ -157,7 +156,6 @@ class MusicAudioEngine {
       this.chain.apply(this.eqSpec);
       // Turned on mid-song: the context has to run for the element to be heard.
       if (this.active.el && !this.active.el.paused) void resumeWithin(ctx);
-      for (const listener of this.graphListeners) listener();
     } catch (err) {
       console.warn("[musicAudioEngine] WebAudio graph unavailable, playing without the equalizer", err);
       this.webAudioFailed = true;
@@ -537,22 +535,11 @@ class MusicAudioEngine {
   }
 
   /**
-   * Whether streams should come as AAC: on macOS only MP4 audio reaches the graph, and once the
-   * graph is in use every song plays through it.
+   * Whether streams should come as AAC: on macOS only MP4 audio reaches the graph, and a song
+   * already playing when the equalizer or crossfade comes on must be heard through it.
    */
   wantsAac(): boolean {
-    return IS_MACOS_RUNTIME && (this.graphReady || this.needsGraph());
-  }
-
-  /** Whether the song playing bypasses the graph, so the equalizer cannot be heard on it. */
-  activeBypassesGraph(): boolean {
-    return this.graphReady && !!this.active.el?.getAttribute("src") && !this.routes(this.active);
-  }
-
-  /** Called once the graph is built, when songs loaded before it may need loading again. */
-  onGraphReady(listener: () => void): () => void {
-    this.graphListeners.add(listener);
-    return () => this.graphListeners.delete(listener);
+    return IS_MACOS_RUNTIME;
   }
 
   /** False once WebAudio failed here, so the equalizer cannot be heard. */

@@ -16,6 +16,9 @@ function cx(...parts: Array<string | false | null | undefined>): string {
   The sidebar only scrolls from `lg` up, and that is also the only place it
   clips: related cards bleed past their own box so their colour wash can grow.
   `lg:p-2` keeps that bleed inside the scroller's paint box.
+
+  z-[31] puts both columns above the player frame's z-30, so its glow passes behind them, and
+  below the top bar's z-40, whose search suggestions hang down over this page.
 */
 export function WatchLayout({ player, metadata, description, comments, sidebar }: WatchLayoutProps) {
   const isTheaterMode = usePlayerStore((s) => s.isTheaterMode);
@@ -48,7 +51,7 @@ export function WatchLayout({ player, metadata, description, comments, sidebar }
         <div
           ref={mainRef}
           className={cx(
-            "flex w-full min-w-0 flex-col gap-5 lg:row-start-2",
+            "relative z-[31] flex w-full min-w-0 flex-col gap-5 lg:row-start-2",
             isTheaterMode ? "lg:col-start-2" : "lg:col-start-1",
           )}
         >
@@ -60,7 +63,7 @@ export function WatchLayout({ player, metadata, description, comments, sidebar }
         <div
           ref={sideRef}
           className={cx(
-            "flex w-full min-h-0 flex-col gap-5 overscroll-contain lg:sticky lg:top-6 lg:max-h-[calc(100vh-6.5rem)] lg:self-start lg:overflow-y-auto lg:p-2 hide-scrollbar",
+            "relative z-[31] flex w-full min-h-0 flex-col gap-5 overscroll-contain lg:sticky lg:top-6 lg:max-h-[calc(100vh-6.5rem)] lg:self-start lg:overflow-y-auto lg:p-2 hide-scrollbar",
             isTheaterMode ? "lg:col-start-3 lg:row-start-2" : "lg:col-start-2 lg:row-span-2 lg:row-start-1",
           )}
         >

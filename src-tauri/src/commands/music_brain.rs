@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::commands::linked::err as linked_err;
 use crate::db::music_content::GraphTaste;
@@ -13,9 +13,8 @@ use crate::music_brain::rank::{
     RankInput, day_slot, heavy_rotation, rank, rediscover, time_of_day_rotation,
 };
 use crate::music_brain::store::MusicBrainStore;
-use crate::profiles::ActiveProfile;
-use crate::sync2::actions::leave;
-use sqlx::SqlitePool;
+use crate::sync2::actions::leave_if_linked;
+use crate::sync2::profile_actions::syncs_link;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
 
@@ -279,12 +278,11 @@ pub async fn get_music_taste_profile(
 /// Like `reset_brain`, leaves the sync group first in the profile that syncs.
 #[tauri::command]
 pub async fn reset_music_brain(
+    app: AppHandle,
     music_brain: State<'_, Arc<MusicBrainStore>>,
-    pool: State<'_, SqlitePool>,
-    profile: State<'_, ActiveProfile>,
 ) -> CmdResult<()> {
-    if profile.is_default {
-        leave(&pool).await.map_err(|e| linked_err(&e))?;
+    if syncs_link(&app).await {
+        leave_if_linked(&app).await.map_err(|e| linked_err(&e))?;
     }
     music_brain.reset().await.map_err(ErrorResponse::from)
 }

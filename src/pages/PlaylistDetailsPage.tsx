@@ -23,6 +23,7 @@ import { usePublishTitle } from "../lib/usePublishTitle";
 import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
 import { youtubePlaylistUrl } from "../lib/youtubeUrl";
 import { copyText } from "../lib/clipboard";
+import { confirmPlaylistRemoval } from "../lib/confirmPlaylistRemoval";
 import { fisherYates } from "../lib/musicShuffle";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useDownloadStore } from "../store/useDownloadStore";
@@ -146,15 +147,17 @@ export function PlaylistDetailsPage({
     }
   };
 
+  const librarySummary = (): PlaylistSummary | null => meta && {
+    type: "playlist",
+    id: meta.id,
+    title: meta.title,
+    thumbnailUrl: heroThumbnailUrl ?? meta.thumbnailUrl ?? null,
+    videoCountText: meta.videoCountText,
+  };
+
   const handleSaveToLibrary = async () => {
-    if (!meta) return;
-    const summary: PlaylistSummary = {
-      type: "playlist",
-      id: meta.id,
-      title: meta.title,
-      thumbnailUrl: heroThumbnailUrl ?? meta.thumbnailUrl ?? null,
-      videoCountText: meta.videoCountText,
-    };
+    const summary = librarySummary();
+    if (!meta || !summary) return;
     try {
       const playlists = await savePlaylistToLibrary(summary);
       const saved = playlists.find((playlist) => playlist.id === meta.id);
@@ -171,11 +174,9 @@ export function PlaylistDetailsPage({
   };
 
   const handleRemoveFromLibrary = async () => {
-    if (!meta || isProtected) return;
-    const confirmMessage = isOwned
-      ? `Delete "${meta.title}"? This can't be undone.`
-      : `Remove "${meta.title}" from your library?`;
-    if (!window.confirm(confirmMessage)) return;
+    const summary = librarySummary();
+    if (!meta || !summary || isProtected) return;
+    if (!await confirmPlaylistRemoval(summary, isOwned)) return;
 
     try {
       await removePlaylistFromLibrary(meta.id);

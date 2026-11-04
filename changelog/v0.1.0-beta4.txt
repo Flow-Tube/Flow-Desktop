@@ -68,6 +68,7 @@ PLAYER
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 
 FIXES
+- Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.
 - Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.

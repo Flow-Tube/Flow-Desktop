@@ -8,7 +8,6 @@ import {
   ratiosFromPosition,
   parseSavedPosition,
   useMiniPlayerDrag,
-  DRAG_START_THRESHOLD_PX,
   MIN_VIEWPORT_GUTTER,
   TOP_TITLEBAR_GUTTER,
 } from "./useMiniPlayerDrag";
@@ -19,7 +18,6 @@ import { SETTINGS } from "./settings/schema";
 
 describe("mini-player positioning calculations", () => {
   it("computes bounds accurately given viewport and player size", () => {
-    expect(DRAG_START_THRESHOLD_PX).toBe(6);
     expect(MIN_VIEWPORT_GUTTER).toBe(24);
     expect(TOP_TITLEBAR_GUTTER).toBe(48);
     const bounds = computeMiniPlayerBounds(1000, 800, 400, 225, 24, 48);
@@ -91,15 +89,9 @@ describe("useMiniPlayerDrag hook", () => {
   let hookResult: ReturnType<typeof useMiniPlayerDrag> | null = null;
   let elementRef: HTMLDivElement | null = null;
 
-  function ProbeComponent({
-    isFloating,
-    onPositionChange,
-  }: {
-    isFloating: boolean;
-    onPositionChange?: (ratios: { xRatio: number; yRatio: number }) => void;
-  }) {
+  function ProbeComponent({ isFloating }: { isFloating: boolean }) {
     const frameRef = useRef<HTMLDivElement | null>(null);
-    const result = useMiniPlayerDrag({ frameRef, isFloating, onPositionChange });
+    const result = useMiniPlayerDrag({ frameRef, isFloating });
     hookResult = result;
 
     return createElement(
@@ -185,7 +177,7 @@ describe("useMiniPlayerDrag hook", () => {
     expect(hookResult?.isDragging).toBe(false);
   });
 
-  it("does not initiate drag below threshold and lets click pass through", () => {
+  it("does not initiate drag at or below the shared threshold", () => {
     act(() => {
       root = createRoot(document.createElement("div"));
       root.render(createElement(ProbeComponent, { isFloating: true }));
@@ -201,7 +193,7 @@ describe("useMiniPlayerDrag hook", () => {
       } as unknown as React.PointerEvent<HTMLDivElement>);
     });
 
-    // Move only 3px (< DRAG_START_THRESHOLD_PX of 6)
+    // Inside DRAG_THRESHOLD_PX
     act(() => {
       hookResult?.dragBinds.onPointerMove?.({
         pointerId: 1,
@@ -219,27 +211,12 @@ describe("useMiniPlayerDrag hook", () => {
         currentTarget: elementRef,
       } as unknown as React.PointerEvent<HTMLDivElement>);
     });
-
-    const stopPropagation = vi.fn();
-    const preventDefault = vi.fn();
-    act(() => {
-      hookResult?.dragBinds.onClickCapture?.({
-        stopPropagation,
-        preventDefault,
-      } as unknown as React.MouseEvent<HTMLDivElement>);
-    });
-
-    // Click was not swallowed because it was a pure click
-    expect(stopPropagation).not.toHaveBeenCalled();
-    expect(preventDefault).not.toHaveBeenCalled();
   });
 
-  it("initiates drag above threshold, updates transform, saves position, and swallows click", () => {
-    const onPositionChange = vi.fn();
-
+  it("initiates drag above threshold, moves the frame, and saves the position", () => {
     act(() => {
       root = createRoot(document.createElement("div"));
-      root.render(createElement(ProbeComponent, { isFloating: true, onPositionChange }));
+      root.render(createElement(ProbeComponent, { isFloating: true }));
     });
 
     if (elementRef) {
@@ -258,7 +235,7 @@ describe("useMiniPlayerDrag hook", () => {
       } as unknown as React.PointerEvent<HTMLDivElement>);
     });
 
-    // Move 20px (above 6px threshold)
+    // Move 20px, past the threshold
     act(() => {
       hookResult?.dragBinds.onPointerMove?.({
         pointerId: 1,
@@ -279,19 +256,51 @@ describe("useMiniPlayerDrag hook", () => {
     });
 
     expect(hookResult?.isDragging).toBe(false);
-    expect(onPositionChange).toHaveBeenCalled();
+    expect(useAppSettingsStore.getState().values[SETTINGS.MINI_PLAYER_POSITION]).toContain("xRatio");
+  });
 
-    // Verify click swallowing
-    const stopPropagation = vi.fn();
-    const preventDefault = vi.fn();
+  it("clears its transform when the frame stops floating, as it does in fullscreen", () => {
     act(() => {
-      hookResult?.dragBinds.onClickCapture?.({
-        stopPropagation,
-        preventDefault,
-      } as unknown as React.MouseEvent<HTMLDivElement>);
+      root = createRoot(document.createElement("div"));
+      root.render(createElement(ProbeComponent, { isFloating: true }));
+    });
+    expect(elementRef?.style.transform).toContain("translate3d");
+
+    act(() => {
+      root?.render(createElement(ProbeComponent, { isFloating: false }));
+    });
+    expect(elementRef?.style.transform).toBe("");
+  });
+
+  it("leaves the pointer with the gesture overlay when it already holds it", () => {
+    act(() => {
+      root = createRoot(document.createElement("div"));
+      root.render(createElement(ProbeComponent, { isFloating: true }));
+    });
+    const capture = vi.fn();
+    if (elementRef) elementRef.setPointerCapture = capture;
+    const overlay = { closest: () => null, hasPointerCapture: () => true };
+
+    act(() => {
+      hookResult?.dragBinds.onPointerDown?.({
+        button: 0,
+        pointerId: 1,
+        clientX: 500,
+        clientY: 500,
+        target: overlay,
+      } as unknown as React.PointerEvent<HTMLDivElement>);
+    });
+    act(() => {
+      hookResult?.dragBinds.onPointerMove?.({
+        pointerId: 1,
+        clientX: 520,
+        clientY: 520,
+        target: overlay,
+        currentTarget: elementRef,
+      } as unknown as React.PointerEvent<HTMLDivElement>);
     });
 
-    expect(stopPropagation).toHaveBeenCalled();
-    expect(preventDefault).toHaveBeenCalled();
+    expect(hookResult?.isDragging).toBe(true);
+    expect(capture).not.toHaveBeenCalled();
   });
 });

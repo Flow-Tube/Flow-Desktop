@@ -18,7 +18,7 @@ import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore
 import { copyText } from "../../../lib/clipboard";
 import { getString } from "../../../lib/i18n/index";
 import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
-import { LONG_PRESS_MS, shouldStartWindowDrag } from "../../../lib/pointerGesture";
+import { LONG_PRESS_MS, shouldStartDrag } from "../../../lib/pointerGesture";
 import { startWindowDrag } from "../../../lib/api/pip";
 import { StatsForNerds } from "../StatsForNerds";
 import { PlayerContextMenu, type PlayerContextMenuItem } from "./PlayerContextMenu";
@@ -83,6 +83,8 @@ type PlayerGestureOverlayProps = {
   isCompact?: boolean;
   /** In the pop-out window, a press that moves drags the window. */
   canDragWindow?: boolean;
+  /** The mini player: `useMiniPlayerDrag` on the frame moves it, from these bubbling moves. */
+  canDragFrame?: boolean;
   /** The settings menu, which shares the "one menu at a time" rule with the right-click menu. */
   settingsOpen: boolean;
   onCloseSettings: () => void;
@@ -128,6 +130,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   onRevealControls,
   isCompact = false,
   canDragWindow = false,
+  canDragFrame = false,
   settingsOpen,
   onCloseSettings,
 }) => {
@@ -242,8 +245,13 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = pressStartRef.current;
     if (!start) return;
-    const drag = shouldStartWindowDrag({
-      canDragWindow,
+    // A press that sped playback up stays a speed-up, so the frame never hears it moved.
+    if (canDragFrame && longPressActiveRef.current) {
+      event.stopPropagation();
+      return;
+    }
+    const drag = shouldStartDrag({
+      canDrag: canDragWindow || canDragFrame,
       boosting: longPressActiveRef.current,
       dx: event.clientX - start.x,
       dy: event.clientY - start.y,
@@ -251,6 +259,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
     if (!drag) return;
     restorePlaybackRate();
     draggedRef.current = true;
+    if (canDragFrame) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -416,7 +425,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
       <div
         ref={layerRef}
         {...{ [PLAYER_VIDEO_LAYER_ATTR]: "" }}
-        className="absolute inset-0 z-[15] cursor-default"
+        className={`absolute inset-0 z-[15] ${canDragFrame ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={restorePlaybackRate}

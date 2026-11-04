@@ -230,4 +230,62 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     expect(seekTo).toHaveBeenCalledWith(40);
     expect(onSeekFeedback).toHaveBeenCalledWith("backward", 10);
   });
+
+  describe("dragging the mini player", () => {
+    // React stops a synthetic event at the root, so past the root means the frame heard it too.
+    const pressAndMove = (layer: Element, heldMs: number, onFrameMove: () => void) => {
+      document.addEventListener("pointermove", onFrameMove, { once: true });
+      act(() => {
+        layer.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 100 }));
+      });
+      act(() => {
+        vi.advanceTimersByTime(heldMs);
+      });
+      act(() => {
+        layer.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 130, clientY: 100 }));
+      });
+      document.removeEventListener("pointermove", onFrameMove);
+    };
+
+    it("cancels the long press once the press moves, and lets the frame hear the move", () => {
+      const setPlaybackRate = vi.fn();
+      const onFrameMove = vi.fn();
+      renderOverlay({ canDragFrame: true, longPressPlaybackRate: 2, setPlaybackRate });
+      pressAndMove(host.querySelector("[class*='z-[15]']")!, 100, onFrameMove);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(setPlaybackRate).not.toHaveBeenCalled();
+      expect(onFrameMove).toHaveBeenCalled();
+    });
+
+    it("keeps a press that already sped up from moving the frame", () => {
+      const onFrameMove = vi.fn();
+      renderOverlay({ canDragFrame: true, longPressPlaybackRate: 2 });
+      pressAndMove(host.querySelector("[class*='z-[15]']")!, 500, onFrameMove);
+      expect(onFrameMove).not.toHaveBeenCalled();
+    });
+
+    it("doesn't toggle playback on the click that ends a drag", () => {
+      const togglePlay = vi.fn();
+      renderOverlay({ canDragFrame: true, togglePlay });
+      const layer = host.querySelector("[class*='z-[15]']")!;
+      pressAndMove(layer, 50, () => {});
+      act(() => {
+        layer.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0, detail: 1 }));
+        vi.advanceTimersByTime(1000);
+      });
+      expect(togglePlay).not.toHaveBeenCalled();
+    });
+
+    it("shows a grab cursor only when it can be dragged", () => {
+      renderOverlay({ canDragFrame: true });
+      expect(host.querySelector("[class*='z-[15]']")?.className).toContain("cursor-grab");
+    });
+
+    it("keeps the default cursor everywhere else", () => {
+      renderOverlay();
+      expect(host.querySelector("[class*='z-[15]']")?.className).toContain("cursor-default");
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type React from "react";
 import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
+import { DRAG_THRESHOLD_PX } from "./pointerGesture";
 import { SETTINGS } from "./settings/schema";
 
 export interface MiniPlayerRatios {
@@ -15,9 +16,9 @@ export interface MiniPlayerBounds {
   maxY: number;
 }
 
-export const DRAG_START_THRESHOLD_PX = 6;
 export const MIN_VIEWPORT_GUTTER = 24;
-export const TOP_TITLEBAR_GUTTER = 48; // Leaves room for top TitleBar (h-10 / 40px)
+/** Keeps the player clear of the title bar, which is 40 px tall. */
+export const TOP_TITLEBAR_GUTTER = 48;
 
 export function computeMiniPlayerBounds(
   viewportWidth: number,
@@ -74,7 +75,7 @@ export function parseSavedPosition(raw: string | null | undefined): MiniPlayerRa
       };
     }
   } catch {
-    // If invalid JSON, fallback to default bottom-right
+    // Unreadable JSON falls through to the default corner.
   }
   return { xRatio: 1, yRatio: 1 };
 }
@@ -82,7 +83,6 @@ export function parseSavedPosition(raw: string | null | undefined): MiniPlayerRa
 export interface UseMiniPlayerDragOptions {
   frameRef: React.RefObject<HTMLDivElement | null>;
   isFloating: boolean;
-  onPositionChange?: (ratios: MiniPlayerRatios) => void;
 }
 
 export interface MiniPlayerDragBinds {
@@ -90,13 +90,11 @@ export interface MiniPlayerDragBinds {
   onPointerMove?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onPointerUp?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onPointerCancel?: (event: React.PointerEvent<HTMLDivElement>) => void;
-  onClickCapture?: (event: React.MouseEvent<HTMLDivElement>) => void;
 }
 
 export function useMiniPlayerDrag({
   frameRef,
   isFloating,
-  onPositionChange,
 }: UseMiniPlayerDragOptions) {
   const [isDragging, setIsDragging] = useState(false);
   const currentPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -105,7 +103,6 @@ export function useMiniPlayerDrag({
   const pressRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isDraggingActiveRef = useRef(false);
-  const swallowClickRef = useRef(false);
 
   const getPlayerDimensions = () => {
     const frame = frameRef.current;
@@ -126,7 +123,8 @@ export function useMiniPlayerDrag({
     currentPosRef.current = { x, y };
   };
 
-  // Keep ratios in sync if settings load asynchronously, provided user isn't actively dragging
+  // Settings load after the first render, and leaving the watch page clears the
+  // slot tracker's transform after the layout effect below has run.
   useEffect(() => {
     if (!isDraggingActiveRef.current) {
       ratiosRef.current = parseSavedPosition(savedPositionSetting);
@@ -139,7 +137,6 @@ export function useMiniPlayerDrag({
     }
   }, [savedPositionSetting, isFloating]);
 
-  // Keep in-sync when entering floating mode or on window resize
   useLayoutEffect(() => {
     if (!isFloating) {
       if (frameRef.current) {
@@ -181,6 +178,26 @@ export function useMiniPlayerDrag({
     };
   }
 
+  const finishPress = (event: React.PointerEvent<HTMLDivElement>) => {
+    const press = pressRef.current;
+    if (!press || press.id !== event.pointerId) return;
+    pressRef.current = null;
+    if (!isDraggingActiveRef.current) return;
+
+    isDraggingActiveRef.current = false;
+    setIsDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    const dims = getPlayerDimensions();
+    const bounds = computeMiniPlayerBounds(window.innerWidth, window.innerHeight, dims.width, dims.height);
+    const currentPos = currentPosRef.current || positionFromRatios(ratiosRef.current, bounds);
+    const newRatios = ratiosFromPosition(currentPos.x, currentPos.y, bounds);
+    ratiosRef.current = newRatios;
+    void setSettingValue(SETTINGS.MINI_PLAYER_POSITION, JSON.stringify(newRatios));
+  };
+
   const dragBinds: MiniPlayerDragBinds = {
     onPointerDown: (event) => {
       if (event.button !== 0) return;
@@ -194,7 +211,6 @@ export function useMiniPlayerDrag({
       pressRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
       startPosRef.current = currentPos;
       isDraggingActiveRef.current = false;
-      swallowClickRef.current = false;
     },
 
     onPointerMove: (event) => {
@@ -205,14 +221,14 @@ export function useMiniPlayerDrag({
       const dy = event.clientY - press.y;
 
       if (!isDraggingActiveRef.current) {
-        if (Math.hypot(dx, dy) <= DRAG_START_THRESHOLD_PX) return;
+        if (Math.hypot(dx, dy) <= DRAG_THRESHOLD_PX) return;
         isDraggingActiveRef.current = true;
-        swallowClickRef.current = true;
         setIsDragging(true);
-        try {
+        // The gesture overlay holds the pointer for a press on the video and needs
+        // its release. Anything else needs capturing, or the drag ends at the frame's edge.
+        const target = event.target as Element | null;
+        if (!target?.hasPointerCapture?.(event.pointerId)) {
           event.currentTarget.setPointerCapture(event.pointerId);
-        } catch {
-          // In some test/headless environments setPointerCapture may be unavailable
         }
       }
 
@@ -224,68 +240,8 @@ export function useMiniPlayerDrag({
       syncPositionToDom(nextX, nextY);
     },
 
-    onPointerUp: (event) => {
-      const press = pressRef.current;
-      if (!press || press.id !== event.pointerId) return;
-      pressRef.current = null;
-
-      if (isDraggingActiveRef.current) {
-        isDraggingActiveRef.current = false;
-        setIsDragging(false);
-
-        try {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-          // Ignore
-        }
-
-        const dims = getPlayerDimensions();
-        const bounds = computeMiniPlayerBounds(window.innerWidth, window.innerHeight, dims.width, dims.height);
-        const currentPos = currentPosRef.current || positionFromRatios(ratiosRef.current, bounds);
-        const newRatios = ratiosFromPosition(currentPos.x, currentPos.y, bounds);
-        ratiosRef.current = newRatios;
-
-        void setSettingValue(SETTINGS.MINI_PLAYER_POSITION, JSON.stringify(newRatios));
-        onPositionChange?.(newRatios);
-      }
-    },
-
-    onPointerCancel: (event) => {
-      const press = pressRef.current;
-      if (!press || press.id !== event.pointerId) return;
-      pressRef.current = null;
-      if (isDraggingActiveRef.current) {
-        isDraggingActiveRef.current = false;
-        setIsDragging(false);
-
-        try {
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-        } catch {
-          // Ignore
-        }
-
-        const dims = getPlayerDimensions();
-        const bounds = computeMiniPlayerBounds(window.innerWidth, window.innerHeight, dims.width, dims.height);
-        const currentPos = currentPosRef.current || positionFromRatios(ratiosRef.current, bounds);
-        const newRatios = ratiosFromPosition(currentPos.x, currentPos.y, bounds);
-        ratiosRef.current = newRatios;
-
-        void setSettingValue(SETTINGS.MINI_PLAYER_POSITION, JSON.stringify(newRatios));
-        onPositionChange?.(newRatios);
-      }
-    },
-
-    onClickCapture: (event) => {
-      if (swallowClickRef.current) {
-        swallowClickRef.current = false;
-        event.stopPropagation();
-        event.preventDefault();
-      }
-    },
+    onPointerUp: finishPress,
+    onPointerCancel: finishPress,
   };
 
   return {

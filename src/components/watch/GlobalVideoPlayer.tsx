@@ -62,9 +62,10 @@ export function GlobalVideoPlayer() {
   const previousVideoIdRef = useRef(currentVideo?.id ?? null);
 
   const isFloating = videoPlayerMode === "pip";
+  // Fullscreen keeps the "pip" mode, and its frame fills the window with insets.
   const { isDragging, dragBinds } = useMiniPlayerDrag({
     frameRef,
-    isFloating,
+    isFloating: isFloating && !isVideoFullscreen,
   });
   // The pop-out window owns playback in this mode, so this window renders no
   // media element — two decoding the same video would double audio and CPU.
@@ -155,7 +156,7 @@ export function GlobalVideoPlayer() {
 
     return () => {
       observer.disconnect();
-      // Floating and fullscreen layouts position the frame with insets.
+      // Fullscreen uses insets, and the floating layout writes its own transform after this.
       if (frameRef.current) frameRef.current.style.transform = "";
       lastSlotBoundsRef.current = null;
       if (resizeRaf !== null) window.cancelAnimationFrame(resizeRaf);
@@ -333,24 +334,23 @@ export function GlobalVideoPlayer() {
             </div>
             <div
               data-drag-ignore="true"
-              onPointerDown={(event) => event.stopPropagation()}
               className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
             >
               <button
-              type="button"
-              aria-label="Expand video"
-              onClick={expandFromFloating}
-              className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
-            >
-              <Maximize2 size={16} />
+                type="button"
+                aria-label="Expand video"
+                onClick={expandFromFloating}
+                className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
+              >
+                <Maximize2 size={16} />
               </button>
               <button
-              type="button"
-              aria-label="Close video"
-              onClick={dismissVideoPlayer}
-              className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
-            >
-              <X size={16} />
+                type="button"
+                aria-label="Close video"
+                onClick={dismissVideoPlayer}
+                className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
+              >
+                <X size={16} />
               </button>
             </div>
           </>

@@ -1619,9 +1619,6 @@ export const Player: React.FC<PlayerProps> = ({
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       fatalRecoveryAttempts = 0;
-      setHasStartedPlayback(true);
-      sourceSwitchingRef.current = false;
-      setIsSourceSwitching(false);
       logPlayerEventRef.current("hls-manifest-parsed", { levels: hls.levels.length });
       if (desiredPlayingRef.current) void video.play().catch(() => {});
     });
@@ -2160,16 +2157,18 @@ export const Player: React.FC<PlayerProps> = ({
         }
       }
     }
-    setHasStartedPlayback(true);
-    sourceSwitchingRef.current = false;
-    setIsSourceSwitching(false);
-    requestAnimationFrame(() => {
-      syncExternalAudio(true);
-      if (desiredPlayingRef.current || isPlaying) {
-        void videoRef.current?.play().catch(() => {});
-        if (usesExternalAudio) void audioRef.current?.play().catch(() => {});
-      }
-    });
+    if (pendingResumeTime > 0 || isLive) {
+      setHasStartedPlayback(true);
+      sourceSwitchingRef.current = false;
+      setIsSourceSwitching(false);
+      requestAnimationFrame(() => {
+        syncExternalAudio(true);
+        if (desiredPlayingRef.current || isPlaying) {
+          void videoRef.current?.play().catch(() => {});
+          if (usesExternalAudio) void audioRef.current?.play().catch(() => {});
+        }
+      });
+    }
     updateBuffered();
   };
 

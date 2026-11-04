@@ -45,6 +45,9 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 PLAYER
+- Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
+- Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.

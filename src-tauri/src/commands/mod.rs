@@ -7,6 +7,8 @@ pub mod downloads;
 pub mod external;
 pub mod files;
 pub mod home_feed;
+pub mod linked;
+pub mod live;
 pub mod lyrics;
 pub mod music;
 pub mod music_brain;

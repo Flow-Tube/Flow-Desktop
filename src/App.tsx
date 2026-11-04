@@ -13,6 +13,7 @@ import { useWatchLaterStore } from "./store/useWatchLaterStore";
 import { useSubscriptionStore } from "./store/useSubscriptionStore";
 import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
+import { catchUpOnce } from "./lib/linked/catchUp";
 import { useStartupHealth } from "./lib/useStartupHealth";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
@@ -60,6 +61,8 @@ import { LayoutGroup } from "framer-motion";
 import { ToastHost } from "./components/layout/ToastHost";
 import { GlobalMusicAudio } from "./components/music/GlobalMusicAudio";
 import { GlobalMusicDock } from "./components/music/GlobalMusicDock";
+import { RemoteDock } from "./components/playon/RemoteDock";
+import { ConsentDialog } from "./components/playon/ConsentDialog";
 import { MusicOverlay } from "./components/music/MusicOverlay";
 import { EqualizerDialog } from "./components/music/eq/EqualizerDialog";
 import { GlobalVideoPlayer } from "./components/watch/GlobalVideoPlayer";
@@ -84,6 +87,9 @@ import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
 import { useTabSession } from "./lib/tabs/useTabSession";
 import { useSingleTabWhenOff } from "./lib/tabs/useSingleTabWhenOff";
 import { useCrossWindowSync } from "./lib/useCrossWindowSync";
+import { useLinkedSyncEvents } from "./lib/useLinkedSyncEvents";
+import { useLiveNow } from "./lib/live/useLiveNow";
+import { usePlayOnEvents } from "./lib/live/usePlayOnEvents";
 import { IS_MAIN_WINDOW } from "./lib/appWindow";
 import { SelectionMenu } from "./components/common/SelectionMenu";
 
@@ -115,6 +121,9 @@ function App() {
   const tabsRestored = useTabSession();
   useSingleTabWhenOff();
   useCrossWindowSync();
+  useLinkedSyncEvents();
+  useLiveNow();
+  usePlayOnEvents();
   useProfileSwitchListener(markSwitching);
 
   // Onboarding belongs to the main window; an extra window only exists once it is done.
@@ -141,6 +150,8 @@ function App() {
   useEffect(() => {
     if (!IS_MAIN_WINDOW) return;
     const checkOnboarding = async () => {
+      // A profile added from another device has its onboarding state in what that device sent.
+      await catchUpOnce();
       try {
         const completed = await getOnboardingStatus();
         if (!completed && location.pathname !== "/onboarding") {
@@ -302,6 +313,8 @@ function App() {
           <GlobalMusicAudio />
           <LayoutGroup>
             <GlobalMusicDock />
+            <RemoteDock />
+            <ConsentDialog />
             <MusicOverlay />
           </LayoutGroup>
           <DeepFlowController />

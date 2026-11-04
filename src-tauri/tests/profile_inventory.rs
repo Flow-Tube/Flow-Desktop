@@ -188,13 +188,13 @@ fn keychain_entries_are_only_built_in_credentials() {
     let offenders: Vec<String> = rust_sources()
         .into_iter()
         .filter(|(path, source)| {
-            path != "src/scrobble/credentials.rs" && non_test(source).contains("Entry::new(")
+            path != "src/security/keychain.rs" && non_test(source).contains("Entry::new(")
         })
         .map(|(path, _)| path)
         .collect();
     assert!(
         offenders.is_empty(),
-        "keychain entries must go through scrobble/credentials.rs: {offenders:?}"
+        "keychain entries must go through security/keychain.rs: {offenders:?}"
     );
 }
 

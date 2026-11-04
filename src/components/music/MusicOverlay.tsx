@@ -10,7 +10,7 @@ import { useMusicPlayerKeyboard } from "../../lib/useMusicPlayerKeyboard";
 import { useMediaQuery } from "../../lib/useMediaQuery";
 import { useBoolPref } from "../../lib/usePreference";
 import { SETTINGS } from "../../lib/settings/schema";
-import { volumeAfterWheel } from "../../lib/musicPlayerKeys";
+import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { getString } from "../../lib/i18n/index";
 import { HapticButton } from "./HapticButton";
@@ -54,7 +54,7 @@ export function MusicOverlay() {
   const volume = useMusicPlayerStore((s) => s.volume);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const queueSource = useMusicPlayerStore((s) => s.queueSource);
-  const setVolume = useMusicPlayerStore((s) => s.setVolume);
+  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>();
   const setViewState = useMusicPlayerStore((s) => s.setViewState);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
 
@@ -252,8 +252,8 @@ export function MusicOverlay() {
 
             <div className="relative">
               <HapticButton
+                ref={volumeWheelRef}
                 onClick={() => setVolumeOpen((v) => !v)}
-                onWheel={(event) => setVolume(volumeAfterWheel(volume, event.deltaY))}
                 aria-label={getString("music_volume")}
                 aria-pressed={volumeOpen}
                 className={volumeOpen ? TOP_BTN_ACTIVE : TOP_BTN}

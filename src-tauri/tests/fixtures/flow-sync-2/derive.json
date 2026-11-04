@@ -1,0 +1,35 @@
+{
+  "cases": [
+    {
+      "ikm": "ceb95b17be9a7612505b3155da8b15ac36d73e86b9f769cd987ec1539ad6164b",
+      "salt": "",
+      "label": "box",
+      "context": "",
+      "length": 76,
+      "okm": "0c22f55e17c99d20d6f045df1ce399a8bad5dcaeec6780f023f36da594d3ec730c75598acdbe51780022ad539d4d833603c56ed77d06ce70c9f9295b032d8f48d9d6909fb40f709c5e6d2422"
+    },
+    {
+      "ikm": "ceb95b17be9a7612505b3155da8b15ac36d73e86b9f769cd987ec1539ad6164b",
+      "salt": "c7b32e0bfef5029f39df8c85e80ad015",
+      "label": "key changes",
+      "context": "00000007",
+      "length": 32,
+      "okm": "ccfec39c802b05f07e6bd87925024195294c5ccce8641d15dfa1d6fd5cb456af"
+    },
+    {
+      "ikm": "ceb95b17be9a7612505b3155da8b15ac36d73e86b9f769cd987ec1539ad6164b",
+      "salt": "411189aaa0b9829b7c9ac522e6f15580",
+      "label": "sas",
+      "context": "4d20abb1188fb31db56887f0a3a1cbb38ac4a82736010b5e1dc6f00ab68cf32f06cca9cf03ecc7c6617e41f525ac3a8cec62f2b437ef0d34fb55c57472b9beca",
+      "length": 4,
+      "okm": "caed80af"
+    }
+  ],
+  "hashes": [
+    {
+      "label": "device",
+      "data": "8233fc236a84d925353f366b5d7ec5b3e577380e0e82089233b512cc88ae6781edf836ab45257134c12d6e0e66255fa3fbbfa97156061c35e5a41155af38b336",
+      "hash": "d8576f2de42861ceb8030cc722b4c669398a343124aa944d19e5d3e2d27adea2"
+    }
+  ]
+}

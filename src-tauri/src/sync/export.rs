@@ -184,7 +184,8 @@ async fn export_subscriptions(pool: &SqlitePool, device_id: &str) -> Result<Vec<
         None => Vec::new(),
     };
     let stamps = load_changes(pool, changes::GROUPS).await?;
-    tombstones::stamp_groups(&mut groups, &stamps, device_id);
+    let member_stamps = load_changes(pool, changes::GROUP_MEMBERS).await?;
+    tombstones::stamp_groups(&mut groups, &stamps, &member_stamps, device_id);
     let live: BTreeSet<String> = groups.iter().map(|g| g.name.clone()).collect();
     groups.extend(tombstones::groups(&stamps, &live, device_id));
     groups.sort_by(|a, b| a.name.cmp(&b.name));

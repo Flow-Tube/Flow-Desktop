@@ -178,6 +178,7 @@ fn subscription_group_canonical_bytes_match_android() {
         channel_ids: vec!["UC1".to_string(), "UC2".to_string()],
         deleted: false,
         hlc: "1781000000000:0:deviceaa".parse().unwrap(),
+        members: Vec::new(),
         name: "Tech".to_string(),
         sort_order: 0,
     };
@@ -185,6 +186,18 @@ fn subscription_group_canonical_bytes_match_android() {
     assert_eq!(
         json,
         r#"{"channelIds":["UC1","UC2"],"deleted":false,"hlc":"1781000000000:0:deviceaa","name":"Tech","sortOrder":0}"#
+    );
+}
+
+#[test]
+fn subscription_group_members_fixture_locks_its_bytes() {
+    let groups: Vec<SubscriptionGroup> = load_stable("subscriptions_members.json");
+    let group = &groups[0];
+    assert_eq!(group.channel_ids, ["UCabc"]);
+    assert!(!group.members[0].deleted && group.members[1].deleted);
+    assert_eq!(
+        String::from_utf8(to_canonical_json(group)).unwrap(),
+        r#"{"channelIds":["UCabc"],"deleted":false,"hlc":"1781000000500:0:deviceaa","members":[{"channelId":"UCabc","deleted":false,"hlc":"1781000000000:0:deviceaa"},{"channelId":"UCdef","deleted":true,"hlc":"1781000000500:0:deviceaa"}],"name":"Tech","sortOrder":0}"#
     );
 }
 

@@ -442,6 +442,60 @@ async fn a_deleted_group_travels() {
 // Android-shaped records (synthetic, field-for-field with Flow for Android's canonical model)
 // --------------------------------------------------------------------------------------------
 
+/// Sends `from`'s groups to `to`.
+async fn send_groups(from: &SqlitePool, to: &SqlitePool, hash: &str) {
+    let out = export_one(from, Collection::Subscriptions).await;
+    apply_payload(
+        to,
+        PEER,
+        DESK,
+        &[stage_bytes(Collection::Subscriptions, out, hash)],
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn a_channel_removed_from_a_group_travels_and_stays_removed() {
+    let a = memory_pool().await;
+    let b = memory_pool().await;
+    frontend_write(
+        &a,
+        "subscription_groups",
+        r#"[{"name":"Tech","channelIds":["UCa","UCb"],"sortOrder":0}]"#,
+    )
+    .await;
+    send_groups(&a, &b, "m1").await;
+
+    frontend_write(
+        &a,
+        "subscription_groups",
+        r#"[{"name":"Tech","channelIds":["UCa"],"sortOrder":0}]"#,
+    )
+    .await;
+    let out = export_one(&a, Collection::Subscriptions).await;
+    let groups: Vec<SubscriptionGroup> = records(&out);
+    assert_eq!(groups[0].channel_ids, ["UCa"]);
+    assert!(
+        groups[0]
+            .members
+            .iter()
+            .any(|m| m.channel_id == "UCb" && m.deleted)
+    );
+    send_groups(&a, &b, "m2").await;
+    assert_eq!(
+        blob(&b, "subscription_groups").await[0]["channelIds"],
+        json!(["UCa"])
+    );
+
+    // B relays the tombstone, so sending its groups back doesn't restore the channel on A.
+    send_groups(&b, &a, "m3").await;
+    assert_eq!(
+        blob(&a, "subscription_groups").await[0]["channelIds"],
+        json!(["UCa"])
+    );
+}
+
 #[tokio::test]
 async fn android_shaped_records_apply() {
     let desk = memory_pool().await;
@@ -509,4 +563,33 @@ async fn android_shaped_records_apply() {
     // The playlist keeps the phone's sync id, so the phone matches it on the way back.
     let back: Vec<Playlist> = records(&export_one(&desk, Collection::Playlists).await);
     assert_eq!(back[0].sync_id, "sync_3f2a");
+}
+
+#[tokio::test]
+async fn an_older_peer_row_leaves_this_device_s_own_tombstone_its_own() {
+    let desk = memory_pool().await;
+    add_watch(&desk, "v1", "2025-01-01T00:00:00+00:00").await;
+    delete_watch(&desk, "v1").await;
+    let old = WatchHistoryRecord {
+        video_id: "v1".to_string(),
+        title: "title-v1".to_string(),
+        watched_at_ms: 1_735_689_600_000,
+        hlc: Hlc::new(1_735_689_600_000, 0, PEER),
+        ..Default::default()
+    };
+    apply_payload(
+        &desk,
+        DESK,
+        PEER,
+        &[stage(Collection::WatchHistory, &[old], "w1")],
+    )
+    .await
+    .unwrap();
+    let from_peer: bool = sqlx::query_scalar(
+        "SELECT from_peer FROM sync_changes WHERE collection = 'watch_history' AND item_key = 'v1'",
+    )
+    .fetch_one(&desk)
+    .await
+    .unwrap();
+    assert!(!from_peer, "the deletion was made here, not received");
 }

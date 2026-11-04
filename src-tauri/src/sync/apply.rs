@@ -5,9 +5,9 @@
 //!     logic bug — `apply` itself is atomic, but the backup lets a human recover even from a bad
 //!     merge result);
 //!  2. opens **one transaction**;
-//!  3. for each collection: skips it if this exact payload was already applied (the `sync_log`
-//!     idempotency guard), else loads the local canonical state, merges (CRDT), and writes the
-//!     result back — collecting per-collection stats;
+//!  3. for each collection: skips a brain payload a FLOW-SYNC/1 session already applied (the
+//!     `sync_log` idempotency guard), else loads the local canonical state, merges (CRDT), and
+//!     writes the result back — collecting per-collection stats;
 //!  4. records the apply in `sync_log` and **commits**. Any error drops the transaction →
 //!     full rollback, leaving the database untouched and the backup intact.
 //!
@@ -25,10 +25,11 @@ use crate::sync::brain_attrib::{
 use crate::sync::brain_rekey;
 use crate::sync::brainmap;
 use crate::sync::canonical::{
-    Collection, FlowNeuroBrainSnapshot, Hlc, Like, LikeState, MusicBrainSnapshot, Playlist,
-    PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
+    Collection, FlowNeuroBrainSnapshot, GroupMember, Hlc, Like, LikeState, MusicBrainSnapshot,
+    Playlist, PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Change};
+use crate::sync::clock;
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchInsert, WatchRow};
 use crate::sync::merge::{self, MergedFlowNeuroBrain, MergedMusicBrain};
@@ -61,16 +62,44 @@ const WATCH_SELECT: &str = "SELECT video_id, title, channel_name, channel_id, wa
      watch_duration_seconds, total_duration_seconds, is_music, is_short, updated_hlc \
      FROM watch_history";
 
-/// Apply a received payload atomically. See the module docs for the guarantees.
+/// Apply a payload received in a FLOW-SYNC/1 session atomically. See the module docs for the
+/// guarantees.
 pub async fn apply_payload(
     pool: &SqlitePool,
     our_device_id: &str,
     peer_device_id: &str,
     staged: &[StagedCollection],
 ) -> Result<ApplyReport, SyncError> {
+    apply(pool, our_device_id, peer_device_id, staged, true).await
+}
+
+/// [`apply_payload`] for FLOW-SYNC/2 batches, which stream positions already keep from applying
+/// twice: a brain payload seen before (after a reset, or through another group) applies again.
+pub async fn apply_stream_payload(
+    pool: &SqlitePool,
+    our_device_id: &str,
+    peer_device_id: &str,
+    staged: &[StagedCollection],
+) -> Result<ApplyReport, SyncError> {
+    apply(pool, our_device_id, peer_device_id, staged, false).await
+}
+
+/// Takes the write lock at once. A deferred transaction that reads before it writes fails with
+/// `SQLITE_BUSY` when another connection commits in between, instead of waiting for the lock.
+async fn begin_merge(pool: &SqlitePool) -> Result<Transaction<'static, Sqlite>, sqlx::Error> {
+    pool.begin_with("BEGIN IMMEDIATE").await
+}
+
+async fn apply(
+    pool: &SqlitePool,
+    our_device_id: &str,
+    peer_device_id: &str,
+    staged: &[StagedCollection],
+    brains_once: bool,
+) -> Result<ApplyReport, SyncError> {
     let backup = backup_snapshot(pool, staged).await?;
 
-    let mut tx = pool.begin().await?;
+    let mut tx = begin_merge(pool).await?;
     let mut stats = Vec::with_capacity(staged.len());
 
     for sc in staged {
@@ -79,7 +108,7 @@ pub async fn apply_payload(
         // A brain payload is applied at most once per (peer, payload). Data collections merge
         // again: the merges are idempotent, and a payload seen before still restores rows this
         // device lost since (a backup restore, a reset), which skipping it never could.
-        let already: Option<i64> = if !is_brain(sc.collection) {
+        let already: Option<i64> = if !brains_once || !is_brain(sc.collection) {
             None
         } else {
             sqlx::query_scalar(
@@ -142,6 +171,7 @@ pub async fn apply_payload(
         };
 
         if applied {
+            clock::observe(&mut tx, clock::highest_stamp(&sc.ndjson)).await?;
             sqlx::query(
                 "INSERT OR IGNORE INTO sync_log (peer_device_id, collection, payload_hash, applied_at, hwm_hlc)
                  VALUES (?, ?, ?, ?, ?)",
@@ -287,6 +317,52 @@ async fn note_playlist_merge(
     Ok(())
 }
 
+/// [`note_merge`] for a group and each of its channels that the merge changed.
+async fn note_group_merge(
+    tx: &mut Transaction<'_, Sqlite>,
+    rec: &SubscriptionGroup,
+    before: Option<&SubscriptionGroup>,
+) -> Result<(), SyncError> {
+    let header = |g: &SubscriptionGroup| SubscriptionGroup {
+        members: Vec::new(),
+        ..g.clone()
+    };
+    if before.map(header) != Some(header(rec)) {
+        note_merge(
+            tx,
+            changes::GROUPS,
+            &rec.name,
+            &header(rec),
+            rec.deleted,
+            &rec.hlc,
+        )
+        .await?;
+    }
+    let old: BTreeMap<&str, &GroupMember> = before
+        .map(|b| {
+            b.members
+                .iter()
+                .map(|m| (m.channel_id.as_str(), m))
+                .collect()
+        })
+        .unwrap_or_default();
+    for member in &rec.members {
+        if old.get(member.channel_id.as_str()) != Some(&member) {
+            let key = changes::item_key(&rec.name, &member.channel_id);
+            note_merge(
+                tx,
+                changes::GROUP_MEMBERS,
+                &key,
+                member,
+                member.deleted,
+                &member.hlc,
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
+
 /// Bring `sync_changes` in line with a merge result that differs from the local record: keep a
 /// peer's tombstone so it reaches devices that never talked to that peer, or record when the peer
 /// changed a live record (which also retires any older local tombstone for it).
@@ -299,6 +375,10 @@ async fn note_merge<T: serde::Serialize>(
     hlc: &Hlc,
 ) -> Result<(), SyncError> {
     if deleted {
+        // This device's own deletion, which the merge only filled in with the older row's fields.
+        if changes::is_own_deletion(tx, collection, key, hlc.physical_ms).await? {
+            return Ok(());
+        }
         let json = serde_json::to_string(record)?;
         changes::record_peer_tombstone(tx, collection, key, hlc.physical_ms, json).await
     } else {
@@ -605,7 +685,8 @@ async fn apply_subscriptions(
         None => Vec::new(),
     };
     let stamps = changes::load(tx, changes::GROUPS, now_ms()).await?;
-    tombstones::stamp_groups(&mut local, &stamps, device_id);
+    let member_stamps = changes::load(tx, changes::GROUP_MEMBERS, now_ms()).await?;
+    tombstones::stamp_groups(&mut local, &stamps, &member_stamps, device_id);
     let live: BTreeSet<String> = local.iter().map(|g| g.name.clone()).collect();
     local.extend(tombstones::groups(&stamps, &live, device_id));
     let local_map: BTreeMap<String, SubscriptionGroup> =
@@ -619,9 +700,7 @@ async fn apply_subscriptions(
     };
     for rec in &merged {
         let before = local_map.get(&rec.name);
-        if before != Some(rec) {
-            note_merge(tx, changes::GROUPS, &rec.name, rec, rec.deleted, &rec.hlc).await?;
-        }
+        note_group_merge(tx, rec, before).await?;
         match before {
             Some(existing)
                 if existing.channel_ids == rec.channel_ids && existing.deleted == rec.deleted =>
@@ -899,4 +978,52 @@ fn now_iso() -> String {
 
 fn now_ms() -> u64 {
     chrono::Utc::now().timestamp_millis().max(0) as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use std::time::Duration;
+
+    use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+
+    use super::*;
+
+    async fn wal_pool(path: &std::path::Path, busy: Duration) -> SqlitePool {
+        let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", path.display()))
+            .unwrap()
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(busy);
+        SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .unwrap()
+    }
+
+    /// The app writes to the same database while a merge reads, so the merge holds the write lock
+    /// from its first statement: another writer waits for it instead of making it fail.
+    #[tokio::test]
+    async fn a_merge_holds_the_write_lock_from_its_start() {
+        let path = std::env::temp_dir().join(format!("merge-lock-{}.sqlite", std::process::id()));
+        let merge = wal_pool(&path, Duration::from_secs(5)).await;
+        sqlx::query("CREATE TABLE t (v INTEGER)")
+            .execute(&merge)
+            .await
+            .unwrap();
+        let other = wal_pool(&path, Duration::ZERO).await;
+
+        let tx = begin_merge(&merge).await.unwrap();
+        let write = sqlx::query("INSERT INTO t VALUES (1)")
+            .execute(&other)
+            .await;
+        assert!(write.is_err(), "another writer must wait for the merge");
+        tx.commit().await.unwrap();
+        sqlx::query("INSERT INTO t VALUES (1)")
+            .execute(&other)
+            .await
+            .unwrap();
+        let _ = std::fs::remove_file(&path);
+    }
 }

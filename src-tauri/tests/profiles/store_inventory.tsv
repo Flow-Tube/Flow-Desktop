@@ -8,7 +8,28 @@ table	download_jobs	DEVICE	-	The orphan-partial sweep deletes .flowpart files no
 table	sync_identity	DEVICE	-	The sync device id; stays in Default's file where older builds read it
 table	sync_peers	DEFAULT_ONLY	sync	Only Default syncs
 table	sync_log	DEFAULT_ONLY	sync	Only Default syncs
-table	sync_changes	DEFAULT_ONLY	sync	Only Default syncs; local edits are not recorded elsewhere
+table	sync_changes	PROFILE	sync	Each profile that syncs records its own local edits
+table	sync2_sent	DEAD	-	Replaced by sync2_sent_links; still cleared when a group is forgotten
+table	sync2_group	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 group and log positions
+table	sync2_roster	DEVICE	-	The group's state, in Default's file whichever profile runs: the verified FLOW-SYNC/2 roster
+table	sync2_streams	DEVICE	-	The group's state, in Default's file whichever profile runs: how far each device's log was read
+table	sync2_snapshots	DEVICE	-	The group's state, in Default's file whichever profile runs: when each link last got a snapshot
+table	sync2_acks	DEVICE	-	The group's state, in Default's file whichever profile runs: each device's latest FLOW-SYNC/2 ack
+table	sync2_manifests	DEVICE	-	The group's state, in Default's file whichever profile runs: snapshot manifests seen, for garbage collection
+table	sync2_links	DEVICE	-	The group's state, in Default's file whichever profile runs: links that batches name, for garbage collection
+table	sync2_collected	DEVICE	-	The group's state, in Default's file whichever profile runs: how far each log was deleted
+table	sync2_held_roster	DEVICE	-	The group's state, in Default's file whichever profile runs: roster entries a LAN group keeps on its devices
+table	sync2_held_keys	DEVICE	-	The group's state, in Default's file whichever profile runs: wraps and chain boxes a LAN group keeps
+table	sync2_held_objects	DEVICE	-	The group's state, in Default's file whichever profile runs: log objects and blobs a LAN group keeps
+table	sync2_live_seen	DEVICE	-	The group's state, in Default's file whichever profile runs: the highest live counter accepted from each device
+table	sync2_consent	DEVICE	-	The group's state, in Default's file whichever profile runs: which devices may control playback here
+table	sync2_pending	DEVICE	-	The group's state, in Default's file whichever profile runs: objects written while the server was out of reach
+table	sync2_sent_links	DEVICE	-	The group's state, in Default's file whichever profile runs: the FLOW-SYNC/2 upload ledger, per link
+table	sync2_profile_links	DEVICE	-	The group's state, in Default's file whichever profile runs: which local profile syncs which link
+table	sync2_kept	DEVICE	-	The group's state, in Default's file whichever profile runs: batches kept for a linked profile that isn't running
+table	sync2_profiles	DEVICE	-	The group's state, in Default's file whichever profile runs: the profiles collection, each link's name
+table	sync2_floors	DEVICE	-	The group's state, in Default's file whichever profile runs: how far a link read from a snapshot already goes
+table	sync2_reading	DEVICE	-	The group's state, in Default's file whichever profile runs: links still to be read from their snapshot
 table	watch_history	PROFILE	library	Video and music history (is_music)
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log
@@ -64,8 +85,10 @@ setting	sponsorblock_server	PROFILE	settings	SponsorBlock preference
 setting	sync_neuro_merged	DEFAULT_ONLY	sync	FlowNeuro CRDT state
 setting	sync_music_merged	DEFAULT_ONLY	sync	MusicBrain CRDT state
 setting	sync_neuro_baseline	DEFAULT_ONLY	sync	FlowNeuro CRDT baseline
+setting	sync2_errors	DEFAULT_ONLY	sync	Recent linked-devices sync error kinds and times, kept with the group in Default's database
 setting	sync_music_baseline	DEFAULT_ONLY	sync	MusicBrain CRDT baseline
 setting	sync_last_backup	DEFAULT_ONLY	sync	Pre-apply snapshot of the last sync
+setting	sync_clock_hwm	DEFAULT_ONLY	sync	Newest stamp applied; local edits are stamped after it
 setting	sync_device_id	DEAD	-	Unused constant; the id lives in sync_identity
 setting	remote_signature_fallback	DEVICE	-	Network
 setting	content_language	DEVICE	-	Language and region

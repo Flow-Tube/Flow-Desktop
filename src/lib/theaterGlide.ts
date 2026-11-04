@@ -7,6 +7,8 @@ const CHROME_FADE_EXTRA_MS = 120;
 const CROSS_FADE_MS = 160;
 // Below about 40 fps a glide reads as stutter; the rest of the session cross-fades instead.
 const SLOW_FRAME_MS = 25;
+// The video stays visible for the whole trip: hiding it is a black flash on every toggle.
+export const GLIDE_CHROME_SELECTOR = "#flow-player-root > [data-player-ambient], [data-player-content] > :not(video)";
 
 let glideTooSlow = false;
 
@@ -48,7 +50,7 @@ export function glideFrame(frame: HTMLElement, from: FrameBox, to: FrameBox, toT
 
   frame.style.overflow = "hidden";
   const glide = frame.animate(frameKeyframes(from, to, toTheater), { duration, easing: MOTION_EASE });
-  frame.querySelectorAll<HTMLElement>("#flow-player-root > :not(video)").forEach((chrome) => {
+  frame.querySelectorAll<HTMLElement>(GLIDE_CHROME_SELECTOR).forEach((chrome) => {
     chrome.animate(
       [{ opacity: 1 }, { opacity: 0, offset: 0.2 }, { opacity: 0, offset: 0.75 }, { opacity: 1 }],
       { duration: duration + CHROME_FADE_EXTRA_MS, easing: "linear" },

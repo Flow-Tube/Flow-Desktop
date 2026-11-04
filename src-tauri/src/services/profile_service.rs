@@ -11,7 +11,8 @@ use tokio::sync::Mutex;
 use crate::errors::{AppError, AppResult};
 use crate::profiles::registry::{self, Profile, ProfileAvatar, RegistryState};
 use crate::profiles::{ActiveProfile, device_keys, local_state, photos};
-use crate::scrobble::credentials::{self, Keychain, ProfileScoped};
+use crate::scrobble::credentials::{self, ProfileScoped};
+use crate::security::keychain::Keychain;
 
 /// Library rows a new profile can take: channels and groups (contract part SUBSCRIPTIONS).
 const SUBSCRIPTION_KEYS: [&str; 3] = [
@@ -375,6 +376,15 @@ impl ProfileService {
         Ok(self.running_id(&self.load()?))
     }
 
+    pub fn default_profile_id(&self) -> AppResult<String> {
+        Ok(self.load()?.default_id().to_string())
+    }
+
+    /// Every profile, without the photos `list` reads.
+    pub fn profiles(&self) -> AppResult<Vec<Profile>> {
+        Ok(self.load()?.profiles)
+    }
+
     /// Opens a profile that isn't running. Default's file is the app data folder's own.
     pub async fn open_closed(&self, id: &str) -> AppResult<(SqlitePool, bool)> {
         let state = self.load()?;
@@ -604,7 +614,7 @@ fn keychain_for(id: &str) -> ProfileScoped<Keychain> {
         after_switch: false,
         default_name: String::new(),
     };
-    ProfileScoped::new(Keychain, &owner)
+    ProfileScoped::new(credentials::keychain(), &owner)
 }
 
 fn forget_in_keychain(id: &str) -> bool {

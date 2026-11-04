@@ -13,6 +13,7 @@ pub const LIKES: &str = "likes";
 pub const PLAYLISTS: &str = "playlists";
 pub const PLAYLIST_ITEMS: &str = "playlist_items";
 pub const GROUPS: &str = "subscriptions";
+pub const GROUP_MEMBERS: &str = "subscription_members";
 
 /// One local edit or deletion.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,10 +62,27 @@ pub struct Stamp {
     pub from_peer: bool,
 }
 
-/// The key of a track inside a playlist.
+/// The key of a track inside a playlist, or of a channel inside a group.
 #[must_use]
-pub fn item_key(sync_id: &str, video_id: &str) -> String {
-    format!("{sync_id}|{video_id}")
+pub fn item_key(parent: &str, child: &str) -> String {
+    format!("{parent}|{child}")
+}
+
+/// The children recorded under `parent`, by child key. Children never contain the separator, so a
+/// parent whose name extends `parent` past it isn't mistaken for one.
+pub fn children<'a>(
+    stamps: &'a BTreeMap<String, Stamp>,
+    parent: &str,
+) -> impl Iterator<Item = (&'a str, &'a Stamp)> {
+    let prefix = item_key(parent, "");
+    let len = prefix.len();
+    stamps
+        .range(prefix.clone()..)
+        .take_while(move |(key, _)| key.starts_with(&prefix))
+        .filter_map(move |(key, stamp)| {
+            let child = &key[len..];
+            (!child.contains('|')).then_some((child, stamp))
+        })
 }
 
 /// Record local edits and deletions (latest wins per record).
@@ -89,6 +107,33 @@ pub async fn record_peer_tombstone(
         true,
     )
     .await
+}
+
+/// Drops every recorded edit and deletion, after a reset that must not reach other devices.
+pub async fn clear_all(pool: &sqlx::SqlitePool) -> Result<(), SyncError> {
+    sqlx::query("DELETE FROM sync_changes")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Whether this device recorded deleting `key` itself, at `at_ms`.
+pub async fn is_own_deletion(
+    conn: &mut SqliteConnection,
+    collection: &str,
+    key: &str,
+    at_ms: u64,
+) -> Result<bool, SyncError> {
+    let own: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM sync_changes
+         WHERE collection = ? AND item_key = ? AND deleted = 1 AND from_peer = 0 AND changed_at_ms = ?",
+    )
+    .bind(collection)
+    .bind(key)
+    .bind(i64::try_from(at_ms).unwrap_or(i64::MAX))
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(own.is_some())
 }
 
 /// Move a playlist's history, its tracks' included, to the sync id it adopted from a peer.

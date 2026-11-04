@@ -1,0 +1,19 @@
+{
+  "showerSecret": "3f1f016c6c89ccb2fa02c5623edd7ad347646fe373bd4ded76218f84677639f0",
+  "showerPublic": "2d062c672174bcf51be9c1e7ed8cf691860f54e57de9fc90572a0110c01ff475",
+  "scannerSecret": "3274a86f4aad7932a7600af2b83fc1084800506f3ae0913e8dc4a9e7ebc071fa",
+  "scannerPublic": "326a910b3918f3ae2622ca6d8aee0e869ad50a3a5b4f6d2da5f92736696b3e29",
+  "token": "0bc62d99c2d29e8390af6256ea522cae",
+  "showerKey": "166e59467fff3faede65d00c8b5dfa5412ac7519a592b5f4e64e2108f7c58ead",
+  "scannerKey": "fa94e5db513629853b1c8ec90ff0c6f3f32ee82cb0f5e177bb0738dde7653aa9",
+  "sas": "665622",
+  "slot": "5d5e9eb658a1d9747f703ed3533cea9a",
+  "message": {
+    "from": "scanner",
+    "seq": 0,
+    "aad": "464c4f572d53594e432f3220706169720bc62d99c2d29e8390af6256ea522cae0000000000000000",
+    "content": "{\"kem\":\"U3xVnbvJ5azzjhijsUH76iYCfQfvlM2MAAIDvkRwDms\",\"meta\":{\"app\":\"app-desktop\",\"name\":\"Desktop\",\"platform\":\"macos\"},\"sig\":\"RoFBqY6WZpFpJzbLGZlGQ35pXBEoC9SN7-tPU82F9Qo\",\"type\":\"join\"}",
+    "salt": "ab589e46ff4c63624d10f3b7752984e52b06ec8ca36ec818aeb3c610a817abcb",
+    "box": "ab589e46ff4c63624d10f3b7752984e52b06ec8ca36ec818aeb3c610a817abcb48839672475cb690044cbf5f347c0a8f926d361b8dd025c6c10ed79eb37683b32bcc3bf6d864816fa3ef9f5dbf511abaab0a323b6030c80d05df29d6f25062e701f67fbf03304f85688179a7377ee909d956c12fc47c169fa436e9ceac6d42570db37547be5ab433b35af9942df77f01242e38196bd91b52bbf9bb981e20cdcd5794fb897f912a1d28fd10390bcc7072f7df3b9e563cdb653bfa71d8c2e4f2d3a572305495c00e0d490f7ab0c5da79f5935a80dcec9b69a150439b06807907a6ee5ee158b3741701d2c4b6313b22198ba01bd8f7f3fea41b9c4033cd1d4c2afbcc92586859c7c556527f2616f40becbd9519e2b0489f5c6caaae5318dfded0b82c4b126be3eeb15d0e1284c982cdd28fb9be18003e0f1c4900fabd16c2d71571bc39249c40f487b36417475ffa082eca"
+  }
+}

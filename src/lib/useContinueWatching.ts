@@ -3,7 +3,9 @@ import { getWatchHistory } from "./api/db";
 import { getHiddenContinueWatchingIds, hideContinueWatchingVideo } from "./continueWatching";
 import { getString } from "./i18n/index";
 import { mapHistoryRecordToVideo } from "./useHistory";
+import { useEventVersion } from "./useEventVersion";
 import { isKnownShort } from "./videoKind";
+import { HISTORY_UPDATED_EVENT } from "../store/useHistoryStore";
 import type { WatchHistoryRecord } from "../types/db";
 import type { VideoSummary } from "../types/video";
 
@@ -33,6 +35,7 @@ export function buildContinueWatching(history: WatchHistoryRecord[], hidden: Set
 /** Home's Continue Watching shelf. */
 export function useContinueWatching(enabled: boolean) {
   const [videos, setVideos] = useState<VideoSummary[]>([]);
+  const historyVersion = useEventVersion(HISTORY_UPDATED_EVENT);
 
   useEffect(() => {
     if (!enabled) {
@@ -51,7 +54,7 @@ export function useContinueWatching(enabled: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, historyVersion]);
 
   const hide = useCallback((videoId: string) => {
     hideContinueWatchingVideo(videoId);

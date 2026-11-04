@@ -92,6 +92,56 @@ describe("PlayerGestureOverlay double-click vs single-click", () => {
     expect(togglePlay).toHaveBeenCalledTimes(1);
   });
 
+  it("still toggles when the pointer leaves right after the click", () => {
+    const togglePlay = vi.fn();
+    const { overlay } = renderOverlay({ togglePlay });
+
+    act(() => {
+      overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+      overlay.dispatchEvent(new PointerEvent("pointerleave", { bubbles: false }));
+      overlay.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(230);
+    });
+
+    expect(togglePlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("undoes the toggle when a slow double click's second click comes after it fired", () => {
+    const togglePlay = vi.fn();
+    const seekTo = vi.fn();
+    const { overlay } = renderOverlay({ togglePlay, seekTo, currentTime: 50, seekIntervalSeconds: 10 });
+    vi.spyOn(overlay, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 1000,
+      bottom: 600,
+      width: 1000,
+      height: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    act(() => {
+      overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 800, clientY: 300, detail: 1 }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(togglePlay).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      overlay.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, clientX: 800, clientY: 300 }));
+      overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 800, clientY: 300, detail: 2 }));
+      overlay.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, clientX: 800, clientY: 300, detail: 2 }));
+    });
+
+    expect(togglePlay).toHaveBeenCalledTimes(2);
+    expect(seekTo).toHaveBeenCalledWith(60);
+  });
+
   it("cancels togglePlay and seeks when double-clicking on the right side", () => {
     const togglePlay = vi.fn();
     const seekTo = vi.fn();

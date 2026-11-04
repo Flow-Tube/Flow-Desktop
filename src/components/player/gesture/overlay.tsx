@@ -150,6 +150,8 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   const menuClosingPressRef = useRef(false);
   const layerRef = useRef<HTMLDivElement>(null);
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A second click can arrive after the first one's toggle fired, and then has to undo it.
+  const toggledByFirstClickRef = useRef(false);
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
 
@@ -194,7 +196,6 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
   };
 
   const restorePlaybackRate = () => {
-    clearClickTimer();
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -276,12 +277,19 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
 
     if (event.detail > 1) {
       clearClickTimer();
+      if (toggledByFirstClickRef.current) {
+        toggledByFirstClickRef.current = false;
+        togglePlay();
+        setCenterFeedback(null);
+      }
       return;
     }
 
     clearClickTimer();
+    toggledByFirstClickRef.current = false;
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null;
+      toggledByFirstClickRef.current = true;
       togglePlay();
       setCenterFeedback({
         id: Date.now(),

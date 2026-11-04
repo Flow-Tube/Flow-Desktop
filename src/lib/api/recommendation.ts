@@ -1,3 +1,4 @@
+import type { MusicTasteProfile } from "../../types/music";
 import type { VideoSummary } from "../../types/video";
 import { isDeepFlowCurrentlyActive } from "../deepFlow";
 import { isTauriEnv } from "./env";
@@ -189,6 +190,16 @@ export async function getFlowPersona(): Promise<PersonaDetails> {
   }
   return invokeBackend<PersonaDetails>("get_flow_persona");
 }
+
+/** Another profile's brain, persona and music taste, read from its database on this device. */
+export interface ProfileInterests {
+  brain: UserBrain;
+  persona: PersonaDetails;
+  music: MusicTasteProfile;
+}
+
+export const getProfileInterests = (profile: string) =>
+  invokeBackend<ProfileInterests>("get_profile_interests", { profile });
 
 export interface ContentVector {
   topics: Record<string, number>;

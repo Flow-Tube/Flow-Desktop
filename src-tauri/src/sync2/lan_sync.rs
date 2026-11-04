@@ -6,13 +6,15 @@ use std::time::Duration;
 
 use sqlx::SqlitePool;
 use tokio::net::TcpListener;
-use tokio_tungstenite::{accept_async, connect_async};
+use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
 use super::engine::{EngineError, Result, Session, signing_keys, verify_logged};
 use super::held::{HeldStore, winning_chain};
 use super::kdf::sha256;
 use super::keys::MemberSecrets;
-use super::lan_link::{Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server};
+use super::lan_link::{
+    Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server, lan_socket_config,
+};
 use super::paths::parse_log_path;
 use super::roster::Entry;
 use super::store::Store;
@@ -127,7 +129,11 @@ pub async fn meet_as<T: Store>(
     live: &[Vec<u8>],
     sink: LiveSink,
 ) -> Result<Met> {
-    let connect = connect_async(ws_url(address, port, SESSION_PATH));
+    let connect = connect_async_with_config(
+        ws_url(address, port, SESSION_PATH),
+        Some(lan_socket_config()),
+        false,
+    );
     let Ok(Ok((socket, _))) = tokio::time::timeout(CONNECT_WITHIN, connect).await else {
         return Err(EngineError::LanUnreachable);
     };
@@ -174,7 +180,7 @@ async fn answer(
     sink: LiveSink,
 ) -> Result<Met> {
     let address = stream.peer_addr().ok().map(|peer| peer.ip().to_string());
-    let socket = accept_async(stream)
+    let socket = accept_async_with_config(stream, Some(lan_socket_config()))
         .await
         .map_err(|_| EngineError::LanUnreachable)?;
     let held = HeldStore::new(pool.clone());

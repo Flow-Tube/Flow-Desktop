@@ -16,6 +16,8 @@ const SIGNATURE_SIZE: usize = 64;
 pub const MIN_OBJECT_SIZE: usize = HEADER_SIZE + BOX_OVERHEAD + 256 + SIGNATURE_SIZE;
 pub const MAX_OBJECT_SIZE: usize = 4 * 1024 * 1024;
 pub const ZERO_HASH: [u8; 32] = [0; 32];
+/// The largest `seq` every implementation reads exactly.
+const MAX_SEQ: u64 = (1 << 53) - 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectType {
@@ -139,6 +141,9 @@ pub fn parse_object<'a>(bytes: &'a [u8], group: &[u8]) -> Result<ParsedObject<'a
     };
     if header.group[..] != *group {
         return Err(Error::Group);
+    }
+    if header.seq > MAX_SEQ {
+        return Err(Error::Range);
     }
     Ok(ParsedObject {
         header,

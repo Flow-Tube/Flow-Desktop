@@ -69,6 +69,8 @@ export interface LiveDevice {
   now: Now | null;
   /** When `now` arrived, so its position can advance while it plays. */
   nowAtMs: number;
+  /** When any message from it last arrived. */
+  heardAtMs: number;
 }
 
 export interface LiveStatus {

@@ -11,7 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,16 +56,35 @@ impl Collection {
     }
 }
 
-/// Serialize a value to **canonical compact JSON**: object keys sorted ascending by
-/// Unicode codepoint, recursively, no insignificant whitespace. Works because this build has
-/// serde_json's `preserve_order` feature off, so `Value`'s object is a `BTreeMap` and re-serializing
-/// it emits sorted keys. Both platforms produce byte-identical output for the same value, which is
-/// what makes payload hashes cross-platform-stable. Returns `[]`-empty on the (unreachable for
-/// our records) serialize failure rather than panicking.
+/// Serialize a value to **canonical compact JSON** (RFC 8785 key order): object keys sorted
+/// ascending by UTF-16 code unit, recursively, no insignificant whitespace. Both platforms produce
+/// byte-identical output for the same value, which is what makes payload hashes
+/// cross-platform-stable. Returns `[]`-empty on the (unreachable for our records) serialize failure
+/// rather than panicking.
 pub fn to_canonical_json<T: Serialize>(value: &T) -> Vec<u8> {
     serde_json::to_value(value)
-        .and_then(|v| serde_json::to_vec(&v))
+        .and_then(|v| serde_json::to_vec(&Canonical(&v)))
         .unwrap_or_default()
+}
+
+struct Canonical<'a>(&'a Value);
+
+impl Serialize for Canonical<'_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self.0 {
+            Value::Object(object) => {
+                let mut entries: Vec<_> = object.iter().collect();
+                entries.sort_by(|(a, _), (b, _)| a.encode_utf16().cmp(b.encode_utf16()));
+                let mut map = s.serialize_map(Some(entries.len()))?;
+                for (key, value) in entries {
+                    map.serialize_entry(key, &Canonical(value))?;
+                }
+                map.end()
+            }
+            Value::Array(items) => s.collect_seq(items.iter().map(Canonical)),
+            other => other.serialize(s),
+        }
+    }
 }
 
 // ===========================================================================================

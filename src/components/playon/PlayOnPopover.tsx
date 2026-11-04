@@ -15,19 +15,11 @@ const GROUPS: Array<[DeviceGroup, "play_on_playing_now" | "play_on_available" | 
 /** "Play on": what plays, and the group's devices to move it to. */
 export function PlayOnPopover() {
   const { devices, active } = usePlayOn();
-  const moveTo = usePlayOnStore((state) => state.moveTo);
-  const pullFrom = usePlayOnStore((state) => state.pullFrom);
-  const control = usePlayOnStore((state) => state.control);
+  const pickDevice = usePlayOnStore((state) => state.pick);
   const showToast = useUiStore((state) => state.showToast);
 
-  /** Here: pull playback back. A device playing: control it. Any other: move playback there. */
   const pick = (device: PlayOnDevice) => {
-    if (!device.thisDevice && device.group === "playing") {
-      control(device.did);
-      return;
-    }
-    const moving = device.thisDevice ? (active ? pullFrom(active.did) : Promise.resolve()) : moveTo(device.did);
-    moving.catch((error: unknown) =>
+    pickDevice(device).catch((error: unknown) =>
       showToast({
         variant: "error",
         message: getString("play_on_failed", device.thisDevice ? getString("play_on_this_device") : device.name, String(error instanceof Error ? error.message : error)),

@@ -22,11 +22,18 @@ pub enum DeviceKind {
     Desktop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Paused unless said: Android leaves a field at its default out of a message, `state` included.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PlayState {
     Playing,
+    #[default]
     Paused,
+}
+
+/// A `now` without `vol` is at full volume, as Android leaves out a field at its default.
+fn full_volume() -> u8 {
+    100
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,8 +64,9 @@ pub struct Now {
     pub pos: u64,
     #[serde(default)]
     pub dur: u64,
-    pub state: PlayState,
     #[serde(default)]
+    pub state: PlayState,
+    #[serde(default = "full_volume")]
     pub vol: u8,
     #[serde(default)]
     pub queue: Vec<String>,
@@ -171,6 +179,37 @@ mod tests {
         let stopped: LiveMessage =
             serde_json::from_str(r#"{"type":"now","video":null,"state":"paused"}"#).unwrap();
         assert!(stopped.is_valid());
+    }
+
+    /// Android leaves fields at their default out, so a paused `now` has no `state` and a full one no `vol`.
+    #[test]
+    fn a_now_without_its_default_fields_reads_as_android_meant_it() {
+        let empty: LiveMessage = serde_json::from_str(r#"{"type":"now","link":"l"}"#).unwrap();
+        let LiveMessage::Now(empty) = empty else {
+            panic!("not a now")
+        };
+        assert_eq!(empty.video, None);
+        assert_eq!(empty.state, PlayState::Paused);
+        assert_eq!(empty.vol, 100);
+
+        let paused: LiveMessage =
+            serde_json::from_str(r#"{"type":"now","video":"v","title":"t","pos":5000,"dur":9000}"#)
+                .unwrap();
+        let LiveMessage::Now(paused) = paused else {
+            panic!("not a now")
+        };
+        assert_eq!(paused.state, PlayState::Paused);
+        assert_eq!(paused.vol, 100);
+        assert_eq!(paused.pos, 5000);
+
+        let quiet: LiveMessage =
+            serde_json::from_str(r#"{"type":"now","video":"v","state":"playing","vol":0}"#)
+                .unwrap();
+        let LiveMessage::Now(quiet) = quiet else {
+            panic!("not a now")
+        };
+        assert_eq!(quiet.state, PlayState::Playing);
+        assert_eq!(quiet.vol, 0);
     }
 
     #[test]

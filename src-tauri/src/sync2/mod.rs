@@ -17,6 +17,7 @@ pub mod envelope;
 pub mod epoch;
 pub mod error;
 pub mod error_log;
+pub mod forks;
 pub mod gc;
 pub mod group_store;
 pub mod held;

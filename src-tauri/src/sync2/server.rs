@@ -367,6 +367,25 @@ impl Store for ServerStore {
             .map(parse_entry)
             .collect::<std::result::Result<_, _>>()?)
     }
+
+    /// The whole roster, page by page. A page that doesn't advance ends the read.
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        let mut entries: Vec<Entry> = Vec::new();
+        let mut after = -1;
+        loop {
+            let page = self.roster_after(after).await?;
+            let Some(last) = page.last() else {
+                return Ok(entries);
+            };
+            let seq = i64::try_from(last.seq).map_err(|_| StoreError::Malformed)?;
+            if seq <= after {
+                return Err(StoreError::Malformed);
+            }
+            after = seq;
+            entries.extend(page);
+        }
+    }
+
     async fn append_roster(
         &self,
         head: &str,
@@ -395,7 +414,8 @@ impl Store for ServerStore {
         }
         decode_empty(response).await.map(|()| Appended::Done)
     }
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
+    /// The server names a wrap by epoch alone: only one entry can start an epoch there.
+    async fn key(&self, epoch: u32, _kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
         self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
             .await
     }

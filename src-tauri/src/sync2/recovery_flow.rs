@@ -14,6 +14,7 @@ use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
 use super::membership::{append_checked, new_epoch};
 use super::meta::seal_device_meta;
+use super::paths::kc_name;
 use super::recovery::{recovery_keys, recovery_words};
 use super::roster::{Entry, Op, Role, RosterState, apply_entry, replay_roster};
 use super::sealed::random_bytes;
@@ -148,8 +149,11 @@ pub async fn restore<S: Store>(
         return Err(EngineError::RecoveryUsed);
     }
     let group: [u8; 16] = array(&hex::decode(&state.group).map_err(|_| Error::Group)?);
+    let commitment = URL_SAFE_NO_PAD
+        .decode(&state.kc)
+        .map_err(|_| Error::RosterFormat)?;
     let wrap = as_recovery
-        .key(state.epoch, &recovery_id)
+        .key(state.epoch, &kc_name(&commitment), &recovery_id)
         .await?
         .ok_or(Error::KeyCommitment)?;
     let current = unwrap_epoch_key(
@@ -159,14 +163,7 @@ pub async fn restore<S: Store>(
         &recovery.did,
         &wrap,
     )?;
-    check_epoch_key(
-        &current,
-        &group,
-        state.epoch,
-        &URL_SAFE_NO_PAD
-            .decode(&state.kc)
-            .map_err(|_| Error::RosterFormat)?,
-    )?;
+    check_epoch_key(&current, &group, state.epoch, &commitment)?;
 
     let restored = new_epoch(
         &group,

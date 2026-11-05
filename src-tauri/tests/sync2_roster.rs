@@ -92,6 +92,15 @@ fn invalid_entries_are_rejected_for_the_named_reason() {
 }
 
 #[test]
+fn a_genesis_must_match_its_group_id() {
+    for n in vectors()["geneses"].as_array().unwrap() {
+        let entry = parse_entry(&n["entry"]).unwrap();
+        let error = apply_entry(None, &entry).unwrap_err();
+        assert_eq!(error.code(), n["error"].as_str().unwrap());
+    }
+}
+
+#[test]
 fn forks_resolve_to_the_same_winner() {
     let v = vectors();
     let entries = entries(&v);

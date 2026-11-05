@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use super::curve::{is_valid_signing_key, verify};
 use super::kdf::{sha256, tag};
-use super::keys::member_id;
+use super::keys::{group_id, member_id};
 use super::{Error, Result, array};
 use crate::sync::canonical::to_canonical_json;
 
@@ -261,10 +261,30 @@ fn check_chain(state: Option<&RosterState>, entry: &Entry) -> Result<()> {
     }
 }
 
+/// A genesis must carry the id its keys commit to (spec/crypto.md, Group id).
+fn check_group_id(entry: &Entry) -> Result<()> {
+    let keys = |role| {
+        let subject = entry.add.iter().flatten().find(|s| s.role == role)?;
+        Some((b64::<32>(&subject.sig)?, b64::<32>(&subject.kem)?))
+    };
+    let (Some(device), Some(recovery)) = (keys(Role::Device), keys(Role::Recovery)) else {
+        return Err(Error::RosterFormat);
+    };
+    let id = group_id((&device.0, &device.1), (&recovery.0, &recovery.1));
+    if hex::encode(id) == entry.group {
+        Ok(())
+    } else {
+        Err(Error::RosterGroup)
+    }
+}
+
 /// Applies one entry to the state before it, or says why it is not valid.
 pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterState> {
     check_chain(state, entry)?;
     check_shape(entry)?;
+    if entry.op == Op::Genesis {
+        check_group_id(entry)?;
+    }
 
     let mut seen = state.map(|s| s.seen.clone()).unwrap_or_default();
     let mut added = BTreeMap::new();

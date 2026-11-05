@@ -1,7 +1,7 @@
 //! The store a group syncs through: its Flow server, its `WebDAV` folder, or what its devices hold
 //! on the LAN.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::held::HeldStore;
 use super::hybrid::HybridStore;
@@ -51,6 +51,18 @@ impl Store for GroupStore {
         each!(self, store => store.roster_after(after).await)
     }
 
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        each!(self, store => store.roster_view().await)
+    }
+
+    fn is_linear(&self) -> bool {
+        each!(self, store => store.is_linear())
+    }
+
+    fn use_pins(&self, pins: &BTreeSet<String>) {
+        each!(self, store => store.use_pins(pins));
+    }
+
     async fn append_roster(
         &self,
         head: &str,
@@ -61,8 +73,8 @@ impl Store for GroupStore {
         each!(self, store => store.append_roster(head, entry, wraps, chain).await)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        each!(self, store => store.key(epoch, name).await)
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        each!(self, store => store.key(epoch, kc, name).await)
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {

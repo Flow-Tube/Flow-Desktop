@@ -27,6 +27,20 @@ import {
   representationLabelWithCodec,
   type DashVideoTrack,
 } from "../../lib/dashVideoTrack";
+import {
+  manifestVideoTracks,
+  pickDashStart,
+  readMeasuredSpeedKbps,
+  recordVideoSegmentSpeed,
+} from "../../lib/dashStartQuality";
+import {
+  codecFamily,
+  codecToLeaveAfterDecodeError,
+  isCodecRuledOut,
+  withoutRuledOutCodecs,
+  type VideoCodecFamily,
+} from "../../lib/codecHealth";
+import { useCodecHealthStore } from "../../store/useCodecHealthStore";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
@@ -161,6 +175,7 @@ type DashPlayerController = {
   getBitrateInfoListFor: (type: string) => DashBitrateInfo[];
   getRepresentationsByType: (type: string) => DashRepresentationInfo[];
   setRepresentationForTypeById: (type: string, id: string, forceReplace?: boolean) => void;
+  setInitialMediaSettingsFor: (type: string, value: { id: string }) => void;
   extend?: (parentNameString: string, childInstance: () => unknown, override: boolean) => void;
   getQualityFor: (type: string) => number;
   getCurrentRepresentationForType: (type: string) => DashRepresentationInfo | null;
@@ -472,6 +487,10 @@ export const Player: React.FC<PlayerProps> = ({
   const [volumeFeedback, setVolumeFeedback] = useState<PlayerVolumeFeedback | null>(null);
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
   const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
+  const [dashRestartCount, setDashRestartCount] = useState(0);
+  const decodeFallbackPendingRef = useRef(false);
+  const decodeFallbackAtRef = useRef<number | null>(null);
+  const dashStartFamilyRef = useRef<VideoCodecFamily | null>(null);
 
   const fastQualitySwitch = useAppSettingsStore((s) => s.values[SETTINGS.FAST_QUALITY_SWITCH_ENABLED] === "true");
   useEffect(() => {
@@ -509,10 +528,14 @@ export const Player: React.FC<PlayerProps> = ({
     return hlsManifestUrl.slice(0, markerIndex + marker.length);
   }, [hlsManifestUrl]);
 
+  const decodeFailures = useCodecHealthStore((state) => state.failures);
+  const currentVideoId = usePlayerStore((state) => state.currentVideo?.id);
   const supportedQualities = useMemo(() => {
     if (!isDashPlayback) return qualities;
-    return qualities.filter((quality) => isVariantSupported(quality.mimeType));
-  }, [isDashPlayback, qualities]);
+    const decodable = qualities.filter((quality) => isVariantSupported(quality.mimeType));
+    const healthy = decodable.filter((quality) => !isCodecRuledOut(decodeFailures, quality.mimeType, currentVideoId));
+    return healthy.some((quality) => quality.isVideoOnly) ? healthy : decodable;
+  }, [currentVideoId, decodeFailures, isDashPlayback, qualities]);
   const supportedQualitiesRef = useRef(supportedQualities);
   supportedQualitiesRef.current = supportedQualities;
 
@@ -525,6 +548,8 @@ export const Player: React.FC<PlayerProps> = ({
       null
     );
   }, [qualities, selectedQualityId, supportedQualities]);
+  const dashStartChoiceRef = useRef<StreamVariant | null>(null);
+  dashStartChoiceRef.current = selectedQualityId && selectedQualityId !== "auto" ? selectedQuality : null;
 
   const selectedAudioTrack = audioTracks.find((track) => track.id === selectedAudioTrackId)
     || audioTracks.find((track) => track.isDefault)
@@ -586,7 +611,11 @@ export const Player: React.FC<PlayerProps> = ({
     const video = videoRef.current;
     if (!player || !video || !dashReadyRef.current) return;
 
-    const videoTracks = player.getTracksFor?.("video") ?? [];
+    const videoTracks = withoutRuledOutCodecs(
+      player.getTracksFor?.("video") ?? [],
+      useCodecHealthStore.getState().failures,
+      usePlayerStore.getState().currentVideo?.id,
+    );
 
     if (selectedQualityId === "auto") {
       const currentRep = player.getCurrentRepresentationForType("video");
@@ -722,6 +751,29 @@ export const Player: React.FC<PlayerProps> = ({
     });
   }, [logPlayerEvent, selectedQuality, selectedQualityId]);
   const applyDashQualitySelectionRef = useRef(applyDashQualitySelection);
+
+  // Re-resolving would fetch the same codec and fail again, then wait out a source switch.
+  const leaveFailingCodec = useCallback(() => {
+    if (decodeFallbackPendingRef.current) return true;
+    const player = dashPlayerRef.current;
+    const video = videoRef.current;
+    const videoId = usePlayerStore.getState().currentVideo?.id;
+    if (!player || !video || !videoId || !Number.isFinite(video.duration)) return false;
+
+    const current = player.getCurrentRepresentationForType("video");
+    const family = codecToLeaveAfterDecodeError(current?.codecs ?? current?.mimeType, supportedQualitiesRef.current);
+    if (!family) return false;
+
+    const directStart = dashStartFamilyRef.current === null || dashStartFamilyRef.current === family;
+    logPlayerEventRef.current("dash-decode-fallback", { family, directStart, resumeAt: video.currentTime });
+    decodeFallbackPendingRef.current = true;
+    decodeFallbackAtRef.current = video.currentTime;
+    useCodecHealthStore.getState().recordFailure(family, videoId, directStart);
+    setDashRestartCount((count) => count + 1);
+    return true;
+  }, []);
+  const leaveFailingCodecRef = useRef(leaveFailingCodec);
+  leaveFailingCodecRef.current = leaveFailingCodec;
 
   const applyDashAudioSelection = useCallback(() => {
     const player = dashPlayerRef.current;
@@ -1425,6 +1477,8 @@ export const Player: React.FC<PlayerProps> = ({
     }
 
     dashReadyRef.current = false;
+    decodeFallbackPendingRef.current = false;
+    dashStartFamilyRef.current = null;
     const player = dashjs.MediaPlayer().create() as unknown as DashPlayerController;
     if (dashProxyPrefix) {
       player.extend?.("RequestModifier", () => ({
@@ -1471,6 +1525,26 @@ export const Player: React.FC<PlayerProps> = ({
     });
 
     const dashEvents = dashjs.MediaPlayer.events;
+    // STREAM_INITIALIZED is too late for this: the first segment has already been requested.
+    const onManifestLoaded = (event: unknown) => {
+      const speedKbps = readMeasuredSpeedKbps();
+      const start = pickDashStart({
+        selected: dashStartChoiceRef.current,
+        tracks: withoutRuledOutCodecs(
+          manifestVideoTracks((event as { data?: unknown } | null)?.data)
+            .filter((track) => isVariantSupported(track.codec)),
+          useCodecHealthStore.getState().failures,
+          usePlayerStore.getState().currentVideo?.id,
+        ),
+        preferredCodec: useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
+        speedKbps,
+      });
+      if (start.bitrateKbps) {
+        player.updateSettings({ streaming: { abr: { initialBitrate: { video: start.bitrateKbps } } } });
+      }
+      if (start.setId) player.setInitialMediaSettingsFor("video", { id: start.setId });
+      logPlayerEventRef.current("dash-start-quality", { ...start, speedKbps });
+    };
     const onPlaybackWaiting = () => {
       logPlayerEventRef.current("dash-playback-waiting", {
         readyState: video.readyState,
@@ -1553,11 +1627,13 @@ export const Player: React.FC<PlayerProps> = ({
     const onPlaybackError = (event: unknown) => {
       const { label, fatal } = classifyDashError(event);
       logPlayerEventRef.current("dash-playback-error", { event, errorClass: label, fatal });
+      if (label === "media-decode" && leaveFailingCodecRef.current()) return;
       if (fatal) fireRetrySourceRef.current(`dash:${label}`);
     };
     const onDashError = (event: unknown) => {
       const { label, fatal } = classifyDashError(event);
       logPlayerEventRef.current("dash-error", { event, errorClass: label, fatal });
+      if (label === "media-decode" && leaveFailingCodecRef.current()) return;
       if (fatal) fireRetrySourceRef.current(`dash:${label}`);
     };
     const onCapabilitiesDrop = (event: unknown) => {
@@ -1567,6 +1643,8 @@ export const Player: React.FC<PlayerProps> = ({
     };
     const onStreamInitialized = () => {
       dashReadyRef.current = true;
+      const startRepresentation = player.getCurrentRepresentationForType("video");
+      dashStartFamilyRef.current = codecFamily(startRepresentation?.codecs ?? startRepresentation?.mimeType);
       logPlayerEventRef.current("dash-stream-initialized", {
         representations: player.getRepresentationsByType("video").map((representation) => ({
           id: representation.id,
@@ -1586,6 +1664,8 @@ export const Player: React.FC<PlayerProps> = ({
       }
     };
 
+    player.on(dashEvents.MANIFEST_LOADED, onManifestLoaded);
+    player.on(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
     player.on(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
     player.on(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
     player.on(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);
@@ -1597,11 +1677,14 @@ export const Player: React.FC<PlayerProps> = ({
 
     dashPlayerRef.current = player;
     // Starting at 0 and seeking once loaded fetched the opening segments first.
-    const startAt = resumeTimeRef.current;
+    const startAt = decodeFallbackAtRef.current ?? resumeTimeRef.current;
+    decodeFallbackAtRef.current = null;
     player.initialize(video, dashManifestUrl, desiredPlayingRef.current || isPlaying, startAt > 0 ? startAt : undefined);
 
     return () => {
       dashReadyRef.current = false;
+      player.off(dashEvents.MANIFEST_LOADED, onManifestLoaded);
+      player.off(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
       player.off(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
       player.off(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
       player.off(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);
@@ -1623,7 +1706,7 @@ export const Player: React.FC<PlayerProps> = ({
         dashPlayerRef.current = null;
       }
     };
-  }, [bufferConfig, dashManifestUrl, dashProxyPrefix, isDashPlayback]);
+  }, [bufferConfig, dashManifestUrl, dashProxyPrefix, dashRestartCount, isDashPlayback]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1863,6 +1946,7 @@ export const Player: React.FC<PlayerProps> = ({
           message: video.error.message,
         } : null,
       });
+      if ((code === 3 || code === 4) && leaveFailingCodecRef.current()) return;
       if (code && code !== 1) {
         fireRetrySourceRef.current(`media-error:${code}`);
       }
@@ -2718,7 +2802,7 @@ export const Player: React.FC<PlayerProps> = ({
         setControlsVisible={setControlsVisible}
         shouldShowControls={shouldShowControls}
         qualities={supportedQualities}
-        selectedQualityId={selectedQualityId || "auto"}
+        selectedQualityId={selectedQualityId && selectedQualityId !== "auto" ? selectedQuality?.id ?? selectedQualityId : "auto"}
         isDashPlayback={isDashPlayback}
         isLive={isLive}
         onSelectQuality={onSelectQuality}

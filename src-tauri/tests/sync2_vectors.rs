@@ -20,6 +20,7 @@ use flow_desktop_lib::sync2::lan::{
     LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_tag, lan_transcript,
 };
 use flow_desktop_lib::sync2::pairing::{pairing_aad, pairing_keys, pairing_slot};
+use flow_desktop_lib::sync2::paths::{chain_path, kc_name, wrap_path};
 use flow_desktop_lib::sync2::payload::{decode_payload, padded_size};
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret, recovery_words};
 use flow_desktop_lib::sync2::sealed::{open, seal_with_salt};
@@ -180,6 +181,14 @@ fn member_ids_epoch_keys_and_wraps() {
         assert_eq!(derived.kem_public.to_vec(), bytes(&m["kemPublic"]));
         assert_eq!(derived.did.to_vec(), bytes(&m["did"]));
     }
+    let p = &v["paths"];
+    let kc = kc_name(&bytes(&p["commitment"]));
+    let epoch = number::<u32>(&p["epoch"]);
+    assert_eq!(
+        wrap_path(epoch, &kc, p["did"].as_str().unwrap()),
+        p["wrap"].as_str().unwrap()
+    );
+    assert_eq!(chain_path(epoch, &kc), p["chain"].as_str().unwrap());
     let e = &v["epoch"];
     let (key, group, epoch) = (
         bytes(&e["key"]),

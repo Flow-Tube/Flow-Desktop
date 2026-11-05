@@ -21,6 +21,7 @@ use super::lan_peers::service_port;
 use super::mailbox::Mailbox;
 use super::meta::seal_device_meta;
 use super::pairing::{pairing_aad, pairing_keys, pairing_slot};
+use super::paths::kc_name;
 use super::payload::{decode_payload, encode_payload};
 use super::pipe::{AnyPipe, KEY_SIZE, MailboxPipe, Pipe, dial};
 use super::roster::{
@@ -508,7 +509,8 @@ pub async fn finish_lan_join<P: Pipe>(
     for entry in roster {
         held.hold_entry(entry).await?;
     }
-    held.hold_key(state.epoch, &me.did, &wrap).await?;
+    held.hold_key(state.epoch, &kc_name(&commitment), &me.did, &wrap)
+        .await?;
     add_roster_entries(pool, roster).await?;
     save_group(pool, &GroupRecord::on_lan(welcome.group, welcome.link)).await?;
     say_done(channel).await
@@ -600,7 +602,7 @@ where
 mod tests {
     use super::*;
     use crate::sync2::entries::epoch_draft;
-    use crate::sync2::keys::member_secrets;
+    use crate::sync2::keys::{group_id, member_secrets};
 
     /// The join is refused before anything travels.
     struct Unused;
@@ -631,14 +633,16 @@ mod tests {
         std::future::ready(Err(EngineError::Unexpected))
     }
 
-    /// A member signs its own roster, so the group id it names may have any length or differ
-    /// from the welcome's.
+    /// A welcome may name another group than the roster it carries, or an id of any length.
     #[tokio::test]
     async fn a_welcome_must_name_the_rosters_group_as_16_bytes() {
         let member = |n| member_secrets([n; 32], [n + 1; 32]);
         let (device, recovery, me) = (member(1), member(3), member(5));
         let subject = |m: &MemberSecrets, role| member_subject(&m.sig_public, &m.kem_public, role);
-        let group = [0xab, 0xcd];
+        let group = group_id(
+            (&device.sig_public, &device.kem_public),
+            (&recovery.sig_public, &recovery.kem_public),
+        );
         let draft = |op, add| Draft {
             op,
             signer: hex::encode(device.did),
@@ -671,7 +675,7 @@ mod tests {
         );
         let after = apply_entry(Some(&state), &add).unwrap();
         let entries = vec![genesis, add];
-        let welcome = |group: [u8; 2]| Welcome {
+        let welcome = |group: &[u8]| Welcome {
             group: hex::encode(group),
             head: after.head.clone(),
             seq: after.seq,
@@ -680,7 +684,7 @@ mod tests {
             entries: Some(entries.clone()),
             wrap: Some(String::new()),
         };
-        let other = check_pinned(&entries, &welcome([0xab, 0xce]), &mine);
+        let other = check_pinned(&entries, &welcome(&[0xab, 0xce]), &mine);
         assert!(matches!(other, Err(EngineError::Protocol(Error::Group))));
         let welcomed = Welcomed {
             channel: Channel {
@@ -691,7 +695,7 @@ mod tests {
                 received: 0,
             },
             me: mine,
-            welcome: welcome(group),
+            welcome: welcome(&[0xab, 0xcd]),
             reach: None,
         };
         let pool = SqlitePool::connect_lazy("sqlite::memory:").unwrap();

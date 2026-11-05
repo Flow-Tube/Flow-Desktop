@@ -76,6 +76,7 @@ import {
   selectPreferredAudioTrackId,
   selectPreferredCaptionId,
 } from "../../lib/settings/playerRuntime";
+import { hlsAudioChoice } from "../../lib/hlsAudioTrack";
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
   clearLiveTiming,
@@ -554,6 +555,8 @@ export const Player: React.FC<PlayerProps> = ({
     || audioTracks.find((track) => track.isDefault)
     || audioTracks[0]
     || null;
+  const selectedAudioTrackRef = useRef(selectedAudioTrack);
+  selectedAudioTrackRef.current = selectedAudioTrack;
 
   const hasSelectedAlternateAudio =
     !!selectedAudioTrackId && !!selectedAudioTrack && !selectedAudioTrack.isDefault;
@@ -1734,7 +1737,10 @@ export const Player: React.FC<PlayerProps> = ({
       }
     }
 
+    // hls.js picks its first track inside its own manifest handling, before any listener here runs.
+    const audioLanguage = selectedAudioTrackRef.current?.languageCode;
     const hls = new Hls({
+      audioPreference: audioLanguage ? { lang: audioLanguage } : undefined,
       enableWorker: true,
       lowLatencyMode: false,
       maxBufferLength: bufferConfig.maxSeconds,
@@ -1754,10 +1760,16 @@ export const Player: React.FC<PlayerProps> = ({
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       fatalRecoveryAttempts = 0;
       logPlayerEventRef.current("hls-manifest-parsed", { levels: hls.levels.length });
+      const audioChoice = hlsAudioChoice(hls.allAudioTracks, selectedAudioTrackRef.current);
+      if (audioChoice) hls.setAudioOption(audioChoice);
       if (desiredPlayingRef.current) void video.play().catch(() => {});
     });
     hls.on(Hls.Events.FRAG_LOADED, () => {
       fatalRecoveryAttempts = 0;
+    });
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_event, data) => {
+      const track = hls.audioTracks[data.id];
+      logPlayerEventRef.current("hls-audio-track", { name: track?.name, lang: track?.lang, groupId: track?.groupId });
     });
     hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
       if (isLive) stampLiveTiming(video, liveTimingFromPlaylist(hls.targetLatency, data.details.targetduration));
@@ -1817,6 +1829,13 @@ export const Player: React.FC<PlayerProps> = ({
       clearLiveTiming(video);
     };
   }, [bufferConfig, hlsManifestUrl, hlsProxyPrefix, isHlsPlayback, isLive]);
+
+  useEffect(() => {
+    const hls = hlsPlayerRef.current;
+    if (!hls || hls.allAudioTracks.length === 0) return;
+    const choice = hlsAudioChoice(hls.allAudioTracks, selectedAudioTrackRef.current);
+    if (choice) hls.setAudioOption(choice);
+  }, [selectedAudioTrack?.id]);
 
   useEffect(() => {
     if (!isDashPlayback) return;

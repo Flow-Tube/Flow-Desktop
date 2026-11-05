@@ -75,6 +75,7 @@ PLAYER
 - SponsorBlock now works in the pop-out player and for the next video in the mini player.
 - If SponsorBlock can't be reached, the next video plays without skips instead of skipping at the last video's times.
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
+- A video that falls back to its backup stream now keeps the audio you chose, usually the original, instead of playing an auto-dubbed language. The audio menu works on that stream too.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

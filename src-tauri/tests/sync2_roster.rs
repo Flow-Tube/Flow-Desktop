@@ -164,7 +164,7 @@ fn a_removal_replaces_a_recovery_key_set_by_a_device_that_is_gone() {
             Some(count) => base(&entries, count),
             None => replay_roster(&entries).unwrap(),
         };
-        let steps: Vec<Entry> = serde_json::from_value(case["then"].clone()).unwrap();
+        let steps: Vec<Entry> = serde_json::from_value(case["steps"].clone()).unwrap();
         let (last, before) = steps.split_last().unwrap();
         for step in before {
             state = apply_entry(Some(&state), step).unwrap();

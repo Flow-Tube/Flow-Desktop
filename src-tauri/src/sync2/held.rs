@@ -8,12 +8,12 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::SqlitePool;
 
-use super::forks::resolve_forks;
+use super::forks::{ForkResolution, resolve_forks};
 use super::paths::{parse_log_path, roster_path};
 use super::roster::{Entry, entry_hash, parse_entry};
 use super::server::{Appended, ChangedObject, Result, StoreError};
 use super::state::{StoreKind, load_group, roster_entries, roster_pins};
-use super::store::Store;
+use super::store::{Store, wraps_epoch};
 use crate::sync::canonical::to_canonical_json;
 
 /// Objects listed per call of [`Store::changes`].
@@ -61,14 +61,17 @@ impl HeldStore {
         Ok(())
     }
 
-    pub async fn hold_key(&self, epoch: u32, name: &str, bytes: &[u8]) -> Result<()> {
-        sqlx::query("INSERT OR IGNORE INTO sync2_held_keys (epoch, name, bytes) VALUES (?, ?, ?)")
-            .bind(epoch)
-            .bind(name)
-            .bind(bytes)
-            .execute(&self.pool)
-            .await
-            .map_err(StoreError::Local)?;
+    pub async fn hold_key(&self, epoch: u32, kc: &str, name: &str, bytes: &[u8]) -> Result<()> {
+        sqlx::query(
+            "INSERT OR IGNORE INTO sync2_held_keys (epoch, kc, name, bytes) VALUES (?, ?, ?, ?)",
+        )
+        .bind(epoch)
+        .bind(kc)
+        .bind(name)
+        .bind(bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(StoreError::Local)?;
         Ok(())
     }
 
@@ -120,8 +123,8 @@ impl HeldStore {
             .collect())
     }
 
-    /// The chain the rule picks from what this device holds, within the group it has verified.
-    pub async fn chain(&self) -> Result<Vec<Entry>> {
+    /// What the rule makes of what this device holds, within the group it has verified.
+    pub async fn resolved(&self) -> Result<ForkResolution> {
         let pins = roster_pins(&self.pool)
             .await
             .map_err(|_| StoreError::Malformed)?;
@@ -130,31 +133,12 @@ impl HeldStore {
             .map_err(|_| StoreError::Malformed)?
             .map(|record| record.group_id);
         let held = self.candidates_after(-1).await?;
-        Ok(resolve_forks(group.as_deref(), &held, &pins, None)
-            .map(|resolved| resolved.chain)
-            .unwrap_or_default())
+        Ok(resolve_forks(group.as_deref(), &held, &pins, None).unwrap_or_default())
     }
 
-    /// What a `roster` request names: the `seq` and hash of this device's head, or -1 and none.
-    pub async fn head(&self) -> Result<(i64, Option<String>)> {
-        let chain = self.chain().await?;
-        Ok(chain.last().map_or((-1, None), |entry| {
-            let seq = i64::try_from(entry.seq).unwrap_or(i64::MAX);
-            (seq, Some(entry_hash(entry)))
-        }))
-    }
-
-    /// The entries above `after`, or every entry held when `head` isn't on this device's winning
-    /// chain: the asker's head then lost a fork here, or is unknown, so it needs the whole picture.
-    /// Holding `head` isn't enough, since this device may have just fetched it from the asker.
-    pub async fn roster_for(&self, after: i64, head: Option<&str>) -> Result<Vec<Entry>> {
-        let all = self.candidates_after(-1).await?;
-        let chain = self.chain().await?;
-        let known = head.is_none_or(|head| chain.iter().any(|e| entry_hash(e) == head));
-        Ok(all
-            .into_iter()
-            .filter(|e| !known || i64::try_from(e.seq).is_ok_and(|seq| seq > after))
-            .collect())
+    /// The chain the rule picks from what this device holds.
+    pub async fn chain(&self) -> Result<Vec<Entry>> {
+        Ok(self.resolved().await?.chain)
     }
 }
 
@@ -204,41 +188,37 @@ impl Store for HeldStore {
         wraps: &BTreeMap<String, String>,
         chain: Option<&str>,
     ) -> Result<Appended> {
-        let current = self
-            .chain()
-            .await?
-            .last()
-            .map(entry_hash)
-            .unwrap_or_default();
+        let below = self.chain().await?;
+        let current = below.last().map(entry_hash).unwrap_or_default();
         if current != head {
             return Ok(Appended::Conflict { head: current });
         }
-        let epoch = match &entry.epoch {
-            Some(epoch) => epoch.n,
-            None => self.current_epoch().await?,
-        };
+        let (epoch, kc) = wraps_epoch(entry, &below)?;
         let decode = |b64: &str| {
             URL_SAFE_NO_PAD
                 .decode(b64)
                 .map_err(|_| StoreError::Malformed)
         };
         for (did, wrap) in wraps {
-            self.hold_key(epoch, did, &decode(wrap)?).await?;
+            self.hold_key(epoch, &kc, did, &decode(wrap)?).await?;
         }
         if let Some(chain) = chain {
-            self.hold_key(epoch, "chain", &decode(chain)?).await?;
+            self.hold_key(epoch, &kc, "chain", &decode(chain)?).await?;
         }
         self.hold_entry(entry).await?;
         Ok(Appended::Done)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        sqlx::query_scalar("SELECT bytes FROM sync2_held_keys WHERE epoch = ? AND name = ?")
-            .bind(epoch)
-            .bind(name)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(StoreError::Local)
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        sqlx::query_scalar(
+            "SELECT bytes FROM sync2_held_keys WHERE epoch = ? AND kc = ? AND name = ?",
+        )
+        .bind(epoch)
+        .bind(kc)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(StoreError::Local)
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
@@ -288,17 +268,5 @@ impl Store for HeldStore {
             })
             .collect();
         Ok((objects, next))
-    }
-}
-
-impl HeldStore {
-    async fn current_epoch(&self) -> Result<u32> {
-        Ok(self
-            .chain()
-            .await?
-            .iter()
-            .filter_map(|e| e.epoch.as_ref().map(|epoch| epoch.n))
-            .next_back()
-            .unwrap_or(0))
     }
 }

@@ -15,6 +15,8 @@ pub struct ForkResolution {
     pub contested: Vec<Entry>,
     /// The contested entries that revoke another contested entry: what the user chooses between.
     pub sides: Vec<Entry>,
+    /// The entries off the chain that stand and start an epoch: their keys still open objects.
+    pub standing: Vec<Entry>,
 }
 
 /// What a device does with a store's view of the roster.
@@ -22,6 +24,7 @@ pub struct ForkResolution {
 pub enum Settlement {
     Apply {
         chain: Vec<Entry>,
+        standing: Vec<Entry>,
         extends_applied: bool,
     },
     Contested {
@@ -241,6 +244,7 @@ pub fn resolve_forks(
                 .map(|&index| nodes[index].entry.clone())
                 .collect(),
             sides,
+            standing: Vec::new(),
         });
     }
 
@@ -267,8 +271,19 @@ pub fn resolve_forks(
             .filter(|&child| nodes[child].status == Some(Status::Stands))
             .collect();
     }
+    let on_chain: BTreeSet<String> = chain.iter().map(entry_hash).collect();
+    let standing = nodes
+        .iter()
+        .filter(|node| {
+            node.status == Some(Status::Stands)
+                && node.entry.epoch.is_some()
+                && !on_chain.contains(&node.hash)
+        })
+        .map(|node| node.entry.clone())
+        .collect();
     Ok(ForkResolution {
         chain,
+        standing,
         ..ForkResolution::default()
     })
 }
@@ -310,6 +325,7 @@ pub fn settle_roster(
     }
     Ok(Settlement::Apply {
         chain: resolved.chain,
+        standing: resolved.standing,
         extends_applied,
     })
 }

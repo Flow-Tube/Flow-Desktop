@@ -20,7 +20,7 @@ use super::paths::{chain_path, log_path, roster_path, wrap_path};
 use super::roster::{Entry, entry_hash, parse_entry};
 use super::sealed::random_bytes;
 use super::server::{Appended, ChangedObject, Result, StoreError};
-use super::store::Store;
+use super::store::{Store, wraps_epoch};
 use crate::sync::canonical::to_canonical_json;
 
 /// Objects per log shard (spec/store.md, Layout).
@@ -177,14 +177,7 @@ impl Store for WebDavStore {
         if current != head {
             return Ok(Appended::Conflict { head: current });
         }
-        let epoch = match &entry.epoch {
-            Some(epoch) => epoch.n,
-            None => before
-                .iter()
-                .filter_map(|e| e.epoch.as_ref().map(|epoch| epoch.n))
-                .next_back()
-                .unwrap_or(0),
-        };
+        let (epoch, kc) = wraps_epoch(entry, &before)?;
         let decode = |b64: &str| {
             URL_SAFE_NO_PAD
                 .decode(b64)
@@ -192,11 +185,13 @@ impl Store for WebDavStore {
         };
         for (did, wrap) in wraps {
             self.client
-                .put(&wrap_path(epoch, did), decode(wrap)?)
+                .put(&wrap_path(epoch, &kc, did), decode(wrap)?)
                 .await?;
         }
         if let Some(chain) = chain {
-            self.client.put(&chain_path(epoch), decode(chain)?).await?;
+            self.client
+                .put(&chain_path(epoch, &kc), decode(chain)?)
+                .await?;
         }
         let hash = entry_hash(entry);
         self.client
@@ -211,8 +206,8 @@ impl Store for WebDavStore {
         }
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        self.client.get(&wrap_path(epoch, name)).await
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        self.client.get(&wrap_path(epoch, kc, name)).await
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {

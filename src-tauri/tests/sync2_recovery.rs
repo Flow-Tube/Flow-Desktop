@@ -3,10 +3,13 @@
 
 mod sync2_common;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
 use flow_desktop_lib::sync2::entries::{Draft, build_entry, epoch_draft, member_subject};
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::DeviceMeta;
+use flow_desktop_lib::sync2::paths::kc_name;
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret};
 use flow_desktop_lib::sync2::recovery_flow::{replace_recovery_key, restore};
 use flow_desktop_lib::sync2::roster::{Op, Role, RosterState, apply_entry};
@@ -210,12 +213,13 @@ async fn a_device_replaces_the_recovery_key_and_the_old_words_stop_working() {
     assert_eq!(state.members[&new].role, Role::Recovery);
     assert!(!state.members.contains_key(&old));
     let store = &&g.store;
-    assert!(store.key(1, &new).await.unwrap().is_some());
-    assert!(store.key(1, &old).await.unwrap().is_none());
+    let kc = kc_name(&URL_SAFE_NO_PAD.decode(&state.kc).unwrap());
+    assert!(store.key(1, &kc, &new).await.unwrap().is_some());
+    assert!(store.key(1, &kc, &old).await.unwrap().is_none());
     for device in [&g.a, &g.b] {
         assert!(
             store
-                .key(1, &hex::encode(device.did))
+                .key(1, &kc, &hex::encode(device.did))
                 .await
                 .unwrap()
                 .is_some()

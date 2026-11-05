@@ -6,9 +6,12 @@ mod sync2_common;
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
 use flow_desktop_lib::sync2::entries::build_entry;
 use flow_desktop_lib::sync2::membership::{leave_group, member_keys, new_epoch};
+use flow_desktop_lib::sync2::paths::kc_name;
 use flow_desktop_lib::sync2::roster::{Entry, Op, entry_hash};
 use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result};
 use flow_desktop_lib::sync2::store::Store;
@@ -40,11 +43,13 @@ async fn the_next_device_to_open_a_session_rotates_without_the_one_that_left() {
     assert!(!state.rotate);
     assert_eq!(session.roster().epoch, 1);
     let keys = g.store.0.lock().unwrap().keys.clone();
+    let kc = kc_name(&URL_SAFE_NO_PAD.decode(&state.kc).unwrap());
+    let holds = |name: String| keys.contains_key(&(1, kc.clone(), name));
     for kept in [&g.b, &g.recovery] {
-        assert!(keys.contains_key(&(1, hex::encode(kept.did))));
+        assert!(holds(hex::encode(kept.did)));
     }
-    assert!(!keys.contains_key(&(1, hex::encode(g.a.did))));
-    assert!(keys.contains_key(&(1, "chain".to_owned())));
+    assert!(!holds(hex::encode(g.a.did)));
+    assert!(holds("chain".to_owned()));
 
     Session::open(&pool_b, &g.store, &g.b).await.unwrap();
     assert_eq!(head(&g.store).epoch, 1, "one rotation is enough");
@@ -89,8 +94,8 @@ impl Store for Beaten<'_> {
         self.store.append_roster(head, entry, wraps, chain).await
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        self.store.key(epoch, name).await
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        self.store.key(epoch, kc, name).await
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {

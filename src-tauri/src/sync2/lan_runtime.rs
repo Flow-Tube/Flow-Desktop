@@ -51,7 +51,7 @@ async fn meeting(local: &Local) -> Result<Option<Meeting>> {
         _ => return Ok(None),
     }
     let held = HeldStore::new(local.pool.clone());
-    let session = Session::open_as_peer(&local.pool, held, &local.device).await?;
+    let session = Session::open_for_lan(&local.pool, held, &local.device).await?;
     let lan_key = purpose_key(
         session.current_key(),
         session.group(),

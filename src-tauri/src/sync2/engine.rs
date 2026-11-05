@@ -18,7 +18,7 @@ use super::forks::{Settlement, settle_roster};
 use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
 use super::kept::{Kept, keep};
 use super::keys::MemberSecrets;
-use super::paths::{log_path, parse_log_path};
+use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
@@ -26,8 +26,8 @@ use super::roster::{Entry, RosterState, replay_roster};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, add_roster_entries, floors, load_group, roster_entries, roster_pins,
-    save_floors, save_group, save_streams, streams,
+    Floors, GroupRecord, add_roster_entries, floors, load_group, replace_roster, roster_entries,
+    roster_pins, save_floors, save_group, save_streams, streams,
 };
 use super::store::Store;
 use super::wrap::unwrap_epoch_key;
@@ -243,6 +243,10 @@ pub struct Session<'a, S> {
     signing_keys: BTreeMap<String, [u8; 32]>,
     commitments: BTreeMap<u32, Vec<u8>>,
     keys: BTreeMap<u32, Vec<u8>>,
+    /// The commitments of entries that lost a fork and stand, by the epoch they start.
+    standing: BTreeMap<u32, Vec<Vec<u8>>>,
+    /// The keys of those entries unwrapped so far, by commitment.
+    standing_keys: BTreeMap<Vec<u8>, Vec<u8>>,
     reading: Reading,
 }
 
@@ -314,6 +318,21 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(session)
     }
 
+    /// Like [`Session::open_as_peer`], but while this device lacks its wrap of the settled chain's
+    /// epoch it stays on the chain it had: a LAN session is how it gets that wrap.
+    pub async fn open_for_lan(
+        pool: &SqlitePool,
+        store: S,
+        device: &'a MemberSecrets,
+    ) -> Result<Self> {
+        let mut session = Self::on_applied(pool, store, device).await?;
+        match session.refresh(pool).await {
+            Err(EngineError::Protocol(Error::KeyCommitment)) => session.prepare_names().await?,
+            other => other?,
+        }
+        Ok(session)
+    }
+
     /// The chain this device has applied, without asking the store whether it still stands.
     pub async fn on_applied(
         pool: &SqlitePool,
@@ -334,6 +353,8 @@ impl<'a, S: Store> Session<'a, S> {
             signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
+            standing: BTreeMap::new(),
+            standing_keys: BTreeMap::new(),
         })
     }
 
@@ -350,33 +371,50 @@ impl<'a, S: Store> Session<'a, S> {
             &pins,
             self.store.is_linear(),
         )?;
-        let (chain, extends_applied) = match settled {
+        let (chain, standing, extends_applied) = match settled {
             Settlement::Apply {
                 chain,
+                standing,
                 extends_applied,
-            } => (chain, extends_applied),
+            } => (chain, standing, extends_applied),
             Settlement::Contested { .. } => return Err(EngineError::Contested),
             Settlement::Rollback => return Err(EngineError::RosterRolledBack),
             Settlement::Rewritten => return Err(EngineError::RosterRewritten),
         };
         let state = replay_roster(&chain)?;
         let member = state.members.contains_key(&hex::encode(self.device.did));
-        if !extends_applied {
-            return Err(if member {
-                EngineError::RosterRewritten
-            } else {
-                EngineError::RemovalUnconfirmed
-            });
+        if !extends_applied && !member {
+            return Err(EngineError::RemovalUnconfirmed);
         }
-        add_roster_entries(pool, &chain[self.entries.len()..]).await?;
+        // Nothing is saved until the new chain's key opens: without it the device stays where it was.
+        let current = match self.keys.get(&state.epoch) {
+            _ if !member => None,
+            Some(key) if extends_applied => Some(key.clone()),
+            _ => Some(
+                self.unwrap_wrap(state.epoch, &decode_b64(&state.kc)?)
+                    .await?,
+            ),
+        };
+        if extends_applied {
+            add_roster_entries(pool, &chain[self.entries.len()..]).await?;
+        } else {
+            replace_roster(pool, &chain).await?;
+            self.keys.clear();
+            self.commitments.clear();
+        }
         self.state = state;
         self.entries = chain;
-        if !member {
+        let Some(current) = current else {
             return Err(EngineError::Removed);
-        }
+        };
         self.index_entries()?;
-        if !self.keys.contains_key(&self.state.epoch) {
-            self.unwrap_current().await?;
+        self.keys.insert(self.state.epoch, current);
+        self.standing.clear();
+        for epoch in standing.iter().filter_map(|e| e.epoch.as_ref()) {
+            self.standing
+                .entry(epoch.n)
+                .or_default()
+                .push(decode_b64(&epoch.kc)?);
         }
         Ok(())
     }
@@ -438,17 +476,23 @@ impl<'a, S: Store> Session<'a, S> {
 
     async fn unwrap_current(&mut self) -> Result<()> {
         let epoch = self.state.epoch;
+        let commitment = self.commitments.get(&epoch).ok_or(Error::KeyCommitment)?;
+        let key = self.unwrap_wrap(epoch, commitment).await?;
+        self.keys.insert(epoch, key);
+        Ok(())
+    }
+
+    /// This device's key of the entry that starts `epoch` with `commitment`.
+    async fn unwrap_wrap(&self, epoch: u32, commitment: &[u8]) -> Result<Vec<u8>> {
         let did = self.device.did;
         let wrap = self
             .store
-            .key(epoch, &hex::encode(did))
+            .key(epoch, &kc_name(commitment), &hex::encode(did))
             .await?
             .ok_or(Error::KeyCommitment)?;
         let key = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)?;
-        let commitment = self.commitments.get(&epoch).ok_or(Error::KeyCommitment)?;
         check_epoch_key(&key, &self.group, epoch, commitment)?;
-        self.keys.insert(epoch, key);
-        Ok(())
+        Ok(key)
     }
 
     /// The key of `epoch`, walking the history chain back from the newest key this device holds.
@@ -458,9 +502,10 @@ impl<'a, S: Store> Session<'a, S> {
             if known <= epoch {
                 return Err(Error::KeyCommitment.into());
             }
+            let known_commitment = self.commitments.get(&known).ok_or(Error::KeyCommitment)?;
             let chain = self
                 .store
-                .key(known, "chain")
+                .key(known, &kc_name(known_commitment), "chain")
                 .await?
                 .ok_or(Error::KeyCommitment)?;
             let previous = open_chain(key, &self.group, known, &chain)?;
@@ -472,6 +517,38 @@ impl<'a, S: Store> Session<'a, S> {
             self.keys.insert(known - 1, previous);
         }
         Ok(self.keys[&epoch].clone())
+    }
+
+    /// Opens something sealed under `epoch` with the chain's key, or else with the key of an entry
+    /// that lost that epoch and stands (spec/store.md, Reading an envelope).
+    pub(super) async fn open_under<T>(
+        &mut self,
+        epoch: u32,
+        open: impl Fn(&[u8]) -> std::result::Result<T, Error>,
+    ) -> Result<T> {
+        let failure = match self.epoch_key(epoch).await {
+            Ok(key) => match open(&key) {
+                Ok(opened) => return Ok(opened),
+                Err(error) => error.into(),
+            },
+            Err(error @ EngineError::Protocol(_)) => error,
+            Err(error) => return Err(error),
+        };
+        for commitment in self.standing.get(&epoch).cloned().unwrap_or_default() {
+            let key = match self.standing_keys.get(&commitment) {
+                Some(key) => key.clone(),
+                None => match self.unwrap_wrap(epoch, &commitment).await {
+                    Ok(key) => key,
+                    Err(EngineError::Protocol(_)) => continue,
+                    Err(error) => return Err(error),
+                },
+            };
+            self.standing_keys.insert(commitment, key.clone());
+            if let Ok(opened) = open(&key) {
+                return Ok(opened);
+            }
+        }
+        Err(failure)
     }
 
     pub(super) async fn write(
@@ -720,14 +797,14 @@ impl<'a, S: Store> Session<'a, S> {
     }
 
     pub(super) async fn open_content(&mut self, object: &ParsedObject<'_>) -> Result<Content> {
-        let epoch = object.header.epoch;
-        let key = purpose_key(
-            &self.epoch_key(epoch).await?,
-            &self.group,
-            epoch,
-            object.header.object_type.purpose(),
-        );
-        let content = decode_payload(&open_object(object, &key)?)?;
+        let (epoch, group) = (object.header.epoch, self.group);
+        let purpose = object.header.object_type.purpose();
+        let opened = self
+            .open_under(epoch, |key| {
+                open_object(object, &purpose_key(key, &group, epoch, purpose))
+            })
+            .await?;
+        let content = decode_payload(&opened)?;
         Ok(match object.header.object_type {
             ObjectType::Changes => Content::Batch(parse_batch(&content)?),
             ObjectType::Snapshot => {

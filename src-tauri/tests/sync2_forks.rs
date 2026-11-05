@@ -7,9 +7,11 @@ use std::collections::BTreeSet;
 
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
 use flow_desktop_lib::sync2::entries::{build_entry, epoch_draft, member_subject};
+use flow_desktop_lib::sync2::epoch::epoch_commitment;
 use flow_desktop_lib::sync2::forks::{Settlement, settle_roster};
 use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
+use flow_desktop_lib::sync2::paths::kc_name;
 use flow_desktop_lib::sync2::roster::{
     Entry, Op, Role, RosterState, apply_entry, entry_hash, parse_entry,
 };
@@ -58,10 +60,12 @@ fn outcome(v: &Value, settled: Settlement) -> Value {
     match settled {
         Settlement::Apply {
             chain,
+            standing,
             extends_applied,
         } => serde_json::json!({
             "outcome": "apply",
             "chain": chain_names(v, &chain),
+            "standing": names(v, &standing),
             "extendsApplied": extends_applied,
         }),
         Settlement::Contested { contested, sides } => serde_json::json!({
@@ -141,8 +145,8 @@ async fn holding(g: &Group) -> (SqlitePool, HeldStore) {
         held.hold_entry(&entry).await.unwrap();
     }
     let keys = g.store.0.lock().unwrap().keys.clone();
-    for ((epoch, name), wrap) in keys {
-        held.hold_key(epoch, &name, &wrap).await.unwrap();
+    for ((epoch, kc, name), wrap) in keys {
+        held.hold_key(epoch, &kc, &name, &wrap).await.unwrap();
     }
     Session::open_as_peer(&pool, held.clone(), &g.b)
         .await
@@ -165,7 +169,8 @@ async fn hold_wrap(
         key,
     )
     .unwrap();
-    held.hold_key(epoch, &hex::encode(member.did), &wrap)
+    let kc = kc_name(&epoch_commitment(key, &g.group, epoch));
+    held.hold_key(epoch, &kc, &hex::encode(member.did), &wrap)
         .await
         .unwrap();
 }
@@ -216,6 +221,55 @@ async fn a_device_that_removed_nobody_is_not_asked_about_a_removed_signer() {
 
     let session = Session::open_as_peer(&pool, held, &g.b).await.unwrap();
     assert_eq!(session.roster().head, entry_hash(&removal));
+}
+
+/// B read an entry that later lost, so it returns to the last common entry and takes the winner.
+#[tokio::test]
+async fn a_device_that_applied_a_losing_entry_adopts_the_winner() {
+    let g = group().await;
+    let (c, state) = with_c(&g).await;
+    let (pool, held) = holding(&g).await;
+    let d = new_member();
+    let mut losing = draft(Op::Add, &c);
+    losing.add = Some(vec![member_subject(
+        &d.sig_public,
+        &d.kem_public,
+        Role::Device,
+    )]);
+    let losing = build_entry(&g.group, Some(&state), losing, &[&c, &d]);
+    held.hold_entry(&losing).await.unwrap();
+    Session::open_as_peer(&pool, held.clone(), &g.b)
+        .await
+        .unwrap();
+    assert_eq!(roster_entries(&pool).await.unwrap().last(), Some(&losing));
+
+    let (winner, key) = removing(&g, &state, &g.a, &c, &[&g.a, &g.b, &g.recovery]);
+    hold_wrap(&held, &g, 1, &key, &g.b).await;
+    held.hold_entry(&winner).await.unwrap();
+    let session = Session::open_as_peer(&pool, held, &g.b).await.unwrap();
+    assert_eq!(session.roster().head, entry_hash(&winner));
+    assert_eq!(roster_entries(&pool).await.unwrap().last(), Some(&winner));
+    assert_eq!(session.current_key(), key);
+}
+
+#[tokio::test]
+async fn a_device_left_out_by_a_changed_roster_deletes_nothing_by_itself() {
+    let g = group().await;
+    let (c, state) = with_c(&g).await;
+    let (pool, held) = holding(&g).await;
+    let mut applied = draft(Op::Rename, &g.b);
+    applied.meta = Some(std::iter::once((hex::encode(g.b.did), "x".to_owned())).collect());
+    let applied = build_entry(&g.group, Some(&state), applied, &[&g.b]);
+    held.hold_entry(&applied).await.unwrap();
+    Session::open_as_peer(&pool, held.clone(), &g.b)
+        .await
+        .unwrap();
+
+    let (removal, _) = removing(&g, &state, &g.a, &g.b, &[&g.a, &c, &g.recovery]);
+    held.hold_entry(&removal).await.unwrap();
+    let opened = Session::open_as_peer(&pool, held, &g.b).await;
+    assert!(matches!(opened, Err(EngineError::RemovalUnconfirmed)));
+    assert_eq!(roster_entries(&pool).await.unwrap().last(), Some(&applied));
 }
 
 #[tokio::test]

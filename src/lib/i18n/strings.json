@@ -1886,7 +1886,7 @@
   "linked_save": "Save",
   "linked_cancel": "Cancel",
   "linked_remove": "Remove",
-  "linked_remove_confirm": "Remove %s? It stops syncing and can't read anything written after this.",
+  "linked_remove_confirm": "Remove %s? It stops syncing and can't read anything written after this. Changes it made that this device hasn't received yet may not arrive.",
   "linked_add_device": "Link a device",
   "linked_add_title": "Scan with your other device",
   "linked_add_subtitle": "In Flow on the other device, open Linked devices and scan this code. Both devices then show the same six digits.",

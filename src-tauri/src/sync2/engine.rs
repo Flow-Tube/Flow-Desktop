@@ -10,8 +10,8 @@ use sqlx::SqlitePool;
 use super::batches::{IncomingBatch, batch_content, mark_sent, outgoing_batches, parse_batch};
 use super::bootstrap::Snapshot;
 use super::envelope::{
-    Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
-    seal_object, verify_object,
+    Header, ObjectType, ParsedObject, StreamPosition, ZERO_HASH, cut_chain, next_in_stream,
+    open_object, parse_object, seal_object, verify_object,
 };
 use super::epoch::{Purpose, check_epoch_key, open_chain, purpose_key};
 use super::forks::{Settlement, settle_roster};
@@ -22,7 +22,9 @@ use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
-use super::roster::{Entry, Op, Role, RosterState, entry_hash, replay_roster};
+use super::roster::{
+    Entry, Op, Role, RosterState, Sender, check_sender, entry_hash, replay_roster,
+};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
@@ -246,13 +248,14 @@ pub struct Session<'a, S> {
     group: [u8; 16],
     state: RosterState,
     entries: Vec<Entry>,
-    signing_keys: BTreeMap<String, [u8; 32]>,
     commitments: BTreeMap<u32, Vec<u8>>,
     keys: BTreeMap<u32, Vec<u8>>,
     /// The commitments of entries that lost a fork and stand, by the epoch they start.
     standing: BTreeMap<u32, Vec<Vec<u8>>>,
     /// The keys of those entries unwrapped so far, by commitment.
     standing_keys: BTreeMap<Vec<u8>, Vec<u8>>,
+    /// The hashes found walking down from each removed sender's cut.
+    cut_walks: BTreeMap<String, BTreeMap<u64, [u8; 32]>>,
     reading: Reading,
 }
 
@@ -260,15 +263,6 @@ fn decode_b64(value: &str) -> Result<Vec<u8>> {
     URL_SAFE_NO_PAD
         .decode(value)
         .map_err(|_| Error::RosterFormat.into())
-}
-
-/// The signing key of every device the roster ever added, by `did`.
-pub fn signing_keys(entries: &[Entry]) -> Result<BTreeMap<String, [u8; 32]>> {
-    let mut keys = BTreeMap::new();
-    for subject in entries.iter().flat_map(|e| e.add.iter().flatten()) {
-        keys.insert(subject.did.clone(), array(&decode_b64(&subject.sig)?));
-    }
-    Ok(keys)
 }
 
 /// `None` when reading an object fails a protocol check: that object is discarded, which stops
@@ -291,12 +285,13 @@ pub(super) fn contained<T>(read: Result<T>) -> Result<Option<T>> {
 pub fn verify_logged<'b>(
     bytes: &'b [u8],
     group: &[u8; 16],
-    signing_keys: &BTreeMap<String, [u8; 32]>,
+    senders: &BTreeMap<String, Sender>,
     did: &str,
     seq: u64,
 ) -> std::result::Result<ParsedObject<'b>, Error> {
     let object = parse_object(bytes, group)?;
-    verify_object(&object, signing_keys.get(did).ok_or(Error::Sender)?)?;
+    let sender = check_sender(senders, did, object.header.epoch, seq)?;
+    verify_object(&object, &sender.sig)?;
     if hex::encode(object.header.sender) != did || object.header.seq != seq {
         return Err(Error::Replay);
     }
@@ -356,11 +351,11 @@ impl<'a, S: Store> Session<'a, S> {
             group,
             state: replay_roster(&entries)?,
             entries,
-            signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
             standing: BTreeMap::new(),
             standing_keys: BTreeMap::new(),
+            cut_walks: BTreeMap::new(),
         })
     }
 
@@ -443,9 +438,8 @@ impl<'a, S: Store> Session<'a, S> {
         self.unwrap_current().await
     }
 
-    /// Finds the signing keys and epoch commitments in the entries applied.
+    /// Finds the epoch commitments in the entries applied.
     pub(super) fn index_entries(&mut self) -> Result<()> {
-        self.signing_keys = signing_keys(&self.entries)?;
         for epoch in self.entries.iter().filter_map(|e| e.epoch.as_ref()) {
             self.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
         }
@@ -724,7 +718,9 @@ impl<'a, S: Store> Session<'a, S> {
                     parse_log_path(&change.path).map(|(did, seq)| (did, seq, change.path))
                 })
                 .filter(|(did, seq, _)| {
-                    *did != me && pulled.positions.get(did).is_none_or(|p| p.seq < *seq)
+                    *did != me
+                        && pulled.positions.get(did).is_none_or(|p| p.seq < *seq)
+                        && !self.past_its_cut(did, *seq)
                 })
                 .collect();
             loop {
@@ -799,6 +795,7 @@ impl<'a, S: Store> Session<'a, S> {
         let read = async {
             let object = self.verified(&bytes, did, seq)?;
             let position = next_in_stream(last, &object)?;
+            self.check_cut_chain(did, &object, last).await?;
             Ok((position, self.open_content(&object).await?))
         };
         contained(read.await)
@@ -815,14 +812,80 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(verify_logged(
             bytes,
             &self.group,
-            &self.signing_keys,
+            &self.state.senders,
             did,
             seq,
         )?)
     }
 
-    pub(super) fn signing_keys(&self) -> &BTreeMap<String, [u8; 32]> {
-        &self.signing_keys
+    pub(super) fn senders(&self) -> &BTreeMap<String, Sender> {
+        &self.state.senders
+    }
+
+    /// An object a removed sender wrote after its log ended, which never gets read, so it isn't
+    /// missing either.
+    fn past_its_cut(&self, did: &str, seq: u64) -> bool {
+        self.state.senders.get(did).is_some_and(|sender| {
+            sender.until.is_some() && sender.cut.as_ref().is_none_or(|cut| seq > cut.seq)
+        })
+    }
+
+    /// Checks a removed sender's chain from where this device has read, down from the hash its
+    /// removal names, before anything of it is applied (spec/store.md, A removed sender's chain).
+    async fn check_cut_chain(
+        &mut self,
+        did: &str,
+        object: &ParsedObject<'_>,
+        last: Option<&StreamPosition>,
+    ) -> Result<()> {
+        let seq = object.header.seq;
+        if self
+            .state
+            .senders
+            .get(did)
+            .is_none_or(|s| s.until.is_none())
+        {
+            return Ok(());
+        }
+        if !self
+            .cut_walks
+            .get(did)
+            .is_some_and(|w| w.contains_key(&seq))
+        {
+            let (from, hash) = last.map_or((0, &ZERO_HASH), |l| (l.seq, &l.hash));
+            let walk = self.walk_cut(did, from, Some(hash)).await?;
+            self.cut_walks.insert(did.to_owned(), walk);
+        }
+        let wanted = self.cut_walks.get(did).and_then(|walk| walk.get(&seq));
+        if wanted == Some(&object.hash) {
+            Ok(())
+        } else {
+            Err(Error::Prev.into())
+        }
+    }
+
+    /// The hashes of a removed sender's log from its cut down to `from`.
+    pub(super) async fn walk_cut(
+        &self,
+        did: &str,
+        from: u64,
+        hash: Option<&[u8; 32]>,
+    ) -> Result<BTreeMap<u64, [u8; 32]>> {
+        let cut = self
+            .state
+            .senders
+            .get(did)
+            .and_then(|sender| sender.cut.as_ref())
+            .ok_or(Error::Sender)?;
+        let top = hex::decode(&cut.hash)
+            .ok()
+            .filter(|h| h.len() == 32)
+            .ok_or(Error::Prev)?;
+        cut_chain((cut.seq, array(&top)), from, hash, &self.group, |seq| {
+            let path = log_path(did, seq);
+            async move { Ok::<_, EngineError>(self.store.get_object(&path).await?) }
+        })
+        .await
     }
 
     /// A store login, under its own rule (spec/store.md, Store logins): only under the chain's key

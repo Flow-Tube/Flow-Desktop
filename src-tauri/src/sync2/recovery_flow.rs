@@ -100,6 +100,7 @@ fn replacement(
             Role::Recovery,
         )]),
         remove: Some(vec![old.to_owned()]),
+        cut: None,
         epoch: Some(epoch.field),
         meta: None,
     };
@@ -188,6 +189,7 @@ pub async fn restore<S: Store>(
             Role::Device,
         )]),
         remove: None,
+        cut: None,
         epoch: Some(restored.field),
         meta: Some(BTreeMap::from([(
             hex::encode(device.did),

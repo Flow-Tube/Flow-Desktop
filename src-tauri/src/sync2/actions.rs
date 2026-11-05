@@ -21,7 +21,7 @@ use super::profile_links::{link_profile, reading};
 use super::recovery_flow::replace_recovery_key;
 use super::roster::{Role, entry_hash};
 use super::server::{ServerStore, StoreError};
-use super::service::{LastSync, is_syncing, last_sync, sync_soon};
+use super::service::{LastSync, is_syncing, last_sync, sync_now, sync_soon};
 use super::setup::{
     create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
 };
@@ -542,9 +542,13 @@ pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {
 
 pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
     let local = local(app).await?;
+    // The cut names what this device has read, so read what it can first (spec/protocol.md, Removal).
+    if let Err(error) = sync_now(app).await {
+        tracing::warn!(target: "flow::sync2", kind = error.kind(), "removing without a last sync");
+    }
     let record = linked(&local.pool).await?;
     let session = open_session(&local, &record).await?;
-    remove_device(&session, &local.device, id).await?;
+    remove_device(&local.pool, &session, &local.device, id).await?;
     snapshot_soon(&local.pool).await?;
     sync_soon(app);
     Ok(())

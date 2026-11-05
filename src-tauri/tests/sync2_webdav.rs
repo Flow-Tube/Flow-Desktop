@@ -713,7 +713,9 @@ async fn the_notice_follows_a_removal_and_not_a_leave_and_clears_with_a_login() 
     a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
         .await
         .unwrap();
-    remove_device(&a, &g.a, &hex::encode(c.did)).await.unwrap();
+    remove_device(&pool_a, &a, &g.a, &hex::encode(c.did))
+        .await
+        .unwrap();
 
     a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
         .await

@@ -35,6 +35,7 @@ impl<S: Store> Session<'_, S> {
                 signer: hex::encode(self.device().did),
                 add: None,
                 remove: None,
+                cut: None,
                 epoch: Some(epoch.field),
                 meta: None,
             };

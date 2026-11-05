@@ -23,7 +23,7 @@ use super::keys::MemberSecrets;
 use super::lan::{LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_transcript};
 use super::paths::parse_log_path;
 use super::payload::{decode_payload, encode_payload};
-use super::roster::{Entry, Role, parse_entry};
+use super::roster::{Entry, Role, Sender, parse_entry};
 use super::sealed::{open, random_bytes, seal};
 use super::store::Store;
 use super::{Error, array};
@@ -364,7 +364,7 @@ pub type LiveSink = Arc<dyn Fn(Vec<u8>) + Send + Sync>;
 pub struct Holder {
     pub store: HeldStore,
     pub group: [u8; 16],
-    pub signing_keys: BTreeMap<String, [u8; 32]>,
+    pub senders: BTreeMap<String, Sender>,
     pub live: LiveSink,
 }
 
@@ -373,7 +373,7 @@ impl Holder {
         Self {
             store,
             group: *session.group(),
-            signing_keys: session.signing_keys().clone(),
+            senders: session.senders().clone(),
             live,
         }
     }
@@ -413,7 +413,7 @@ impl Holder {
             },
             Request::Put { path } => {
                 let accepted = parse_log_path(&path).is_some_and(|(did, seq)| {
-                    verify_logged(bytes, &self.group, &self.signing_keys, &did, seq).is_ok()
+                    verify_logged(bytes, &self.group, &self.senders, &did, seq).is_ok()
                 });
                 if accepted {
                     self.store.put_object(&path, bytes.to_vec()).await?;

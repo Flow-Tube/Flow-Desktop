@@ -37,7 +37,21 @@ fn view(state: &RosterState) -> Value {
         .iter()
         .map(|(did, m)| json!({ "did": did, "role": if m.role == Role::Device { "device" } else { "recovery" }, "used": m.used }))
         .collect();
-    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "members": members })
+    let senders: Vec<Value> = state
+        .senders
+        .iter()
+        .map(|(did, s)| {
+            let mut view = json!({ "did": did, "role": if s.role == Role::Device { "device" } else { "recovery" }, "since": s.since });
+            if let Some(until) = s.until {
+                view["until"] = json!(until);
+            }
+            if let Some(cut) = &s.cut {
+                view["cut"] = json!({ "seq": cut.seq, "hash": cut.hash });
+            }
+            view
+        })
+        .collect();
+    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "members": members, "senders": senders })
 }
 
 #[test]

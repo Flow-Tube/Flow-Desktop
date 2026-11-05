@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use sqlx::SqlitePool;
 
 use super::engine::{Result, Session};
 use super::entries::{Draft, build_entry, epoch_draft};
@@ -11,9 +12,10 @@ use super::epoch::seal_chain;
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
 use super::meta::seal_device_meta;
-use super::roster::{Entry, EpochField, Op, RosterState, apply_entry};
+use super::roster::{Cut, Entry, EpochField, Op, RosterState, apply_entry};
 use super::sealed::random_bytes;
 use super::server::Appended;
+use super::state::streams;
 use super::store::Store;
 use super::wrap::wrap_epoch_key;
 use super::{Error, array};
@@ -83,11 +85,19 @@ pub async fn append_checked<S: Store>(
 
 /// Removes `removed` and starts a new epoch it never receives. The store also refuses it at once.
 pub async fn remove_device<S: Store>(
+    pool: &SqlitePool,
     session: &Session<'_, S>,
     device: &MemberSecrets,
     removed: &str,
 ) -> Result<()> {
     let state = session.roster();
+    let cut = streams(pool).await?.remove(removed).map(|position| {
+        let cut = Cut {
+            seq: position.seq,
+            hash: hex::encode(position.hash),
+        };
+        BTreeMap::from([(removed.to_owned(), cut)])
+    });
     let epoch = new_epoch(
         session.group(),
         state.epoch + 1,
@@ -99,6 +109,7 @@ pub async fn remove_device<S: Store>(
         signer: hex::encode(device.did),
         add: None,
         remove: Some(vec![removed.to_owned()]),
+        cut,
         epoch: Some(epoch.field),
         meta: None,
     };
@@ -110,11 +121,20 @@ pub async fn remove_device<S: Store>(
 /// start the next epoch (spec/protocol.md, Leaving).
 pub async fn leave_group<S: Store>(session: &Session<'_, S>, device: &MemberSecrets) -> Result<()> {
     let me = hex::encode(device.did);
+    let record = session.record();
+    let cut = (record.own_seq > 0).then(|| {
+        let cut = Cut {
+            seq: record.own_seq.unsigned_abs(),
+            hash: record.own_prev.clone(),
+        };
+        BTreeMap::from([(me.clone(), cut)])
+    });
     let draft = Draft {
         op: Op::Leave,
         signer: me.clone(),
         add: None,
         remove: Some(vec![me]),
+        cut,
         epoch: None,
         meta: None,
     };
@@ -144,6 +164,7 @@ pub async fn rename_device<S: Store>(
         signer: hex::encode(device.did),
         add: None,
         remove: None,
+        cut: None,
         epoch: None,
         meta: Some(BTreeMap::from([(
             did.to_owned(),

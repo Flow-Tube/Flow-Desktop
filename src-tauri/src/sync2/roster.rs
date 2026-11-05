@@ -50,6 +50,14 @@ pub struct EpochField {
     pub to: Vec<String>,
 }
 
+/// The last object of a removed device's log that its removal accepts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Cut {
+    pub seq: u64,
+    pub hash: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
@@ -63,6 +71,8 @@ pub struct Entry {
     pub add: Option<Vec<Subject>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remove: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut: Option<BTreeMap<String, Cut>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epoch: Option<EpochField>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -78,6 +88,19 @@ pub struct Member {
     pub used: bool,
 }
 
+/// A member of any time: what step 2 of reading an envelope checks a sender against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sender {
+    pub sig: [u8; 32],
+    pub role: Role,
+    /// The epoch in force when it was added.
+    pub since: u32,
+    /// The last epoch it could write under, once it was removed or left.
+    pub until: Option<u32>,
+    /// Absent when its removal accepts none of its log.
+    pub cut: Option<Cut>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RosterState {
     pub group: String,
@@ -88,8 +111,29 @@ pub struct RosterState {
     /// A device left in this epoch, so the next device to write must rotate first.
     pub rotate: bool,
     pub members: BTreeMap<String, Member>,
-    pub seen: BTreeSet<String>,
+    pub senders: BTreeMap<String, Sender>,
 }
+
+/// Step 2 of reading an envelope: a device, within the epochs it belonged to, and no further along
+/// its log than its removal accepted.
+pub fn check_sender<'s>(
+    senders: &'s BTreeMap<String, Sender>,
+    did: &str,
+    epoch: u32,
+    seq: u64,
+) -> Result<&'s Sender> {
+    let sender = senders.get(did).ok_or(Error::Sender)?;
+    let gone = sender
+        .until
+        .is_some_and(|until| epoch > until || sender.cut.as_ref().is_none_or(|cut| seq > cut.seq));
+    if sender.role != Role::Device || epoch < sender.since || gone {
+        return Err(Error::Sender);
+    }
+    Ok(sender)
+}
+
+/// The largest integer every implementation reads exactly.
+const MAX_SEQ: u64 = (1 << 53) - 1;
 
 fn is_hex(value: &str, bytes: usize) -> bool {
     value.len() == bytes * 2
@@ -112,6 +156,12 @@ fn well_formed(entry: &Entry) -> bool {
         && is_hex(&entry.group, 16)
         && is_hex(&entry.prev, 32)
         && is_hex(&entry.signer, 16)
+        && entry.cut.as_ref().is_none_or(|cut| {
+            !cut.is_empty()
+                && cut.iter().all(|(did, cut)| {
+                    is_hex(did, 16) && is_hex(&cut.hash, 32) && (1..=MAX_SEQ).contains(&cut.seq)
+                })
+        })
         && entry.add.as_ref().is_none_or(|add| {
             !add.is_empty()
                 && add.iter().all(|s| {
@@ -174,6 +224,13 @@ fn check_shape(entry: &Entry) -> Result<()> {
         Op::Rename => (0, false, false),
         Op::Recovery => (1, true, true),
     };
+    if let Some(cut) = &entry.cut {
+        let removed = entry.remove.iter().flatten();
+        let named = cut.keys().all(|did| removed.clone().any(|id| id == did));
+        if !matches!(entry.op, Op::Remove | Op::Leave) || !named {
+            return Err(Error::RosterOp);
+        }
+    }
     let added = entry.add.as_ref().map_or(0, Vec::len);
     if added != add || remove != entry.remove.is_some() || epoch != entry.epoch.is_some() {
         return Err(Error::RosterOp);
@@ -206,13 +263,13 @@ fn check_shape(entry: &Entry) -> Result<()> {
     Ok(())
 }
 
-fn check_subject(subject: &Subject, seen: &BTreeSet<String>) -> Result<Member> {
+fn check_subject(subject: &Subject, senders: &BTreeMap<String, Sender>) -> Result<Member> {
     let (Some(sig), Some(kem)) = (b64::<32>(&subject.sig), b64::<32>(&subject.kem)) else {
         return Err(Error::RosterFormat);
     };
     if !is_valid_signing_key(&sig)
         || hex::encode(member_id(&sig, &kem)) != subject.did
-        || seen.contains(&subject.did)
+        || senders.contains_key(&subject.did)
     {
         return Err(Error::RosterKey);
     }
@@ -286,10 +343,10 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
         check_group_id(entry)?;
     }
 
-    let mut seen = state.map(|s| s.seen.clone()).unwrap_or_default();
+    let mut senders = state.map(|s| s.senders.clone()).unwrap_or_default();
     let mut added = BTreeMap::new();
     for subject in entry.add.iter().flatten() {
-        added.insert(subject.did.clone(), check_subject(subject, &seen)?);
+        added.insert(subject.did.clone(), check_subject(subject, &senders)?);
     }
 
     let signer = check_signer(entry, state, &added)?;
@@ -322,6 +379,10 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
             return Err(Error::RosterOp);
         }
         members.remove(id);
+        if let Some(sender) = senders.get_mut(id) {
+            sender.until = state.map(|s| s.epoch);
+            sender.cut = entry.cut.as_ref().and_then(|cut| cut.get(id)).cloned();
+        }
     }
     if entry.op == Op::Leave && !members.values().any(|m| m.role == Role::Device) {
         return Err(Error::RosterOp);
@@ -335,8 +396,21 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
             },
         );
     }
+    let epoch = entry
+        .epoch
+        .as_ref()
+        .map_or_else(|| state.map_or(0, |s| s.epoch), |e| e.n);
     for (id, member) in added {
-        seen.insert(id.clone());
+        senders.insert(
+            id.clone(),
+            Sender {
+                sig: member.sig,
+                role: member.role,
+                since: epoch,
+                until: None,
+                cut: None,
+            },
+        );
         members.insert(id, member);
     }
 
@@ -367,17 +441,14 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
         group: entry.group.clone(),
         seq: entry.seq,
         head: entry_hash(entry),
-        epoch: entry
-            .epoch
-            .as_ref()
-            .map_or_else(|| state.map_or(0, |s| s.epoch), |e| e.n),
+        epoch,
         kc: entry.epoch.as_ref().map_or_else(
             || state.map(|s| s.kc.clone()).unwrap_or_default(),
             |e| e.kc.clone(),
         ),
         rotate: entry.op == Op::Leave || (entry.epoch.is_none() && state.is_some_and(|s| s.rotate)),
         members,
-        seen,
+        senders,
     })
 }
 

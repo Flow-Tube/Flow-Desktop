@@ -40,6 +40,7 @@ async fn desktop_talks_to_a_real_server() {
             member_subject(&recovery.sig_public, &recovery.kem_public, Role::Recovery),
         ]),
         remove: None,
+        cut: None,
         epoch: Some(epoch_draft(
             &epoch_key,
             &group,

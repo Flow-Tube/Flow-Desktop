@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::batches::{IncomingBatch, parse_batch};
 use super::blob::open_blob;
 use super::engine::{Content, Result, Session, contained};
-use super::envelope::{ObjectType, StreamPosition};
+use super::envelope::{ObjectType, ParsedObject, StreamPosition};
 use super::epoch::purpose_key;
 use super::paths::{blob_path, log_path, parse_log_path};
 use super::payload::decode_payload;
@@ -179,6 +179,7 @@ impl<S: Store> Session<'_, S> {
                 if object.header.object_type != ObjectType::Snapshot {
                     return Ok(None);
                 }
+                self.check_manifest_chain(did, &object).await?;
                 let content = self.open_content(&object).await?;
                 Ok(Some((object.header.epoch, content)))
             };
@@ -193,6 +194,25 @@ impl<S: Store> Session<'_, S> {
             }
         }
         Ok(found)
+    }
+
+    /// A removed sender's manifest counts only if the walk down from its cut reaches it.
+    async fn check_manifest_chain(&self, did: &str, object: &ParsedObject<'_>) -> Result<()> {
+        if self
+            .roster()
+            .senders
+            .get(did)
+            .is_none_or(|s| s.until.is_none())
+        {
+            return Ok(());
+        }
+        let seq = object.header.seq;
+        let walk = self.walk_cut(did, seq - 1, None).await?;
+        if walk.get(&seq) == Some(&object.hash) {
+            Ok(())
+        } else {
+            Err(Error::Prev.into())
+        }
     }
 
     pub(super) async fn snapshot_batches(

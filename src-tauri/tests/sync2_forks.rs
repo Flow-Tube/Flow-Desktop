@@ -7,9 +7,11 @@ use std::collections::BTreeSet;
 
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
 use flow_desktop_lib::sync2::entries::{build_entry, epoch_draft, member_subject};
+use flow_desktop_lib::sync2::epoch::epoch_commitment;
 use flow_desktop_lib::sync2::forks::{Settlement, settle_roster};
 use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
+use flow_desktop_lib::sync2::paths::kc_name;
 use flow_desktop_lib::sync2::roster::{
     Entry, Op, Role, RosterState, apply_entry, entry_hash, parse_entry,
 };
@@ -58,10 +60,12 @@ fn outcome(v: &Value, settled: Settlement) -> Value {
     match settled {
         Settlement::Apply {
             chain,
+            standing,
             extends_applied,
         } => serde_json::json!({
             "outcome": "apply",
             "chain": chain_names(v, &chain),
+            "standing": names(v, &standing),
             "extendsApplied": extends_applied,
         }),
         Settlement::Contested { contested, sides } => serde_json::json!({
@@ -141,8 +145,8 @@ async fn holding(g: &Group) -> (SqlitePool, HeldStore) {
         held.hold_entry(&entry).await.unwrap();
     }
     let keys = g.store.0.lock().unwrap().keys.clone();
-    for ((epoch, name), wrap) in keys {
-        held.hold_key(epoch, &name, &wrap).await.unwrap();
+    for ((epoch, kc, name), wrap) in keys {
+        held.hold_key(epoch, &kc, &name, &wrap).await.unwrap();
     }
     Session::open_as_peer(&pool, held.clone(), &g.b)
         .await
@@ -165,7 +169,8 @@ async fn hold_wrap(
         key,
     )
     .unwrap();
-    held.hold_key(epoch, &hex::encode(member.did), &wrap)
+    let kc = kc_name(&epoch_commitment(key, &g.group, epoch));
+    held.hold_key(epoch, &kc, &hex::encode(member.did), &wrap)
         .await
         .unwrap();
 }

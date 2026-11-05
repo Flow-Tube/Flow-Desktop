@@ -414,7 +414,8 @@ impl Store for ServerStore {
         }
         decode_empty(response).await.map(|()| Appended::Done)
     }
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
+    /// The server names a wrap by epoch alone: only one entry can start an epoch there.
+    async fn key(&self, epoch: u32, _kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
         self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
             .await
     }

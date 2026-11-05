@@ -202,12 +202,7 @@ impl<S: Store> Session<'_, S> {
         manifest: &Manifest,
     ) -> Result<Vec<IncomingBatch>> {
         let writer_id = hex::decode(writer).map_err(|_| Error::Sender)?;
-        let key = purpose_key(
-            &self.epoch_key(epoch).await?,
-            self.group(),
-            epoch,
-            ObjectType::Snapshot.purpose(),
-        );
+        let group = *self.group();
         let mut batches = Vec::new();
         for part in &manifest.parts {
             let blob = self
@@ -216,7 +211,12 @@ impl<S: Store> Session<'_, S> {
                 .await?
                 .ok_or(Error::BlobHash)?;
             let hash = hex::decode(&part.blob).map_err(|_| Error::BlobHash)?;
-            let payload = open_blob(&key, self.group(), epoch, &writer_id, &blob, &hash)?;
+            let payload = self
+                .open_under(epoch, |key| {
+                    let key = purpose_key(key, &group, epoch, ObjectType::Snapshot.purpose());
+                    open_blob(&key, &group, epoch, &writer_id, &blob, &hash)
+                })
+                .await?;
             batches.push(parse_batch(&decode_payload(&payload)?)?);
         }
         Ok(batches)

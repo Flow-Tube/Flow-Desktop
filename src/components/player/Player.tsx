@@ -27,6 +27,12 @@ import {
   representationLabelWithCodec,
   type DashVideoTrack,
 } from "../../lib/dashVideoTrack";
+import {
+  manifestVideoTracks,
+  pickDashStart,
+  readMeasuredSpeedKbps,
+  recordVideoSegmentSpeed,
+} from "../../lib/dashStartQuality";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
@@ -160,6 +166,7 @@ type DashPlayerController = {
   getBitrateInfoListFor: (type: string) => DashBitrateInfo[];
   getRepresentationsByType: (type: string) => DashRepresentationInfo[];
   setRepresentationForTypeById: (type: string, id: string, forceReplace?: boolean) => void;
+  setInitialMediaSettingsFor: (type: string, value: { id: string }) => void;
   extend?: (parentNameString: string, childInstance: () => unknown, override: boolean) => void;
   getQualityFor: (type: string) => number;
   getCurrentRepresentationForType: (type: string) => DashRepresentationInfo | null;
@@ -524,6 +531,8 @@ export const Player: React.FC<PlayerProps> = ({
       null
     );
   }, [qualities, selectedQualityId, supportedQualities]);
+  const dashStartChoiceRef = useRef<StreamVariant | null>(null);
+  dashStartChoiceRef.current = selectedQualityId && selectedQualityId !== "auto" ? selectedQuality : null;
 
   const selectedAudioTrack = audioTracks.find((track) => track.id === selectedAudioTrackId)
     || audioTracks.find((track) => track.isDefault)
@@ -1468,6 +1477,22 @@ export const Player: React.FC<PlayerProps> = ({
     });
 
     const dashEvents = dashjs.MediaPlayer.events;
+    // STREAM_INITIALIZED is too late for this: the first segment has already been requested.
+    const onManifestLoaded = (event: unknown) => {
+      const speedKbps = readMeasuredSpeedKbps();
+      const start = pickDashStart({
+        selected: dashStartChoiceRef.current,
+        tracks: manifestVideoTracks((event as { data?: unknown } | null)?.data)
+          .filter((track) => isVariantSupported(track.codec)),
+        preferredCodec: useAppSettingsStore.getState().values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264",
+        speedKbps,
+      });
+      if (start.bitrateKbps) {
+        player.updateSettings({ streaming: { abr: { initialBitrate: { video: start.bitrateKbps } } } });
+      }
+      if (start.setId) player.setInitialMediaSettingsFor("video", { id: start.setId });
+      logPlayerEventRef.current("dash-start-quality", { ...start, speedKbps });
+    };
     const onPlaybackWaiting = () => {
       logPlayerEventRef.current("dash-playback-waiting", {
         readyState: video.readyState,
@@ -1583,6 +1608,8 @@ export const Player: React.FC<PlayerProps> = ({
       }
     };
 
+    player.on(dashEvents.MANIFEST_LOADED, onManifestLoaded);
+    player.on(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
     player.on(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
     player.on(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
     player.on(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);
@@ -1599,6 +1626,8 @@ export const Player: React.FC<PlayerProps> = ({
 
     return () => {
       dashReadyRef.current = false;
+      player.off(dashEvents.MANIFEST_LOADED, onManifestLoaded);
+      player.off(dashEvents.FRAGMENT_LOADING_COMPLETED, recordVideoSegmentSpeed);
       player.off(dashEvents.PLAYBACK_WAITING, onPlaybackWaiting);
       player.off(dashEvents.BUFFER_LEVEL_STATE_CHANGED, onBufferStateChanged);
       player.off(dashEvents.QUALITY_CHANGE_REQUESTED, onQualityChangeRequested);

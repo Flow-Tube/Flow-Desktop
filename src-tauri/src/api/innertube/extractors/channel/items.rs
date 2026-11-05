@@ -286,4 +286,33 @@ mod tests {
         assert_eq!(video.channel_id.as_deref(), Some("UCguest"));
         assert_eq!(video.channel_name, "Guest");
     }
+
+    #[test]
+    fn channel_lockup_without_byline_is_claimed_by_owner() {
+        let node = json!({
+            "lockupViewModel": {
+                "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                "contentId": "vid00000001",
+                "rendererContext": { "commandContext": { "onTap": { "innertubeCommand": {
+                    "watchEndpoint": { "videoId": "vid00000001" }
+                } } } },
+                "metadata": { "lockupMetadataViewModel": {
+                    "title": { "content": "The worst week in cybersecurity..." },
+                    "metadata": { "contentMetadataViewModel": { "metadataRows": [
+                        { "metadataParts": [
+                            { "text": { "content": "1.2M views" } },
+                            { "text": { "content": "20 hours ago" } }
+                        ] }
+                    ] } }
+                } }
+            }
+        });
+        let Some(ChannelItem::Video(video)) = item_of(&node, &owner()) else {
+            panic!("video");
+        };
+        assert_eq!(video.channel_id.as_deref(), Some("UCowner"));
+        assert_eq!(video.channel_name, "Owner");
+        assert_eq!(video.view_count_text.as_deref(), Some("1.2M views"));
+        assert_eq!(video.published_text.as_deref(), Some("20 hours ago"));
+    }
 }

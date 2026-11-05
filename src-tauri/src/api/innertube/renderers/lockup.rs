@@ -127,6 +127,84 @@ fn is_upcoming_text(text: &str) -> bool {
     text.starts_with("Premieres") || text.starts_with("Scheduled for") || text.ends_with("waiting")
 }
 
+fn is_compact_count_pattern(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.len() > 12 {
+        return false;
+    }
+    let chars: Vec<char> = trimmed.chars().collect();
+    if !chars.first().is_some_and(char::is_ascii_digit) {
+        return false;
+    }
+    let last = match chars.last() {
+        Some(c) => *c,
+        None => return false,
+    };
+    let is_multiplier = matches!(
+        last,
+        'k' | 'K' | 'm' | 'M' | 'b' | 'B' | '千' | '万' | '萬' | '億' | '亿' | '천' | '만'
+    );
+    if !is_multiplier {
+        return false;
+    }
+    chars[..chars.len() - 1]
+        .iter()
+        .all(|c| c.is_ascii_digit() || matches!(*c, '.' | ',' | ' ' | '\u{a0}' | '\u{202f}'))
+}
+
+fn is_view_or_stream_count(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let has_digits = text.chars().any(|c| c.is_ascii_digit());
+    if !has_digits && !lower.starts_with("no view") {
+        return false;
+    }
+    const COUNT_KEYWORDS: &[&str] = &[
+        "view",
+        "watching",
+        "waiting",
+        "streamed",
+        "aufruf",
+        "vue",
+        "просмотр",
+        "visualizz",
+        "visualizaç",
+        "vista",
+        "reproducc",
+        "weergav",
+        "wyświetl",
+        "visning",
+        "näyttö",
+        "katselukert",
+        "lượt xem",
+        "조회수",
+        "回視聴",
+        "次观看",
+        "次觀看",
+        "mio.",
+        "mio",
+        "тыс",
+        "млн",
+        "млрд",
+    ];
+    COUNT_KEYWORDS.iter().any(|&kw| lower.contains(kw)) || is_compact_count_pattern(text)
+}
+
+fn is_count_part(part: &Part<'_>) -> bool {
+    if part.has_icon {
+        return true;
+    }
+    if part.is_age() || is_upcoming_text(part.text) {
+        return false;
+    }
+    is_view_or_stream_count(part.text) || part.label.is_some_and(is_view_or_stream_count)
+}
+
+fn is_stats_row(row: &[Part<'_>]) -> bool {
+    row.iter()
+        .any(|part| part.is_age() || is_upcoming_text(part.text))
+        || row.first().is_some_and(is_count_part)
+}
+
 fn thumbnail(lockup: &Value) -> Option<String> {
     let image = &lockup["contentImage"];
     thumbnail_url_from_array(&image["thumbnailViewModel"]["image"]["sources"]).or_else(|| {
@@ -229,24 +307,29 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
 
     let all_rows: Vec<Vec<Part<'_>>> = rows(lockup).iter().map(parts).collect();
     let all_parts = || all_rows.iter().flatten();
-    let channel = all_rows
-        .first()
-        .and_then(|row| row.first())
-        .filter(|part| !part.has_icon && !part.is_age());
+    // A byline row names the channel. On channel tabs and other surfaces where the
+    // viewer is already on the channel's page, lockupViewModel omits the byline row
+    // and begins directly with the metadata/stats row (views and date).
+    let byline_row = all_rows
+        .iter()
+        .find(|row| !row.is_empty() && !is_stats_row(row));
+    let channel = byline_row.and_then(|row| row.first());
     let published = all_parts()
         .find(|part| part.is_age() || is_upcoming_text(part.text))
         .map(|part| part.age_text().to_string());
-    // Rows after the first hold the counts; the first row is the byline.
+    // Search for the view or stream count in rows that carry stats.
     let views = all_parts()
         .find(|part| part.has_icon)
         .or_else(|| {
-            // An abbreviated count in another language ("23 Mio.") reads as no
-            // number, but is still the count the card shows.
-            all_rows.iter().skip(1).flatten().find(|part| {
-                !part.is_age()
-                    && !is_upcoming_text(part.text)
-                    && part.text.chars().any(|c| c.is_ascii_digit())
-            })
+            all_rows
+                .iter()
+                .filter(|row| is_stats_row(row))
+                .flatten()
+                .find(|part| {
+                    !part.is_age()
+                        && !is_upcoming_text(part.text)
+                        && (is_count_part(part) || part.text.chars().any(|c| c.is_ascii_digit()))
+                })
         })
         .map(|part| part.text.to_string());
     let image = &metadata(lockup)["image"];
@@ -451,5 +534,52 @@ mod tests {
         assert_eq!(item.channel_id.as_deref(), Some("UC1"));
         assert_eq!(item.collaborators.len(), 2);
         assert!(lockup_item(&json!({ "contentType": "LOCKUP_CONTENT_TYPE_CHANNEL" })).is_none());
+    }
+
+    #[test]
+    fn channel_tab_lockups_without_byline_do_not_parse_views_as_channel_name() {
+        let lockup = video_lockup(&json!([
+            { "metadataParts": [
+                { "text": { "content": "1.2M views" } },
+                { "text": { "content": "20 hours ago" } }
+            ] }
+        ]));
+        let item = lockup_item(&lockup).unwrap();
+        assert_eq!(item.channel_name, "");
+        assert_eq!(item.view_count_text.as_deref(), Some("1.2M views"));
+        assert_eq!(item.published_text.as_deref(), Some("20 hours ago"));
+        let video = related_to_video(item);
+        assert_eq!(video.channel_name, "");
+        assert_eq!(video.view_count, Some(1_200_000));
+        assert_eq!(video.view_count_text.as_deref(), Some("1.2M views"));
+        assert_eq!(video.published_text.as_deref(), Some("20 hours ago"));
+    }
+
+    #[test]
+    fn channel_name_with_numbers_is_not_treated_as_stats() {
+        let lockup = video_lockup(&json!([
+            { "metadataParts": [{ "text": { "content": "Studio 54" } }] },
+            { "metadataParts": [
+                { "text": { "content": "500K views" } },
+                { "text": { "content": "2 years ago" } }
+            ] }
+        ]));
+        let item = lockup_item(&lockup).unwrap();
+        assert_eq!(item.channel_name, "Studio 54");
+        assert_eq!(item.view_count_text.as_deref(), Some("500K views"));
+        assert_eq!(item.published_text.as_deref(), Some("2 years ago"));
+        let video = related_to_video(item);
+        assert_eq!(video.channel_name, "Studio 54");
+        assert_eq!(video.view_count, Some(500_000));
+    }
+
+    #[test]
+    fn channel_tab_live_stream_without_byline_reads_watching_count() {
+        let lockup = video_lockup(&json!([
+            { "metadataParts": [{ "text": { "content": "1.5K watching" } }] }
+        ]));
+        let item = lockup_item(&lockup).unwrap();
+        assert_eq!(item.channel_name, "");
+        assert_eq!(item.view_count_text.as_deref(), Some("1.5K watching"));
     }
 }

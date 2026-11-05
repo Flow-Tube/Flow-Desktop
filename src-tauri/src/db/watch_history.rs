@@ -34,7 +34,16 @@ impl WatchHistoryRecord {
     }
 }
 
+fn sanitize_channel_name(name: Option<&str>) -> Option<&str> {
+    name.map(str::trim).filter(|n| {
+        !n.is_empty()
+            && !n.to_lowercase().contains("view")
+            && !n.to_lowercase().contains("watching")
+    })
+}
+
 pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord) -> AppResult<()> {
+    let clean_channel_name = sanitize_channel_name(record.channel_name.as_deref());
     // Check if record already exists for this video_id
     let existing = sqlx::query("SELECT id FROM watch_history WHERE video_id = ? LIMIT 1")
         .bind(&record.video_id)
@@ -50,7 +59,7 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
         sqlx::query(
             "UPDATE watch_history SET
                 title = ?,
-                channel_name = ?,
+                channel_name = COALESCE(?, channel_name),
                 channel_id = COALESCE(?, channel_id),
                 watch_date = ?,
                 watch_duration_seconds = CASE WHEN ? AND is_music
@@ -62,7 +71,7 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
              WHERE id = ?",
         )
         .bind(&record.title)
-        .bind(&record.channel_name)
+        .bind(clean_channel_name)
         .bind(&record.channel_id)
         .bind(&record.watch_date)
         .bind(record.is_music)
@@ -82,7 +91,7 @@ pub async fn upsert_watch_record(pool: &SqlitePool, record: &WatchHistoryRecord)
         )
         .bind(&record.video_id)
         .bind(&record.title)
-        .bind(&record.channel_name)
+        .bind(clean_channel_name)
         .bind(&record.channel_id)
         .bind(&record.watch_date)
         .bind(record.watch_duration_seconds)
@@ -108,6 +117,7 @@ pub async fn upsert_watch_records_bulk(
     let mut tx = pool.begin().await.map_err(AppError::from)?;
 
     for record in records {
+        let clean_channel_name = sanitize_channel_name(record.channel_name.as_deref());
         let existing = sqlx::query("SELECT id FROM watch_history WHERE video_id = ? LIMIT 1")
             .bind(&record.video_id)
             .fetch_optional(&mut *tx)
@@ -119,7 +129,7 @@ pub async fn upsert_watch_records_bulk(
             sqlx::query(
                 "UPDATE watch_history SET
                     title = ?,
-                    channel_name = ?,
+                    channel_name = COALESCE(?, channel_name),
                     channel_id = COALESCE(?, channel_id),
                     watch_date = ?,
                     watch_duration_seconds = ?,
@@ -130,7 +140,7 @@ pub async fn upsert_watch_records_bulk(
                  WHERE id = ?",
             )
             .bind(&record.title)
-            .bind(&record.channel_name)
+            .bind(clean_channel_name)
             .bind(&record.channel_id)
             .bind(&record.watch_date)
             .bind(record.watch_duration_seconds)
@@ -148,7 +158,7 @@ pub async fn upsert_watch_records_bulk(
             )
             .bind(&record.video_id)
             .bind(&record.title)
-            .bind(&record.channel_name)
+            .bind(clean_channel_name)
             .bind(&record.channel_id)
             .bind(&record.watch_date)
             .bind(record.watch_duration_seconds)
@@ -172,7 +182,12 @@ pub async fn get_watch_history(
     offset: i64,
 ) -> AppResult<Vec<WatchHistoryRecord>> {
     let records = sqlx::query_as::<_, WatchHistoryRecord>(
-        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
+        "SELECT id, video_id, title,
+            CASE
+                WHEN channel_name LIKE '%view%' OR channel_name LIKE '%watching%' THEN NULL
+                ELSE channel_name
+            END AS channel_name,
+            channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
          FROM watch_history
          ORDER BY watch_date DESC, created_at DESC
          LIMIT ? OFFSET ?"
@@ -215,7 +230,12 @@ pub async fn get_music_history(
     offset: i64,
 ) -> AppResult<Vec<WatchHistoryRecord>> {
     let records = sqlx::query_as::<_, WatchHistoryRecord>(
-        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
+        "SELECT id, video_id, title,
+            CASE
+                WHEN channel_name LIKE '%view%' OR channel_name LIKE '%watching%' THEN NULL
+                ELSE channel_name
+            END AS channel_name,
+            channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
          FROM watch_history
          WHERE is_music = 1
          ORDER BY watch_date DESC, created_at DESC
@@ -236,7 +256,12 @@ pub async fn get_watch_record(
     video_id: &str,
 ) -> AppResult<Option<WatchHistoryRecord>> {
     let record = sqlx::query_as::<_, WatchHistoryRecord>(
-        "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
+        "SELECT id, video_id, title,
+            CASE
+                WHEN channel_name LIKE '%view%' OR channel_name LIKE '%watching%' THEN NULL
+                ELSE channel_name
+            END AS channel_name,
+            channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
          FROM watch_history
          WHERE video_id = ?
          LIMIT 1"

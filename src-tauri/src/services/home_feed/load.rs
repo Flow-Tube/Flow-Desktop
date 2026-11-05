@@ -833,7 +833,12 @@ impl HomeFeedService {
             .filter_map(|(id, name, uploads)| Some((id, name, uploads?)))
             .collect();
         let mut fresh = Vec::new();
-        for (channel, name, uploads) in fetched {
+        for (channel, name, mut uploads) in fetched {
+            for card in &mut uploads {
+                if card.video.channel_name.is_empty() {
+                    card.video.channel_name.clone_from(&name);
+                }
+            }
             let kept = channel_memory::keep_uploads(uploads, now);
             let _ = channel_memory::save_uploads(pool, &channel, &name, &kept, now).await;
             fresh.extend(kept);
@@ -900,7 +905,12 @@ impl HomeFeedService {
         })
         .await;
         for (channel, name, uploads) in fetched {
-            if let Some(uploads) = uploads {
+            if let Some(mut uploads) = uploads {
+                for card in &mut uploads {
+                    if card.video.channel_name.is_empty() {
+                        card.video.channel_name.clone_from(&name);
+                    }
+                }
                 let mut kept: Vec<Card> = uploads
                     .into_iter()
                     .filter(|c| !c.is_short() && !c.video.is_live)

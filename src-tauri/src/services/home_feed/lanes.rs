@@ -7,7 +7,7 @@ use super::card::Card;
 use super::filters::{
     FRESH_SUB_WINDOW_MS, dynamic_fresh_sub_slots, is_fresh_subscribed, keep_showable,
 };
-use super::inputs::Inputs;
+use super::inputs::{Inputs, Subscriptions};
 use super::mixer::{Blend, FeedSource, Page, blend, quotas};
 use super::seeds::{GraphCandidate, apply_graph_boost};
 use crate::flow_neuro::gates::LANE_RELEVANCE_FLOOR;
@@ -162,11 +162,16 @@ impl Lanes {
     }
 }
 
-fn with_avatar(mut card: Card, avatars: &HashMap<String, String>) -> Card {
+fn with_subscription_metadata(mut card: Card, subscriptions: &Subscriptions) -> Card {
     if card.video.channel_avatar_url.is_none()
-        && let Some(avatar) = avatars.get(card.channel_id())
+        && let Some(avatar) = subscriptions.avatars.get(card.channel_id())
     {
         card.video.channel_avatar_url = Some(avatar.clone());
+    }
+    if card.video.channel_name.is_empty()
+        && let Some(name) = subscriptions.names.get(card.channel_id())
+    {
+        card.video.channel_name = name.clone();
     }
     card
 }
@@ -191,10 +196,9 @@ pub async fn build(
 ) -> Lanes {
     let subs = inputs.subscriptions.ids();
     let hidden = |card: &Card| inputs.exclusions.hides(card);
-    let avatars = &inputs.subscriptions.avatars;
     let subs_pool: Vec<Card> = distinct_by(
         keep_showable(raw.subs, &inputs.watched, &hidden, now_ms, false)
-            .map(|c| with_avatar(c, avatars))
+            .map(|c| with_subscription_metadata(c, &inputs.subscriptions))
             .collect(),
         |c| c.id().to_string(),
     );
@@ -301,7 +305,6 @@ fn fresh_lanes(
     now_ms: u64,
 ) -> (Vec<Card>, Vec<Card>) {
     let hidden = |card: &Card| inputs.exclusions.hides(card);
-    let avatars = &inputs.subscriptions.avatars;
     // The store covers every followed channel with real publish times, so a fresh upload shows
     // even when its channel missed this load's fetch window.
     let rss_fresh = rss.into_iter().filter(|card| {
@@ -320,7 +323,7 @@ fn fresh_lanes(
                     .cloned(),
             )
             .filter(|c| !inputs.watched.contains(c.id()))
-            .map(|c| with_avatar(c, avatars))
+            .map(|c| with_subscription_metadata(c, &inputs.subscriptions))
             .collect(),
         |c| c.id().to_string(),
     );

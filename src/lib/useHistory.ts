@@ -60,6 +60,15 @@ export function getHistoryDateLabel(watchDate: string, now = new Date()) {
   });
 }
 
+function cleanChannelName(channelName: string | null | undefined): string {
+  if (!channelName) return "";
+  const trimmed = channelName.trim();
+  if (/\bviews?\b|\bwatching\b/i.test(trimmed) || /^\d+(\.\d+)?[kKmMbB]$/.test(trimmed)) {
+    return "";
+  }
+  return trimmed;
+}
+
 export function mapHistoryRecordToVideo(record: WatchHistoryRecord): HistoryVideo {
   const duration = record.totalDurationSeconds ?? 0;
   const progress = duration > 0
@@ -69,7 +78,7 @@ export function mapHistoryRecordToVideo(record: WatchHistoryRecord): HistoryVide
   return {
     id: record.videoId,
     title: record.title,
-    channelName: record.channelName || "Unknown Channel",
+    channelName: cleanChannelName(record.channelName) || "Unknown Channel",
     channelId: record.channelId || null,
     thumbnailUrl: `https://i.ytimg.com/vi/${record.videoId}/hqdefault.jpg`,
     durationSeconds: record.totalDurationSeconds || 0,

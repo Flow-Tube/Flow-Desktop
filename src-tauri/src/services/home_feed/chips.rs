@@ -331,6 +331,11 @@ async fn ranked(rec: &RecommendationService, known: &Known, cards: Vec<Card>) ->
         {
             card.video.channel_avatar_url = Some(avatar.clone());
         }
+        if card.video.channel_name.is_empty()
+            && let Some(name) = known.inputs.subscriptions.names.get(card.channel_id())
+        {
+            card.video.channel_name = name.clone();
+        }
     }
     ranked
 }

@@ -49,6 +49,7 @@ pub enum Request {
     },
     Key {
         epoch: u32,
+        kc: String,
         name: String,
     },
     List {
@@ -215,20 +216,20 @@ fn did_bytes(did: &str) -> Result<[u8; 16]> {
         .ok_or(EngineError::Unexpected)
 }
 
-/// The connecting side: says hello under the current epoch, with the port it listens on, and
-/// checks the advertiser.
+/// The connecting side: says hello under `epoch`, whose key is `epoch_key`, with the port it listens
+/// on, and checks the advertiser. [`EngineError::LanUnreachable`] when the advertiser didn't answer.
 pub async fn hello_as_client<S, T>(
     mut socket: WsChannel<S>,
     session: &Session<'_, T>,
     device: &MemberSecrets,
+    (epoch, epoch_key): (u32, &[u8]),
     listening: Option<u16>,
 ) -> Result<(Framed<S>, String)>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: Store,
 {
-    let epoch = session.roster().epoch;
-    let lan_key = purpose_key(session.current_key(), session.group(), epoch, Purpose::Lan);
+    let lan_key = purpose_key(epoch_key, session.group(), epoch, Purpose::Lan);
     let me = hex::encode(device.did);
     let client_nonce = random_bytes::<NONCE_SIZE>();
     let mut hello = json!({ "did": me, "n": URL_SAFE_NO_PAD.encode(client_nonce) });
@@ -239,7 +240,10 @@ where
         .send_binary(hello_frame(epoch, &lan_key, 1, &hello)?)
         .await?;
 
-    let reply = socket.recv_binary().await?;
+    let reply = socket
+        .recv_binary()
+        .await
+        .map_err(|_| EngineError::LanUnreachable)?;
     if frame_epoch(&reply)? != epoch {
         return Err(EngineError::Unexpected);
     }
@@ -391,7 +395,7 @@ impl Holder {
                 },
                 Vec::new(),
             ),
-            Request::Key { epoch, name } => match self.store.key(epoch, &name).await? {
+            Request::Key { epoch, kc, name } => match self.store.key(epoch, &kc, &name).await? {
                 Some(bytes) => (found(true), bytes),
                 None => (found(false), Vec::new()),
             },
@@ -549,9 +553,10 @@ impl Link {
         response.entries.ok_or(EngineError::Unexpected)
     }
 
-    pub async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
+    pub async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
         self.bytes(Request::Key {
             epoch,
+            kc: kc.to_owned(),
             name: name.to_owned(),
         })
         .await

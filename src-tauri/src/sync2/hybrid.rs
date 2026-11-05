@@ -137,13 +137,13 @@ impl<S: Store + Sync> Store for HybridStore<S> {
         Ok(appended)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        if let Some(bytes) = self.held.key(epoch, name).await? {
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        if let Some(bytes) = self.held.key(epoch, kc, name).await? {
             return Ok(Some(bytes));
         }
-        let fetched = self.store.key(epoch, name).await?;
+        let fetched = self.store.key(epoch, kc, name).await?;
         if let Some(bytes) = &fetched {
-            self.held.hold_key(epoch, name, bytes).await?;
+            self.held.hold_key(epoch, kc, name, bytes).await?;
         }
         Ok(fetched)
     }

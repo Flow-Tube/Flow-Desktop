@@ -101,8 +101,11 @@ async fn onto_webdav(g: &Group, url: &str) {
         let memory = g.store.0.lock().unwrap();
         (memory.roster.clone(), memory.keys.clone())
     };
-    for ((epoch, name), wrap) in keys {
-        client.put(&wrap_path(epoch, &name), wrap).await.unwrap();
+    for ((epoch, kc, name), wrap) in keys {
+        client
+            .put(&wrap_path(epoch, &kc, &name), wrap)
+            .await
+            .unwrap();
     }
     for entry in &roster {
         let path = roster_path(entry.seq, &entry_hash(entry));

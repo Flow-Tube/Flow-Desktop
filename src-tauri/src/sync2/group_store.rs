@@ -73,8 +73,8 @@ impl Store for GroupStore {
         each!(self, store => store.append_roster(head, entry, wraps, chain).await)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        each!(self, store => store.key(epoch, name).await)
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        each!(self, store => store.key(epoch, kc, name).await)
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {

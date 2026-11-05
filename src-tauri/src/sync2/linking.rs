@@ -21,6 +21,7 @@ use super::lan_peers::service_port;
 use super::mailbox::Mailbox;
 use super::meta::seal_device_meta;
 use super::pairing::{pairing_aad, pairing_keys, pairing_slot};
+use super::paths::kc_name;
 use super::payload::{decode_payload, encode_payload};
 use super::pipe::{AnyPipe, KEY_SIZE, MailboxPipe, Pipe, dial};
 use super::roster::{
@@ -508,7 +509,8 @@ pub async fn finish_lan_join<P: Pipe>(
     for entry in roster {
         held.hold_entry(entry).await?;
     }
-    held.hold_key(state.epoch, &me.did, &wrap).await?;
+    held.hold_key(state.epoch, &kc_name(&commitment), &me.did, &wrap)
+        .await?;
     add_roster_entries(pool, roster).await?;
     save_group(pool, &GroupRecord::on_lan(welcome.group, welcome.link)).await?;
     say_done(channel).await

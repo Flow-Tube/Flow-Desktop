@@ -7,12 +7,15 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sqlx::SqlitePool;
 
 use super::engine::{Result, Session};
-use super::entries::{Draft, build_entry, epoch_draft};
+use super::entries::{Draft, build_entry, epoch_draft, member_subject};
 use super::epoch::seal_chain;
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
 use super::meta::seal_device_meta;
-use super::roster::{Cut, Entry, EpochField, Op, RosterState, apply_entry};
+use super::recovery::{recovery_keys, recovery_words};
+use super::roster::{
+    Cut, Entry, EpochField, Op, Role, RosterState, apply_entry, installer_gone, recovery_member,
+};
 use super::sealed::random_bytes;
 use super::server::Appended;
 use super::state::streams;
@@ -64,6 +67,23 @@ pub fn member_keys(state: &RosterState, except: Option<&str>) -> Result<Vec<([u8
         .map_err(|_| Error::RosterFormat.into())
 }
 
+/// The ids and X25519 keys of everyone after `gone` leave and `joining` come in.
+pub(super) fn members_after(
+    state: &RosterState,
+    gone: &[String],
+    joining: &[&MemberSecrets],
+) -> Result<Vec<([u8; 16], [u8; 32])>> {
+    let mut members = Vec::new();
+    for (did, member) in state.members.iter().filter(|(did, _)| !gone.contains(did)) {
+        members.push((
+            array(&hex::decode(did).map_err(|_| Error::RosterFormat)?),
+            member.kem,
+        ));
+    }
+    members.extend(joining.iter().map(|m| (m.did, m.kem_public)));
+    Ok(members)
+}
+
 /// Checks an entry against the roster this session verified, then appends it.
 pub async fn append_checked<S: Store>(
     session: &Session<'_, S>,
@@ -84,37 +104,66 @@ pub async fn append_checked<S: Store>(
 }
 
 /// Removes `removed` and starts a new epoch it never receives. The store also refuses it at once.
-pub async fn remove_device<S: Store>(
+///
+/// When the device that set the recovery key goes, the same entry replaces it (spec/protocol.md,
+/// Validation rule 8), and this returns the new words to show once.
+pub async fn remove_devices<S: Store>(
     pool: &SqlitePool,
     session: &Session<'_, S>,
     device: &MemberSecrets,
-    removed: &str,
-) -> Result<()> {
+    removed: &[String],
+) -> Result<Option<String>> {
     let state = session.roster();
-    let cut = streams(pool).await?.remove(removed).map(|position| {
-        let cut = Cut {
-            seq: position.seq,
-            hash: hex::encode(position.hash),
-        };
-        BTreeMap::from([(removed.to_owned(), cut)])
-    });
+    let positions = streams(pool).await?;
+    let cut: BTreeMap<String, Cut> = removed
+        .iter()
+        .filter_map(|did| {
+            let position = positions.get(did)?;
+            let cut = Cut {
+                seq: position.seq,
+                hash: hex::encode(position.hash),
+            };
+            Some((did.clone(), cut))
+        })
+        .collect();
+    let secret: [u8; 32] = random_bytes();
+    let next = recovery_keys(&secret);
+    let replacing = installer_gone(&state.members, removed);
+    let mut gone = removed.to_vec();
+    if replacing {
+        let (old, _) = recovery_member(&state.members).ok_or(Error::RosterFormat)?;
+        gone.push(old.clone());
+    }
+    let joining: &[&MemberSecrets] = if replacing { &[&next] } else { &[] };
     let epoch = new_epoch(
         session.group(),
         state.epoch + 1,
-        &member_keys(state, Some(removed))?,
+        &members_after(state, &gone, joining)?,
         session.current_key(),
     )?;
     let draft = Draft {
         op: Op::Remove,
         signer: hex::encode(device.did),
-        add: None,
-        remove: Some(vec![removed.to_owned()]),
-        cut,
+        add: replacing.then(|| {
+            vec![member_subject(
+                &next.sig_public,
+                &next.kem_public,
+                Role::Recovery,
+            )]
+        }),
+        remove: Some(gone),
+        cut: (!cut.is_empty()).then_some(cut),
         epoch: Some(epoch.field),
         meta: None,
     };
-    let entry = build_entry(session.group(), Some(state), draft, &[device]);
-    append_checked(session, &entry, &epoch.wraps, Some(&epoch.chain)).await
+    let signers: &[&MemberSecrets] = if replacing {
+        &[device, &next]
+    } else {
+        &[device]
+    };
+    let entry = build_entry(session.group(), Some(state), draft, signers);
+    append_checked(session, &entry, &epoch.wraps, Some(&epoch.chain)).await?;
+    Ok(replacing.then(|| recovery_words(&secret)))
 }
 
 /// Takes this device out of the group with an entry that changes no keys: the devices that stay

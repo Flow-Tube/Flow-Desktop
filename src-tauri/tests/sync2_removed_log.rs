@@ -6,7 +6,7 @@ mod sync2_common;
 use std::collections::BTreeMap;
 
 use flow_desktop_lib::sync2::engine::{Session, verify_logged};
-use flow_desktop_lib::sync2::membership::{leave_group, remove_device};
+use flow_desktop_lib::sync2::membership::{leave_group, remove_devices};
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::state::{load_group, streams};
 use sqlx::SqlitePool;
@@ -83,7 +83,7 @@ async fn what_a_removed_device_writes_later_is_not_read() {
     write(&pool_b, &mut b, "aaaaaaaaaaa").await;
     let before = batches_a_new_reader_gets(&g).await;
     read_all(&pool_a, &mut a).await;
-    remove_device(&pool_a, &a, &g.a, &hex::encode(g.b.did))
+    remove_devices(&pool_a, &a, &g.a, &[hex::encode(g.b.did)])
         .await
         .unwrap();
 
@@ -94,6 +94,29 @@ async fn what_a_removed_device_writes_later_is_not_read() {
 }
 
 #[tokio::test]
+async fn what_a_removed_device_writes_later_is_deleted() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    let mut a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    let mut b = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
+    write(&pool_b, &mut b, "aaaaaaaaaaa").await;
+    read_all(&pool_a, &mut a).await;
+    let cut = own_seq(&pool_b).await;
+    let did = hex::encode(g.b.did);
+    remove_devices(&pool_a, &a, &g.a, std::slice::from_ref(&did))
+        .await
+        .unwrap();
+    write(&pool_b, &mut b, "bbbbbbbbbbb").await;
+
+    let mut a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    read_all(&pool_a, &mut a).await;
+
+    let objects = g.store.0.lock().unwrap();
+    assert!(objects.objects.contains_key(&log_path(&did, cut)));
+    assert!(!objects.objects.contains_key(&log_path(&did, cut + 1)));
+}
+
+#[tokio::test]
 async fn a_removal_that_read_nothing_of_a_log_ends_it_at_the_start() {
     let g = group().await;
     let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
@@ -101,7 +124,7 @@ async fn a_removal_that_read_nothing_of_a_log_ends_it_at_the_start() {
     let mut b = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
     write(&pool_b, &mut b, "aaaaaaaaaaa").await;
     assert!(batches_a_new_reader_gets(&g).await > 0);
-    remove_device(&pool_a, &a, &g.a, &hex::encode(g.b.did))
+    remove_devices(&pool_a, &a, &g.a, &[hex::encode(g.b.did)])
         .await
         .unwrap();
 
@@ -119,7 +142,7 @@ async fn an_object_replaced_below_the_cut_is_not_applied() {
     assert!(batches_a_new_reader_gets(&g).await > 0);
     read_all(&pool_a, &mut a).await;
     let other = other_copy(&g, &["ccccccccccc", "ddddddddddd"]).await;
-    remove_device(&pool_a, &a, &g.a, &hex::encode(g.b.did))
+    remove_devices(&pool_a, &a, &g.a, &[hex::encode(g.b.did)])
         .await
         .unwrap();
 
@@ -140,7 +163,7 @@ async fn an_object_replaced_at_the_cut_stops_the_log_before_anything_is_applied(
     read_all(&pool_a, &mut a).await;
     let last = own_seq(&pool_b).await;
     let other = other_copy(&g, &["aaaaaaaaaaa", "ccccccccccc"]).await;
-    remove_device(&pool_a, &a, &g.a, &hex::encode(g.b.did))
+    remove_devices(&pool_a, &a, &g.a, &[hex::encode(g.b.did)])
         .await
         .unwrap();
 
@@ -169,7 +192,9 @@ async fn a_device_that_read_past_the_cut_keeps_its_place() {
     let reached = own_seq(&pool_b).await;
     assert_eq!(streams(&pool_r).await.unwrap()[&did].seq, reached);
     assert!(streams(&pool_a).await.unwrap()[&did].seq < reached);
-    remove_device(&pool_a, &a, &g.a, &did).await.unwrap();
+    remove_devices(&pool_a, &a, &g.a, std::slice::from_ref(&did))
+        .await
+        .unwrap();
 
     let mut reader = Session::open(&pool_r, &g.store, &g.a).await.unwrap();
     read_all(&pool_r, &mut reader).await;
@@ -206,7 +231,9 @@ async fn a_lan_peer_can_t_hand_over_an_object_above_the_cut() {
     read_all(&pool_a, &mut a).await;
     let did = hex::encode(g.b.did);
     let cut = own_seq(&pool_b).await;
-    remove_device(&pool_a, &a, &g.a, &did).await.unwrap();
+    remove_devices(&pool_a, &a, &g.a, std::slice::from_ref(&did))
+        .await
+        .unwrap();
     write(&pool_b, &mut b, "bbbbbbbbbbb").await;
 
     let senders = head(&g.store).senders;
@@ -244,7 +271,9 @@ async fn a_snapshot_of_a_removed_device_counts_only_if_its_chain_reaches_the_cut
         g.store
             .put(&log_path(&did, manifest), genuine[&manifest].clone());
 
-        remove_device(&pool_a, &a, &g.a, &did).await.unwrap();
+        remove_devices(&pool_a, &a, &g.a, std::slice::from_ref(&did))
+            .await
+            .unwrap();
         if replaced {
             g.store
                 .put(&log_path(&did, manifest), other[&manifest].clone());

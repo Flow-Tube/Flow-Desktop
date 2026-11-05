@@ -152,6 +152,9 @@ impl<S: Store> Session<'_, S> {
         let Some(link) = self.reading().active.clone() else {
             return Ok(());
         };
+        if self.roster().recovery_due {
+            return Ok(());
+        }
         let collections = exported
             .iter()
             .map(|c| (c.collection.key(), c.ndjson.as_slice()))
@@ -161,6 +164,9 @@ impl<S: Store> Session<'_, S> {
 
     /// Writes the `profiles` collection as a snapshot of its own.
     pub async fn write_profiles_snapshot(&mut self, pool: &SqlitePool) -> Result<()> {
+        if self.roster().recovery_due {
+            return Ok(());
+        }
         let ndjson = profile_names::ndjson(pool).await?;
         self.write_snapshot_of(pool, None, vec![(PROFILES, ndjson.as_slice())])
             .await

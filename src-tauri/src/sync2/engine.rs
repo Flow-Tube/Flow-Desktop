@@ -22,6 +22,7 @@ use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
+use super::recovery_notice::note_recovery_changes;
 use super::roster::{
     Entry, Op, Role, RosterState, Sender, check_sender, entry_hash, replay_roster,
 };
@@ -56,6 +57,8 @@ pub enum EngineError {
     NotLinked,
     #[error("this device was removed from its sync group")]
     Removed,
+    #[error("the recovery key has to be replaced before anything is written")]
+    RecoveryDue,
     #[error("the roster that leaves this device out replaces entries it had applied")]
     RemovalUnconfirmed,
     #[error("two sides of the roster removed each other")]
@@ -113,6 +116,7 @@ impl EngineError {
             Self::Local(error) => error.kind(),
             Self::NotLinked => "linkedNotLinked",
             Self::Removed => "linkedRemoved",
+            Self::RecoveryDue => "linkedRecoveryDue",
             Self::RemovalUnconfirmed => "linkedRemovalUnconfirmed",
             Self::Contested => "linkedContested",
             Self::RosterRolledBack => "linkedRolledBack",
@@ -161,6 +165,8 @@ pub struct Pulled {
     links: Vec<Option<String>>,
     acks: BTreeMap<String, VersionVector>,
     manifests: Vec<Logged>,
+    /// Objects removed senders wrote after their logs ended, which [`Session::finish`] deletes.
+    past_cut: Vec<String>,
 }
 
 impl Pulled {
@@ -403,6 +409,7 @@ impl<'a, S: Store> Session<'a, S> {
             self.keys.clear();
             self.commitments.clear();
         }
+        note_recovery_changes(pool, &hex::encode(self.device.did), &self.entries, &chain).await?;
         if self.record.kind == StoreKind::WebDav {
             let known: BTreeSet<String> = self.entries.iter().map(entry_hash).collect();
             let removal = chain
@@ -568,6 +575,9 @@ impl<'a, S: Store> Session<'a, S> {
         object_type: ObjectType,
         content: &[u8],
     ) -> Result<()> {
+        if self.state.recovery_due {
+            return Err(EngineError::RecoveryDue);
+        }
         let seq = u64::try_from(self.record.own_seq + 1).map_err(|_| Error::Length)?;
         let epoch = self.state.epoch;
         let header = Header {
@@ -618,6 +628,9 @@ impl<'a, S: Store> Session<'a, S> {
         let Some(link) = self.reading.active.clone() else {
             return Ok(0);
         };
+        if self.state.recovery_due {
+            return Ok(0);
+        }
         let outgoing = outgoing_batches(pool, exported, &self.state.head, &link, now_ms()).await?;
         for batch in &outgoing.batches {
             self.write(pool, ObjectType::Changes, &batch.content)
@@ -632,7 +645,7 @@ impl<'a, S: Store> Session<'a, S> {
     /// Uploads the `profiles` records this device changed since it last sent them.
     pub async fn push_profiles(&mut self, pool: &SqlitePool) -> Result<()> {
         let unsent = profile_names::unsent(pool).await?;
-        if unsent.is_empty() {
+        if unsent.is_empty() || self.state.recovery_due {
             return Ok(());
         }
         let lines: Vec<Vec<u8>> = unsent.iter().map(to_canonical_json).collect();
@@ -712,17 +725,18 @@ impl<'a, S: Store> Session<'a, S> {
                 return Ok(pulled);
             }
             // Objects of one sender may be listed out of order: retry while a pass makes progress.
-            let mut waiting: Vec<(String, u64, String)> = changes
+            let (past_cut, mut waiting): (Vec<_>, Vec<_>) = changes
                 .into_iter()
                 .filter_map(|change| {
                     parse_log_path(&change.path).map(|(did, seq)| (did, seq, change.path))
                 })
                 .filter(|(did, seq, _)| {
-                    *did != me
-                        && pulled.positions.get(did).is_none_or(|p| p.seq < *seq)
-                        && !self.past_its_cut(did, *seq)
+                    *did != me && pulled.positions.get(did).is_none_or(|p| p.seq < *seq)
                 })
-                .collect();
+                .partition(|(did, seq, _)| self.past_its_cut(did, *seq));
+            pulled
+                .past_cut
+                .extend(past_cut.into_iter().map(|(_, _, path)| path));
             loop {
                 let before = waiting.len();
                 let mut still = Vec::new();
@@ -952,7 +966,12 @@ impl<'a, S: Store> Session<'a, S> {
             record_manifest(pool, logged).await?;
         }
         record_links(pool, &pulled.links).await?;
-        if pulled.consumed > 0 {
+        for path in &pulled.past_cut {
+            if self.delete_or_stop(path).await.is_none() {
+                break;
+            }
+        }
+        if pulled.consumed > 0 && !self.state.recovery_due {
             let ack = Ack {
                 vv: pulled
                     .positions

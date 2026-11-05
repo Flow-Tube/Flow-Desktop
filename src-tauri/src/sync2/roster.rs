@@ -86,6 +86,8 @@ pub struct Member {
     pub kem: [u8; 32],
     pub role: Role,
     pub used: bool,
+    /// For a recovery member from a `recovery` or `remove` entry: the device that signed it.
+    pub installer: Option<String>,
 }
 
 /// A member of any time: what step 2 of reading an envelope checks a sender against.
@@ -110,6 +112,9 @@ pub struct RosterState {
     pub kc: String,
     /// A device left in this epoch, so the next device to write must rotate first.
     pub rotate: bool,
+    /// The device that set the recovery key is gone, so it must be replaced before anything is
+    /// written.
+    pub recovery_due: bool,
     pub members: BTreeMap<String, Member>,
     pub senders: BTreeMap<String, Sender>,
 }
@@ -218,7 +223,8 @@ fn check_shape(entry: &Entry) -> Result<()> {
     let (add, remove, epoch) = match entry.op {
         Op::Genesis => (2, false, true),
         Op::Add | Op::Restore => (1, false, entry.op == Op::Restore),
-        Op::Remove => (0, true, true),
+        // Takes a subject when it replaces the recovery key too, which `check_replacement` decides.
+        Op::Remove => (entry.add.as_ref().map_or(0, Vec::len), true, true),
         Op::Leave => (0, true, false),
         Op::Rotate => (0, false, true),
         Op::Rename => (0, false, false),
@@ -254,7 +260,7 @@ fn check_shape(entry: &Entry) -> Result<()> {
     roles.sort();
     let expected: &[Role] = match entry.op {
         Op::Genesis => &[Role::Device, Role::Recovery],
-        Op::Recovery => &[Role::Recovery],
+        Op::Recovery | Op::Remove => &[Role::Recovery],
         _ => &[Role::Device],
     };
     if added > 0 && roles != expected {
@@ -278,6 +284,7 @@ fn check_subject(subject: &Subject, senders: &BTreeMap<String, Sender>) -> Resul
         kem,
         role: subject.role,
         used: false,
+        installer: None,
     })
 }
 
@@ -318,6 +325,38 @@ fn check_chain(state: Option<&RosterState>, entry: &Entry) -> Result<()> {
     }
 }
 
+/// The current recovery key, and its id.
+pub fn recovery_member(members: &BTreeMap<String, Member>) -> Option<(&String, &Member)> {
+    members.iter().find(|(_, m)| m.role == Role::Recovery)
+}
+
+/// The current recovery key was set by a device that is gone, or goes with `removed`.
+pub fn installer_gone(members: &BTreeMap<String, Member>, removed: &[String]) -> bool {
+    recovery_member(members)
+        .and_then(|(_, member)| member.installer.as_ref())
+        .is_some_and(|installer| !members.contains_key(installer) || removed.contains(installer))
+}
+
+/// A removal replaces the recovery key exactly when the device that set it is gone.
+fn check_replacement(entry: &Entry, state: Option<&RosterState>) -> Result<()> {
+    let Some(state) = state else {
+        return Ok(());
+    };
+    if entry.op == Op::Rotate && state.recovery_due {
+        return Err(Error::RosterOp);
+    }
+    if entry.op != Op::Remove {
+        return Ok(());
+    }
+    let removed = entry.remove.as_deref().unwrap_or_default();
+    let required = installer_gone(&state.members, removed);
+    let names = recovery_member(&state.members).is_some_and(|(did, _)| removed.contains(did));
+    if required != entry.add.is_some() || required != names {
+        return Err(Error::RosterOp);
+    }
+    Ok(())
+}
+
 /// A genesis must carry the id its keys commit to (spec/crypto.md, Group id).
 fn check_group_id(entry: &Entry) -> Result<()> {
     let keys = |role| {
@@ -342,6 +381,7 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
     if entry.op == Op::Genesis {
         check_group_id(entry)?;
     }
+    check_replacement(entry, state)?;
 
     let mut senders = state.map(|s| s.senders.clone()).unwrap_or_default();
     let mut added = BTreeMap::new();
@@ -368,14 +408,15 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
     }
 
     let mut members = state.map(|s| s.members.clone()).unwrap_or_default();
-    let removed_role = if entry.op == Op::Recovery {
-        Role::Recovery
-    } else {
-        Role::Device
-    };
+    let replaces = entry.op == Op::Recovery || (entry.op == Op::Remove && entry.add.is_some());
     for id in entry.remove.iter().flatten() {
         let wrong_target = (*id == entry.signer) != (entry.op == Op::Leave);
-        if wrong_target || members.get(id).is_none_or(|m| m.role != removed_role) {
+        let Some(member) = members.get(id).filter(|_| !wrong_target) else {
+            return Err(Error::RosterOp);
+        };
+        let recovery = member.role == Role::Recovery;
+        let named_in_cut = entry.cut.as_ref().is_some_and(|cut| cut.contains_key(id));
+        if (recovery && (!replaces || named_in_cut)) || (!recovery && entry.op == Op::Recovery) {
             return Err(Error::RosterOp);
         }
         members.remove(id);
@@ -400,7 +441,10 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
         .epoch
         .as_ref()
         .map_or_else(|| state.map_or(0, |s| s.epoch), |e| e.n);
-    for (id, member) in added {
+    for (id, mut member) in added {
+        if member.role == Role::Recovery && entry.op != Op::Genesis {
+            member.installer = Some(entry.signer.clone());
+        }
         senders.insert(
             id.clone(),
             Sender {
@@ -447,9 +491,33 @@ pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterS
             |e| e.kc.clone(),
         ),
         rotate: entry.op == Op::Leave || (entry.epoch.is_none() && state.is_some_and(|s| s.rotate)),
+        recovery_due: installer_gone(&members, &[]),
         members,
         senders,
     })
+}
+
+/// The current devices that `removed` added, following those devices' additions in turn.
+pub fn devices_added_by(entries: &[Entry], removed: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut from = vec![removed.to_owned()];
+    while let Some(signer) = from.pop() {
+        let added = entries
+            .iter()
+            .filter(|entry| entry.op == Op::Add && entry.signer == signer)
+            .flat_map(|entry| entry.add.iter().flatten());
+        for subject in added {
+            if !found.contains(&subject.did) {
+                found.push(subject.did.clone());
+                from.push(subject.did.clone());
+            }
+        }
+    }
+    let members = replay_roster(entries)
+        .map(|s| s.members)
+        .unwrap_or_default();
+    found.retain(|did| members.contains_key(did));
+    found
 }
 
 pub fn replay_roster(entries: &[Entry]) -> Result<RosterState> {

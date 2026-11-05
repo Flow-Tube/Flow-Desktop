@@ -61,15 +61,16 @@ use commands::downloads::{
 use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
 use commands::linked::{
-    linked_accept_join, linked_add_device, linked_answer, linked_ask_to_join, linked_cancel,
-    linked_cancel_login_change, linked_catch_up, linked_choose_profile, linked_contest,
-    linked_create, linked_create_lan, linked_create_webdav, linked_dashboard, linked_decline_join,
-    linked_delete_profile, linked_devices, linked_enter_code, linked_finish_login_change,
-    linked_forget, linked_join_requests, linked_keep_side, linked_leave, linked_link_phase,
-    linked_profiles, linked_recovery_saved, linked_remove, linked_rename, linked_replace_recovery,
-    linked_restore, linked_retry_keychain, linked_show_code, linked_start_login_change,
-    linked_status, linked_stop_profile, linked_sync_added_profile, linked_sync_now,
-    linked_sync_profile, linked_update_login,
+    linked_accept_join, linked_add_device, linked_added_by, linked_answer,
+    linked_answer_recovery_notice, linked_ask_to_join, linked_cancel, linked_cancel_login_change,
+    linked_catch_up, linked_choose_profile, linked_contest, linked_create, linked_create_lan,
+    linked_create_webdav, linked_dashboard, linked_decline_join, linked_delete_profile,
+    linked_devices, linked_enter_code, linked_finish_login_change, linked_forget,
+    linked_join_requests, linked_keep_side, linked_leave, linked_link_phase, linked_profiles,
+    linked_recovery_saved, linked_remove, linked_rename, linked_replace_recovery, linked_restore,
+    linked_retry_keychain, linked_show_code, linked_start_login_change, linked_status,
+    linked_stop_profile, linked_sync_added_profile, linked_sync_now, linked_sync_profile,
+    linked_update_login,
 };
 use commands::live::{live_consents, live_now, live_send, live_set_consent, live_status};
 use commands::lyrics::{
@@ -818,6 +819,8 @@ pub fn run() {
             linked_retry_keychain,
             linked_rename,
             linked_remove,
+            linked_added_by,
+            linked_answer_recovery_notice,
             linked_forget,
             linked_contest,
             linked_keep_side,

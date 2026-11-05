@@ -53,6 +53,7 @@ pub mod profile_links;
 pub mod profile_names;
 pub mod recovery;
 pub mod recovery_flow;
+pub mod recovery_notice;
 pub mod roster;
 pub mod rotation;
 pub mod sealed;

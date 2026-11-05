@@ -79,8 +79,24 @@ pub async fn linked_rename(app: AppHandle, id: String, name: String) -> Result<(
 }
 
 #[tauri::command]
-pub async fn linked_remove(app: AppHandle, id: String) -> Result<(), ErrorResponse> {
-    actions::remove(&app, &id).await.map_err(|e| err(&e))
+pub async fn linked_remove(
+    app: AppHandle,
+    id: String,
+    also: Vec<String>,
+) -> Result<Option<String>, ErrorResponse> {
+    actions::remove(&app, &id, &also).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_added_by(app: AppHandle, id: String) -> Result<Vec<String>, ErrorResponse> {
+    actions::added_by(&app, &id).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_answer_recovery_notice(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::answer_recovery_notice(&app)
+        .await
+        .map_err(|e| err(&e))
 }
 
 #[tauri::command]

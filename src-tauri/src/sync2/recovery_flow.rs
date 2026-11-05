@@ -12,7 +12,7 @@ use super::entries::{Draft, build_entry, member_subject};
 use super::epoch::check_epoch_key;
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
-use super::membership::{append_checked, new_epoch};
+use super::membership::{append_checked, members_after, new_epoch};
 use super::meta::seal_device_meta;
 use super::paths::kc_name;
 use super::recovery::{recovery_keys, recovery_words};
@@ -28,26 +28,6 @@ use crate::sync::canonical::to_canonical_json;
 pub struct Restored {
     pub entries: Vec<Entry>,
     pub words: String,
-}
-
-fn members_with(
-    state: &RosterState,
-    without: &str,
-    extra: &[&MemberSecrets],
-) -> Result<Vec<([u8; 16], [u8; 32])>> {
-    let mut members = Vec::new();
-    for (did, member) in state
-        .members
-        .iter()
-        .filter(|(did, _)| did.as_str() != without)
-    {
-        members.push((
-            array(&hex::decode(did).map_err(|_| Error::RosterFormat)?),
-            member.kem,
-        ));
-    }
-    members.extend(extra.iter().map(|m| (m.did, m.kem_public)));
-    Ok(members)
 }
 
 async fn append<S: Store>(
@@ -88,7 +68,7 @@ fn replacement(
     let epoch = new_epoch(
         group,
         state.epoch + 1,
-        &members_with(state, old, &[&next])?,
+        &members_after(state, &[old.to_owned()], &[&next])?,
         current_key,
     )?;
     let draft = Draft {
@@ -169,7 +149,7 @@ pub async fn restore<S: Store>(
     let restored = new_epoch(
         &group,
         state.epoch + 1,
-        &members_with(&state, "", &[device])?,
+        &members_after(&state, &[], &[device])?,
         &current,
     )?;
     let sealed_meta = seal_device_meta(

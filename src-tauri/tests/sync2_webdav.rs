@@ -28,7 +28,9 @@ use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, finish_join, join, join_on_lan,
 };
-use flow_desktop_lib::sync2::membership::{leave_group, member_keys, remove_device, rename_device};
+use flow_desktop_lib::sync2::membership::{
+    leave_group, member_keys, remove_devices, rename_device,
+};
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, log_path, roster_path, wrap_path};
 use flow_desktop_lib::sync2::payload::encode_payload;
 use flow_desktop_lib::sync2::pipe::listen_on;
@@ -713,7 +715,7 @@ async fn the_notice_follows_a_removal_and_not_a_leave_and_clears_with_a_login() 
     a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
         .await
         .unwrap();
-    remove_device(&pool_a, &a, &g.a, &hex::encode(c.did))
+    remove_devices(&pool_a, &a, &g.a, &[hex::encode(c.did)])
         .await
         .unwrap();
 

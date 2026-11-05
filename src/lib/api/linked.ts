@@ -9,6 +9,12 @@ export interface LastSync {
   error?: string | null;
 }
 
+export interface RecoveryNotice {
+  /** The device behind the change. */
+  device: string;
+  atMs: number;
+}
+
 export interface LinkedStatus {
   /** The group this device is in: on a Flow server, in a WebDAV folder, or on its devices on the network. */
   kind: "server" | "webdav" | "lan" | null;
@@ -25,6 +31,10 @@ export interface LinkedStatus {
   /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
   keychainBlocked: boolean;
   recoverySaved: boolean;
+  /** The recovery key changed from another device, until the user answers. */
+  recoveryNotice: RecoveryNotice | null;
+  /** The device that set the recovery key left: nothing is written until it is replaced. */
+  recoveryDue: boolean;
   lastSync?: LastSync | null;
   /** A run is under way. */
   syncing: boolean;
@@ -35,6 +45,8 @@ export interface LinkedDevice {
   name: string;
   platform: string;
   thisDevice: boolean;
+  /** It set the current recovery key, so its leaving stops the others writing. */
+  setRecoveryKey: boolean;
   /** Met on this network in the last few minutes. */
   nearby: boolean;
   /** When the device last synced, as the server saw it, or as this device last met it on the LAN. */
@@ -158,7 +170,14 @@ export const replaceRecovery = () => invokeBackend<string>("linked_replace_recov
 /** Asks the keychain again after it refused, and resolves once it answered. */
 export const retryKeychain = () => invokeBackend<void>("linked_retry_keychain");
 export const renameDevice = (id: string, name: string) => invokeBackend<void>("linked_rename", { id, name });
-export const removeDevice = (id: string) => invokeBackend<void>("linked_remove", { id });
+/** Resolves to the new recovery words to show once, when the removal had to replace them. */
+export const removeDevice = (id: string, also: string[] = []) =>
+  invokeBackend<string | null>("linked_remove", { id, also })
+
+/** The current devices `id` added, for the user to remove with it if they don't recognise them. */
+export const devicesAddedBy = (id: string) => invokeBackend<string[]>("linked_added_by", { id })
+
+export const answerRecoveryNotice = () => invokeBackend<void>("linked_answer_recovery_notice");
 /** Tells the group this device leaves, then forgets the group and this device's keys. */
 export const leaveGroup = () => invokeBackend<void>("linked_leave");
 /** Forgets the group and this device's keys without telling the group. */

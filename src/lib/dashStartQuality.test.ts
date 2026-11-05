@@ -42,8 +42,12 @@ describe("pickDashStart with a chosen quality", () => {
     expect(start("h1080", 8750).bitrateKbps).toBe(3500);
   });
 
-  it("keeps dash.js's own start just under the line, so a slow link starts soon", () => {
-    expect(start("h1080", 8749)).toEqual({ bitrateKbps: null, setId: null });
+  it("keeps dash.js's low start just under the line, so a slow link starts soon", () => {
+    expect(start("h1080", 8749)).toEqual({ bitrateKbps: null, setId: "video-h264-mp4" });
+  });
+
+  it("stays in the chosen codec on a slow start, so the video never hops codecs", () => {
+    expect(start("v1080", 1000)).toEqual({ bitrateKbps: null, setId: "video-vp9-mp4" });
   });
 
   it("never holds a low choice to the higher default start", () => {

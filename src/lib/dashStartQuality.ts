@@ -57,8 +57,8 @@ export function manifestVideoTracks(manifest: unknown): DashVideoTrack[] {
 
 /**
  * Where playback should begin, decided before dash.js picks. `selected` is null on
- * Auto. A quality the connection can't load quickly keeps dash.js's own start and
- * follows from the next segment, so a slow link still shows a picture soon.
+ * Auto. A quality the connection can't load quickly starts at dash.js's own low
+ * bitrate and follows from the next segment, so a slow link still shows a picture soon.
  */
 export function pickDashStart(input: {
   selected: StreamVariant | null;
@@ -81,9 +81,9 @@ export function pickDashStart(input: {
 
   const kbps = Math.ceil(bandwidth / 1000);
   const loadsQuickly = speedKbps === null || speedKbps >= kbps * START_SPEED_MARGIN;
-  return loadsQuickly || kbps <= DASH_DEFAULT_START_KBPS
-    ? { bitrateKbps: kbps, setId: track.id }
-    : { bitrateKbps: null, setId: null };
+  // A slow start still stays in the chosen codec: hopping from H.264 to AV1 mid-video
+  // has failed to decode on bytes that play fine when the video starts on AV1.
+  return { bitrateKbps: loadsQuickly || kbps <= DASH_DEFAULT_START_KBPS ? kbps : null, setId: track.id };
 }
 
 export function readMeasuredSpeedKbps(): number | null {

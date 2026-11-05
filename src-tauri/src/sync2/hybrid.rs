@@ -107,6 +107,20 @@ impl<S: Store + Sync> Store for HybridStore<S> {
         }
     }
 
+    /// The server's answer decides while it answers. What arrived from LAN peers stays held.
+    async fn roster_view(&self) -> Result<Vec<Entry>> {
+        match self.store.roster_view().await {
+            Ok(entries) => {
+                for entry in &entries {
+                    self.held.hold_entry(entry).await?;
+                }
+                Ok(entries)
+            }
+            Err(error) if unreachable(&error) => self.held.roster_view().await,
+            Err(error) => Err(error),
+        }
+    }
+
     async fn append_roster(
         &self,
         head: &str,
@@ -123,13 +137,13 @@ impl<S: Store + Sync> Store for HybridStore<S> {
         Ok(appended)
     }
 
-    async fn key(&self, epoch: u32, name: &str) -> Result<Option<Vec<u8>>> {
-        if let Some(bytes) = self.held.key(epoch, name).await? {
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        if let Some(bytes) = self.held.key(epoch, kc, name).await? {
             return Ok(Some(bytes));
         }
-        let fetched = self.store.key(epoch, name).await?;
+        let fetched = self.store.key(epoch, kc, name).await?;
         if let Some(bytes) = &fetched {
-            self.held.hold_key(epoch, name, bytes).await?;
+            self.held.hold_key(epoch, kc, name, bytes).await?;
         }
         Ok(fetched)
     }

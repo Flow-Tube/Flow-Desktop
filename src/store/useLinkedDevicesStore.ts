@@ -16,6 +16,7 @@ import {
   getLinkPhase,
   getLinkedDevices,
   getLinkedStatus,
+  keepSide,
   leaveGroup,
   markRecoverySaved,
   onLinkPhase,
@@ -86,6 +87,7 @@ interface LinkedState {
   remove: (id: string) => Promise<void>;
   leave: () => Promise<void>;
   forget: () => Promise<void>;
+  keepSide: (entry: string) => Promise<void>;
   syncNow: () => Promise<void>;
 }
 
@@ -254,6 +256,12 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     forget: () =>
       run(async () => {
         await forgetGroup();
+        await get().refresh();
+      }),
+
+    keepSide: (entry) =>
+      run(async () => {
+        await keepSide(entry);
         await get().refresh();
       }),
 

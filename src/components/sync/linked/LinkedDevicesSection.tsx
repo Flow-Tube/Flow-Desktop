@@ -6,6 +6,7 @@ import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import type { LinkedStatus } from "../../../lib/api/linked";
 import { SegmentedControl } from "../../ui/SegmentedControl";
 import { SectionHeader, Spinner } from "../SyncParts";
+import { ContestNotice } from "./ContestNotice";
 import { Dashboard } from "./Dashboard";
 import { KeychainBlocked } from "./KeychainBlocked";
 import { LinkPanel } from "./LinkPanel";
@@ -24,6 +25,7 @@ function Body() {
   if (status.keychainBlocked) return <KeychainBlocked />;
   if (!status.kind) return <LinkedSetup />;
   if (status.loginRefused) return <LoginRefused />;
+  if (status.lastSync?.error === "linkedContested") return <ContestNotice />;
   return <LinkedTabs status={status} />;
 }
 

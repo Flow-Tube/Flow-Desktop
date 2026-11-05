@@ -64,7 +64,7 @@ async fn desktop_talks_to_a_real_server() {
     assert_eq!(entries, [genesis]);
 
     let wrap = store
-        .key(0, &hex::encode(device.did))
+        .key(0, "", &hex::encode(device.did))
         .await
         .unwrap()
         .unwrap();

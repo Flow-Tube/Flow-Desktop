@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 use super::engine::{EngineError, Result};
 use super::entries::{Draft, build_entry, epoch_draft, member_subject};
 use super::held::HeldStore;
-use super::keys::MemberSecrets;
+use super::keys::{MemberSecrets, group_id};
 use super::linking::DeviceMeta;
 use super::meta::seal_device_meta;
 use super::recovery::{recovery_keys, recovery_secret, recovery_words};
@@ -32,10 +32,13 @@ struct Genesis {
 }
 
 fn genesis(device: &MemberSecrets, meta: &DeviceMeta) -> Result<Genesis> {
-    let group: [u8; 16] = random_bytes();
     let epoch_key: [u8; 32] = random_bytes();
     let recovery_secret: [u8; 32] = random_bytes();
     let recovery = recovery_keys(&recovery_secret);
+    let group = group_id(
+        (&device.sig_public, &device.kem_public),
+        (&recovery.sig_public, &recovery.kem_public),
+    );
     let sealed_meta = seal_device_meta(
         &epoch_key,
         &group,

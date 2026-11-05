@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 
 use super::device::DEVICE_KEYS;
 use super::engine::{EngineError, Result, Session};
+use super::forks::{Settlement, settle_roster};
 use super::group_store::GroupStore;
 use super::held::HeldStore;
 use super::hybrid::HybridStore;
@@ -18,14 +19,14 @@ use super::membership::{leave_group, remove_device, rename_device};
 use super::names::device_names;
 use super::profile_links::{link_profile, reading};
 use super::recovery_flow::replace_recovery_key;
-use super::roster::Role;
+use super::roster::{Role, entry_hash};
 use super::server::{ServerStore, StoreError};
 use super::service::{LastSync, is_syncing, last_sync, sync_soon};
 use super::setup::{
     create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
 };
 use super::snapshot::snapshot_soon;
-use super::state::{GroupRecord, StoreKind, forget_group, load_group};
+use super::state::{GroupRecord, StoreKind, add_roster_pin, forget_group, load_group, roster_pins};
 use super::store::Store;
 use super::webdav::{WebDavLogin, WebDavStore};
 use super::webdav_login::{forget_login, load_login, save_login};
@@ -92,12 +93,9 @@ async fn server_store(local: &Local, record: &GroupRecord) -> Result<ServerStore
 }
 
 /// A session for this device, reading the links its profiles sync.
-pub async fn open_session<'a>(
-    local: &'a Local,
-    record: &GroupRecord,
-) -> Result<Session<'a, GroupStore>> {
+async fn store_of(local: &Local, record: &GroupRecord) -> Result<GroupStore> {
     let (pool, device) = (&local.pool, &local.device);
-    let store = match record.kind {
+    Ok(match record.kind {
         StoreKind::Server => {
             let server = server_store(local, record).await?;
             let me = hex::encode(device.did);
@@ -112,7 +110,15 @@ pub async fn open_session<'a>(
             .await?,
         )),
         StoreKind::Lan => GroupStore::Held(HeldStore::new(pool.clone())),
-    };
+    })
+}
+
+pub async fn open_session<'a>(
+    local: &'a Local,
+    record: &GroupRecord,
+) -> Result<Session<'a, GroupStore>> {
+    let (pool, device) = (&local.pool, &local.device);
+    let store = store_of(local, record).await?;
     let mut session = Session::open(pool, store, device).await?;
     let (running, default) = (&local.running_profile, &local.default_profile);
     session.set_reading(reading(pool, &record.link, running, default).await?);
@@ -137,12 +143,13 @@ pub async fn stopped(pool: &SqlitePool) -> Result<Option<String>> {
 }
 
 /// Stops syncing once the group shut this device out (spec/protocol.md, Removal). A roster that
-/// no longer lists it also forgets the group and its keys; a server that refuses it a token
-/// leaves that to the user, because the roster can't be read then.
+/// extends the applied one and no longer lists it also forgets the group and its keys. A server
+/// that refuses it a token, or a roster that replaces entries it had applied, leaves that to the
+/// user.
 pub async fn stop_if_shut_out(pool: &SqlitePool, error: &EngineError) -> Result<()> {
     match error {
         EngineError::Removed => forget_with_keys(pool).await?,
-        EngineError::Store(StoreError::SignInRefused) => {}
+        EngineError::Store(StoreError::SignInRefused) | EngineError::RemovalUnconfirmed => {}
         _ => return Ok(()),
     }
     Ok(set_setting(pool, STOPPED, error.kind()).await?)
@@ -191,6 +198,59 @@ pub struct LinkedStatus {
     pub recovery_saved: bool,
     pub last_sync: Option<LastSync>,
     pub syncing: bool,
+}
+
+/// One side of a contested roster: keeping it keeps this device, which removed those.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContestSide {
+    pub entry: String,
+    pub device: String,
+    pub removes: Vec<String>,
+}
+
+/// The sides the user chooses between while the roster is contested.
+pub async fn contest(app: &AppHandle) -> Result<Vec<ContestSide>> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let store = store_of(&local, &record).await?;
+    let pins = roster_pins(&local.pool).await?;
+    let mut session = Session::on_applied(&local.pool, store, &local.device).await?;
+    let Settlement::Contested { sides, .. } = settle_roster(
+        &record.group_id,
+        session.entries(),
+        &session.store().roster_view().await?,
+        &pins,
+        session.store().is_linear(),
+    )?
+    else {
+        return Ok(Vec::new());
+    };
+    let _ = session.prepare_names().await;
+    let names = device_names(&mut session).await.unwrap_or_default();
+    let name = |did: &str| {
+        names
+            .get(did)
+            .map_or_else(|| did[..8].to_owned(), |m| m.name.clone())
+    };
+    Ok(sides
+        .iter()
+        .map(|side| ContestSide {
+            entry: entry_hash(side),
+            device: name(&side.signer),
+            removes: side.remove.iter().flatten().map(|did| name(did)).collect(),
+        })
+        .collect())
+}
+
+/// Keeps one side of a contested roster on this device. The next sync settles from it.
+pub async fn keep_side(app: &AppHandle, entry: &str) -> Result<()> {
+    if !contest(app).await?.iter().any(|side| side.entry == entry) {
+        return Err(EngineError::Unexpected);
+    }
+    add_roster_pin(&state_pool(app), entry).await?;
+    sync_soon(app);
+    Ok(())
 }
 
 /// What can be shown without reaching the server.

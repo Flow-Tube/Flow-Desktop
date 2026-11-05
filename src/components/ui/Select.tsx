@@ -6,6 +6,7 @@ import { AnchoredPortalMenu, type MenuAnchor } from './AnchoredPortalMenu';
 export interface SelectOption {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 export interface SelectProps {
@@ -83,13 +84,20 @@ export function Select({ value, onChange, options, disabled, className = '' }: S
                   type="button"
                   role="option"
                   aria-selected={active}
+                  aria-disabled={o.disabled}
+                  disabled={o.disabled}
                   onClick={() => {
                     onChange(o.value);
                     close();
                   }}
-                  className="flex w-full items-center justify-between gap-3 px-3.5 py-2 text-sm text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100"
+                  className={cx(
+                    'flex w-full items-center justify-between gap-3 px-3.5 py-2 text-sm transition-colors duration-200 ease-out',
+                    o.disabled
+                      ? 'cursor-not-allowed text-chrome-neutral-500'
+                      : 'text-chrome-neutral-300 hover:bg-surface-container-highest hover:text-chrome-neutral-100',
+                  )}
                 >
-                  <span className={active ? 'text-chrome-neutral-100' : undefined}>{o.label}</span>
+                  <span className={active && !o.disabled ? 'text-chrome-neutral-100' : undefined}>{o.label}</span>
                   {active && <Check className="h-4 w-4 text-[var(--color-primary)]" />}
                 </button>
               );

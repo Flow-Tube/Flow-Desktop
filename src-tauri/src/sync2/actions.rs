@@ -28,8 +28,12 @@ use super::setup::{
 use super::snapshot::snapshot_soon;
 use super::state::{GroupRecord, StoreKind, add_roster_pin, forget_group, load_group, roster_pins};
 use super::store::Store;
+use super::store_login::{forget_login_change, forget_login_sent, login_due, login_waiting};
 use super::webdav::{WebDavLogin, WebDavStore};
-use super::webdav_login::{forget_login, load_login, save_login};
+use super::webdav_login::{
+    forget_login, forget_pending_login, load_login, load_pending_login, save_login,
+    save_pending_login,
+};
 use crate::db::settings::{get_setting, set_setting};
 use crate::services::profile_service::ProfileService;
 use crate::sync::{changes, ledger};
@@ -193,6 +197,10 @@ pub struct LinkedStatus {
     pub store_url: Option<String>,
     /// The `WebDAV` folder refused its login, so nothing syncs until a new one is entered.
     pub login_refused: bool,
+    /// A removed device can still reach the `WebDAV` folder until its login changes.
+    pub login_due: bool,
+    /// The devices yet to read the login this device sent, while that change is under way.
+    pub login_waiting: Option<Vec<String>>,
     /// The keychain hasn't given this device's keys: a read waits for access, or it was refused.
     pub keychain_blocked: bool,
     pub recovery_saved: bool,
@@ -265,6 +273,8 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
             .filter(|r| r.kind != StoreKind::Lan)
             .map(|r| r.store_url),
         login_refused: login_refused(&pool).await?,
+        login_due: login_due(&pool).await?,
+        login_waiting: login_waiting(&pool).await?,
         keychain_blocked: DEVICE_KEYS.blocked(),
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
@@ -371,6 +381,24 @@ pub async fn create_on_webdav(
     started(&local, words).await
 }
 
+/// Checks that the folder takes `login` and still holds this group.
+pub async fn check_login(record: &GroupRecord, me: String, login: &WebDavLogin) -> Result<()> {
+    let store = WebDavStore::connect(&record.store_url, login.clone(), me).await?;
+    store.probe().await?;
+    if store.group().await?.as_deref() != Some(record.group_id.as_str()) {
+        return Err(EngineError::Unexpected);
+    }
+    Ok(())
+}
+
+/// Saves a login the folder took, in place of whatever came before.
+async fn adopt_login(pool: &SqlitePool, login: &WebDavLogin) -> Result<()> {
+    save_login(login).await?;
+    forget_pending_login().await?;
+    forget_login_change(pool).await?;
+    set_login_refused(pool, false).await
+}
+
 /// Replaces a `WebDAV` login the folder refused, once the folder takes the new one and still
 /// holds this group.
 pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result<()> {
@@ -380,20 +408,64 @@ pub async fn update_login(app: &AppHandle, user: &str, password: &str) -> Result
         user: user.trim().to_owned(),
         password: password.to_owned(),
     };
-    let store = WebDavStore::connect(
-        &record.store_url,
-        login.clone(),
-        hex::encode(local.device.did),
-    )
-    .await?;
-    store.probe().await?;
-    if store.group().await?.as_deref() != Some(record.group_id.as_str()) {
-        return Err(EngineError::Unexpected);
-    }
-    save_login(&login).await?;
-    set_login_refused(&local.pool, false).await?;
+    check_login(&record, hex::encode(local.device.did), &login).await?;
+    adopt_login(&local.pool, &login).await?;
     sync_soon(app);
     Ok(())
+}
+
+/// Sends the other devices a new login for the folder, before the user sets it there (spec/protocol.md,
+/// Replacing a store's login). Opening the session re-reads the roster, and fails while it is contested.
+pub async fn start_login_change(app: &AppHandle, user: &str, password: &str) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    if record.kind != StoreKind::WebDav {
+        return Err(EngineError::Unexpected);
+    }
+    let login = WebDavLogin {
+        user: user.trim().to_owned(),
+        password: password.to_owned(),
+    };
+    let mut session = open_session(&local, &record).await?;
+    session.write_login(&local.pool, &login).await?;
+    save_pending_login(&login).await?;
+    sync_soon(app);
+    Ok(())
+}
+
+/// The user set the new login at the provider: checks it, and uses it from now on.
+pub async fn finish_login_change(app: &AppHandle) -> Result<()> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let login = load_pending_login().await?.ok_or(EngineError::Unexpected)?;
+    check_login(&record, hex::encode(local.device.did), &login).await?;
+    adopt_login(&local.pool, &login).await?;
+    sync_soon(app);
+    Ok(())
+}
+
+/// Stops a login change this device started. A device that read the login still holds it, and only
+/// tries it if the folder refuses the current one.
+pub async fn cancel_login_change(app: &AppHandle) -> Result<()> {
+    forget_pending_login().await?;
+    forget_login_sent(&state_pool(app)).await
+}
+
+/// The folder refused the login: tries the pending one once. False when there is none, or it fails.
+pub async fn try_pending_login(app: &AppHandle) -> Result<bool> {
+    let local = local(app).await?;
+    let record = linked(&local.pool).await?;
+    let Some(login) = load_pending_login().await? else {
+        return Ok(false);
+    };
+    if check_login(&record, hex::encode(local.device.did), &login)
+        .await
+        .is_err()
+    {
+        return Ok(false);
+    }
+    adopt_login(&local.pool, &login).await?;
+    Ok(true)
 }
 
 /// Starts a group that lives on this network's devices, with no server, and returns the recovery
@@ -585,5 +657,6 @@ async fn forget_here(pool: &SqlitePool) -> Result<()> {
     super::error_log::clear(pool).await?;
     set_setting(pool, STOPPED, "").await?;
     set_login_refused(pool, false).await?;
+    forget_login_change(pool).await?;
     set_recovery_saved(pool, true).await
 }

@@ -207,6 +207,7 @@ fn member_ids_epoch_keys_and_wraps() {
         Purpose::Live,
         Purpose::Lan,
         Purpose::Chain,
+        Purpose::Store,
     ];
     for purpose in purposes {
         assert_eq!(

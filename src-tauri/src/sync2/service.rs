@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use super::actions::{
     Local, local, login_refused, open_session, set_login_refused, state_pool, stop_if_shut_out,
-    stopped,
+    stopped, try_pending_login,
 };
 use super::batches::{IncomingBatch, apply_batches};
 use super::engine::{EngineError, Result, Session, now_ms};
@@ -26,6 +26,7 @@ use super::profile_links::reading;
 use super::server::StoreError;
 use super::snapshot::{PROFILES_KEY, note_merged, snapshot_due};
 use super::state::{link_read, links_to_read, load_group, save_floors};
+use super::webdav_login::save_pending_login;
 use crate::sync::canonical::Collection;
 use crate::sync::export::export_collections;
 use crate::sync::runtime::{
@@ -99,7 +100,11 @@ pub async fn sync_now(app: &AppHandle) -> Result<Vec<Received>> {
         tracing::warn!(target: "flow::sync2", kind = failed.kind(), "could not stop syncing");
     }
     if matches!(result, Err(EngineError::Store(StoreError::Unauthorized))) {
-        set_login_refused(&pool, true).await?;
+        if try_pending_login(app).await.unwrap_or(false) {
+            sync_soon(app);
+        } else {
+            set_login_refused(&pool, true).await?;
+        }
     }
     let last = LastSync {
         at_ms: now_ms(),
@@ -184,6 +189,9 @@ async fn exchange(
     apply(app, local, &groups, &mut applied).await?;
     if !applied.changed.is_empty() {
         let _ = app.emit(EVENT_REFRESH, &applied.changed);
+    }
+    if let Some(login) = &pulled.login {
+        save_pending_login(login).await?;
     }
     session.finish(pool, pulled).await?;
     let received = applied.received(session).await;

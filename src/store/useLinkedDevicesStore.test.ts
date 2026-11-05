@@ -27,6 +27,9 @@ const api = vi.hoisted(() => ({
   retryKeychain: vi.fn(),
   syncNow: vi.fn(),
   updateLogin: vi.fn(),
+  startLoginChange: vi.fn(),
+  finishLoginChange: vi.fn(),
+  cancelLoginChange: vi.fn(),
 }));
 vi.mock("../lib/api/linked", () => api);
 const confirmAction = vi.hoisted(() => vi.fn());

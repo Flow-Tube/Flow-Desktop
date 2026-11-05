@@ -13,7 +13,7 @@ use super::envelope::{
     Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
     seal_object, verify_object,
 };
-use super::epoch::{check_epoch_key, open_chain, purpose_key};
+use super::epoch::{Purpose, check_epoch_key, open_chain, purpose_key};
 use super::forks::{Settlement, settle_roster};
 use super::gc::{Ack, Logged, VersionVector, record_ack, record_links, record_manifest};
 use super::kept::{Kept, keep};
@@ -22,14 +22,16 @@ use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
-use super::roster::{Entry, RosterState, replay_roster};
+use super::roster::{Entry, Op, Role, RosterState, entry_hash, replay_roster};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, add_roster_entries, floors, load_group, replace_roster, roster_entries,
-    roster_pins, save_floors, save_group, save_streams, streams,
+    Floors, GroupRecord, StoreKind, add_roster_entries, floors, load_group, replace_roster,
+    roster_entries, roster_pins, save_floors, save_group, save_streams, streams,
 };
 use super::store::Store;
+use super::store_login::{decode_login, encode_login, note_login, note_login_sent, note_removal};
+use super::webdav::WebDavLogin;
 use super::wrap::unwrap_epoch_key;
 use super::{Error, array};
 use crate::sync::canonical::to_canonical_json;
@@ -146,6 +148,8 @@ pub struct Pulled {
     floors: Floors,
     positions: BTreeMap<String, StreamPosition>,
     cursor: i64,
+    /// The latest store login read, for the caller to keep as pending.
+    pub login: Option<WebDavLogin>,
     /// Batches and snapshot manifests read. Acks aren't acknowledged, so two idle devices don't
     /// answer each other's acks forever.
     consumed: usize,
@@ -231,6 +235,8 @@ pub(super) enum Content {
     Batch(IncomingBatch),
     Snapshot(Manifest),
     Ack(Ack),
+    /// A store login this device may take; `None` when the read rule says to ignore it.
+    Login(Option<WebDavLogin>),
 }
 
 pub struct Session<'a, S> {
@@ -401,6 +407,17 @@ impl<'a, S: Store> Session<'a, S> {
             replace_roster(pool, &chain).await?;
             self.keys.clear();
             self.commitments.clear();
+        }
+        if self.record.kind == StoreKind::WebDav {
+            let known: BTreeSet<String> = self.entries.iter().map(entry_hash).collect();
+            let removal = chain
+                .iter()
+                .filter(|e| e.op == Op::Remove && !known.contains(&entry_hash(e)))
+                .filter_map(|e| e.epoch.as_ref())
+                .next_back();
+            if let Some(epoch) = removal {
+                note_removal(pool, epoch.n).await?;
+            }
         }
         self.state = state;
         self.entries = chain;
@@ -589,6 +606,15 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(())
     }
 
+    /// Writes `login` to this device's log (spec/protocol.md, Replacing a store's login). The
+    /// session was just opened, so the roster was re-read and isn't contested.
+    pub async fn write_login(&mut self, pool: &SqlitePool, login: &WebDavLogin) -> Result<()> {
+        self.write(pool, ObjectType::Login, &encode_login(login))
+            .await?;
+        note_login_sent(pool, &hex::encode(self.device.did), self.record.own_seq).await?;
+        note_login(pool, self.state.epoch).await
+    }
+
     /// Uploads what changed in `exported`, the running profile's data, since the last upload.
     pub async fn push(
         &mut self,
@@ -727,6 +753,9 @@ impl<'a, S: Store> Session<'a, S> {
                                 Content::Ack(ack) => {
                                     pulled.acks.insert(did, ack.vv);
                                 }
+                                Content::Login(login) => {
+                                    pulled.login = login.or(pulled.login.take());
+                                }
                             }
                         }
                         None => still.push((did, seq, path)),
@@ -796,7 +825,25 @@ impl<'a, S: Store> Session<'a, S> {
         &self.signing_keys
     }
 
+    /// A store login, under its own rule (spec/store.md, Store logins): only under the chain's key
+    /// of the epoch in force, from a current device, and never a reason to stop reading a log.
+    fn login_in(&self, object: &ParsedObject<'_>) -> Option<WebDavLogin> {
+        let epoch = object.header.epoch;
+        let sender = self.state.members.get(&hex::encode(object.header.sender))?;
+        if self.record.kind != StoreKind::WebDav
+            || epoch != self.state.epoch
+            || sender.role != Role::Device
+        {
+            return None;
+        }
+        let key = purpose_key(self.current_key(), &self.group, epoch, Purpose::Store);
+        decode_login(&decode_payload(&open_object(object, &key).ok()?).ok()?)
+    }
+
     pub(super) async fn open_content(&mut self, object: &ParsedObject<'_>) -> Result<Content> {
+        if object.header.object_type == ObjectType::Login {
+            return Ok(Content::Login(self.login_in(object)));
+        }
         let (epoch, group) = (object.header.epoch, self.group);
         let purpose = object.header.object_type.purpose();
         let opened = self
@@ -813,7 +860,7 @@ impl<'a, S: Store> Session<'a, S> {
             ObjectType::Ack => {
                 Content::Ack(serde_json::from_slice(&content).map_err(|_| Error::Payload)?)
             }
-            ObjectType::Live => return Err(Error::Suite.into()),
+            ObjectType::Live | ObjectType::Login => return Err(Error::Suite.into()),
         })
     }
 
@@ -822,6 +869,9 @@ impl<'a, S: Store> Session<'a, S> {
     pub async fn finish(&mut self, pool: &SqlitePool, pulled: Pulled) -> Result<()> {
         keep(pool, &pulled.kept).await?;
         save_floors(pool, &pulled.floors).await?;
+        if pulled.login.is_some() {
+            note_login(pool, self.state.epoch).await?;
+        }
         let records = profile_names::parse(&pulled.profiles);
         for link in profile_names::merge(pool, &records).await? {
             forget_link(pool, &link).await?;

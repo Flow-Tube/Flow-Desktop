@@ -6,11 +6,13 @@ import {
   askToJoin,
   answerCode,
   cancelLink,
+  cancelLoginChange,
   createGroup,
   createLanGroup,
   createWebdavGroup,
   declineJoin,
   enterCode,
+  finishLoginChange,
   forgetGroup,
   getJoinRequests,
   getLinkPhase,
@@ -27,6 +29,7 @@ import {
   restoreGroup,
   retryKeychain,
   showCode,
+  startLoginChange,
   syncNow,
   updateLogin,
   type FolderAccess,
@@ -68,6 +71,9 @@ interface LinkedState {
   createOnLan: () => Promise<void>;
   createOnWebdav: (url: string, user: string, password: string) => Promise<void>;
   updateLogin: (user: string, password: string) => Promise<void>;
+  startLoginChange: (user: string, password: string) => Promise<void>;
+  finishLoginChange: () => Promise<void>;
+  cancelLoginChange: () => Promise<void>;
   retryKeychain: () => Promise<void>;
   /** Restores from a Flow server, or with `login` from a WebDAV folder. */
   restore: (url: string, words: string, login?: WebdavLogin) => Promise<void>;
@@ -178,6 +184,24 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     updateLogin: (user, password) =>
       run(async () => {
         await updateLogin(user, password);
+        await get().refresh();
+      }),
+
+    startLoginChange: (user, password) =>
+      run(async () => {
+        await startLoginChange(user, password);
+        await get().refresh();
+      }),
+
+    finishLoginChange: () =>
+      run(async () => {
+        await finishLoginChange();
+        await get().refresh();
+      }),
+
+    cancelLoginChange: () =>
+      run(async () => {
+        await cancelLoginChange();
         await get().refresh();
       }),
 

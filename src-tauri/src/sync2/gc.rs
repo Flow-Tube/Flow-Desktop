@@ -127,7 +127,7 @@ async fn deleted_links(pool: &SqlitePool) -> Result<Vec<String>> {
     )
 }
 
-async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
+pub(super) async fn acks(pool: &SqlitePool) -> Result<BTreeMap<String, VersionVector>> {
     let rows: Vec<(String, String)> = sqlx::query_as("SELECT did, vv FROM sync2_acks")
         .fetch_all(pool)
         .await

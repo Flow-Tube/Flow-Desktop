@@ -24,6 +24,7 @@ pub enum ObjectType {
     Changes = 0x01,
     Snapshot = 0x02,
     Ack = 0x03,
+    Login = 0x04,
     Live = 0x10,
 }
 
@@ -33,6 +34,7 @@ impl ObjectType {
             0x01 => Some(Self::Changes),
             0x02 => Some(Self::Snapshot),
             0x03 => Some(Self::Ack),
+            0x04 => Some(Self::Login),
             0x10 => Some(Self::Live),
             _ => None,
         }
@@ -43,6 +45,7 @@ impl ObjectType {
             Self::Changes => Purpose::Changes,
             Self::Snapshot => Purpose::Snapshot,
             Self::Ack => Purpose::Ack,
+            Self::Login => Purpose::Store,
             Self::Live => Purpose::Live,
         }
     }

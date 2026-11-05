@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LogOut } from "lucide-react";
 import { SettingsGroup } from "../settings/SettingsGroup";
 import { SettingItem } from "../settings/SettingItem";
 import { Button } from "../ui/Button";
@@ -43,7 +44,14 @@ export function ScrobblingSection() {
 
   const confirmSignOut = async (service: ScrobbleService) => {
     const name = getString(SERVICE_NAME[service]);
-    if (!await confirmAction(getString("scrobbling_sign_out_confirm", name), name)) return;
+    const confirmed = await confirmAction({
+      title: getString("scrobbling_sign_out_title", name),
+      message: getString("scrobbling_sign_out_body"),
+      icon: LogOut,
+      confirmLabel: getString("scrobbling_sign_out"),
+      destructive: true,
+    });
+    if (!confirmed) return;
     if (!await signOut(service)) showToast({ message: getString("scrobbling_sign_out_failed"), variant: "error" });
   };
 

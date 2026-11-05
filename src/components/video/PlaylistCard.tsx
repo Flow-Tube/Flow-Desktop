@@ -3,7 +3,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Library, ListVideo, MoreVertical } from 'lucide-react';
 import type { PlaylistSummary } from '../../types/video';
+import { confirmPlaylistRemoval } from '../../lib/confirmPlaylistRemoval';
 import {
+  isOwnedPlaylist,
   isPlaylistInLibrary,
   isProtectedPlaylistId,
   removePlaylistFromLibrary,
@@ -195,8 +197,11 @@ export function PlaylistCard({
     if (isProtected) return;
 
     try {
+      const owned = await isOwnedPlaylist(playlist.id);
+      if (!await confirmPlaylistRemoval(playlist, owned)) return;
       if (!await remove()) return;
-      showSaveToast({ destination: { kind: 'library' }, item: toastItem, removed: true, undo: save });
+      // Undo saves again from YouTube, which doesn't know a playlist made in Flow.
+      showSaveToast({ destination: { kind: 'library' }, item: toastItem, removed: true, undo: owned ? undefined : save });
     } catch (error) {
       console.error('Failed to remove playlist from library', error);
       showSaveFailedToast({ destination: { kind: 'library' }, item: toastItem, removed: true, retry: handleRemoveFromLibrary });

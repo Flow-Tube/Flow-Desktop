@@ -45,7 +45,12 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC
+- Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
+- Instrumental songs no longer show KuGou's notice as their lyrics.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
+- Hiding or showing the Queue or Lyrics pane in the full player no longer stretches the title and controls, and the artwork moves with the text.
+- A new Blur other lines switch in the lyrics menu and Settings keeps every line of synced lyrics sharp. Linux never blurs them, so it doesn't show there.
+- Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
@@ -68,6 +73,9 @@ PLAYER
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 
 FIXES
+- Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
+- Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.
+- Removing a playlist from a card now always asks first. Deleting a playlist you made no longer offers an Undo, which only brought it back empty.
 - Scrolling with the wheel over the video on the Watch page now scrolls the page, so you no longer have to move the pointer off the video first.
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.

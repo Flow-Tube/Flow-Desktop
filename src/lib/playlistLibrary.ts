@@ -272,6 +272,11 @@ export const persistStoredPlaylists = async (playlists: StoredPlaylist[]) => {
   }
 };
 
+export const isOwnedPlaylist = async (playlistId: string) => {
+  const playlists = await loadStoredPlaylists();
+  return playlists.some((playlist) => playlist.id === playlistId && playlist.source === "Owned");
+};
+
 export const isPlaylistInLibrary = async (playlistId: string) => {
   if (isProtectedPlaylistId(playlistId)) return true;
   const playlists = await loadStoredPlaylists();

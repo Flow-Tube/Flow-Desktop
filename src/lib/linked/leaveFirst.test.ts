@@ -35,7 +35,9 @@ describe("leaveGroupFirst", () => {
     api.leaveGroup.mockRejectedValue({ kind: "linkedGroupMissing", message: "unclaimed" });
     confirmAction.mockResolvedValue(true);
     await expect(leaveGroupFirst()).resolves.toBe(true);
-    expect(confirmAction).toHaveBeenCalledWith(expect.stringContaining("no longer has this group"), expect.any(String));
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining("no longer has this group") }),
+    );
     expect(api.forgetGroup).toHaveBeenCalledOnce();
   });
 

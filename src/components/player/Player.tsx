@@ -27,7 +27,6 @@ import {
   representationLabelWithCodec,
   type DashVideoTrack,
 } from "../../lib/dashVideoTrack";
-import { hlsAudioChoice } from "../../lib/hlsAudioTrack";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
@@ -63,6 +62,7 @@ import {
   selectPreferredAudioTrackId,
   selectPreferredCaptionId,
 } from "../../lib/settings/playerRuntime";
+import { hlsAudioChoice } from "../../lib/hlsAudioTrack";
 import { setSettingValue, useAppSettingsStore } from "../../store/useAppSettingsStore";
 import {
   clearLiveTiming,

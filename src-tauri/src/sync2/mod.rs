@@ -62,6 +62,7 @@ pub mod setup;
 pub mod snapshot;
 pub mod state;
 pub mod store;
+pub mod store_login;
 pub mod webdav;
 pub mod webdav_login;
 pub mod wrap;

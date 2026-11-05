@@ -11,6 +11,7 @@ import { Spinner } from "../SyncParts";
 import { Card } from "./Card";
 import { DeviceList } from "./DeviceList";
 import { JoinRequests } from "./JoinRequests";
+import { LoginChange } from "./LoginChange";
 import { ConfirmedAction } from "./ConfirmedAction";
 import { ProfilesCard } from "./ProfilesCard";
 
@@ -31,6 +32,7 @@ export function LinkedOverview({ status }: { status: LinkedStatus }) {
   return (
     <div className="grid grid-cols-12 gap-4">
       {status.kind === "server" && <JoinRequests />}
+      {status.kind === "webdav" && <LoginChange status={status} devices={devices ?? []} />}
       <Card title={getString(STORE_TITLES[status.kind ?? "server"])} className="col-span-12 lg:col-span-5">
         {status.kind === "lan" ? (
           <p className="text-sm text-chrome-neutral-400">{getString("linked_on_lan_body")}</p>

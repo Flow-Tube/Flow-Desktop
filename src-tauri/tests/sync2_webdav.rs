@@ -6,37 +6,46 @@ mod sync2_common;
 
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use dav_server::DavHandler;
 use dav_server::body::Body;
 use dav_server::fakels::FakeLs;
 use dav_server::memfs::MemFs;
 use flow_desktop_lib::sync::canonical::to_canonical_json;
+use flow_desktop_lib::sync2::actions::check_login;
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::codes::{StoreLocation, new_offer, read_code};
 use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
-use flow_desktop_lib::sync2::keys::member_secrets;
+use flow_desktop_lib::sync2::entries::{build_entry, epoch_draft, member_subject};
+use flow_desktop_lib::sync2::envelope::{Header, ObjectType, seal_object};
+use flow_desktop_lib::sync2::epoch::{Purpose, epoch_commitment, purpose_key, seal_chain};
+use flow_desktop_lib::sync2::kdf::sha256;
+use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, finish_join, join, join_on_lan,
 };
-use flow_desktop_lib::sync2::membership::rename_device;
-use flow_desktop_lib::sync2::paths::{log_path, roster_path, wrap_path};
+use flow_desktop_lib::sync2::membership::{leave_group, member_keys, remove_device, rename_device};
+use flow_desktop_lib::sync2::paths::{chain_path, kc_name, log_path, roster_path, wrap_path};
+use flow_desktop_lib::sync2::payload::encode_payload;
 use flow_desktop_lib::sync2::pipe::listen_on;
-use flow_desktop_lib::sync2::roster::entry_hash;
+use flow_desktop_lib::sync2::roster::{Op, Role, entry_hash};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::StoreError;
 use flow_desktop_lib::sync2::setup::{create_webdav_group, restore_webdav_group};
-use flow_desktop_lib::sync2::state::{StoreKind, load_group};
+use flow_desktop_lib::sync2::state::{StoreKind, load_group, streams};
 use flow_desktop_lib::sync2::store::Store;
+use flow_desktop_lib::sync2::store_login::{login_due, login_waiting};
 use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
+use flow_desktop_lib::sync2::wrap::wrap_epoch_key;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use sync2_common::{Group, device_pool, empty_pool, exported, group, watch};
+use sqlx::SqlitePool;
+use sync2_common::{Group, device_pool, draft, empty_pool, exported, group, head, watch};
 use tokio::net::TcpListener;
 use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -46,6 +55,11 @@ const PASSWORD: &str = "secret";
 
 /// Serves an in-memory WebDAV folder that asks for `USER`:`PASSWORD`, counting requests.
 async fn webdav_server() -> (String, Arc<AtomicUsize>) {
+    webdav_server_with(Arc::new(Mutex::new(PASSWORD.to_owned()))).await
+}
+
+/// The same, asking for `USER` and whatever `password` holds at the time.
+async fn webdav_server_with(password: Arc<Mutex<String>>) -> (String, Arc<AtomicUsize>) {
     let handler = DavHandler::builder()
         .filesystem(MemFs::new())
         .locksystem(FakeLs::new())
@@ -54,17 +68,20 @@ async fn webdav_server() -> (String, Arc<AtomicUsize>) {
     let port = listener.local_addr().unwrap().port();
     let requests = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&requests);
-    let expected = format!("Basic {}", STANDARD.encode(format!("{USER}:{PASSWORD}")));
     tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
-            let (handler, counted, expected) =
-                (handler.clone(), Arc::clone(&counted), expected.clone());
+            let (handler, counted, password) =
+                (handler.clone(), Arc::clone(&counted), Arc::clone(&password));
             tokio::spawn(async move {
                 let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
-                    let (handler, counted, expected) =
-                        (handler.clone(), Arc::clone(&counted), expected.clone());
+                    let (handler, counted, password) =
+                        (handler.clone(), Arc::clone(&counted), Arc::clone(&password));
                     async move {
                         counted.fetch_add(1, Ordering::SeqCst);
+                        let expected = format!(
+                            "Basic {}",
+                            STANDARD.encode(format!("{USER}:{}", password.lock().unwrap()))
+                        );
                         let authorized = request
                             .headers()
                             .get("authorization")
@@ -433,4 +450,299 @@ async fn a_log_read_up_to_its_last_possible_seq_lists_nothing_more() {
         .collect();
     assert_eq!(last, [log_path(&a, u64::MAX)]);
     assert!(listed(u64::MAX).await.is_empty());
+}
+
+/// A folder with the group on it, whose password can change, and a device's database as a
+/// `WebDAV` group.
+async fn folder(g: &Group) -> (String, Arc<Mutex<String>>) {
+    let password = Arc::new(Mutex::new(PASSWORD.to_owned()));
+    let (url, _) = webdav_server_with(Arc::clone(&password)).await;
+    onto_webdav(g, &url).await;
+    let client = webdav(&url, PASSWORD).await;
+    let id = hex::encode(g.group);
+    let body = format!(r#"{{"format":"FLOW-SYNC/2","group":"{id}"}}"#);
+    client.put("store.json", body.into_bytes()).await.unwrap();
+    (url, password)
+}
+
+async fn webdav_pool(g: &Group, url: &str) -> SqlitePool {
+    let pool = device_pool(g).await;
+    sqlx::query("UPDATE sync2_group SET kind = ?, store_url = ?")
+        .bind(StoreKind::WebDav)
+        .bind(url)
+        .execute(&pool)
+        .await
+        .unwrap();
+    pool
+}
+
+fn new_login() -> WebDavLogin {
+    WebDavLogin {
+        user: USER.into(),
+        password: "the new one".into(),
+    }
+}
+
+/// Writes `content` as a login object at the next `seq` of `did`'s log on the folder, sealed under
+/// `key` as `epoch`, and returns the next position.
+async fn plant_login(
+    url: &str,
+    g: &Group,
+    signer: &MemberSecrets,
+    (epoch, key): (u32, &[u8]),
+    (seq, prev): (u64, [u8; 32]),
+) -> (u64, [u8; 32]) {
+    let header = Header {
+        object_type: ObjectType::Login,
+        group: g.group,
+        epoch,
+        sender: signer.did,
+        seq,
+        prev,
+    };
+    let sealed = seal_object(
+        &header,
+        &purpose_key(key, &g.group, epoch, Purpose::Store),
+        &encode_payload(br#"{"k":"webdav","n":"u","w":"planted"}"#).unwrap(),
+        &signer.sig_seed,
+    );
+    let hash = sha256(&sealed);
+    webdav(url, PASSWORD)
+        .await
+        .put(&log_path(&hex::encode(signer.did), seq), sealed)
+        .await
+        .unwrap();
+    (seq + 1, hash)
+}
+
+#[tokio::test]
+async fn a_new_login_reaches_a_device_that_takes_it_once_the_folder_refuses_the_old_one() {
+    let g = group().await;
+    let (url, password) = folder(&g).await;
+    let (pool_a, pool_b) = (webdav_pool(&g, &url).await, webdav_pool(&g, &url).await);
+
+    let mut a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    a.write_login(&pool_a, &new_login()).await.unwrap();
+    assert_eq!(login_waiting(&pool_a).await.unwrap().unwrap().len(), 1);
+
+    let mut b = Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    let pulled = b.pull(&pool_b).await.unwrap();
+    assert_eq!(pulled.login, Some(new_login()));
+    b.finish(&pool_b, pulled).await.unwrap();
+
+    let mut a2 = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    let read_ack = a2.pull(&pool_a).await.unwrap();
+    a2.finish(&pool_a, read_ack).await.unwrap();
+    assert_eq!(login_waiting(&pool_a).await.unwrap(), Some(Vec::new()));
+
+    "the new one".clone_into(&mut password.lock().unwrap());
+    let record = load_group(&pool_b).await.unwrap().unwrap();
+    let me = hex::encode(g.b.did);
+    let old = WebDavLogin {
+        user: USER.into(),
+        password: PASSWORD.into(),
+    };
+    assert!(matches!(
+        check_login(&record, me.clone(), &old).await,
+        Err(EngineError::Store(StoreError::Unauthorized))
+    ));
+    check_login(&record, me, &new_login()).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_login_the_folder_refuses_is_reported_as_refused() {
+    let g = group().await;
+    let (url, password) = folder(&g).await;
+    let pool = webdav_pool(&g, &url).await;
+    "another".clone_into(&mut password.lock().unwrap());
+    let record = load_group(&pool).await.unwrap().unwrap();
+    assert!(matches!(
+        check_login(&record, hex::encode(g.b.did), &new_login()).await,
+        Err(EngineError::Store(StoreError::Unauthorized))
+    ));
+}
+
+#[tokio::test]
+async fn a_login_on_a_group_with_a_flow_server_is_ignored() {
+    let g = group().await;
+    let (url, _) = folder(&g).await;
+    let pool_b = device_pool(&g).await;
+    plant_login(&url, &g, &g.a, (0, &g.epoch_key), (1, [0; 32])).await;
+    let mut b = Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    assert_eq!(b.pull(&pool_b).await.unwrap().login, None);
+}
+
+/// A `remove` wins over a `rotate` that lost and stands, so the rotate's key isn't the chain's.
+#[tokio::test]
+async fn a_login_outside_the_chains_current_key_is_ignored_and_the_log_goes_on() {
+    let g = group().await;
+    let c = member_secrets(random_bytes(), random_bytes());
+    let state = head(&g.store);
+    let mut add = draft(Op::Add, &g.a);
+    add.add = Some(vec![member_subject(
+        &c.sig_public,
+        &c.kem_public,
+        Role::Device,
+    )]);
+    let add = build_entry(&g.group, Some(&state), add, &[&g.a, &c]);
+    let wrap = wrap_epoch_key(&c.kem_public, &g.group, 0, &c.did, &g.epoch_key).unwrap();
+    let wraps = BTreeMap::from([(hex::encode(c.did), URL_SAFE_NO_PAD.encode(wrap))]);
+    (&g.store)
+        .append_roster(&state.head, &add, &wraps, None)
+        .await
+        .unwrap();
+    let (url, _) = folder(&g).await;
+    let pool_b = webdav_pool(&g, &url).await;
+    let before = head(&g.store);
+
+    Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    let losing_key: [u8; 32] = random_bytes();
+    let dids = [g.a.did, g.b.did, c.did, g.recovery.did];
+    let mut rotate = draft(Op::Rotate, &g.b);
+    rotate.epoch = Some(epoch_draft(&losing_key, &g.group, 1, &dids));
+    let rotate = build_entry(&g.group, Some(&before), rotate, &[&g.b]);
+    let client = webdav(&url, PASSWORD).await;
+    let losing_wrap = wrap_epoch_key(&g.b.kem_public, &g.group, 1, &g.b.did, &losing_key).unwrap();
+    let kc = kc_name(&epoch_commitment(&losing_key, &g.group, 1));
+    client
+        .put(&wrap_path(1, &kc, &hex::encode(g.b.did)), losing_wrap)
+        .await
+        .unwrap();
+    client
+        .put(
+            &roster_path(rotate.seq, &entry_hash(&rotate)),
+            to_canonical_json(&rotate),
+        )
+        .await
+        .unwrap();
+
+    let keys = member_keys(&before, Some(&hex::encode(c.did))).unwrap();
+    let remove_key: [u8; 32] = random_bytes();
+    let stays = [g.a.did, g.b.did, g.recovery.did];
+    let mut remove = draft(Op::Remove, &g.a);
+    remove.remove = Some(vec![hex::encode(c.did)]);
+    remove.epoch = Some(epoch_draft(&remove_key, &g.group, 1, &stays));
+    let remove = build_entry(&g.group, Some(&before), remove, &[&g.a]);
+    let kc = kc_name(&epoch_commitment(&remove_key, &g.group, 1));
+    for (did, kem) in keys {
+        let wrap = wrap_epoch_key(&kem, &g.group, 1, &did, &remove_key).unwrap();
+        client
+            .put(&wrap_path(1, &kc, &hex::encode(did)), wrap)
+            .await
+            .unwrap();
+    }
+    client
+        .put(
+            &chain_path(1, &kc),
+            seal_chain(&remove_key, &g.group, 1, &g.epoch_key),
+        )
+        .await
+        .unwrap();
+    client
+        .put(
+            &roster_path(remove.seq, &entry_hash(&remove)),
+            to_canonical_json(&remove),
+        )
+        .await
+        .unwrap();
+
+    let next = plant_login(&url, &g, &c, (0, &g.epoch_key), (1, [0; 32])).await;
+    plant_login(&url, &g, &c, (1, &losing_key), next).await;
+    let next = plant_login(&url, &g, &g.a, (0, &g.epoch_key), (1, [0; 32])).await;
+    let next = plant_login(&url, &g, &g.a, (1, &losing_key), next).await;
+    let (seq, _) = plant_login(&url, &g, &g.a, (1, &remove_key), next).await;
+
+    let mut b = Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    assert_eq!(b.roster().head, entry_hash(&remove));
+    let pulled = b.pull(&pool_b).await.unwrap();
+    assert_eq!(
+        pulled.login,
+        Some(WebDavLogin {
+            user: "u".into(),
+            password: "planted".into(),
+        }),
+        "only the last one, reached by reading past the others, counts"
+    );
+    b.finish(&pool_b, pulled).await.unwrap();
+    let acked = held_position(&pool_b, &hex::encode(g.a.did)).await;
+    assert_eq!(acked, seq - 1);
+}
+
+async fn held_position(pool: &SqlitePool, did: &str) -> u64 {
+    streams(pool).await.unwrap()[did].seq
+}
+
+#[tokio::test]
+async fn the_notice_follows_a_removal_and_not_a_leave_and_clears_with_a_login() {
+    let g = group().await;
+    let (url, _) = folder(&g).await;
+    let (pool_a, pool_b) = (webdav_pool(&g, &url).await, webdav_pool(&g, &url).await);
+
+    let mut a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    assert!(!login_due(&pool_a).await.unwrap());
+
+    let c = member_secrets(random_bytes(), random_bytes());
+    let state = a.roster().clone();
+    let mut add = draft(Op::Add, &g.a);
+    add.add = Some(vec![member_subject(
+        &c.sig_public,
+        &c.kem_public,
+        Role::Device,
+    )]);
+    let add = build_entry(&g.group, Some(&state), add, &[&g.a, &c]);
+    let wrap = wrap_epoch_key(&c.kem_public, &g.group, 0, &c.did, &g.epoch_key).unwrap();
+    let wraps = BTreeMap::from([(hex::encode(c.did), URL_SAFE_NO_PAD.encode(wrap))]);
+    a.store()
+        .append_roster(&state.head, &add, &wraps, None)
+        .await
+        .unwrap();
+    a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    remove_device(&a, &g.a, &hex::encode(c.did)).await.unwrap();
+
+    a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    assert!(login_due(&pool_a).await.unwrap());
+    let mut b = Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    assert!(login_due(&pool_b).await.unwrap());
+
+    a.write_login(&pool_a, &new_login()).await.unwrap();
+    assert!(!login_due(&pool_a).await.unwrap());
+    let pulled = b.pull(&pool_b).await.unwrap();
+    b.finish(&pool_b, pulled).await.unwrap();
+    assert!(!login_due(&pool_b).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_leave_calls_for_no_new_login() {
+    let g = group().await;
+    let (url, _) = folder(&g).await;
+    let pool_a = webdav_pool(&g, &url).await;
+    let pool_b = webdav_pool(&g, &url).await;
+    let a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    leave_group(&a, &g.a).await.unwrap();
+    Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    assert!(!login_due(&pool_b).await.unwrap());
 }

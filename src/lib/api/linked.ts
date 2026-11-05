@@ -18,6 +18,10 @@ export interface LinkedStatus {
   storeUrl?: string | null;
   /** The WebDAV folder refused its login, so nothing syncs until a new one is entered. */
   loginRefused: boolean;
+  /** A removed device can still reach the WebDAV folder until its login changes. */
+  loginDue: boolean;
+  /** The devices yet to read the login this device sent, while that change is under way. */
+  loginWaiting?: string[] | null;
   /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
   keychainBlocked: boolean;
   recoverySaved: boolean;
@@ -134,6 +138,15 @@ export const createWebdavGroup = (url: string, user: string, password: string) =
 /** Replaces a WebDAV login the folder refused. */
 export const updateLogin = (user: string, password: string) =>
   invokeBackend<void>("linked_update_login", { user, password });
+
+/** Sends the other devices a new login for the folder, before the user sets it there. */
+export const startLoginChange = (user: string, password: string) =>
+  invokeBackend<void>("linked_start_login_change", { user, password });
+
+/** The user set the new login at the provider: checks it, and uses it from now on. */
+export const finishLoginChange = () => invokeBackend<void>("linked_finish_login_change");
+
+export const cancelLoginChange = () => invokeBackend<void>("linked_cancel_login_change");
 
 /** Resolves to the new recovery words, shown once. */
 export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>

@@ -6,6 +6,9 @@ use super::webdav::WebDavLogin;
 use crate::security::keychain::{CredentialError, CredentialStore};
 
 const WEBDAV_ENTRY: &str = "WEBDAV";
+/// The login that replaces it once the folder refuses it (spec/protocol.md, Replacing a store's
+/// login).
+const PENDING_ENTRY: &str = "WEBDAV_PENDING";
 
 pub async fn save_login(login: &WebDavLogin) -> Result<(), CredentialError> {
     let login = login.clone();
@@ -20,10 +23,30 @@ pub async fn forget_login() -> Result<(), CredentialError> {
     with_keychain(|keychain| forget(keychain)).await
 }
 
+pub async fn save_pending_login(login: &WebDavLogin) -> Result<(), CredentialError> {
+    let value = encoded(login)?;
+    with_keychain(move |keychain| keychain.write(PENDING_ENTRY, &value)).await
+}
+
+pub async fn load_pending_login() -> Result<Option<WebDavLogin>, CredentialError> {
+    with_keychain(|keychain| {
+        Ok(keychain
+            .read(PENDING_ENTRY)?
+            .and_then(|value| serde_json::from_str(&value).ok()))
+    })
+    .await
+}
+
+pub async fn forget_pending_login() -> Result<(), CredentialError> {
+    with_keychain(|keychain| keychain.remove(PENDING_ENTRY)).await
+}
+
+fn encoded(login: &WebDavLogin) -> Result<String, CredentialError> {
+    serde_json::to_string(login).map_err(|_| CredentialError("Could not encode the WebDAV login"))
+}
+
 fn save(store: &dyn CredentialStore, login: &WebDavLogin) -> Result<(), CredentialError> {
-    let value = serde_json::to_string(login)
-        .map_err(|_| CredentialError("Could not encode the WebDAV login"))?;
-    store.write(WEBDAV_ENTRY, &value)
+    store.write(WEBDAV_ENTRY, &encoded(login)?)
 }
 
 fn load(store: &dyn CredentialStore) -> Result<WebDavLogin, CredentialError> {
@@ -34,6 +57,7 @@ fn load(store: &dyn CredentialStore) -> Result<WebDavLogin, CredentialError> {
 }
 
 fn forget(store: &dyn CredentialStore) -> Result<(), CredentialError> {
+    store.remove(PENDING_ENTRY)?;
     store.remove(WEBDAV_ENTRY)
 }
 

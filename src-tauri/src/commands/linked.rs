@@ -147,6 +147,31 @@ pub async fn linked_update_login(
 }
 
 #[tauri::command]
+pub async fn linked_start_login_change(
+    app: AppHandle,
+    user: String,
+    password: String,
+) -> Result<(), ErrorResponse> {
+    actions::start_login_change(&app, &user, &password)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_finish_login_change(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::finish_login_change(&app)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_cancel_login_change(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::cancel_login_change(&app)
+        .await
+        .map_err(|e| err(&e))
+}
+
+#[tauri::command]
 pub async fn linked_ask_to_join(
     app: AppHandle,
     url: String,

@@ -140,28 +140,6 @@ impl HeldStore {
     pub async fn chain(&self) -> Result<Vec<Entry>> {
         Ok(self.resolved().await?.chain)
     }
-
-    /// What a `roster` request names: the `seq` and hash of this device's head, or -1 and none.
-    pub async fn head(&self) -> Result<(i64, Option<String>)> {
-        let chain = self.chain().await?;
-        Ok(chain.last().map_or((-1, None), |entry| {
-            let seq = i64::try_from(entry.seq).unwrap_or(i64::MAX);
-            (seq, Some(entry_hash(entry)))
-        }))
-    }
-
-    /// The entries above `after`, or every entry held when `head` isn't on this device's winning
-    /// chain: the asker's head then lost a fork here, or is unknown, so it needs the whole picture.
-    /// Holding `head` isn't enough, since this device may have just fetched it from the asker.
-    pub async fn roster_for(&self, after: i64, head: Option<&str>) -> Result<Vec<Entry>> {
-        let all = self.candidates_after(-1).await?;
-        let chain = self.chain().await?;
-        let known = head.is_none_or(|head| chain.iter().any(|e| entry_hash(e) == head));
-        Ok(all
-            .into_iter()
-            .filter(|e| !known || i64::try_from(e.seq).is_ok_and(|seq| seq > after))
-            .collect())
-    }
 }
 
 impl Store for HeldStore {

@@ -60,7 +60,7 @@ fn is_blob_of(path: &str, bytes: &[u8]) -> bool {
 /// Pulls what `held` lacks from the peer behind `link`, and returns how many objects it took.
 pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Result<usize> {
     // From the start: an entry that lost can sit below this device's head, and its key still reads.
-    for entry in link.roster(-1, None).await? {
+    for entry in link.roster(-1).await? {
         held.hold_entry(&entry).await?;
     }
     let resolved = held.resolved().await?;

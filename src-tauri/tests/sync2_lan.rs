@@ -125,7 +125,7 @@ async fn a_malformed_entry_from_a_peer_is_not_held() {
     let mut entry = g.store.0.lock().unwrap().roster[1].clone();
     entry.v = 3;
     let refused = held.hold_entry(&entry).await.is_err();
-    assert_eq!(held.head().await.unwrap().0, 1);
+    assert_eq!(held.chain().await.unwrap().last().unwrap().seq, 1);
     assert!(refused);
 }
 

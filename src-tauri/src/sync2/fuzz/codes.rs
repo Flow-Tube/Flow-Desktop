@@ -5,6 +5,7 @@ use proptest::prelude::*;
 use super::mutations;
 use crate::sync::canonical::to_canonical_json;
 use crate::sync2::codes::{QrCode, StoreLocation, new_offer, read_code};
+use crate::sync2::pairing::pairing_commit;
 use crate::sync2::pipe::LanAddress;
 
 fn base64_or_text() -> impl Strategy<Value = String> {
@@ -28,10 +29,10 @@ fn qr_code() -> impl Strategy<Value = QrCode> {
         proptest::option::of(store),
         proptest::option::of(prop::collection::vec(address, 0..3)),
     )
-        .prop_map(|(v, t, e, r, d, s, l)| QrCode {
+        .prop_map(|(v, t, c, r, d, s, l)| QrCode {
             v,
             t,
-            e,
+            c,
             r,
             d,
             s,
@@ -52,8 +53,8 @@ proptest! {
             prop_assert_eq!(code.qr(), &qr);
             let token = URL_SAFE_NO_PAD.decode(&qr.t).ok().filter(|t| t.len() == 16);
             prop_assert_eq!(code.token().ok().map(Vec::from), token);
-            let key = URL_SAFE_NO_PAD.decode(&qr.e).ok().filter(|k| k.len() == 32);
-            prop_assert_eq!(code.shower_key().ok().map(Vec::from), key);
+            let commitment = URL_SAFE_NO_PAD.decode(&qr.c).ok().filter(|k| k.len() == 32);
+            prop_assert_eq!(code.commitment().ok().map(Vec::from), commitment);
         }
     }
 
@@ -71,6 +72,6 @@ fn a_member_code_reads_back() {
     let offer = new_offer(Some(store.clone()), "Desk", None);
     let code = read_code(&offer.qr).unwrap();
     assert_eq!(code.token().unwrap(), offer.token);
-    assert_eq!(code.shower_key().unwrap(), offer.public);
+    assert_eq!(code.commitment().unwrap(), pairing_commit(&offer.public));
     assert!(matches!(code, crate::sync2::codes::Code::Member { store: s, .. } if s == store));
 }

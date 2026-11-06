@@ -28,6 +28,7 @@ use flow_desktop_lib::sync2::linking::{
 use flow_desktop_lib::sync2::live_message::{LiveMessage, Now, PlayState};
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
 use flow_desktop_lib::sync2::membership::{leave_group, member_keys, new_epoch, rename_device};
+use flow_desktop_lib::sync2::pairing::pairing_proof;
 use flow_desktop_lib::sync2::paths::log_path;
 use flow_desktop_lib::sync2::pipe::{Pipe, listen_on};
 use flow_desktop_lib::sync2::roster::{Entry, Op, Role, entry_hash, fork_winner};
@@ -533,14 +534,17 @@ async fn a_lan_message_past_a_frame_s_limit_is_refused() {
         "ws://127.0.0.1:{}/flow-sync/2/pair",
         listening.addresses[0].p
     );
+    let token = [7; 16];
     tokio::spawn(async move {
         let (mut socket, _) = connect_async(url).await.unwrap();
-        for len in [32, 4 << 20, 5 << 20] {
+        let first = [&[0; 32][..], &pairing_proof(&token, &[0; 32])[..]].concat();
+        let _ = socket.send(Message::Binary(first.into())).await;
+        for len in [4 << 20, 5 << 20] {
             let _ = socket.send(Message::Binary(vec![0; len].into())).await;
         }
         let _ = socket.next().await;
     });
-    let (mut pipe, _) = listening.accept().await.unwrap();
+    let (mut pipe, _) = listening.accept(&token).await.unwrap();
     assert_eq!(pipe.receive().await.unwrap().len(), 4 << 20);
     assert!(pipe.receive().await.is_err());
 }

@@ -1,18 +1,24 @@
 //! How pairing messages travel (spec/protocol.md, Channel): through a store's mailbox, or over a
-//! LAN WebSocket. Either way the scanner's ephemeral key goes first, in the clear.
+//! LAN WebSocket. Either way two clear messages come first: the scanner's key with its proof, then
+//! the shower's key.
 
 use std::future::Future;
+use std::net::IpAddr;
 use std::time::Duration;
 
+use futures_util::StreamExt;
+use futures_util::stream::FuturesUnordered;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::{Instant, timeout, timeout_at};
+use tokio::time::{Instant, timeout};
 use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
 use super::engine::{EngineError, Result};
 use super::lan_link::lan_socket_config;
 use super::mailbox::Mailbox;
+use super::pairing::pairing_proof;
 use super::paths::pair_message_name;
 use crate::sync::qr::is_local_address;
 use crate::sync::transport::{ClientStream, WsChannel, bind, lan_ip_candidates, ws_url};
@@ -23,6 +29,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const LINGER: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 pub const SLOT_LIFETIME: Duration = Duration::from_secs(180);
+/// How long a LAN connection has to prove it read the code.
+const FIRST_MESSAGE: Duration = Duration::from_secs(5);
+/// LAN connections waited on at once, so silent ones can't hold up the real scanner.
+const WAITING: usize = 8;
 /// Addresses a code lists, best first, as many as FLOW-SYNC/1 codes carry.
 const LAN_ADDRESSES: usize = 3;
 pub const KEY_SIZE: usize = 32;
@@ -38,10 +48,6 @@ pub struct LanAddress {
 pub trait Pipe {
     fn send(&mut self, bytes: Vec<u8>) -> impl Future<Output = Result<()>> + Send;
     fn receive(&mut self) -> impl Future<Output = Result<Vec<u8>>> + Send;
-    /// The scanner's first step: its ephemeral public key.
-    fn send_key(&mut self, key: [u8; KEY_SIZE]) -> impl Future<Output = Result<()>> + Send;
-    /// The shower's first step: the scanner's key, which it needs to open anything.
-    fn receive_key(&mut self) -> impl Future<Output = Result<[u8; KEY_SIZE]>> + Send;
     /// Ends pairing after the last message.
     fn close(&mut self) -> impl Future<Output = ()> + Send;
     /// The other device's address, when the pipe runs over the LAN.
@@ -50,14 +56,13 @@ pub trait Pipe {
     }
 }
 
-fn split_key(bytes: &[u8]) -> Result<([u8; KEY_SIZE], &[u8])> {
-    let (key, rest) = bytes
-        .split_first_chunk::<KEY_SIZE>()
-        .ok_or(EngineError::Unexpected)?;
-    Ok((*key, rest))
+/// The scanner's key, when `first` is that key followed by a proof that it read the code.
+pub fn scanner_key(first: &[u8], token: &[u8; 16]) -> Option<[u8; KEY_SIZE]> {
+    let (key, proof) = first.split_first_chunk::<KEY_SIZE>()?;
+    bool::from(proof.ct_eq(&pairing_proof(token, key))).then_some(*key)
 }
 
-/// A slot of a store's pairing mailbox. The scanner's key is the prefix of its first message.
+/// A slot of a store's pairing mailbox.
 pub struct MailboxPipe<'m, M> {
     mailbox: &'m M,
     slot: String,
@@ -65,8 +70,6 @@ pub struct MailboxPipe<'m, M> {
     directions: (char, char),
     sent: u64,
     received: u64,
-    prefix: Vec<u8>,
-    pending: Option<Vec<u8>>,
 }
 
 impl<'m, M: Mailbox + Sync> MailboxPipe<'m, M> {
@@ -77,25 +80,31 @@ impl<'m, M: Mailbox + Sync> MailboxPipe<'m, M> {
             directions: if shower { ('a', 'b') } else { ('b', 'a') },
             sent: 0,
             received: 0,
-            prefix: Vec::new(),
-            pending: None,
         }
+    }
+
+    /// The scanner's first message. After a wrong proof this path stays quiet until the slot ends,
+    /// which leaves the LAN path open.
+    pub async fn first_message(&mut self, token: &[u8; 16]) -> Result<[u8; KEY_SIZE]> {
+        let deadline = Instant::now() + SLOT_LIFETIME;
+        let first = self.receive().await?;
+        if let Some(key) = scanner_key(&first, token) {
+            return Ok(key);
+        }
+        tokio::time::sleep_until(deadline).await;
+        Err(EngineError::TimedOut)
     }
 }
 
 impl<M: Mailbox + Sync> Pipe for MailboxPipe<'_, M> {
     async fn send(&mut self, bytes: Vec<u8>) -> Result<()> {
         let name = pair_message_name(self.directions.0, self.sent);
-        let message = [std::mem::take(&mut self.prefix), bytes].concat();
-        self.mailbox.put_message(&self.slot, &name, message).await?;
+        self.mailbox.put_message(&self.slot, &name, bytes).await?;
         self.sent += 1;
         Ok(())
     }
 
     async fn receive(&mut self) -> Result<Vec<u8>> {
-        if let Some(bytes) = self.pending.take() {
-            return Ok(bytes);
-        }
         let name = pair_message_name(self.directions.1, self.received);
         let deadline = Instant::now() + SLOT_LIFETIME;
         loop {
@@ -110,24 +119,12 @@ impl<M: Mailbox + Sync> Pipe for MailboxPipe<'_, M> {
         }
     }
 
-    fn send_key(&mut self, key: [u8; KEY_SIZE]) -> impl Future<Output = Result<()>> + Send {
-        self.prefix = key.to_vec();
-        std::future::ready(Ok(()))
-    }
-
-    async fn receive_key(&mut self) -> Result<[u8; KEY_SIZE]> {
-        let first = self.receive().await?;
-        let (key, rest) = split_key(&first)?;
-        self.pending = Some(rest.to_vec());
-        Ok(key)
-    }
-
     fn close(&mut self) -> impl Future<Output = ()> + Send {
         std::future::ready(())
     }
 }
 
-/// A WebSocket to the other device on the same network. The scanner's key is its own first frame.
+/// A WebSocket to the other device on the same network.
 pub struct LanPipe<S> {
     socket: WsChannel<S>,
     shower: bool,
@@ -144,18 +141,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Pipe for LanPipe<S> {
             .await
             .map_err(|_| EngineError::TimedOut)?
             .map_err(EngineError::from)
-    }
-
-    async fn send_key(&mut self, key: [u8; KEY_SIZE]) -> Result<()> {
-        self.send(key.to_vec()).await
-    }
-
-    async fn receive_key(&mut self) -> Result<[u8; KEY_SIZE]> {
-        let frame = self.receive().await?;
-        match split_key(&frame)? {
-            (key, []) => Ok(key),
-            _ => Err(EngineError::Unexpected),
-        }
     }
 
     /// The shower waits a little for the scanner to close, so the last message isn't cut off.
@@ -196,20 +181,6 @@ where
         match self {
             Self::Mailbox(pipe) => pipe.receive().await,
             Self::Lan(pipe) => pipe.receive().await,
-        }
-    }
-
-    async fn send_key(&mut self, key: [u8; KEY_SIZE]) -> Result<()> {
-        match self {
-            Self::Mailbox(pipe) => pipe.send_key(key).await,
-            Self::Lan(pipe) => pipe.send_key(key).await,
-        }
-    }
-
-    async fn receive_key(&mut self) -> Result<[u8; KEY_SIZE]> {
-        match self {
-            Self::Mailbox(pipe) => pipe.receive_key().await,
-            Self::Lan(pipe) => pipe.receive_key().await,
         }
     }
 
@@ -262,28 +233,47 @@ pub async fn listen_on(addresses: Vec<String>) -> Result<Listening> {
 }
 
 impl Listening {
-    /// Waits for one scanner and reads its key. Other connections stay unanswered.
-    pub async fn accept(self) -> Result<(LanPipe<TcpStream>, [u8; KEY_SIZE])> {
-        let deadline = Instant::now() + SLOT_LIFETIME;
-        let (stream, peer) = timeout_at(deadline, self.listener.accept())
+    /// Waits for a scanner that read the code and returns its key. Connections that don't prove
+    /// that are dropped, and none is served after the one that does.
+    pub async fn accept(self, token: &[u8; 16]) -> Result<(LanPipe<TcpStream>, [u8; KEY_SIZE])> {
+        let waiting = async {
+            let mut waiting = FuturesUnordered::new();
+            loop {
+                tokio::select! {
+                    accepted = self.listener.accept(), if waiting.len() < WAITING => {
+                        let (stream, peer) = accepted.map_err(crate::sync::error::SyncError::from)?;
+                        waiting.push(timeout(FIRST_MESSAGE, first_message(stream, peer.ip(), token)));
+                    }
+                    Some(first) = waiting.next() => {
+                        if let Ok(Some(found)) = first {
+                            return Ok(found);
+                        }
+                    }
+                }
+            }
+        };
+        timeout(SLOT_LIFETIME, waiting)
             .await
             .map_err(|_| EngineError::TimedOut)?
-            .map_err(crate::sync::error::SyncError::from)?;
-        let socket = timeout_at(
-            deadline,
-            accept_async_with_config(stream, Some(lan_socket_config())),
-        )
-        .await
-        .map_err(|_| EngineError::TimedOut)?
-        .map_err(crate::sync::error::SyncError::from)?;
-        let mut pipe = LanPipe {
-            socket: WsChannel::new(socket),
-            shower: true,
-            peer: Some(peer.ip().to_string()),
-        };
-        let key = pipe.receive_key().await?;
-        Ok((pipe, key))
     }
+}
+
+async fn first_message(
+    stream: TcpStream,
+    peer: IpAddr,
+    token: &[u8; 16],
+) -> Option<(LanPipe<TcpStream>, [u8; KEY_SIZE])> {
+    let socket = accept_async_with_config(stream, Some(lan_socket_config()))
+        .await
+        .ok()?;
+    let mut pipe = LanPipe {
+        socket: WsChannel::new(socket),
+        shower: true,
+        peer: Some(peer.to_string()),
+    };
+    let first = pipe.receive().await.ok()?;
+    let key = scanner_key(&first, token)?;
+    Some((pipe, key))
 }
 
 /// Dials the addresses a code lists, in order, each for a few seconds.
@@ -314,13 +304,19 @@ mod tests {
 
     proptest! {
         #[test]
-        fn the_scanner_key_is_the_first_32_bytes(
-            bytes in prop::collection::vec(any::<u8>(), 0..96),
+        fn only_a_key_with_its_proof_is_a_first_message(
+            key in any::<[u8; KEY_SIZE]>(),
+            token in any::<[u8; 16]>(),
+            extra in prop::collection::vec(any::<u8>(), 1..16),
         ) {
-            let split = split_key(&bytes).ok().map(|(key, rest)| (key.to_vec(), rest.to_vec()));
-            let expected = (bytes.len() >= KEY_SIZE)
-                .then(|| (bytes[..KEY_SIZE].to_vec(), bytes[KEY_SIZE..].to_vec()));
-            prop_assert_eq!(split, expected);
+            let proof = pairing_proof(&token, &key);
+            let good = [&key[..], &proof[..]].concat();
+            prop_assert_eq!(scanner_key(&good, &token), Some(key));
+            prop_assert_eq!(scanner_key(&key, &token), None);
+            prop_assert_eq!(scanner_key(&[&good[..], &extra[..]].concat(), &token), None);
+            let mut wrong = good;
+            wrong[KEY_SIZE] ^= 1;
+            prop_assert_eq!(scanner_key(&wrong, &token), None);
         }
     }
 }

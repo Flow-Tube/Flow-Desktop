@@ -149,7 +149,6 @@ export function DownloadsTab() {
             {getString('settings_browse')}
           </button>
         </div>
-        <div className="border-t border-chrome-neutral-800/50" />
         <div aria-disabled={musicDownloadLocationDisabled} className={`flex items-center justify-between px-5 py-4 transition-colors duration-200 ease-out ${musicDownloadLocationDisabled ? 'opacity-50' : 'hover:bg-surface-container'}`}>
           <div className="flex-1 min-w-0 me-4">
             <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_music_download_folder')}</div>

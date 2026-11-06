@@ -17,9 +17,7 @@ const ADD_BUTTON = 'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medi
 
 function FolderRows({ folders }: { folders: LocalMediaFolder[] }) {
   const removeFolder = useLocalMediaStore((s) => s.removeFolder);
-  if (folders.length === 0) {
-    return <div className="px-5 pb-4 text-xs text-chrome-neutral-500">{getString('settings_local_media_none')}</div>;
-  }
+  if (folders.length === 0) return null;
   const remove = (path: string) => {
     void removeFolder(path).catch(() =>
       useUiStore.getState().showToast({ variant: 'error', message: getString('settings_local_media_remove_failed') }),
@@ -65,7 +63,6 @@ export function LocalMediaSettings() {
         </button>
       </SettingItem>
       <FolderRows folders={folders.filter((folder) => folder.role === 'include')} />
-      <div className="border-t border-chrome-neutral-800/50" />
       <SettingItem title={getString('settings_local_media_excluded')} description={getString('settings_local_media_excluded_desc')}>
         <button type="button" className={ADD_BUTTON} onClick={() => void addFolder(getString('settings_local_media_exclude_title'), true)}>
           <FolderPlus size={14} />
@@ -73,7 +70,6 @@ export function LocalMediaSettings() {
         </button>
       </SettingItem>
       <FolderRows folders={folders.filter((folder) => folder.role === 'exclude')} />
-      <div className="border-t border-chrome-neutral-800/50" />
       <SettingItem title={getString('settings_local_media_hide_recordings')} description={getString('settings_local_media_hide_recordings_desc')}>
         <ToggleSwitch checked={hideRecordings} onChange={setHideRecordings} />
       </SettingItem>

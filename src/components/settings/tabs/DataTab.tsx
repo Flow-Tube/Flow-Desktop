@@ -86,7 +86,6 @@ export function DataTab() {
             </div>
             <Button variant="secondary" size="sm" onClick={() => navigate('/settings/import')}><Upload size={14} />{getString('settings_import')}</Button>
           </div>
-          <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
             <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_diagnostics')}</div>
@@ -94,7 +93,6 @@ export function DataTab() {
             </div>
             <Button variant="secondary" size="sm" onClick={() => navigate('/settings/diagnostics')}><FileText size={14} />{getString('settings_open')}</Button>
           </div>
-          <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
             <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_data')}</div>
@@ -102,7 +100,6 @@ export function DataTab() {
             </div>
             <Button variant="secondary" size="sm" onClick={() => handleExport(backupType as BackupFileKind, getString('settings_export_data'))}><Download size={14} />{getString('settings_export')}</Button>
           </div>
-          <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
             <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_history')}</div>
@@ -110,7 +107,6 @@ export function DataTab() {
             </div>
             <Button variant="secondary" size="sm" onClick={() => handleExport('WATCH_HISTORY', getString('settings_export_history'))}><Download size={14} />{getString('settings_export')}</Button>
           </div>
-          <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
             <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_newpipe')}</div>
@@ -118,7 +114,6 @@ export function DataTab() {
             </div>
             <Button variant="secondary" size="sm" onClick={() => handleExport('NEWPIPE_SUBSCRIPTIONS', getString('settings_export_newpipe'))}><Download size={14} />{getString('settings_export')}</Button>
           </div>
-          <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
             <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_clear_cache')}</div>

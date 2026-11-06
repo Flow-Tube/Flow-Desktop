@@ -43,7 +43,7 @@ export function AutoBackupGroup() {
     showToast({ message: getString(message), variant });
   };
 
-  const lastRun = status.lastRunMs > 0 ? new Date(status.lastRunMs).toLocaleString() : getString('settings_backup_never_run');
+  const lastRun = status.lastRunMs > 0 ? new Date(status.lastRunMs).toLocaleString() : null;
 
   return (
     <SettingsGroup title={getString('settings_group_auto_backup')}>
@@ -64,12 +64,14 @@ export function AutoBackupGroup() {
       <SettingItem title={getString('settings_backup_folder')} description={folder || getString('settings_backup_no_folder')}>
         <Button variant="secondary" size="sm" onClick={chooseFolder}><FolderOpen size={14} />{getString('settings_backup_pick_folder')}</Button>
       </SettingItem>
-      <SettingItem
-        title={getString('settings_backup_last_run')}
-        description={status.lastError ? getString(status.lastError === 'folder_missing' ? 'settings_backup_folder_missing' : 'settings_backup_failed') : undefined}
-      >
-        <span className="text-sm text-chrome-neutral-300">{lastRun}</span>
-      </SettingItem>
+      {(lastRun || status.lastError) && (
+        <SettingItem
+          title={getString('settings_backup_last_run')}
+          description={status.lastError ? getString(status.lastError === 'folder_missing' ? 'settings_backup_folder_missing' : 'settings_backup_failed') : undefined}
+        >
+          {lastRun && <span className="text-sm text-chrome-neutral-300">{lastRun}</span>}
+        </SettingItem>
+      )}
       <SettingItem title={getString('settings_backup_run_now')} description={getString('settings_backup_run_now_desc')}>
         <Button variant="secondary" size="sm" onClick={runNow} disabled={backingUp || !folder}><DatabaseBackup size={14} />{backingUp ? getString('settings_backup_running') : getString('settings_backup_run_now')}</Button>
       </SettingItem>

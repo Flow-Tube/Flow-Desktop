@@ -187,43 +187,43 @@ export function TasteTab() {
             />
           </section>
 
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-7">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-medium text-chrome-neutral-200">
-                  {getString("taste_current_interests")}
-                </h2>
-                <p className="mt-1 text-sm text-chrome-neutral-400">
-                  {getString("taste_topics_count", preferredTopics.length)}
-                </p>
+          {(loading || preferredTopics.length > 0) && (
+            <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-7">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-medium text-chrome-neutral-200">
+                    {getString("taste_current_interests")}
+                  </h2>
+                  <p className="mt-1 text-sm text-chrome-neutral-400">
+                    {getString("taste_topics_count", preferredTopics.length)}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pe-1">
-              {loading ? (
-                <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
-                  <Loader2 size={16} className="animate-spin" />
-                  {getString("taste_loading")}
-                </span>
-              ) : preferredTopics.length > 0 ? (
-                preferredTopics.map((topic) => (
-                  <RemovableChip
-                    key={topic}
-                    topic={topic}
-                    detail={
-                      pickEvidence.has(topic.toLowerCase())
-                        ? getString(evidenceLabel(pickEvidence.get(topic.toLowerCase()) ?? 0))
-                        : undefined
-                    }
-                    tone="interest"
-                    saving={savingTopic?.toLowerCase() === topic.toLowerCase()}
-                    onRemove={() => void removeInterest(topic)}
-                  />
-                ))
-              ) : (
-                <span className="text-sm text-chrome-neutral-500">{getString("taste_empty_interests")}</span>
-              )}
-            </div>
-          </section>
+              <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pe-1">
+                {loading ? (
+                  <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
+                    <Loader2 size={16} className="animate-spin" />
+                    {getString("taste_loading")}
+                  </span>
+                ) : (
+                  preferredTopics.map((topic) => (
+                    <RemovableChip
+                      key={topic}
+                      topic={topic}
+                      detail={
+                        pickEvidence.has(topic.toLowerCase())
+                          ? getString(evidenceLabel(pickEvidence.get(topic.toLowerCase()) ?? 0))
+                          : undefined
+                      }
+                      tone="interest"
+                      saving={savingTopic?.toLowerCase() === topic.toLowerCase()}
+                      onRemove={() => void removeInterest(topic)}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
+          )}
 
           <TasteSection title={getString("taste_groups_title")} description={getString("taste_groups_desc")}>
             {taste.loading && taste.overview.groups.length === 0 ? (
@@ -257,31 +257,33 @@ export function TasteTab() {
             <p className="text-sm text-chrome-neutral-500">{getString("discover_channels_like_yours_footer")}</p>
           </TasteSection>
 
-          <TasteSection
-            title={getString("taste_remembered_title")}
-            description={getString("taste_remembered_desc")}
-            action={
-              taste.overview.rememberedChannels.length > 0 && (
-                <button
-                  type="button"
-                  disabled={taste.forgetting !== null}
-                  onClick={() => void taste.forget("all")}
-                  className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-chrome-neutral-700 px-3 text-sm text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-chrome-neutral-800 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {taste.forgetting === "all" && <Loader2 size={14} className="animate-spin" />}
-                  {getString("taste_remembered_forget_all")}
-                </button>
-              )
-            }
-          >
-            <div className="h-48 overflow-y-auto pe-1">
-              <RememberedChannels
-                channels={taste.overview.rememberedChannels}
-                forgetting={taste.forgetting}
-                onForget={(channelId) => void taste.forget(channelId)}
-              />
-            </div>
-          </TasteSection>
+          {taste.overview.rememberedChannels.length > 0 && (
+            <TasteSection
+              title={getString("taste_remembered_title")}
+              description={getString("taste_remembered_desc")}
+              action={
+                taste.overview.rememberedChannels.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={taste.forgetting !== null}
+                    onClick={() => void taste.forget("all")}
+                    className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-chrome-neutral-700 px-3 text-sm text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-chrome-neutral-800 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {taste.forgetting === "all" && <Loader2 size={14} className="animate-spin" />}
+                    {getString("taste_remembered_forget_all")}
+                  </button>
+                )
+              }
+            >
+              <div className="h-48 overflow-y-auto pe-1">
+                <RememberedChannels
+                  channels={taste.overview.rememberedChannels}
+                  forgetting={taste.forgetting}
+                  onForget={(channelId) => void taste.forget(channelId)}
+                />
+              </div>
+            </TasteSection>
+          )}
 
           <TasteMusicData />
 
@@ -341,50 +343,52 @@ export function TasteTab() {
             />
           </section>
 
-          <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-7">
-            <div className="mb-4">
-              <h2 className="text-base font-medium text-chrome-neutral-200">
-                {getString("taste_current_blocked")}
-              </h2>
-              <p className="mt-1 text-sm text-chrome-neutral-400">
-                {getString("taste_blocked_count", blockedTopics.length)}
-              </p>
-            </div>
-            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pe-1">
-              {loading ? (
-                <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
-                  <Loader2 size={16} className="animate-spin" />
-                  {getString("taste_loading")}
-                </span>
-              ) : blockedTopics.length > 0 ? (
-                blockedTopics.map((topic) => (
-                  <RemovableChip
-                    key={topic}
-                    topic={topic}
-                    tone="blocked"
-                    saving={savingTopic?.toLowerCase() === topic.toLowerCase()}
-                    onRemove={() => void unblockBlockedTopic(topic)}
-                  />
-                ))
-              ) : (
-                <span className="text-sm text-chrome-neutral-500">{getString("taste_empty_blocked")}</span>
-              )}
-            </div>
-          </section>
+          {(loading || blockedTopics.length > 0) && (
+            <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 xl:col-span-7">
+              <div className="mb-4">
+                <h2 className="text-base font-medium text-chrome-neutral-200">
+                  {getString("taste_current_blocked")}
+                </h2>
+                <p className="mt-1 text-sm text-chrome-neutral-400">
+                  {getString("taste_blocked_count", blockedTopics.length)}
+                </p>
+              </div>
+              <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pe-1">
+                {loading ? (
+                  <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
+                    <Loader2 size={16} className="animate-spin" />
+                    {getString("taste_loading")}
+                  </span>
+                ) : (
+                  blockedTopics.map((topic) => (
+                    <RemovableChip
+                      key={topic}
+                      topic={topic}
+                      tone="blocked"
+                      saving={savingTopic?.toLowerCase() === topic.toLowerCase()}
+                      onRemove={() => void unblockBlockedTopic(topic)}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
+          )}
 
-          <TasteSection
-            title={getString("taste_hidden_channels")}
-            description={getString("taste_hidden_channels_desc")}
-          >
-            <div className="h-72 overflow-y-auto pe-1">
-              <HiddenChannels
-                channels={taste.overview.hiddenChannels}
-                resolvingNames={taste.resolvingNames}
-                unblocking={unblocking}
-                onUnblock={handleUnblockChannel}
-              />
-            </div>
-          </TasteSection>
+          {taste.overview.hiddenChannels.length > 0 && (
+            <TasteSection
+              title={getString("taste_hidden_channels")}
+              description={getString("taste_hidden_channels_desc")}
+            >
+              <div className="h-72 overflow-y-auto pe-1">
+                <HiddenChannels
+                  channels={taste.overview.hiddenChannels}
+                  resolvingNames={taste.resolvingNames}
+                  unblocking={unblocking}
+                  onUnblock={handleUnblockChannel}
+                />
+              </div>
+            </TasteSection>
+          )}
 
           <section className="col-span-12 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
             <div className="mb-4">

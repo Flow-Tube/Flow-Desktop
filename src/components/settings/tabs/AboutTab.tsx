@@ -126,15 +126,10 @@ export function AboutTab() {
 
       <SettingsGroup title={getString('settings_group_app')}>
         <LinkRow icon={<Code2 size={16} />} label={getString('settings_version')} value={appMetadata?.version ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<History size={16} />} label={getString('about_changelog')} value={getString('about_changelog_summary')} onSelect={() => setOpenDialog('changelog')} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Fingerprint size={16} />} label={getString('settings_identifier')} value={appMetadata?.identifier ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Cpu size={16} />} label={getString('settings_tauri_version')} value={appMetadata?.tauriVersion ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Package size={16} />} label={getString('settings_bundle_type')} value={appMetadata?.bundleType ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Info size={16} />} label={getString('settings_metadata_source')} value={sourceLabel(appMetadata?.source)} />
       </SettingsGroup>
 
@@ -162,7 +157,6 @@ export function AboutTab() {
                 {checkingUpdate ? getString('settings_checking') : getString('settings_check_for_updates')}
               </Button>
             </div>
-            <div className="border-t border-chrome-neutral-800/50" />
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex-1 min-w-0 me-4">
                 <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_auto_update')}</div>
@@ -176,21 +170,15 @@ export function AboutTab() {
 
       <SettingsGroup title={getString('settings_group_contact')}>
         <LinkRow icon={<Globe size={16} />} label={getString('settings_website')} value="flow.aedev.me" href="https://flow.aedev.me" />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<GithubIcon />} label={getString('settings_github')} value="A-EDev/flow-desktop" href="https://github.com/Flow-Tube/Flow-Desktop" />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<RedditIcon />} label={getString('settings_reddit')} value="r/Flow_Official" href="https://reddit.com/r/Flow_Official" />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<User size={16} />} label={getString('settings_creator')} value="A-EDev" href="https://github.com/A-EDev" />
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_support')}>
         <LinkRow icon={<OpenCollectiveIcon />} label={getString('settings_donate_open_collective')} value="" href={OPEN_COLLECTIVE_URL} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<PatreonIcon />} label={getString('settings_donate_patreon')} value="" href={PATREON_URL} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Heart size={16} />} label={getString('settings_donate_all_ways')} value="" onSelect={() => navigate('/support')} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <div className="px-5 py-4">
           <p className="text-xs text-chrome-neutral-400 leading-relaxed">{getString('settings_donate_desc')}</p>
         </div>
@@ -198,9 +186,7 @@ export function AboutTab() {
 
       <SettingsGroup title={getString('settings_group_legal')}>
         <LinkRow icon={<Scale size={16} />} label={getString('settings_license')} value="GPL-3.0" />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<FileText size={16} />} label={getString('about_notices')} value={getString('about_notices_summary')} onSelect={() => setOpenDialog('notices')} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <div className="px-5 py-4">
           <p className="text-xs text-chrome-neutral-400 leading-relaxed">{getString('settings_license_text')}</p>
         </div>
@@ -208,19 +194,12 @@ export function AboutTab() {
 
       <SettingsGroup title={getString('settings_group_device')}>
         <LinkRow icon={<Monitor size={16} />} label={getString('settings_platform')} value={systemMetadata?.platform ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Monitor size={16} />} label={getString('settings_os')} value={systemMetadata ? `${systemMetadata.osType} ${systemMetadata.osVersion}` : unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Cpu size={16} />} label={getString('settings_os_family')} value={systemMetadata?.family ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Cpu size={16} />} label={getString('settings_architecture')} value={systemMetadata?.arch ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Globe size={16} />} label={getString('settings_locale')} value={systemMetadata?.locale ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Monitor size={16} />} label={getString('settings_display')} value={systemMetadata?.display ?? unknown()} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Info size={16} />} label={getString('settings_metadata_source')} value={sourceLabel(systemMetadata?.source)} />
-        <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Cpu size={16} />} label={getString('settings_user_agent')} value={systemMetadata?.userAgent ?? unknown()} />
       </SettingsGroup>
 

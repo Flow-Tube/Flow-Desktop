@@ -17,7 +17,7 @@ pub const LYRICS_HTTP_MAX_BODY: usize = 8 * 1024 * 1024;
 
 /// Hosts of the lyrics providers: `BetterLyrics`, lrc.red, `LyricsPlus`, `SimpMusic`, `KuGou`,
 /// `Paxsenix` (with the Apple Music catalogue and iTunes search it looks songs up in), `LrcLib`
-/// and Unison.
+/// and Unison. The animated artwork service sits beside `BetterLyrics` and is asked the same way.
 const LYRICS_HOSTS: &[&str] = &[
     "lyrics-api.boidu.dev",
     "lrc.red",
@@ -31,6 +31,7 @@ const LYRICS_HOSTS: &[&str] = &[
     "itunes.apple.com",
     "lrclib.net",
     "unison.boidu.dev",
+    "artwork.boidu.dev",
 ];
 
 pub struct LyricsHttpBody {
@@ -123,6 +124,7 @@ mod tests {
         assert!(allowed("https://lrc.red/api/v1?track=a"));
         assert!(allowed("https://cdn.lrc.red/s/XX.ttml"));
         assert!(allowed("https://itunes.apple.com/search?term=a"));
+        assert!(allowed("https://artwork.boidu.dev/?s=a&a=b"));
         assert!(allowed("https://LRCLIB.net/api/get"));
     }
 

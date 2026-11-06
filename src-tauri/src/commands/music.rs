@@ -472,6 +472,44 @@ pub async fn proxy_image_url(
     ))
 }
 
+/// True for an https URL on Apple's streaming hosts, the only place motion artwork comes from.
+fn is_artwork_loop_url(url: &reqwest::Url) -> bool {
+    url.scheme() == "https"
+        && url
+            .host_str()
+            .is_some_and(|host| host.ends_with(".apple.com") || host.ends_with(".mzstatic.com"))
+}
+
+/// A local URL for a motion artwork playlist. The webview's CSP allows media and fetches only from
+/// the proxy, and a segment's own URL goes after the same `?url=`, as with a live stream's playlist.
+#[tauri::command]
+pub async fn proxy_artwork_loop(
+    url: String,
+    streaming_manager: State<'_, StreamingManager>,
+) -> CmdResult<String> {
+    let parsed = reqwest::Url::parse(url.trim())
+        .map_err(|_| ErrorResponse::from(AppError::Validation("Invalid artwork URL".into())))?;
+    if !is_artwork_loop_url(&parsed) {
+        return Err(ErrorResponse::from(AppError::Validation(
+            "Unsupported artwork URL".into(),
+        )));
+    }
+    let token = format!("loop-{}", Uuid::new_v4());
+    streaming_manager.register_session(
+        token.clone(),
+        parsed.to_string(),
+        "application/vnd.apple.mpegurl".to_string(),
+        crate::api::http::BROWSER_USER_AGENT.to_string(),
+    );
+    let mut local = reqwest::Url::parse(&format!(
+        "http://127.0.0.1:{}/proxy/{token}",
+        streaming_manager.get_port()
+    ))
+    .map_err(|_| ErrorResponse::from(AppError::Validation("Invalid proxy URL".into())))?;
+    local.query_pairs_mut().append_pair("url", parsed.as_str());
+    Ok(local.to_string())
+}
+
 /// Base URL of the proxy's image route when the webview shouldn't fetch images
 /// itself: the Linux AppImage can't over HTTPS (see `streaming::images`), and
 /// `app_proxy` asks for it so images follow the user's proxy. `None` everywhere
@@ -489,4 +527,18 @@ pub fn image_proxy_base(
             crate::streaming::images::route_token()
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn artwork_loops_only_come_from_apple_over_https() {
+        let ok = |raw: &str| is_artwork_loop_url(&reqwest::Url::parse(raw).unwrap());
+        assert!(ok("https://mvod.itunes.apple.com/itunes-assets/x.m3u8"));
+        assert!(!ok("http://mvod.itunes.apple.com/x.m3u8"));
+        assert!(!ok("https://evil.example/x.m3u8"));
+        assert!(!ok("https://apple.com.evil.example/x.m3u8"));
+    }
 }

@@ -16,6 +16,7 @@ import { MusicCardMenu, useMusicContextMenu } from "../MusicCardMenu";
 import { MusicScrubber } from "../MusicScrubber";
 import { MusicSleepTimerButton } from "../MusicSleepTimerButton";
 import { useNowPlayingMenuActions } from "../useNowPlayingMenuActions";
+import { AnimatedArtworkLoop } from "./AnimatedArtworkLoop";
 import { PlayerTransport } from "./PlayerTransport";
 
 const META_BTN =
@@ -73,16 +74,21 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
       transition={LAYOUT_SPRING}
       className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center"
     >
-      <MusicArtwork
+      <motion.div
         layout
         transition={LAYOUT_SPRING}
-        src={track.thumbnail}
-        alt={track.title}
-        loading={loading}
-        iconClassName="h-16 w-16"
-        className={`aspect-square shrink-0 rounded-2xl ${artworkHidden ? "invisible" : ""}`}
+        className={`relative aspect-square shrink-0 overflow-hidden rounded-2xl ${artworkHidden ? "invisible" : ""}`}
         style={{ width: artSize }}
-      />
+      >
+        <MusicArtwork
+          src={track.thumbnail}
+          alt={track.title}
+          loading={loading}
+          iconClassName="h-16 w-16"
+          className="h-full w-full rounded-2xl"
+        />
+        {!artworkHidden && <AnimatedArtworkLoop track={track} />}
+      </motion.div>
 
       {/* Its own layout lets framer undo the column's resize scale. Position only, so a change in its own width can't squash the text either. */}
       <motion.div layout="position" transition={LAYOUT_SPRING} className="mt-8 flex w-full max-w-2xl flex-col gap-5">

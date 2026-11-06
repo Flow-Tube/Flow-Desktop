@@ -1072,6 +1072,8 @@
   "settings_music_plain_control_colors_app_theme": "App theme",
   "settings_music_player_follow_light_theme": "Light in light theme",
   "settings_music_player_follow_light_theme_desc": "Artwork backgrounds turn light when the app theme is light",
+  "settings_animated_artwork": "Animated artwork",
+  "settings_animated_artwork_desc": "Loop an album's motion artwork when it has one",
   "settings_music_restore_queue": "Restore the last queue",
   "settings_music_restore_queue_desc": "Reopen the music player on the song you stopped at, paused, with its queue",
   "settings_music_resume_long_tracks": "Resume long tracks",

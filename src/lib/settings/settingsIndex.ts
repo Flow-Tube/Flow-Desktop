@@ -126,6 +126,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_lyrics_providers" },
     { title: "settings_lyrics_cache" },
     { title: "settings_music_player_background", summary: "settings_music_player_background_desc" },
+    { title: "settings_animated_artwork", summary: "settings_animated_artwork_desc", keywords: ["motion", "video", "cover"] },
     { title: "settings_music_artwork_control_colors", summary: "settings_music_artwork_control_colors_desc" },
     { title: "settings_music_plain_control_colors", summary: "settings_music_plain_control_colors_desc" },
     { title: "settings_music_player_follow_light_theme", summary: "settings_music_player_follow_light_theme_desc" },

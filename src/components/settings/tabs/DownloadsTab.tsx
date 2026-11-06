@@ -40,7 +40,6 @@ export function DownloadsTab() {
   const [lyricsFile, setLyricsFile] = useBoolPref(SETTINGS.DOWNLOAD_LYRICS_FILE, true);
   const [autoOpened, setAutoOpened] = useBoolPref(SETTINGS.AUTO_DOWNLOAD_OPENED_VIDEOS, false);
   const [autoLiked, setAutoLiked] = useBoolPref(SETTINGS.AUTO_DOWNLOAD_LIKED_MUSIC, false);
-  const [storageCard, setStorageCard] = useBoolPref(SETTINGS.DOWNLOADS_STORAGE_CARD, true);
   const recovery = useDownloadRecovery();
 
   const downloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_LOCATION);
@@ -123,9 +122,6 @@ export function DownloadsTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_your_downloads')}>
-        <SettingItem title={getString('settings_downloads_storage_card')} description={getString('settings_downloads_storage_card_desc')}>
-          <ToggleSwitch checked={storageCard} onChange={setStorageCard} />
-        </SettingItem>
         <SettingItem title={getString('settings_find_earlier_downloads')} description={getString('settings_find_earlier_downloads_desc')}>
           <Button type="button" variant="secondary" size="sm" disabled={recovery.running !== null} onClick={() => void recovery.findEarlier()}>
             {getString(recovery.running === 'find' ? 'downloads_find_earlier_running' : 'settings_run_action')}

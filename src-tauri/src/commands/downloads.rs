@@ -1172,22 +1172,6 @@ pub async fn retag_older_downloads(
         .map_err(ErrorResponse::from)
 }
 
-/// Free bytes on the volume videos are saved to, or `None` when it can't be read.
-#[tauri::command]
-pub async fn get_download_free_space(
-    video_folder: Option<String>,
-    app: AppHandle,
-) -> Result<Option<u64>, ErrorResponse> {
-    let folder = naming::resolve_destination_directory(
-        &app,
-        DownloadMediaKind::Video,
-        video_folder.as_deref(),
-    )?;
-    tokio::task::spawn_blocking(move || recovery::free_bytes(&folder))
-        .await
-        .map_err(|error| download_error(error.to_string()))
-}
-
 /// Puts lyrics that arrived after a download finished into the file's `©lyr` tag.
 /// Only MP4/M4A files Flow wrote progressively can be retagged.
 pub async fn embed_download_lyrics(media_path: &Path, lyrics: String) -> Result<bool, String> {

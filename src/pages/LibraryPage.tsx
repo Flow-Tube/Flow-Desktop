@@ -20,7 +20,6 @@ import { Button } from "../components/ui/Button";
 import { VideoCard } from "../components/video/VideoCard";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
-import { DownloadVideoCard } from "../components/downloads/DownloadVideoCard";
 import { ShortCard } from "../components/shorts/ShortCard";
 import { NotesShelf } from "../components/note/NotesShelf";
 import { ShortsIcon } from "../components/ui/ShortsIcon";
@@ -160,7 +159,7 @@ function DownloadVideoShelfRow({
     <>
       {videos.map((video, index) => (
         <div key={`${video.id}-${index}`} className="w-[280px] md:w-[320px] shrink-0">
-          <DownloadVideoCard video={video} onPlay={onPlay} />
+          <VideoCard video={video} onPlay={onPlay} />
         </div>
       ))}
     </>

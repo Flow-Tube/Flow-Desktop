@@ -37,7 +37,7 @@ type BaseProps = {
 
 export type MusicItemCardProps = BaseProps &
   (
-    | { variant: 'album'; item: AlbumItem }
+    | { variant: 'album'; item: AlbumItem; thumbnailOverlay?: React.ReactNode; appendActions?: MusicMenuAction[] }
     | { variant: 'playlist'; item: PlaylistItem }
     | { variant: 'song'; item: SongItem }
     | { variant: 'video'; item: SongItem }
@@ -237,6 +237,8 @@ function SquareCard({
   onOpen,
   className,
   fill,
+  thumbnailOverlay,
+  appendActions = [],
 }: {
   item?: AlbumItem | SongItem;
   menuKind?: 'album' | 'track';
@@ -247,6 +249,8 @@ function SquareCard({
   onOpen?: () => void;
   className?: string;
   fill?: boolean;
+  thumbnailOverlay?: React.ReactNode;
+  appendActions?: MusicMenuAction[];
 }) {
   const menu = useMusicContextMenu(Boolean(menuKind));
   const isTrack = menuKind === 'track' && item && 'videoId' in item;
@@ -318,6 +322,7 @@ function SquareCard({
             group: 'quick',
             onSelect: () => void shareLink(item.title, youtubeMusicAlbumUrl(item.browseId)),
           },
+          ...appendActions,
         ]
       : [];
 
@@ -347,6 +352,7 @@ function SquareCard({
           className="h-full w-full ring-1 ring-chrome-neutral-800/50"
           iconSize="w-10 h-10"
         />
+        {thumbnailOverlay}
         {isTrack ? (
           <button
             type="button"
@@ -685,6 +691,8 @@ export function MusicItemCard(props: MusicItemCardProps) {
           onOpen={onOpen}
           className={className}
           fill={fill}
+          thumbnailOverlay={props.thumbnailOverlay}
+          appendActions={props.appendActions}
         />
       );
     case 'playlist':

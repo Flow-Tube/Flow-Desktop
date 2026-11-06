@@ -21,7 +21,6 @@ import { useDownloadStore } from "../store/useDownloadStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { SelectableRow } from "../components/common/SelectableRow";
-import { DownloadsStorageSummary } from "../components/downloads/DownloadsStorageSummary";
 import { Button } from "../components/ui/Button";
 import { Select } from "../components/ui/Select";
 import { SearchInput } from "../components/ui/SearchInput";
@@ -37,7 +36,8 @@ import {
   type DownloadSort,
 } from "../lib/downloadsSort";
 import { useDownloadRecovery } from "../lib/useDownloadRecovery";
-import { DownloadVideoCard } from "../components/downloads/DownloadVideoCard";
+import { DownloadProgressOverlay } from "../components/downloads/DownloadProgressOverlay";
+import { VideoCard } from "../components/video/VideoCard";
 import { DownloadCollectionCard } from "../components/downloads/DownloadCollectionCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
 import { useGridStyle } from "../lib/useGridColumns";
@@ -60,7 +60,6 @@ interface MusicEntry {
   key: string;
   recordId?: number;
   song: SongItem;
-  detail?: string;
 }
 
 function progressToVideo(progress: DownloadProgress): VideoSummary {
@@ -160,7 +159,6 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
         key: `record-${record.id}`,
         recordId: record.id,
         song: downloadRecordToSong(record),
-        detail: downloadDetail(record),
       }));
     return [...fromActive, ...fromRecords].filter((entry) =>
       matchesQuery(query, entry.song.title, entry.song.artists.map((artist) => artist.name).join(" ")),
@@ -325,11 +323,6 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
           sticky={false}
           className="py-0"
         />
-          {!loading && !isEmpty ? (
-            <div className="md:ms-auto">
-              <DownloadsStorageSummary records={records} />
-            </div>
-          ) : null}
         </div>
 
         {loading ? (
@@ -364,27 +357,24 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
                   {getString("downloads_videos_section")}
                 </h2>
-                <div className="flow-grid gap-y-6" style={cardGridStyle}>
-                  {videoEntries.map((entry) => {
-                    const selectable = selecting && entry.recordId != null;
-                    return (
-                      <DownloadVideoCard
-                        key={entry.key}
+                <div className="flow-grid gap-y-8" style={cardGridStyle}>
+                  {videoEntries.map((entry) => (
+                    <SelectableRow
+                      key={entry.key}
+                      card
+                      selecting={selecting && entry.recordId != null}
+                      selected={entry.recordId != null && selectedIds.has(entry.recordId)}
+                      onToggle={entry.recordId != null ? () => toggleSelected(entry.recordId!) : undefined}
+                    >
+                      <VideoCard
                         video={entry.video}
-                        progress={entry.progress}
-                        selectable={selectable}
-                        selected={entry.recordId != null && selectedIds.has(entry.recordId)}
-                        onToggleSelect={
-                          entry.recordId != null ? () => toggleSelected(entry.recordId!) : undefined
-                        }
                         onPlay={onPlay}
-                        onDelete={
-                          entry.recordId != null ? () => removeWithUndo([entry.recordId!]) : undefined
-                        }
-                        detail={entry.detail}
+                        reasonLine={entry.detail}
+                        onRemoveDownload={entry.recordId != null ? () => removeWithUndo([entry.recordId!]) : undefined}
+                        thumbnailOverlay={entry.progress ? <DownloadProgressOverlay progress={entry.progress} /> : undefined}
                       />
-                    );
-                  })}
+                    </SelectableRow>
+                  ))}
                 </div>
               </section>
             ) : null}
@@ -408,9 +398,6 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                         className="bg-surface-container-low pe-3"
                         onPlay={() => void playQueue(musicSongs, index)}
                       />
-                      {entry.detail ? (
-                        <p className="truncate px-3 pb-1 pt-0.5 text-xs tabular-nums text-chrome-neutral-500">{entry.detail}</p>
-                      ) : null}
                     </SelectableRow>
                   ))}
                 </div>
@@ -422,7 +409,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
                   {getString("downloads_playlists_section")}
                 </h2>
-                <div className="flow-grid gap-y-6" style={cardGridStyle}>
+                <div className="flow-grid gap-y-8" style={cardGridStyle}>
                   {playlistEntries.map((entry) => (
                     <DownloadCollectionCard
                       key={`collection-${entry.record.id}`}
@@ -441,7 +428,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
                   {getString("downloads_albums_section")}
                 </h2>
-                <div className="flow-grid gap-y-6" style={collectionGridStyle}>
+                <div className="flow-grid gap-y-8" style={collectionGridStyle}>
                   {albumEntries.map((entry) => (
                     <DownloadCollectionCard
                       key={`collection-${entry.record.id}`}

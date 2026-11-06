@@ -35,16 +35,21 @@ interface PlaylistCardProps {
   onSaveToLibrary?: (playlist: PlaylistSummary) => void | boolean | Promise<void | boolean>;
   onRemoveFromLibrary?: (playlist: PlaylistSummary) => void | boolean | Promise<void | boolean>;
   onDownload?: (playlist: PlaylistSummary) => void;
+  /** Drawn over the thumbnail, such as a download's progress. */
+  thumbnailOverlay?: React.ReactNode;
+  appendActions?: MediaMenuAction[];
 }
 
 export function StackedPlaylistThumbnail({
   thumbnailUrl,
   title,
   videoCountText,
+  overlay,
 }: {
   thumbnailUrl?: string | null;
   title: string;
   videoCountText: string;
+  overlay?: React.ReactNode;
 }) {
   const { src, onError } = useImageFallback([thumbnailUrl]);
 
@@ -58,6 +63,7 @@ export function StackedPlaylistThumbnail({
           <ListVideo size={14} />
           {videoCountText}
         </div>
+        {overlay}
       </div>
     );
   }
@@ -92,6 +98,7 @@ export function StackedPlaylistThumbnail({
           <ListVideo size={14} />
           {videoCountText}
         </div>
+        {overlay}
       </div>
     </div>
   );
@@ -104,6 +111,8 @@ export function PlaylistCard({
   onSaveToLibrary,
   onRemoveFromLibrary,
   onDownload,
+  thumbnailOverlay,
+  appendActions = [],
 }: PlaylistCardProps) {
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
@@ -253,6 +262,7 @@ export function PlaylistCard({
       onSelect: () => navigate(playlistRoute),
     },
     ...openActions(playlistRoute),
+    ...appendActions,
   ];
 
   const renderMenu = () => {
@@ -291,6 +301,7 @@ export function PlaylistCard({
         thumbnailUrl={playlist.thumbnailUrl}
         title={playlist.title}
         videoCountText={videoCountText}
+        overlay={thumbnailOverlay}
       />
 
       <div className="flex items-start justify-between gap-3">

@@ -56,14 +56,3 @@ export function downloadDetail(record: DownloadRecord): string {
     at > 0 ? new Date(at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null,
   ].filter(Boolean).join(" • ");
 }
-
-/** Bytes the library takes, by kind. */
-export function downloadedBytes(records: DownloadRecord[]): { video: number; music: number } {
-  let video = 0;
-  let music = 0;
-  for (const record of records) {
-    if (record.mediaKind === "video") video += record.fileSizeBytes ?? 0;
-    else music += record.fileSizeBytes ?? 0;
-  }
-  return { video, music };
-}

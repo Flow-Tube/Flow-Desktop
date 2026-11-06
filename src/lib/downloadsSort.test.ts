@@ -10,7 +10,7 @@ vi.mock("./storage/profileStorage", () => {
   };
 });
 
-import { downloadDetail, downloadedBytes, loadDownloadSort, saveDownloadSort, sortDownloadRecords } from "./downloadsSort";
+import { downloadDetail, loadDownloadSort, saveDownloadSort, sortDownloadRecords } from "./downloadsSort";
 import type { DownloadRecord } from "./api/downloads";
 
 const record = (id: number, extra: Partial<DownloadRecord>): DownloadRecord => ({
@@ -54,12 +54,6 @@ describe("downloadDetail", () => {
   it("gives the size and date it knows", () => {
     expect(downloadDetail(record(1, { fileSizeBytes: 5 * 1024 * 1024 }))).toMatch(/MB • .*2026/);
     expect(downloadDetail(record(1, { createdAt: "nonsense", fileSizeBytes: null }))).toBe("");
-  });
-});
-
-describe("downloadedBytes", () => {
-  it("counts by kind", () => {
-    expect(downloadedBytes([a, b, record(4, { mediaKind: "music", fileSizeBytes: 5 })])).toEqual({ video: 1000, music: 5 });
   });
 });
 

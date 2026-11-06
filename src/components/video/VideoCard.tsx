@@ -66,6 +66,12 @@ export interface VideoCardProps {
   reasonLine?: string;
   /** Whether the card is drawn wider than `hqdefault`; left out, the screen's pixel ratio decides. */
   highResThumbnail?: boolean;
+  /** Drawn over the thumbnail, such as a download's progress. */
+  thumbnailOverlay?: React.ReactNode;
+  /** Replaces what Remove download does in the menu, for a list that offers Undo. */
+  onRemoveDownload?: () => void;
+  /** Replaces the whole menu, for an item that isn't on YouTube. */
+  menuActions?: MediaMenuAction[];
 }
 
 /*
@@ -126,6 +132,9 @@ function VideoCardComponent({
   reason,
   reasonLine,
   highResThumbnail,
+  thumbnailOverlay,
+  onRemoveDownload,
+  menuActions: ownMenuActions,
 }: VideoCardProps) {
   const navigate = useNavigate();
   const subscribe = useSubscriptionStore((s) => s.subscribe);
@@ -386,6 +395,10 @@ function VideoCardComponent({
       openVideoDownload(video);
       return;
     }
+    if (onRemoveDownload) {
+      onRemoveDownload();
+      return;
+    }
     const record = findDownloadedRecord(video.id, "video");
     if (!record) return;
     await removeDownloads([record.id]);
@@ -419,7 +432,7 @@ function VideoCardComponent({
       .then(() => showToast({ variant: "success", message: getString("mark_as_unwatched_toast") }))
       .catch(feedActionFailed);
 
-  const menuActions: MediaMenuAction[] = [
+  const menuActions: MediaMenuAction[] = ownMenuActions ?? [
     {
       id: "play-next",
       label: getString("play_next_video"),
@@ -897,6 +910,7 @@ function VideoCardComponent({
         ) : null}
 
         <div className="pointer-events-none absolute inset-0 bg-chrome-black/0 group-hover:bg-chrome-black/10 transition-colors duration-200" />
+        {thumbnailOverlay}
       </div>
 
       <div className="flex gap-3 pe-1 relative z-10">

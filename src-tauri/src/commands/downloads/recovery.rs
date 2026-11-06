@@ -245,16 +245,6 @@ pub async fn retag_older_downloads(pool: &SqlitePool) -> AppResult<RetagResult> 
     .map_err(|error| AppError::Internal(error.to_string()))
 }
 
-/// The nearest folder that exists, since the download folder is only made on the first download.
-fn existing_ancestor(path: &Path) -> Option<&Path> {
-    path.ancestors().find(|ancestor| ancestor.is_dir())
-}
-
-/// Free bytes on the volume `folder` is on.
-pub fn free_bytes(folder: &Path) -> Option<u64> {
-    fs4::available_space(existing_ancestor(folder)?).ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,13 +468,6 @@ mod tests {
                 skipped: 1
             }
         );
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn free_space_is_read_from_the_nearest_folder_that_exists() {
-        let dir = scratch_dir("free");
-        assert!(free_bytes(&dir.join("not").join("made").join("yet")).is_some());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

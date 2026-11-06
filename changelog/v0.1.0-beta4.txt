@@ -167,7 +167,7 @@ LIBRARY
 - A new Remove watched videos switch takes videos out of Watch Later once you finish them, and opening Watch Later clears any you watched elsewhere, with Undo.
 
 DOWNLOADS
-- Sort downloads by Newest, Oldest, Largest, Title or Channel. Each shows its size and date, and a summary shows the space used and free.
+- Sort downloads by Newest, Oldest, Largest, Title or Channel. Each video shows its size and date.
 - New Download videos you open and Download liked songs switches in Settings > Downloads.
 - Find earlier downloads lists files Flow saved that the page has lost, by the tags in them. Tags for older downloads adds tags to MP4 and M4A files saved before Flow wrote them.
 - Deleting a download now offers Undo.

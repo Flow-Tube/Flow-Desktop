@@ -31,6 +31,7 @@ import { useSponsorBlockSegments } from "../../lib/useSponsorBlockSegments";
 import { useOriginalCurrentVideo } from "../../lib/useOriginalCurrentVideo";
 import { nextAutoAdvanceVideo } from "../../lib/autoAdvance";
 import { useCaptionsWithLocal } from "../../lib/localSubtitles";
+import { useSkipUnplayable } from "../../lib/useSkipUnplayable";
 import { useAutoplayCountdown } from "../../lib/useAutoplayCountdown";
 import { UpNextCard } from "../player/UpNextCard";
 
@@ -61,6 +62,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
 
   const stream = useVideoStream(videoId);
   const captions = useCaptionsWithLocal(videoId, stream.captions);
+  useSkipUnplayable(videoId, stream.streamError);
   useSponsorBlockSegments(videoId);
   const {
     state: countdown,

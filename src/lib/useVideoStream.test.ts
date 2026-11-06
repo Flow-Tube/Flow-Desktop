@@ -1,6 +1,7 @@
 import { act, createElement, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SETTINGS } from "./settings/schema";
 import { useVideoStream } from "./useVideoStream";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useDownloadsLibraryStore } from "../store/useDownloadsLibraryStore";
@@ -113,6 +114,38 @@ describe("recovering a long video", () => {
       await act(async () => state.latest.onRetrySource("media-error"));
       expect(state.latest.resumeTime).toBe(2450);
     } finally { await act(async () => root.unmount()); }
+  });
+});
+
+describe("a video the queue moved to", () => {
+  it("starts from the top, and keeps its place when a quality change reloads it", async () => {
+    vi.stubGlobal("MediaSource", { isTypeSupported: () => true });
+    useDownloadsLibraryStore.setState({ loaded: true, records: [] });
+    useAppSettingsStore.setState({ values: {} });
+    usePlayerStore.setState({
+      currentVideo: { id: "next", title: "", channelName: "" },
+      queueAdvanceVideoId: "next",
+      playbackStartedVideoId: null,
+    });
+    localStorage.setItem("flow_watch_progress:next", JSON.stringify({ currentTime: 120, duration: 600 }));
+    vi.mocked(getStreamInfo).mockReset().mockResolvedValue({
+      streamId: "s", localUrl: "video", expiresAt: "", captions: [], dashManifestUrl: "manifest",
+      variants: [{ id: "v", localUrl: "video", mimeType: 'video/mp4; codecs="avc1.4d401f"', qualityLabel: "720p", isPlayable: true, isDefault: true, hasAudio: true, isVideoOnly: false, deliveryMethod: "progressive" }],
+      audioTracks: [],
+    });
+    let latest!: ReturnType<typeof useVideoStream>;
+    function Harness() { latest = useVideoStream("next"); return null; }
+    const root = createRoot(document.createElement("div"));
+    try {
+      await act(async () => root.render(createElement(Harness)));
+      expect(latest.resumeTime).toBe(0);
+      await act(async () => usePlayerStore.getState().markPlaybackStarted("next"));
+      await act(async () => useAppSettingsStore.setState({ values: { [SETTINGS.DEFAULT_QUALITY_WIFI]: "720p" } }));
+      expect(latest.resumeTime).toBe(120);
+    } finally {
+      await act(async () => root.unmount());
+      usePlayerStore.setState({ queueAdvanceVideoId: null, playbackStartedVideoId: null });
+    }
   });
 });
 

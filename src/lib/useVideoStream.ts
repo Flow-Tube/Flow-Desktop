@@ -14,6 +14,7 @@ import { codecRank } from "./codecPreference";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import { recoveryPosition } from "./playerProgress";
 import { recordAutoReResolve, shouldAutoReResolve, type ReResolveHistory } from "./videoRecoveryPolicy";
+import { isFinishedPosition, resumeStartSeconds } from "./resumePolicy";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type {
   AudioTrack,
@@ -38,9 +39,7 @@ export const readSavedWatchProgress = (videoId: string, fallbackDuration = 0): n
     if (!raw) return 0;
     const progress = JSON.parse(raw) as SavedWatchProgress;
     const duration = progress.duration || fallbackDuration || 0;
-    if (!Number.isFinite(progress.currentTime) || progress.currentTime < 5) return 0;
-    if (duration > 0 && progress.currentTime >= Math.max(0, duration - 12)) return 0;
-    return Math.max(0, progress.currentTime);
+    return resumeStartSeconds(progress.currentTime, duration);
   } catch (error) {
     console.warn("Failed to read saved watch progress", error);
     return 0;
@@ -50,7 +49,7 @@ export const readSavedWatchProgress = (videoId: string, fallbackDuration = 0): n
 export const saveLocalWatchProgress = (videoId: string, currentTime: number, duration: number) => {
   if (!Number.isFinite(currentTime) || currentTime < 0) return;
   try {
-    if (duration > 0 && currentTime >= Math.max(0, duration - 12)) {
+    if (isFinishedPosition(currentTime, duration)) {
       profileStorage.removeItem(getProgressKey(videoId));
       return;
     }
@@ -82,8 +81,12 @@ const resolveHandoff = (video: VideoSummary, isLive: boolean) => {
   if (handoff) {
     return { resumeTime: isLive ? 0 : handoff.positionSeconds, playing: handoff.playing };
   }
+  // A video the queue moved to starts from the top; only one the viewer picked resumes. A reload of
+  // one already playing, after a quality change say, keeps its place.
+  const { queueAdvanceVideoId, playbackStartedVideoId } = usePlayerStore.getState();
+  const reachedByQueue = queueAdvanceVideoId === video.id && playbackStartedVideoId !== video.id;
   return {
-    resumeTime: isLive ? 0 : readSavedWatchProgress(video.id, video.durationSeconds ?? 0),
+    resumeTime: isLive || reachedByQueue ? 0 : readSavedWatchProgress(video.id, video.durationSeconds ?? 0),
     playing: true,
   };
 };

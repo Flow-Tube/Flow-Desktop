@@ -116,6 +116,8 @@ export interface PlayerState {
   isShuffle: boolean;
   /** The order turning shuffle off restores; null while shuffle is off. */
   unshuffledQueue: VideoSummary[] | null;
+  /** The video playing because the queue moved to it, as opposed to one the viewer picked. */
+  queueAdvanceVideoId: string | null;
   /** Videos added with Add to queue during a playlist: they play next and are never saved to it. */
   manualQueueIds: Set<string>;
   playMode: PlayMode;
@@ -257,6 +259,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   repeatMode: "none",
   isShuffle: false,
   unshuffledQueue: null,
+  queueAdvanceVideoId: null,
   manualQueueIds: new Set<string>(),
   playMode: "video",
   currentTime: 0,
@@ -296,7 +299,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
-      ...(isNew ? { playbackStartedVideoId: null } : {}),
+      ...(isNew ? { playbackStartedVideoId: null, queueAdvanceVideoId: null } : {}),
     });
 
     if (video && isNew) {
@@ -385,6 +388,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...(isNew ? { autoplayCandidates: [] } : {}),
       currentTime: 0,
       duration: nextVideo?.durationSeconds ?? 0,
+      queueAdvanceVideoId: null,
       ...(isNew ? { playbackStartedVideoId: null } : {}),
     });
     // Every surface that opens a video funnels through here, so warming the
@@ -505,6 +509,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       currentIndex: index,
       currentVideo: item,
+      queueAdvanceVideoId: null,
       isPlaying: true,
       currentTime: 0,
       duration: item.durationSeconds ?? 0,
@@ -529,12 +534,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const nextItem = queue[nextIndex];
       if (nextItem) {
         get().playQueueItem(nextIndex);
+        set({ queueAdvanceVideoId: nextItem.id });
         return nextItem;
       }
     } else if (repeatMode === "all") {
       const firstItem = queue[0];
       if (firstItem) {
         get().playQueueItem(0);
+        set({ queueAdvanceVideoId: firstItem.id });
         return firstItem;
       }
     }
@@ -578,6 +585,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({
           currentIndex: prevIndex,
           currentVideo: prevItem,
+          queueAdvanceVideoId: prevItem.id,
           isPlaying: true,
           currentTime: 0,
           duration: prevItem.durationSeconds ?? 0,
@@ -592,6 +600,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({
           currentIndex: lastIndex,
           currentVideo: lastItem,
+          queueAdvanceVideoId: lastItem.id,
           isPlaying: true,
           currentTime: 0,
           duration: lastItem.durationSeconds ?? 0,

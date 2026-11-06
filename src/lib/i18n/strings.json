@@ -305,6 +305,7 @@
   "player_up_next_cancel": "Cancel",
   "player_up_next_restart": "Restart",
   "player_up_next_play_now": "Play now",
+  "player_skipped_unplayable": "Skipped a video that can't play",
   "player_menu_miniplayer": "Miniplayer",
   "player_menu_copy_url": "Copy video URL",
   "player_menu_copy_url_at_time": "Copy video URL at current time",

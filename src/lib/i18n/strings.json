@@ -2276,6 +2276,8 @@
   "settings_content_language": "Content Language",
   "settings_content_language_desc": "The language YouTube writes dates, view counts, labels and its translated titles in. Pages you open next follow it.",
   "settings_content_language_default": "English (default)",
+  "settings_original_titles": "Original titles",
+  "settings_original_titles_desc": "Show video titles in the video's own language instead of YouTube's automatic translation. DeArrow titles still come first when DeArrow is on.",
   "toast_dismiss": "Dismiss",
   "toast_view": "View",
   "toast_saved_to": "Saved to %s",

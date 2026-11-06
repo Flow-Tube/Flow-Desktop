@@ -693,6 +693,7 @@ pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     }
     crate::recap::store::clear(pool).await?;
     crate::db::watch_history::clear_watch_history(pool).await?;
+    crate::db::local_media::clear_plays(pool).await?;
     for key in ["subscriptions", "user_playlists"] {
         set_setting(pool, key, "[]").await?;
     }

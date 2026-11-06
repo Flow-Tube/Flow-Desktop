@@ -4,6 +4,9 @@ import { invalidateStreamInfo, resolveStreamInfo } from "./streamResolution";
 import { classifyPlayerError } from "./playerError";
 import { recordPlayerEvent } from "./playerDiagnostics";
 import { getOfflineStream } from "./api/downloads";
+import { getLocalStream } from "./api/localMedia";
+import { isLocalMediaId } from "./localMediaId";
+import { LOCAL_FORMAT_UNSUPPORTED, localPlaybackError } from "./localMedia/playability";
 import { findDownloadedRecord } from "./useDownloads";
 import { useDownloadsLibraryStore } from "../store/useDownloadsLibraryStore";
 import { addWatchRecord } from "./api/db";
@@ -60,6 +63,12 @@ export const saveLocalWatchProgress = (videoId: string, currentTime: number, dur
   } catch (error) {
     console.warn("Failed to save watch progress", error);
   }
+};
+
+/** Where a library file picks up: nowhere near its very start or end. Mirrors saved progress. */
+const localResumeSeconds = (positionSeconds: number, durationSeconds: number): number => {
+  if (positionSeconds < 5) return 0;
+  return durationSeconds > 0 && positionSeconds >= Math.max(0, durationSeconds - 12) ? 0 : positionSeconds;
 };
 
 export const clearLocalWatchProgress = (videoId: string) => {
@@ -264,6 +273,35 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     [setCaptionsInStore],
   );
 
+  /** A library file plays straight from disk: one source, no network, nothing to record. */
+  const playLocalFile = useCallback(
+    async (video: VideoSummary, isCurrentLoad: () => boolean) => {
+      const local = await getLocalStream(video.id);
+      if (!isCurrentLoad()) return;
+      const problem = localPlaybackError(local);
+      if (problem) throw problem;
+      streamInfoRef.current = null;
+      attemptedModesRef.current = new Set(["direct"]);
+      setSelectedQualityId("auto");
+      if (!video.title) {
+        usePlayerStore.getState().enrichCurrentVideo(video.id, {
+          title: local.title,
+          channelName: local.artist,
+          durationSeconds: Math.round(local.durationSeconds),
+        });
+      }
+      const handoff = usePlayerStore.getState().consumePipHandoff(video.id);
+      handResumeToSource(
+        handoff ? handoff.positionSeconds : localResumeSeconds(local.positionSeconds, local.durationSeconds),
+      );
+      setSourceMode("direct");
+      setStreamUrl(local.url);
+      setStreamVideoId(video.id);
+      setIsPlaying(handoff ? handoff.playing : true);
+    },
+    [handResumeToSource, setIsPlaying],
+  );
+
   useEffect(() => {
     const currentVideo = usePlayerStore.getState().currentVideo;
     if (!currentVideo || currentVideo.id !== videoId) return;
@@ -292,6 +330,11 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       lastPlayedTimeRef.current = 0;
       handResumeToSource(0);
       try {
+        if (isLocalMediaId(currentVideo.id)) {
+          await playLocalFile(currentVideo, isCurrentLoad);
+          return;
+        }
+
         // The downloads library is a SQLite read and stream resolution is a
         // network round trip. When the library still has to load, overlap the
         // two instead of paying them back to back — first frame only ever waits
@@ -438,7 +481,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
     void loadStream();
     return () => { ++loadTokenRef.current; };
-  }, [currentVideo?.id, videoId, setIsPlaying, publishCaptions, preferredCodec, preferredQuality, handResumeToSource]);
+  }, [currentVideo?.id, videoId, setIsPlaying, publishCaptions, preferredCodec, preferredQuality, handResumeToSource, playLocalFile]);
 
   const onSelectQuality = useCallback(
     (variant: StreamVariant | "auto") => {
@@ -473,6 +516,16 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
 
   const onRetrySource = useCallback(
     (reason: string) => {
+      if (isLocalMediaId(usePlayerStore.getState().currentVideo?.id)) {
+        // One source, read from disk: a media error means it can't be read, so there is nothing
+        // to fall back to, and a stall on a slow drive is left to catch up.
+        if (reason.startsWith("media-error")) {
+          recordPlayerEvent(`local file refused by the media element (${reason})`);
+          setStreamError(`Media element refused the file (${reason})`);
+          setStreamErrorKind(LOCAL_FORMAT_UNSUPPORTED);
+        }
+        return;
+      }
       const info = streamInfoRef.current;
       if (!info || hardRetryInFlightRef.current) return;
       const available = computeAvailableSourceModes(info);
@@ -565,6 +618,21 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     setStreamErrorKind(null);
     stallExhaustedCyclesRef.current = 0;
     recordPlayerEvent(`video hard retry: ${currentVideo.id}`);
+    if (isLocalMediaId(currentVideo.id)) {
+      void playLocalFile(currentVideo, isCurrentLoad)
+        .catch((err) => {
+          if (!isCurrentLoad()) return;
+          const info = classifyPlayerError(err);
+          setStreamError(info.rawMessage);
+          setStreamErrorKind(info.kind);
+        })
+        .finally(() => {
+          if (!isCurrentLoad()) return;
+          hardRetryInFlightRef.current = false;
+          setLoadingStream(false);
+        });
+      return;
+    }
     // A hard retry exists because the resolved URLs stopped working, so it has
     // to walk a fresh client ladder rather than be handed the same answer again.
     invalidateStreamInfo(currentVideo.id);
@@ -632,7 +700,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
         hardRetryInFlightRef.current = false;
         setLoadingStream(false);
       });
-  }, [currentVideo, preferredCodec, preferredQuality, publishCaptions, handResumeToSource]);
+  }, [currentVideo, preferredCodec, preferredQuality, publishCaptions, handResumeToSource, playLocalFile]);
   hardRetryRef.current = onHardRetry;
 
   return {

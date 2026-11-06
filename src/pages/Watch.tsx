@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { usePlayerStore } from "../store/usePlayerStore";
+import { isLocalMediaId } from "../lib/localMediaId";
+import { LocalWatchMetadata } from "../components/localMedia/LocalWatchMetadata";
 import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
@@ -59,10 +61,11 @@ export function Watch() {
 
   const offlineRecord = useDownloadedVideoRecord(videoId);
   const playbackSettled = usePlaybackSettled(videoId);
-  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord, retryNonce, offlineRecord);
+  const isLocalFile = isLocalMediaId(videoId);
+  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord && !isLocalFile, retryNonce, offlineRecord);
   const relatedLane = useRelatedLane(
     videoId,
-    relatedVideosEnabled && !offlineRecord,
+    relatedVideosEnabled && !offlineRecord && !isLocalFile,
     playbackSettled,
     retryNonce,
   );
@@ -125,7 +128,7 @@ export function Watch() {
   // Page furniture, not playback: it waits until playback has actually started
   // rather than compete with the first media buffer.
   useEffect(() => {
-    if (!videoId || !playbackSettled || offlineRecord) return;
+    if (!videoId || !playbackSettled || offlineRecord || isLocalFile) return;
     let cancelled = false;
 
     const loadReactionMetadata = async () => {
@@ -148,7 +151,7 @@ export function Watch() {
     return () => {
       cancelled = true;
     };
-  }, [videoId, playbackSettled, retryNonce, setDearrowData, setRydData, loadSettings, offlineRecord]);
+  }, [videoId, playbackSettled, retryNonce, setDearrowData, setRydData, loadSettings, offlineRecord, isLocalFile]);
 
   const isHidden = useFeedHiddenFilter();
   const relatedVideoIds = useMemo(
@@ -246,20 +249,26 @@ export function Watch() {
     <WatchLayout
       player={<WatchPlayerSlot />}
       metadata={
-        <WatchMetadata
-          currentVideo={currentVideo}
-          videoData={videoDetails}
-          dearrowData={dearrowData}
-          rydData={rydData}
-        />
+        isLocalFile ? (
+          <LocalWatchMetadata currentVideo={currentVideo} />
+        ) : (
+          <WatchMetadata
+            currentVideo={currentVideo}
+            videoData={videoDetails}
+            dearrowData={dearrowData}
+            rydData={rydData}
+          />
+        )
       }
       description={
-        <>
-          <WatchNote video={currentVideo} videoData={videoDetails} />
-          <DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />
-        </>
+        isLocalFile ? null : (
+          <>
+            <WatchNote video={currentVideo} videoData={videoDetails} />
+            <DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />
+          </>
+        )
       }
-      comments={commentsEnabled && !offlineRecord && playbackSettled ? (
+      comments={commentsEnabled && !offlineRecord && !isLocalFile && playbackSettled ? (
         <Suspense fallback={<div className="h-32" />}>
           <CommentsSection videoId={videoId} />
         </Suspense>
@@ -279,7 +288,7 @@ export function Watch() {
             videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl || undefined}
           />
 
-          {relatedVideosEnabled && (
+          {relatedVideosEnabled && !isLocalFile && (
             <RelatedVideos
               items={visibleRelated}
               loading={relatedLane.loading || unseen.waiting}

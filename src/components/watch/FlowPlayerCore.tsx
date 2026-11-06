@@ -36,6 +36,8 @@ import { useSkipUnplayable } from "../../lib/useSkipUnplayable";
 import { usePaidPromotion } from "../../lib/usePaidPromotion";
 import { useAutoplayCountdown } from "../../lib/useAutoplayCountdown";
 import { UpNextCard } from "../player/UpNextCard";
+import { isLocalMediaId } from "../../lib/localMediaId";
+import { useLocalMediaStore } from "../../store/useLocalMediaStore";
 
 /** How close to the end the next video is resolved. Long enough to cover a slow
  * client ladder, short enough that a video abandoned early never triggers it. */
@@ -108,10 +110,12 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
 
   const resolvedChannelId = videoDetails?.channelId || currentVideo?.channelId || "";
   const playbackSettled = usePlaybackSettled(currentVideo?.id);
-  const category = useVideoCategory(currentVideo?.id, videoDetails?.category, playbackSettled);
+  const isLocalFile = isLocalMediaId(currentVideo?.id);
+  const category = useVideoCategory(currentVideo?.id, videoDetails?.category, playbackSettled && !isLocalFile);
+  // As on Android, a library file teaches the video engine nothing.
   const watchSubject = useMemo(
     () =>
-      currentVideo
+      currentVideo && !isLocalFile
         ? {
             videoId: currentVideo.id,
             // A video opened from a link carries only its id until its details load.
@@ -126,6 +130,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
         : null,
     [
       currentVideo,
+      isLocalFile,
       resolvedChannelId,
       videoDetails?.title,
       videoDetails?.channelName,
@@ -167,6 +172,11 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       const now = Date.now();
       if (now - lastProgressPersistedAtRef.current < 5000) return;
       lastProgressPersistedAtRef.current = now;
+
+      if (isLocalMediaId(currentVideo.id)) {
+        useLocalMediaStore.getState().notePlayback(currentVideo.id, time, nextDuration);
+        return;
+      }
 
       // localStorage writes are synchronous main-thread IO; keep them behind
       // the 5s gate instead of every timeupdate tick. The history effect
@@ -214,6 +224,10 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       const video = currentVideoRef.current;
       if (!latest || latest.videoId !== currentVideoId || !video || video.id !== currentVideoId) return;
       if (!shouldRecordWatchHistory()) return;
+      if (isLocalMediaId(video.id)) {
+        useLocalMediaStore.getState().notePlayback(video.id, latest.time, latest.duration);
+        return;
+      }
       saveLocalWatchProgress(video.id, latest.time, latest.duration);
       return addWatchRecord({
         videoId: video.id,
@@ -306,7 +320,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     [stream.streamError, stream.streamErrorKind, stream.streamStartsAtMs],
   );
 
-  const watchUrl = videoId ? youtubeWatchUrl(videoId) : null;
+  const watchUrl = videoId && !isLocalMediaId(videoId) ? youtubeWatchUrl(videoId) : null;
 
   const handleCopyLogs = useCallback(async () => {
     if (!errorInfo) return false;

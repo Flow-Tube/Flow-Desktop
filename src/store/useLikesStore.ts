@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { isLocalMediaId } from "../lib/localMediaId";
 import { getSetting, setSetting } from "../lib/api/db";
 import { getMusicQueue } from "../lib/api/music";
 import { autoDownloadLikedSong } from "../lib/autoDownload";
@@ -135,6 +136,7 @@ export const useLikesStore = create<LikesState>((set, get) => ({
   },
 
   toggleVideo: async (video) => {
+    if (isLocalMediaId(video.id)) return false;
     await get().load();
     const key = itemKey("video", video.id);
     const exists = get().items.some((item) => itemKey(item.kind, item.id) === key);
@@ -155,6 +157,7 @@ export const useLikesStore = create<LikesState>((set, get) => ({
   },
 
   toggleSong: async (song) => {
+    if (isLocalMediaId(song.videoId ?? song.id)) return false;
     await get().load();
     const id = songId(song);
     const key = itemKey("music", id);

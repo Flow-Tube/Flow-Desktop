@@ -11,6 +11,9 @@ import {
   prefetchMusicStream,
   resolveMusicStream,
 } from "../lib/musicStreamResolution";
+import { getLocalStream } from "../lib/api/localMedia";
+import { isLocalMediaId } from "../lib/localMediaId";
+import { LOCAL_FORMAT_UNSUPPORTED, localPlaybackError } from "../lib/localMedia/playability";
 import { seedOfflineLyrics } from "../lib/lyrics/offline";
 import { findDownloadedRecord } from "../lib/useDownloads";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
@@ -33,7 +36,7 @@ import {
 } from "../lib/musicQueueEdits";
 import { radioSession } from "../lib/musicRadioSession";
 import type { RestoredQueue } from "../lib/musicQueuePersistence";
-import { isLongTrack, resumePositionFor } from "../lib/musicResume";
+import { isLongTrack, localResumeStart, resumePositionFor } from "../lib/musicResume";
 import { POOL_LOW_WATER } from "../lib/musicRadioPlanner";
 import { SETTINGS } from "../lib/settings/schema";
 import { getSettingValue } from "./useAppSettingsStore";
@@ -321,7 +324,7 @@ export const selectRadioOn = (s: Pick<MusicPlayerState, "radioEnabled" | "radioS
 
 /** Resolves a song's stream ahead of playing it; a downloaded one plays from disk and needs none. */
 export function warmMusicStream(videoId: string): void {
-  if (findDownloadedRecord(videoId, "audio")) return;
+  if (findDownloadedRecord(videoId, "audio") || isLocalMediaId(videoId)) return;
   prefetchMusicStream(videoId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
 }
 
@@ -410,7 +413,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     if (remaining > (isShuffle ? 0 : RADIO_LOW_WATER)) return;
 
     const seed = queue[queue.length - 1] ?? get().currentTrack;
-    if (!seed) return;
+    // A station needs a song YouTube knows.
+    if (!seed || isLocalMediaId(videoIdOf(seed))) return;
     const generation = radioSession.generation;
 
     const request = (async () => {
@@ -522,6 +526,20 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       });
 
     try {
+      if (isLocalMediaId(videoId)) {
+        const local = await getLocalStream(videoId);
+        if (get().loadingStreamId !== videoId) return;
+        const problem = localPlaybackError(local);
+        if (problem) throw problem;
+        set({ loudnessDb: null, loadingStreamId: null });
+        musicAudioEngine.setLoudness(null, get().normalizationEnabled);
+        await musicAudioEngine.load(local.url, local.contentType, track.duration ?? null);
+        musicAudioEngine.seekWhenReady(options?.resumeAt ?? localResumeStart(local.positionSeconds, local.durationSeconds));
+        await start();
+        afterStart();
+        return;
+      }
+
       // The downloads library is a SQLite read and resolution is a network round
       // trip; when the library still has to load, overlap the two rather than
       // paying them in sequence. Once loaded the offline check is synchronous,
@@ -595,7 +613,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
         return;
       }
       unplayableSkips = 0;
-      if (!navigator.onLine) {
+      if (!navigator.onLine && !isLocalMediaId(videoId)) {
         waitForNetwork(() => {
           if (get().queue[get().currentIndex] === track) void get()._loadIndex(index, { resumeAt, autoplay });
         });
@@ -1036,6 +1054,17 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     stopStallWatch();
     const videoId = videoIdOf(currentTrack);
     const code = musicAudioEngine.getErrorCode();
+    if (isLocalMediaId(videoId)) {
+      // A file reads the same on a retry, so the link recovery below has nothing to offer.
+      recordPlayerEvent(`local file refused by the media element (${code ?? "stall"})`);
+      set({
+        isPlaying: false,
+        isBuffering: false,
+        streamError: `media element error ${code ?? "stall"}`,
+        streamErrorKind: LOCAL_FORMAT_UNSUPPORTED,
+      });
+      return;
+    }
     const failure = classifyMediaFailure(code, navigator.onLine);
     recordPlayerEvent(`music playback error (media element ${code ?? "stall"}, ${failure})`);
     // The element rejected the URL it was given, so drop it rather than let any

@@ -1,5 +1,6 @@
 import type { SongItem } from "../types/music";
 import { getMusicResumePosition, saveMusicResumePosition } from "./api/musicQueue";
+import { isLocalMediaId } from "./localMediaId";
 import { SETTINGS } from "./settings/schema";
 import { getSettingValue } from "../store/useAppSettingsStore";
 
@@ -21,19 +22,24 @@ export function resumeStartSeconds(savedSeconds: number, durationSeconds: number
 
 const resumeEnabled = (): boolean => getSettingValue(SETTINGS.MUSIC_RESUME_LONG_TRACKS) === "true";
 
+/** Where a long library file starts, from its own saved play. */
+export function localResumeStart(savedSeconds: number, durationSeconds: number): number {
+  return resumeEnabled() ? resumeStartSeconds(savedSeconds, durationSeconds) : 0;
+}
+
 const idOf = (track: SongItem): string => track.videoId ?? track.id;
 
 /** The position a fresh play of `track` starts from, 0 for a song or with the setting off. */
 export async function resumePositionFor(track: SongItem): Promise<number> {
   const duration = track.duration ?? 0;
-  if (!resumeEnabled() || !isLongTrack(duration)) return 0;
+  if (!resumeEnabled() || !isLongTrack(duration) || isLocalMediaId(idOf(track))) return 0;
   const saved = await getMusicResumePosition(idOf(track)).catch(() => null);
   return saved === null ? 0 : resumeStartSeconds(saved, duration);
 }
 
 /** Remembers where a long track was left; nothing is written for songs or with the setting off. */
 export function rememberResumePosition(track: SongItem, positionSeconds: number, durationSeconds: number): void {
-  if (!resumeEnabled() || !isLongTrack(durationSeconds)) return;
+  if (!resumeEnabled() || !isLongTrack(durationSeconds) || isLocalMediaId(idOf(track))) return;
   void saveMusicResumePosition(idOf(track), positionSeconds, durationSeconds).catch((error) =>
     console.warn("Failed to save where a long track was left", error),
   );

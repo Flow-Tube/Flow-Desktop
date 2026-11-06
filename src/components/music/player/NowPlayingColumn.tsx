@@ -10,6 +10,7 @@ import { useBoolPref } from "../../../lib/usePreference";
 import { useElementSize } from "../../../lib/useElementSize";
 import { useLikesStore } from "../../../store/useLikesStore";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
+import { isLocalMediaId } from "../../../lib/localMediaId";
 import { toggleSongLikeWithToast } from "../../../lib/songLikeToast";
 import type { SongItem } from "../../../types/music";
 import { HapticButton } from "../HapticButton";
@@ -125,14 +126,16 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <MusicSleepTimerButton className={META_BTN} activeClassName={`${META_BTN} text-[var(--color-primary)]`} />
-            <HapticButton
-              onClick={() => void handleLike()}
-              aria-label={getString("music_like")}
-              aria-pressed={liked}
-              className={liked ? `${META_BTN} text-[var(--color-primary)]` : META_BTN}
-            >
-              <Heart className="h-5 w-5" fill={liked ? "currentColor" : "none"} />
-            </HapticButton>
+            {!isLocalMediaId(videoId) && (
+              <HapticButton
+                onClick={() => void handleLike()}
+                aria-label={getString("music_like")}
+                aria-pressed={liked}
+                className={liked ? `${META_BTN} text-[var(--color-primary)]` : META_BTN}
+              >
+                <Heart className="h-5 w-5" fill={liked ? "currentColor" : "none"} />
+              </HapticButton>
+            )}
             <HapticButton onClick={menu.openMenuFromDots} aria-label={getString("music_more_actions")} className={META_BTN}>
               <MoreHorizontal className="h-5 w-5" />
             </HapticButton>

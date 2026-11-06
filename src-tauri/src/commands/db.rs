@@ -4,7 +4,7 @@ use crate::api::innertube::extractors::audio_preference;
 use crate::commands::linked::err as linked_err;
 use crate::db::settings;
 use crate::db::watch_history::{self, WatchHistoryRecord};
-use crate::errors::ErrorResponse;
+use crate::errors::{AppError, ErrorResponse};
 use crate::sync::error::SyncError;
 use crate::sync::local_edits;
 use crate::sync2::actions::{leave_if_linked, reset_local_data};
@@ -35,12 +35,26 @@ pub async fn get_music_history(
         .map_err(ErrorResponse::from)
 }
 
+/// `watch_history` is a sync collection, and a file on this computer means nothing on a phone.
+fn refuse_local_files(records: &[WatchHistoryRecord]) -> Result<(), ErrorResponse> {
+    if records
+        .iter()
+        .any(|record| crate::local_media::is_local_id(&record.video_id))
+    {
+        return Err(ErrorResponse::from(AppError::Validation(
+            "A local file can't enter watch history".into(),
+        )));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn add_watch_record(
     app: AppHandle,
     record: WatchHistoryRecord,
     pool: State<'_, SqlitePool>,
 ) -> Result<(), ErrorResponse> {
+    refuse_local_files(std::slice::from_ref(&record))?;
     watch_history::upsert_watch_record(&pool, &record)
         .await
         .map_err(ErrorResponse::from)?;
@@ -57,6 +71,7 @@ pub async fn restore_watch_record(
     record: WatchHistoryRecord,
     pool: State<'_, SqlitePool>,
 ) -> Result<(), ErrorResponse> {
+    refuse_local_files(std::slice::from_ref(&record))?;
     watch_history::upsert_watch_record(&pool, &record)
         .await
         .map_err(ErrorResponse::from)?;
@@ -73,6 +88,7 @@ pub async fn add_watch_records_bulk(
     records: Vec<WatchHistoryRecord>,
     pool: State<'_, SqlitePool>,
 ) -> Result<(), ErrorResponse> {
+    refuse_local_files(&records)?;
     watch_history::upsert_watch_records_bulk(&pool, &records)
         .await
         .map_err(ErrorResponse::from)?;

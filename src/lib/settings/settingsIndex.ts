@@ -267,6 +267,10 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_find_earlier_downloads", summary: "settings_find_earlier_downloads_desc", keywords: ["recover", "restore"] },
     { title: "settings_retag_downloads", summary: "settings_retag_downloads_desc", keywords: ["metadata"] },
     { title: "settings_download_subtitles", summary: "settings_download_subtitles_desc" },
+    { title: "settings_local_media_folders", summary: "settings_local_media_folders_desc", keywords: ["local", "files", "library"] },
+    { title: "settings_local_media_excluded", summary: "settings_local_media_excluded_desc", keywords: ["local", "hidden", "folders"] },
+    { title: "settings_local_media_hide_recordings", summary: "settings_local_media_hide_recordings_desc", keywords: ["local", "voice notes"] },
+    { title: "settings_local_media_min_audio", keywords: ["local", "short", "length"] },
   ]),
   ...rows("data", [
     { title: "settings_backup_frequency", summary: "settings_backup_frequency_desc", keywords: ["automatic", "schedule"] },

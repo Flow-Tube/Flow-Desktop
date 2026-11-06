@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { useSettingsStore, type DiscordRpcMode } from "../store/useSettingsStore";
+import { isLocalMediaId } from "./localMediaId";
 import { youtubeMusicWatchUrl, youtubeWatchUrl } from "./youtubeUrl";
 import {
   clearDiscordPresence,
@@ -93,11 +94,11 @@ export function useDiscordPresence(): void {
         title: track.title,
         subtitle: track.artists.map((a) => a.name).filter(Boolean).join(", ") || undefined,
         album: track.album?.name || undefined,
-        artworkUrl: track.thumbnail || undefined,
+        artworkUrl: isLocalMediaId(trackVideoId) ? undefined : track.thumbnail || undefined,
         elapsedSeconds: elapsed,
         durationSeconds: m.duration || track.duration || undefined,
         isPaused: !m.isPlaying,
-        url: trackVideoId ? youtubeMusicWatchUrl(trackVideoId) : undefined,
+        url: trackVideoId && !isLocalMediaId(trackVideoId) ? youtubeMusicWatchUrl(trackVideoId) : undefined,
         buttonLabel: getString('discord_button_listen'),
       };
     } else if (chosen === "video" && v.currentVideo) {

@@ -1,6 +1,7 @@
 import { Disc3, Share2, SlidersHorizontal } from 'lucide-react';
 
 import { shareLink } from '../../lib/clipboard';
+import { isLocalMediaId } from '../../lib/localMediaId';
 import { getString } from '../../lib/i18n/index';
 import { youtubeMusicWatchUrl } from '../../lib/youtubeUrl';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
@@ -33,6 +34,11 @@ export function useNowPlayingMenuActions(
   if (!track) return [];
 
   const onOpenEqualizer = options?.onOpenEqualizer;
+  const equalizerAction = onOpenEqualizer
+    ? [{ id: 'equalizer', label: getString('music_equalizer'), icon: <SlidersHorizontal size={16} />, group: 'go' as const, onSelect: onOpenEqualizer }]
+    : [];
+  // Everything else names something on YouTube; a file on this computer isn't.
+  if (isLocalMediaId(videoIdOf(track))) return equalizerAction;
   return [
     ...radioActions,
     ...watchVideoActions,
@@ -53,9 +59,7 @@ export function useNowPlayingMenuActions(
       onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
     ...detailsActions,
-    ...(onOpenEqualizer
-      ? [{ id: 'equalizer', label: getString('music_equalizer'), icon: <SlidersHorizontal size={16} />, group: 'go' as const, onSelect: onOpenEqualizer }]
-      : []),
+    ...equalizerAction,
     ...blockActions,
   ];
 }

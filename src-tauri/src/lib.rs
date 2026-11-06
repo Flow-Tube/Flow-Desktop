@@ -94,7 +94,7 @@ use commands::music_brain::{
     block_music_artist, dislike_music_artist, get_blocked_music_artists, get_daily_mixes,
     get_heavy_rotation, get_music_brain_snapshot, get_music_rediscover, get_music_taste_profile,
     get_music_time_rotation, rank_music_candidates, record_music_interaction, reset_music_brain,
-    unblock_music_artist,
+    set_favourite_music_artist, unblock_music_artist,
 };
 use commands::music_queue::{
     clear_music_queue_state, get_music_resume_position, load_music_queue_state,
@@ -808,6 +808,7 @@ pub fn run() {
             // --- Dedicated music brain (separate from flow_neuro) ---
             record_music_interaction,
             dislike_music_artist,
+            set_favourite_music_artist,
             block_music_artist,
             unblock_music_artist,
             get_blocked_music_artists,

@@ -183,6 +183,19 @@ pub async fn dislike_music_artist(
     Ok(())
 }
 
+/// An artist picked by hand, as at setup, or unpicked. Seeds only the music brain.
+#[tauri::command]
+pub async fn set_favourite_music_artist(
+    artist_id: Option<String>,
+    artist_name: String,
+    favourite: bool,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<()> {
+    let key = artist_key(artist_id.as_deref(), &artist_name);
+    music_brain.set_favourite_artist(&key, favourite).await;
+    Ok(())
+}
+
 /// Hard-block an artist ("don't recommend this artist") — a permanent denylist so they
 /// never appear in any music surface (ranked shelves, radio, On Repeat, Daily Mixes).
 #[tauri::command]

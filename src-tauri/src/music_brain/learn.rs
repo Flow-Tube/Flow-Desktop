@@ -265,6 +265,35 @@ pub fn unblock_music_artist(brain: &mut MusicBrain, artist_key: &str) {
 /// Self-balancing discovery appetite. Each counted listen drifts it toward neutral; a
 /// counted listen of a NEW artist nudges it up. Sustained novel engagement keeps it high;
 /// when the user settles into familiar listening it regresses on its own.
+/// Where a liked song puts its artist, which is also where a picked artist starts.
+const LIKE_SCORE_FLOOR: f64 = 0.8;
+
+/// A picked artist starts where a liked song would put them, without inventing plays, so stats stay
+/// true. Unpicking forgets an artist only if they were never played.
+pub fn set_favourite_artist(brain: &mut MusicBrain, artist_key: &str, favourite: bool) {
+    if artist_key.is_empty() {
+        return;
+    }
+    if !favourite {
+        if brain
+            .artist_affinity
+            .get(artist_key)
+            .is_some_and(|affinity| affinity.plays == 0)
+        {
+            brain.artist_affinity.remove(artist_key);
+        }
+        return;
+    }
+    brain.blocked_artists.remove(artist_key);
+    brain.disliked_artists.remove(artist_key);
+    let affinity = brain
+        .artist_affinity
+        .entry(artist_key.to_string())
+        .or_default();
+    affinity.liked = true;
+    affinity.score = affinity.score.max(LIKE_SCORE_FLOOR);
+}
+
 pub fn update_discovery_appetite(brain: &mut MusicBrain, was_novel: bool) {
     brain.discovery_appetite += (DISCOVERY_NEUTRAL - brain.discovery_appetite) * APPETITE_REGRESS;
     if was_novel {
@@ -339,6 +368,47 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_artist_is_liked_without_inventing_plays() {
+        let mut brain = MusicBrain::default();
+        brain.blocked_artists.insert("a".to_string());
+        brain.disliked_artists.insert("a".to_string(), 5);
+        set_favourite_artist(&mut brain, "a", true);
+        let affinity = &brain.artist_affinity["a"];
+        assert!(affinity.liked);
+        assert!(affinity.score >= LIKE_SCORE_FLOOR);
+        assert_eq!(affinity.plays, 0);
+        assert_eq!(brain.total_plays, 0);
+        assert!(brain.blocked_artists.is_empty());
+        assert!(brain.disliked_artists.is_empty());
+    }
+
+    #[test]
+    fn unpicking_forgets_only_an_artist_never_played() {
+        let mut brain = MusicBrain::default();
+        set_favourite_artist(&mut brain, "picked", true);
+        set_favourite_artist(&mut brain, "played", true);
+        brain.artist_affinity.get_mut("played").unwrap().plays = 3;
+        set_favourite_artist(&mut brain, "picked", false);
+        set_favourite_artist(&mut brain, "played", false);
+        assert!(!brain.artist_affinity.contains_key("picked"));
+        assert!(brain.artist_affinity.contains_key("played"));
+    }
+
+    #[test]
+    fn a_higher_score_is_kept_and_an_empty_key_ignored() {
+        let mut brain = MusicBrain::default();
+        brain
+            .artist_affinity
+            .entry("a".to_string())
+            .or_default()
+            .score = 0.99;
+        set_favourite_artist(&mut brain, "a", true);
+        assert!(brain.artist_affinity["a"].score >= 0.99);
+        set_favourite_artist(&mut brain, "", true);
+        assert_eq!(brain.artist_affinity.len(), 1);
+    }
 
     fn sig(track: &str, artist: &str) -> MusicSignal {
         MusicSignal {

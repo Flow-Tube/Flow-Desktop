@@ -206,6 +206,9 @@ NOTIFICATIONS
 - New Shorts from your subscriptions can be left out of alerts, with a Shorts switch in Settings. Several uploads since the last check now each get a notification.
 - In the notifications panel you can save a video to Watch later and undo a removal. New and Last 7 days sections join Today, Yesterday and Earlier.
 - Wellbeing, in Settings > Content: a chart of your watch and listen time over the last week, plus break and bedtime reminders. Reminders are native notifications and only arrive while Flow is running.
+- The tray now shows and controls videos as well as music, and has a Continue watching item for your latest unfinished video.
+- Windows Jump List and macOS Dock menu: Search, Downloads, History and Music are one click away.
+- Downloads show their progress on the taskbar or Dock icon.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

@@ -7,6 +7,8 @@ export const MUSIC_PLAY_EVENT = "flow:music-play";
 export const OPEN_ROUTE_EVENT = "flow:open-route";
 /** A global media key or tray click, sent by the backend to the window that last started playing. */
 export const MEDIA_COMMAND_EVENT = "flow:media-command";
+/** Asks the top bar to put the cursor in its search box. */
+export const FOCUS_SEARCH_EVENT = "flow:focus-search";
 
 export interface DataChangedPayload {
   source: string;

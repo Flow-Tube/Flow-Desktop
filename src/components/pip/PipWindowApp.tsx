@@ -9,6 +9,7 @@ import { usePipSession } from "../../lib/usePipSession";
 import { usePipWindowAspectLock } from "../../lib/usePipWindowAspectLock";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
 import { useMediaCommands } from "../../lib/useMediaCommands";
+import { useMusicTray } from "../../lib/useMusicTray";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { WindowResizeEdges } from "../ui/WindowResizeEdges";
 import { FlowPlayerCore } from "../watch/FlowPlayerCore";
@@ -36,6 +37,7 @@ export function PipWindowApp() {
   // OS transport controls.
   useMediaSessionMetadata(isPlaying);
   useMediaCommands();
+  useMusicTray();
 
   return (
     <div className="group relative flex h-screen w-screen items-center justify-center overflow-hidden bg-chrome-black text-chrome-zinc-100">

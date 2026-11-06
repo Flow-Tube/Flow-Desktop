@@ -9,6 +9,7 @@ import { buildSuggestionColumns, type SuggestionRow } from '../../lib/searchSugg
 import { SETTINGS } from '../../lib/settings/schema';
 import { prefetchStreamInfo } from '../../lib/streamResolution';
 import { useSearchSuggestions } from '../../lib/useSearchSuggestions';
+import { FOCUS_SEARCH_EVENT } from '../../lib/windowEvents';
 import { parseYoutubeUrl, routeForYoutubeUrl } from '../../lib/youtubeUrl';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
@@ -53,17 +54,22 @@ export function TopbarSearch() {
     const onOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
     };
+    const focusSearch = () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      setOpen(true);
+    };
     const onShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-        setOpen(true);
+        focusSearch();
       }
     };
     document.addEventListener('mousedown', onOutside);
     window.addEventListener('keydown', onShortcut);
+    window.addEventListener(FOCUS_SEARCH_EVENT, focusSearch);
     return () => {
+      window.removeEventListener(FOCUS_SEARCH_EVENT, focusSearch);
       document.removeEventListener('mousedown', onOutside);
       window.removeEventListener('keydown', onShortcut);
     };

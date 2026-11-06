@@ -1,4 +1,4 @@
-//! Global media keys, and the window they act on. The plugin goes in only when the setting is
+//! Global media keys, and the window they and the tray act on. The plugin goes in only when the setting is
 //! turned on, so nobody who left it off runs a key hook or, on macOS, an event tap.
 
 use std::sync::{Mutex, PoisonError};
@@ -7,6 +7,8 @@ use tauri::{AppHandle, Emitter, Listener, Manager, Wry};
 use tauri_plugin_global_shortcut::{
     Builder, Code, GlobalShortcut, GlobalShortcutExt, Shortcut, ShortcutState,
 };
+
+use super::music_tray::MusicTray;
 
 /// Every window listens on its own label; the payload is one of the commands below.
 pub const MEDIA_COMMAND_EVENT: &str = "flow:media-command";
@@ -42,22 +44,30 @@ pub fn watch_playback_claims(app: &AppHandle) {
         };
         let target = handle.state::<PlaybackTarget>();
         *target.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(claim.source);
+        if let Err(error) = handle.state::<MusicTray>().show_latest(&handle) {
+            tracing::warn!(%error, "Could not update the tray");
+        }
     });
 }
 
-/// Sends a command to the window that last started playing, or the main window once that one
-/// has closed.
-pub fn send_media_command(app: &AppHandle, command: &str) {
+/// The window that last started playing, or the main window once that one has closed.
+pub fn playback_window(app: &AppHandle) -> String {
     let claimed = app
         .state::<PlaybackTarget>()
         .0
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
-    let label = target_window(claimed.as_deref(), |label| {
+    target_window(claimed.as_deref(), |label| {
         app.get_webview_window(label).is_some()
-    });
-    if let Err(error) = app.emit_to(label, MEDIA_COMMAND_EVENT, command) {
+    })
+    .to_owned()
+}
+
+/// Sends a command to the window that last started playing.
+pub fn send_media_command(app: &AppHandle, command: &str) {
+    let label = playback_window(app);
+    if let Err(error) = app.emit_to(label.as_str(), MEDIA_COMMAND_EVENT, command) {
         tracing::warn!(%error, "Could not send a media command to the player");
     }
 }

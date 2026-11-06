@@ -114,7 +114,11 @@ tauri-winrt-notification = "0.8"
 windows-registry = "0.100"
 # Core Audio and the process snapshot name Flow's WebView2 audio in the volume mixer.
 windows = { version = "0.62", features = [
+  "Win32_Foundation",
   "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_Shell_PropertiesSystem",
+  "Win32_Storage_EnhancedStorage",
   "Win32_Media_Audio",
   "Win32_System_Com",
   "Win32_System_Com_StructuredStorage",

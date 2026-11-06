@@ -15,6 +15,8 @@ pub mod flow_neuro;
 #[cfg(any(target_os = "linux", test))]
 mod linux_startup;
 #[cfg(target_os = "macos")]
+mod macos_dock;
+#[cfg(target_os = "macos")]
 mod macos_window;
 pub mod models;
 mod music_brain;
@@ -146,7 +148,10 @@ use commands::sync::{
     sync_cancel, sync_device_info, sync_host_receive, sync_respond_consent, sync_scan_join,
     sync_start_host, sync_status,
 };
-use commands::tray::{music_tray_hide, music_tray_supported, music_tray_update};
+use commands::tray::{
+    music_tray_hide, music_tray_supported, music_tray_update, set_download_progress,
+    set_shell_pages, take_launch_page,
+};
 use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
     fetch_subtitles, get_channel_about, get_channel_details, get_channel_page, get_channel_tab,
@@ -283,6 +288,10 @@ pub fn run() {
                         tracing::warn!(error = ?error, "Could not open a window for --new-window");
                     }
                 });
+                return;
+            }
+            if let Some(route) = services::shell_pages::route_from_args(argv.iter()) {
+                services::shell_pages::open_route(app, route);
                 return;
             }
             if let Some(window) = app.get_webview_window("main") {
@@ -531,6 +540,9 @@ pub fn run() {
             app.manage(commands::discord::DiscordPresenceOwner::default());
             app.manage(services::music_tray::MusicTray::default());
             app.manage(services::media_keys::PlaybackTarget::default());
+            app.manage(services::shell_pages::LaunchPage::new(
+                services::shell_pages::route_from_args(std::env::args()),
+            ));
             services::media_keys::watch_playback_claims(app.handle());
 
             // Initialize and manage streaming proxy
@@ -917,6 +929,9 @@ pub fn run() {
             // --- Music tray ---
             music_tray_supported,
             music_tray_update,
+            set_shell_pages,
+            take_launch_page,
+            set_download_progress,
             global_media_keys_supported,
             global_media_keys_set,
             music_tray_hide,

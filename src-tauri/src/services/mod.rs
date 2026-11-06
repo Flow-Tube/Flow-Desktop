@@ -2,6 +2,8 @@ pub mod blocked_channel_names;
 pub mod discord_presence;
 pub mod home_engine;
 pub mod home_feed;
+#[cfg(windows)]
+pub mod jump_list;
 pub mod media_keys;
 pub mod music_service;
 pub mod music_tray;
@@ -10,6 +12,7 @@ pub mod notification_service;
 pub mod profile_interests;
 pub mod profile_service;
 pub mod recommendation_service;
+pub mod shell_pages;
 pub mod shorts_engine;
 pub mod shorts_service;
 pub mod subscription_feed;

@@ -82,6 +82,7 @@ import { DeepFlowController } from "./components/deep-flow/DeepFlowController";
 import { DeepLinkController } from "./components/handoff/DeepLinkController";
 import { DiscordPresenceController } from "./components/discord/DiscordPresenceController";
 import { MusicTrayController } from "./components/tray/MusicTrayController";
+import { ShellPagesController } from "./components/tray/ShellPagesController";
 import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKeysController";
 import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
@@ -333,6 +334,7 @@ function App() {
       </div>
       <GlobalVideoPlayer />
       <PipWindowController />
+      <MusicTrayController />
       {/* Music, deep links, the updater and other once-per-app jobs run in the main window only. */}
       {IS_MAIN_WINDOW && (
         <>
@@ -346,8 +348,8 @@ function App() {
           </LayoutGroup>
           <DeepFlowController />
           <DeepLinkController />
-          <MusicTrayController />
           <GlobalMediaKeysController />
+          <ShellPagesController />
           <ScrobbleController />
           <WellbeingController />
         </>

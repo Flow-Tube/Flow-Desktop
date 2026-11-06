@@ -1,18 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-const player = vi.hoisted(() => ({
-  currentTrack: null as unknown,
-  togglePlay: vi.fn(),
-  next: vi.fn(),
-  previous: vi.fn(),
-}));
-
-vi.mock("../store/useMusicPlayerStore", () => ({
-  useMusicPlayerStore: Object.assign(() => undefined, { getState: () => player }),
-}));
-
-import { runTrayAction, trayNowPlaying } from "./useMusicTray";
+import { trayNowPlaying, videoToResume } from "./useMusicTray";
 import type { SongItem } from "../types/music";
+import type { VideoSummary } from "../types/video";
 
 const song = (artists: string[]): SongItem => ({
   id: "s1",
@@ -28,30 +18,24 @@ const song = (artists: string[]): SongItem => ({
   params: null,
 });
 
-describe("music tray", () => {
-  beforeEach(() => {
-    player.currentTrack = null;
-    vi.clearAllMocks();
-  });
+const video = (id: string, channelName = "Channel") => ({ id, title: `Video ${id}`, channelName }) as VideoSummary;
 
+describe("tray", () => {
   it("titles the tray with the song and its artists", () => {
-    expect(trayNowPlaying(song(["A", "B"]), "Nothing")).toBe("Song · A, B");
-    expect(trayNowPlaying(song([]), "Nothing")).toBe("Song");
-    expect(trayNowPlaying(null, "Nothing")).toBe("Nothing");
+    expect(trayNowPlaying(song(["A", "B"]), null, "Nothing")).toBe("Song · A, B");
+    expect(trayNowPlaying(song([]), null, "Nothing")).toBe("Song");
+    expect(trayNowPlaying(null, null, "Nothing")).toBe("Nothing");
   });
 
-  it("sends each tray action to the music player", () => {
-    player.currentTrack = song(["A"]);
-    runTrayAction("toggle");
-    runTrayAction("next");
-    runTrayAction("previous");
-    expect(player.togglePlay).toHaveBeenCalledOnce();
-    expect(player.next).toHaveBeenCalledOnce();
-    expect(player.previous).toHaveBeenCalledOnce();
+  it("titles the tray with the video and its channel", () => {
+    expect(trayNowPlaying(null, video("a"), "Nothing")).toBe("Video a · Channel");
+    expect(trayNowPlaying(null, video("a", ""), "Nothing")).toBe("Video a");
   });
 
-  it("ignores tray clicks with nothing loaded", () => {
-    runTrayAction("toggle");
-    expect(player.togglePlay).not.toHaveBeenCalled();
+  it("offers the newest video that isn't already in the player", () => {
+    expect(videoToResume([video("a"), video("b")], null)?.id).toBe("a");
+    expect(videoToResume([video("a"), video("b")], video("a"))?.id).toBe("b");
+    expect(videoToResume([video("a")], video("a"))).toBeNull();
+    expect(videoToResume([], null)).toBeNull();
   });
 });

@@ -8,6 +8,8 @@ import { useMusicChipFilter } from '../../lib/useMusicHome';
 import { useGridStyle } from '../../lib/useGridColumns';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
+import { episodeAsSong } from '../../lib/searchResults';
+import { getString } from '../../lib/i18n/index';
 import type { SongItem, YTItem } from '../../types/music';
 
 export default function MusicBrowsePage() {
@@ -25,7 +27,13 @@ export default function MusicBrowsePage() {
     title, browseId, params: browseParams, orderBy: 0,
   } : null, [browseId, browseParams, title]);
   const { items, sections, loading, loadingMore, error, reload, loadMore, hasMore } = useMusicChipFilter(chip);
-  const shown = (list: YTItem[]) => list.filter((item) => item.type !== 'podcast' && item.type !== 'episode')
+  const isPodcastPage = Boolean(
+    title.toLowerCase().includes('podcast') ||
+    (browseParams && browseParams.toLowerCase().includes('podcast')) ||
+    title === t('music_mood_podcasts') ||
+    title === getString('music_mood_podcasts')
+  );
+  const shown = (list: YTItem[]) => list.filter((item) => (isPodcastPage ? true : item.type !== 'podcast' && item.type !== 'episode'))
     .filter((item) => item.type === 'song' ? !isHidden(item)
       : item.type === 'artist' ? !isArtistHidden(item) : true);
   const visible = shown(items);
@@ -33,8 +41,15 @@ export default function MusicBrowsePage() {
   const sectioned = sections.length > 1;
   const sectionedCount = sections.reduce((count, section) => count + section.items.length, 0);
   const moreItems = sectioned ? shown(items.slice(sectionedCount)) : [];
-  const audioSongs = visible.filter((item): item is Extract<YTItem, { type: 'song' }> =>
-    item.type === 'song' && (!item.musicVideoType || item.musicVideoType === 'MUSIC_VIDEO_TYPE_ATV'));
+  const audioSongs = visible.flatMap((item): SongItem[] => {
+    if (item.type === 'song') {
+      return (!item.musicVideoType || item.musicVideoType === 'MUSIC_VIDEO_TYPE_ATV') ? [item] : [];
+    }
+    if (item.type === 'episode') {
+      return [episodeAsSong(item)];
+    }
+    return [];
+  });
   const play = (song: SongItem) => {
     const index = audioSongs.findIndex((item) => (item.videoId ?? item.id) === (song.videoId ?? song.id));
     void playQueue(audioSongs, Math.max(0, index), title);
@@ -63,6 +78,16 @@ export default function MusicBrowsePage() {
       case 'artist':
         return <MusicItemCard variant="artist" item={item} fill
           onOpen={() => navigate(`/music/artist/${item.id}`)} />;
+      case 'podcast':
+        return <MusicItemCard variant="podcast" item={item} fill
+          onPlay={() => navigate(`/music/playlist/${item.id}`)}
+          onOpen={() => navigate(`/music/playlist/${item.id}`)} />;
+      case 'episode': {
+        const asSong = episodeAsSong(item);
+        return <MusicItemCard variant="episode" item={item} fill
+          onPlay={() => play(asSong)}
+          onOpen={() => play(asSong)} />;
+      }
       default:
         return null;
     }

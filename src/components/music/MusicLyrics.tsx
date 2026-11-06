@@ -7,6 +7,7 @@ import { useLyrics } from "../../lib/lyrics/useLyrics";
 import { useLyricsStore } from "../../store/useLyricsStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useBoolPref, usePreference } from "../../lib/usePreference";
+import { useKeepScreenOn } from "../../lib/useKeepScreenOn";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useTheme } from "../../lib/useTheme";
 import { LyricsPanel } from "./lyrics/LyricsPanel";
@@ -61,6 +62,8 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
   const [showRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
   const [blurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
+  const [keepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
+  useKeepScreenOn(keepScreenOn && active && isPlaying);
   const { theme, variant: themeVariant } = useTheme();
   const textColor = useMemo(() => hexToRgb(theme.variants[themeVariant].onSurface), [theme, themeVariant]);
   const lyricAccent = backdrop && accent ? accent : textColor;

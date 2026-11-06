@@ -8,6 +8,7 @@ import { useBoolPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { IS_LINUX_RUNTIME } from '../../../lib/platform';
+import { canKeepScreenOn } from '../../../lib/useKeepScreenOn';
 import {
   getOrderedProviders,
   parseProviderEnabledStates,
@@ -23,6 +24,7 @@ export function MusicLyricsSettings() {
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
+  const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const cache = useLyricsCache();
 
@@ -51,6 +53,11 @@ export function MusicLyricsSettings() {
       {showRomanization && (
         <SettingItem title={getString('lyrics_auto_romanize')} description={getString('lyrics_auto_romanize_summary')}>
           <ToggleSwitch checked={autoRomanize} onChange={setAutoRomanize} />
+        </SettingItem>
+      )}
+      {canKeepScreenOn() && (
+        <SettingItem title={getString('lyrics_keep_screen_on')} description={getString('lyrics_keep_screen_on_summary')}>
+          <ToggleSwitch checked={keepScreenOn} onChange={setKeepScreenOn} />
         </SettingItem>
       )}
       {/* Linux never draws this blur, because the engine would do it on the CPU. */}

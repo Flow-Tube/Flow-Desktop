@@ -6,6 +6,7 @@ import { useBoolPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
+import { useMusicPlayerStore } from '../../../store/useMusicPlayerStore';
 
 export function MusicPlaybackSettings() {
   const [audioQuality, setAudioQuality] = usePreference(SETTINGS.MUSIC_AUDIO_QUALITY, 'Auto');
@@ -14,6 +15,10 @@ export function MusicPlaybackSettings() {
   const [sleepTimerButton, setSleepTimerButton] = useBoolPref(SETTINGS.MUSIC_SLEEP_TIMER_BUTTON, false);
   const [swipeLeft, setSwipeLeft] = usePreference(SETTINGS.MUSIC_QUEUE_SWIPE_LEFT);
   const [swipeRight, setSwipeRight] = usePreference(SETTINGS.MUSIC_QUEUE_SWIPE_RIGHT);
+  const [openPlayer, setOpenPlayer] = useBoolPref(SETTINGS.MUSIC_OPEN_PLAYER_ON_PLAY);
+  const [pauseWhenMuted, setPauseWhenMuted] = useBoolPref(SETTINGS.MUSIC_PAUSE_WHEN_MUTED);
+  const radioEnabled = useMusicPlayerStore((state) => state.radioEnabled);
+  const toggleRadio = useMusicPlayerStore((state) => state.toggleRadio);
   const qualityDisabled = isSettingDisabledUntilWired(SETTINGS.MUSIC_AUDIO_QUALITY);
   const swipeOptions = [
     { value: 'PLAY_NEXT', label: getString('music_play_next') },
@@ -43,6 +48,15 @@ export function MusicPlaybackSettings() {
       </SettingItem>
       <SettingItem title={getString('settings_music_sleep_timer_button')} description={getString('settings_music_sleep_timer_button_desc')}>
         <ToggleSwitch checked={sleepTimerButton} onChange={setSleepTimerButton} />
+      </SettingItem>
+      <SettingItem title={getString('music_autoplay')} description={getString('music_autoplay_desc')}>
+        <ToggleSwitch checked={radioEnabled} onChange={() => toggleRadio()} />
+      </SettingItem>
+      <SettingItem title={getString('settings_open_music_player_on_play')} description={getString('settings_open_music_player_on_play_desc')}>
+        <ToggleSwitch checked={openPlayer} onChange={setOpenPlayer} />
+      </SettingItem>
+      <SettingItem title={getString('settings_pause_when_muted')} description={getString('settings_pause_when_muted_desc')}>
+        <ToggleSwitch checked={pauseWhenMuted} onChange={setPauseWhenMuted} />
       </SettingItem>
     </SettingsGroup>
   );

@@ -86,6 +86,7 @@ MUSIC
 - Song menus have Details: title, artist, album, views, likes, length and upload date. Click a line to copy it.
 - Settings > Music can hide the artwork in the full player, change the shape of the music progress bar, and make album art and cards on music pages smaller.
 - YouTube captions are now a lyrics provider, tried before YouTube's plain lyrics, so more songs get timed lines. Reorder or turn it off in Settings > Music.
+- New switches: open the full player for new songs, pause music while muted, and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

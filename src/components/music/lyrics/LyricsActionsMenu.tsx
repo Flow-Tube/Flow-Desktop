@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { MENU_ENTER_TRANSITION, MENU_EXIT_TRANSITION } from "../../../lib/motion";
+import { canKeepScreenOn } from "../../../lib/useKeepScreenOn";
 import {
   AlignCenter,
   AlignLeft,
@@ -10,6 +11,7 @@ import {
   Languages,
   MoreVertical,
   Pencil,
+  Sun,
   RefreshCw,
   Save,
   SearchCheck,
@@ -85,6 +87,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
+  const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const { copy, save } = useLyricsActions(track);
 
@@ -201,6 +204,15 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
                 supporting={getString("lyrics_auto_romanize_summary")}
                 checked={autoRomanize}
                 onChange={setAutoRomanize}
+              />
+            )}
+            {canKeepScreenOn() && (
+              <SwitchRow
+                icon={<Sun className="h-5 w-5" />}
+                title={getString("lyrics_keep_screen_on")}
+                supporting={getString("lyrics_keep_screen_on_summary")}
+                checked={keepScreenOn}
+                onChange={setKeepScreenOn}
               />
             )}
             {/* Linux never draws this blur, because the engine would do it on the CPU. */}

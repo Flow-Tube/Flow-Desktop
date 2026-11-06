@@ -147,6 +147,35 @@ describe("Fade when you skip", () => {
   });
 });
 
+describe("Open the full player for new songs", () => {
+  afterEach(() => {
+    useAppSettingsStore.setState({ values: {} });
+    useMusicPlayerStore.setState({ viewState: "dock" });
+  });
+
+  const opensWith = async (play: () => Promise<void>) => {
+    useMusicPlayerStore.setState({ viewState: "dock" });
+    await play();
+    return useMusicPlayerStore.getState().viewState;
+  };
+
+  it("opens for a picked song, a queue and a radio", async () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.MUSIC_OPEN_PLAYER_ON_PLAY]: "true" } });
+    const { playTrack, playQueue, startRadio } = useMusicPlayerStore.getState();
+    expect(await opensWith(() => playTrack(song("a")))).toBe("full");
+    expect(await opensWith(() => playQueue([song("a")], 0))).toBe("full");
+    expect(await opensWith(() => startRadio(song("a")))).toBe("full");
+  });
+
+  it("stays in the dock with the setting off, and for a restored queue", async () => {
+    const { playTrack, playQueue, startRadio } = useMusicPlayerStore.getState();
+    expect(await opensWith(() => playTrack(song("a")))).toBe("dock");
+    expect(await opensWith(() => startRadio(song("a")))).toBe("dock");
+    useAppSettingsStore.setState({ values: { [SETTINGS.MUSIC_OPEN_PLAYER_ON_PLAY]: "true" } });
+    expect(await opensWith(() => playQueue([song("a")], 0, null, { at: 1, autoplay: false }))).toBe("dock");
+  });
+});
+
 describe("recovering from a playback error", () => {
   const MEDIA_ERR_NETWORK = 2;
   const MEDIA_ERR_DECODE = 3;

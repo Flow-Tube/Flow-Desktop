@@ -325,6 +325,10 @@ export function warmMusicStream(videoId: string): void {
   prefetchMusicStream(videoId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
 }
 
+/** A song the listener just started opens the full player, if that's their setting, as on Android. */
+const viewForNewSong = () =>
+  getSettingValue(SETTINGS.MUSIC_OPEN_PLAYER_ON_PLAY) === "true" ? { viewState: "full" as const } : {};
+
 function armSkipFade(s: Pick<MusicPlayerState, "isPlaying" | "progress" | "duration" | "queue">, index: number): void {
   const target = s.queue[index];
   if (s.isPlaying && target) musicAudioEngine.armSkipFade(videoIdOf(target), s.progress, s.duration);
@@ -370,7 +374,12 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const remote = remoteControl();
     if (remote) return remote.play([videoIdOf(track)], 0, true);
     resetRadioSession([videoIdOf(track)]);
-    set({ ...freshQueue([track], get().isShuffle ? [track] : null), radioStationActive: false, queueSource: null });
+    set({
+      ...freshQueue([track], get().isShuffle ? [track] : null),
+      radioStationActive: false,
+      queueSource: null,
+      ...viewForNewSong(),
+    });
     await get()._loadIndex(0);
   },
 
@@ -385,6 +394,8 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       ...freshQueue(shuffled ? shuffleFrom(tracks, first) : tracks, shuffled ? tracks : null),
       radioStationActive: false,
       queueSource: source,
+      // `start` means a restored queue, not a song the listener just picked.
+      ...(start ? {} : viewForNewSong()),
     });
     await get()._loadIndex(shuffled ? 0 : first, start && { resumeAt: start.at, autoplay: start.autoplay });
   },
@@ -817,6 +828,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       currentIndex: 0,
       radioStationActive: true,
       queueSource: null,
+      ...viewForNewSong(),
     });
     await get()._loadIndex(0);
   },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Ban,
@@ -31,6 +31,7 @@ import { useProxyImageSrc } from "../../lib/useImageProxy";
 import type { ShortVideoSummary, VideoSummary } from "../../types/video";
 import { backgroundTabClickProps, openedInBackgroundTab } from "../../lib/openTarget";
 import { openActions } from "../common/openActions";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 interface ShortCardProps {
   short: ShortVideoSummary;
@@ -49,7 +50,9 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
   const disableShortsPlayer = useAppSettingsStore(
     (state) => state.values[SETTINGS.DISABLE_SHORTS_PLAYER] === "true",
   );
-  const title = short.title?.trim() || "Short";
+  const cardRef = useRef<HTMLDivElement>(null);
+  const originalTitle = useOriginalTitle(short.id, cardRef);
+  const title = originalTitle || short.title?.trim() || "Short";
   const video = useMemo<VideoSummary>(
     () => ({
       id: short.id,
@@ -179,6 +182,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
 
   return (
     <div
+      ref={cardRef}
       onContextMenu={openContextMenu}
       className={[
         "group relative flex shrink-0 flex-col gap-2 text-left",

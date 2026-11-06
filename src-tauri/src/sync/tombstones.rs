@@ -11,6 +11,7 @@ use crate::sync::canonical::{
     WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Stamp};
+use crate::sync::mapping::like_key;
 use crate::sync::merge::playlist_merge_key;
 
 fn peer_record<T: DeserializeOwned>(stamp: &Stamp) -> Option<T> {
@@ -45,6 +46,19 @@ pub fn watch_history(
             })
         })
         .collect()
+}
+
+/// A like put back by Undo keeps its old time; a tombstone already at a peer would beat that, so
+/// a live like counts from its last edit.
+pub fn raise_live_likes(live: &mut [Like], stamps: &BTreeMap<String, Stamp>, device_id: &str) {
+    for like in live {
+        if let Some(s) = stamps.get(&like_key(like))
+            && !s.deleted
+            && s.at_ms > like.hlc.physical_ms
+        {
+            like.hlc = Hlc::new(s.at_ms, 0, device_id);
+        }
+    }
 }
 
 #[must_use]

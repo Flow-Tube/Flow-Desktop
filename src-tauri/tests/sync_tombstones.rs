@@ -129,7 +129,10 @@ const LIKED: &str = r#"[{"kind":"video","id":"vid1","likedAt":"2025-01-02T00:00:
 #[tokio::test]
 async fn an_unlike_travels_and_an_older_peer_like_cannot_undo_it() {
     let desk = memory_pool().await;
+    let peer = memory_pool().await;
+    frontend_write(&peer, "liked_items", LIKED).await;
     frontend_write(&desk, "liked_items", LIKED).await;
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     frontend_write(&desk, "liked_items", "[]").await;
 
     let likes: Vec<Like> = records(&export_one(&desk, Collection::Likes).await);
@@ -164,8 +167,6 @@ async fn an_unlike_travels_and_an_older_peer_like_cannot_undo_it() {
     );
 
     // The peer receiving the desktop's export drops its like.
-    let peer = memory_pool().await;
-    frontend_write(&peer, "liked_items", LIKED).await;
     let out = export_one(&desk, Collection::Likes).await;
     apply_payload(
         &peer,
@@ -176,6 +177,37 @@ async fn an_unlike_travels_and_an_older_peer_like_cannot_undo_it() {
     .await
     .unwrap();
     assert!(blob(&peer, "liked_items").await.is_empty());
+}
+
+#[tokio::test]
+async fn an_undone_unlike_outlives_the_tombstone_a_peer_already_holds() {
+    let desk = memory_pool().await;
+    frontend_write(&desk, "liked_items", LIKED).await;
+    frontend_write(&desk, "liked_items", "[]").await;
+    frontend_write(&desk, "liked_items", LIKED).await;
+
+    let sent_before_undo = now_ms() - 1_000;
+    let likes: Vec<Like> = records(&export_one(&desk, Collection::Likes).await);
+    assert_eq!(likes[0].state, LikeState::Liked);
+    assert!(likes[0].hlc.physical_ms > sent_before_undo);
+
+    let tombstone = Like {
+        kind: LikeKind::Video,
+        id: "vid1".to_string(),
+        state: LikeState::None,
+        updated_at_ms: sent_before_undo,
+        hlc: Hlc::new(sent_before_undo, 0, PEER),
+        meta: None,
+    };
+    apply_payload(
+        &desk,
+        DESK,
+        PEER,
+        &[stage(Collection::Likes, &[tombstone], "l1")],
+    )
+    .await
+    .unwrap();
+    assert_eq!(blob(&desk, "liked_items").await.len(), 1, "the Undo wins");
 }
 
 #[tokio::test]

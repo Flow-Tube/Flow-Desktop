@@ -408,6 +408,7 @@ async fn apply_likes(
     };
     let live: BTreeSet<String> = local.iter().map(mapping::like_key).collect();
     let stamps = changes::load(tx, changes::LIKES, now_ms()).await?;
+    tombstones::raise_live_likes(&mut local, &stamps, device_id);
     local.extend(tombstones::likes(&stamps, &live, device_id));
     let incoming = parse_ndjson::<Like>(ndjson)?;
     let local_map: BTreeMap<String, Like> = local

@@ -46,6 +46,7 @@ export interface VideoCardProps {
   onAddToQueue?: (video: VideoSummary) => void;
   onRemoveFromHistory?: (videoId: string) => void;
   onRemoveFromContinueWatching?: (videoId: string) => void;
+  onRemoveFromLikes?: (videoId: string) => void;
   variant?: 'default' | 'grid' | 'history' | 'continue' | 'list' | 'compact';
   hideChannelAvatar?: boolean;
   showDragHandle?: boolean;
@@ -109,6 +110,7 @@ function VideoCardComponent({
   onAddToQueue,
   onRemoveFromHistory,
   onRemoveFromContinueWatching,
+  onRemoveFromLikes,
   variant = 'default',
   hideChannelAvatar,
   showDragHandle = true,
@@ -454,6 +456,16 @@ function VideoCardComponent({
         group: "library" as const,
         danger: true,
         onSelect: () => onRemoveFromContinueWatching(video.id),
+      }]
+      : []),
+    ...(onRemoveFromLikes
+      ? [{
+        id: "remove-like",
+        label: getString("remove"),
+        icon: <Trash2 size={16} />,
+        group: "library" as const,
+        danger: true,
+        onSelect: () => onRemoveFromLikes(video.id),
       }]
       : []),
     ...openActions(route),

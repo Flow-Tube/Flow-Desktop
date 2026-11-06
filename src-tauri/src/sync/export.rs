@@ -112,6 +112,7 @@ async fn export_likes(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, Syn
     };
     let live: BTreeSet<String> = likes.iter().map(mapping::like_key).collect();
     let stamps = load_changes(pool, changes::LIKES).await?;
+    tombstones::raise_live_likes(&mut likes, &stamps, device_id);
     likes.extend(tombstones::likes(&stamps, &live, device_id));
     likes.sort_by(|a, b| mapping::like_key(a).cmp(&mapping::like_key(b)));
     Ok(to_ndjson(&likes))

@@ -70,7 +70,7 @@ function normalizeStoredAlbum(raw: AlbumItem | StoredAlbum): StoredAlbum {
 interface AlbumLibraryState {
   albums: StoredAlbum[];
   loaded: boolean;
-  addTarget: SongItem | null;
+  addTargets: SongItem[];
   searchAlbumId: string | null;
 
   load: () => Promise<void>;
@@ -84,8 +84,14 @@ interface AlbumLibraryState {
   removeAlbum: (id: string) => Promise<void>;
   addTrack: (albumId: string, track: SongItem) => Promise<void>;
   removeTrack: (albumId: string, trackVideoId: string) => Promise<void>;
+  /** Adds the songs not already there and returns the ones that went in. */
+  addTracks: (albumId: string, tracks: SongItem[]) => Promise<SongItem[]>;
+  removeTracks: (albumId: string, trackVideoIds: string[]) => Promise<void>;
+  /** Puts a list back as it was, for Undo. */
+  restoreTracks: (albumId: string, tracks: SongItem[]) => Promise<void>;
+  updateDetails: (albumId: string, title: string, description: string) => Promise<void>;
 
-  openAddToAlbum: (track: SongItem) => void;
+  openAddToAlbum: (tracks: SongItem | SongItem[]) => void;
   closeAddToAlbum: () => void;
   openTrackSearch: (albumId: string) => void;
   closeTrackSearch: () => void;
@@ -99,10 +105,25 @@ const persist = async (albums: StoredAlbum[]) => {
   }
 };
 
-export const useAlbumLibraryStore = create<AlbumLibraryState>((set, get) => ({
+export const useAlbumLibraryStore = create<AlbumLibraryState>((set, get) => {
+  /** Shows a change at once and takes it back if it can't be saved. */
+  const commit = async (next: StoredAlbum[]) => {
+    const previous = get().albums;
+    set({ albums: next });
+    try {
+      await setSetting(ALBUMS_SETTING_KEY, JSON.stringify(next));
+    } catch (error) {
+      set({ albums: previous });
+      throw error;
+    }
+  };
+  const editOwned = (albumId: string, edit: (album: StoredAlbum) => StoredAlbum) =>
+    commit(get().albums.map((album) => (album.id === albumId && album.source === "Owned" ? edit(album) : album)));
+
+  return {
   albums: [],
   loaded: false,
-  addTarget: null,
+  addTargets: [],
   searchAlbumId: null,
 
   load: async () => {
@@ -233,8 +254,41 @@ export const useAlbumLibraryStore = create<AlbumLibraryState>((set, get) => ({
     await persist(updated);
   },
 
-  openAddToAlbum: (track) => set({ addTarget: track }),
-  closeAddToAlbum: () => set({ addTarget: null }),
+  addTracks: async (albumId, tracks) => {
+    const album = get().albums.find((candidate) => candidate.id === albumId && candidate.source === "Owned");
+    if (!album) return [];
+    const seen = new Set((album.tracks ?? []).map(songVideoId));
+    const added = tracks.filter((track) => {
+      const id = songVideoId(track);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    if (added.length === 0) return [];
+    await editOwned(albumId, (current) => ({
+      ...current,
+      tracks: [...(current.tracks ?? []), ...added],
+      thumbnail: current.thumbnail ?? added.find((track) => track.thumbnail)?.thumbnail ?? null,
+    }));
+    return added;
+  },
+
+  removeTracks: (albumId, trackVideoIds) => {
+    const removed = new Set(trackVideoIds);
+    return editOwned(albumId, (album) => ({
+      ...album,
+      tracks: (album.tracks ?? []).filter((track) => !removed.has(songVideoId(track))),
+    }));
+  },
+
+  restoreTracks: (albumId, tracks) => editOwned(albumId, (album) => ({ ...album, tracks })),
+
+  updateDetails: (albumId, title, description) =>
+    editOwned(albumId, (album) => ({ ...album, title: title.trim() || album.title, description: description.trim() })),
+
+  openAddToAlbum: (tracks) => set({ addTargets: Array.isArray(tracks) ? tracks : [tracks] }),
+  closeAddToAlbum: () => set({ addTargets: [] }),
   openTrackSearch: (albumId) => set({ searchAlbumId: albumId }),
   closeTrackSearch: () => set({ searchAlbumId: null }),
-}));
+  };
+});

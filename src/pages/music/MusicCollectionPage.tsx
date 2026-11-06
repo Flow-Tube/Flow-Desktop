@@ -3,18 +3,34 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, Play } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
-import { AlbumTrackRow } from '../../components/music/AlbumTrackRow';
+import { EditAlbumDialog } from '../../components/music/EditAlbumDialog';
 import { MusicCollectionHeader } from '../../components/music/MusicCollectionHeader';
+import { MusicCollectionSkeleton } from '../../components/music/MusicCollectionSkeleton';
+import { MusicCollectionSuggestions } from '../../components/music/MusicCollectionSuggestions';
+import { CollectionFilterBar, CollectionSelectionBar } from '../../components/music/MusicCollectionToolbar';
+import { MusicCollectionTrackList } from '../../components/music/MusicCollectionTrackList';
 import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { MusicShelf } from '../../components/music/MusicShelf';
 import { useMusicCollection, type CollectionKind } from '../../lib/useMusicCollection';
 import { usePublishTitle } from '../../lib/usePublishTitle';
-import { useCollectionDownloadState } from '../../lib/useCollectionDownloads';
+import { loadMusicPlaylistSongs, useCollectionDownloadState } from '../../lib/useCollectionDownloads';
+import { useCollectionSuggestions } from '../../lib/useCollectionSuggestions';
+import { useCollectionView } from '../../lib/useCollectionView';
+import {
+  addSongsToQueue,
+  downloadSongs,
+  playSongsNext,
+  removeSongsWithUndo,
+} from '../../lib/useCollectionSelectionActions';
+import { useSongSelection } from '../../lib/useSongSelection';
+import { shareLink } from '../../lib/clipboard';
+import { youtubeMusicAlbumUrl, youtubeMusicPlaylistUrl } from '../../lib/youtubeUrl';
+import { songToastItem } from '../../lib/songLikeToast';
+import { useUiStore } from '../../store/useUiStore';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
-import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
+import { albumDetailPath, useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import { getString } from '../../lib/i18n/index';
-import { artistsText } from '../../lib/musicFormat';
 import type { AlbumItem, SongItem } from '../../types/music';
 import { shuffled } from '../../lib/musicRecall';
 import { songToFileEntry } from '../../lib/playlistFile';
@@ -33,33 +49,6 @@ function parseTrackCount(text: string | null): number | null {
   return Number.isFinite(count) ? count : null;
 }
 
-function CollectionSkeleton() {
-  return (
-    <div className="animate-pulse pb-32">
-      <div className="flex flex-col items-center gap-6 p-6 sm:flex-row sm:items-end lg:p-8">
-        <div className="h-44 w-44 shrink-0 rounded-2xl bg-surface-container-low lg:h-52 lg:w-52" />
-        <div className="flex w-full flex-col items-center gap-3 sm:items-start">
-          <div className="h-3 w-16 rounded bg-surface-container-low" />
-          <div className="h-9 w-2/3 max-w-md rounded-lg bg-surface-container-low" />
-          <div className="h-4 w-40 rounded bg-surface-container-low" />
-          <div className="mt-3 h-12 w-56 rounded-full bg-surface-container-low" />
-        </div>
-      </div>
-      <div className="mx-auto flex max-w-[1100px] flex-col gap-1 px-6 pt-6 lg:px-8">
-        {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 p-2">
-            <div className="h-12 w-12 shrink-0 rounded-md bg-surface-container-low" />
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <div className="h-3.5 w-1/2 rounded bg-surface-container-low" />
-              <div className="h-3 w-1/3 rounded bg-surface-container-low" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -67,18 +56,40 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
   const addToQueue = useMusicPlayerStore((s) => s.addToQueue);
   const currentTrack = useMusicPlayerStore((s) => s.currentTrack);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
-  const removeAlbumTrack = useAlbumLibraryStore((s) => s.removeTrack);
+  const ownedAlbums = useAlbumLibraryStore((s) => s.albums);
+  const addAlbumTracks = useAlbumLibraryStore((s) => s.addTracks);
+  const removeAlbumTracks = useAlbumLibraryStore((s) => s.removeTracks);
+  const updateAlbumDetails = useAlbumLibraryStore((s) => s.updateDetails);
+  const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const toggleAlbumSave = useAlbumLibraryStore((s) => s.toggle);
   const isAlbumSaved = useAlbumLibraryStore((s) => (kind === 'album' && id ? s.isSaved(id) : false));
   const openTrackSearch = useAlbumLibraryStore((s) => s.openTrackSearch);
   const [showMiniHeader, setShowMiniHeader] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const { meta, songs, otherVersions, loading, loadingMore, error, hasMore, loadMore, reload, ownedAlbumId } =
     useMusicCollection(kind, id);
   usePublishTitle(meta?.title);
 
+  const ownedAlbum = ownedAlbumId ? ownedAlbums.find((album) => album.id === ownedAlbumId) ?? null : null;
+  const view = useCollectionView({
+    id,
+    songs,
+    isAlbumKind: kind === 'album',
+    isOwned: Boolean(ownedAlbumId),
+    hasMore,
+    loadingMore,
+    loadMore,
+  });
+  const selection = useSongSelection(view.ordered, view.shown);
+  const stopSelection = selection.stop;
+  useEffect(() => stopSelection(), [id, stopSelection]);
+  const suggestions = useCollectionSuggestions(ownedAlbumId, songs);
+  const requestSuggestions = suggestions.requestOnce;
+  const showSuggestions = Boolean(ownedAlbumId) && !selection.selecting && !view.debouncedQuery.trim();
+
   const openCollectionDownload = useDownloadStore((s) => s.openCollection);
-  const albumDownloadState = useCollectionDownloadState(kind === 'album' ? id : undefined, 'album');
+  const albumDownloadState = useCollectionDownloadState(id, 'album');
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -97,6 +108,21 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
     return () => observer.disconnect();
   }, [hasMore, loadingMore, loadMore]);
 
+  const listEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!showSuggestions || songs.length === 0 || typeof IntersectionObserver === 'undefined') return;
+    const target = listEndRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) requestSuggestions();
+      },
+      { root: scrollRef.current },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [requestSuggestions, showSuggestions, songs.length]);
+
   const expectedTrackCount = parseTrackCount(meta?.trackCountText ?? null);
   useEffect(() => {
     if (loading || loadingMore || !hasMore) return;
@@ -110,7 +136,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
     setShowMiniHeader((visible) => (visible === nextVisible ? visible : nextVisible));
   };
 
-  if (loading && !meta) return <CollectionSkeleton />;
+  if (loading && !meta) return <MusicCollectionSkeleton />;
 
   if (error || !meta) {
     return (
@@ -130,12 +156,12 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
   }
 
   const playFrom = (track: SongItem) => {
-    const start = Math.max(0, songs.findIndex((t) => videoIdOf(t) === videoIdOf(track)));
-    void playQueue(songs, start, meta?.title ?? null);
+    const start = Math.max(0, view.ordered.findIndex((t) => videoIdOf(t) === videoIdOf(track)));
+    void playQueue(view.ordered, start, meta?.title ?? null);
   };
   const playAll = (shuffle: boolean) => {
-    if (!songs.length) return;
-    void playQueue(shuffle ? shuffled(songs) : songs, 0, meta?.title ?? null);
+    if (!view.ordered.length) return;
+    void playQueue(shuffle ? shuffled(view.ordered) : view.ordered, 0, meta?.title ?? null);
   };
 
   const isOnlineAlbum = kind === 'album' && !ownedAlbumId;
@@ -151,7 +177,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
         thumbnailUrl: meta.thumbnail ?? undefined,
         year: meta.yearText ? Number.parseInt(meta.yearText, 10) || null : null,
       },
-      load: () => Promise.resolve(songs),
+      load: () => (kind === 'playlist' && hasMore ? loadMusicPlaylistSongs(id) : Promise.resolve(songs)),
     });
   };
 
@@ -162,6 +188,45 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
       isMusic: true,
       videos: songs.map(songToFileEntry),
     });
+  };
+
+  const saveDetails = (title: string, description: string) => {
+    if (!ownedAlbumId) return;
+    void updateAlbumDetails(ownedAlbumId, title, description).catch((error) => {
+      console.error('Failed to save the album', error);
+      useUiStore.getState().showToast({ variant: 'error', message: getString('album_edit_failed') });
+    });
+  };
+
+  const handleShare = () => {
+    if (!id) return;
+    const url = kind === 'album' ? youtubeMusicAlbumUrl(id) : youtubeMusicPlaylistUrl(id);
+    void shareLink(meta.title, url).then((result) => {
+      const { showToast } = useUiStore.getState();
+      if (result === 'copied') showToast({ variant: 'success', message: getString('share_link_copied') });
+      if (result === 'failed') showToast({ variant: 'error', message: getString('share_link_copy_failed') });
+    });
+  };
+
+  const removeSongs = (tracks: SongItem[]) => {
+    if (ownedAlbum) void removeSongsWithUndo(ownedAlbum, tracks);
+  };
+
+  const addSuggestion = (song: SongItem) => {
+    if (!ownedAlbum) return;
+    const destination = { kind: 'album' as const, path: albumDetailPath(ownedAlbum), name: ownedAlbum.title };
+    void addAlbumTracks(ownedAlbum.id, [song])
+      .then(() =>
+        showSaveToast({
+          destination,
+          item: songToastItem(song),
+          undo: () => removeAlbumTracks(ownedAlbum.id, [videoIdOf(song)]),
+        }),
+      )
+      .catch((error) => {
+        console.error('Failed to add the song to the album', error);
+        showSaveFailedToast({ destination, item: songToastItem(song) });
+      });
   };
 
   const handleToggleSave = () => {
@@ -235,53 +300,88 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
         saved={isOnlineAlbum ? isAlbumSaved : undefined}
         onToggleSave={isOnlineAlbum ? handleToggleSave : undefined}
         onAddTracks={ownedAlbumId ? () => openTrackSearch(ownedAlbumId) : undefined}
-        onDownload={kind === 'album' ? handleDownloadAlbum : undefined}
+        onDownload={handleDownloadAlbum}
         downloadActive={albumDownloadState.active}
         downloadComplete={albumDownloadState.isComplete}
         onExport={songs.length > 0 && !hasMore ? handleExport : undefined}
+        onShare={ownedAlbumId ? undefined : handleShare}
+        onEdit={ownedAlbumId ? () => setEditing(true) : undefined}
       />
 
+      {editing && ownedAlbum ? (
+        <EditAlbumDialog
+          initialTitle={ownedAlbum.title}
+          initialDescription={ownedAlbum.description ?? ''}
+          onSave={saveDetails}
+          onClose={() => setEditing(false)}
+        />
+      ) : null}
+
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-8 pt-6">
-        <div className="mb-4 flex items-center border-b border-chrome-neutral-800/50 px-4 pb-2 text-xs font-semibold uppercase tracking-wider text-chrome-neutral-500">
-          <span className="w-12 shrink-0">#</span>
-          <span className="min-w-0 flex-1">{getString('music_track_title_column')}</span>
-          <span className="hidden w-32 shrink-0 text-right lg:block">
-            {getString('music_streams_column')}
-          </span>
-          <span className="ml-4 w-[72px] shrink-0" aria-hidden="true" />
-          <span className="w-16 shrink-0 text-right">{getString('music_time_column')}</span>
-        </div>
-
-        <div className="flex flex-col">
-          {songs.map((song, i) => {
-            const songId = videoIdOf(song);
-            const isCurrentSong = currentTrackId === songId;
-            // On albums the per-track artist just repeats the album artist, so show it
-            // only for featured artists that differ; the play count takes the Streams column.
-            const trackArtist = artistsText(song.artists);
-            const showArtist =
-              kind !== 'album' || (!!trackArtist && trackArtist !== meta.artistName);
-
-            return (
-              <AlbumTrackRow
-                key={`${songId}-${i}`}
-                track={song}
-                index={i}
-                isCurrent={isCurrentSong}
-                isPlaying={isPlaying}
-                streamsText={song.viewsText}
-                showArtist={showArtist}
-                onPlay={playFrom}
-                onAddToQueue={addToQueue}
+        {songs.length > 0 ? (
+          <div className="sticky top-14 z-30 -mx-2 bg-surface px-2 py-2">
+            {selection.selecting ? (
+              <CollectionSelectionBar
+                count={selection.selectedSongs.length}
+                allSelected={selection.allSelected}
+                onToggleAll={selection.toggleAll}
+                onDone={selection.stop}
+                onPlayNext={() => {
+                  playSongsNext(selection.selectedSongs);
+                  selection.stop();
+                }}
+                onAddToQueue={() => {
+                  addSongsToQueue(selection.selectedSongs);
+                  selection.stop();
+                }}
+                onAddToAlbum={() => {
+                  openAddToAlbum(selection.selectedSongs);
+                  selection.stop();
+                }}
+                onDownload={() => {
+                  void downloadSongs(selection.selectedSongs);
+                  selection.stop();
+                }}
                 onRemove={
                   ownedAlbumId
-                    ? (t) => void removeAlbumTrack(ownedAlbumId, videoIdOf(t))
+                    ? () => {
+                        removeSongs(selection.selectedSongs);
+                        selection.stop();
+                      }
                     : undefined
                 }
               />
-            );
-          })}
-        </div>
+            ) : (
+              <CollectionFilterBar
+                isAlbumKind={kind === 'album'}
+                query={view.query}
+                onQueryChange={view.setQuery}
+                sortOrder={view.sortOrder}
+                sortOrders={view.sortOrders}
+                onSortChange={view.setSortOrder}
+                onSelect={selection.start}
+              />
+            )}
+          </div>
+        ) : null}
+
+        <MusicCollectionTrackList
+          songs={view.shown}
+          positions={view.positions}
+          totalSongs={songs.length}
+          query={view.debouncedQuery}
+          isAlbumKind={kind === 'album'}
+          artistName={meta.artistName}
+          currentTrackId={currentTrackId}
+          isPlaying={isPlaying}
+          selectedIds={selection.selectedIds}
+          onToggleSelected={selection.toggle}
+          onPlay={playFrom}
+          onAddToQueue={addToQueue}
+          onRemove={ownedAlbumId ? (track) => removeSongs([track]) : undefined}
+        />
+
+        <div ref={listEndRef} className="h-px w-full" />
 
         {(hasMore || songs.length > 0) && (
           <div className="flex flex-col items-center gap-3 py-6">
@@ -304,6 +404,22 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
             ) : null}
           </div>
         )}
+
+        {showSuggestions ? (
+          <MusicCollectionSuggestions
+            songs={suggestions.suggestions}
+            loading={suggestions.loading}
+            currentTrackId={currentTrackId}
+            isPlaying={isPlaying}
+            onRefresh={suggestions.refresh}
+            onPlay={(song) => {
+              const start = suggestions.suggestions.findIndex((t) => videoIdOf(t) === videoIdOf(song));
+              void playQueue(suggestions.suggestions, Math.max(0, start), meta.title);
+            }}
+            onAddToQueue={addToQueue}
+            onAdd={addSuggestion}
+          />
+        ) : null}
       </div>
       {kind === 'album' && otherVersions.length > 0 && <div className="mx-auto max-w-[1600px] px-8 pt-8">
         <MusicShelf title={getString('music_other_versions')} items={otherVersions}

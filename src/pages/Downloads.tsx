@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { downloadedMusicCollectionPath } from "../lib/musicRoutes";
 import { Download as DownloadIcon, Loader2, ListChecks, Search, Trash2 } from "lucide-react";
 
 import type { VideoSummary } from "../types/video";
@@ -194,7 +195,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   );
 
   const openCollection = (kind: "playlist" | "album", collectionId: string) => {
-    navigate(kind === "album" ? `/music/album/${collectionId}` : `/playlist/${collectionId}`);
+    navigate(kind === "album" ? downloadedMusicCollectionPath(collectionId) : `/playlist/${collectionId}`);
   };
 
   const standaloneRecordCount = useMemo(

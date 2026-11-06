@@ -72,6 +72,9 @@ MUSIC
 - Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
 - Follow on an artist's page now really follows them. It used to forget as soon as you left the page. Artists you follow, here or on an artist card, go to your phone as music artists.
 - A song played from search now plays alone, with radio filling up next, instead of queueing the other results.
+- Album and playlist pages have a search, and each one remembers how you sorted it: title, artist, album, length or, on your own lists, date added.
+- Select songs on an album or playlist to play them next, queue them, add them to an album, download them or take them out of your own list with Undo.
+- Rename your own albums and change their description, download whole YouTube Music playlists, share albums and playlists, and get suggestions under your own lists.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

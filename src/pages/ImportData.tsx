@@ -1,10 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal, StickyNote } from "lucide-react";
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
-import { unzipSync } from "fflate";
 import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
+import { readBackupFile, type UnreadableReason } from "../lib/api/backup";
+import { pickFile } from "../lib/dialogs";
 import { useHistoryStore } from "../store/useHistoryStore";
 import { bootstrapFromHistory, bootstrapFromSubscriptions, importBrain } from "../lib/api/recommendation";
 import {
@@ -14,7 +15,7 @@ import {
 } from "../lib/flowNeuroImport";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { parseSubscriptionExport } from "../lib/api/youtube";
-import { getString } from "../lib/i18n/index";
+import { getString, type StringKey } from "../lib/i18n/index";
 import {
   extractBackupCollections,
   importBackupCollections,
@@ -35,6 +36,12 @@ import { useProfilesStore } from "../store/useProfilesStore";
 import { useUiStore } from "../store/useUiStore";
 import { activeProfile } from "../lib/storage/profileStorage";
 
+const UNREADABLE_MESSAGES: Record<UnreadableReason, StringKey> = {
+  too_large: "import_error_too_large",
+  no_backup: "import_error_no_backup",
+  damaged: "import_error_damaged",
+};
+
 interface ParseChannelResult { id: string; name: string; }
 interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
 
@@ -53,8 +60,6 @@ async function refreshStoresAfterRestore() {
 }
 
 export const ImportData: React.FC = () => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [importSubs, setImportSubs] = useState(true);
   const [importPlaylists, setImportPlaylists] = useState(true);
   const [importHistory, setImportHistory] = useState(true);
@@ -80,7 +85,7 @@ export const ImportData: React.FC = () => {
 
   const handleCardClick = () => {
     if (["reading", "parsing", "saving"].includes(importState)) return;
-    fileInputRef.current?.click();
+    void pickAndImport();
   };
 
   const extractChannelIdFromUrl = (url: string): string => {
@@ -162,36 +167,22 @@ export const ImportData: React.FC = () => {
     return records;
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const pickAndImport = async () => {
+    const path = await pickFile(getString("import_select_file"), [{ name: getString("import_supported_formats_title"), extensions: ["zip", "json", "xml", "opml", "csv", "txt", "html"] }]);
+    if (!path) return;
     setImportState("reading"); setProgress(15); setStatusMessage(getString("import_reading")); setErrorMessage("");
     setSubsCount(0); setPlaylistsCount(0); setHistoryCount(0); setNeuroCount(0); setSettingsCount(0); setLikesCount(0);
-    const isZip = file.name.endsWith(".zip");
-    const reader = new FileReader();
-    reader.onprogress = (event) => { if (event.lengthComputable) setProgress(15 + Math.round((event.loaded / event.total) * 20)); };
-
-    reader.onload = async (event) => {
-      setImportState("parsing"); setProgress(40); setStatusMessage(getString("import_parsing"));
       try {
-        let text = "";
-        let backupData: any = null;
-        if (isZip) {
-          const ab = event.target?.result as ArrayBuffer;
-          if (!ab) throw new Error(getString("import_error_empty_archive"));
-          const dec = unzipSync(new Uint8Array(ab));
-          const jk = Object.keys(dec).filter(k => k.toLowerCase().endsWith(".json"));
-          // A profiles-era Android master also has profiles/<id>/app_data.json; the root one is Default's.
-          const atRoot = jk.filter(k => !k.includes("/"));
-          const key = atRoot.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /engine[_-]?brain|neuro[_-]?brain|flow[_-]?brain/i.test(k)) ?? jk[0];
-          if (!key) throw new Error(getString("import_error_no_json_archive"));
-          text = new TextDecoder("utf-8").decode(dec[key]);
-        } else { text = event.target?.result as string; }
+        const read = await readBackupFile(path);
+        if (read.type === "unreadable") throw new Error(getString(UNREADABLE_MESSAGES[read.reason]));
+        setImportState("parsing"); setProgress(40); setStatusMessage(getString("import_parsing"));
+        const text = read.type === "text" ? read.text : "{}";
+        let backupData: any = read.type === "backup" ? read.data : null;
         if (!text?.trim()) throw new Error(getString("import_error_empty_backup"));
         const trimmed = text.trim();
         const isJson = trimmed.startsWith("{") || trimmed.startsWith("[");
         const isHtml = trimmed.toLowerCase().includes("<html") || trimmed.toLowerCase().includes("<!doctype html");
-        if (isJson) { try { backupData = JSON.parse(text); } catch { if (trimmed.includes("\n")) { backupData = { isFreeTubeHistory: true, rawText: text }; } else { throw new Error(getString("import_error_invalid_json")); } } }
+        if (isJson && !backupData) { try { backupData = JSON.parse(text); } catch { if (trimmed.includes("\n")) { backupData = { isFreeTubeHistory: true, rawText: text }; } else { throw new Error(getString("import_error_invalid_json")); } } }
 
         setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
         let subbedCount = 0, playCount = 0, timelineCount = 0, importedSettingsCount = 0;
@@ -365,10 +356,6 @@ export const ImportData: React.FC = () => {
 
         setProgress(100); setImportState("success");
       } catch (err: any) { console.error("Import failure", err); setImportState("error"); setErrorMessage(err?.message || getString("import_file_not_recognized")); }
-    };
-
-    reader.onerror = () => { setImportState("error"); setErrorMessage(getString("import_error_read_file")); };
-    if (isZip) reader.readAsArrayBuffer(file); else reader.readAsText(file);
   };
 
   const toggleItems = [
@@ -395,8 +382,6 @@ export const ImportData: React.FC = () => {
         <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString("import_title")}</h1>
         <p className="mt-1 text-sm text-chrome-neutral-400">{getString("import_subtitle")}</p>
       </header>
-
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".zip,.json,.xml,.opml,.csv,.txt,.html" className="hidden" />
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12 space-y-6 lg:col-span-7">

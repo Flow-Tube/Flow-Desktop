@@ -275,8 +275,14 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ...rows("data", [
     { title: "settings_backup_frequency", summary: "settings_backup_frequency_desc", keywords: ["automatic", "schedule"] },
     { title: "settings_backup_scope" },
+    { title: "settings_backup_folder" },
+    { title: "settings_backup_last_run" },
+    { title: "settings_backup_run_now", summary: "settings_backup_run_now_desc" },
     { title: "settings_history_records" },
     { title: "settings_subscriptions_count" },
+    { title: "settings_export_data", summary: "settings_export_data_desc", keywords: ["backup", "save"] },
+    { title: "settings_export_history", summary: "settings_export_history_desc", keywords: ["takeout", "libretube"] },
+    { title: "settings_export_newpipe", summary: "settings_export_newpipe_desc", keywords: ["subscriptions"] },
   ]),
   ...rows("about", [
     { title: "settings_auto_update", summary: "settings_auto_update_desc" },

@@ -250,6 +250,9 @@ export const SETTINGS = {
 
   AUTO_BACKUP_FREQUENCY: "auto_backup_frequency",
   AUTO_BACKUP_TYPE: "auto_backup_type",
+  AUTO_BACKUP_FOLDER: "auto_backup_folder",
+  AUTO_BACKUP_LAST_RUN: "auto_backup_last_run",
+  AUTO_BACKUP_LAST_ERROR: "auto_backup_last_error",
 
   SPONSORBLOCK_ENABLED: "sponsorblock_enabled",
   DEARROW_ENABLED: "dearrow_enabled",
@@ -485,6 +488,9 @@ export const SETTING_SCOPES = {
   [SETTINGS.LOCAL_MEDIA_VIDEOS_AS_GRID]: "device",
   [SETTINGS.AUTO_BACKUP_FREQUENCY]: "device",
   [SETTINGS.AUTO_BACKUP_TYPE]: "device",
+  [SETTINGS.AUTO_BACKUP_FOLDER]: "device",
+  [SETTINGS.AUTO_BACKUP_LAST_RUN]: "device",
+  [SETTINGS.AUTO_BACKUP_LAST_ERROR]: "device",
   [SETTINGS.SPONSORBLOCK_ENABLED]: "profile",
   [SETTINGS.DEARROW_ENABLED]: "profile",
   [SETTINGS.DEARROW_BADGE_ENABLED]: "profile",
@@ -815,8 +821,12 @@ export const SETTING_DEFINITIONS = [
   num(SETTINGS.LOCAL_MEDIA_MIN_AUDIO_SECONDS, "downloads", 60, "wired", 0, 3600),
   bool(SETTINGS.LOCAL_MEDIA_VIDEOS_AS_GRID, "downloads", true, "wired"),
 
-  str(SETTINGS.AUTO_BACKUP_FREQUENCY, "data", "NONE", "persisted-only", ["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
+  str(SETTINGS.AUTO_BACKUP_FREQUENCY, "data", "NONE", "wired", ["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
   str(SETTINGS.AUTO_BACKUP_TYPE, "data", "APP_DATA", "wired", ["APP_DATA", "BRAIN", "MASTER"]),
+  // A path on this computer and the schedule's own record: neither means anything on another.
+  str(SETTINGS.AUTO_BACKUP_FOLDER, "data", "", "wired", undefined, "visible", "internal"),
+  num(SETTINGS.AUTO_BACKUP_LAST_RUN, "data", 0, "wired", 0, undefined, "internal"),
+  str(SETTINGS.AUTO_BACKUP_LAST_ERROR, "data", "", "wired", undefined, "internal", "internal"),
 
   bool(SETTINGS.SPONSORBLOCK_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.DEARROW_ENABLED, "extensions", true, "wired"),

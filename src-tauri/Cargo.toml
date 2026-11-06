@@ -96,6 +96,8 @@ keyring = "4"
 # compression (parity with Android java.util.zip), and LAN IP discovery for the QR.
 tokio-tungstenite = "0.30"
 flate2 = "1"
+# Master backups: the same zip layout Flow for Android reads and writes.
+zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 local-ip-address = "0.6"
 # FLOW-SYNC/2 LAN groups find each other over mDNS (`_flow._tcp`).
 mdns-sd = "0.21.6"

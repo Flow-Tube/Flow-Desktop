@@ -1,5 +1,6 @@
 pub mod app_window;
 pub mod backup;
+pub mod backup_files;
 pub mod db;
 pub mod diagnostics;
 pub mod discord;

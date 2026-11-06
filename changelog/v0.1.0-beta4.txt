@@ -219,6 +219,9 @@ LOCAL MEDIA
 - Files stay on this computer: they don't sync, and playing them teaches no recommendations. A file Flow can't play says why, naming a sound format this computer can't decode.
 - Local songs show the lyrics in a .lrc file beside them or inside the file, and their covers. Local videos pick up subtitle files from their folder, and you can add one yourself.
 - A local file's menu has Details and Move to trash. A file in the trash can be put back from there.
+- Automatic backups run at launch and on a timer while Flow is open: daily, weekly or monthly, into a folder you pick, with the last run and Back up now in Settings. Each run replaces the last file of its type, as on Android.
+- Master backups are now the same zip Flow for Android makes, so a backup from either app restores on the other, brains and profiles included. Old Flow Desktop .json backups still restore. Proxy credentials and other private settings are never in a backup.
+- Export your watch history as YouTube-history JSON, and your subscriptions in NewPipe format.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

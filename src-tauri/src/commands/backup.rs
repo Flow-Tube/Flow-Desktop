@@ -138,7 +138,10 @@ fn filter_parseable(collection: Collection, values: &[Value]) -> (Vec<Value>, u6
     (kept, dropped)
 }
 
-async fn get_setting_value(pool: &SqlitePool, key: &str) -> Result<Option<String>, SyncError> {
+pub(crate) async fn get_setting_value(
+    pool: &SqlitePool,
+    key: &str,
+) -> Result<Option<String>, SyncError> {
     Ok(
         sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = ?")
             .bind(key)
@@ -344,7 +347,7 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
 // export/merge sees the freshest learning, and reload them after a merge wrote the DB so
 // the next debounced flush can't clobber the merged result. An import holds the video
 // brain's saves in between, so its background save cannot land mid-merge either.
-async fn flush_brains(app: &AppHandle, hold: bool) {
+pub(crate) async fn flush_brains(app: &AppHandle, hold: bool) {
     if let Some(svc) = app.try_state::<RecommendationService>() {
         let flushed = if hold {
             svc.flush_and_hold_brain().await
@@ -388,16 +391,7 @@ pub async fn export_backup_data(
     export_backup(&pool, &scope).await.map_err(sync_err)
 }
 
-/// One profile's part of a master backup: its raw settings and its collections.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileBackupPart {
-    pub id: String,
-    pub settings: std::collections::HashMap<String, String>,
-    pub export: BackupExport,
-}
-
-async fn raw_settings(
+pub(crate) async fn raw_settings(
     pool: &SqlitePool,
     keys: &[String],
     with_device_keys: bool,
@@ -408,53 +402,14 @@ async fn raw_settings(
         if !with_device_keys && crate::profiles::device_keys::is_device_key(key) {
             continue;
         }
+        if crate::backup::is_never_backed_up(key) {
+            continue;
+        }
         if let Some(value) = get_setting_value(pool, key).await? {
             settings.insert(key.clone(), value);
         }
     }
     Ok(settings)
-}
-
-/// Exports any profile for the master backup: the running one through its live pool (brains
-/// flushed first), any other from its closed database.
-#[tauri::command]
-pub async fn export_profile_backup(
-    id: String,
-    setting_keys: Vec<String>,
-    app: AppHandle,
-    pool: State<'_, SqlitePool>,
-    profiles: State<'_, ProfileService>,
-) -> Result<ProfileBackupPart, ErrorResponse> {
-    let running = profiles.running_profile_id().map_err(ErrorResponse::from)?;
-    let default_id = profiles.list().map_err(ErrorResponse::from)?.default_id;
-    if id == running {
-        flush_brains(&app, false).await;
-        let settings = raw_settings(&pool, &setting_keys, id == default_id)
-            .await
-            .map_err(sync_err)?;
-        let export = export_backup(&pool, "MASTER").await.map_err(sync_err)?;
-        return Ok(ProfileBackupPart {
-            id,
-            settings,
-            export,
-        });
-    }
-    let (closed, is_default) = profiles
-        .open_closed(&id)
-        .await
-        .map_err(ErrorResponse::from)?;
-    let part = async {
-        let settings = raw_settings(&closed, &setting_keys, is_default).await?;
-        let export = export_backup(&closed, "MASTER").await?;
-        Ok::<_, SyncError>(ProfileBackupPart {
-            id: id.clone(),
-            settings,
-            export,
-        })
-    }
-    .await;
-    closed.close().await;
-    part.map_err(sync_err)
 }
 
 /// Adds a master backup's profiles to the registry; see `ProfileService::restore_master`.

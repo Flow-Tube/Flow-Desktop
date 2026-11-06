@@ -4,6 +4,7 @@
 
 pub mod api;
 mod appimage;
+pub mod backup;
 mod bridge;
 #[cfg(target_os = "linux")]
 mod codec_probe;
@@ -42,8 +43,7 @@ use tauri::Manager;
 use api::innertube::InnertubeClient;
 use commands::app_window::{AppWindowSession, AppWindowState, app_window_session, open_app_window};
 use commands::backup::{
-    export_backup_data, export_profile_backup, import_backup_data, import_profile_backup,
-    profiles_restore_master,
+    export_backup_data, import_backup_data, import_profile_backup, profiles_restore_master,
 };
 use commands::db::{
     add_watch_record, add_watch_records_bulk, clear_watch_history, delete_short_watch_records,
@@ -585,6 +585,8 @@ pub fn run() {
             app.manage(update_support);
 
             services::notification_service::spawn_poll_loop(app.handle().clone(), pool.clone());
+            app.manage(backup::auto::AutoBackupState::default());
+            backup::auto::spawn(app.handle().clone(), pool.clone());
 
             // Register the flow:// scheme at runtime. Production installers
             // (NSIS/MSI, .desktop) do this, but dev builds and Linux need it.
@@ -705,7 +707,11 @@ pub fn run() {
             clear_lyrics_cache,
             save_download_lyrics,
             export_backup_data,
-            export_profile_backup,
+            commands::backup_files::export_backup_file,
+            commands::backup_files::read_backup,
+            commands::backup_files::auto_backup_register,
+            commands::backup_files::auto_backup_status,
+            commands::backup_files::auto_backup_run_now,
             import_profile_backup,
             profiles_restore_master,
             import_backup_data,

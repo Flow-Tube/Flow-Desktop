@@ -141,6 +141,11 @@ dir_site	src/linux_startup.rs	DEVICE	-	startup_state.json
 dir_site	src/services/win_notify.rs	DEVICE	-	toast logo
 setting	feed_actions_state_v1	PROFILE	private	Dismissed videos, blocked channels and keywords
 setting	homeSubsRotationCursor	PROFILE	private	Home subscriptions rotation cursor
+setting	auto_backup_frequency	DEVICE	-	One automatic backup schedule per install
+setting	auto_backup_type	DEVICE	-	One automatic backup schedule per install
+setting	auto_backup_folder	DEVICE	-	Where automatic backups go on this computer
+setting	auto_backup_last_run	DEVICE	-	When the automatic backup last ran
+setting	auto_backup_last_error	DEVICE	-	Why the automatic backup last failed
 file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
 dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder
 dir_site	src/commands/local_media.rs	CACHE	-	local_covers, disposable covers read from local files

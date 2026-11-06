@@ -1,4 +1,6 @@
 import { useCallback, useState, useEffect } from "react";
+import { registerAutoBackup } from "./lib/api/backup";
+import { getString } from "./lib/i18n/index";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { usePlayerStore } from "./store/usePlayerStore";
 import { useFeedActionsStore } from "./store/useFeedActionsStore";
@@ -164,6 +166,7 @@ function App() {
     // Every subscribe button reads these, so they load once here rather than once per button.
     void useSubscriptionStore.getState().loadSubscriptions();
     void useNotificationStore.getState().loadChannelPreferences();
+    if (IS_MAIN_WINDOW) void registerAutoBackup(getString("settings_backup_failed_notice")).catch(() => {});
   }, []);
 
   // Check onboarding state from sqlite db setting

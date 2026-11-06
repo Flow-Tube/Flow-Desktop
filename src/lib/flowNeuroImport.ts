@@ -84,8 +84,9 @@ const mapDisplayForms = (value: unknown): Record<string, DisplayForm> => {
 
 const toLanguage = (value: unknown): string | null => (typeof value === "string" && value ? value : null);
 
-// Flow for Android writes key spec 2 keys from its brain schema 20 on.
+// Flow for Android's brain schemas that first write each key spec.
 const ANDROID_KEY_SPEC_2_SCHEMA = 20;
+const ANDROID_KEY_SPEC_3_SCHEMA = 21;
 
 const mapTopicEvidence = (value: unknown): UserBrain["topic_evidence"] => {
   const input = asObject(value);
@@ -193,7 +194,9 @@ export function convertFlowNeuroBrainData(value: unknown): UserBrain {
   const schemaVersion = toNumber(data.schemaVersion ?? data.schema_version, 13);
   const keySpec = toNumber(
     data.keySpec ?? data.key_spec,
-    typeof data.schemaVersion === "number" && data.schemaVersion >= ANDROID_KEY_SPEC_2_SCHEMA ? 2 : 0,
+    typeof data.schemaVersion !== "number" || data.schemaVersion < ANDROID_KEY_SPEC_2_SCHEMA
+      ? 0
+      : data.schemaVersion >= ANDROID_KEY_SPEC_3_SCHEMA ? 3 : 2,
   );
 
   const recentQueryTokens = Array.isArray(data.recentQueryTokens ?? data.recent_query_tokens)

@@ -1,6 +1,10 @@
+import { ChevronRight, MonitorSmartphone } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
 import { getString } from "../../lib/i18n/index";
 import type { DeviceGroup, PlayOnDevice } from "../../lib/live/devices";
 import { usePlayOn } from "../../lib/live/usePlayOn";
+import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useUiStore } from "../../store/useUiStore";
 import { usePlayOnStore } from "../../store/usePlayOnStore";
 import { DeviceRow } from "./DeviceRow";
@@ -13,9 +17,11 @@ const GROUPS: Array<[DeviceGroup, "play_on_playing_now" | "play_on_available" | 
 ];
 
 /** "Play on": what plays, and the group's devices to move it to. */
-export function PlayOnPopover() {
+export function PlayOnPopover({ onClose }: { onClose: () => void }) {
   const { devices, active } = usePlayOn();
   const pickDevice = usePlayOnStore((state) => state.pick);
+  const movingTo = usePlayOnStore((state) => state.movingTo);
+  const navigate = useNavigate();
   const showToast = useUiStore((state) => state.showToast);
 
   const pick = (device: PlayOnDevice) => {
@@ -25,6 +31,13 @@ export function PlayOnPopover() {
         message: getString("play_on_failed", device.thisDevice ? getString("play_on_this_device") : device.name, String(error instanceof Error ? error.message : error)),
       }),
     );
+  };
+
+  const manage = () => {
+    onClose();
+    // The full player would otherwise stay over the page it opens.
+    useMusicPlayerStore.getState().closeOverlay();
+    navigate("/sync");
   };
 
   return (
@@ -51,13 +64,28 @@ export function PlayOnPopover() {
                 key={device.did}
                 device={device}
                 active={device.did === active?.did}
-                disabled={device.group === "offline" || (device.thisDevice && device.did === active?.did)}
+                moving={device.did === movingTo}
+                disabled={movingTo !== null || device.group === "offline" || (device.thisDevice && device.did === active?.did)}
                 onPick={() => pick(device)}
               />
             ))}
           </section>
         );
       })}
+      <button
+        type="button"
+        onClick={manage}
+        className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-container-high text-chrome-neutral-300">
+          <MonitorSmartphone className="h-[18px] w-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{getString("play_on_manage")}</span>
+          <span className="line-clamp-1 text-xs text-chrome-neutral-400">{getString("play_on_manage_summary")}</span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-chrome-neutral-500" />
+      </button>
     </div>
   );
 }

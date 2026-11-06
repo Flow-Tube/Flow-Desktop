@@ -31,7 +31,7 @@ export function PlayOnButton({ className, iconSize = 18 }: { className: string; 
       </button>
       {anchor && (
         <AnchoredPortalMenu anchor={anchor} onClose={() => setAnchor(null)} closeOnScroll={false} className="z-[70]">
-          <PlayOnPopover />
+          <PlayOnPopover onClose={() => setAnchor(null)} />
         </AnchoredPortalMenu>
       )}
     </>

@@ -62,6 +62,7 @@ SYNC
 LIBRARY
 - Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note, and Note at this time in the player's settings. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
 - A Notes page in Library and the sidebar: search, filter by videos or channels, sort by edit time, title or your own order, and select notes to copy, delete or reorder. Each note lists its times, and Play from starts the video there.
+- Play on is now in the full music player too. Its list says when playback is moving, links to Manage linked devices, and Flow tells you when another device hands playback to this one.
 
 MUSIC
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.

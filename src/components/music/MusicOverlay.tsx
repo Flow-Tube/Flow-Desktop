@@ -21,6 +21,7 @@ import { AmbientBackdrop } from "./AmbientBackdrop";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
+import { PlayOnButton } from "../playon/PlayOnButton";
 import { LAYOUT_SPRING, NowPlayingColumn } from "./player/NowPlayingColumn";
 import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
 import { PlayerTransport } from "./player/PlayerTransport";
@@ -264,6 +265,8 @@ export function MusicOverlay() {
                 <VolumePopover open={volumeOpen} />
               </div>
             </div>
+
+            <PlayOnButton className={TOP_BTN} iconSize={20} />
 
             <HapticButton
               onClick={() => setEqOpen((v) => !v)}

@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 
 import { getString } from "../../lib/i18n/index";
 import type { PlayOnDevice } from "../../lib/live/devices";
@@ -17,12 +17,14 @@ function detail(device: PlayOnDevice): string {
 interface DeviceRowProps {
   device: PlayOnDevice;
   active: boolean;
+  /** Playback is on its way to this device. */
+  moving: boolean;
   disabled: boolean;
   onPick: () => void;
 }
 
 /** A device to play on: tapping it moves playback there, or controls it when it plays already. */
-export function DeviceRow({ device, active, disabled, onPick }: DeviceRowProps) {
+export function DeviceRow({ device, active, moving, disabled, onPick }: DeviceRowProps) {
   const offline = device.group === "offline";
   return (
     <button
@@ -42,9 +44,10 @@ export function DeviceRow({ device, active, disabled, onPick }: DeviceRowProps) 
         <span className={`line-clamp-1 text-sm font-medium ${offline ? "text-chrome-neutral-500" : "text-chrome-neutral-100"}`}>
           {device.thisDevice ? getString("play_on_this_device") : device.name}
         </span>
-        <span className="line-clamp-1 text-xs text-chrome-neutral-400">{detail(device)}</span>
+        <span className="line-clamp-1 text-xs text-chrome-neutral-400">{moving ? getString("play_on_moving") : detail(device)}</span>
       </span>
-      {device.group === "playing" && <PlayingWave className="h-4 text-[var(--color-primary)]" />}
+      {moving && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--color-primary)]" aria-hidden />}
+      {!moving && device.group === "playing" && <PlayingWave className="h-4 text-[var(--color-primary)]" />}
       {active && <Check className="h-4 w-4 shrink-0 text-[var(--color-primary)]" aria-label={getString("play_on_active")} />}
     </button>
   );

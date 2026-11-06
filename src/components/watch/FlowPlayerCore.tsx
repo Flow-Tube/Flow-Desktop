@@ -26,6 +26,7 @@ import { getString } from "../../lib/i18n/index";
 import type { FlowPlayerCoreProps } from "./types";
 import { onBeforeProfileSwitch } from "../../lib/profiles/beforeSwitch";
 import { useSponsorBlockSegments } from "../../lib/useSponsorBlockSegments";
+import { useOriginalCurrentVideo } from "../../lib/useOriginalCurrentVideo";
 
 /** How close to the end the next video is resolved. Long enough to cover a slow
  * client ladder, short enough that a video abandoned early never triggers it. */
@@ -39,6 +40,7 @@ const NEXT_VIDEO_PREFETCH_LEAD_SECONDS = 20;
  * owns its sizing and reads `isTheaterMode` directly.
  */
 export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCoreProps) {
+  useOriginalCurrentVideo(videoDetails);
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   const dearrowData = usePlayerStore((s) => s.dearrowData);
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);

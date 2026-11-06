@@ -7,6 +7,7 @@ import { formatCount } from "../../lib/utils";
 import { SubscribeButton } from "../ui/SubscribeButton";
 import type { ShortItem } from "../../types/shorts";
 import type { VideoDetails } from "../../types/video";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 interface ShortMetadataProps {
   short: ShortItem;
@@ -23,7 +24,8 @@ export function ShortMetadata({
   const channelId = short.channelId ?? details?.channelId ?? null;
   const fetchedAvatar = useChannelAvatar(channelId);
   const avatar = useProxiedImageUrl(upgradeAvatarUrl(short.channelAvatarUrl ?? fetchedAvatar));
-  const title = short.title.trim() && short.title !== "Short" ? short.title : details?.title || short.title;
+  const originalTitle = useOriginalTitle(short.id);
+  const title = originalTitle || (short.title.trim() && short.title !== "Short" ? short.title : details?.title || short.title);
   const channelName = short.channelName.trim() || details?.channelName || "Unknown channel";
   const viewText = formatCount(short.viewCountText ?? details?.viewCountText);
   const viewStatText = viewText ? `${viewText} views` : null;

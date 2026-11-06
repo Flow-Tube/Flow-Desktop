@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import {
   GripHorizontal,
   ListVideo,
@@ -27,6 +27,7 @@ import { removeVideoFromQueuePlaylist } from "../../lib/queuePlaylistEdits";
 import { resolveDragMove, sortableRowStyle, useListDragSensors } from "../../lib/sortableList";
 import { usePlayerStore, type RepeatMode } from "../../store/usePlayerStore";
 import type { VideoSummary } from "../../types/video";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 const repeatLabels: Record<RepeatMode, string> = {
   none: getString("queue_repeat_off"),
@@ -70,6 +71,8 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
   } = useSortable({ id: video.id });
 
   const style = sortableRowStyle(transform, transition);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const title = useOriginalTitle(video.id, titleRef) || video.title;
 
   return (
     <div
@@ -82,7 +85,7 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
       <button
         ref={setActivatorNodeRef}
         type="button"
-        aria-label={getString("reorder_item", video.title)}
+        aria-label={getString("reorder_item", title)}
         className="shrink-0 cursor-grab rounded-md p-1 text-chrome-neutral-500 transition-colors hover:text-chrome-neutral-300 active:cursor-grabbing"
         {...attributes}
         {...listeners}
@@ -94,7 +97,7 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
         type="button"
         onClick={() => onPlay(index)}
         className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-xl bg-surface-container-highest"
-        aria-label={getString("queue_play_item", video.title)}
+        aria-label={getString("queue_play_item", title)}
       >
         {video.thumbnailUrl ? (
           <img
@@ -115,6 +118,7 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
       </button>
 
       <button
+        ref={titleRef}
         type="button"
         onClick={() => onPlay(index)}
         className="min-w-0 flex-1 text-left"
@@ -129,7 +133,7 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
           </span>
         ) : null}
         <span className="mt-0.5 block line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100">
-          {video.title}
+          {title}
         </span>
         <span className="mt-1 block truncate text-xs text-chrome-neutral-500">{video.channelName}</span>
       </button>

@@ -1,4 +1,5 @@
 import type { StringKey } from "../i18n/index";
+import { MUSIC_HOME_SHELVES } from "../musicHomeShelves";
 
 export type SettingsCategory =
   | "appearance"
@@ -132,6 +133,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_music_queue_swipe_right", summary: "settings_music_queue_swipe_desc" },
     { title: "settings_music_sleep_timer_button", summary: "settings_music_sleep_timer_button_desc" },
     { title: "settings_music_tray" },
+    ...MUSIC_HOME_SHELVES.map((shelf) => ({ title: shelf.title, keywords: ["music home", "shelf", "section"] })),
+    { title: "scrobbling_import", summary: "scrobbling_import_summary", keywords: ["last.fm", "libre.fm", "listenbrainz"] },
   ]),
   ...rows("content", [
     { title: "deep_flow_mode_title" },

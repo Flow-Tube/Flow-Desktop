@@ -91,10 +91,10 @@ use commands::music::{
     proxy_image_url, search_music_continuation, search_music_typed,
 };
 use commands::music_brain::{
-    block_music_artist, dislike_music_artist, get_blocked_music_artists, get_daily_mixes,
-    get_heavy_rotation, get_music_brain_snapshot, get_music_rediscover, get_music_taste_profile,
-    get_music_time_rotation, rank_music_candidates, record_music_interaction, reset_music_brain,
-    set_favourite_music_artist, unblock_music_artist,
+    block_music_artist, dislike_music_artist, favourite_music_artist, get_blocked_music_artists,
+    get_daily_mixes, get_heavy_rotation, get_music_brain_snapshot, get_music_rediscover,
+    get_music_taste_profile, get_music_time_rotation, rank_music_candidates,
+    record_music_interaction, reset_music_brain, set_favourite_music_artist, unblock_music_artist,
 };
 use commands::music_queue::{
     clear_music_queue_state, get_music_resume_position, load_music_queue_state,
@@ -133,7 +133,7 @@ use commands::recommendation::{
 use commands::scrobble::{
     scrobble_flush, scrobble_listened, scrobble_love, scrobble_now_playing,
     scrobble_retry_keychain, scrobble_set_own_key, scrobble_sign_in, scrobble_sign_out,
-    scrobble_status,
+    scrobble_similar_tracks, scrobble_status, scrobble_top_artists,
 };
 use commands::shorts::{
     get_shorts_feed, load_more_shorts, record_seen_shorts, report_short_view, reset_shorts_feed,
@@ -809,6 +809,7 @@ pub fn run() {
             record_music_interaction,
             dislike_music_artist,
             set_favourite_music_artist,
+            favourite_music_artist,
             block_music_artist,
             unblock_music_artist,
             get_blocked_music_artists,
@@ -905,6 +906,8 @@ pub fn run() {
             music_tray_hide,
             // --- Scrobbling ---
             scrobble_status,
+            scrobble_top_artists,
+            scrobble_similar_tracks,
             scrobble_sign_in,
             scrobble_sign_out,
             scrobble_set_own_key,

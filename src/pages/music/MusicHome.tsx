@@ -14,6 +14,9 @@ import { useMusicChipFilter, useMusicHome } from '../../lib/useMusicHome';
 import { useMusicPersonalization } from '../../lib/useMusicPersonalization';
 import { useMusicDiscoverySections } from '../../lib/useMusicDiscoverySections';
 import { useMusicMoreSections } from '../../lib/useMusicMoreSections';
+import { useMusicLibraryShelves } from '../../lib/useMusicLibraryShelves';
+import { useLastFmDiscovery } from '../../lib/useLastFmDiscovery';
+import { isShelfShown, parseHiddenShelves } from '../../lib/musicHomeShelves';
 import { useMusicCharts } from '../../lib/useMusicCharts';
 import { useMusicMoods } from '../../lib/useMusicMoods';
 import { composeMusicFeed, type MusicFeedSection } from '../../lib/musicFeedComposer';
@@ -58,6 +61,11 @@ export default function MusicHome() {
   const charts = useMusicCharts(chartCountry);
   const moods = useMusicMoods();
   const moreSections = useMusicMoreSections(data?.chips ?? NO_CHIPS, moods.groups);
+  const libraryShelves = useMusicLibraryShelves();
+  const [hiddenShelvesRaw] = usePreference(SETTINGS.MUSIC_HOME_HIDDEN_SHELVES);
+  const hiddenShelves = useMemo(() => parseHiddenShelves(hiddenShelvesRaw), [hiddenShelvesRaw]);
+  const lastFm = useLastFmDiscovery(!hiddenShelves.has('LASTFM_DISCOVER'));
+  const requestLastFm = lastFm.request;
   const isHidden = useMusicHiddenFilter();
   const isArtistHidden = useMusicArtistHidden();
   // Drop blocked/dismissed songs and blocked-artist cards from every shelf.
@@ -99,6 +107,21 @@ export default function MusicHome() {
     observer.observe(target);
     return () => observer.disconnect();
   }, [pageHasMore, pageLoadingMore, pageLoadMore]);
+
+  const feedEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!lastFm.available || typeof IntersectionObserver === 'undefined') return;
+    const target = feedEndRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) requestLastFm();
+      },
+      { rootMargin: '0px 0px 800px 0px' },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [lastFm.available, requestLastFm]);
 
   const playTrack = (track: SongItem, context: SongItem[], source: string | null) => {
     const queue = context.length ? context : [track];
@@ -191,11 +214,11 @@ export default function MusicHome() {
 
     const quickPicks = personalization.quickPicks.filter((track) => !isHidden(track));
     const feed = composeMusicFeed(
-      [...personalization.sections, ...discoverySections, ...moreSections]
+      [...libraryShelves, ...personalization.sections, ...discoverySections, ...moreSections, ...lastFm.sections]
         .map((section) => ({ ...section, items: visible(section.items) })),
       [...(data?.sections ?? []), ...charts].map((section) => ({ ...section, items: visible(section.items) })),
       personalization.maturity, quickPicks, { hasMoods: moodItems.length > 0 },
-    );
+    ).filter((entry) => isShelfShown(entry, hiddenShelves));
 
     const headerActions = (section: MusicFeedSection, items: YTItem[]) => {
       if (section.route) return { onNavigate: () => navigate(section.route as string) };
@@ -290,6 +313,7 @@ export default function MusicHome() {
         className="mt-1 mb-8"
       />
       {renderBody()}
+      <div ref={feedEndRef} className="h-px w-full" />
 
       {error && (data || personalization.quickPicks.length || personalization.sections.length
         || discoverySections.length) && (

@@ -291,6 +291,11 @@ export function dislikeMusicArtist(artistId: string | null, artistName: string):
   return invokeBackend<void>("dislike_music_artist", { artistId, artistName });
 }
 
+/** Adds an artist to the favourites, without inventing plays. True when they were not one yet. */
+export function favouriteMusicArtist(artistId: string | null, artistName: string): Promise<boolean> {
+  return invokeBackend<boolean>("favourite_music_artist", { artistId, artistName });
+}
+
 /** Hard-blocks an artist ("don't recommend") — a permanent denylist across all music surfaces. */
 export function blockMusicArtist(artistId: string | null, artistName: string): Promise<void> {
   return invokeBackend<void>("block_music_artist", { artistId, artistName });

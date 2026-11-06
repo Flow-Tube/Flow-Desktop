@@ -580,6 +580,7 @@ pub fn merged_music_to_musicbrain(m: &MergedMusicBrain, base: &MusicBrain) -> Mu
                     score: aw.score,
                     last_played: aw.last_played,
                     liked: aw.liked,
+                    display: String::new(),
                 },
             )
         })

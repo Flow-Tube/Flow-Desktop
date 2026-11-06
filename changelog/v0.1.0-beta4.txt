@@ -75,6 +75,9 @@ MUSIC
 - Album and playlist pages have a search, and each one remembers how you sorted it: title, artist, album, length or, on your own lists, date added.
 - Select songs on an album or playlist to play them next, queue them, add them to an album, download them or take them out of your own list with Undo.
 - Rename your own albums and change their description, download whole YouTube Music playlists, share albums and playlists, and get suggestions under your own lists.
+- Settings > Music has a switch for each music home shelf. New shelves show your own playlists and the artists you follow, plus Live performances and Music videos for you when YouTube offers them.
+- Import your top artists from Last.fm, Libre.fm or ListenBrainz in Settings > Music, so recommendations start from your real listening.
+- If you're signed in to Last.fm, the music home gets a Discover with Last.fm shelf picked from what you have on repeat.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

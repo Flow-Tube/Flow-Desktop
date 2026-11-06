@@ -196,6 +196,17 @@ pub async fn set_favourite_music_artist(
     Ok(())
 }
 
+/// Adds an artist to the favourites. True when they were not one yet.
+#[tauri::command]
+pub async fn favourite_music_artist(
+    artist_id: Option<String>,
+    artist_name: String,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<bool> {
+    let key = artist_key(artist_id.as_deref(), &artist_name);
+    Ok(music_brain.favourite_artist(&key, &artist_name).await)
+}
+
 /// Hard-block an artist ("don't recommend this artist") — a permanent denylist so they
 /// never appear in any music surface (ranked shelves, radio, On Repeat, Daily Mixes).
 #[tauri::command]

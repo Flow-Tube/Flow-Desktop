@@ -160,6 +160,13 @@ pub fn taste_profile(brain: &MusicBrain, now_ms: u64) -> MusicTasteProfile {
             name: names
                 .get(key.as_str())
                 .copied()
+                .or_else(|| {
+                    brain
+                        .artist_affinity
+                        .get(key.as_str())
+                        .map(|affinity| affinity.display.as_str())
+                        .filter(|display| !display.is_empty())
+                })
                 .unwrap_or(key.as_str())
                 .to_string(),
             score,
@@ -251,6 +258,7 @@ mod tests {
                 score: 0.99,
                 last_played: 1,
                 liked: false,
+                display: String::new(),
             },
         );
         let p = taste_profile(&brain, 2_000);

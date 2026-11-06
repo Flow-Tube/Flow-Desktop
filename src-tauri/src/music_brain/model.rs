@@ -58,6 +58,9 @@ pub struct Affinity {
     pub score: f64,
     pub last_played: u64,
     pub liked: bool,
+    /// The artist's name, for an artist known from a pick rather than from a played track.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub display: String,
 }
 
 /// The whole music taste state, persisted as one JSON blob under the settings key

@@ -568,6 +568,12 @@ export async function getSubscriptionRssFeed(
  * channel. `onBatch` fires once per emitted batch; the promise resolves when
  * the stream completes.
  */
+/** Collaborations of the followed channels; a few more channels are looked at on each call. */
+export async function scanSubscriptionCollaborations(channelIds: string[]): Promise<VideoSummary[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<VideoSummary[]>("scan_subscription_collaborations", { channelIds });
+}
+
 export async function streamSubscriptionRssFeed(
   channelIds: string[],
   onBatch: (feed: SubscriptionRssFeed) => void,

@@ -169,6 +169,11 @@ SEARCH
 - Searching again from your history brings back the filters you used. Shorts is now its own chip, next to All.
 - New Unwatched, Watched and Recently uploaded chips, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 
+LIBRARY
+- Subscriptions has a Refresh button that refreshes only the group you have open. Refresh subscriptions at startup now works.
+- Manage subscriptions can be sorted by name or latest upload, and shows video channels and music artists apart.
+- Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
+
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.

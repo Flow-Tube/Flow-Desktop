@@ -46,6 +46,7 @@ export function ContentTab() {
   const [watchedThreshold, setWatchedThreshold] = usePreference(SETTINGS.WATCHED_THRESHOLD);
   const [shortsContent, setShortsContent] = useBoolPref(SETTINGS.SHORTS_CONTENT_ENABLED, true);
   const [channelShortsTab, setChannelShortsTab] = useBoolPref(SETTINGS.CHANNEL_SHORTS_TAB_WHEN_HIDDEN, false);
+  const [subsCollaborations, setSubsCollaborations] = useBoolPref(SETTINGS.SUBSCRIPTION_COLLABORATIONS_ENABLED, true);
   const [subsCheckedCount, setSubsCheckedCount] = useBoolPref(SETTINGS.SUBS_SHOW_CHECKED_VIDEO_COUNT, true);
   const [hideSeen, setHideSeen] = useBoolPref(SETTINGS.HIDE_SEEN_VIDEOS, false);
   const [removeWatched, setRemoveWatched] = useBoolPref(SETTINGS.REMOVE_WATCHED_FROM_WATCH_LATER, false);
@@ -220,6 +221,7 @@ export function ContentTab() {
         <SettingItem title={getString('settings_show_shorts')} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_SHORTS)}><ToggleSwitch checked={subsShowShorts} onChange={setSubsShowShorts} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_SHORTS)} /></SettingItem>
         <SettingItem title={getString('settings_show_live')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_LIVE)}><ToggleSwitch checked={subsShowLive} onChange={setSubsShowLive} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_LIVE)} /></SettingItem>
         <SettingItem title={getString('settings_hide_unplayable')} description={getString('settings_hide_unplayable_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS)}><ToggleSwitch checked={subsHideUnplayable} onChange={setSubsHideUnplayable} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS)} /></SettingItem>
+        <SettingItem title={getString('settings_subs_collaborations')} description={getString('settings_subs_collaborations_desc')}><ToggleSwitch checked={subsCollaborations} onChange={setSubsCollaborations} /></SettingItem>
         <SettingItem title={getString('settings_subs_checked_count')} description={getString('settings_subs_checked_count_desc')}><ToggleSwitch checked={subsCheckedCount} onChange={setSubsCheckedCount} /></SettingItem>
       </SettingsGroup>
 

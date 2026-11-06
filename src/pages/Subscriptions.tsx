@@ -1,11 +1,12 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BellOff, BellRing, ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, Trash2, Upload, User } from "lucide-react";
+import { ChevronDown, ChevronUp, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, Upload, User } from "lucide-react";
 import { parseSubscriptionExport } from "../lib/api/youtube";
 import { bootstrapFromSubscriptions } from "../lib/api/recommendation";
 import { SETTINGS } from "../lib/settings/schema";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useNotificationStore } from "../store/useNotificationStore";
+import { useUiStore } from "../store/useUiStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { getString } from "../lib/i18n/index";
 import { Button } from "../components/ui/Button";
@@ -16,13 +17,16 @@ import { ScanProgressBar } from "../components/subscriptions/ScanProgressBar";
 import { FeedFailedNotice } from "../components/subscriptions/FeedFailedNotice";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { ShortsShelf } from "../components/shelf/ShortsShelf";
+import { ChannelAvatarImage, getAvatarUrl } from "../components/subscriptions/ChannelAvatarImage";
 import { LastRefreshedLine } from "../components/subscriptions/LastRefreshedLine";
+import { SubscriptionsManage } from "../components/subscriptions/SubscriptionsManage";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
+import { usePreference } from "../lib/usePreference";
 import { useShortsEnabled } from "../lib/useShortsContent";
+import { isVideoOfChannel } from "../lib/subscriptionFeedMerge";
+import { sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptionSort";
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
 import { useFeedVisibilityFilter } from "../lib/useWatchedFilter";
-import { upgradeAvatarUrl } from "../lib/thumbnails";
-import { useProxiedImageUrl } from "../lib/useProxiedImageUrl";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
 import type { ShortVideoSummary, VideoSummary } from "../types/video";
 import { Checkbox } from "../components/ui/Checkbox";
@@ -30,25 +34,6 @@ import { Checkbox } from "../components/ui/Checkbox";
 interface SubscriptionsProps {
   onPlay: (video: VideoSummary) => void;
   onAddToQueue: (video: VideoSummary) => void;
-}
-
-function getAvatarUrl(url?: string | null) {
-  const normalized = upgradeAvatarUrl(url);
-  if (!normalized?.startsWith("http")) return undefined;
-  if (/ytimg\.com\/vi\//i.test(normalized)) return undefined;
-  return normalized;
-}
-
-function ChannelAvatarImage({ src, name }: { src?: string | null; name: string }) {
-  const imageSrc = useProxiedImageUrl(upgradeAvatarUrl(src));
-  if (!imageSrc) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-surface-container-high text-sm font-semibold text-chrome-neutral-400">
-        {name.charAt(0).toUpperCase()}
-      </div>
-    );
-  }
-  return <img src={imageSrc} alt={name} className="h-full w-full object-cover" />;
 }
 
 function channelCountLabel(count: number) {
@@ -82,6 +67,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     failedChannelIds,
     lastRefreshedAt,
     refresh: refreshFeed,
+    refreshChannels,
   } = useSubscriptionFeed(subscriptions);
   const failedChannelNames = useMemo(
     () =>
@@ -174,7 +160,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
         setImportText("");
         setShowImportModal(false);
       } else {
-        alert("No valid subscription records could be parsed. Check the format.");
+        useUiStore.getState().showToast({ variant: "error", message: getString("subscriptions_import_nothing") });
       }
     } catch (e) {
       console.error("Import failed", e);
@@ -219,6 +205,16 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     return visibleChannels.filter((channel) => groupChannelIds.has(channel.id));
   }, [selectedGroup, visibleChannels]);
 
+  const [sortMode, setSortMode] = usePreference(SETTINGS.SUBS_SORT_MODE);
+  const sortedFeedChannels = useMemo(
+    () => sortSubscriptions(feedChannels, sortMode as SubscriptionSortMode, videos),
+    [feedChannels, sortMode, videos],
+  );
+  const sortedManageChannels = useMemo(
+    () => sortSubscriptions(visibleChannels, sortMode as SubscriptionSortMode, videos),
+    [visibleChannels, sortMode, videos],
+  );
+
   const channelsWithNewVideos = useMemo(() => {
     return new Set(
       videos
@@ -234,9 +230,9 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
       const matchesSearch = !query
         || video.title.toLowerCase().includes(query)
         || video.channelName.toLowerCase().includes(query);
-      const matchesChannel = !selectedChannelId || video.channelId === selectedChannelId;
+      const matchesChannel = !selectedChannelId || isVideoOfChannel(video, selectedChannelId);
       const matchesGroup = !selectedGroup
-        || Boolean(video.channelId && selectedGroup.channelIds.includes(video.channelId));
+        || selectedGroup.channelIds.some((channelId) => isVideoOfChannel(video, channelId));
 
       return matchesSearch && matchesChannel && matchesGroup;
     });
@@ -312,6 +308,20 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                 <Upload size={16} />
                 {getString("subscriptions_import_button")}
               </Button>
+              {viewMode === "feed" && (
+                <Button
+                  variant="tonal"
+                  disabled={scanProgress != null || feedLoading}
+                  onClick={() => {
+                    if (selectedGroup) void refreshChannels(selectedGroup.channelIds);
+                    else refreshFeed();
+                  }}
+                  className="shrink-0"
+                >
+                  <RefreshCw size={16} className={scanProgress ? "animate-spin" : undefined} />
+                  {getString("refresh")}
+                </Button>
+              )}
               <Button
                 variant="tonal"
                 onClick={() => setViewMode((mode) => mode === "feed" ? "manage" : "feed")}
@@ -334,7 +344,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
           <>
             {viewMode === "feed" ? (
               <ChannelSwiper
-                channels={feedChannels}
+                channels={sortedFeedChannels}
                 selectedChannelId={selectedChannelId}
                 channelsWithNewVideos={channelsWithNewVideos}
                 onSelectChannel={handleSelectChannel}
@@ -417,99 +427,16 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                 </section>
               </>
             ) : (
-              <section className="pt-2">
-                <div className="mb-4 flex items-end justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-semibold text-chrome-neutral-100">
-                      {getString("subscriptions_manage_header")}
-                    </h2>
-                    <p className="mt-1 text-sm text-chrome-neutral-400">
-                      {getString("subscriptions_manage_subtitle", visibleChannels.length)}
-                    </p>
-                  </div>
-                </div>
-
-                {visibleChannels.length > 0 ? (
-                  <div className="divide-y divide-chrome-neutral-800 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
-                    {visibleChannels.map((channel) => {
-                      const details = channelDetails[channel.id];
-                      const avatarUrl = getAvatarUrl(channel.avatarUrl) || getAvatarUrl(details?.avatarUrl);
-                      const initial = channel.name.charAt(0).toUpperCase();
-
-                      return (
-                        <div
-                          key={channel.id}
-                          className="flex items-center gap-4 px-4 py-3 transition-colors duration-200 ease-out hover:bg-surface-container"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/channel/${channel.id}`)}
-                            className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-surface-container-high text-sm font-semibold text-chrome-neutral-300"
-                          >
-                            {avatarUrl ? (
-                              <ChannelAvatarImage src={avatarUrl} name={channel.name} />
-                            ) : (
-                              initial
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/channel/${channel.id}`)}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <div className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">
-                              {channel.name}
-                            </div>
-                            <div className="line-clamp-1 text-xs text-chrome-neutral-400">
-                              {channel.subscriberCountText || details?.subscriberCountText || getString("subscriptions_subscribers_unavailable")}
-                            </div>
-                          </button>
-
-                          {(() => {
-                            const notifOn = channelNotifications[channel.id] !== false;
-                            return (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                title={getString(
-                                  notifOn
-                                    ? "subscription_notifications_on"
-                                    : "subscription_notifications_off",
-                                )}
-                                aria-pressed={notifOn}
-                                className={notifOn ? "text-[var(--color-primary)]" : "text-chrome-neutral-400"}
-                                onClick={() => setChannelNotification(channel.id, !notifOn)}
-                              >
-                                {notifOn ? <BellRing size={16} /> : <BellOff size={16} />}
-                              </Button>
-                            );
-                          })()}
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-chrome-red-400 hover:bg-chrome-red-950/30"
-                            onClick={() => unsubscribe(channel.id)}
-                          >
-                            {getString("subscriptions_unsubscribe")}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-chrome-neutral-800 bg-surface-container-low p-10 text-center">
-                    <User className="mb-3 text-chrome-neutral-600" size={36} />
-                    <h3 className="text-base font-medium text-chrome-neutral-200">
-                      {getString("subscriptions_empty_manage")}
-                    </h3>
-                    <p className="mt-1 max-w-md text-sm text-chrome-neutral-400">
-                      {getString("subscriptions_empty_manage_body")}
-                    </p>
-                  </div>
-                )}
-              </section>
+              <SubscriptionsManage
+                channels={sortedManageChannels}
+                channelDetails={channelDetails}
+                sortMode={sortMode as SubscriptionSortMode}
+                onSortChange={setSortMode}
+                channelNotifications={channelNotifications}
+                onSetNotification={setChannelNotification}
+                onOpenChannel={(channelId) => navigate(`/channel/${channelId}`)}
+                onUnsubscribe={unsubscribe}
+              />
             )}
           </>
         )}

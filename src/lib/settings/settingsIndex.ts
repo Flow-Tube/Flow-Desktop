@@ -183,6 +183,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_show_live" },
     { title: "settings_hide_unplayable", summary: "settings_hide_unplayable_desc" },
     { title: "settings_subs_checked_count", summary: "settings_subs_checked_count_desc" },
+    { title: "settings_subs_collaborations", summary: "settings_subs_collaborations_desc" },
     { title: "settings_notifications_enabled", summary: "settings_notifications_enabled_desc" },
     { title: "settings_notification_interval", summary: "settings_notification_interval_desc" },
     { title: "settings_region_picker", summary: "settings_region_picker_desc" },

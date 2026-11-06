@@ -83,6 +83,8 @@ setting	home_max_video_age	PROFILE	settings	Home preference
 setting	hide_seen_videos	PROFILE	settings	Home preference
 setting	notifications_enabled	PROFILE	settings	New-upload alerts
 setting	notif_check_interval_minutes	PROFILE	settings	Android twin subscription_check_interval_minutes is per profile
+setting	subscription_collaborations_enabled	PROFILE	settings	Pull collaborations into the subscription feed
+setting	subscription_collaborations_v1	PROFILE	library	Collaboration index for this profiles subscribed channels
 setting	home_subscriptions_enabled	PROFILE	settings	Show subscriptions on Home, as on Android
 setting	stable_volume_enabled	PROFILE	settings	Playback preference
 setting	sponsorblock_categories	PROFILE	settings	SponsorBlock preference

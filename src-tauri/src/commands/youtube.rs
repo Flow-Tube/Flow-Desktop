@@ -1198,6 +1198,21 @@ pub async fn get_unplayable_video_ids(
     Ok(ids.into_iter().collect())
 }
 
+/// Collaborations of the followed channels: a few more are looked at, and all known are returned.
+#[tauri::command]
+pub async fn scan_subscription_collaborations(
+    channel_ids: Vec<String>,
+    youtube_service: State<'_, YoutubeService>,
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<Vec<VideoSummary>, ErrorResponse> {
+    let unique_channel_ids = dedupe_channel_ids(channel_ids)?;
+    let now_ms = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(0);
+    Ok(
+        subscription_feed::collabs::scan(&youtube_service, &pool, &unique_channel_ids, now_ms)
+            .await,
+    )
+}
+
 #[tauri::command]
 pub async fn get_subscription_rss_feed(
     channel_ids: Vec<String>,

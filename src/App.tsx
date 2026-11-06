@@ -16,6 +16,7 @@ import { useNotificationStore } from "./store/useNotificationStore";
 import { getOnboardingStatus } from "./lib/api/recommendation";
 import { catchUpOnce } from "./lib/linked/catchUp";
 import { useStartupHealth } from "./lib/useStartupHealth";
+import { useStartupSubscriptionRefresh } from "./lib/useStartupSubscriptionRefresh";
 import { useImageProxyBootstrap } from "./lib/useImageProxy";
 import { WATCH_LATER_PLAYLIST_ID } from "./lib/playlistLibrary";
 import type { VideoSummary } from "./types/video";
@@ -119,6 +120,7 @@ function App() {
 
   // Clear the Linux startup-crash sentinel as soon as the app mounts
   useStartupHealth();
+  useStartupSubscriptionRefresh();
   useImageProxyBootstrap();
   useTabHistoryShortcuts();
   useEffect(installTabPlaybackSync, []);

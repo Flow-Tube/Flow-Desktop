@@ -4,7 +4,7 @@ import { useBlockedKeywordMatch, useFeedActionsStore } from '../../store/useFeed
 import { useBlockedRevealStore } from '../../lib/blockedContent';
 import { BlockedVideoCard } from './BlockedVideoCard';
 import { useLiveStore } from '../../store/useLiveStore';
-import { Plus, Ban, Bell, BellRing, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, ListVideo, Download, User, Share2 } from 'lucide-react';
+import { Plus, Ban, Bell, BellRing, Check, Info, ListStart, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, ListVideo, Download, User, Share2 } from 'lucide-react';
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -26,6 +26,8 @@ import { youtubeWatchUrl } from '../../lib/youtubeUrl';
 import { getString } from '../../lib/i18n/index';
 import { useUpcomingReminderStore } from '../../store/useUpcomingReminderStore';
 import { useWatchLaterStore } from '../../store/useWatchLaterStore';
+import { useWatchedVideoIds } from '../../lib/useWatchedFilter';
+import { VideoDetailsDialog } from './VideoDetailsDialog';
 import { useUiStore } from '../../store/useUiStore';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 import { usePlaylistModalStore } from '../../store/usePlaylistModalStore';
@@ -130,6 +132,8 @@ function VideoCardComponent({
   const notInterested = useFeedActionsStore((s) => s.notInterested);
   const blockChannelAction = useFeedActionsStore((s) => s.blockChannel);
   const markWatched = useFeedActionsStore((s) => s.markWatched);
+  const markUnwatched = useFeedActionsStore((s) => s.markUnwatched);
+  const isMarkedWatched = useFeedActionsStore((s) => s.watchedVideoIds.has(video.id));
   const moreLikeThis = useFeedActionsStore((s) => s.moreLikeThis);
   const showToast = useUiStore((s) => s.showToast);
   const openAddToPlaylist = usePlaylistModalStore((s) => s.openAddToPlaylist);
@@ -137,6 +141,10 @@ function VideoCardComponent({
   const removeDownloads = useDownloadsLibraryStore((s) => s.remove);
   const isDownloaded = useIsDownloaded(video.id);
   const [showMenu, setShowMenu] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  // History is read only with the menu open: a feed mounts hundreds of cards.
+  const historyWatched = useWatchedVideoIds(showMenu);
+  const isWatched = isMarkedWatched || historyWatched.has(video.id);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [dominantColor, setDominantColor] = useState<Rgb | null>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -395,7 +403,28 @@ function VideoCardComponent({
 
   const feedActionFailed = () => showToast({ variant: "error", message: getString("feed_action_failed") });
 
+  const handlePlayNext = () => {
+    const result = usePlayerStore.getState().playVideoNext(video);
+    showToast(
+      result === "duplicate"
+        ? { variant: "info", message: getString("queue_duplicate_toast") }
+        : { variant: "success", message: getString("play_next_toast") },
+    );
+  };
+
+  const handleMarkUnwatched = () =>
+    markUnwatched(video.id)
+      .then(() => showToast({ variant: "success", message: getString("mark_as_unwatched_toast") }))
+      .catch(feedActionFailed);
+
   const menuActions: MediaMenuAction[] = [
+    {
+      id: "play-next",
+      label: getString("play_next_video"),
+      icon: <ListStart size={16} />,
+      group: "library",
+      onSelect: handlePlayNext,
+    },
     {
       id: "queue",
       label: getString("music_add_to_queue"),
@@ -498,12 +527,27 @@ function VideoCardComponent({
       group: "feed",
       onSelect: () => moreLikeThis(video),
     },
+    isWatched
+      ? {
+        id: "mark-unwatched",
+        label: getString("mark_as_unwatched"),
+        icon: <EyeOff size={16} />,
+        group: "feed" as const,
+        onSelect: handleMarkUnwatched,
+      }
+      : {
+        id: "mark-watched",
+        label: getString("menu_mark_watched"),
+        icon: <Eye size={16} />,
+        group: "feed" as const,
+        onSelect: () => markWatched(video),
+      },
     {
-      id: "mark-watched",
-      label: getString("menu_mark_watched"),
-      icon: <Eye size={16} />,
-      group: "feed",
-      onSelect: () => markWatched(video),
+      id: "details",
+      label: getString("details_metadata"),
+      icon: <Info size={16} />,
+      group: "go",
+      onSelect: () => setShowDetails(true),
     },
     {
       id: "not-interested",
@@ -524,6 +568,18 @@ function VideoCardComponent({
   ];
 
   const renderMenu = () => {
+    if (showDetails) {
+      return (
+        <VideoDetailsDialog
+          video={video}
+          title={displayTitle}
+          durationText={video.durationSeconds ? formatDuration(video.durationSeconds) : null}
+          publishedText={publishedText}
+          whyShown={reason}
+          onClose={() => setShowDetails(false)}
+        />
+      );
+    }
     if (!showMenu || !menuAnchor) return null;
 
     return (
@@ -754,6 +810,7 @@ function VideoCardComponent({
               </>
             )}
           </div>
+          {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
           <CardPills video={video} />
         </div>
 

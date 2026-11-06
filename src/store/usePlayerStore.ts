@@ -5,6 +5,7 @@ import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
 import { queueWith, remoteControl } from "./useRemoteControlStore";
+import { queueWithNext } from "../lib/videoQueueEdits";
 import { profileStorage } from "../lib/storage/profileStorage";
 import { isPopOutWindow } from "../lib/api/pip";
 
@@ -176,6 +177,8 @@ export interface PlayerState {
   /** Replaces the queue around the video playing, which carries on; it goes first when `videos` leaves it out. */
   replaceQueue: (videos: VideoSummary[]) => void;
   addToQueue: (video: VideoSummary) => QueueAddResult;
+  /** Puts the video right after the current one, moving it there if it is already queued. */
+  playVideoNext: (video: VideoSummary) => QueueAddResult;
   removeFromQueue: (index: number) => void;
   /** Puts a removed video back at its old place, for Undo. */
   restoreQueueItem: (video: VideoSummary, index: number) => void;
@@ -443,6 +446,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: nextQueue,
       currentIndex: currentVideo && currentIndex < 0 ? 0 : currentIndex,
       ...openQueuePanel,
+    });
+    return "added";
+  },
+
+  playVideoNext: (video) => {
+    const remote = remoteControl();
+    if (remote) {
+      remote.command("queue", { queue: queueWith(remote, [video.id], true) });
+      return "added";
+    }
+    const { queue, currentVideo, currentIndex, manualQueueIds } = get();
+    if (currentVideo?.id === video.id) return "duplicate";
+    if (queue.length === 0 && !currentVideo) {
+      get().setQueue([video], 0);
+      get().enterVideoPip("auto");
+      return "added";
+    }
+    const { queue: nextQueue, currentIndex: nextIndex } = queueWithNext(
+      queue.length === 0 && currentVideo ? [currentVideo] : queue,
+      Math.max(0, currentIndex),
+      video,
+    );
+    set({
+      queue: nextQueue,
+      currentIndex: nextIndex,
+      manualQueueIds: new Set(manualQueueIds).add(video.id),
+      isQueuePanelOpen: true,
+      isChaptersPanelOpen: false,
     });
     return "added";
   },

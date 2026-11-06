@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { clearWatchProgress } from "../lib/watchProgress";
 import { create } from "zustand";
 import { getSetting, setSetting, addWatchRecord } from "../lib/api/db";
 import {
@@ -40,6 +41,8 @@ interface FeedActionsState {
   /** Lets a channel back into every feed: unblocked, and no longer set aside by "not interested". */
   unblockChannel: (channelId: string) => Promise<void>;
   markWatched: (video: VideoSummary) => Promise<void>;
+  /** Takes the mark away and clears how far it was watched; the history entry stays. */
+  markUnwatched: (videoId: string) => Promise<void>;
   moreLikeThis: (video: VideoSummary) => Promise<void>;
   addBlockedKeyword: (keyword: string) => void;
   removeBlockedKeyword: (keyword: string) => void;
@@ -238,6 +241,21 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
         set(previous);
         persist();
         throw e;
+      }
+    },
+
+    markUnwatched: async (videoId) => {
+      const previous = get().watchedVideoIds;
+      const next = new Set(previous);
+      next.delete(videoId);
+      set({ watchedVideoIds: next });
+      persist();
+      try {
+        await clearWatchProgress(videoId);
+      } catch (error) {
+        set({ watchedVideoIds: previous });
+        persist();
+        throw error;
       }
     },
 

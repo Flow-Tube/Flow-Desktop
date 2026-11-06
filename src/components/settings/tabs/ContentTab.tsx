@@ -25,6 +25,7 @@ export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
+  const [homeViewMode, setHomeViewMode] = usePreference(SETTINGS.HOME_VIEW_MODE);
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);
   const [shortsShelf, setShortsShelf] = useBoolPref(SETTINGS.SHORTS_SHELF_ENABLED, true);
@@ -129,6 +130,12 @@ export function ContentTab() {
               label: getString('settings_grid_columns_option', count),
             }))}
           />
+        </SettingItem>
+        <SettingItem title={getString('settings_home_view_mode')} description={getString('settings_home_view_mode_desc')}>
+          <Select value={homeViewMode} onChange={setHomeViewMode} options={[
+            { value: 'GRID', label: getString('ui_grid_view') },
+            { value: 'LIST', label: getString('ui_list_view') },
+          ]} />
         </SettingItem>
         <SettingItem title={getString('settings_video_title_lines')} description={getString('settings_video_title_lines_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_TITLE_MAX_LINES)}>
           <Select value={String(titleMaxLines)} onChange={(v) => setTitleMaxLines(Number(v))} disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_TITLE_MAX_LINES)} options={[

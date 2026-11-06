@@ -31,10 +31,11 @@ export function useHideWatched(surface: HideWatchedSurface): boolean {
 
 function useWatchHistory(enabled: boolean): WatchHistoryRecord[] {
   const [history, setHistory] = useState<WatchHistoryRecord[]>([]);
-  const version = useEventVersion(HISTORY_UPDATED_EVENT);
+  // A feed mounts hundreds of cards with this off: one that isn't reading must not render again.
+  const version = useEventVersion(HISTORY_UPDATED_EVENT, enabled);
   useEffect(() => {
     if (!enabled) {
-      setHistory([]);
+      setHistory((current) => (current.length > 0 ? [] : current));
       return;
     }
     let cancelled = false;

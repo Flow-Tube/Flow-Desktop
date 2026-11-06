@@ -138,6 +138,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "deep_flow_expire_duration_title" },
     { title: "deep_flow_save_history_title", summary: "deep_flow_save_history_subtitle" },
     { title: "settings_grid_columns" },
+    { title: "settings_home_view_mode", summary: "settings_home_view_mode_desc" },
     { title: "settings_video_title_lines", summary: "settings_video_title_lines_desc" },
     { title: "settings_home_feed", summary: "settings_home_feed_desc" },
     { title: "settings_app_logo", summary: "settings_app_logo_desc" },

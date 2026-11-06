@@ -120,7 +120,9 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
           <div className="flex min-h-[360px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
             <div>
               <h2 className="text-base font-medium text-chrome-neutral-200">{getString(error)}</h2>
-              <p className="mt-1 text-sm text-chrome-neutral-400">{getString('explore_error_subtitle')}</p>
+              {error !== 'explore_rate_limited' && (
+                <p className="mt-1 text-sm text-chrome-neutral-400">{getString('explore_error_subtitle')}</p>
+              )}
             </div>
             <Button type="button" onClick={explore.refresh}>
               <RotateCcw className="h-4 w-4" />

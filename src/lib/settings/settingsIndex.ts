@@ -144,6 +144,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_shorts_shelf", summary: "settings_shorts_shelf_desc" },
     { title: "settings_home_shorts_shelf", summary: "settings_home_shorts_shelf_desc" },
     { title: "settings_continue_watching", summary: "settings_continue_watching_desc" },
+    { title: "settings_home_subscriptions", summary: "settings_home_subscriptions_desc" },
+    { title: "settings_home_refresh_on_reselect", summary: "settings_home_refresh_on_reselect_desc" },
     { title: "settings_home_max_age", summary: "settings_home_max_age_desc" },
     { title: "settings_comments", summary: "settings_comments_desc" },
     { title: "settings_notes", summary: "settings_notes_desc" },

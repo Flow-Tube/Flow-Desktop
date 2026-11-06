@@ -1,20 +1,31 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
+import { usePlayerStore } from "../store/usePlayerStore";
 import { getString } from "../lib/i18n/index";
 import { SETTINGS } from "../lib/settings/schema";
 import { useHomeFeed } from "../lib/useHomeFeed";
 import { useContinueWatching } from "../lib/useContinueWatching";
+import { useGridStyle } from "../lib/useGridColumns";
 import {
   ALL_CHIP,
+  LIVE_CHIP,
+  MIXES_CHIP,
   NEW_TO_YOU_CHIP,
   RECENT_CHIP,
+  WATCHED_CHIP,
   interestChipKey,
   interestChipLabel,
   useHomeChips,
+  visibleHomeMixes,
+  visibleChipKeys,
 } from "../lib/useHomeChips";
-import { homeOriginLabel } from "../lib/homeOrigin";
+import { homeOriginLabel, homeReasonLine } from "../lib/homeOrigin";
+import { HOME_RESELECTED_EVENT, homeReselectAction } from "../lib/homeReselect";
+import { useScrollContainer } from "../lib/useScrollContainer";
+import type { HomeMix } from "../lib/api/homeFeed";
 import type { VideoSummary } from "../types/video";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { VideoShelf } from "../components/shelf/VideoShelf";
@@ -24,6 +35,7 @@ import { HomeFeedFooter } from "../components/home/HomeFeedFooter";
 import { HomeFeedMessage } from "../components/home/HomeFeedMessage";
 import { HomeFeedButton } from "../components/home/HomeFeedButton";
 import { HomeChipRow } from "../components/home/HomeChipRow";
+import { HomeMixCard } from "../components/home/HomeMixCard";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -38,28 +50,67 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   );
   const hideWatchedVideos = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_WATCHED_VIDEOS] === "true");
   const isHidden = useFeedHiddenFilter({ hideWatched: hideWatchedVideos });
+  const isHiddenFromRewatch = useFeedHiddenFilter({ hideWatched: false });
+  const refreshOnReselect = useAppSettingsStore(
+    (state) => state.values[SETTINGS.REFRESH_HOME_ON_RESELECT] !== "false",
+  );
+  const navigate = useNavigate();
+  const setQueue = usePlayerStore((state) => state.setQueue);
+  const scrollContainer = useScrollContainer();
   const { snapshot, failed, refresh, retryMore, reportViewport } = useHomeFeed(homeFeedEnabled);
   const continueWatching = useContinueWatching(continueWatchingEnabled);
   const chips = useHomeChips(homeFeedEnabled);
-  const chipOptions = useMemo(
-    () => [
-      { key: ALL_CHIP, label: getString("home_chip_all") },
-      ...chips.interests.map((chip) => ({ key: interestChipKey(chip), label: interestChipLabel(chip) })),
-      { key: NEW_TO_YOU_CHIP, label: getString("home_chip_new_to_you") },
-      { key: RECENT_CHIP, label: getString("home_chip_recently_uploaded") },
-    ],
-    [chips.interests],
-  );
+  const chipOptions = useMemo(() => {
+    const labels = new Map([
+      [ALL_CHIP, getString("home_chip_all")],
+      ...chips.chips.interests.map((chip): [string, string] => [interestChipKey(chip), interestChipLabel(chip)]),
+      [NEW_TO_YOU_CHIP, getString("home_chip_new_to_you")],
+      [RECENT_CHIP, getString("home_chip_recently_uploaded")],
+      [MIXES_CHIP, getString("home_chip_mixes")],
+      [LIVE_CHIP, getString("home_chip_live")],
+      [WATCHED_CHIP, getString("home_chip_watched")],
+    ]);
+    return visibleChipKeys(chips.chips, chips.selected).map((key) => ({ key, label: labels.get(key) ?? key }));
+  }, [chips.chips, chips.selected]);
+  // The Watched chip exists to show what was watched, whatever "Hide watched videos" says.
+  const chipHidden = chips.selected === WATCHED_CHIP ? isHiddenFromRewatch : isHidden;
   const chipVideos = useMemo(
-    () => (chips.feed?.status === "ready" ? chips.feed.cards.filter((card) => !isHidden(card)) : []),
-    [chips.feed, isHidden],
+    () => (chips.feed?.status === "ready" ? chips.feed.cards.filter((card) => !chipHidden(card)) : []),
+    [chips.feed, chipHidden],
+  );
+  const chipMixes = useMemo(
+    () => (chips.feed?.status === "ready" ? visibleHomeMixes(chips.feed.mixes, isHiddenFromRewatch) : []),
+    [chips.feed, isHiddenFromRewatch],
+  );
+  const playMix = useCallback(
+    (mix: HomeMix) => {
+      setQueue(mix.videos, 0);
+      navigate(`/watch/${mix.seed.id}`);
+    },
+    [setQueue, navigate],
   );
   const [refreshing, setRefreshing] = useState(false);
+  const gridStyle = useGridStyle();
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     void refresh().finally(() => setRefreshing(false));
   }, [refresh]);
+
+  const { feed: chipFeed, reload: reloadChip } = chips;
+  useEffect(() => {
+    const handleReselected = () => {
+      const scroller = scrollContainer?.current;
+      const action = homeReselectAction(scroller?.scrollTop ?? 0, refreshOnReselect);
+      if (action === "scroll") scroller?.scrollTo({ top: 0 });
+      else if (action === "refresh") {
+        if (chipFeed) reloadChip();
+        else handleRefresh();
+      }
+    };
+    window.addEventListener(HOME_RESELECTED_EVENT, handleReselected);
+    return () => window.removeEventListener(HOME_RESELECTED_EVENT, handleReselected);
+  }, [scrollContainer, refreshOnReselect, chipFeed, reloadChip, handleRefresh]);
 
   // Cards the viewer hid leave at once; the backend drops them from its next pages too.
   const visibleVideos = useMemo(() => snapshot.cards.filter((card) => !isHidden(card)), [snapshot.cards, isHidden]);
@@ -80,6 +131,10 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
       const origin = snapshot.origins[video.id];
       return origin ? homeOriginLabel(origin) : undefined;
     },
+    [snapshot.origins],
+  );
+  const reasonLineOf = useCallback(
+    (video: VideoSummary) => homeReasonLine(snapshot.origins[video.id]),
     [snapshot.origins],
   );
 
@@ -137,6 +192,14 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           action={retryButton}
         />
       );
+    } else if (chipMixes.length > 0) {
+      body = (
+        <div className="flow-grid gap-y-8 pb-8" style={gridStyle}>
+          {chipMixes.map((mix) => (
+            <HomeMixCard key={mix.seed.id} mix={mix} onPlay={playMix} />
+          ))}
+        </div>
+      );
     } else if (chipVideos.length === 0) {
       body = (
         <HomeFeedMessage
@@ -178,6 +241,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           insertNode={homeShelves}
           trackImpressions
           getReason={reasonOf}
+          getReasonLine={reasonLineOf}
           onLastVisibleIndex={handleLastVisible}
         />
         <HomeFeedFooter

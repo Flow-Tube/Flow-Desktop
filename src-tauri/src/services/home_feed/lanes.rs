@@ -189,7 +189,7 @@ pub async fn build(
     taste: &TasteProfile,
     now_ms: u64,
 ) -> Lanes {
-    let subs = inputs.subscriptions.ids();
+    let subs = inputs.boosted_channels();
     let hidden = |card: &Card| inputs.exclusions.hides(card);
     let avatars = &inputs.subscriptions.avatars;
     let subs_pool: Vec<Card> = distinct_by(

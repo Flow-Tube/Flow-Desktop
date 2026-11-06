@@ -188,7 +188,7 @@ impl HomeFeedService {
             .search_pages
             .set_upload_date(super::sources::upload_filter(inputs.max_video_age_ms));
         let taste = TasteProfile::of(&brain, &classify_persona(&brain));
-        let followed = inputs.subscriptions.ids();
+        let followed = inputs.boosted_channels();
         let mut attempt = Attempt::start(&feed_cards, held.unwrap_or_default());
 
         self.fill_from_memory(&rec, &pool, &inputs, &brain, &followed, now, &mut attempt)

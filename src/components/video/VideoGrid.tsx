@@ -23,6 +23,8 @@ interface VideoGridProps {
   trackImpressions?: boolean;
   /** Why a feed shows a card, offered in its menu. */
   getReason?: (video: VideoSummary) => string | undefined;
+  /** A line shown on the card itself, for the few reasons worth saying up front. */
+  getReasonLine?: (video: VideoSummary) => string | undefined;
   /** The position of the last card on screen, for a feed that pages as it nears the end. */
   onLastVisibleIndex?: (index: number) => void;
 }
@@ -55,6 +57,7 @@ function VideoGridComponent({
   hideChannelAvatar,
   trackImpressions = false,
   getReason,
+  getReasonLine,
   onLastVisibleIndex,
 }: VideoGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
@@ -107,6 +110,7 @@ function VideoGridComponent({
               variant={variant}
               hideChannelAvatar={hideChannelAvatar}
               reason={getReason?.(video)}
+              reasonLine={getReasonLine?.(video)}
               highResThumbnail={highResThumbnails}
             />
           </div>

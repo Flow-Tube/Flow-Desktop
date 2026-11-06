@@ -37,7 +37,7 @@ interface PlaylistCardProps {
   onDownload?: (playlist: PlaylistSummary) => void;
 }
 
-function StackedPlaylistThumbnail({
+export function StackedPlaylistThumbnail({
   thumbnailUrl,
   title,
   videoCountText,

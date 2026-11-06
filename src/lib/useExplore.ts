@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getExploreDestination, getExploreGrid, getExplorePage } from './api/youtube';
 import { useBoolPref, usePreference } from './usePreference';
 import { SETTINGS } from './settings/schema';
+import { normalizeBackendError } from './api/errors';
 import type { StringKey } from './i18n/index';
 import type {
   ExploreDestinationId,
@@ -23,6 +24,11 @@ export const EXPLORE_DESTINATIONS: { id: ExploreDestinationId; labelKey: StringK
 ];
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+/** What a failed Explore load says: being limited is nothing a refresh can fix, so it reads apart. */
+export function exploreErrorKey(error: unknown): StringKey {
+  return normalizeBackendError(error).kind === 'rateLimited' ? 'explore_rate_limited' : 'explore_load_error';
+}
 
 /** A shelf opened in full: its grid so far, and the token for more. */
 export interface ExploreSeeAll {
@@ -75,7 +81,7 @@ export function useExplore() {
         if (request !== requestRef.current) return;
         console.warn('Failed to load Explore', err);
         setPage(null);
-        setError('explore_load_error');
+        setError(exploreErrorKey(err));
       })
       .finally(() => {
         if (request === requestRef.current) setLoading(false);

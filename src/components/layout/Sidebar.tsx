@@ -11,6 +11,7 @@ import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
 import { SectionHeader, SubscriptionsNav } from './SidebarSections';
 import { SidebarTabs } from './SidebarTabs';
 import { getString } from '../../lib/i18n/index';
+import { announceHomeReselected } from '../../lib/homeReselect';
 import { openInNewTab } from '../../lib/openTarget';
 import { SETTINGS } from '../../lib/settings/schema';
 import { useNotesEnabled } from '../../lib/useNotes';
@@ -75,6 +76,10 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   }
 
   const closeOverlay = isOverlay ? () => setWatchSidebarOpen(false) : undefined;
+  const handleHomeClick = () => {
+    closeOverlay?.();
+    if (location.pathname === '/') announceHomeReselected();
+  };
 
   return (
     <aside
@@ -88,7 +93,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
       {/* Always 240 px wide, so labels never rewrap while the rail opens and closes. */}
       <div className="flex min-h-0 w-60 flex-1 flex-col overflow-y-auto overflow-x-hidden py-2">
         <nav className="flex flex-col gap-1.5">
-          <SidebarItem onOpenInNewTab={openInNewTab} to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} collapsed={collapsed} />
+          <SidebarItem onOpenInNewTab={openInNewTab} to="/" end {...navIconPair('home')} label={getString('home')} onClick={handleHomeClick} collapsed={collapsed} />
           <SidebarItem onOpenInNewTab={openInNewTab} to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} collapsed={collapsed} />
           {showShortsNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} collapsed={collapsed} />}
           {showCategoriesNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} collapsed={collapsed} />}

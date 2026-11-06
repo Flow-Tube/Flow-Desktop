@@ -58,6 +58,8 @@ export interface VideoCardProps {
   showAddedDate?: boolean;
   /** Why a feed shows this card, at the top of its menu. */
   reason?: string;
+  /** A short line under the card's details saying why it is here. */
+  reasonLine?: string;
   /** Whether the card is drawn wider than `hqdefault`; left out, the screen's pixel ratio decides. */
   highResThumbnail?: boolean;
 }
@@ -118,6 +120,7 @@ function VideoCardComponent({
   isDragActive = false,
   showAddedDate = false,
   reason,
+  reasonLine,
   highResThumbnail,
 }: VideoCardProps) {
   const navigate = useNavigate();
@@ -870,6 +873,7 @@ function VideoCardComponent({
             {video.viewCountText && publishedText && <span className="mx-1">•</span>}
             {publishedText && <span>{publishedText}</span>}
           </div>
+          {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
           <CardPills video={video} />
         </div>
 

@@ -34,6 +34,11 @@ export function toggledHiddenSections(hidden: ReadonlySet<string>, id: LibrarySe
   return JSON.stringify([...next]);
 }
 
+/** Saved Shorts goes with the Show Shorts switch as well as its own. */
+export function hiddenOnLibraryPage(hidden: ReadonlySet<string>, shortsEnabled: boolean): ReadonlySet<string> {
+  return shortsEnabled ? hidden : new Set([...hidden, "SAVED_SHORTS"]);
+}
+
 export function useHiddenLibrarySections(): ReadonlySet<string> {
   const [raw] = usePreference(SETTINGS.HIDDEN_LIBRARY_SECTIONS);
   return useMemo(() => parseHiddenLibrarySections(raw), [raw]);

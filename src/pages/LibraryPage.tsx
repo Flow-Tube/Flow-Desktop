@@ -4,7 +4,8 @@ import { Clock, Disc3, Download, History, ListVideo, Music2, ThumbsUp } from "lu
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
-import { useHiddenLibrarySections } from "../lib/librarySections";
+import { hiddenOnLibraryPage, useHiddenLibrarySections } from "../lib/librarySections";
+import { useShortsEnabled, videosWithShorts } from "../lib/useShortsContent";
 import { useLibrary, type LibraryPlaylist } from "../lib/useLibrary";
 import { historyVideoToSong, type HistoryVideo } from "../lib/useHistory";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
@@ -207,16 +208,15 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
     loading,
   } = useLibrary();
 
-  const hidden = useHiddenLibrarySections();
+  const shortsEnabled = useShortsEnabled();
+  const hidden = hiddenOnLibraryPage(useHiddenLibrarySections(), shortsEnabled);
 
   const isEmpty = (length: number) => !loading && length === 0;
 
-  const statsText = getString(
-    "library_stats_summary",
-    playlists.length,
-    savedAlbums.length,
-    savedShorts.length,
-  );
+  const statsText = shortsEnabled
+    ? getString("library_stats_summary", playlists.length, savedAlbums.length, savedShorts.length)
+    : getString("library_stats_summary_no_shorts", playlists.length, savedAlbums.length);
+  const historyShown = videosWithShorts(history, shortsEnabled);
 
   const handleOpenAlbum = (album: StoredAlbum) => {
     navigate(albumDetailPath(album));
@@ -239,9 +239,9 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           title={getString("library_history_label")}
           icon={History}
           viewAllTo="/history"
-          isEmpty={isEmpty(history.length)}
+          isEmpty={isEmpty(historyShown.length)}
         >
-          <HistoryShelfRow items={history} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+          <HistoryShelfRow items={historyShown} onPlay={onPlay} onAddToQueue={onAddToQueue} />
         </LibraryShelf>
       )}
 

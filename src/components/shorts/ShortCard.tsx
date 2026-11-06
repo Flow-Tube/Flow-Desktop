@@ -12,12 +12,10 @@ import {
 } from "lucide-react";
 import type { MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { MediaMenu } from "../ui/MediaMenu";
-import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useDownloadStore } from "../../store/useDownloadStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import { useUiStore } from "../../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
-import { SETTINGS } from "../../lib/settings/schema";
 import { buildShortQueue, shortSummaryToItem } from "../../lib/shortsQueue";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
 import {
@@ -33,6 +31,7 @@ import type { ShortVideoSummary, VideoSummary } from "../../types/video";
 import { backgroundTabClickProps, openedInBackgroundTab } from "../../lib/openTarget";
 import { openActions } from "../common/openActions";
 import { useOriginalTitle } from "../../lib/useOriginalTitle";
+import { useShortsPlayerDisabled } from "../../lib/useShortsContent";
 
 interface ShortCardProps {
   short: ShortVideoSummary;
@@ -50,9 +49,7 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
   const blockChannelAction = useFeedActionsStore((s) => s.blockChannel);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [savedToLibrary, setSavedToLibrary] = useState(false);
-  const disableShortsPlayer = useAppSettingsStore(
-    (state) => state.values[SETTINGS.DISABLE_SHORTS_PLAYER] === "true",
-  );
+  const disableShortsPlayer = useShortsPlayerDisabled();
   const cardRef = useRef<HTMLDivElement>(null);
   const originalTitle = useOriginalTitle(short.id, cardRef);
   const title = originalTitle || short.title?.trim() || getString('shorts_short');

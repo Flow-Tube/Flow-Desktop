@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { shortItemToSummary } from "./shortsQueue";
 import { fetchFeedShorts, visibleFetchedShorts } from "./useShortsFeed";
+import { loadFinishedShortIds } from "./useWatchedFilter";
 import type { ShortVideoSummary } from "../types/video";
 
 const SHELF_SIZE = 15;
@@ -34,9 +35,9 @@ export function useHomeShortsShelf(enabled: boolean): ShortVideoSummary[] {
       return;
     }
     let cancelled = false;
-    void loadShelf()
-      .then((loaded) => {
-        if (!cancelled) setShorts(visibleFetchedShorts(loaded).slice(0, SHELF_SIZE));
+    void Promise.all([loadShelf(), loadFinishedShortIds()])
+      .then(([loaded, finished]) => {
+        if (!cancelled) setShorts(visibleFetchedShorts(loaded, finished).slice(0, SHELF_SIZE));
       })
       .catch((error) => console.warn("Failed to load the Home Shorts shelf", error));
     return () => {

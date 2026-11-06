@@ -86,6 +86,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
   const [scanProgress, setScanProgress] = useState<ScanProgress | null>(null);
   const [failedChannelIds, setFailedChannelIds] = useState<string[]>([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const channelIds = useMemo(
     () => channels.map((channel) => channel.id).sort().join('|'),
     [channels],
@@ -102,6 +103,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
       setError(null);
       setLoading(false);
       setScanProgress(null);
+      setLastRefreshedAt(null);
       return;
     }
 
@@ -112,6 +114,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
       setVideos(mem.videos);
       setRssChannels(mem.channels);
       setFailedChannelIds(mem.failedChannelIds);
+      setLastRefreshedAt(mem.cachedAt);
       setLoading(false);
     } else {
       setLoading(true);
@@ -137,6 +140,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
           setVideos(persisted.videos);
           setRssChannels(persisted.channels);
           setFailedChannelIds(failed);
+          setLastRefreshedAt(persisted.cachedAt);
           setLoading(false);
           cachedAt = persisted.cachedAt;
           haveVideos = true;
@@ -162,11 +166,13 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
           const done = feed.processed >= feed.total;
           setScanProgress(done ? null : { processed: feed.processed, total: feed.total });
           if (done && feed.videos.length > 0) {
+            const refreshedAt = Date.now();
+            setLastRefreshedAt(refreshedAt);
             feedCache.set(channelIds, {
               videos: feed.videos,
               channels: feed.channels,
               failedChannelIds: feed.failedChannelIds,
-              cachedAt: Date.now(),
+              cachedAt: refreshedAt,
             });
             void persistFeed(channelIds, feed);
             void observeChannelUploads(recentUploadsPerChannel(feed.videos)).catch((err) =>
@@ -214,7 +220,7 @@ export function useSubscriptionFeed(channels: SubscribedChannel[]) {
   }, [channelIds, refreshNonce]);
 
   const refresh = useCallback(() => setRefreshNonce((value) => value + 1), []);
-  return { videos, rssChannels, loading, error, scanProgress, failedChannelIds, refresh };
+  return { videos, rssChannels, loading, error, scanProgress, failedChannelIds, lastRefreshedAt, refresh };
 }
 
 const channelDetailsCache = new Map<string, ChannelDetails>();

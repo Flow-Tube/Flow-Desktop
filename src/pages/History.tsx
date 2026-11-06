@@ -12,7 +12,8 @@ import { CategoryChips } from "../components/layout/CategoryChips";
 import { Select } from "../components/ui/Select";
 import { confirmAction } from "../lib/dialogs";
 import { useHistory, groupHistoryByDate } from "../lib/useHistory";
-import { filterHistory, type HistoryFilter, type HistorySort } from "../lib/historyFilter";
+import { effectiveHistoryFilter, filterHistory, type HistoryFilter, type HistorySort } from "../lib/historyFilter";
+import { useShortsEnabled } from "../lib/useShortsContent";
 import { useHistoryYears } from "../lib/useHistoryYears";
 import { useDebounce } from "../lib/useDebounce";
 import { useHistoryStore } from "../store/useHistoryStore";
@@ -25,7 +26,9 @@ interface HistoryProps {
 export const History: React.FC<HistoryProps> = ({ onPlay }) => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<HistoryFilter>("all");
+  const [chosenFilter, setFilter] = useState<HistoryFilter>("all");
+  const shortsEnabled = useShortsEnabled();
+  const filter = effectiveHistoryFilter(chosenFilter, shortsEnabled);
   const [sort, setSort] = useState<HistorySort>("newest");
   const [year, setYear] = useState<number | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -68,21 +71,21 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
     () => [
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
-      { key: "shorts" as const, label: getString("history_filter_shorts") },
+      ...(shortsEnabled ? [{ key: "shorts" as const, label: getString("history_filter_shorts") }] : []),
       { key: "music" as const, label: getString("history_filter_music") },
     ],
-    [],
+    [shortsEnabled],
   );
   const activeLabel = filters.find((f) => f.key === filter)?.label ?? filters[0]?.label ?? "";
 
   const visibleGroups = useMemo(
-    () => groupHistoryByDate(filterHistory(history, { filter, year, sort, query: debouncedQuery })),
-    [history, filter, year, sort, debouncedQuery],
+    () => groupHistoryByDate(filterHistory(history, { filter, year, sort, query: debouncedQuery, shortsEnabled })),
+    [history, filter, year, sort, debouncedQuery, shortsEnabled],
   );
 
   // Anything but the plain newest-first list is only right over all of history. The offset moves
   // only when a page arrives, so a page that fails to load is not retried in a loop.
-  const needsWholeHistory = filter !== "all" || year !== null || sort !== "newest" || debouncedQuery.trim() !== "";
+  const needsWholeHistory = !shortsEnabled || filter !== "all" || year !== null || sort !== "newest" || debouncedQuery.trim() !== "";
   const triedOffset = useRef<number | null>(null);
   useEffect(() => {
     if (!needsWholeHistory || !hasMore || loadingMore || triedOffset.current === offset) return;

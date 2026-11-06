@@ -8,6 +8,7 @@ import { getString } from "../lib/i18n/index";
 import { SETTINGS } from "../lib/settings/schema";
 import { useHomeFeed } from "../lib/useHomeFeed";
 import { useContinueWatching } from "../lib/useContinueWatching";
+import { useFeedVisibilityFilter } from "../lib/useWatchedFilter";
 import { useGridStyle } from "../lib/useGridColumns";
 import {
   ALL_CHIP,
@@ -31,6 +32,7 @@ import { VideoGrid } from "../components/video/VideoGrid";
 import { VideoShelf } from "../components/shelf/VideoShelf";
 import { ShortsShelf } from "../components/shelf/ShortsShelf";
 import { useHomeShortsShelf } from "../lib/useHomeShortsShelf";
+import { useShortsEnabled } from "../lib/useShortsContent";
 import { HomeFeedFooter } from "../components/home/HomeFeedFooter";
 import { HomeFeedMessage } from "../components/home/HomeFeedMessage";
 import { HomeFeedButton } from "../components/home/HomeFeedButton";
@@ -48,8 +50,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const continueWatchingEnabled = useAppSettingsStore(
     (state) => state.values[SETTINGS.CONTINUE_WATCHING_ENABLED] !== "false",
   );
-  const hideWatchedVideos = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_WATCHED_VIDEOS] === "true");
-  const isHidden = useFeedHiddenFilter({ hideWatched: hideWatchedVideos });
+  const isHidden = useFeedVisibilityFilter("home");
   const isHiddenFromRewatch = useFeedHiddenFilter({ hideWatched: false });
   const refreshOnReselect = useAppSettingsStore(
     (state) => state.values[SETTINGS.REFRESH_HOME_ON_RESELECT] !== "false",
@@ -142,7 +143,8 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     (state) => state.values[SETTINGS.HOME_SHORTS_SHELF_ENABLED] !== "false",
   );
   const shortsShelvesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_SHELF_ENABLED] !== "false");
-  const homeShorts = useHomeShortsShelf(homeFeedEnabled && homeShortsEnabled && shortsShelvesEnabled);
+  const shortsEnabled = useShortsEnabled();
+  const homeShorts = useHomeShortsShelf(homeFeedEnabled && homeShortsEnabled && shortsShelvesEnabled && shortsEnabled);
   const shelfVideos = useMemo(
     () => continueWatching.videos.filter((video) => !isHidden(video)),
     [continueWatching.videos, isHidden],

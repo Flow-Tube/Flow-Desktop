@@ -7,7 +7,6 @@ import { SETTINGS } from "../lib/settings/schema";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useNotificationStore } from "../store/useNotificationStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { getString } from "../lib/i18n/index";
 import { Button } from "../components/ui/Button";
 import { SearchInput } from "../components/ui/SearchInput";
@@ -17,8 +16,11 @@ import { ScanProgressBar } from "../components/subscriptions/ScanProgressBar";
 import { FeedFailedNotice } from "../components/subscriptions/FeedFailedNotice";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { ShortsShelf } from "../components/shelf/ShortsShelf";
+import { LastRefreshedLine } from "../components/subscriptions/LastRefreshedLine";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
+import { useShortsEnabled } from "../lib/useShortsContent";
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
+import { useFeedVisibilityFilter } from "../lib/useWatchedFilter";
 import { upgradeAvatarUrl } from "../lib/thumbnails";
 import { useProxiedImageUrl } from "../lib/useProxiedImageUrl";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
@@ -78,6 +80,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
     error: feedError,
     scanProgress,
     failedChannelIds,
+    lastRefreshedAt,
     refresh: refreshFeed,
   } = useSubscriptionFeed(subscriptions);
   const failedChannelNames = useMemo(
@@ -89,10 +92,11 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   );
   const channelDetails = useSubscriptionChannelDetails(subscriptions);
   const showSubscriptionVideos = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_VIDEOS] !== "false");
-  const showSubscriptionShorts = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_SHORTS] !== "false");
+  const shortsEnabled = useShortsEnabled();
+  const showSubscriptionShorts = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_SHORTS] !== "false") && shortsEnabled;
   const showSubscriptionLive = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_LIVE] !== "false");
-  const hideWatchedVideos = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_WATCHED_VIDEOS] === "true");
-  const isHidden = useFeedHiddenFilter({ hideWatched: hideWatchedVideos });
+  const isHidden = useFeedVisibilityFilter("subscriptions");
+  const showCheckedCount = useAppSettingsStore((state) => state.values[SETTINGS.SUBS_SHOW_CHECKED_VIDEO_COUNT] !== "false");
   const hideUnplayable = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS] === "true");
   const unplayableIds = useUnplayableVideoIds(hideUnplayable);
   const [searchQuery, setSearchQuery] = useState("");
@@ -367,9 +371,16 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                 )}
 
                 <section className="pt-2">
-                  <h2 className="mb-4 text-xl font-semibold text-chrome-neutral-100">
+                  <h2 className={`${lastRefreshedAt ? "mb-1" : "mb-4"} text-xl font-semibold text-chrome-neutral-100`}>
                     {getString("subscriptions_latest_header")}
                   </h2>
+                  {lastRefreshedAt ? (
+                    <LastRefreshedLine
+                      refreshedAt={lastRefreshedAt}
+                      checkedCount={videos.length}
+                      showCount={showCheckedCount}
+                    />
+                  ) : null}
 
                   {feedError ? (
                     <div className="rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-6 text-sm text-chrome-neutral-300">

@@ -7,7 +7,8 @@ import { IconButton } from '../components/ui/IconButton';
 import { Select } from '../components/ui/Select';
 import { VideoGrid } from '../components/video/VideoGrid';
 import { getString } from '../lib/i18n/index';
-import { EXPLORE_DESTINATIONS, useExplore } from '../lib/useExplore';
+import { EXPLORE_DESTINATIONS, shelvesWithShorts, useExplore } from '../lib/useExplore';
+import { useShortsEnabled, videosWithShorts } from '../lib/useShortsContent';
 import { useInfiniteScroll } from '../lib/useInfiniteScroll';
 import { REGION_OPTIONS } from '../lib/regionOptions';
 import type { VideoSummary } from '../types/video';
@@ -23,6 +24,9 @@ const SHELF_PREVIEW = 8;
 export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCategoriesProps) {
   const explore = useExplore();
   const { page, loading, error, seeAll, region } = explore;
+  const shortsEnabled = useShortsEnabled();
+  const shelves = useMemo(() => shelvesWithShorts(page?.shelves ?? [], shortsEnabled), [page, shortsEnabled]);
+  const seeAllVideos = useMemo(() => videosWithShorts(seeAll?.videos ?? [], shortsEnabled), [seeAll?.videos, shortsEnabled]);
 
   const sentinelRef = useInfiniteScroll({
     hasNextPage: Boolean(seeAll?.continuation),
@@ -106,7 +110,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
               </IconButton>
               <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{seeAll.title}</h2>
             </div>
-            <VideoGrid videos={seeAll.videos} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+            <VideoGrid videos={seeAllVideos} onPlay={onPlay} onAddToQueue={onAddToQueue} />
             <div ref={sentinelRef} className="h-10" />
             {seeAll.loading && (
               <div className="flex justify-center py-6 text-chrome-neutral-500">
@@ -131,7 +135,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
           </div>
         ) : (
           <div className="flex flex-col gap-10 pb-12">
-            {page?.shelves.map((shelf, index) => (
+            {shelves.map((shelf, index) => (
               <section key={`${shelf.title}-${index}`} className="flex flex-col">
                 <div className="mb-3 flex items-center justify-between px-1">
                   <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{shelf.title}</h2>
@@ -146,7 +150,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
                   )}
                 </div>
                 <VideoGrid
-                  videos={page.shelves.length === 1 ? shelf.videos : shelf.videos.slice(0, SHELF_PREVIEW)}
+                  videos={shelves.length === 1 ? shelf.videos : shelf.videos.slice(0, SHELF_PREVIEW)}
                   onPlay={onPlay}
                   onAddToQueue={onAddToQueue}
                 />

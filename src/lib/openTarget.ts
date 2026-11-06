@@ -2,6 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { readStreamInfoEntry } from "./streamResolution";
 import { wantsBackgroundTab } from "./clickIntent";
 import { tabsEnabled } from "./tabs/tabsEnabled";
+import { shortsPlayerDisabledNow } from "./useShortsContent";
 import { openAppWindow, type WindowVideoHandoff } from "./api/appWindow";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { activeTab, useTabsStore, type ParkedVideo } from "../store/useTabsStore";
@@ -11,10 +12,10 @@ import { useUiStore } from "../store/useUiStore";
 import { getString } from "./i18n/index";
 import type { VideoSummary } from "../types/video";
 
-/** The page a card opens: a Short in the Shorts player, a channel result on its channel page. */
+/** The page a card opens: a Short in the Shorts player unless that's off, a channel result on its channel page. */
 export function routeForVideo(video: Pick<VideoSummary, "id" | "isShort">): string {
   if (video.id.startsWith("channel:")) return `/channel/${video.id.slice("channel:".length)}`;
-  return video.isShort ? `/shorts/${video.id}` : `/watch/${video.id}`;
+  return video.isShort && !shortsPlayerDisabledNow() ? `/shorts/${video.id}` : `/watch/${video.id}`;
 }
 
 /** Opens `route` in a background tab; false, and nothing opened, while tabs are off. */

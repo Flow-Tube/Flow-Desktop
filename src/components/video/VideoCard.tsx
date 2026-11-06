@@ -154,9 +154,9 @@ function VideoCardComponent({
   const route = routeForVideo(video);
   const play = useCallback((event?: React.MouseEvent) => {
     if (openedInBackgroundTab(event, route)) return;
-    if (video.isShort && !isChannel) navigate(`/shorts/${video.id}`);
+    if (route.startsWith("/shorts/")) navigate(route);
     else onPlay(video);
-  }, [video, isChannel, navigate, onPlay, route]);
+  }, [video, navigate, onPlay, route]);
   const tabClickProps = useMemo(() => backgroundTabClickProps(route), [route]);
 
   useEffect(() => {

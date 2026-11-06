@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NavigationType } from "react-router-dom";
+import { SETTINGS } from "./settings/schema";
 import type { VideoSummary } from "../types/video";
 
 const openAppWindow = vi.fn(async () => "flow-1");
@@ -46,6 +47,14 @@ describe("routeForVideo", () => {
     expect(routeForVideo({ id: "abc" })).toBe("/watch/abc");
     expect(routeForVideo({ id: "abc", isShort: true })).toBe("/shorts/abc");
     expect(routeForVideo({ id: "channel:UC1" })).toBe("/channel/UC1");
+  });
+
+  it("sends a Short to the watch page when Shorts are hidden or the Shorts player is off", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.SHORTS_CONTENT_ENABLED]: "false" } });
+    expect(routeForVideo({ id: "abc", isShort: true })).toBe("/watch/abc");
+    useAppSettingsStore.setState({ values: { [SETTINGS.DISABLE_SHORTS_PLAYER]: "true" } });
+    expect(routeForVideo({ id: "abc", isShort: true })).toBe("/watch/abc");
+    useAppSettingsStore.setState({ values: {} });
   });
 });
 

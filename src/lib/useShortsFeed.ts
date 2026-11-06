@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { cleanChannelId, useFeedActionsStore } from "../store/useFeedActionsStore";
 import { getShortsFeed, loadMoreShorts, resetShortsFeed } from "./api/shorts";
+import { SETTINGS } from "./settings/schema";
+import { loadFinishedShortIds } from "./useWatchedFilter";
+import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { ShortItem, ShortsFeed } from "../types/shorts";
 
 
@@ -55,17 +58,24 @@ function mergeInitialItems(items: ShortItem[], initial: ShortItem[]): ShortItem[
   return [...initial, ...fresh];
 }
 
-export function visibleFetchedShorts<T extends Pick<ShortItem, "id"> & { channelId?: string | null }>(items: T[]): T[] {
+const NOTHING_FINISHED: ReadonlySet<string> = new Set();
+
+export function visibleFetchedShorts<T extends Pick<ShortItem, "id"> & { channelId?: string | null }>(
+  items: T[],
+  finished: ReadonlySet<string> = NOTHING_FINISHED,
+): T[] {
   const {
     dismissedVideoIds,
     blockedChannelIds,
     suppressedChannelIds,
     watchedVideoIds,
   } = useFeedActionsStore.getState();
+  const hideWatched = useAppSettingsStore.getState().values[SETTINGS.HIDE_WATCHED_SHORTS] !== "false";
   const suppressedCutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
 
   return items.filter((short) => {
-    if (dismissedVideoIds.has(short.id) || watchedVideoIds.has(short.id)) return false;
+    if (dismissedVideoIds.has(short.id)) return false;
+    if (hideWatched && (watchedVideoIds.has(short.id) || finished.has(short.id))) return false;
     const channelId = cleanChannelId(short.channelId);
     if (!channelId) return true;
     return (
@@ -116,10 +126,10 @@ export function useShortsFeed(
         cancelled = true;
       };
     }
-    fetchFeedShorts(seedId)
-      .then((feed) => {
+    Promise.all([fetchFeedShorts(seedId), loadFinishedShortIds()])
+      .then(([feed, finished]) => {
         if (cancelled) return;
-        const mergedItems = mergeInitialItems(visibleFetchedShorts(feed.items), queuedItems);
+        const mergedItems = mergeInitialItems(visibleFetchedShorts(feed.items, finished), queuedItems);
         mergedItems.forEach((s) => seenIdsRef.current.add(s.id));
         setItems(mergedItems);
         continuationRef.current = feed.continuation;
@@ -146,12 +156,15 @@ export function useShortsFeed(
     inFlightRef.current = true;
     setLoadingMore(true);
     try {
-      const feed = waitingToHandOverRef.current
-        ? await fetchFeedShorts(seedId)
-        : await loadMoreShorts(await currentSubIds(), continuationRef.current);
+      const [feed, finished] = await Promise.all([
+        waitingToHandOverRef.current
+          ? fetchFeedShorts(seedId)
+          : currentSubIds().then((subs) => loadMoreShorts(subs, continuationRef.current)),
+        loadFinishedShortIds(),
+      ]);
       waitingToHandOverRef.current = false;
       continuationRef.current = feed.continuation;
-      const fresh = visibleFetchedShorts(feed.items).filter((s) => !seenIdsRef.current.has(s.id));
+      const fresh = visibleFetchedShorts(feed.items, finished).filter((s) => !seenIdsRef.current.has(s.id));
       if (fresh.length) {
         fresh.forEach((s) => seenIdsRef.current.add(s.id));
         setItems((prev) => [...prev, ...fresh]);
@@ -169,8 +182,8 @@ export function useShortsFeed(
     async (short: ShortItem) => {
       if (queueEnd === "stop") return;
       try {
-        const feed = await fetchFeedShorts(short.id);
-        const fresh = visibleFetchedShorts(feed.items).filter((item) => !seenIdsRef.current.has(item.id));
+        const [feed, finished] = await Promise.all([fetchFeedShorts(short.id), loadFinishedShortIds()]);
+        const fresh = visibleFetchedShorts(feed.items, finished).filter((item) => !seenIdsRef.current.has(item.id));
         if (fresh.length === 0) return;
         fresh.forEach((item) => seenIdsRef.current.add(item.id));
         setItems((previous) => {

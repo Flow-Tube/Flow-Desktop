@@ -13,6 +13,7 @@ import { SidebarTabs } from './SidebarTabs';
 import { getString } from '../../lib/i18n/index';
 import { announceHomeReselected } from '../../lib/homeReselect';
 import { openInNewTab } from '../../lib/openTarget';
+import { useShortsEnabled } from '../../lib/useShortsContent';
 import { SETTINGS } from '../../lib/settings/schema';
 import { useNotesEnabled } from '../../lib/useNotes';
 
@@ -57,7 +58,8 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const { subscriptions } = useSubscriptionStore();
   const location = useLocation();
   const [subsExpanded, setSubsExpanded] = useState(false);
-  const showShortsNav = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
+  const shortsNavEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
+  const showShortsNav = useShortsEnabled() && shortsNavEnabled;
   const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
   const showCategoriesNav = useAppSettingsStore((state) => state.values[SETTINGS.CATEGORIES_NAV_TAB_ENABLED] !== 'false');
   const notesEnabled = useNotesEnabled();

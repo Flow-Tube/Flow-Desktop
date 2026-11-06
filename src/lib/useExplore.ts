@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getExploreDestination, getExploreGrid, getExplorePage } from './api/youtube';
 import { useBoolPref, usePreference } from './usePreference';
+import { videosWithShorts } from './useShortsContent';
 import { SETTINGS } from './settings/schema';
 import { normalizeBackendError } from './api/errors';
 import type { StringKey } from './i18n/index';
@@ -24,6 +25,14 @@ export const EXPLORE_DESTINATIONS: { id: ExploreDestinationId; labelKey: StringK
 ];
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+/** Explore's shelves, each without its Shorts and none left empty when Shorts are hidden. */
+export function shelvesWithShorts(shelves: ExploreShelf[], shortsEnabled: boolean): ExploreShelf[] {
+  if (shortsEnabled) return shelves;
+  return shelves
+    .map((shelf) => ({ ...shelf, videos: videosWithShorts(shelf.videos, false) }))
+    .filter((shelf) => shelf.videos.length > 0);
+}
 
 /** What a failed Explore load says: being limited is nothing a refresh can fix, so it reads apart. */
 export function exploreErrorKey(error: unknown): StringKey {

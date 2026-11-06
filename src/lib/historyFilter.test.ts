@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filterHistory, historyYear, type HistoryView } from "./historyFilter";
+import { effectiveHistoryFilter, filterHistory, historyYear, type HistoryView } from "./historyFilter";
 import type { WatchHistoryRecord } from "../types/db";
 
 const record = (videoId: string, watchDate: string, extra: Partial<WatchHistoryRecord> = {}): WatchHistoryRecord => ({
@@ -17,10 +17,17 @@ const records = [
   record("short", "2025-06-15T12:00:00.000Z", { isShort: true }),
   record("song", "2024-06-15T12:00:00.000Z", { isMusic: true, channelName: "Band" }),
 ];
-const view = (changes: Partial<HistoryView>): HistoryView => ({ filter: "all", year: null, sort: "newest", query: "", ...changes });
+const view = (changes: Partial<HistoryView>): HistoryView => ({ filter: "all", year: null, sort: "newest", query: "", shortsEnabled: true, ...changes });
 const ids = (changes: Partial<HistoryView>) => filterHistory(records, view(changes)).map((item) => item.videoId);
 
 describe("filterHistory", () => {
+  it("shows no Shorts while Shorts are hidden, and the Shorts tab falls back to All", () => {
+    expect(ids({ shortsEnabled: false })).toEqual(["video", "song"]);
+    expect(effectiveHistoryFilter("shorts", false)).toBe("all");
+    expect(effectiveHistoryFilter("shorts", true)).toBe("shorts");
+    expect(effectiveHistoryFilter("music", false)).toBe("music");
+  });
+
   it("keeps Shorts out of Videos and in their own tab", () => {
     expect(ids({ filter: "videos" })).toEqual(["video"]);
     expect(ids({ filter: "shorts" })).toEqual(["short"]);

@@ -153,11 +153,16 @@ SHORTS
 - More like this, in a Short's More menu, teaches your recommendations and puts similar Shorts right after it.
 - A Short that links to a full video shows a chip that opens it. Double-click a Short to like it.
 - A Short with several audio tracks offers them in its settings, and the equalizer now applies to Shorts.
+- Subscriptions shows when the feed last refreshed and how many videos it checked. The count has its own switch.
 
 HOME
 - Home has three new chips. Mixes builds queues from videos you liked or finished, Live shows streams on now, and Watched brings back videos worth seeing again.
 - A Subscriptions on Home switch keeps channels you follow out of Home. Clicking Home again scrolls to the top, then refreshes, and you can turn the refresh off.
 - Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.
+
+SHORTS
+- A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.
+- Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

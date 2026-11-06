@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseHiddenLibrarySections, toggledHiddenSections } from "./librarySections";
+import { parseHiddenLibrarySections, toggledHiddenSections, hiddenOnLibraryPage } from "./librarySections";
 
 describe("hidden Library sections", () => {
   it("reads what was stored and survives junk", () => {
@@ -13,5 +13,13 @@ describe("hidden Library sections", () => {
     const hidden = parseHiddenLibrarySections(toggledHiddenSections(new Set(), "LIKES", true));
     expect(hidden.has("LIKES")).toBe(true);
     expect(parseHiddenLibrarySections(toggledHiddenSections(hidden, "LIKES", false)).size).toBe(0);
+  });
+});
+
+describe("hiddenOnLibraryPage", () => {
+  it("hides Saved Shorts while Shorts are hidden, on top of the viewer's own choices", () => {
+    const hidden = new Set(["LIKES"]);
+    expect(hiddenOnLibraryPage(hidden, true)).toBe(hidden);
+    expect([...hiddenOnLibraryPage(hidden, false)].sort()).toEqual(["LIKES", "SAVED_SHORTS"]);
   });
 });

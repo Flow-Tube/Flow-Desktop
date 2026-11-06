@@ -9,6 +9,7 @@ vi.mock("./api/shorts", () => ({
   loadMoreShorts: vi.fn(),
   resetShortsFeed: vi.fn(),
 }));
+vi.mock("./useWatchedFilter", () => ({ loadFinishedShortIds: async () => new Set<string>() }));
 vi.mock("../store/useSubscriptionStore", () => ({
   useSubscriptionStore: { getState: () => ({ subscriptions: [{ id: "s" }], loadSubscriptions: vi.fn() }) },
 }));

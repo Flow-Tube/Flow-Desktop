@@ -27,6 +27,7 @@ import { shareLink } from '../../lib/clipboard';
 import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
+import { isLocalMediaId } from '../../lib/localMediaId';
 
 type BaseProps = {
   className?: string;
@@ -49,6 +50,8 @@ export type MusicItemCardProps = BaseProps &
         item: SongItem;
         onNavigate?: () => void;
         appendActions?: MusicMenuAction[];
+        /** Replaces the whole menu, for a track that isn't on YouTube. */
+        menuActions?: MusicMenuAction[];
       }
   );
 
@@ -527,12 +530,14 @@ function ListRow({
   onPlay,
   onNavigate,
   appendActions,
+  menuActions: ownMenuActions,
   className,
 }: {
   item: SongItem;
   onPlay?: () => void;
   onNavigate?: () => void;
   appendActions?: MusicMenuAction[];
+  menuActions?: MusicMenuAction[];
   className?: string;
 }) {
   const trackId = videoIdOf(item);
@@ -553,7 +558,8 @@ function ListRow({
   const isPlayingTrack = !!currentTrack && videoIdOf(currentTrack) === trackId && playerIsPlaying;
   const isHighlighted = isHovered || isPlayingTrack;
   const activeColor = dominantColor ?? preloadedColor;
-  const menuActions: MusicMenuAction[] = [...songActions, ...(appendActions ?? [])];
+  const menuActions: MusicMenuAction[] = ownMenuActions ?? [...songActions, ...(appendActions ?? [])];
+  const canLike = !isLocalMediaId(trackId);
   const resolveColor = (img?: HTMLImageElement) => {
     const source = img ?? artworkRef.current;
     if (!source || !source.complete || source.naturalWidth === 0) {
@@ -635,21 +641,23 @@ function ListRow({
           )}
         </span>
         <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
-          <button
-            type="button"
-            aria-label={getString('music_like_track')}
-            aria-pressed={songLike.liked}
-            onClick={(event) => {
-              event.stopPropagation();
-              void songLike.toggle();
-            }}
-            className={cx(
-              'grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100',
-              songLike.liked ? 'text-[var(--color-primary)]' : null,
-            )}
-          >
-            <Heart className="h-4 w-4" fill={songLike.liked ? 'currentColor' : 'none'} />
-          </button>
+          {canLike && (
+            <button
+              type="button"
+              aria-label={getString('music_like_track')}
+              aria-pressed={songLike.liked}
+              onClick={(event) => {
+                event.stopPropagation();
+                void songLike.toggle();
+              }}
+              className={cx(
+                'grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100',
+                songLike.liked ? 'text-[var(--color-primary)]' : null,
+              )}
+            >
+              <Heart className="h-4 w-4" fill={songLike.liked ? 'currentColor' : 'none'} />
+            </button>
+          )}
           <div className="relative">
             <button
               type="button"
@@ -774,6 +782,7 @@ export function MusicItemCard(props: MusicItemCardProps) {
           onPlay={onPlay}
           onNavigate={props.onNavigate}
           appendActions={props.appendActions}
+          menuActions={props.menuActions}
           className={className}
         />
       );

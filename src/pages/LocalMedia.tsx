@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Play, RefreshCw, Settings as SettingsIcon, Shuffle } from "lucide-react";
+import { ChevronLeft, Play, RefreshCw, Shuffle } from "lucide-react";
 
 import { LocalContinueShelf } from "../components/localMedia/LocalContinueShelf";
 import { LocalFileList } from "../components/localMedia/LocalFileList";
@@ -21,8 +21,6 @@ import { getPlural, getString } from "../lib/i18n/index";
 import { isFiltering } from "../lib/localMedia/filters";
 import { playLocalFiles } from "../lib/localMedia/playback";
 import { useLocalMediaView } from "../lib/localMedia/useLocalMediaView";
-import { SETTINGS } from "../lib/settings/schema";
-import { useBoolPref } from "../lib/usePreference";
 import { useLocalMediaStore } from "../store/useLocalMediaStore";
 import type { LocalMediaKind } from "../lib/api/localMedia";
 
@@ -42,7 +40,6 @@ export default function LocalMedia() {
   const setOpenFolder = useLocalMediaStore((s) => s.setOpenFolder);
   const updateFilters = useLocalMediaStore((s) => s.updateFilters);
   const resetFilters = useLocalMediaStore((s) => s.resetFilters);
-  const [videosAsGrid] = useBoolPref(SETTINGS.LOCAL_MEDIA_VIDEOS_AS_GRID);
   const view = useLocalMediaView();
 
   useEffect(() => {
@@ -66,7 +63,7 @@ export default function LocalMedia() {
     if (view.items.length === 0) {
       return <LocalNoMatches onClear={canClearFilters ? resetFilters : undefined} />;
     }
-    return <LocalFileList files={view.items} plays={plays} nowMs={view.nowMs} asGrid={isVideos && videosAsGrid} />;
+    return <LocalFileList files={view.items} plays={plays} nowMs={view.nowMs} isVideos={isVideos} />;
   };
 
   return (
@@ -79,7 +76,15 @@ export default function LocalMedia() {
             </h1>
             <p className="mt-2 text-sm text-chrome-neutral-400">{getString("library_local_media_subtitle")}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
+            {hasFolders && (
+              <SearchInput
+                value={filters.query}
+                onChange={(event) => updateFilters({ query: event.target.value })}
+                placeholder={getString("local_search_hint")}
+                containerClassName="w-full sm:w-72"
+              />
+            )}
             <SegmentedControl<LocalMediaKind>
               label={getString("local_media_kind_label")}
               value={kind}
@@ -93,9 +98,6 @@ export default function LocalMedia() {
               <RefreshCw size={16} />
               {getString("local_media_rescan")}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => navigate("/settings", { state: { settingsCategory: "downloads" } })} aria-label={getString("settings")}>
-              <SettingsIcon size={16} />
-            </Button>
           </div>
         </header>
 
@@ -108,12 +110,6 @@ export default function LocalMedia() {
 
         {hasFolders && (
           <>
-            <SearchInput
-              value={filters.query}
-              onChange={(event) => updateFilters({ query: event.target.value })}
-              placeholder={getString("local_search_hint")}
-              containerClassName="w-full sm:w-96"
-            />
             <LocalMediaFilterBar />
             {view.hiddenCount > 0 && (
               <p className="text-xs text-chrome-neutral-500">

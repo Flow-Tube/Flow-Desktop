@@ -1,4 +1,4 @@
-import { act, createElement } from "react";
+import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -159,3 +159,61 @@ describe("VideoCard title", () => {
     expect(host.textContent).toContain(ORIGINAL);
   });
 });
+
+describe("VideoCard on other libraries", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  const render = (props: Partial<ComponentProps<typeof VideoCard>> & { video: VideoSummary }) =>
+    act(() =>
+      root.render(createElement(MemoryRouter, null, createElement(VideoCard, { onPlay: vi.fn(), ...props }))),
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("IntersectionObserver", FakeObserver);
+    useSettingsStore.setState({ dearrowEnabled: true });
+    setOriginalTitles(true);
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+    setOriginalTitles(false);
+  });
+
+  it("never asks a service about a file on this computer", async () => {
+    render({ video: { id: "local_0000000000000001", title: "My film", channelName: "Movies" } });
+    await flush();
+    expect(getDeArrowOverride).not.toHaveBeenCalled();
+    expect(getOriginalTitle).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("My film");
+  });
+
+  it("draws what it is given over the thumbnail", () => {
+    render({
+      video: { id: freshId(), title: "Saving", channelName: "A channel" },
+      thumbnailOverlay: createElement("span", { "data-testid": "overlay" }, "42%"),
+    });
+    expect(host.querySelector(".aspect-video [data-testid=overlay]")?.textContent).toBe("42%");
+  });
+
+  it("uses the menu it is given in place of its own", () => {
+    const onSelect = vi.fn();
+    render({
+      video: { id: freshId(), title: "A file", channelName: "Movies" },
+      menuActions: [{ id: "own", label: "Only this", icon: null, group: "library", onSelect }],
+    });
+    act(() => {
+      host.querySelector(".video-card")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 1, clientY: 1 }));
+    });
+    const menu = document.body.textContent ?? "";
+    expect(menu).toContain("Only this");
+    expect(menu).not.toContain("Not interested");
+  });
+});
+

@@ -125,6 +125,20 @@ describe("the Local media page", () => {
     expect(container.textContent).toContain("1 video");
   });
 
+  it("keeps search in the header and has no layout switch", async () => {
+    await show({ folders: [folder], files: [file({})] });
+    expect(container.querySelector("header input")).not.toBeNull();
+    expect(container.querySelector('[aria-label="Show as list"], [aria-label="Show as grid"]')).toBeNull();
+  });
+
+  it("uses the track rows on the Music tab, with no like button for a file", async () => {
+    await show({ folders: [folder], files: [file({ kind: "audio", title: "A song" })] });
+    await act(async () => useLocalMediaStore.setState({ kind: "audio" }));
+    expect(container.textContent).toContain("A song");
+    expect(container.querySelector('[aria-label="More options"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Like track"]')).toBeNull();
+  });
+
   it("shows Continue watching for a file left part way", async () => {
     await show({
       folders: [folder],

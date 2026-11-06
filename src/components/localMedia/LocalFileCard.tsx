@@ -1,12 +1,16 @@
-import { useRef } from "react";
-import { Film, Music2 } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { LocalMediaFile } from "../../lib/api/localMedia";
-import { formatBytes, formatDuration } from "../../lib/downloadOptions";
-import { folderNameOf, watchStateOf, progressFraction, type PlaysById } from "../../lib/localMedia/filters";
-import { useLocalCover } from "../../lib/localMedia/useLocalCover";
+import { formatBytes } from "../../lib/downloadOptions";
 import { getString } from "../../lib/i18n/index";
-import { LocalFileMenuButton } from "./LocalFileMenuButton";
+import { progressFraction, watchStateOf, type PlaysById } from "../../lib/localMedia/filters";
+import { localFileToSong, localFileToVideo } from "../../lib/localMedia/items";
+import { useLocalCover } from "../../lib/localMedia/useLocalCover";
+import { localFileMenuActions } from "../../lib/localMedia/useLocalFileMenu";
+import { MusicItemCard } from "../music/MusicItemCard";
+import { VideoCard } from "../video/VideoCard";
+import { LocalFileDetailsDialog } from "./LocalFileDetailsDialog";
 
 interface LocalFileItemProps {
   file: LocalMediaFile;
@@ -15,89 +19,68 @@ interface LocalFileItemProps {
   onPlay: () => void;
 }
 
-function subtitleOf(file: LocalMediaFile): string {
-  const size = formatBytes(file.sizeBytes);
-  return [file.artist || folderNameOf(file.folderPath), size].filter(Boolean).join(" · ");
+/** The file's menu actions, with the details dialog they can open. */
+function useLocalFileMenu(file: LocalMediaFile): { actions: ReturnType<typeof localFileMenuActions>; dialog: ReactNode } {
+  const navigate = useNavigate();
+  const [showDetails, setShowDetails] = useState(false);
+  return {
+    actions: localFileMenuActions(file, { navigate, onDetails: () => setShowDetails(true) }),
+    dialog: showDetails ? <LocalFileDetailsDialog file={file} onClose={() => setShowDetails(false)} /> : null,
+  };
 }
 
-function Artwork({ file, plays, nowMs, className }: Omit<LocalFileItemProps, "onPlay"> & { className: string }) {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const cover = useLocalCover(file.id, frameRef);
-  const Icon = file.kind === "video" ? Film : Music2;
-  const fraction = file.kind === "video" ? progressFraction(file, plays) : 0;
-  const isNew = watchStateOf(file, plays, nowMs) === "new";
-  return (
-    <div ref={frameRef} className={`relative flex items-center justify-center overflow-hidden rounded-xl bg-surface-container ${className}`}>
-      {cover ? (
-        <img src={cover} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <Icon className="h-8 w-8 text-chrome-neutral-600" aria-hidden />
-      )}
-      {isNew && (
-        <span className="absolute left-1.5 top-1.5 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-on-primary">
-          {getString("local_new_badge")}
-        </span>
-      )}
-      {file.durationMs > 0 && (
-        <span className="absolute bottom-1.5 right-1.5 rounded-md bg-chrome-black/80 px-1.5 py-0.5 text-xs font-medium tabular-nums text-chrome-white">
-          {formatDuration(file.durationMs / 1000)}
-        </span>
-      )}
-      {fraction > 0 && (
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-chrome-black/40">
-          <div className="h-full bg-primary" style={{ width: `${fraction * 100}%` }} />
-        </div>
-      )}
-    </div>
-  );
-}
-
+/** A video file on the app's video card. */
 export function LocalFileCard({ file, plays, nowMs, onPlay }: LocalFileItemProps) {
+  const frame = useRef<HTMLDivElement>(null);
+  const cover = useLocalCover(file.id, frame);
+  const menu = useLocalFileMenu(file);
+  const percent = progressFraction(file, plays) * 100;
+  const video = useMemo(
+    () => ({
+      ...localFileToVideo(file),
+      thumbnailUrl: cover,
+      viewCountText: formatBytes(file.sizeBytes) ?? undefined,
+      watchProgressPercent: percent,
+    }),
+    [file, cover, percent],
+  );
   return (
-    <div className="group flex min-w-0 flex-col gap-2">
-      <button
-        type="button"
-        onClick={onPlay}
-        className="block w-full rounded-xl transition-opacity duration-200 ease-out hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        aria-label={file.title}
-      >
-        <Artwork file={file} plays={plays} nowMs={nowMs} className="aspect-video w-full" />
-      </button>
-      <div className="flex items-start gap-1 px-1">
-        <div className="min-w-0 flex-1">
-          <p className="line-clamp-2 text-sm font-medium text-chrome-neutral-100" title={file.fileName}>
-            {file.title}
-          </p>
-          <p className="mt-0.5 truncate text-xs text-chrome-neutral-400">{subtitleOf(file)}</p>
-        </div>
-        <LocalFileMenuButton file={file} />
-      </div>
+    <div ref={frame} className="min-w-0">
+      <VideoCard
+        video={video}
+        variant={percent > 0 ? "continue" : "default"}
+        hideChannelAvatar
+        onPlay={onPlay}
+        menuActions={menu.actions}
+        thumbnailOverlay={
+          watchStateOf(file, plays, nowMs) === "new" ? (
+            <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-on-primary">
+              {getString("local_new_badge")}
+            </span>
+          ) : undefined
+        }
+      />
+      {menu.dialog}
     </div>
   );
 }
 
-export function LocalFileRow({ file, plays, nowMs, onPlay }: LocalFileItemProps) {
+/** A song file on the app's track row. */
+export function LocalFileRow({ file, onPlay }: Pick<LocalFileItemProps, "file" | "onPlay">) {
+  const frame = useRef<HTMLDivElement>(null);
+  const cover = useLocalCover(file.id, frame);
+  const menu = useLocalFileMenu(file);
+  const song = useMemo(() => ({ ...localFileToSong(file), thumbnail: cover ?? "" }), [file, cover]);
   return (
-    <div className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors duration-200 ease-out hover:bg-surface-container-low">
-      <button
-        type="button"
-        onClick={onPlay}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      >
-        <Artwork
-          file={file}
-          plays={plays}
-          nowMs={nowMs}
-          className={file.kind === "video" ? "aspect-video w-32 shrink-0" : "h-14 w-14 shrink-0"}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-chrome-neutral-100" title={file.fileName}>
-            {file.title}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-chrome-neutral-400">{subtitleOf(file)}</span>
-        </span>
-      </button>
-      <LocalFileMenuButton file={file} />
+    <div ref={frame} className="min-w-0">
+      <MusicItemCard
+        variant="track-list"
+        item={song}
+        className="bg-surface-container-low pe-3"
+        onPlay={onPlay}
+        menuActions={menu.actions}
+      />
+      {menu.dialog}
     </div>
   );
 }

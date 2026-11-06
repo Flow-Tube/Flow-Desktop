@@ -43,6 +43,7 @@ import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMet
 import { collaboratorsByline } from "../../lib/collaborators";
 import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
+import { isLocalMediaId } from '../../lib/localMediaId';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -162,6 +163,8 @@ function VideoCardComponent({
   const thumbnailRef = useRef<HTMLImageElement>(null);
 
   const isChannel = video.id.startsWith("channel:");
+  // A file on this computer has no channel, and nothing on YouTube to look up its title by.
+  const isLocalFile = isLocalMediaId(video.id);
   const cleanId = isChannel ? video.id.replace("channel:", "") : video.id;
   const channelId = video.channelId || "";
 
@@ -210,12 +213,12 @@ function VideoCardComponent({
   const channelCardAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.thumbnailUrl));
   // Cached and de-duplicated across cards and remounts by the hook; this used to
   // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
-  const dearrowOverride = useDeArrowOverride(isChannel ? null : video.id, dearrowEnabled);
+  const dearrowOverride = useDeArrowOverride(isChannel || isLocalFile ? null : video.id, dearrowEnabled);
   const overriddenTitle = dearrowOverride?.title || null;
   const dearrowRandomFrame = useAppSettingsStore((state) => state.values[SETTINGS.DEARROW_RANDOM_FRAME] !== "false");
   const overriddenThumbnail = deArrowThumbnail(dearrowOverride, dearrowRandomFrame) || null;
 
-  const originalTitle = useOriginalTitle(isChannel || overriddenTitle ? null : video.id, cardRef);
+  const originalTitle = useOriginalTitle(isChannel || isLocalFile || overriddenTitle ? null : video.id, cardRef);
   const displayTitle = overriddenTitle || originalTitle || video.title;
   const thumbnailCandidates = useMemo(
     () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, highResThumbnail),
@@ -308,6 +311,7 @@ function VideoCardComponent({
 
   const handleChannelNavigate = useCallback(async (e?: React.MouseEvent<HTMLElement>) => {
     e?.stopPropagation();
+    if (isLocalFile) return;
     if (channelId) {
       navigate(`/channel/${channelId}`);
       return;
@@ -321,7 +325,7 @@ function VideoCardComponent({
     } catch (error) {
       console.warn("Failed to resolve channel for video card", error);
     }
-  }, [channelId, navigate, video.id]);
+  }, [channelId, isLocalFile, navigate, video.id]);
 
 
 
@@ -947,7 +951,7 @@ function VideoCardComponent({
           </h3>
           <div
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors"
+            className={`text-chrome-zinc-400 text-[13px] mt-0.5 truncate transition-colors ${isLocalFile ? "" : "cursor-pointer hover:text-chrome-zinc-300"}`}
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </div>

@@ -244,7 +244,6 @@ export const SETTINGS = {
   AUTO_DOWNLOAD_LIKED_MUSIC: "auto_download_liked_music",
   LOCAL_MEDIA_HIDE_RECORDINGS: "local_media_hide_recordings",
   LOCAL_MEDIA_MIN_AUDIO_SECONDS: "local_media_min_audio_seconds",
-  LOCAL_MEDIA_VIDEOS_AS_GRID: "local_media_videos_as_grid",
 
   AUTO_BACKUP_FREQUENCY: "auto_backup_frequency",
   AUTO_BACKUP_TYPE: "auto_backup_type",
@@ -481,7 +480,6 @@ export const SETTING_SCOPES = {
   [SETTINGS.AUTO_DOWNLOAD_LIKED_MUSIC]: "device",
   [SETTINGS.LOCAL_MEDIA_HIDE_RECORDINGS]: "device",
   [SETTINGS.LOCAL_MEDIA_MIN_AUDIO_SECONDS]: "device",
-  [SETTINGS.LOCAL_MEDIA_VIDEOS_AS_GRID]: "device",
   [SETTINGS.AUTO_BACKUP_FREQUENCY]: "device",
   [SETTINGS.AUTO_BACKUP_TYPE]: "device",
   [SETTINGS.AUTO_BACKUP_FOLDER]: "device",
@@ -813,7 +811,6 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.AUTO_DOWNLOAD_LIKED_MUSIC, "downloads", false, "wired"),
   bool(SETTINGS.LOCAL_MEDIA_HIDE_RECORDINGS, "downloads", true, "wired"),
   num(SETTINGS.LOCAL_MEDIA_MIN_AUDIO_SECONDS, "downloads", 60, "wired", 0, 3600),
-  bool(SETTINGS.LOCAL_MEDIA_VIDEOS_AS_GRID, "downloads", true, "wired"),
 
   str(SETTINGS.AUTO_BACKUP_FREQUENCY, "data", "NONE", "wired", ["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
   str(SETTINGS.AUTO_BACKUP_TYPE, "data", "APP_DATA", "wired", ["APP_DATA", "BRAIN", "MASTER"]),

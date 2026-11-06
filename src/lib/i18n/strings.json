@@ -208,8 +208,6 @@
   "local_view_folders": "Folders",
   "local_continue_watching": "Continue watching",
   "local_new_badge": "New",
-  "local_grid_view": "Show as grid",
-  "local_list_view": "Show as list",
   "local_hidden_count_one": "%1$d file hidden",
   "local_hidden_count_other": "%1$d files hidden",
   "local_manage": "Manage",

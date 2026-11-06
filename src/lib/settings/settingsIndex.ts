@@ -209,6 +209,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_original_titles", summary: "settings_original_titles_desc" },
   ]),
   ...rows("taste", [
+    { title: "recap_title", summary: "recap_summary", keywords: ["wrapped", "stats", "statistics", "year in review", "watch time", "listening time", "most watched", "top artists"] },
     { title: "taste_add_interest" },
     { title: "taste_current_interests" },
     { title: "taste_browse_interests" },

@@ -16,7 +16,7 @@ pub const TRACKS_PER_MONTH: usize = 300;
 pub const SAID_NO_PER_MONTH: usize = 100;
 
 /// How a video was watched. Music is never in the video ledger.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum ViewFormat {
     Long,
@@ -25,7 +25,7 @@ pub enum ViewFormat {
 }
 
 /// Library actions the recap counts per month.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum LedgerAction {
     Like,

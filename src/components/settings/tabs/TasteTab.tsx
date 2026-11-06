@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Ban, Heart, Loader2, RotateCw, UserSearch } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Ban, ChartNoAxesColumn, Heart, Loader2, RotateCw, UserSearch } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 import { TOPIC_CATEGORIES } from "../../onboarding/constants";
 import { getString } from "../../../lib/i18n/index";
@@ -13,6 +13,9 @@ import { TasteMusicData } from "../taste/TasteMusicData";
 import { HiddenChannels } from "../taste/HiddenChannels";
 import { RememberedChannels } from "../taste/RememberedChannels";
 import { TasteSection } from "../taste/TasteSection";
+import { SettingsGroup } from "../SettingsGroup";
+import { SettingItem } from "../SettingItem";
+import { Button } from "../../ui/Button";
 
 type TasteView = "interests" | "blocked";
 
@@ -31,6 +34,7 @@ const BLOCKED_SUGGESTIONS = [
 ];
 
 export function TasteTab() {
+  const navigate = useNavigate();
   const [view, setView] = useState<TasteView>("interests");
   const [interestInput, setInterestInput] = useState("");
   const [blockedInput, setBlockedInput] = useState("");
@@ -141,6 +145,20 @@ export function TasteTab() {
           </button>
         </div>
       </header>
+
+      <div className="col-span-12">
+        <SettingsGroup>
+          <SettingItem
+            title={getString("recap_title")}
+            description={getString("recap_summary")}
+            icon={<ChartNoAxesColumn className="h-5 w-5" />}
+          >
+            <Button variant="secondary" size="sm" onClick={() => navigate("/recap")}>
+              {getString("settings_open")}
+            </Button>
+          </SettingItem>
+        </SettingsGroup>
+      </div>
 
       {error && (
         <div className="col-span-12 rounded-2xl border border-chrome-red-900/50 bg-chrome-red-950/30 px-4 py-3 text-sm text-chrome-red-300">

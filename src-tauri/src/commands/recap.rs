@@ -3,13 +3,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use serde::Serialize;
 use sqlx::SqlitePool;
 use tauri::State;
 
-use crate::errors::ErrorResponse;
+use crate::errors::{AppError, ErrorResponse};
 use crate::music_brain::store::MusicBrainStore;
-use crate::recap::model::{RecapEntry, TOPICS_PER_VIEW};
+use crate::recap::model::{MusicMonth, RecapEntry, TOPICS_PER_VIEW, VideoMonth};
 use crate::recap::store;
+use crate::recap::summary::{RecapPeriod, RecapSource, RecapSummary, summarize};
 use crate::services::recommendation_service::RecommendationService;
 
 fn now_ms() -> i64 {
@@ -55,4 +57,46 @@ pub async fn recap_record_batch(
     store::apply_batch(&pool, &entries, &topics, &seen, now_ms())
         .await
         .map_err(ErrorResponse::from)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecapIndex {
+    /// When the ledger started, Unix milliseconds. It holds only estimates from before then.
+    pub started_at: i64,
+    /// Every month it holds, newest first, with that month's views and plays.
+    pub months: Vec<(String, i64)>,
+    /// Distinct videos per channel in watch history: id, name, videos.
+    pub history_channels: Vec<(String, String, i64)>,
+}
+
+const HISTORY_CHANNELS: i64 = 10;
+
+/// What a recap page needs before it shows a period, starting the ledger if this is the first time.
+#[tauri::command]
+pub async fn recap_index(
+    pool: State<'_, SqlitePool>,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> Result<RecapIndex, ErrorResponse> {
+    let seen = seen_artists(&music_brain).await;
+    let started_at = store::ensure_started(&pool, &seen, now_ms()).await?;
+    Ok(RecapIndex {
+        started_at,
+        months: store::month_activity(&pool).await?,
+        history_channels: store::history_channels(&pool, HISTORY_CHANNELS).await?,
+    })
+}
+
+/// One period of the recap, folded from the ledger off the main thread.
+#[tauri::command]
+pub async fn recap_summary(
+    period: String,
+    source: RecapSource,
+    pool: State<'_, SqlitePool>,
+) -> Result<RecapSummary, ErrorResponse> {
+    let period = RecapPeriod::parse(&period)
+        .ok_or_else(|| AppError::Validation(format!("unknown recap period: {period}")))?;
+    let video = store::read_months::<VideoMonth>(&pool, true).await?;
+    let music = store::read_months::<MusicMonth>(&pool, false).await?;
+    Ok(summarize(&period, source, &video, &music))
 }

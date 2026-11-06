@@ -15,6 +15,7 @@ import {
   type StoredAlbum,
 } from "../store/useAlbumLibraryStore";
 import { LibraryShelf } from "../components/library/LibraryShelf";
+import { RecapEntryCard } from "../components/recap/RecapEntryCard";
 import { VideoCard } from "../components/video/VideoCard";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
@@ -233,6 +234,8 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           <p className="mt-2 text-sm text-chrome-neutral-400">{statsText}</p>
         </div>
       </header>
+
+      <RecapEntryCard />
 
       {!hidden.has("HISTORY") && (
         <LibraryShelf

@@ -343,6 +343,36 @@ pub async fn read_months<T: DeserializeOwned + Default>(
         .collect())
 }
 
+/// The months the ledger holds, newest first, each with how many views and plays it counted.
+pub async fn month_activity(pool: &SqlitePool) -> AppResult<Vec<(String, i64)>> {
+    let mut activity: BTreeMap<String, i64> = BTreeMap::new();
+    for (month, record, _) in read_months::<VideoMonth>(pool, true).await? {
+        *activity.entry(month).or_insert(0) += record.views;
+    }
+    for (month, record, _) in read_months::<MusicMonth>(pool, false).await? {
+        *activity.entry(month).or_insert(0) += record.plays;
+    }
+    Ok(activity.into_iter().rev().collect())
+}
+
+/// Distinct videos per channel from watch history, most first; music rows stay out.
+pub async fn history_channels(
+    pool: &SqlitePool,
+    limit: i64,
+) -> AppResult<Vec<(String, String, i64)>> {
+    Ok(sqlx::query_as(
+        "SELECT channel_id, COALESCE(MAX(channel_name), ''), COUNT(DISTINCT video_id) AS videos
+         FROM watch_history
+         WHERE is_music = 0 AND channel_id IS NOT NULL AND channel_id != ''
+         GROUP BY channel_id
+         ORDER BY videos DESC, channel_id
+         LIMIT ?",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
 /// The whole ledger for a master backup.
 pub async fn export(pool: &SqlitePool) -> AppResult<RecapBackup> {
     let _guard = LEDGER.lock().await;
@@ -624,6 +654,50 @@ mod tests {
         let video = read_months::<VideoMonth>(&pool, true).await.unwrap();
         assert!(video[0].1.queries.is_empty());
         assert_eq!(video[0].1.actions.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn activity_counts_views_and_plays_newest_month_first() {
+        let pool = pool().await;
+        let mut backup = RecapBackup::default();
+        backup.video.months.insert(
+            "2026-01".into(),
+            VideoMonth {
+                views: 2,
+                ..Default::default()
+            },
+        );
+        backup.video.months.insert(
+            "2026-02".into(),
+            VideoMonth {
+                views: 1,
+                ..Default::default()
+            },
+        );
+        backup.music.months.insert(
+            "2026-02".into(),
+            MusicMonth {
+                plays: 3,
+                ..Default::default()
+            },
+        );
+        restore(&pool, &backup, 1).await.unwrap();
+        assert_eq!(
+            month_activity(&pool).await.unwrap(),
+            vec![("2026-02".to_string(), 4), ("2026-01".to_string(), 2)]
+        );
+    }
+
+    #[tokio::test]
+    async fn history_channels_leave_music_out() {
+        let pool = pool().await;
+        add_history(&pool, "a", false).await;
+        add_history(&pool, "b", false).await;
+        add_history(&pool, "song", true).await;
+        assert_eq!(
+            history_channels(&pool, 10).await.unwrap(),
+            vec![("UCold".to_string(), "Old Channel".to_string(), 2)]
+        );
     }
 
     #[tokio::test]

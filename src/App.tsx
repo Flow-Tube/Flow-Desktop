@@ -42,6 +42,7 @@ import Search from "./pages/Search";
 import ExploreCategories from "./pages/ExploreCategories";
 import Subscriptions from "./pages/Subscriptions";
 import History from "./pages/History";
+import RecapPage from "./pages/RecapPage";
 import Downloads from "./pages/Downloads";
 import Likes from "./pages/Likes";
 import LibraryPage from "./pages/LibraryPage";
@@ -281,6 +282,9 @@ function App() {
           } />
           <Route path="notes" element={
             <Notes onPlay={handlePlayVideo} />
+          } />
+          <Route path="recap" element={
+            <RecapPage onPlay={handlePlayVideo} />
           } />
           <Route path="saved-shorts" element={
             <SavedShorts />

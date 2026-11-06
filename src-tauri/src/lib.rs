@@ -704,6 +704,8 @@ pub fn run() {
             record_seen_videos,
             seen_video_ids_among,
             commands::recap::recap_record_batch,
+            commands::recap::recap_index,
+            commands::recap::recap_summary,
             commands::home_feed::home_feed_open,
             commands::home_feed::home_feed_refresh,
             commands::home_feed::home_feed_viewport,

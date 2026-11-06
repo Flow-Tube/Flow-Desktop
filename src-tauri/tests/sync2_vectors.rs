@@ -19,9 +19,12 @@ use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan::{
     LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_tag, lan_transcript,
 };
-use flow_desktop_lib::sync2::pairing::{pairing_aad, pairing_keys, pairing_slot};
+use flow_desktop_lib::sync2::pairing::{
+    pairing_aad, pairing_commit, pairing_keys, pairing_proof, pairing_slot,
+};
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, wrap_path};
 use flow_desktop_lib::sync2::payload::{decode_payload, padded_size};
+use flow_desktop_lib::sync2::pipe::scanner_key;
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret, recovery_words};
 use flow_desktop_lib::sync2::roster::{Entry, check_sender, replay_roster};
 use flow_desktop_lib::sync2::sealed::{open, seal_with_salt};
@@ -441,6 +444,20 @@ fn pairing() {
         shower
     );
     assert_eq!(pairing_slot(&token).to_vec(), bytes(&v["slot"]));
+    assert_eq!(pairing_commit(&shower).to_vec(), bytes(&v["commit"]));
+    assert_eq!(pairing_proof(&token, &scanner).to_vec(), bytes(&v["proof"]));
+    let token_array: [u8; 16] = token.clone().try_into().unwrap();
+    assert_eq!(
+        scanner_key(&bytes(&v["scannerFirst"]), &token_array).map(Vec::from),
+        Some(scanner.clone())
+    );
+    let refused = &v["refused"];
+    assert_ne!(
+        pairing_commit(&bytes(&refused["showerPublic"])).to_vec(),
+        bytes(&v["commit"])
+    );
+    let wrong = [&scanner[..], &bytes(&refused["proof"])[..]].concat();
+    assert_eq!(scanner_key(&wrong, &token_array), None);
     let m = &v["message"];
     assert_eq!(pairing_aad(&token, 0), bytes(&m["aad"]));
     let content =

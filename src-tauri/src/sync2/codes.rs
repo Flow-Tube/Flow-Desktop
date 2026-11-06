@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::array;
 use super::curve::agreement_public_key;
 use super::engine::{EngineError, Result};
+use super::pairing::pairing_commit;
 use super::pipe::{KEY_SIZE, LanAddress, Listening};
 use super::sealed::random_bytes;
 use crate::sync::canonical::to_canonical_json;
@@ -52,7 +53,7 @@ impl StoreLocation {
 pub struct QrCode {
     pub v: u8,
     pub t: String,
-    pub e: String,
+    pub c: String,
     pub r: String,
     pub d: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,8 +91,9 @@ impl Code {
             .ok_or(EngineError::Unexpected)
     }
 
-    pub fn shower_key(&self) -> Result<[u8; KEY_SIZE]> {
-        b64_key(&self.qr().e)
+    /// What the shower's key must hash to.
+    pub fn commitment(&self) -> Result<[u8; KEY_SIZE]> {
+        b64_key(&self.qr().c)
     }
 }
 
@@ -144,7 +146,7 @@ pub fn new_offer(
     let code = QrCode {
         v: 2,
         t: URL_SAFE_NO_PAD.encode(token),
-        e: URL_SAFE_NO_PAD.encode(public),
+        c: URL_SAFE_NO_PAD.encode(pairing_commit(&public)),
         r: if store.is_some() { "m" } else { "n" }.into(),
         d: device_name.chars().take(NAME_LIMIT).collect(),
         s: store,

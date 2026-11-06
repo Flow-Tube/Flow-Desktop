@@ -19,7 +19,7 @@ export function SettingItem({ title, description, disabled = false, icon, childr
       aria-disabled={disabled}
       className={cx(
         'flex justify-between items-center px-5 py-4 transition-colors duration-200 ease-out',
-        disabled ? 'opacity-50' : 'hover:bg-surface-container'
+        disabled ? 'opacity-50' : 'hover:bg-surface-container-highest'
       )}
     >
       {icon && <span className="mr-3 shrink-0 text-chrome-neutral-400">{icon}</span>}

@@ -113,7 +113,7 @@ export function LyricsProviderList({ order, isEnabled, onReorder, onToggle }: Ly
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
-        <div role="list" aria-label={getString('settings_lyrics_providers')} className="flex flex-col divide-y divide-chrome-neutral-800/50">
+        <div role="list" aria-label={getString('settings_lyrics_providers')} className="flex flex-col divide-y-2 divide-[var(--color-background)]">
           {order.map((name, index) => (
             <div role="listitem" key={name}>
               <ProviderRow

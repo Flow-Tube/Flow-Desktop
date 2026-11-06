@@ -91,6 +91,9 @@ PLAYER
 - Original titles, in Settings under Content, keeps video titles in the video's own language instead of YouTube's automatic translation, on cards, Shorts, the queue and the watch page. It is off by default, and DeArrow titles still come first when DeArrow is on. A single video you download is named the same way (#377).
 - Audio Track Language in Settings now works. Videos with several audio tracks start in your language, and fall back to the original when it isn't offered. The choice also syncs with your phone.
 
+SETTINGS
+- Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
+
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.

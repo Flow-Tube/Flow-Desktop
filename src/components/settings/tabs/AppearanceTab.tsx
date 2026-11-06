@@ -1,4 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
+import { SettingItem } from '../SettingItem';
+import { SettingsGroup } from '../SettingsGroup';
 import { Download, Plus, Upload } from "lucide-react";
 import { CustomThemeEditor } from "../../theme/CustomThemeEditor";
 import { ThemeFileSection } from "../../theme/ThemeFileSection";
@@ -111,13 +113,13 @@ export function AppearanceTab() {
         </div>
       </section>
 
-      <section className="mt-8 flex items-center justify-between gap-6 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
-        <div className="min-w-0">
-          <h2 className="text-base font-medium text-chrome-neutral-200">{getString("settings_expressive_sliders")}</h2>
-          <p className="mt-1 text-sm text-chrome-neutral-400">{getString("settings_expressive_sliders_desc")}</p>
-        </div>
-        <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
-      </section>
+      <div className="mt-8">
+        <SettingsGroup>
+          <SettingItem title={getString("settings_expressive_sliders")} description={getString("settings_expressive_sliders_desc")}>
+            <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
+          </SettingItem>
+        </SettingsGroup>
+      </div>
 
       {IS_LINUX_RUNTIME && <GraphicsCompatibilitySection />}
 

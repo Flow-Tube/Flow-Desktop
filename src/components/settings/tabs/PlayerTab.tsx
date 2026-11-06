@@ -12,6 +12,7 @@ import { videoEqAvailable } from '../../../lib/audio/mediaEqEngine';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
+import { PLAYER_BUTTON_ROWS, type PlayerButtonRow } from '../../../lib/playerButtons';
 import { audioLanguageOptions } from '../../../lib/audioLanguages';
 import { NO_PREFERRED_LANGUAGE } from '../../../lib/settings/playerRuntime';
 import { APP_LOCALE } from '../../../lib/i18n/index';
@@ -22,6 +23,15 @@ const subtitleLanguageOptions = [
   { value: NO_PREFERRED_LANGUAGE, label: getString('settings_language_none') },
   ...audioLanguageOptions(APP_LOCALE),
 ];
+
+function PlayerButtonSwitch({ row }: { row: PlayerButtonRow }) {
+  const [shown, setShown] = useBoolPref(row.setting);
+  return (
+    <SettingItem title={getString(row.title)} description={getString(row.summary)}>
+      <ToggleSwitch checked={shown} onChange={setShown} />
+    </SettingItem>
+  );
+}
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -185,6 +195,10 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_pip_on_minimize')} description={getString('settings_pip_on_minimize_desc')} disabled={!pipSeparateWindow}>
           <ToggleSwitch checked={pipOnMinimize} onChange={setPipOnMinimize} disabled={!pipSeparateWindow} />
         </SettingItem>
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('settings_group_player_buttons')}>
+        {PLAYER_BUTTON_ROWS.map((row) => <PlayerButtonSwitch key={row.id} row={row} />)}
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_player_appearance')}>

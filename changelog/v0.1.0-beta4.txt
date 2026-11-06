@@ -141,6 +141,7 @@ DOWNLOADS
 - New Download videos you open and Download liked songs switches in Settings > Downloads.
 - Find earlier downloads lists files Flow saved that the page has lost, by the tags in them. Tags for older downloads adds tags to MP4 and M4A files saved before Flow wrote them.
 - Deleting a download now offers Undo.
+- Player buttons, in Settings under Player, shows or hides each control on the player bar. The bar looks the same with all of them on, which is the default.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

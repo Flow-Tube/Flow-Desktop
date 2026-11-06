@@ -53,6 +53,7 @@ import { isAtLiveEdge, liveEdgePosition, liveWindow, readLiveTiming, secondsBehi
 import { Slider } from "../ui/Slider";
 import { useWheelVolume } from "../../lib/useWheelVolume";
 import { useVolumeLevel } from "../../lib/audio/volumeBoost";
+import { usePlayerButton } from "../../lib/playerButtons";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -192,6 +193,19 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     isLiveChatAvailable,
     isCommentsAvailable,
   } = usePlayerStore();
+
+  const showNextPrevious = usePlayerButton("nextPrevious");
+  const showVolume = usePlayerButton("volume");
+  const showChapters = usePlayerButton("chapters");
+  const showQueue = usePlayerButton("queue");
+  const showLiveChat = usePlayerButton("liveChat");
+  const showComments = usePlayerButton("comments");
+  const showSponsorBlock = usePlayerButton("sponsorBlock");
+  const showQuality = usePlayerButton("quality");
+  const showCaptions = usePlayerButton("captions");
+  const showPlayOn = usePlayerButton("playOn");
+  const showTheater = usePlayerButton("theater");
+  const showFullscreen = usePlayerButton("fullscreen");
 
   const { level: volumeLevel, maxLevel, setLevel: setVolumeLevel } = useVolumeLevel();
   const changeVolume = (value: number) => {
@@ -653,14 +667,16 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-1 sm:gap-2">
-              <button
-                type="button"
-                title={getString('previous')}
-                onClick={playPrevious}
-                className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
-              >
-                <SkipBack size={19} fill="currentColor" />
-              </button>
+              {showNextPrevious && (
+                <button
+                  type="button"
+                  title={getString('previous')}
+                  onClick={playPrevious}
+                  className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                >
+                  <SkipBack size={19} fill="currentColor" />
+                </button>
+              )}
               <button
                 type="button"
                 title={isPlaying ? "Pause" : "Play"}
@@ -673,15 +689,18 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <Play size={24} fill="currentColor" className="ml-0.5" />
                 )}
               </button>
-              <button
-                type="button"
-                title={getString('next')}
-                onClick={() => playNext()}
-                className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
-              >
-                <SkipForward size={19} fill="currentColor" />
-              </button>
+              {showNextPrevious && (
+                <button
+                  type="button"
+                  title={getString('next')}
+                  onClick={() => playNext()}
+                  className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                >
+                  <SkipForward size={19} fill="currentColor" />
+                </button>
+              )}
 
+              {showVolume && (
               <div ref={volumeWheelRef} className="group/volume hidden items-center sm:flex bg-chrome-black/20 rounded-full hover:pr-2">
                 <button
                   type="button"
@@ -709,6 +728,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 </div>
 
               </div>
+              )}
 
               <div className="ml-1 flex items-center gap-1.5">
                 <div ref={timePillRef} className="whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm bg-chrome-black/20 rounded-full px-2 py-1">
@@ -735,7 +755,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               </div>
 
               <button
-                ref={chapterPillRef}
+                ref={showChapters ? chapterPillRef : undefined}
                 type="button"
                 onClick={() => togglePanel("chapters")}
                 className="hidden items-center gap-1.5 text-xs font-medium text-chrome-white sm:text-sm bg-chrome-black/20 hover:bg-chrome-white/10 rounded-full px-2 py-1 transition-all select-none cursor-pointer active:scale-95 group/pill max-w-[150px] sm:max-w-[260px] truncate"
@@ -746,7 +766,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             </div>
 
             <div className="flex items-center gap-1 sm:gap-2 bg-chrome-black/20 rounded-full px-1 py-1">
-              {isFullscreen && (
+              {isFullscreen && showChapters && (
                 <button
                   type="button"
                   title={getString("player_panel_chapters")}
@@ -758,17 +778,19 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <ScrollText size={19} />
                 </button>
               )}
-              <button
-                type="button"
-                title={getString("queue_title")}
-                aria-label={getString("queue_title")}
-                aria-pressed={panelOpen("queue")}
-                onClick={() => togglePanel("queue")}
-                className={panelButtonClass("queue")}
-              >
-                <ListVideo size={19} />
-              </button>
-              {isFullscreen && isLiveChatAvailable && (
+              {showQueue && (
+                <button
+                  type="button"
+                  title={getString("queue_title")}
+                  aria-label={getString("queue_title")}
+                  aria-pressed={panelOpen("queue")}
+                  onClick={() => togglePanel("queue")}
+                  className={panelButtonClass("queue")}
+                >
+                  <ListVideo size={19} />
+                </button>
+              )}
+              {isFullscreen && isLiveChatAvailable && showLiveChat && (
                 <button
                   type="button"
                   title={getString("live_chat_title")}
@@ -780,7 +802,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <MessageSquareText size={19} />
                 </button>
               )}
-              {isFullscreen && isCommentsAvailable && (
+              {isFullscreen && isCommentsAvailable && showComments && (
                 <button
                   type="button"
                   title={getString("watch_comments")}
@@ -792,7 +814,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <MessagesSquare size={19} />
                 </button>
               )}
-              {sbSubmitEnabled && currentVideo && (
+              {sbSubmitEnabled && currentVideo && showSponsorBlock && (
                 <button
                   type="button"
                   title={getString('player_submit_sponsorblock_segment')}
@@ -806,6 +828,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <SponsorBlockIcon className="h-[18px] w-[18px]" />
                 </button>
               )}
+              {showQuality && (
               <button
                 type="button"
                 {...{ [PLAYER_MENU_OWNER_ATTR]: "" }}
@@ -823,6 +846,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               >
                 {qualityLabel(selectedQualityId || "auto", supportedQualities, activeQualityLabel)}
               </button>
+              )}
+              {showCaptions && (
               <button
                 type="button"
                 {...{ [PLAYER_MENU_OWNER_ATTR]: "" }}
@@ -844,6 +869,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               >
                 <Captions size={19} />
               </button>
+              )}
               <button
                 type="button"
                 {...{ [PLAYER_MENU_OWNER_ATTR]: "" }}
@@ -865,7 +891,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   }
                 />
               </button>
-              <PlayOnButton className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10" iconSize={19} />
+              {showPlayOn && (
+                <PlayOnButton className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10" iconSize={19} />
+              )}
               {showPipButton && (
                 <button
                   type="button"
@@ -879,7 +907,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <PictureInPicture2 size={19} />
                 </button>
               )}
-              {!isFullscreen && (
+              {!isFullscreen && showTheater && (
                 <button
                   type="button"
                   title={getString('player_theater_mode')}
@@ -892,14 +920,16 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   {isTheaterMode ? <Shrink size={19} /> : <Expand size={19} />}
                 </button>
               )}
-              <button
-                type="button"
-                title={getString('player_fullscreen')}
-                onClick={toggleFullscreen}
-                className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
-              >
-                {isFullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
-              </button>
+              {showFullscreen && (
+                <button
+                  type="button"
+                  title={getString('player_fullscreen')}
+                  onClick={toggleFullscreen}
+                  className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                >
+                  {isFullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
+                </button>
+              )}
             </div>
           </div>
         </div>

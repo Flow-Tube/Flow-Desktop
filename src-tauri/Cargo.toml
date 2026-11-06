@@ -52,7 +52,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 
 # HTTP Client
-reqwest = { version = "0.13.3", features = ["stream", "json", "form", "brotli", "gzip", "rustls"] }
+reqwest = { version = "0.13.3", features = ["stream", "json", "form", "brotli", "gzip", "rustls", "socks"] }
+# The system proxy lookup behind api/app_proxy.rs; reqwest already builds these.
+hyper = "1"
+hyper-util = { version = "0.1", features = ["client-proxy", "client-proxy-system"] }
 webm-iterable = "0.7.1"
 
 # Cover-art embedding for downloaded music/audio (MP4 covr, ID3 APIC, Vorbis pictures).

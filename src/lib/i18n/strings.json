@@ -925,7 +925,7 @@
   "settings_remote_signature_fallback": "Remote signature fallback",
   "settings_remote_signature_fallback_desc": "When YouTube stops serving the usual sources, ask PipePipe's public decoder to solve the TV app's signed streams. It receives the signature and player ids, never the video id.",
   "settings_enable_proxy": "Enable Proxy",
-  "settings_enable_proxy_desc": "Route API traffic through a proxy server",
+  "settings_enable_proxy_desc": "Send Flow's traffic through a proxy server. Devices on your network stay direct",
   "settings_proxy_protocol": "Protocol",
   "settings_proxy_host": "Host",
   "settings_proxy_port": "Port",

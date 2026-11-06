@@ -102,3 +102,5 @@ FIXES
 - Downloading a Short now works, from the Shorts player and from a Shorts card. The download window names portrait videos by their real resolution, so a 1080x1920 Short is 1080p, and starts on it.
 - Search no longer shows videos and Shorts from channels you blocked, the channels themselves, or videos you marked Not interested.
 - Trending Region is now Content country, and search and recommendations follow it as well as trending. Before, only Explore, charts and Shorts did. YouTube Music's home still follows where you connect from.
+- Proxy settings now work. HTTP, SOCKS5 and SOCKS4 proxies, with an optional sign-in, carry video, music, downloads, thumbnails, sync servers and update checks. Devices on your network stay direct, and changes apply to new connections.
+- Retry with Proxy on a video that won't load now really does that, and only shows when you have set a proxy up.

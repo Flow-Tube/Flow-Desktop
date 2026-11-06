@@ -472,12 +472,16 @@ pub async fn proxy_image_url(
     ))
 }
 
-/// Base URL of the proxy's image route when the webview can't fetch HTTPS
-/// images itself (the Linux AppImage, see `streaming::images`); `None`
-/// everywhere else, where images load directly.
+/// Base URL of the proxy's image route when the webview shouldn't fetch images
+/// itself: the Linux AppImage can't over HTTPS (see `streaming::images`), and
+/// `app_proxy` asks for it so images follow the user's proxy. `None` everywhere
+/// else, where images load directly.
 #[tauri::command]
-pub fn image_proxy_base(streaming_manager: State<'_, StreamingManager>) -> Option<String> {
-    let needed = cfg!(target_os = "linux") && std::env::var_os("APPIMAGE").is_some();
+pub fn image_proxy_base(
+    streaming_manager: State<'_, StreamingManager>,
+    app_proxy: bool,
+) -> Option<String> {
+    let needed = app_proxy || (cfg!(target_os = "linux") && std::env::var_os("APPIMAGE").is_some());
     needed.then(|| {
         format!(
             "http://127.0.0.1:{}/img/{}",

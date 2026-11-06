@@ -1,3 +1,5 @@
+import { appProxyUrl } from "../settings/appProxy";
+import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { relaunchFlow } from "./process";
 import { isTauriEnv } from "./env";
 import { invokeBackend } from "./errors";
@@ -39,7 +41,8 @@ export function getUpdateSupport(): Promise<UpdateSupport> {
 export async function checkForAppUpdate(): Promise<Update | null> {
   if (!(await isTauriEnv())) return null;
   const { check } = await import("@tauri-apps/plugin-updater");
-  return check();
+  const proxy = appProxyUrl(useAppSettingsStore.getState().values);
+  return check(proxy ? { proxy } : undefined);
 }
 
 /**

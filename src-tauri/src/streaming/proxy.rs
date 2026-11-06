@@ -453,7 +453,7 @@ pub async fn start_proxy_server(manager: StreamingManager, std_listener: std::ne
             .local_addr()
             .map_or_else(|_| "an unknown port".to_string(), |addr| addr.to_string())
     );
-    let client = reqwest::Client::builder()
+    let client = crate::api::app_proxy::with_app_proxy(reqwest::Client::builder())
         .connect_timeout(std::time::Duration::from_secs(10))
         .no_gzip()
         .no_brotli()

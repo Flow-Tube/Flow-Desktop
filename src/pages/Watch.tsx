@@ -4,7 +4,7 @@ import { usePlayerStore } from "../store/usePlayerStore";
 import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
+import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
 import { getPlaylistDetails } from "../lib/api/youtube";
 import { getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
 import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
@@ -14,7 +14,6 @@ import { useRelatedLane } from "../lib/useRelatedLane";
 import { useUnseenFilter } from "../lib/useUnseenFilter";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { decideWatchRouteSync } from "../lib/watchRouteSync";
-import { setSetting } from "../lib/api/db";
 import {
   WatchLayout,
   WatchMetadata,
@@ -26,6 +25,7 @@ import {
 import { WatchPlayerSlot } from "../components/watch/WatchPlayerSlot";
 import { WatchSidePanels } from "../components/watch/WatchSidePanels";
 import type { RelatedContentItem, VideoSummary } from "../types/video";
+import { configuredProxyUrl } from "../lib/settings/appProxy";
 import { SETTINGS } from "../lib/settings/schema";
 
 const CommentsSection = lazy(() => import("../components/watch/CommentsSection"));
@@ -216,15 +216,25 @@ export function Watch() {
     [navigate, setQueue],
   );
 
+  const canRetryWithProxy = useAppSettingsStore(
+    (state) => state.values[SETTINGS.PROXY_ENABLED] !== "true" && configuredProxyUrl(state.values) !== null,
+  );
   const retryWithProxy = useCallback(() => {
-    void setSetting("proxy_enabled", "true").catch(() => {});
-    setPageError(null);
-    setRetryNonce((n) => n + 1);
+    void setSettingValue(SETTINGS.PROXY_ENABLED, "true").finally(() => {
+      setPageError(null);
+      setRetryNonce((n) => n + 1);
+    });
   }, []);
 
   if (!currentVideo) {
     if (pageError) {
-      return <WatchErrorState message={pageError} onRetryWithProxy={retryWithProxy} onGoBack={() => navigate(-1)} />;
+      return (
+        <WatchErrorState
+          message={pageError}
+          onRetryWithProxy={canRetryWithProxy ? retryWithProxy : undefined}
+          onGoBack={() => navigate(-1)}
+        />
+      );
     }
     return <WatchPageSkeleton />;
   }

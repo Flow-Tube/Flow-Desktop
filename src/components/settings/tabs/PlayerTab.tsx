@@ -5,6 +5,7 @@ import { Select } from '../../ui/Select';
 import { TextInput } from '../../ui/TextInput';
 import { Slider } from '../../ui/Slider';
 import { AmbientModeIcon } from '../../ui/AmbientModeIcon';
+import { useWheelValue } from '../../../lib/useWheelValue';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
@@ -42,6 +43,14 @@ export function PlayerTab() {
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
   const [ambientIntensity, setAmbientIntensity] = useNumberPref(SETTINGS.AMBIENT_MODE_INTENSITY);
+  const ambientIntensityWheelRef = useWheelValue<HTMLDivElement>({
+    value: ambientIntensity,
+    min: 10,
+    max: 100,
+    step: 5,
+    disabled: !ambientMode,
+    onChange: setAmbientIntensity,
+  });
   const [adaptiveSize, setAdaptiveSize] = useBoolPref(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, true);
 
   const [autoPip, setAutoPip] = useBoolPref(SETTINGS.AUTO_PIP_ENABLED, false);
@@ -173,18 +182,20 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_ambient_mode')} description={getString('settings_ambient_mode_desc')}>
           <div className="flex items-center gap-2.5">
             <AmbientModeIcon className={ambientMode ? 'text-primary' : 'text-chrome-neutral-500'} />
-            <div className="w-24 sm:w-32">
-              <Slider
-                aria-label={getString('settings_ambient_intensity')}
-                min={10}
-                max={100}
-                step={5}
-                value={ambientIntensity}
-                onChange={setAmbientIntensity}
-                disabled={!ambientMode}
-              />
+            <div ref={ambientIntensityWheelRef} className="flex items-center gap-2.5">
+              <div className="w-24 sm:w-32">
+                <Slider
+                  aria-label={getString('settings_ambient_intensity')}
+                  min={10}
+                  max={100}
+                  step={5}
+                  value={ambientIntensity}
+                  onChange={setAmbientIntensity}
+                  disabled={!ambientMode}
+                />
+              </div>
+              <span className="w-9 text-right font-mono text-xs text-chrome-neutral-400">{ambientIntensity}%</span>
             </div>
-            <span className="w-9 text-right font-mono text-xs text-chrome-neutral-400">{ambientIntensity}%</span>
             <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
           </div>
         </SettingItem>

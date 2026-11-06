@@ -9,8 +9,7 @@
 //!
 //! `default_video_codec` is deliberately not synced: an AV1 or VP9 preference that suits one device
 //! freezes video on a desktop or phone without that hardware decoder. `skip_silence` stays out
-//! until the desktop implements it: its switch is disabled here, so a value from Android would be
-//! stuck on with no way to turn it off.
+//! because the desktop has no such setting.
 
 use serde_json::Value;
 

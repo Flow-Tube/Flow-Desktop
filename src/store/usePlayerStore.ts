@@ -143,6 +143,10 @@ export interface PlayerState {
   isTheaterMode: boolean;
   /** How the picture fills the player, for this session as on Flow for Android. */
   videoFit: VideoFit;
+  /** Width over height of the video playing, once its metadata has loaded. */
+  videoAspect: number | null;
+  /** WebAudio gain above full volume, from 1 to 2. `volume` itself stays from 0 to 1. */
+  volumeBoost: number;
   sponsorBlockSegments: SponsorBlockSegment[];
   /** SponsorBlock is off for this one video. Kept in shared storage so a pop-out opened for it agrees. */
   sponsorBlockOffVideoId: string | null;
@@ -156,6 +160,8 @@ export interface PlayerState {
   enrichCurrentVideo: (videoId: string, patch: Partial<VideoSummary>) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setVolume: (volume: number) => void;
+  setVolumeBoost: (volumeBoost: number) => void;
+  setVideoAspect: (videoAspect: number | null) => void;
   setMuted: (muted: boolean | ((previous: boolean) => boolean)) => void;
   setIsVideoFullscreenTransitioning: (transitioning: boolean) => void;
   setPlaybackRate: (playbackRate: PlaybackRate) => void;
@@ -266,6 +272,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   isTheaterMode: getSavedTheaterMode(),
   videoFit: "fit",
+  videoAspect: null,
+  volumeBoost: 1,
   sponsorBlockSegments: [],
   sponsorBlockOffVideoId: isPopOutWindow() ? profileStorage.getItem(SPONSORBLOCK_OFF_VIDEO_KEY) : null,
   dearrowData: null,
@@ -315,7 +323,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setIsPlaying: (isPlaying) => set({ isPlaying }),
 
-  setVolume: (volume) => set({ volume: Math.min(1, Math.max(0, volume)) }),
+  setVolume: (volume) => {
+    const next = Math.min(1, Math.max(0, volume));
+    // A boost only exists at full volume; a later return to 100% must not jump back above it.
+    set(next < 1 ? { volume: next, volumeBoost: 1 } : { volume: next });
+  },
+  setVolumeBoost: (volumeBoost) => set({ volumeBoost }),
+  setVideoAspect: (videoAspect) => set({ videoAspect }),
 
   setMuted: (muted) =>
     set((state) => ({ muted: typeof muted === "function" ? muted(state.muted) : muted })),

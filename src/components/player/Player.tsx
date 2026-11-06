@@ -63,6 +63,8 @@ import { SponsorBlockSkipButton } from "./SponsorBlockSkipButton";
 import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
 import { useVideoEq } from "../../lib/audio/useVideoEq";
+import { useVolumeLevel } from "../../lib/audio/volumeBoost";
+import { adaptivePlayerAspect, useReportVideoAspect } from "../../lib/adaptivePlayer";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
@@ -368,7 +370,6 @@ export const Player: React.FC<PlayerProps> = ({
     isPlaying,
     setIsPlaying,
     volume,
-    setVolume,
     muted,
     setMuted,
     playbackRate,
@@ -599,7 +600,11 @@ export const Player: React.FC<PlayerProps> = ({
     !isHlsPlayback &&
     (hasSelectedAlternateAudio || (!!selectedQuality && !selectedQuality.hasAudio));
 
-  useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null);
+  const { level: volumeLevelNow, maxLevel, setLevel: setVolumeLevel, gain: boostGain } = useVolumeLevel();
+  useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null, boostGain);
+  useReportVideoAspect(videoRef, currentVideoId);
+  const adaptiveEnabled = useAppSettingsStore((state) => state.values[SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED] !== "false");
+  const videoAspect = usePlayerStore((state) => state.videoAspect);
 
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
@@ -2209,16 +2214,16 @@ export const Player: React.FC<PlayerProps> = ({
           break;
         case "arrowup": {
           event.preventDefault();
-          const raised = Math.min(1, volume + 0.05);
-          setVolume(raised);
+          const raised = Math.min(maxLevel, volumeLevelNow + 0.05);
+          setVolumeLevel(raised);
           setMuted(false);
           showVolumeFeedback(raised, false);
           break;
         }
         case "arrowdown": {
           event.preventDefault();
-          const lowered = Math.max(0, volume - 0.05);
-          setVolume(lowered);
+          const lowered = Math.max(0, volumeLevelNow - 0.05);
+          setVolumeLevel(lowered);
           showVolumeFeedback(lowered, muted);
           break;
         }
@@ -2325,7 +2330,9 @@ export const Player: React.FC<PlayerProps> = ({
     playPrevious,
     setIsTheaterMode,
     setMuted,
-    setVolume,
+    setVolumeLevel,
+    maxLevel,
+    volumeLevelNow,
     showVolumeFeedback,
     stepFrame,
     stepPlaybackRate,
@@ -2493,8 +2500,11 @@ export const Player: React.FC<PlayerProps> = ({
   };
 
   // The root stays unclipped so the glow can leave it; what it used to clip lives in the content wrapper.
+  const fillsTallerSlot =
+    !isPipMode && !isFullscreen && adaptivePlayerAspect(videoAspect, adaptiveEnabled, isTheaterSurface) !== null;
   const playerRootClasses = cx(
-    "relative w-full aspect-video outline-none",
+    "relative w-full outline-none",
+    fillsTallerSlot ? "h-full" : "aspect-video",
     isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : "rounded-xl",
     isFullscreen && "rounded-none",
     className

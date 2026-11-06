@@ -2,6 +2,9 @@ import { PictureInPicture2 } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { requestPopoutReturn } from "../../lib/pipHandoff";
 import { getString } from "../../lib/i18n/index";
+import { adaptivePlayerAspect } from "../../lib/adaptivePlayer";
+import { SETTINGS } from "../../lib/settings/schema";
+import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 
 export function WatchPlayerSlot() {
   const isTheaterMode = usePlayerStore((s) => s.isTheaterMode);
@@ -9,6 +12,9 @@ export function WatchPlayerSlot() {
   const expandVideoPlayer = usePlayerStore((s) => s.expandVideoPlayer);
   const isFloating = videoPlayerMode === "pip";
   const isPoppedOut = videoPlayerMode === "window";
+  const adaptiveEnabled = useAppSettingsStore((s) => s.values[SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED] !== "false");
+  const videoAspect = usePlayerStore((s) => s.videoAspect);
+  const tallerAspect = adaptivePlayerAspect(videoAspect, adaptiveEnabled, isTheaterMode);
 
   const overlayClass =
     "absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[inherit] bg-chrome-black/85 text-sm font-medium text-chrome-zinc-300 transition-colors hover:text-chrome-white";
@@ -16,6 +22,7 @@ export function WatchPlayerSlot() {
   return (
     <div
       data-flow-watch-player-slot="true"
+      style={tallerAspect === null ? undefined : { aspectRatio: String(tallerAspect), maxHeight: "calc(100vh - 160px)" }}
       className={
         isTheaterMode
           ? "relative w-full aspect-video max-h-[calc(100vh-160px)] min-h-[480px] bg-chrome-black"

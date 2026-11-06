@@ -109,6 +109,9 @@ PLAYER
 - Subtitle timing moves captions earlier or later in steps, for each video. Add an SRT or VTT file from the subtitles menu or by dropping it on the player, and Flow remembers it for that video.
 - Subtitle style adds window color and opacity, edge styles, custom colors and a position for fullscreen.
 - Preferred subtitle language now lists every language and has No preference, which syncs with your phone. The transcript has a search field.
+- Volume boost now works: with it on, the volume slider, wheel and arrow keys go up to 200%. It is off by default and adds no extra sound processing until you pass 100%.
+- Adaptive player size now works: a vertical or narrow video gets a taller player on the watch page, capped to fit the screen. It is on by default, as on Android.
+- The Skip silence row is gone. It never worked here, and a browser player can't remove silence the way Android does.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

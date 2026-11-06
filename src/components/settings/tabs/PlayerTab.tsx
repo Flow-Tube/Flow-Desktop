@@ -8,6 +8,7 @@ import { AmbientModeIcon } from '../../ui/AmbientModeIcon';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
 import { getPlural, getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
+import { videoEqAvailable } from '../../../lib/audio/mediaEqEngine';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
@@ -27,8 +28,6 @@ export function PlayerTab() {
   const [queueAutoplay, setQueueAutoplay] = useBoolPref(SETTINGS.QUEUE_AUTOPLAY_ENABLED, true);
   const [autoplayDelay, setAutoplayDelay] = useNumberPref(SETTINGS.AUTOPLAY_COUNTDOWN_SECONDS, 0);
   const [loop, setLoop] = useBoolPref(SETTINGS.VIDEO_LOOP_ENABLED, false);
-  const [skipSilence, setSkipSilence] = useBoolPref(SETTINGS.SKIP_SILENCE_ENABLED, false);
-  const skipSilenceDisabled = isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED);
   const [stableVolume, setStableVolume] = useBoolPref(SETTINGS.STABLE_VOLUME_ENABLED, false);
   const [videoLoudness, setVideoLoudness] = useBoolPref(SETTINGS.VIDEO_LOUDNESS_NORMALIZATION, false);
   const [volumeBoost, setVolumeBoost] = useBoolPref(SETTINGS.ALLOW_VOLUME_BOOST, false);
@@ -81,18 +80,18 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_loop_video')} description={getString('settings_loop_video_desc')}>
           <ToggleSwitch checked={loop} onChange={setLoop} />
         </SettingItem>
-        <SettingItem title={getString('settings_skip_silence')} description={getString('settings_skip_silence_desc')} disabled={skipSilenceDisabled}>
-          {/* Older builds synced Android's value in; until the feature exists it must not show as on. */}
-          <ToggleSwitch checked={skipSilence && !skipSilenceDisabled} onChange={setSkipSilence} disabled={skipSilenceDisabled} />
-        </SettingItem>
         <SettingItem title={getString('settings_stable_volume')} description={getString('settings_stable_volume_desc')}>
           <ToggleSwitch checked={stableVolume} onChange={setStableVolume} />
         </SettingItem>
         <SettingItem title={getString('settings_video_loudness')} description={getString('settings_video_loudness_desc')}>
           <ToggleSwitch checked={videoLoudness} onChange={setVideoLoudness} />
         </SettingItem>
-        <SettingItem title={getString('settings_volume_boost')} description={getString('settings_volume_boost_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ALLOW_VOLUME_BOOST)}>
-          <ToggleSwitch checked={volumeBoost} onChange={setVolumeBoost} disabled={isSettingDisabledUntilWired(SETTINGS.ALLOW_VOLUME_BOOST)} />
+        <SettingItem
+          title={getString('settings_volume_boost')}
+          description={getString(videoEqAvailable() ? 'settings_volume_boost_desc' : 'settings_volume_boost_unavailable')}
+          disabled={!videoEqAvailable()}
+        >
+          <ToggleSwitch checked={volumeBoost} onChange={setVolumeBoost} disabled={!videoEqAvailable()} />
         </SettingItem>
       </SettingsGroup>
 
@@ -213,8 +212,8 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_ambient_glow')} description={getString('settings_ambient_glow_desc')} disabled={!ambientMode}>
           <ToggleSwitch checked={ambientMode && ambientGlow} onChange={setAmbientGlow} disabled={!ambientMode} />
         </SettingItem>
-        <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)}>
-          <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} disabled={isSettingDisabledUntilWired(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED)} />
+        <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')}>
+          <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} />
         </SettingItem>
       </SettingsGroup>
     </div>

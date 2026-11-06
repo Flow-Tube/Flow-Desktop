@@ -319,6 +319,19 @@ describe("set queue", () => {
   });
 });
 
+describe("volume boost", () => {
+  it("drops the boost once the volume leaves 100%", () => {
+    const store = usePlayerStore.getState();
+    store.setVolume(1);
+    store.setVolumeBoost(1.6);
+    store.setVolume(1);
+    expect(usePlayerStore.getState().volumeBoost).toBe(1.6);
+    store.setVolume(0.5);
+    expect(usePlayerStore.getState().volumeBoost).toBe(1);
+    store.setVolume(1);
+  });
+});
+
 describe("autoplay", () => {
   it("drops the playlist context once autoplay extends the queue", () => {
     const playlist = { id: "wl", title: "Watch Later", editable: true, reorderable: true };

@@ -476,7 +476,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           <div className="h-1 w-24 overflow-hidden rounded-full bg-chrome-white/25">
             <div
               className="h-full rounded-full bg-chrome-white"
-              style={{ width: `${volumeFeedback.muted ? 0 : Math.round(volumeFeedback.volume * 100)}%` }}
+              style={{ width: `${volumeFeedback.muted ? 0 : Math.min(100, Math.round(volumeFeedback.volume * 100))}%` }}
             />
           </div>
           <span className="min-w-[3ch] text-sm font-bold tabular-nums">

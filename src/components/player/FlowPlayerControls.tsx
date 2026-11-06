@@ -52,6 +52,7 @@ import { getString } from "../../lib/i18n/index";
 import { isAtLiveEdge, liveEdgePosition, liveWindow, readLiveTiming, secondsBehindLive } from "../../lib/liveEdge";
 import { Slider } from "../ui/Slider";
 import { useWheelVolume } from "../../lib/useWheelVolume";
+import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -174,7 +175,6 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     isPlaying,
     currentVideo,
     volume,
-    setVolume,
     playbackRate,
     setPlaybackRate,
     duration,
@@ -193,12 +193,14 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     isCommentsAvailable,
   } = usePlayerStore();
 
+  const { level: volumeLevel, maxLevel, setLevel: setVolumeLevel } = useVolumeLevel();
   const changeVolume = (value: number) => {
-    setVolume(value);
+    setVolumeLevel(value);
     setMuted(value === 0);
   };
   const volumeWheelRef = useWheelVolume({
-    volume,
+    volume: volumeLevel,
+    max: maxLevel,
     muted,
     onVolumeChange: changeVolume,
     onUnmute: () => setMuted(false),
@@ -699,9 +701,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <Slider
                     aria-label={getString('music_volume')}
                     min={0}
-                    max={1}
+                    max={maxLevel}
                     step={0.01}
-                    value={muted ? 0 : volume}
+                    value={muted ? 0 : volumeLevel}
                     onChange={changeVolume}
                   />
                 </div>

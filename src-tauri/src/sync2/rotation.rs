@@ -21,7 +21,8 @@ impl<S: Store> Session<'_, S> {
     pub(super) async fn rotate_if_due(&mut self, pool: &SqlitePool) -> Result<()> {
         for _ in 0..ATTEMPTS {
             let state = self.roster();
-            if !state.rotate {
+            // A due recovery key waits for the user's new words, whose entry starts the epoch.
+            if !state.rotate || state.recovery_due {
                 return Ok(());
             }
             let epoch = new_epoch(
@@ -35,6 +36,7 @@ impl<S: Store> Session<'_, S> {
                 signer: hex::encode(self.device().did),
                 add: None,
                 remove: None,
+                cut: None,
                 epoch: Some(epoch.field),
                 meta: None,
             };

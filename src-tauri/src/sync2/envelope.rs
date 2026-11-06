@@ -1,5 +1,7 @@
 //! The object envelope shared by log objects and live messages (spec/store.md).
 
+use std::collections::BTreeMap;
+
 use subtle::ConstantTimeEq;
 
 use super::array;
@@ -200,6 +202,38 @@ pub fn next_in_stream(
         seq: *seq,
         hash: object.hash,
     })
+}
+
+/// Walks a removed sender's log down from its cut to `stop_seq` (spec/store.md, A removed sender's
+/// chain), so nothing is applied from a chain that doesn't reach the hash the removal names. With
+/// `stop_hash`, the walk must arrive at it. Returns the hash each object must have when it is then
+/// read forward.
+pub async fn cut_chain<E, F, Fut>(
+    cut: (u64, [u8; 32]),
+    stop_seq: u64,
+    stop_hash: Option<&[u8; 32]>,
+    group: &[u8; 16],
+    mut read: F,
+) -> std::result::Result<BTreeMap<u64, [u8; 32]>, E>
+where
+    E: From<Error>,
+    F: FnMut(u64) -> Fut,
+    Fut: Future<Output = std::result::Result<Option<Vec<u8>>, E>>,
+{
+    let (top, mut wanted) = cut;
+    let mut hashes = BTreeMap::new();
+    for seq in (stop_seq + 1..=top).rev() {
+        let bytes = read(seq).await?.ok_or(Error::Gap)?;
+        if !bool::from(sha256(&bytes).ct_eq(&wanted)) {
+            return Err(Error::Prev.into());
+        }
+        hashes.insert(seq, wanted);
+        wanted = parse_object(&bytes, group)?.header.prev;
+    }
+    if top > stop_seq && stop_hash.is_some_and(|hash| !bool::from(wanted.ct_eq(hash))) {
+        return Err(Error::Prev.into());
+    }
+    Ok(hashes)
 }
 
 /// Live messages carry a counter instead of a chain.

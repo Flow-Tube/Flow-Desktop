@@ -8,8 +8,8 @@ use flow_desktop_lib::sync::canonical::to_canonical_json;
 use flow_desktop_lib::sync2::blob::open_blob;
 use flow_desktop_lib::sync2::curve::{agreement_public_key, is_valid_signing_key, verify};
 use flow_desktop_lib::sync2::envelope::{
-    ObjectType, StreamPosition, next_in_stream, next_live_counter, open_object, parse_object,
-    verify_object,
+    ObjectType, StreamPosition, cut_chain, next_in_stream, next_live_counter, open_object,
+    parse_object, verify_object,
 };
 use flow_desktop_lib::sync2::epoch::{
     Purpose, check_epoch_key, epoch_commitment, open_chain, purpose_key,
@@ -23,6 +23,7 @@ use flow_desktop_lib::sync2::pairing::{pairing_aad, pairing_keys, pairing_slot};
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, wrap_path};
 use flow_desktop_lib::sync2::payload::{decode_payload, padded_size};
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret, recovery_words};
+use flow_desktop_lib::sync2::roster::{Entry, check_sender, replay_roster};
 use flow_desktop_lib::sync2::sealed::{open, seal_with_salt};
 use flow_desktop_lib::sync2::wrap::{unwrap_epoch_key, wrap_epoch_key_with_rng};
 use flow_desktop_lib::sync2::{Error, Result};
@@ -322,6 +323,63 @@ fn envelopes_open_in_stream_order() {
             "{}",
             n["name"]
         );
+    }
+}
+
+#[test]
+fn who_may_write_under_which_epoch() {
+    let v = load("senders");
+    let entries: Vec<Entry> = serde_json::from_value(v["entries"].clone()).unwrap();
+    let state = replay_roster(&entries).unwrap();
+    for c in v["senders"].as_array().unwrap() {
+        let checked = check_sender(
+            &state.senders,
+            text(&c["did"]),
+            number(&c["epoch"]),
+            number(&c["seq"]),
+        );
+        match c.get("error") {
+            Some(error) => assert_eq!(checked.unwrap_err().code(), text(error), "{}", c["name"]),
+            None => assert!(checked.is_ok(), "{}", c["name"]),
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_walk_down_from_a_cut() {
+    let v = load("senders");
+    let group: [u8; 16] = array(&v["group"]);
+    for w in v["walks"].as_array().unwrap() {
+        let log: Vec<Vec<u8>> = w["log"].as_array().unwrap().iter().map(bytes).collect();
+        let stop_seq = w.get("last").map_or(0, |last| number(&last["seq"]));
+        let stop_hash: [u8; 32] = w.get("last").map_or([0; 32], |last| array(&last["hash"]));
+        let walked = cut_chain(
+            (number(&w["cut"]["seq"]), array(&w["cut"]["hash"])),
+            stop_seq,
+            Some(&stop_hash),
+            &group,
+            |seq| {
+                let object = log
+                    .get(usize::try_from(seq - 1).unwrap())
+                    .filter(|object| !object.is_empty())
+                    .cloned();
+                async move { Ok::<_, Error>(object) }
+            },
+        )
+        .await;
+        match w.get("error") {
+            Some(error) => assert_eq!(walked.unwrap_err().code(), text(error), "{}", w["name"]),
+            None => {
+                let hashes: Vec<String> = walked.unwrap().values().map(hex::encode).collect();
+                let wanted: Vec<String> = w["hashes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|hash| text(hash).to_owned())
+                    .collect();
+                assert_eq!(hashes, wanted, "{}", w["name"]);
+            }
+        }
     }
 }
 

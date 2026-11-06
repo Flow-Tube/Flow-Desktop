@@ -23,6 +23,7 @@ import {
   markRecoverySaved,
   onLinkPhase,
   onSynced,
+  answerRecoveryNotice,
   removeDevice,
   renameDevice,
   replaceRecovery,
@@ -90,7 +91,8 @@ interface LinkedState {
   /** Replaces the recovery key and shows the new words. */
   replaceRecovery: () => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
-  remove: (id: string) => Promise<void>;
+  remove: (id: string, also?: string[]) => Promise<void>;
+  answerRecoveryNotice: () => Promise<void>;
   leave: () => Promise<void>;
   forget: () => Promise<void>;
   keepSide: (entry: string) => Promise<void>;
@@ -261,10 +263,16 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await loadDevices();
       }),
 
-    remove: (id) =>
+    remove: (id, also) =>
       run(async () => {
-        await removeDevice(id);
+        const words = await removeDevice(id, also);
+        if (words) set({ words });
         await loadDevices();
+      }),
+
+    answerRecoveryNotice: () =>
+      run(async () => {
+        await answerRecoveryNotice();
       }),
 
     leave: () =>

@@ -191,6 +191,7 @@ pub fn draft(op: Op, signer: &MemberSecrets) -> Draft {
         signer: hex::encode(signer.did),
         add: None,
         remove: None,
+        cut: None,
         epoch: None,
         meta: None,
     }

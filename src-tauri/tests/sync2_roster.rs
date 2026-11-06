@@ -35,9 +35,29 @@ fn view(state: &RosterState) -> Value {
     let members: Vec<Value> = state
         .members
         .iter()
-        .map(|(did, m)| json!({ "did": did, "role": if m.role == Role::Device { "device" } else { "recovery" }, "used": m.used }))
+        .map(|(did, m)| {
+            let mut view = json!({ "did": did, "role": if m.role == Role::Device { "device" } else { "recovery" }, "used": m.used });
+            if let Some(installer) = &m.installer {
+                view["installer"] = json!(installer);
+            }
+            view
+        })
         .collect();
-    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "members": members })
+    let senders: Vec<Value> = state
+        .senders
+        .iter()
+        .map(|(did, s)| {
+            let mut view = json!({ "did": did, "role": if s.role == Role::Device { "device" } else { "recovery" }, "since": s.since });
+            if let Some(until) = s.until {
+                view["until"] = json!(until);
+            }
+            if let Some(cut) = &s.cut {
+                view["cut"] = json!({ "seq": cut.seq, "hash": cut.hash });
+            }
+            view
+        })
+        .collect();
+    json!({ "seq": state.seq, "head": state.head, "epoch": state.epoch, "rotate": state.rotate, "recoveryDue": state.recovery_due, "members": members, "senders": senders })
 }
 
 #[test]
@@ -133,4 +153,31 @@ fn a_null_field_is_not_an_absent_one() {
     let mut with_null = v["entries"][1].clone();
     with_null["remove"] = Value::Null;
     assert_eq!(parse_entry(&with_null).unwrap_err().code(), "roster-format");
+}
+
+#[test]
+fn a_removal_replaces_a_recovery_key_set_by_a_device_that_is_gone() {
+    let v = vectors();
+    let entries = entries(&v);
+    for case in v["replacements"].as_array().unwrap() {
+        let mut state = match case.get("base") {
+            Some(count) => base(&entries, count),
+            None => replay_roster(&entries).unwrap(),
+        };
+        let steps: Vec<Entry> = serde_json::from_value(case["steps"].clone()).unwrap();
+        let (last, before) = steps.split_last().unwrap();
+        for step in before {
+            state = apply_entry(Some(&state), step).unwrap();
+        }
+        let applied = apply_entry(Some(&state), last);
+        match case.get("error") {
+            Some(error) => assert_eq!(
+                applied.unwrap_err().code(),
+                error.as_str().unwrap(),
+                "{}",
+                case["name"]
+            ),
+            None => assert_eq!(view(&applied.unwrap()), case["state"], "{}", case["name"]),
+        }
+    }
 }

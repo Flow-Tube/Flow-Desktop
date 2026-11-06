@@ -8,7 +8,7 @@ use sqlx::SqlitePool;
 use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
-use super::engine::{EngineError, Result, Session, signing_keys, verify_logged};
+use super::engine::{EngineError, Result, Session, verify_logged};
 use super::forks::ForkResolution;
 use super::held::HeldStore;
 use super::kdf::sha256;
@@ -18,7 +18,7 @@ use super::lan_link::{
     lan_socket_config,
 };
 use super::paths::parse_log_path;
-use super::roster::Entry;
+use super::roster::{Entry, replay_roster};
 use super::store::{Store, wraps_epoch};
 use crate::sync::transport::{ClientStream, WsChannel, ws_url};
 
@@ -72,7 +72,9 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
         }
     }
 
-    let keys = signing_keys(&resolved.chain)?;
+    let senders = replay_roster(&resolved.chain)
+        .map(|state| state.senders)
+        .unwrap_or_default();
     let (paths, blobs) = link.list(held.held_vv().await?).await?;
     let mut taken = 0;
     for path in paths {
@@ -83,7 +85,7 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
             continue;
         }
         if let Some(bytes) = link.get(&path).await?
-            && verify_logged(&bytes, group, &keys, &did, seq).is_ok()
+            && verify_logged(&bytes, group, &senders, &did, seq).is_ok()
         {
             held.put_object(&path, bytes).await?;
             taken += 1;

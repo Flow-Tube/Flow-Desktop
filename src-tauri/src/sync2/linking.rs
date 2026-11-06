@@ -264,6 +264,7 @@ where
         signer: hex::encode(device.did),
         add: Some(vec![member_subject(&sig_public, &kem_public, Role::Device)]),
         remove: None,
+        cut: None,
         epoch: None,
         meta: Some(BTreeMap::from([(
             hex::encode(did),
@@ -648,6 +649,7 @@ mod tests {
             signer: hex::encode(device.did),
             add: Some(add),
             remove: None,
+            cut: None,
             epoch: None,
             meta: None,
         };

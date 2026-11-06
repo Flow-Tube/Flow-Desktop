@@ -30,6 +30,7 @@ static ROSTER: LazyLock<Roster> = LazyLock::new(|| {
         signer: hex::encode(device.did),
         add: Some(add),
         remove: None,
+        cut: None,
         epoch: None,
         meta: None,
     };
@@ -144,6 +145,7 @@ proptest! {
             signer: hex::encode(device.did),
             add: None,
             remove: None,
+            cut: None,
             epoch: Some(epoch_draft(&[2; 32], &ROSTER.group, n, &members)),
             meta: None,
         };

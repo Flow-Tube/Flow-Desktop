@@ -20,6 +20,7 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedUnreachable: "linked_error_unreachable",
   linkedRefused: "linked_error_refused",
   linkedGroupMissing: "linked_error_group_missing",
+  linkedRecoveryDue: "linked_error_recovery_due",
   linkedInstanceChanged: "linked_error_instance_changed",
   linkedAlreadyClaimed: "linked_error_already_claimed",
   linkedAdminRefused: "linked_error_admin_refused",

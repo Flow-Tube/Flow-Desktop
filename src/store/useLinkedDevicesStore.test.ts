@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   onLinkPhase: vi.fn(),
   onSynced: vi.fn(),
   removeDevice: vi.fn(),
+  answerRecoveryNotice: vi.fn(),
   renameDevice: vi.fn(),
   restoreGroup: vi.fn(),
   retryKeychain: vi.fn(),
@@ -160,5 +161,18 @@ describe("useLinkedDevicesStore", () => {
     await useLinkedDevicesStore.getState().create("https://sync.example.com", "admin", true);
     expect(api.createGroup).toHaveBeenLastCalledWith("https://sync.example.com", "admin", true);
     expect(useLinkedDevicesStore.getState()).toMatchObject({ serverTaken: false, words: WORDS });
+  });
+
+  it("shows the new words when removing a device replaced them", async () => {
+    api.removeDevice.mockResolvedValue("new words");
+    await useLinkedDevicesStore.getState().remove("a", ["b"]);
+    expect(api.removeDevice).toHaveBeenCalledWith("a", ["b"]);
+    expect(useLinkedDevicesStore.getState().words).toBe("new words");
+  });
+
+  it("shows no words when a removal left the recovery key alone", async () => {
+    api.removeDevice.mockResolvedValue(null);
+    await useLinkedDevicesStore.getState().remove("a");
+    expect(useLinkedDevicesStore.getState().words).toBeNull();
   });
 });

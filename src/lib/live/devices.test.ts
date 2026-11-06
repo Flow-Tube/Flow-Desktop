@@ -10,6 +10,7 @@ const linked = (id: string, extra: Partial<LinkedDevice> = {}): LinkedDevice => 
   id,
   name: id.toUpperCase(),
   platform: "android",
+  setRecoveryKey: false,
   thisDevice: false,
   nearby: false,
   lastSyncMs: 1000,

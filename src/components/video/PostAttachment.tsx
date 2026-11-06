@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckCircle2, ChevronLeft, ChevronRight, XCircle } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { upgradeCommunityPostImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { useRichTargetHandler } from "../../lib/useRichTargetHandler";
 import type { PollChoice, PostAttachment as Attachment, QuizChoice, VideoSummary } from "../../types/video";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 function Gallery({ urls }: { urls: string[] }) {
   const [index, setIndex] = useState(0);
@@ -124,8 +125,11 @@ function Quiz({ choices, totalVotesText }: { choices: QuizChoice[]; totalVotesTe
 function SharedVideo({ video }: { video: VideoSummary }) {
   const open = useRichTargetHandler();
   const thumbnail = useProxiedImageUrl(video.thumbnailUrl);
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const title = useOriginalTitle(video.id, cardRef) || video.title;
   return (
     <button
+      ref={cardRef}
       type="button"
       onClick={() => open({ kind: "video", videoId: video.id })}
       className="mb-4 flex w-full items-center gap-3 rounded-xl border border-chrome-neutral-800 p-2 text-left transition-colors hover:bg-surface-container-high"
@@ -134,7 +138,7 @@ function SharedVideo({ video }: { video: VideoSummary }) {
         {thumbnail && <img src={thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />}
       </div>
       <div className="min-w-0">
-        <p className="line-clamp-2 text-sm font-semibold text-chrome-neutral-100">{video.title}</p>
+        <p className="line-clamp-2 text-sm font-semibold text-chrome-neutral-100">{title}</p>
         <p className="truncate text-xs text-chrome-neutral-400">
           {[video.channelName, video.viewCountText].filter(Boolean).join(" · ")}
         </p>

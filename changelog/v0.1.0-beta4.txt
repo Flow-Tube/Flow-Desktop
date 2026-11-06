@@ -93,6 +93,7 @@ PLAYER
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
+- The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

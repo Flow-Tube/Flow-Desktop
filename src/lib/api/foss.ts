@@ -66,6 +66,14 @@ export async function submitSponsorBlockSegment(
 export interface DeArrowOverride {
   title: string | null;
   thumbnailUrl: string | null;
+  /** The frame to show when nothing is submitted, for the "Use a video frame" switch. */
+  randomFrameUrl: string | null;
+}
+
+/** The thumbnail to show from an override: a submission, or else a frame if that's wanted. */
+export function deArrowThumbnail(override: DeArrowOverride | null, useRandomFrame: boolean): string | null {
+  if (!override) return null;
+  return override.thumbnailUrl ?? (useRandomFrame ? override.randomFrameUrl : null);
 }
 
 export async function getDeArrowOverride(videoId: string): Promise<DeArrowOverride | null> {

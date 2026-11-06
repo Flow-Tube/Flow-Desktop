@@ -9,6 +9,7 @@ import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useImageFallback } from '../../lib/useImageFallback';
+import { deArrowThumbnail } from '../../lib/api/foss';
 import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
 import { getVideoDetails } from '../../lib/api/youtube';
@@ -202,7 +203,8 @@ function VideoCardComponent({
   // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
   const dearrowOverride = useDeArrowOverride(isChannel ? null : video.id, dearrowEnabled);
   const overriddenTitle = dearrowOverride?.title || null;
-  const overriddenThumbnail = dearrowOverride?.thumbnailUrl || null;
+  const dearrowRandomFrame = useAppSettingsStore((state) => state.values[SETTINGS.DEARROW_RANDOM_FRAME] !== "false");
+  const overriddenThumbnail = deArrowThumbnail(dearrowOverride, dearrowRandomFrame) || null;
 
   const originalTitle = useOriginalTitle(isChannel || overriddenTitle ? null : video.id, cardRef);
   const displayTitle = overriddenTitle || originalTitle || video.title;

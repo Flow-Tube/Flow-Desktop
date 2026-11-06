@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ExternalLink, Globe, Heart, Scale, Code2, Cpu, Monitor, User, Package, Fingerprint, Info, RefreshCw } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { ChevronRight, ExternalLink, FileText, Globe, Heart, History, Scale, Code2, Cpu, Monitor, User, Package, Fingerprint, Info, RefreshCw } from 'lucide-react';
 import { SettingsGroup } from '../SettingsGroup';
 import Logo from '../../common/Logo';
 import { Button } from '../../ui/Button';
@@ -14,6 +15,8 @@ import { updateBlockedStringKey } from '../../../lib/updateSupport';
 import { useUiStore } from '../../../store/useUiStore';
 import { OPEN_COLLECTIVE_URL, PATREON_URL } from '../../../lib/supportLinks';
 import { OpenCollectiveIcon, PatreonIcon } from '../../ui/SupportPlatformIcons';
+import { ChangelogDialog } from '../about/ChangelogDialog';
+import { NoticesDialog } from '../about/NoticesDialog';
 
 function GithubIcon({ size = 16 }: { size?: number }) {
   return (
@@ -64,6 +67,7 @@ export function AboutTab() {
   const [appMetadata, setAppMetadata] = useState<AppMetadata | null>(null);
   const [systemMetadata, setSystemMetadata] = useState<SystemMetadata | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [openDialog, setOpenDialog] = useState<'changelog' | 'notices' | null>(null);
   const autoCheck = useUpdaterStore((s) => s.autoCheck);
   const setAutoCheck = useUpdaterStore((s) => s.setAutoCheck);
   const checkForUpdates = useUpdaterStore((s) => s.checkForUpdates);
@@ -122,6 +126,8 @@ export function AboutTab() {
 
       <SettingsGroup title={getString('settings_group_app')}>
         <LinkRow icon={<Code2 size={16} />} label={getString('settings_version')} value={appMetadata?.version ?? unknown()} />
+        <div className="border-t border-chrome-neutral-800/50" />
+        <LinkRow icon={<History size={16} />} label={getString('about_changelog')} value={getString('about_changelog_summary')} onSelect={() => setOpenDialog('changelog')} />
         <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Fingerprint size={16} />} label={getString('settings_identifier')} value={appMetadata?.identifier ?? unknown()} />
         <div className="border-t border-chrome-neutral-800/50" />
@@ -193,6 +199,8 @@ export function AboutTab() {
       <SettingsGroup title={getString('settings_group_legal')}>
         <LinkRow icon={<Scale size={16} />} label={getString('settings_license')} value="GPL-3.0" />
         <div className="border-t border-chrome-neutral-800/50" />
+        <LinkRow icon={<FileText size={16} />} label={getString('about_notices')} value={getString('about_notices_summary')} onSelect={() => setOpenDialog('notices')} />
+        <div className="border-t border-chrome-neutral-800/50" />
         <div className="px-5 py-4">
           <p className="text-xs text-chrome-neutral-400 leading-relaxed">{getString('settings_license_text')}</p>
         </div>
@@ -215,6 +223,11 @@ export function AboutTab() {
         <div className="border-t border-chrome-neutral-800/50" />
         <LinkRow icon={<Cpu size={16} />} label={getString('settings_user_agent')} value={systemMetadata?.userAgent ?? unknown()} />
       </SettingsGroup>
+
+      <AnimatePresence>
+        {openDialog === 'changelog' && <ChangelogDialog key="changelog" installedVersion={appMetadata?.version ?? null} onClose={() => setOpenDialog(null)} />}
+        {openDialog === 'notices' && <NoticesDialog key="notices" onClose={() => setOpenDialog(null)} />}
+      </AnimatePresence>
     </div>
   );
 }

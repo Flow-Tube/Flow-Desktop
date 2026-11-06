@@ -1038,6 +1038,7 @@ pub async fn get_dearrow_override(
         }
         Ok(None) => {
             let empty_override = crate::api::dearrow::DeArrowOverride {
+                random_frame_url: None,
                 title: None,
                 thumbnail_url: None,
             };

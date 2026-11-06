@@ -20,6 +20,7 @@ import { copyText } from "../lib/clipboard";
 import { confirmAction } from "../lib/dialogs";
 import { getString } from "../lib/i18n/index";
 import { isSettingDisabledUntilWired } from "../lib/settings/values";
+import { useBoolPref } from "../lib/usePreference";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -30,6 +31,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export const ExtensionsPage: React.FC = () => {
+  const [dearrowRandomFrame, setDearrowRandomFrame] = useBoolPref(SETTINGS.DEARROW_RANDOM_FRAME);
   const {
     loadSettings,
     sponsorBlockEnabled,
@@ -138,6 +140,14 @@ export const ExtensionsPage: React.FC = () => {
             >
               <ToggleSwitch checked={dearrowEnabled} onChange={setDeArrowEnabled} />
             </SettingItem>
+            {dearrowEnabled && (
+              <SettingItem
+                title={getString('extensions_de_arrow_random_frame')}
+                description={getString('extensions_de_arrow_random_frame_description')}
+              >
+                <ToggleSwitch checked={dearrowRandomFrame} onChange={setDearrowRandomFrame} />
+              </SettingItem>
+            )}
             {dearrowEnabled && (
               <SettingItem
                 title={getString('extensions_de_arrow_badge')}

@@ -251,6 +251,7 @@ export const SETTINGS = {
   SPONSORBLOCK_ENABLED: "sponsorblock_enabled",
   DEARROW_ENABLED: "dearrow_enabled",
   DEARROW_BADGE_ENABLED: "dearrow_badge_enabled",
+  DEARROW_RANDOM_FRAME: "dearrow_random_frame",
   RYTD_ENABLED: "rytd_enabled",
   DISCORD_RPC_MODE: "discord_rpc_mode",
   MUSIC_TRAY_ENABLED: "music_tray_enabled",
@@ -481,6 +482,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.SPONSORBLOCK_ENABLED]: "profile",
   [SETTINGS.DEARROW_ENABLED]: "profile",
   [SETTINGS.DEARROW_BADGE_ENABLED]: "profile",
+  [SETTINGS.DEARROW_RANDOM_FRAME]: "profile",
   [SETTINGS.RYTD_ENABLED]: "profile",
   [SETTINGS.DISCORD_RPC_MODE]: "device",
   [SETTINGS.MUSIC_TRAY_ENABLED]: "device",
@@ -810,6 +812,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SPONSORBLOCK_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.DEARROW_ENABLED, "extensions", true, "wired"),
   bool(SETTINGS.DEARROW_BADGE_ENABLED, "extensions", true, "wired"),
+  bool(SETTINGS.DEARROW_RANDOM_FRAME, "extensions", true, "wired"),
   bool(SETTINGS.RYTD_ENABLED, "extensions", true, "wired"),
   str(SETTINGS.DISCORD_RPC_MODE, "extensions", "off", "wired", ["off", "music", "videos", "musicAndVideos"]),
   // Linux trays need an AppIndicator library and a desktop that shows them, so it is opt-in there.

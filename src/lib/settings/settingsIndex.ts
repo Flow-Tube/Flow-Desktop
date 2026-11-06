@@ -278,5 +278,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_auto_update", summary: "settings_auto_update_desc" },
     { title: "settings_check_for_updates" },
     { title: "settings_version" },
+    { title: "about_changelog", summary: "about_changelog_summary", keywords: ["release notes", "what's new"] },
+    { title: "about_notices", summary: "about_notices_summary", keywords: ["licence", "license", "open source", "third party"] },
   ]),
 ];

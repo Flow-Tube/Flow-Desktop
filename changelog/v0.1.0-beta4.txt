@@ -209,6 +209,8 @@ NOTIFICATIONS
 - The tray now shows and controls videos as well as music, and has a Continue watching item for your latest unfinished video.
 - Windows Jump List and macOS Dock menu: Search, Downloads, History and Music are one click away.
 - Downloads show their progress on the taskbar or Dock icon.
+- About has a Changelog with the notes of every release, and Open source notices listing the projects Flow is built on.
+- Flow looks for updates every 12 hours while it stays open, not only when it starts.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
@@ -221,6 +223,7 @@ FIXES
 - Downloading a Short now works, from the Shorts player and from a Shorts card. The download window names portrait videos by their real resolution, so a 1080x1920 Short is 1080p, and starts on it.
 - Search no longer shows videos and Shorts from channels you blocked, the channels themselves, or videos you marked Not interested.
 - Trending Region is now Content country, and search and recommendations follow it as well as trending. Before, only Explore, charts and Shorts did. YouTube Music's home still follows where you connect from.
-- Proxy settings now work. HTTP, SOCKS5 and SOCKS4 proxies, with an optional sign-in, carry video, music, downloads, thumbnails, sync servers and update checks. Devices on your network stay direct, and changes apply to new connections.
+- Proxy settings now work. HTTP, SOCKS5 and SOCKS4 proxies, with an optional sign-in, carry video, music, downloads, thumbnails, sync servers and update checks. Devices on your network and YouTube's bot-check token minting stay direct, and changes apply to new connections.
+- DeArrow: a video nobody has submitted a thumbnail for now shows a frame from the video, like Flow for Android. Use a video frame in Integrations turns this off.
 - Retry with Proxy on a video that won't load now really does that, and only shows when you have set a proxy up.
 - The Flow Neuro page can block a channel from its favoured list, and now shows Shorts seen and your recent discovery searches.

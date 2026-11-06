@@ -11,6 +11,7 @@ import { MusicShelf } from '../../components/music/MusicShelf';
 import { useArtistPage, type ArtistMoreEndpoint } from '../../lib/useArtistPage';
 import { usePublishTitle } from '../../lib/usePublishTitle';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
+import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { getString } from '../../lib/i18n/index';
 import { upgradeAvatarUrl } from '../../lib/thumbnails';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
@@ -225,7 +226,8 @@ export default function ArtistPage() {
   const { data, loading, error, reload } = useArtistPage(artistId);
   usePublishTitle(data?.header?.title);
 
-  const [following, setFollowing] = useState(false);
+  const followId = (data?.header.id || artistId || '').replace('channel:', '');
+  const following = useSubscriptionStore((state) => state.subscriptions.some((channel) => channel.id === followId));
   const [aboutExpanded, setAboutExpanded] = useState(false);
 
   if (loading && !data) return <ArtistSkeleton />;
@@ -316,7 +318,12 @@ export default function ArtistPage() {
         onPlay={() => startPlayback(false)}
         onShuffle={() => void startMix(shuffle)}
         onRadio={() => void startMix(radio)}
-        onToggleFollow={() => setFollowing((value) => !value)}
+        onToggleFollow={() => {
+          if (!followId) return;
+          const { subscribe, unsubscribe } = useSubscriptionStore.getState();
+          if (following) void unsubscribe(followId);
+          else void subscribe(followId, header.title, header.thumbnail ?? undefined, { isMusic: true });
+        }}
       />
 
       <main className="mx-auto flex max-w-[1600px] flex-col gap-12 px-8 pt-8">

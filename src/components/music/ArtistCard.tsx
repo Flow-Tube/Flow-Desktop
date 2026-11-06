@@ -67,7 +67,7 @@ export function ArtistCard({ artist, fill, className, onOpen }: ArtistCardProps)
     if (following) {
       void unsubscribe(target);
     } else {
-      void subscribe(target, artist.title, artist.thumbnail ?? undefined);
+      void subscribe(target, artist.title, artist.thumbnail ?? undefined, { isMusic: true });
     }
   };
 

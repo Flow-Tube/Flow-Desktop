@@ -62,6 +62,7 @@ MUSIC
 - Hiding or showing the Queue or Lyrics pane in the full player no longer stretches the title and controls, and the artwork moves with the text.
 - A new Blur other lines switch in the lyrics menu and Settings keeps every line of synced lyrics sharp. Linux never blurs them, so it doesn't show there.
 - Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
+- Follow on an artist's page now really follows them. It used to forget as soon as you left the page. Artists you follow, here or on an artist card, go to your phone as music artists.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

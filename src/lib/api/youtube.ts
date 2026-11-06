@@ -84,6 +84,11 @@ export async function searchVideos(
   return invokeBackend<SearchVideosResponse>("search_videos", { request });
 }
 
+export async function getOriginalTitle(videoId: string): Promise<string | null> {
+  if (!(await isTauriEnv())) return null;
+  return invokeBackend<string | null>("get_original_title", { videoId });
+}
+
 export async function getVideoDetails(videoId: string): Promise<VideoDetails> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock video details.");

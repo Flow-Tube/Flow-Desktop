@@ -9,6 +9,7 @@ import {
 } from "../../lib/useVideoStream";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
 import { useWatchSession } from "../../lib/useWatchSession";
+import { useRecapViewSession } from "../../lib/recap/useRecapViewSession";
 import { usePlaybackSettled } from "../../lib/usePlaybackSettled";
 import { useVideoCategory } from "../../lib/useVideoCategory";
 import { addWatchRecord } from "../../lib/api/db";
@@ -134,6 +135,19 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     ],
   );
   const { onTime: reportWatchTime, onEnded: endWatchSession } = useWatchSession(watchSubject);
+  const recapSubject = useMemo(
+    () =>
+      watchSubject && currentVideo
+        ? {
+            ...watchSubject,
+            durationSeconds: currentVideo.durationSeconds,
+            thumbnailUrl: currentVideo.thumbnailUrl,
+            channelAvatarUrl: currentVideo.channelAvatarUrl,
+          }
+        : null,
+    [watchSubject, currentVideo],
+  );
+  const reportRecapTime = useRecapViewSession(recapSubject);
 
   const handleTimeUpdate = useCallback(
     (time: number, mediaDuration: number) => {
@@ -146,6 +160,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       if (!stream.isLive) prefetchNextVideo(time, nextDuration);
 
       reportWatchTime(time, mediaDuration);
+      reportRecapTime(time, mediaDuration);
       latestProgressRef.current = { videoId: currentVideo.id, time, duration: nextDuration };
       if (!shouldRecordWatchHistory() || stream.isLive) return;
 
@@ -176,6 +191,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       stream.isLive,
       prefetchNextVideo,
       reportWatchTime,
+      reportRecapTime,
       setCurrentTime,
       setDuration,
       stream.streamVideoId,

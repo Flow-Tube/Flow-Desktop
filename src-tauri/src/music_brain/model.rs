@@ -14,6 +14,15 @@ use crate::flow_neuro::scoring::TimeBucket;
 
 pub const MUSIC_SCHEMA_VERSION: i32 = 1;
 
+/// Resolves a stable artist key: the artist id when present, else a normalized name.
+#[must_use]
+pub fn artist_key(artist_id: Option<&str>, artist_name: &str) -> String {
+    match artist_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(id) => id.to_string(),
+        None => artist_name.trim().to_lowercase(),
+    }
+}
+
 // --- Bounded-growth caps (mobile-friendly; one small resident JSON blob) ---
 pub const ARTIST_AFFINITY_MAX: usize = 600;
 pub const ARTIST_AFFINITY_KEEP: usize = 500;

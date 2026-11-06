@@ -7,6 +7,7 @@ import {
   sanitizeFilterState,
   type SearchFilterState,
 } from "../lib/searchFilterState";
+import { recapQueriesCleared, recapSearch } from "../lib/recap/recapQueue";
 import { profileStorage } from "../lib/storage/profileStorage";
 import { getSettingValue, useAppSettingsStore } from "./useAppSettingsStore";
 
@@ -85,7 +86,11 @@ export const useSearchHistoryStore = create<SearchHistoryState>((set, get) => ({
   entries: load(),
   record: (query) => {
     const trimmed = query.trim();
-    if (!trimmed || getSettingValue(SETTINGS.SEARCH_HISTORY_ENABLED) === "false" || !deepFlowAllowsHistory()) return;
+    if (!trimmed) return;
+    const saving = getSettingValue(SETTINGS.SEARCH_HISTORY_ENABLED) !== "false";
+    // With search history off the search still counts, but its words aren't kept. Android's rule.
+    recapSearch(saving ? trimmed : null);
+    if (!saving || !deepFlowAllowsHistory()) return;
     set((state) => {
       const earlier = state.entries.find((entry) => sameQuery(entry.query, trimmed));
       const entries = [
@@ -110,6 +115,7 @@ export const useSearchHistoryStore = create<SearchHistoryState>((set, get) => ({
     return { entries };
   }),
   clear: () => {
+    recapQueriesCleared();
     persist([]);
     set({ entries: [] });
   },

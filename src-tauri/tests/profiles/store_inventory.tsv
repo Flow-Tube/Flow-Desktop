@@ -36,6 +36,9 @@ table	notes	PROFILE	library	The profile's notes on videos and channels; never co
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log
 table	seen_videos	PROFILE	private	Cards this viewer has seen
+table	recap_months	PROFILE	private	Recap ledger: what this viewer watched and listened to, per month
+table	recap_known	PROFILE	private	Recap ledger: channels and artists this viewer has met
+table	recap_state	PROFILE	private	Recap ledger: when it started for this viewer
 table	neuro_channel_categories	PROFILE	private	FlowNeuro v4 side store
 table	neuro_cowatch_sources	PROFILE	private	FlowNeuro v4 side store
 table	neuro_content_topics	PROFILE	private	FlowNeuro v4 side store

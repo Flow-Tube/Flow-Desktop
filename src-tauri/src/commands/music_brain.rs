@@ -7,7 +7,7 @@ use crate::db::music_content::GraphTaste;
 use crate::errors::ErrorResponse;
 use crate::models::music::{Artist, SongItem};
 use crate::music_brain::mixes::{DailyMixSeed, daily_mixes};
-use crate::music_brain::model::MusicBrain;
+use crate::music_brain::model::{MusicBrain, artist_key};
 use crate::music_brain::profile::{MusicTasteProfile, artist_insights, taste_profile};
 use crate::music_brain::rank::{
     RankInput, day_slot, heavy_rotation, rank, rediscover, time_of_day_rotation,
@@ -17,14 +17,6 @@ use crate::sync2::actions::leave_if_linked;
 use crate::sync2::profile_actions::syncs_link;
 
 type CmdResult<T> = Result<T, ErrorResponse>;
-
-/// Resolves a stable artist key: the artist id when present, else a normalized name.
-fn artist_key(artist_id: Option<&str>, artist_name: &str) -> String {
-    match artist_id.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(id) => id.to_string(),
-        None => artist_name.trim().to_lowercase(),
-    }
-}
 
 /// Projects a `SongItem` into the minimal shape the ranker needs.
 fn song_to_input(song: &SongItem) -> RankInput {

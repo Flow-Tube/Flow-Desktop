@@ -7,7 +7,10 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
-use flow_desktop_lib::commands::backup::{SUBSCRIPTION_CHANNELS_KEY, export_backup, import_backup};
+use flow_desktop_lib::commands::backup::{
+    RECAP_STATS_ENTRY, SUBSCRIPTION_CHANNELS_KEY, export_backup, import_backup,
+};
+use flow_desktop_lib::sync::canonical::Collection;
 
 async fn memory_pool() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
@@ -255,4 +258,70 @@ async fn a_master_with_profiles_restores_default_only_in_the_old_importer() {
         .await
         .unwrap();
     assert_eq!(ids, ["v1"]);
+}
+
+async fn ledger_months(pool: &SqlitePool) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM recap_months")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+async fn seed_ledger(pool: &SqlitePool, views: i64) {
+    sqlx::query(
+        "INSERT OR REPLACE INTO recap_months (source, month, record, estimated)
+         VALUES ('video', '2026-09', ?, 0)",
+    )
+    .bind(format!("{{\"views\":{views}}}"))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn the_recap_ledger_travels_in_master_backups_only_and_never_by_sync() {
+    let pool = memory_pool().await;
+    seed_ledger(&pool, 3).await;
+
+    let master = export_backup(&pool, "MASTER").await.unwrap();
+    assert!(master.collections.contains_key(RECAP_STATS_ENTRY));
+    for scope in ["APP_DATA", "BRAIN"] {
+        let export = export_backup(&pool, scope).await.unwrap();
+        assert!(!export.collections.contains_key(RECAP_STATS_ENTRY));
+    }
+    assert!(Collection::ALL.iter().all(|c| c.key() != RECAP_STATS_ENTRY));
+}
+
+#[tokio::test]
+async fn restoring_the_recap_ledger_replaces_what_is_there() {
+    let source = memory_pool().await;
+    seed_ledger(&source, 3).await;
+    let export = export_backup(&source, "MASTER").await.unwrap();
+    let payload = serde_json::json!({ "collections": export.collections });
+
+    let target = memory_pool().await;
+    seed_ledger(&target, 99).await;
+    sqlx::query(
+        "INSERT INTO recap_months (source, month, record, estimated)
+         VALUES ('music', '2020-01', '{}', 0)",
+    )
+    .execute(&target)
+    .await
+    .unwrap();
+    import_backup(&target, &payload).await.unwrap();
+    assert_eq!(ledger_months(&target).await, 1);
+    let record: String = sqlx::query_scalar("SELECT record FROM recap_months")
+        .fetch_one(&target)
+        .await
+        .unwrap();
+    assert!(record.contains("\"views\":3"));
+}
+
+#[tokio::test]
+async fn an_unreadable_recap_entry_leaves_the_ledger_alone() {
+    let pool = memory_pool().await;
+    seed_ledger(&pool, 3).await;
+    let payload = serde_json::json!({ "collections": { RECAP_STATS_ENTRY: ["junk"] } });
+    import_backup(&pool, &payload).await.unwrap();
+    assert_eq!(ledger_months(&pool).await, 1);
 }

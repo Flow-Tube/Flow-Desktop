@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const deepFlow = vi.hoisted(() => ({ record: true }));
 vi.mock("../lib/deepFlow", () => ({ deepFlowAllowsHistory: () => deepFlow.record }));
+vi.mock("../lib/recap/recapQueue", () => ({ recapSearch: vi.fn(), recapQueriesCleared: vi.fn() }));
 
+import { recapSearch } from "../lib/recap/recapQueue";
 import { SETTINGS } from "../lib/settings/schema";
 import { DEFAULT_SEARCH_FILTER_STATE } from "../lib/searchFilterState";
 import { useAppSettingsStore } from "./useAppSettingsStore";
@@ -15,6 +17,17 @@ describe("search history", () => {
     deepFlow.record = true;
     useAppSettingsStore.setState({ values: {} });
     useSearchHistoryStore.getState().clear();
+  });
+
+  it("counts a search with history off, without keeping its words", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.SEARCH_HISTORY_ENABLED]: "false" } });
+    useSearchHistoryStore.getState().record("lofi");
+    expect(recapSearch).toHaveBeenLastCalledWith(null);
+    expect(queries()).toEqual([]);
+
+    useAppSettingsStore.setState({ values: {} });
+    useSearchHistoryStore.getState().record("lofi");
+    expect(recapSearch).toHaveBeenLastCalledWith("lofi");
   });
 
   it("keeps the newest first and moves a repeated search to the top", () => {

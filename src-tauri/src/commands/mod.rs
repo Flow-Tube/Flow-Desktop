@@ -18,6 +18,7 @@ pub mod notifications;
 pub mod pip;
 pub mod process;
 pub mod profiles;
+pub mod recap;
 pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;

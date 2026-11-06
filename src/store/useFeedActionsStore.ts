@@ -9,6 +9,7 @@ import {
   unblockChannel as apiUnblockChannel,
 } from "../lib/api/recommendation";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
+import { recapAction } from "../lib/recap/recapQueue";
 import { isKnownShort } from "../lib/videoKind";
 import { isMusicVideo } from "../lib/utils";
 import type { VideoSummary } from "../types/video";
@@ -192,6 +193,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
           false,
           m.isShort,
         );
+        recapAction("NOT_INTERESTED");
       } catch (e) {
         console.warn("Failed to record not interested", e);
         set(previous);
@@ -213,6 +215,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
       persist();
       try {
         await apiBlockChannel(channelId, video.channelName);
+        recapAction("BLOCK_CHANNEL");
       } catch (e) {
         console.warn("Failed to block channel", e);
         set({ blockedChannelIds: previous });

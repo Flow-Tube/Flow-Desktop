@@ -30,6 +30,11 @@ function isBackendErrorResponse(value: unknown): value is BackendErrorResponse {
   return typeof candidate.message === "string" && typeof candidate.kind === "string";
 }
 
+/** Tauri refused the call before it reached the command: the arguments don't fit its types. */
+export function isInvalidArgsError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("invalid args");
+}
+
 export function normalizeBackendError(error: unknown): BackendApiError {
   if (isBackendErrorResponse(error)) {
     return new BackendApiError(error.message, error.kind, error, error.startsAtMs);

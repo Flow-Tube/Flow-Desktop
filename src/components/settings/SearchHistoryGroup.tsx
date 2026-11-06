@@ -1,5 +1,6 @@
 import { confirmAction } from '../../lib/dialogs';
 import { getString, type StringKey } from '../../lib/i18n/index';
+import { recapQueriesCleared } from '../../lib/recap/recapQueue';
 import { SETTINGS } from '../../lib/settings/schema';
 import { useBoolPref, useNumberPref } from '../../lib/usePreference';
 import { useSearchHistoryStore } from '../../store/useSearchHistoryStore';
@@ -34,6 +35,11 @@ export function SearchHistoryGroup() {
     trimTo(Number(value));
   };
 
+  const handleSaveSearches = (next: boolean) => {
+    setSaveSearches(next);
+    if (!next) recapQueriesCleared();
+  };
+
   const handleClear = async () => {
     const confirmed = await confirmAction({
       title: getString('settings_clear_search_history'),
@@ -50,7 +56,7 @@ export function SearchHistoryGroup() {
         <ToggleSwitch checked={pausedHistory} onChange={setPausedHistory} />
       </SettingItem>
       <SettingItem title={getString('settings_save_search_history')} description={getString('settings_save_search_history_desc')}>
-        <ToggleSwitch checked={saveSearches} onChange={setSaveSearches} />
+        <ToggleSwitch checked={saveSearches} onChange={handleSaveSearches} />
       </SettingItem>
       <SettingItem title={getString('settings_search_suggestions')} description={getString('settings_search_suggestions_desc')}>
         <ToggleSwitch checked={suggestions} onChange={setSuggestions} />

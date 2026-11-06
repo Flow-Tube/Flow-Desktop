@@ -5,11 +5,16 @@ import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { MusicListenTracker } from "./musicListenTracker";
 import { recordSongHistory } from "./musicHistory";
 import { rememberResumePosition } from "./musicResume";
+import { RecapMusicSession } from "./recap/musicSession";
+
+const recapListening = new RecapMusicSession();
 
 /** The one tracker the audio element's events feed. */
 export const musicListens = new MusicListenTracker({
-  recordListen: (track, listenedSeconds, durationSeconds) =>
-    void recordSongHistory(track, listenedSeconds, durationSeconds),
+  recordListen: (track, listenedSeconds, durationSeconds) => {
+    void recordSongHistory(track, listenedSeconds, durationSeconds);
+    recapListening.note(track, listenedSeconds, durationSeconds);
+  },
   recordPosition: rememberResumePosition,
 });
 

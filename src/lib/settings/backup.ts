@@ -10,6 +10,7 @@ import {
   type SettingKey,
 } from "./schema";
 import { isSettingKey, normalizeSettingValue, validateSettingValue } from "./values";
+import { flushRecapQueue } from "../recap/recapQueue";
 
 export const SETTINGS_BACKUP_SCHEMA_VERSION = 2;
 /** v1 files (settings blob only) must keep importing unchanged. */
@@ -195,6 +196,7 @@ function typedSettings(raw: Record<string, string>): Record<string, unknown> {
 
 /** Every profile: Default at the top level, the others under `profiles`, plus the manifest. */
 export async function buildMasterBackup(): Promise<MasterBackup> {
+  await flushRecapQueue();
   const view = await listProfiles();
   const backup: MasterBackup = {
     schemaVersion: SETTINGS_BACKUP_SCHEMA_VERSION,

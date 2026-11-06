@@ -249,7 +249,8 @@ export const ImportData: React.FC = () => {
         if (backupCollections) {
           const collectionAllowed = (key: string): boolean => {
             switch (key) {
-              case "watch_history": return importHistory;
+              case "watch_history":
+              case "recap_stats": return importHistory;
               case "flow_neuro_brain":
               case "music_brain": return importNeuro;
               case "subscriptions":

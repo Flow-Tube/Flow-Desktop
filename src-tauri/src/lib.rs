@@ -19,6 +19,7 @@ mod macos_window;
 pub mod models;
 mod music_brain;
 pub mod profiles;
+mod recap;
 mod relaunch;
 mod scrobble;
 mod security;
@@ -702,6 +703,7 @@ pub fn run() {
             record_feed_impressions,
             record_seen_videos,
             seen_video_ids_among,
+            commands::recap::recap_record_batch,
             commands::home_feed::home_feed_open,
             commands::home_feed::home_feed_refresh,
             commands::home_feed::home_feed_viewport,

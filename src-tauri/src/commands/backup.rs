@@ -15,6 +15,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::errors::{AppError, ErrorResponse};
 use crate::music_brain::store::MusicBrainStore;
+use crate::recap;
+use crate::recap::model::RecapBackup;
 use crate::services::profile_service::{MasterManifest, ProfileService, RestoreTarget};
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::apply;
@@ -31,6 +33,9 @@ use crate::sync::protocol::StagedCollection;
 /// Extra backup entry (not a sync collection): the frontend's flat subscribed-channel list.
 pub const SUBSCRIPTION_CHANNELS_KEY: &str = "subscription_channels";
 const SUBSCRIPTIONS_SETTING_KEY: &str = "subscriptions";
+/// Extra master-backup entry (not a sync collection): the recap ledger, in a one-item array
+/// because importers keep only arrays. As on Android, it never travels by sync.
+pub const RECAP_STATS_ENTRY: &str = "recap_stats";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +61,10 @@ pub struct CollectionImportSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ImportSummary {
     pub collections: Vec<CollectionImportSummary>,
+}
+
+fn recap_err(e: &AppError) -> SyncError {
+    SyncError::Protocol(format!("recap ledger: {e}"))
 }
 
 pub(crate) fn sync_err(e: SyncError) -> ErrorResponse {
@@ -173,6 +182,16 @@ pub async fn export_backup(pool: &SqlitePool, scope: &str) -> Result<BackupExpor
                 map.insert(SUBSCRIPTION_CHANNELS_KEY.to_string(), parsed);
             }
         }
+    }
+
+    if scope == "MASTER" {
+        let ledger = recap::store::export(pool)
+            .await
+            .map_err(|e| recap_err(&e))?;
+        map.insert(
+            RECAP_STATS_ENTRY.to_string(),
+            Value::Array(vec![serde_json::to_value(ledger)?]),
+        );
     }
 
     Ok(BackupExport {
@@ -298,6 +317,24 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
         summary
             .collections
             .push(import_channel_list(pool, channels).await?);
+    }
+
+    if let Some(Value::Array(ledgers)) = collections.get(RECAP_STATS_ENTRY) {
+        // A file with no readable ledger leaves this device's own in place.
+        if let Some(backup) = ledgers
+            .first()
+            .and_then(|value| serde_json::from_value::<RecapBackup>(value.clone()).ok())
+        {
+            let months =
+                recap::store::restore(pool, &backup, chrono::Utc::now().timestamp_millis())
+                    .await
+                    .map_err(|e| recap_err(&e))?;
+            summary.collections.push(CollectionImportSummary {
+                collection: RECAP_STATS_ENTRY.to_string(),
+                added: months,
+                ..Default::default()
+            });
+        }
     }
 
     Ok(summary)

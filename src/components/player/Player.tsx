@@ -49,6 +49,7 @@ import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
 import { SponsorBlockTracker } from "../../lib/sponsorBlockPolicy";
 import { useManualSponsorSegment } from "../../lib/useManualSponsorSegment";
 import type { SponsorBlockSegment } from "../../lib/api/foss";
+import { recapSponsorSkip } from "../../lib/recap/recapQueue";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import {
@@ -2469,11 +2470,13 @@ export const Player: React.FC<PlayerProps> = ({
         const [start, end] = sb.skip.segment;
         seekTo(end);
         void incrementStats(sb.skip.category as SponsorBlockCategory, Math.max(0, end - start));
+        recapSponsorSkip(usePlayerStore.getState().currentVideo ?? {}, sb.skip.category, Math.max(0, end - start) * 1000);
         return;
       }
       if (sb.muteStarted) {
         const [start, end] = sb.muteStarted.segment;
         void incrementStats(sb.muteStarted.category as SponsorBlockCategory, Math.max(0, end - start));
+        recapSponsorSkip(usePlayerStore.getState().currentVideo ?? {}, sb.muteStarted.category, Math.max(0, end - start) * 1000);
       }
       if (sb.mute) {
         inMuteSegment = true;

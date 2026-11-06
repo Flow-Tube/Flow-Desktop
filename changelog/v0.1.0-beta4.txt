@@ -137,6 +137,9 @@ PLAYER
 - The mini player comes in three sizes. A thin progress bar stays at the bottom of the video when the controls hide, and clicking the time switches to what's left.
 - Optional frame step buttons while paused and a paid promotion label. The Save button shows Saved, Stats for nerds has more rows and Copy, and the description lists its tags and can be copied.
 
+LIBRARY
+- Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.
+
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
 - The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.

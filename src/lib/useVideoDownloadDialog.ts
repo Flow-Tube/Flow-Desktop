@@ -26,6 +26,7 @@ import {
 } from "./downloadOptions";
 import { IS_MACOS_RUNTIME } from "./platform";
 import { noteVideoSaved } from "./videoSaved";
+import { recapVideoAction } from "./recap/recapQueue";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
@@ -172,6 +173,7 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
         );
       }
       noteVideoSaved(video);
+      recapVideoAction(video, "DOWNLOAD");
       return started;
     } catch (reason) {
       setError(reason);

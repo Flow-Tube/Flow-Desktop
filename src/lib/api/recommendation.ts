@@ -261,6 +261,8 @@ export interface UserBrain {
   rejection_patterns: Record<string, RejectionSignal>;
   feed_history: Record<string, FeedEntry>;
   recent_query_tokens: string[][];
+  /** Device-local, and absent in a brain read from another synced profile. */
+  seen_shorts_history?: Record<string, number>;
   topic_evidence: Record<string, TopicEvidence>;
   schema_version: number;
   language_profile?: string | null;

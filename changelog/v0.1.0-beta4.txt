@@ -87,6 +87,7 @@ MUSIC
 - Settings > Music can hide the artwork in the full player, change the shape of the music progress bar, and make album art and cards on music pages smaller.
 - YouTube captions are now a lyrics provider, tried before YouTube's plain lyrics, so more songs get timed lines. Reorder or turn it off in Settings > Music.
 - New switches: open the full player for new songs, pause music while muted, and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
+- The Taste tab can export, import and reset your music profile on its own, without touching your video profile.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
@@ -211,3 +212,4 @@ FIXES
 - Trending Region is now Content country, and search and recommendations follow it as well as trending. Before, only Explore, charts and Shorts did. YouTube Music's home still follows where you connect from.
 - Proxy settings now work. HTTP, SOCKS5 and SOCKS4 proxies, with an optional sign-in, carry video, music, downloads, thumbnails, sync servers and update checks. Devices on your network stay direct, and changes apply to new connections.
 - Retry with Proxy on a video that won't load now really does that, and only shows when you have set a proxy up.
+- The Flow Neuro page can block a channel from its favoured list, and now shows Shorts seen and your recent discovery searches.

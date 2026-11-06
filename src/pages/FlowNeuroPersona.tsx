@@ -8,6 +8,7 @@ import { usePersonaData } from "../lib/usePersonaData";
 import { leaveGroupFirst } from "../lib/linked/leaveFirst";
 import { clearHomeFeed } from "../lib/api/homeFeed";
 import { useFeedActionsStore } from "../store/useFeedActionsStore";
+import { useUiStore } from "../store/useUiStore";
 
 import { SkeletonLoader } from "../components/persona/SkeletonLoader";
 import { PersonaOverview } from "../components/persona/PersonaOverview";
@@ -71,6 +72,16 @@ export function FlowNeuroPersona() {
       await refresh(true);
     } catch (e) {
       console.error("Failed to unblock channel:", e);
+    }
+  };
+
+  const handleBlockChannel = async (channelId: string, channelName: string) => {
+    try {
+      await useFeedActionsStore.getState().blockChannel({ channelId, channelName });
+      await refresh(true);
+    } catch (e) {
+      console.error("Failed to block channel:", e);
+      useUiStore.getState().showToast({ variant: "error", message: getString("persona_channel_block_failed") });
     }
   };
 
@@ -202,7 +213,7 @@ export function FlowNeuroPersona() {
 
         {/* Creator Memories & Blocked Filters */}
         <div className="col-span-12 lg:col-span-6">
-          <ChannelMemory brain={activeBrain} />
+          <ChannelMemory brain={activeBrain} onBlockChannel={readOnly ? undefined : (id, name) => void handleBlockChannel(id, name)} />
         </div>
 
         {/* Blocked Filters Section (rendered conditionally if blocks exist) */}

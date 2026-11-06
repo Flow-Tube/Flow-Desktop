@@ -218,6 +218,9 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "taste_groups_title", summary: "taste_groups_desc" },
     { title: "taste_remembered_title" },
     { title: "taste_hidden_channels" },
+    { title: "taste_export_music", summary: "taste_export_music_desc", keywords: ["backup", "music brain"] },
+    { title: "taste_import_music", summary: "taste_import_music_desc", keywords: ["restore", "music brain"] },
+    { title: "taste_reset_music", summary: "taste_reset_music_desc", keywords: ["clear", "music brain"] },
   ]),
   ...rows("quality", [
     { title: "settings_default_resolution", summary: "settings_default_resolution_desc" },

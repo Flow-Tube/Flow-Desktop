@@ -9,6 +9,7 @@ import { evidenceLabel, useTasteOverview } from "../../../lib/useTasteOverview";
 import { useFeedActionsStore } from "../../../store/useFeedActionsStore";
 import { AddTopicForm, RemovableChip, TopicChip, cx } from "../taste/TasteChips";
 import { TasteGroups } from "../taste/TasteGroups";
+import { TasteMusicData } from "../taste/TasteMusicData";
 import { HiddenChannels } from "../taste/HiddenChannels";
 import { RememberedChannels } from "../taste/RememberedChannels";
 import { TasteSection } from "../taste/TasteSection";
@@ -263,6 +264,8 @@ export function TasteTab() {
               />
             </div>
           </TasteSection>
+
+          <TasteMusicData />
 
           <section className="col-span-12 space-y-10">
             <div>

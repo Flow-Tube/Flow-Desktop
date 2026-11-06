@@ -37,7 +37,7 @@ interface FeedActionsState {
   notInterested: (video: VideoSummary) => Promise<void>;
   /** Hides a video from every feed, e.g. after a thumbs-down on the watch page. */
   hideVideo: (videoId: string) => void;
-  blockChannel: (video: VideoSummary) => Promise<void>;
+  blockChannel: (video: Pick<VideoSummary, "channelId" | "channelName">) => Promise<void>;
   /** Lets a channel back into every feed: unblocked, and no longer set aside by "not interested". */
   unblockChannel: (channelId: string) => Promise<void>;
   markWatched: (video: VideoSummary) => Promise<void>;

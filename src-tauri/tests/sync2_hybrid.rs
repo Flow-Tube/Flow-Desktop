@@ -341,10 +341,13 @@ async fn a_damaged_wrap_taken_from_a_member_is_dropped_for_the_next_meeting() {
     let g = group().await;
     let pool = device_pool(&g).await;
     let server = Damaging::new(&g.store);
-    over(&server, &pool, &g.b).await;
+    Session::open(&pool, over(&server, &pool, &g.b).await, &g.b)
+        .await
+        .unwrap();
     let held = HeldStore::new(pool.clone());
     let commitment = URL_SAFE_NO_PAD.decode(&head(&g.store).kc).unwrap();
     let (kc, name) = (kc_name(&commitment), hex::encode(g.b.did));
+    held.forget_key(0, &kc, &name).await.unwrap();
     held.hold_key(0, &kc, &name, &[7; 80]).await.unwrap();
 
     assert!(Session::open(&pool, held.clone(), &g.b).await.is_err());

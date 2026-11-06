@@ -8,6 +8,7 @@ export const DEFAULT_PROVIDER_ORDER: readonly string[] = [
   "Paxsenix",
   "LrcLib",
   "Unison",
+  "YouTubeSubtitle",
   "YouTube",
 ];
 

@@ -39,8 +39,10 @@ describe("lyrics provider order", () => {
     expect([...resolved].sort()).toEqual([...DEFAULT_PROVIDER_ORDER].sort());
   });
 
-  it("drops the removed YouTubeSubtitle stub from an old saved order", () => {
-    expect(resolveProviderOrder("YouTubeSubtitle,YouTube")).not.toContain("YouTubeSubtitle");
+  it("adds YouTube captions right before YouTube for a saved order that never had them", () => {
+    const resolved = resolveProviderOrder("YouTube,KuGou");
+    expect(resolved.indexOf("YouTubeSubtitle")).toBeGreaterThanOrEqual(0);
+    expect(new Set(resolved).size).toBe(resolved.length);
   });
 
   it("serializes known names once", () => {

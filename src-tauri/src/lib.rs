@@ -81,15 +81,15 @@ use commands::lyrics::{
 };
 use commands::music::{
     get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
-    get_music_artist_items, get_music_artist_page, get_music_charts_page, get_music_deep_cuts,
-    get_music_explore_page, get_music_home_page, get_music_linked_artists, get_music_lyrics_typed,
-    get_music_mood_genre, get_music_mood_groups, get_music_moods, get_music_new_releases,
-    get_music_playlist_continuation, get_music_playlist_page, get_music_queue,
-    get_music_queue_continuation, get_music_related_typed, get_music_request_diagnostics,
-    get_music_search_suggestions, get_music_search_summary, get_music_stream,
-    get_music_trending_songs, get_music_watch_queue, image_proxy_base, lyrics_http_get,
-    proxy_artwork_loop, proxy_image_url, romanize_lyrics, search_music_continuation,
-    search_music_typed,
+    get_music_artist_items, get_music_artist_page, get_music_captions_lrc, get_music_charts_page,
+    get_music_deep_cuts, get_music_explore_page, get_music_home_page, get_music_linked_artists,
+    get_music_lyrics_typed, get_music_mood_genre, get_music_mood_groups, get_music_moods,
+    get_music_new_releases, get_music_playlist_continuation, get_music_playlist_page,
+    get_music_queue, get_music_queue_continuation, get_music_related_typed,
+    get_music_request_diagnostics, get_music_search_suggestions, get_music_search_summary,
+    get_music_stream, get_music_trending_songs, get_music_watch_queue, image_proxy_base,
+    lyrics_http_get, proxy_artwork_loop, proxy_image_url, romanize_lyrics,
+    search_music_continuation, search_music_typed,
 };
 use commands::music_brain::{
     block_music_artist, dislike_music_artist, favourite_music_artist, get_blocked_music_artists,
@@ -807,6 +807,7 @@ pub fn run() {
             proxy_image_url,
             proxy_artwork_loop,
             romanize_lyrics,
+            get_music_captions_lrc,
             image_proxy_base,
             // --- Dedicated music brain (separate from flow_neuro) ---
             record_music_interaction,

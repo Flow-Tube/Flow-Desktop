@@ -13,7 +13,8 @@ export const OFFLINE_LYRICS_PROVIDER = "Downloaded";
 
 /** A provider name as the lyrics UI shows it. */
 export function lyricsSourceLabel(providerName: string): string {
-  return providerName === OFFLINE_LYRICS_PROVIDER ? getString("lyrics_source_downloaded") : providerName;
+  if (providerName === OFFLINE_LYRICS_PROVIDER) return getString("lyrics_source_downloaded");
+  return providerName === "YouTubeSubtitle" ? getString("lyrics_provider_youtube_captions") : providerName;
 }
 
 const offline = new Map<string, OfflineLyrics>();

@@ -351,6 +351,19 @@ pub async fn get_music_lyrics_typed(
     music.lyrics(&video_id).await.map_err(ErrorResponse::from)
 }
 
+/// A song's `YouTube` captions as `.lrc` text, or `None` when it has none.
+#[tauri::command]
+pub async fn get_music_captions_lrc(
+    video_id: String,
+    music: State<'_, MusicService>,
+) -> CmdResult<Option<String>> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    music
+        .captions_lrc(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 /// A Latin line per lyric line, made on this computer. Empty for Japanese lyrics.
 #[tauri::command]
 pub async fn romanize_lyrics(lines: Vec<String>) -> Vec<Option<String>> {

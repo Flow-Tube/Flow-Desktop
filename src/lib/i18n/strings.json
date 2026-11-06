@@ -977,6 +977,7 @@
   "crossfade_curve_hold": "Hold",
   "crossfade_curve_gentle": "Gentle",
   "settings_lyrics_providers": "Lyrics Providers",
+  "lyrics_provider_youtube_captions": "YouTube captions",
   "settings_lyrics_providers_enabled": "providers enabled",
   "settings_lyrics_ordered": "Tried in order",
   "settings_lyrics_provider_enabled": "Enabled for lyric lookup",

@@ -1,3 +1,4 @@
+import { lyricsSourceLabel } from '../../lib/lyrics/offline';
 import {
   DndContext,
   closestCenter,
@@ -63,7 +64,7 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
         <GripVertical className="h-4 w-4" />
       </button>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-chrome-neutral-200">{`${index + 1}. ${name}`}</div>
+        <div className="text-sm font-medium text-chrome-neutral-200">{`${index + 1}. ${lyricsSourceLabel(name)}`}</div>
         <div className="mt-0.5 text-xs text-chrome-neutral-400">
           {getString(enabled ? 'settings_lyrics_provider_enabled' : 'settings_lyrics_provider_disabled')}
         </div>

@@ -30,3 +30,8 @@ export function saveDownloadLyrics(videoId: string, lrc: string): Promise<boolea
 export function romanizeLyrics(lines: string[]): Promise<Array<string | null>> {
   return invokeBackend<Array<string | null>>("romanize_lyrics", { lines });
 }
+
+/** A song's YouTube captions as `.lrc` text, or null when it has none. */
+export function getMusicCaptionsLrc(videoId: string): Promise<string | null> {
+  return invokeBackend<string | null>("get_music_captions_lrc", { videoId });
+}

@@ -1,6 +1,8 @@
 //! Watch-surface extractors: the `next` queue/radio, typed related, lyrics, and
 //! `music/get_queue`.
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
 use super::clients;
@@ -122,6 +124,15 @@ impl InnertubeClient {
         Ok(related_from_sections(sections))
     }
 
+    /// A song's captions as `.lrc` text, for songs no lyrics provider has.
+    pub(crate) async fn music_captions_lrc(&self, video_id: &str) -> AppResult<Option<String>> {
+        let mut payload = json!({ "params": transcript_params(video_id) });
+        let res = self
+            .post_music("get_transcript", &clients::WEB_REMIX, &mut payload, None)
+            .await?;
+        Ok(lrc_from_transcript(&res))
+    }
+
     /// Plain lyrics for a song (via the `next` lyrics tab pointer), with their credit.
     pub(crate) async fn music_lyrics_text(&self, video_id: &str) -> AppResult<Option<MusicLyrics>> {
         let queue = self.music_watch_queue(Some(video_id), None, None).await?;
@@ -150,6 +161,41 @@ impl InnertubeClient {
         }
         Ok((!text.is_empty()).then_some(MusicLyrics { text, source }))
     }
+}
+
+/// The transcript request's protobuf: field 1, the video id, base64 encoded.
+fn transcript_params(video_id: &str) -> String {
+    let length = u8::try_from(video_id.len()).unwrap_or(u8::MAX);
+    let mut message = vec![0x0A, length];
+    message.extend_from_slice(video_id.as_bytes());
+    STANDARD.encode(message)
+}
+
+/// `[mm:ss.mmm]text` per cue. `None` when the answer holds no cues.
+fn lrc_from_transcript(res: &Value) -> Option<String> {
+    let groups = res["actions"][0]["updateEngagementPanelAction"]["content"]["transcriptRenderer"]
+        ["body"]["transcriptBodyRenderer"]["cueGroups"]
+        .as_array()?;
+    let lines: Vec<String> = groups
+        .iter()
+        .filter_map(|group| {
+            let cue = &group["transcriptCueGroupRenderer"]["cues"][0]["transcriptCueRenderer"];
+            let start = &cue["startOffsetMs"];
+            let ms = start
+                .as_u64()
+                .or_else(|| start.as_str().and_then(|text| text.parse().ok()))?;
+            let text = cue["cue"]["simpleText"]
+                .as_str()?
+                .trim_matches(|c: char| c == '♪' || c.is_whitespace());
+            Some(format!(
+                "[{:02}:{:02}.{:03}]{text}",
+                ms / 60_000,
+                (ms / 1000) % 60,
+                ms % 1000
+            ))
+        })
+        .collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
 fn is_video_song(song: &SongItem) -> bool {
@@ -535,5 +581,25 @@ mod related_tests {
         );
         assert_eq!(queue.related_browse_id.as_deref(), Some("MPTRt_related"));
         assert_eq!(queue.lyrics_browse_id.as_deref(), Some("MPLYt_lyrics"));
+    }
+
+    #[test]
+    fn transcript_params_match_android() {
+        // Android sends base64 of "\n\u{b}<videoId>".
+        assert_eq!(transcript_params("dQw4w9WgXcQ"), "CgtkUXc0dzlXZ1hjUQ==");
+    }
+
+    #[test]
+    fn transcript_cues_become_lrc() {
+        let res = json!({"actions": [{"updateEngagementPanelAction": {"content": {"transcriptRenderer": {"body": {"transcriptBodyRenderer": {"cueGroups": [
+            {"transcriptCueGroupRenderer": {"cues": [{"transcriptCueRenderer": {"startOffsetMs": "61500", "cue": {"simpleText": "♪ Hello ♪"}}}]}},
+            {"transcriptCueGroupRenderer": {"cues": [{"transcriptCueRenderer": {"startOffsetMs": 5, "cue": {"simpleText": "World"}}}]}},
+            {"transcriptCueGroupRenderer": {"cues": []}},
+        ]}}}}}}]});
+        assert_eq!(
+            lrc_from_transcript(&res).as_deref(),
+            Some("[01:01.500]Hello\n[00:00.005]World")
+        );
+        assert_eq!(lrc_from_transcript(&json!({})), None);
     }
 }

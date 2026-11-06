@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { getPlural, getString } from '../../lib/i18n/index';
 import { musicSortLabel, type MusicSortOrder } from '../../lib/musicCollectionSort';
+import { Button } from '../ui/Button';
 import { SearchInput } from '../ui/SearchInput';
 import { Select } from '../ui/Select';
 
@@ -18,15 +19,10 @@ function ToolbarButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="inline-flex h-9 items-center gap-2 rounded-full bg-surface-container-high px-3 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:pointer-events-none disabled:opacity-50"
-    >
+    <Button type="button" variant="secondary" size="sm" disabled={disabled} onClick={onClick}>
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }
 

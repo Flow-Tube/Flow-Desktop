@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, Loader2, Play } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
-import { EditAlbumDialog } from '../../components/music/EditAlbumDialog';
+import { PlaylistFormDialog } from '../../components/playlist/PlaylistFormDialog';
 import { MusicCollectionHeader } from '../../components/music/MusicCollectionHeader';
 import { MusicCollectionSkeleton } from '../../components/music/MusicCollectionSkeleton';
 import { MusicCollectionSuggestions } from '../../components/music/MusicCollectionSuggestions';
@@ -309,11 +309,16 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
       />
 
       {editing && ownedAlbum ? (
-        <EditAlbumDialog
-          initialTitle={ownedAlbum.title}
+        <PlaylistFormDialog
+          title={getString('album_edit')}
+          confirmLabel={getString('save')}
+          initialName={ownedAlbum.title}
           initialDescription={ownedAlbum.description ?? ''}
-          onSave={saveDetails}
-          onClose={() => setEditing(false)}
+          onSubmit={(title, description) => {
+            saveDetails(title, description);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
         />
       ) : null}
 

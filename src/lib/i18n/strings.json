@@ -251,7 +251,6 @@
   "local_detail_bitrate": "Bitrate",
   "local_detail_kbps": "%1$d kbps",
   "local_detail_added": "Added",
-  "local_details_close": "Close",
   "local_no_remote": "You're controlling another device. Stop that to play files from this computer.",
   "library_page_title": "Your Library",
   "library_saved_albums_label": "Saved Albums",

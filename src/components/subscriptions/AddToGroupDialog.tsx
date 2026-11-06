@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
+import { InfoDialog } from "../ui/InfoDialog";
+import { TextInput } from "../ui/TextInput";
 import { channelCountLabel } from "../../lib/channelGroupLabels";
 import { groupChannelsWith } from "../../lib/channelGroups";
 import { getString } from "../../lib/i18n/index";
@@ -33,27 +34,13 @@ export function AddToGroupDialog({ channelId, channelName, onClose }: AddToGroup
     setNewName("");
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-chrome-black/70 p-4"
-      onClick={(event) => {
-        event.stopPropagation();
-        onClose();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-label={getString("channel_add_to_group")}
-        className="flex max-h-[70vh] w-full max-w-sm flex-col gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-5"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div>
-          <h3 className="text-base font-medium text-chrome-neutral-100">{getString("channel_add_to_group")}</h3>
-          <p className="mt-0.5 line-clamp-1 text-sm text-chrome-neutral-400">{channelName}</p>
-        </div>
+  return (
+    <InfoDialog title={getString("channel_add_to_group")} closeLabel={getString("close")} onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <p className="line-clamp-1 text-sm text-chrome-neutral-400">{channelName}</p>
 
         {groups.length > 0 ? (
-          <div className="min-h-0 flex-1 divide-y divide-chrome-neutral-800 overflow-y-auto rounded-lg border border-chrome-neutral-800 bg-surface-container-low">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-chrome-neutral-800 bg-surface-container-low">
             {groups.map((group) => {
               const member = group.channelIds.includes(channelId);
               return (
@@ -76,28 +63,21 @@ export function AddToGroupDialog({ channelId, channelName, onClose }: AddToGroup
         )}
 
         <div className="flex items-center gap-2">
-          <input
+          <TextInput
             value={newName}
-            onChange={(event) => setNewName(event.target.value)}
+            onChange={setNewName}
             onKeyDown={(event) => {
               if (event.key === "Enter") submitNew();
             }}
             placeholder={getString("subscriptions_groups_name")}
-            className="h-9 min-w-0 flex-1 rounded-lg border border-chrome-neutral-800 bg-surface-container-low px-3 text-sm text-chrome-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="min-w-0 flex-1"
           />
           <Button variant="tonal" size="sm" disabled={!newName.trim()} onClick={submitNew}>
             <Plus size={15} />
             {getString("subscriptions_groups_create")}
           </Button>
         </div>
-
-        <div className="flex justify-end">
-          <Button variant="ghost" onClick={onClose}>
-            {getString("close")}
-          </Button>
-        </div>
       </div>
-    </div>,
-    document.body,
+    </InfoDialog>
   );
 }

@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/ui/EmptyState";
 import React, { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { CheckSquare, Copy, ListOrdered, Loader2, StickyNote, Trash2, X } from "lucide-react";
@@ -27,17 +28,6 @@ const SORT_LABELS: Record<NotesSort, StringKey> = {
   title: "notes_sort_title",
   custom: "notes_sort_custom",
 };
-
-function EmptyState({ title, body, action }: { title: string; body?: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-chrome-neutral-800 px-6 py-16 text-center">
-      <StickyNote size={32} className="text-chrome-neutral-500" />
-      <h2 className="text-base font-medium text-chrome-neutral-100">{title}</h2>
-      {body && <p className="max-w-md text-sm text-chrome-neutral-400">{body}</p>}
-      {action}
-    </div>
-  );
-}
 
 export const Notes: React.FC<{ onPlay: (video: VideoSummary) => void }> = ({ onPlay }) => {
   const page = useNotesPage();
@@ -85,16 +75,13 @@ export const Notes: React.FC<{ onPlay: (video: VideoSummary) => void }> = ({ onP
           <Loader2 className="animate-spin text-primary" size={32} />
         </div>
       ) : page.loadError ? (
-        <EmptyState
-          title={getString("notes_load_failed")}
-          action={
-            <Button variant="tonal" onClick={() => void page.reload()}>
-              {getString("retry")}
-            </Button>
-          }
-        />
+        <EmptyState icon={StickyNote} title={getString("notes_load_failed")}>
+          <Button variant="tonal" onClick={() => void page.reload()}>
+            {getString("retry")}
+          </Button>
+        </EmptyState>
       ) : page.all.length === 0 ? (
-        <EmptyState title={getString("notes_empty_title")} body={getString("notes_empty_body")} />
+        <EmptyState icon={StickyNote} title={getString("notes_empty_title")} body={getString("notes_empty_body")} />
       ) : page.reordering ? (
         <NotesReorderList notes={page.visible} onMove={page.move} onDone={page.stopReordering} />
       ) : (
@@ -151,7 +138,7 @@ export const Notes: React.FC<{ onPlay: (video: VideoSummary) => void }> = ({ onP
           )}
 
           {page.visible.length === 0 ? (
-            <EmptyState title={getString("notes_no_match_title")} body={getString("notes_no_match_body")} />
+            <EmptyState icon={StickyNote} title={getString("notes_no_match_title")} body={getString("notes_no_match_body")} />
           ) : (
             <div className="grid grid-cols-12 gap-6">
               <ul className="col-span-12 flex flex-col gap-1 lg:col-span-5">

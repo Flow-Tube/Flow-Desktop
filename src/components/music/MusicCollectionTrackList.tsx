@@ -1,3 +1,4 @@
+import { EmptyState } from '../ui/EmptyState';
 import { ListMusic, SearchX } from 'lucide-react';
 
 import { getString } from '../../lib/i18n/index';
@@ -21,16 +22,6 @@ interface MusicCollectionTrackListProps {
   onRemove?: (song: SongItem) => void;
 }
 
-function EmptyState({ icon, title, body }: { icon: React.ReactNode; title: string; body?: string }) {
-  return (
-    <div className="flex flex-col items-center gap-2 py-16 text-center">
-      {icon}
-      <p className="text-sm font-medium text-chrome-neutral-200">{title}</p>
-      {body ? <p className="text-sm text-chrome-neutral-500">{body}</p> : null}
-    </div>
-  );
-}
-
 /** The songs of an album or playlist. A song keeps its number in the page's own order whatever the sort. */
 export function MusicCollectionTrackList({
   songs,
@@ -50,7 +41,7 @@ export function MusicCollectionTrackList({
   if (totalSongs === 0) {
     return (
       <EmptyState
-        icon={<ListMusic className="h-8 w-8 text-chrome-neutral-500" />}
+        icon={ListMusic}
         title={getString('music_collection_empty_title')}
         body={onRemove ? getString('music_collection_empty_body') : undefined}
       />
@@ -59,7 +50,7 @@ export function MusicCollectionTrackList({
   if (songs.length === 0) {
     return (
       <EmptyState
-        icon={<SearchX className="h-8 w-8 text-chrome-neutral-500" />}
+        icon={SearchX}
         title={getString('music_collection_no_matches', query.trim())}
       />
     );

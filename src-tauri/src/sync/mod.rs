@@ -20,6 +20,7 @@ pub mod notes;
 pub mod protocol;
 pub mod qr;
 pub mod runtime;
+pub mod saved_shorts;
 pub mod session;
 pub mod settings_map;
 pub mod tombstones;

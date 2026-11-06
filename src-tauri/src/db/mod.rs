@@ -42,6 +42,10 @@ pub async fn initialize_database(dir: PathBuf) -> AppResult<SqlitePool> {
         tracing::warn!(%error, "Failed to prune recommendation events");
     }
 
+    if let Err(error) = crate::sync::saved_shorts::adopt_synced_playlist(&pool).await {
+        tracing::warn!(%error, "Failed to move synced Saved Shorts into the library");
+    }
+
     Ok(pool)
 }
 

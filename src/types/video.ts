@@ -434,6 +434,9 @@ export interface ShortVideoSummary {
   channelAvatarUrl?: string | null;
   viewCountText?: string | null;
   publishedText?: string | null;
+  /** Epoch ms it was saved; missing for Shorts saved before it was kept. */
+  addedAtInPlaylist?: number | null;
+  durationSeconds?: number | null;
 }
 
 export interface PlaylistSummary {

@@ -31,6 +31,7 @@ use crate::sync::canonical::{
     MusicBrainSnapshot, Note, OrSet, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
     SubscribedChannel, SubscriptionGroup, TrackMetaWire, WatchHistoryRecord,
 };
+use crate::sync::saved_shorts::SAVED_SHORTS_SYNC_ID;
 
 // ===========================================================================================
 // Generic primitive helpers
@@ -250,6 +251,7 @@ fn is_reconcilable(p: &Playlist) -> bool {
         && !p.is_protected
         && p.is_user_created
         && p.origin == PlaylistOrigin::Local
+        && p.sync_id != SAVED_SHORTS_SYNC_ID
         && !normalize_title(&p.title).is_empty()
 }
 

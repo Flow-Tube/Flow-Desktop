@@ -36,6 +36,7 @@ use crate::sync::mapping::{self, WatchInsert, WatchRow};
 use crate::sync::merge::{self, MergedFlowNeuroBrain, MergedMusicBrain};
 use crate::sync::notes;
 use crate::sync::protocol::StagedCollection;
+use crate::sync::saved_shorts;
 use crate::sync::settings_map;
 use crate::sync::tombstones;
 
@@ -63,6 +64,10 @@ pub struct ApplyReport {
 const WATCH_SELECT: &str = "SELECT video_id, title, channel_name, channel_id, watch_date, \
      watch_duration_seconds, total_duration_seconds, is_music, is_short, updated_hlc \
      FROM watch_history";
+
+/// Starts the peer id a backup restore applies under: a file on this device says nothing about
+/// what any other device keeps.
+pub const BACKUP_RESTORE_PEER_PREFIX: &str = "backup-restore-";
 
 /// Apply a payload received in a FLOW-SYNC/1 session atomically. See the module docs for the
 /// guarantees.
@@ -138,7 +143,7 @@ async fn apply(
             ),
             Collection::Likes => (apply_likes(&mut tx, our_device_id, &sc.ndjson).await?, true),
             Collection::Playlists => (
-                apply_playlists(&mut tx, our_device_id, &sc.ndjson).await?,
+                apply_playlists(&mut tx, our_device_id, peer_device_id, &sc.ndjson).await?,
                 true,
             ),
             Collection::Settings => (
@@ -446,6 +451,7 @@ async fn apply_likes(
 async fn apply_playlists(
     tx: &mut Transaction<'_, Sqlite>,
     device_id: &str,
+    peer_device_id: &str,
     ndjson: &[u8],
 ) -> Result<ApplyStats, SyncError> {
     let mut local = match get_setting(tx, mapping::PLAYLISTS_SETTING_KEY).await? {
@@ -455,7 +461,18 @@ async fn apply_playlists(
     if let Some(raw) = get_setting(tx, mapping::ALBUMS_SETTING_KEY).await? {
         local.extend(mapping::parse_albums_blob(&raw, device_id));
     }
+    let library = get_setting(tx, saved_shorts::SAVED_SHORTS_SETTING_KEY).await?;
+    if let Some(raw) = &library {
+        local.push(saved_shorts::parse_library(raw, device_id));
+    }
     let incoming = parse_ndjson::<Playlist>(ndjson)?;
+    if !peer_device_id.starts_with(BACKUP_RESTORE_PEER_PREFIX)
+        && incoming
+            .iter()
+            .any(|p| p.sync_id == saved_shorts::SAVED_SHORTS_SYNC_ID)
+    {
+        set_setting(tx, saved_shorts::PEER_KEEPS_LIST_SETTING_KEY, "true").await?;
+    }
     for (from, to) in merge::adopt_peer_playlist_ids(&mut local, &incoming) {
         changes::rename_playlist(tx, &from, &to).await?;
     }
@@ -489,6 +506,17 @@ async fn apply_playlists(
         }
     }
 
+    let (shorts, merged): (Vec<Playlist>, Vec<Playlist>) = merged
+        .into_iter()
+        .partition(|p| p.sync_id == saved_shorts::SAVED_SHORTS_SYNC_ID);
+    if let Some(playlist) = shorts.first() {
+        set_setting(
+            tx,
+            saved_shorts::SAVED_SHORTS_SETTING_KEY,
+            &saved_shorts::library_blob(playlist, library.as_deref()),
+        )
+        .await?;
+    }
     let (albums, playlists): (Vec<Playlist>, Vec<Playlist>) =
         merged.into_iter().partition(mapping::is_album_playlist);
 
@@ -922,6 +950,11 @@ async fn backup_snapshot(
                 obj.insert("user_playlists".to_string(), serde_json::json!(raw));
                 let albums = setting_value(pool, mapping::ALBUMS_SETTING_KEY).await?;
                 obj.insert("saved_albums".to_string(), serde_json::json!(albums));
+                let shorts = setting_value(pool, saved_shorts::SAVED_SHORTS_SETTING_KEY).await?;
+                obj.insert(
+                    saved_shorts::SAVED_SHORTS_SETTING_KEY.to_string(),
+                    serde_json::json!(shorts),
+                );
             }
             Collection::Settings => {
                 let mut map = serde_json::Map::new();

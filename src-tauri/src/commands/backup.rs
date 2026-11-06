@@ -157,7 +157,7 @@ pub async fn export_backup(pool: &SqlitePool, scope: &str) -> Result<BackupExpor
     let collections = scope_collections(scope)
         .ok_or_else(|| SyncError::Protocol(format!("unknown backup scope: {scope}")))?;
     let device_id = ledger::get_or_create_device_id(pool).await?;
-    let outgoing = export::export_collections(pool, &device_id, &collections).await?;
+    let outgoing = export::export_for_backup(pool, &device_id, &collections).await?;
 
     let mut map = serde_json::Map::new();
     for oc in outgoing {
@@ -267,7 +267,8 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
         // A unique per-import peer id keeps the sync_log idempotency guard from silently
         // skipping a deliberate re-restore (e.g. restore, clear data, restore again).
         let peer_id = format!(
-            "backup-restore-{}",
+            "{}{}",
+            apply::BACKUP_RESTORE_PEER_PREFIX,
             chrono::Utc::now().timestamp_millis().max(0)
         );
         let report = apply::apply_payload(pool, &device_id, &peer_id, &staged).await?;

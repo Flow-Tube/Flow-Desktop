@@ -27,6 +27,7 @@ async function reloadLikes(): Promise<void> {
 async function reloadPlaylists(): Promise<void> {
   await useAlbumLibraryStore.getState().load();
   window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
+  window.dispatchEvent(new Event(SAVED_SHORTS_LIBRARY_UPDATED_EVENT));
 }
 
 /** Fired after a sync merged either recommendation brain, which the backend already reloaded. */

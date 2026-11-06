@@ -67,6 +67,8 @@ setting	user_neuro_brain_before_v14	PROFILE	private	Pre-migration copy, written 
 setting	user_music_brain	PROFILE	private	MusicBrain
 setting	music_brain_backfilled	PROFILE	private	Follows user_music_brain
 setting	liked_items	PROFILE	library	Likes
+setting	saved_shorts_library	PROFILE	library	Saved Shorts; never copied to another profile
+setting	saved_shorts_peer_keeps_list	PROFILE	sync	A device has sent Saved Shorts, so this profile's may go out
 setting	sync2_notes_missed	DEFAULT_ONLY	sync	The group's state, in Default's file: notes other devices sent before this build kept them are still to be read
 setting	user_playlists	PROFILE	library	Playlists
 setting	saved_albums	PROFILE	library	Saved albums

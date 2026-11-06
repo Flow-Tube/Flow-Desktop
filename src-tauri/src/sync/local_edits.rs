@@ -14,6 +14,7 @@ use crate::sync::changes::{self, Change};
 use crate::sync::clock;
 use crate::sync::error::SyncError;
 use crate::sync::mapping;
+use crate::sync::saved_shorts;
 
 /// Record the edits a frontend write to settings `key` is about to make. A no-op for keys that
 /// aren't synced blobs.
@@ -73,6 +74,7 @@ fn is_tracked_blob(key: &str) -> bool {
         mapping::LIKES_SETTING_KEY,
         mapping::PLAYLISTS_SETTING_KEY,
         mapping::ALBUMS_SETTING_KEY,
+        saved_shorts::SAVED_SHORTS_SETTING_KEY,
         mapping::SUBSCRIPTION_GROUPS_SETTING_KEY,
     ]
     .contains(&key)
@@ -91,6 +93,11 @@ pub fn diff_blob(key: &str, old: &str, new: &str, now_ms: u64) -> Vec<Change> {
         mapping::ALBUMS_SETTING_KEY => diff_playlists(
             &mapping::parse_albums_blob(old, ""),
             &mapping::parse_albums_blob(new, ""),
+            now_ms,
+        ),
+        saved_shorts::SAVED_SHORTS_SETTING_KEY => diff_playlists(
+            &[saved_shorts::parse_library(old, "")],
+            &[saved_shorts::parse_library(new, "")],
             now_ms,
         ),
         mapping::SUBSCRIPTION_GROUPS_SETTING_KEY => diff_groups(old, new, now_ms),

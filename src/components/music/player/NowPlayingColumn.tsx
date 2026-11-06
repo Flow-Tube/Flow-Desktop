@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Heart, MoreHorizontal } from "lucide-react";
@@ -58,7 +58,6 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
 
   const videoId = track.videoId ?? track.id;
   const liked = likedItems.some((item) => item.kind === "music" && item.id === videoId);
-  const primaryArtist = track.artists?.find((artist) => artist.id) ?? track.artists?.[0] ?? null;
 
   useEffect(() => {
     if (!likesLoaded) void loadLikes();
@@ -94,18 +93,31 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
             >
               {track.title}
             </h1>
-            <button
-              type="button"
-              disabled={!primaryArtist?.id}
-              onClick={() => {
-                if (!primaryArtist?.id) return;
-                closeOverlay();
-                navigate(`/music/artist/${primaryArtist.id}`);
-              }}
-              className="mt-2 line-clamp-1 max-w-full text-left text-base text-chrome-neutral-300 transition-colors hover:text-chrome-neutral-100 disabled:cursor-default disabled:hover:text-chrome-neutral-300 lg:text-lg"
-            >
-              {artistsText(track.artists)}
-            </button>
+            <div className="mt-2 line-clamp-1 max-w-full text-left text-base text-chrome-neutral-300 lg:text-lg">
+              {track.artists && track.artists.length > 0 ? (
+                track.artists.map((artist, idx) => (
+                  <Fragment key={artist.id ?? `${artist.name}-${idx}`}>
+                    {idx > 0 && <span className="text-chrome-neutral-400">, </span>}
+                    {artist.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeOverlay();
+                          navigate(`/music/artist/${artist.id}`);
+                        }}
+                        className="transition-colors hover:text-chrome-neutral-100 hover:underline"
+                      >
+                        {artist.name}
+                      </button>
+                    ) : (
+                      <span>{artist.name}</span>
+                    )}
+                  </Fragment>
+                ))
+              ) : (
+                <span>{artistsText(track.artists)}</span>
+              )}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <MusicSleepTimerButton className={META_BTN} activeClassName={`${META_BTN} text-[var(--color-primary)]`} />

@@ -25,6 +25,7 @@ vi.mock("../store/useUiStore", () => ({
 
 import {
   DEEP_FLOW_NEVER_EXPIRES_HOURS,
+  deepFlowAllowsHistory,
   getDeepFlowRemainingMs,
   isDeepFlowCurrentlyActive,
   shouldRecordWatchHistory,
@@ -148,6 +149,19 @@ describe("shouldRecordWatchHistory", () => {
       [SETTINGS.DEEP_FLOW_ACTIVATED_AT]: String(Date.now()),
       [SETTINGS.DEEP_FLOW_EXPIRE_HOURS]: "4",
       [SETTINGS.DEEP_FLOW_SAVE_HISTORY]: "false",
+    });
+    expect(shouldRecordWatchHistory()).toBe(false);
+  });
+
+  it("stops while watch history is paused, Deep Flow or not", () => {
+    seed({ [SETTINGS.PAUSE_WATCH_HISTORY]: "true" });
+    expect(shouldRecordWatchHistory()).toBe(false);
+    expect(deepFlowAllowsHistory()).toBe(true);
+    seed({
+      [SETTINGS.PAUSE_WATCH_HISTORY]: "true",
+      [SETTINGS.DEEP_FLOW_ACTIVE]: "true",
+      [SETTINGS.DEEP_FLOW_ACTIVATED_AT]: String(Date.now()),
+      [SETTINGS.DEEP_FLOW_SAVE_HISTORY]: "true",
     });
     expect(shouldRecordWatchHistory()).toBe(false);
   });

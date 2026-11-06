@@ -18,6 +18,7 @@ import { CONTENT_LANGUAGE_OPTIONS } from '../../../lib/contentLanguages';
 import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridColumns';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
+import { SearchHistoryGroup } from '../SearchHistoryGroup';
 
 export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
@@ -176,6 +177,8 @@ export function ContentTab() {
           </SettingItem>
         )}
       </SettingsGroup>
+
+      <SearchHistoryGroup />
 
       <LibrarySectionsGroup />
 

@@ -13,7 +13,7 @@ import { parseYoutubeUrl, routeForYoutubeUrl } from '../../lib/youtubeUrl';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
-import { useSearchHistoryStore } from '../../store/useSearchHistoryStore';
+import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
 import { useUiStore } from '../../store/useUiStore';
 
 const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
@@ -22,7 +22,8 @@ export function TopbarSearch() {
   const navigate = useNavigate();
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const region = useAppSettingsStore((s) => s.values[SETTINGS.TRENDING_REGION]);
-  const history = useSearchHistoryStore((s) => s.entries);
+  const history = useVisibleSearchHistory();
+  const suggestionsEnabled = useAppSettingsStore((s) => s.values[SETTINGS.SEARCH_SUGGESTIONS_ENABLED] !== 'false');
   const recordSearch = useSearchHistoryStore((s) => s.record);
   const removeSearch = useSearchHistoryStore((s) => s.remove);
   const clearHistory = useSearchHistoryStore((s) => s.clear);
@@ -36,7 +37,7 @@ export function TopbarSearch() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { suggestions, musicItems } = useSearchSuggestions(text, region);
+  const { suggestions, musicItems } = useSearchSuggestions(text, region, suggestionsEnabled);
   const columns = useMemo(
     () => buildSuggestionColumns({ query: text, history, suggestions, musicItems, isHiddenSong }),
     [text, history, suggestions, musicItems, isHiddenSong],

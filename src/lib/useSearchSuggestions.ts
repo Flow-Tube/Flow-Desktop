@@ -11,13 +11,13 @@ const MIN_QUERY_LENGTH = 2;
  * Text suggestions from YouTube and tappable entities from YouTube Music for `query`.
  * The two answers are shown as each arrives, so a slow one never holds up the other.
  */
-export function useSearchSuggestions(query: string, region: string | null | undefined) {
+export function useSearchSuggestions(query: string, region: string | null | undefined, enabled = true) {
   const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
   const [musicItems, setMusicItems] = useState<YTItem[]>([]);
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < MIN_QUERY_LENGTH) {
+    if (!enabled || q.length < MIN_QUERY_LENGTH) {
       setSuggestions([]);
       setMusicItems([]);
       return;
@@ -49,7 +49,7 @@ export function useSearchSuggestions(query: string, region: string | null | unde
       current = false;
       clearTimeout(timer);
     };
-  }, [query, region]);
+  }, [query, region, enabled]);
 
   return { suggestions, musicItems };
 }

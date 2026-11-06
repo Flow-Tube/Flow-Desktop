@@ -6,11 +6,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::batches::{IncomingBatch, parse_batch};
 use super::blob::open_blob;
-use super::engine::{Content, Result, Session, contained};
+use super::engine::{Content, EngineError, Result, Session, contained};
 use super::envelope::{ObjectType, ParsedObject, StreamPosition};
 use super::epoch::purpose_key;
 use super::paths::{blob_path, log_path, parse_log_path};
 use super::payload::decode_payload;
+use super::read_budget::ReadBudget;
+use super::server::StoreError;
 use super::snapshot::{Manifest, Tip};
 use super::store::Store;
 use super::{Error, array};
@@ -92,6 +94,7 @@ impl<S: Store> Session<'_, S> {
         let me = hex::encode(self.device().did);
         let mut logs: BTreeMap<String, Vec<u64>> = BTreeMap::new();
         let mut cursor = 0;
+        let mut budget = ReadBudget::default();
         loop {
             let (changes, next) = self.store().changes(cursor).await?;
             for (did, seq) in changes.iter().filter_map(|c| parse_log_path(&c.path)) {
@@ -100,6 +103,10 @@ impl<S: Store> Session<'_, S> {
             // A cursor that doesn't move would hand out the same page forever.
             if changes.is_empty() || next <= cursor {
                 break;
+            }
+            // A partial list could pick a snapshot that doesn't cover the logs left out.
+            if !budget.take(changes.len()) {
+                return Err(StoreError::Malformed.into());
             }
             cursor = next;
         }
@@ -171,11 +178,12 @@ impl<S: Store> Session<'_, S> {
             if found.len() >= wanted {
                 break;
             }
-            let Some(bytes) = self.store().get_object(&log_path(did, seq)).await? else {
+            let path = log_path(did, seq);
+            let Some(bytes) = self.store().get_object(&path).await? else {
                 continue;
             };
             let read = async {
-                let object = self.verified(&bytes, did, seq)?;
+                let object = self.verified_copy(&bytes, &path, did, seq).await?;
                 if object.header.object_type != ObjectType::Snapshot {
                     return Ok(None);
                 }
@@ -225,9 +233,10 @@ impl<S: Store> Session<'_, S> {
         let group = *self.group();
         let mut batches = Vec::new();
         for part in &manifest.parts {
+            let path = blob_path(writer, &part.blob);
             let blob = self
                 .store()
-                .get_object(&blob_path(writer, &part.blob))
+                .get_object(&path)
                 .await?
                 .ok_or(Error::BlobHash)?;
             let hash = hex::decode(&part.blob).map_err(|_| Error::BlobHash)?;
@@ -236,7 +245,13 @@ impl<S: Store> Session<'_, S> {
                     let key = purpose_key(key, &group, epoch, ObjectType::Snapshot.purpose());
                     open_blob(&key, &group, epoch, &writer_id, &blob, &hash)
                 })
-                .await?;
+                .await;
+            match &payload {
+                Ok(_) => self.store().keep_object(&path, &blob).await?,
+                Err(EngineError::Protocol(_)) => self.store().drop_object(&path).await?,
+                Err(_) => {}
+            }
+            let payload = payload?;
             batches.push(parse_batch(&decode_payload(&payload)?)?);
         }
         Ok(batches)

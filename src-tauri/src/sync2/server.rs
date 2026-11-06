@@ -18,6 +18,7 @@ use super::http::{MAX_RESPONSE, Transport, read_body};
 use super::kdf::tag;
 use super::keys::MemberSecrets;
 use super::mailbox::Mailbox;
+use super::read_budget::ReadBudget;
 use super::roster::{Entry, parse_entry};
 use super::store::Store;
 
@@ -372,6 +373,7 @@ impl Store for ServerStore {
     async fn roster_view(&self) -> Result<Vec<Entry>> {
         let mut entries: Vec<Entry> = Vec::new();
         let mut after = -1;
+        let mut budget = ReadBudget::default();
         loop {
             let page = self.roster_after(after).await?;
             let Some(last) = page.last() else {
@@ -382,6 +384,9 @@ impl Store for ServerStore {
                 return Err(StoreError::Malformed);
             }
             after = seq;
+            if !budget.take(page.len()) {
+                return Err(StoreError::Malformed);
+            }
             entries.extend(page);
         }
     }

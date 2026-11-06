@@ -429,6 +429,100 @@ async fn answers_past_their_limit_are_refused() {
     assert!(matches!(dav.list("dev/").await, Err(StoreError::Malformed)));
 }
 
+/// Answers each `PROPFIND` with a page from `listing`, given the path asked for, and each `GET`
+/// with `body`.
+async fn scripted_webdav(listing: fn(&str) -> String, body: String) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((stream, _)) = listener.accept().await {
+            let body = body.clone();
+            tokio::spawn(async move {
+                let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
+                    let body = body.clone();
+                    async move {
+                        let path = request.uri().path().to_owned();
+                        let mut response = if request.method() == hyper::Method::GET {
+                            hyper::Response::new(Body::from(body))
+                        } else {
+                            let xml = format!(
+                                r#"<D:multistatus xmlns:D="DAV:">{}</D:multistatus>"#,
+                                listing(&path)
+                            );
+                            let mut response = hyper::Response::new(Body::from(xml));
+                            *response.status_mut() = hyper::StatusCode::MULTI_STATUS;
+                            response
+                        };
+                        response
+                            .headers_mut()
+                            .insert("content-type", "application/xml".parse().unwrap());
+                        Ok::<_, Infallible>(response)
+                    }
+                });
+                let _ = http1::Builder::new()
+                    .serve_connection(TokioIo::new(stream), service)
+                    .await;
+            });
+        }
+    });
+    format!("http://127.0.0.1:{port}/flow-sync/")
+}
+
+fn propfind_entry(href: &str, folder: bool) -> String {
+    let kind = if folder { "<D:collection/>" } else { "" };
+    format!(
+        "<D:response><D:href>{href}</D:href><D:propstat><D:prop><D:resourcetype>{kind}</D:resourcetype></D:prop></D:propstat></D:response>"
+    )
+}
+
+/// One sender, and every shard of its log ending in the shard's last object, so a reader looks at
+/// the next shard.
+fn always_full_shards(path: &str) -> String {
+    if path.ends_with("/dev/") {
+        return propfind_entry(&format!("{path}{}/", "ab".repeat(16)), true);
+    }
+    let shard = path
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .and_then(|s| u64::from_str_radix(s, 16).ok())
+        .unwrap_or(0);
+    (0..1000)
+        .map(|n| format!("{path}{:016x}.o", shard * 1024 + 1023 - n))
+        .map(|href| propfind_entry(&href, false))
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_listing_ends_when_every_shard_of_a_log_looks_full() {
+    let url = scripted_webdav(always_full_shards, String::new()).await;
+    let store = store_for(&url, &random_bytes()).await;
+    let (objects, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        store.new_objects(0, &BTreeMap::new()),
+    )
+    .await
+    .expect("the listing ends")
+    .unwrap();
+    assert!(!objects.is_empty(), "what was listed still gets read");
+}
+
+fn many_roster_files(path: &str) -> String {
+    (0..64)
+        .map(|n| propfind_entry(&format!("{path}{n:016x}.r"), false))
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_roster_folder_too_large_to_hold_is_refused() {
+    let url = scripted_webdav(many_roster_files, " ".repeat(4 << 20)).await;
+    let store = store_for(&url, &random_bytes()).await;
+    assert!(matches!(
+        store.roster_after(-1).await,
+        Err(StoreError::Malformed)
+    ));
+}
+
 /// A member's snapshot can place a log at its last possible `seq`; listing past it must hold.
 #[tokio::test]
 async fn a_log_read_up_to_its_last_possible_seq_lists_nothing_more() {

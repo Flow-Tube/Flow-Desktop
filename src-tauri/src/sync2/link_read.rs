@@ -81,14 +81,14 @@ impl<S: Store> Session<'_, S> {
             .collect();
         candidates.sort_by_key(|logged| std::cmp::Reverse(merged(&logged.manifest)));
         for logged in candidates {
-            let Some(bytes) = self
-                .store()
-                .get_object(&log_path(&logged.did, logged.seq))
-                .await?
-            else {
+            let path = log_path(&logged.did, logged.seq);
+            let Some(bytes) = self.store().get_object(&path).await? else {
                 continue;
             };
-            if let Some(object) = contained(self.verified(&bytes, &logged.did, logged.seq))? {
+            let verified = self
+                .verified_copy(&bytes, &path, &logged.did, logged.seq)
+                .await;
+            if let Some(object) = contained(verified)? {
                 return Ok(Some((logged, object.header.epoch)));
             }
         }

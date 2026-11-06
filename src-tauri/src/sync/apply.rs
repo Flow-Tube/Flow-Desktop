@@ -964,6 +964,23 @@ async fn setting_value(pool: &SqlitePool, key: &str) -> Result<Option<String>, S
     )
 }
 
+/// Whether this collection's merge can read `line`. One it can't fails the whole payload there.
+pub fn readable_record(collection: Collection, line: &[u8]) -> bool {
+    fn reads<T: serde::de::DeserializeOwned>(line: &[u8]) -> bool {
+        serde_json::from_slice::<T>(line).is_ok()
+    }
+    match collection {
+        Collection::WatchHistory => reads::<WatchHistoryRecord>(line),
+        Collection::Likes => reads::<Like>(line),
+        Collection::Playlists => reads::<Playlist>(line),
+        Collection::Settings => reads::<SettingEntry>(line),
+        Collection::FlowNeuroBrain => reads::<FlowNeuroBrainSnapshot>(line),
+        Collection::MusicBrain => reads::<MusicBrainSnapshot>(line),
+        Collection::Subscriptions => reads::<SubscriptionGroup>(line),
+        Collection::SubscribedChannels => reads::<SubscribedChannel>(line),
+    }
+}
+
 fn parse_ndjson<T: serde::de::DeserializeOwned>(ndjson: &[u8]) -> Result<Vec<T>, SyncError> {
     ndjson
         .split(|&b| b == b'\n')

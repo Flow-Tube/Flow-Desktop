@@ -98,3 +98,4 @@ FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.
+- Downloading a Short now works, from the Shorts player and from a Shorts card. The download window names portrait videos by their real resolution, so a 1080x1920 Short is 1080p, and starts on it.

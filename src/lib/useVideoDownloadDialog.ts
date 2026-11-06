@@ -18,6 +18,7 @@ import {
 } from "./downloadActions";
 import {
   defaultRow,
+  displayHeight,
   preferredCodec,
   qualityRows,
   resolutionBadge,
@@ -35,7 +36,8 @@ export type VideoDownloadMode = "video" | "audio";
 /** A short description of a format for the dock: "1080p · VP9 · 60 fps". */
 export function describeFormat(format: DownloadableFormat): string {
   const fps = format.fps && format.fps > 30 ? ` · ${format.fps} fps` : "";
-  return `${format.height ? `${format.height}p` : format.resolution} · ${format.videoCodec}${fps}`;
+  const height = displayHeight(format);
+  return `${height ? `${height}p` : format.resolution} · ${format.videoCodec}${fps}`;
 }
 
 export { resolutionBadge };

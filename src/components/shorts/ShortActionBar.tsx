@@ -18,6 +18,7 @@ import { useVideoReactions } from "../../lib/useVideoReactions";
 import { useExitGhost } from "../../lib/useExitGhost";
 import { useUiStore } from "../../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
+import { useDownloadStore } from "../../store/useDownloadStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import {
   isShortSaved,
@@ -198,7 +199,7 @@ export function ShortActionBar({
 
   const downloadShort = () => {
     setMenuOpen(false);
-    showToast({ variant: "info", message: getString("shorts_download_coming_soon") });
+    useDownloadStore.getState().openVideo(video);
   };
 
   return (

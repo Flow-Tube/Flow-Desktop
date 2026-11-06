@@ -13,6 +13,7 @@ import {
 import type { MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { MediaMenu } from "../ui/MediaMenu";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { useDownloadStore } from "../../store/useDownloadStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import { useUiStore } from "../../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
@@ -175,7 +176,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
 
   const downloadShort = () => {
     setMenuAnchor(null);
-    showToast({ variant: "info", message: getString("shorts_download_coming_soon") });
+    useDownloadStore.getState().openVideo(video);
   };
 
   const isShelf = variant === "shelf";

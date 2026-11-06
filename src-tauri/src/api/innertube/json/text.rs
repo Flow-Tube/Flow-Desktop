@@ -33,6 +33,52 @@ pub fn browse_id_in_runs(container: &Value, field: &str) -> Option<String> {
     })
 }
 
+/// Strips "Go to channel" or localized prefixes from accessibility labels (e.g. "Go to channel Maddock Films" -> "Maddock Films").
+#[must_use]
+pub fn extract_channel_from_a11y_label(label: &str) -> Option<&str> {
+    const PREFIXES: &[&str] = &[
+        "Go to channel ",
+        "Go to ",
+        "Channel ",
+        "Aller sur la chaîne ",
+        "Accéder à la chaîne ",
+        "Ir al canal ",
+        "Ir para o canal ",
+        "Zum Kanal ",
+        "Kanal aufrufen: ",
+        "Kanal aufrufen ",
+        "Vai al canale ",
+        "Ga naar kanaal ",
+        "Перейти на канал ",
+        "Перейти к каналу ",
+        "Przejdź do kanału ",
+        "Kanalına git: ",
+        "Kanalına git ",
+        "채널로 이동: ",
+        "채널로 이동 ",
+        "チャンネルに移動: ",
+        "チャンネルに移動 ",
+        "前往頻道: ",
+        "前往頻道 ",
+        "前往频道: ",
+        "前往频道 ",
+    ];
+    let mut candidate = label.trim();
+    for prefix in PREFIXES {
+        if let Some(stripped) = candidate.strip_prefix(prefix) {
+            candidate = stripped.trim();
+            break;
+        }
+    }
+    if !candidate.is_empty()
+        && !crate::api::innertube::json::count::is_view_or_stream_count(candidate)
+    {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

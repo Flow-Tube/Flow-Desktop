@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { useHistoryStore } from "../store/useHistoryStore";
+import { useSubscriptionStore } from "../store/useSubscriptionStore";
+import { cleanChannelName } from "./videoStats";
 import type { WatchHistoryRecord } from "../types/db";
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
@@ -66,10 +68,18 @@ export function mapHistoryRecordToVideo(record: WatchHistoryRecord): HistoryVide
     ? Math.min(100, Math.max(0, (record.watchDurationSeconds / duration) * 100))
     : 0;
 
+  let channelName = cleanChannelName(record.channelName);
+  if (!channelName && record.channelId) {
+    const sub = useSubscriptionStore.getState().subscriptions.find((s) => s.id === record.channelId);
+    if (sub?.name) {
+      channelName = sub.name;
+    }
+  }
+
   return {
     id: record.videoId,
     title: record.title,
-    channelName: record.channelName || "Unknown Channel",
+    channelName: channelName || "",
     channelId: record.channelId || null,
     thumbnailUrl: `https://i.ytimg.com/vi/${record.videoId}/hqdefault.jpg`,
     durationSeconds: record.totalDurationSeconds || 0,

@@ -87,8 +87,17 @@ pub fn parse_header(page: &Value, requested_id: &str) -> ChannelDetails {
             .unwrap_or(requested_id)
             .to_string(),
         name: text_of(title)
+            .or_else(|| text_of(&metadata["title"]))
             .or_else(|| metadata["title"].as_str().map(ToOwned::to_owned))
             .or_else(|| text_of(&legacy["title"]))
+            .or_else(|| text_of(&page["header"]["pageHeaderRenderer"]["pageTitle"]))
+            .or_else(|| {
+                page["microformat"]["microformatDataRenderer"]["title"]
+                    .as_str()
+                    .map(|t| t.trim_end_matches(" - YouTube").trim().to_string())
+            })
+            .or_else(|| text_of(&page["header"]["interactiveTabHeaderRenderer"]["title"]))
+            .or_else(|| text_of(&page["header"]["carouselHeaderRenderer"]["title"]))
             .unwrap_or_default(),
         handle: rows
             .iter()

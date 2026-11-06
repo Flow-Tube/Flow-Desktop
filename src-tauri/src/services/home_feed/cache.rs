@@ -37,6 +37,17 @@ async fn delete_expired(pool: &SqlitePool, now_ms: u64) -> AppResult<()> {
         .bind(ms(now_ms))
         .execute(pool)
         .await?;
+    let _ = sqlx::query(
+        "UPDATE home_feed_cache
+         SET video = json_set(
+             json_set(video, '$.viewCountText', json_extract(video, '$.channelName')),
+             '$.channelName', ''
+         )
+         WHERE json_extract(video, '$.channelName') LIKE '%view%'
+            OR json_extract(video, '$.channelName') LIKE '%watching%'",
+    )
+    .execute(pool)
+    .await;
     Ok(())
 }
 
@@ -72,12 +83,21 @@ async fn insert(
     Ok(())
 }
 
+async fn subscription_names_map(pool: &SqlitePool) -> HashMap<String, String> {
+    subscription_channel_names(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
 /// The feed as last shown with its origins, while under eight hours old.
 pub async fn load_last_feed(
     pool: &SqlitePool,
     now_ms: u64,
 ) -> AppResult<(Vec<Card>, HashMap<String, Origin>)> {
     delete_expired(pool, now_ms).await?;
+    let subs_names = subscription_names_map(pool).await;
     let rows: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT video, origin FROM home_feed_cache WHERE bucket = ? ORDER BY order_index",
     )
@@ -87,9 +107,18 @@ pub async fn load_last_feed(
     let mut cards = Vec::new();
     let mut origins = HashMap::new();
     for (video, origin) in rows {
-        let Ok(card) = serde_json::from_str::<Card>(&video) else {
+        let Ok(mut card) = serde_json::from_str::<Card>(&video) else {
             continue;
         };
+        card.sanitize();
+        if (card.video.channel_name.is_empty()
+            || crate::api::innertube::json::count::is_view_or_stream_count(
+                &card.video.channel_name,
+            ))
+            && let Some(name) = subs_names.get(card.channel_id())
+        {
+            card.video.channel_name = name.clone();
+        }
         if let Some(origin) = origin.and_then(|o| serde_json::from_str::<Origin>(&o).ok()) {
             origins.insert(card.id().to_string(), origin);
         }
@@ -158,6 +187,7 @@ pub async fn load_reserve(
     now_ms: u64,
 ) -> AppResult<Vec<ReserveRow>> {
     delete_expired(pool, now_ms).await?;
+    let subs_names = subscription_names_map(pool).await;
     let mut out = Vec::new();
     for (source, related) in [("RELATED", true), ("DISCOVERY", false)] {
         let rows: Vec<(String,)> = sqlx::query_as(
@@ -172,7 +202,18 @@ pub async fn load_reserve(
         out.extend(
             rows.into_iter()
                 .filter_map(|(video,)| serde_json::from_str::<Card>(&video).ok())
-                .map(|card| ReserveRow { card, related }),
+                .map(|mut card| {
+                    card.sanitize();
+                    if (card.video.channel_name.is_empty()
+                        || crate::api::innertube::json::count::is_view_or_stream_count(
+                            &card.video.channel_name,
+                        ))
+                        && let Some(name) = subs_names.get(card.channel_id())
+                    {
+                        card.video.channel_name = name.clone();
+                    }
+                    ReserveRow { card, related }
+                }),
         );
     }
     Ok(out)
@@ -193,6 +234,7 @@ pub async fn consume_reserve(pool: &SqlitePool, ids: &[String]) -> AppResult<()>
 /// One seed's related list, while under 90 minutes old.
 pub async fn load_related(pool: &SqlitePool, seed_id: &str, now_ms: u64) -> AppResult<Vec<Card>> {
     delete_expired(pool, now_ms).await?;
+    let subs_names = subscription_names_map(pool).await;
     let rows: Vec<(String,)> = sqlx::query_as(
         "SELECT video FROM home_feed_cache WHERE bucket = ? AND seed_id = ? ORDER BY order_index",
     )
@@ -202,7 +244,19 @@ pub async fn load_related(pool: &SqlitePool, seed_id: &str, now_ms: u64) -> AppR
     .await?;
     Ok(rows
         .into_iter()
-        .filter_map(|(video,)| serde_json::from_str(&video).ok())
+        .filter_map(|(video,)| serde_json::from_str::<Card>(&video).ok())
+        .map(|mut card| {
+            card.sanitize();
+            if (card.video.channel_name.is_empty()
+                || crate::api::innertube::json::count::is_view_or_stream_count(
+                    &card.video.channel_name,
+                ))
+                && let Some(name) = subs_names.get(card.channel_id())
+            {
+                card.video.channel_name = name.clone();
+            }
+            card
+        })
         .collect())
 }
 
@@ -258,13 +312,26 @@ pub async fn clear(pool: &SqlitePool) -> AppResult<()> {
 
 /// The stored uploads of followed channels, newest first.
 pub async fn subscription_uploads(pool: &SqlitePool) -> AppResult<Vec<Card>> {
+    let subs_names = subscription_names_map(pool).await;
     let rows: Vec<(String,)> =
         sqlx::query_as("SELECT card FROM subscription_uploads ORDER BY published_at DESC")
             .fetch_all(pool)
             .await?;
     Ok(rows
         .into_iter()
-        .filter_map(|(card,)| serde_json::from_str(&card).ok())
+        .filter_map(|(card,)| serde_json::from_str::<Card>(&card).ok())
+        .map(|mut card| {
+            card.sanitize();
+            if (card.video.channel_name.is_empty()
+                || crate::api::innertube::json::count::is_view_or_stream_count(
+                    &card.video.channel_name,
+                ))
+                && let Some(name) = subs_names.get(card.channel_id())
+            {
+                card.video.channel_name = name.clone();
+            }
+            card
+        })
         .collect())
 }
 
@@ -273,7 +340,10 @@ pub async fn subscription_channel_names(pool: &SqlitePool) -> AppResult<Vec<(Str
     Ok(sqlx::query_as::<_, (String, String)>(
         "SELECT DISTINCT json_extract(card, '$.channelId'), json_extract(card, '$.channelName') \
          FROM subscription_uploads \
-         WHERE json_extract(card, '$.channelId') IS NOT NULL AND json_extract(card, '$.channelName') != ''",
+         WHERE json_extract(card, '$.channelId') IS NOT NULL \
+           AND json_extract(card, '$.channelName') != '' \
+           AND json_extract(card, '$.channelName') NOT LIKE '%view%' \
+           AND json_extract(card, '$.channelName') NOT LIKE '%watching%'",
     )
     .fetch_all(pool)
     .await?)

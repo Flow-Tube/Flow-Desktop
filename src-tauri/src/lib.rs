@@ -14,6 +14,7 @@ mod errors;
 pub mod flow_neuro;
 #[cfg(any(target_os = "linux", test))]
 mod linux_startup;
+mod local_media;
 #[cfg(target_os = "macos")]
 mod macos_dock;
 #[cfg(target_os = "macos")]
@@ -549,6 +550,13 @@ pub fn run() {
             app.manage(services::blocked_channel_names::BlockedChannelNames::default());
             app.manage(services::home_feed::HomeFeedService::new());
             app.manage(DownloadManager::default());
+            let local_media_scanner = Arc::new(local_media::scanner::LocalMediaScanner::default());
+            app.manage(Arc::clone(&local_media_scanner));
+            local_media::scanner::scan_at_launch(
+                local_media_scanner,
+                app.handle().clone(),
+                db::device::pool(&pool).clone(),
+            );
             app.manage(PlayerFullscreenState::default());
             app.manage(PipState::default());
             app.manage(AppWindowState::default());
@@ -718,6 +726,14 @@ pub fn run() {
             get_download_free_space,
             get_downloaded_video_ids,
             get_offline_stream,
+            commands::local_media::local_media_library,
+            commands::local_media::local_media_add_folder,
+            commands::local_media::local_media_remove_folder,
+            commands::local_media::local_media_exclude_folder,
+            commands::local_media::local_media_rescan,
+            commands::local_media::local_media_cancel_scan,
+            commands::local_media::local_media_report_playback,
+            commands::local_media::get_local_stream,
             delete_downloads,
             clear_downloads,
             create_download_collection,

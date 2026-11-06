@@ -9,6 +9,7 @@ pub mod files;
 pub mod home_feed;
 pub mod linked;
 pub mod live;
+pub mod local_media;
 pub mod lyrics;
 pub mod media_keys;
 pub mod music;

@@ -62,12 +62,13 @@ pub const SCHEMA_DEVICE_KEYS: [&str; 54] = [
     "global_media_keys_enabled",
 ];
 
-/// Device keys the frontend stores outside the schema.
-pub const OTHER_DEVICE_KEYS: [&str; 4] = [
+/// Device keys kept outside the schema.
+pub const OTHER_DEVICE_KEYS: [&str; 5] = [
     "updater_preferences",
     "donation_first_launch_time",
     "donation_prompt_last_shown_time",
     "donation_prompt_disabled",
+    "local_media_reading",
 ];
 
 pub fn is_device_key(key: &str) -> bool {

@@ -65,11 +65,15 @@ table	video_kind_checks	CACHE	-	Fact about a video; kept in each profile's file
 table	music_home_sections	DEAD	-	No code reads or writes it
 table	music_home_chips	DEAD	-	No code reads or writes it
 table	settings	PROFILE	settings	Mixed table: device keys are routed to Default's file by key
+table	local_media_files	PROFILE	library	Index of the folders this profile chose, kept with its other library data
+table	local_media_folders	PROFILE	library	The folders this profile chose for its local library
+table	local_media_plays	PROFILE	library	Resume and play counts for local files, kept out of the shared watch history
 setting	user_neuro_brain	PROFILE	private	FlowNeuro brain
 setting	user_neuro_brain_before_v14	PROFILE	private	Pre-migration copy, written for any brain that lacks one
 setting	user_music_brain	PROFILE	private	MusicBrain
 setting	music_brain_backfilled	PROFILE	private	Follows user_music_brain
 setting	liked_items	PROFILE	library	Likes
+setting	local_media_reading	DEVICE	-	Files a library scan is reading, so a crash on one is not repeated at every launch
 setting	saved_shorts_library	PROFILE	library	Saved Shorts; never copied to another profile
 setting	saved_shorts_peer_keeps_list	PROFILE	sync	A device has sent Saved Shorts, so this profile's may go out
 setting	sync2_notes_missed	DEFAULT_ONLY	sync	The group's state, in Default's file: notes other devices sent before this build kept them are still to be read
@@ -138,5 +142,6 @@ setting	feed_actions_state_v1	PROFILE	private	Dismissed videos, blocked channels
 setting	homeSubsRotationCursor	PROFILE	private	Home subscriptions rotation cursor
 file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
 dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder
+dir_site	src/commands/local_media.rs	CACHE	-	local_covers, disposable covers read from local files
 file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
 file	profile_avatars	DEVICE	-	Profile photos, <id>.webp

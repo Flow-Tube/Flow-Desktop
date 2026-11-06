@@ -122,6 +122,10 @@ function isReservedPath(path: string): boolean {
   return RESERVED.has(path.slice(1).toLowerCase());
 }
 
+export function youtubeChannelUrl(channelId: string): string {
+  return `https://www.youtube.com/channel/${channelId}`;
+}
+
 export function youtubeWatchUrl(videoId: string, positionSeconds?: number): string {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   return positionSeconds === undefined ? watchUrl : `${watchUrl}&t=${Math.max(0, Math.floor(positionSeconds))}s`;

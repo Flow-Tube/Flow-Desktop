@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Ban, Heart, Loader2, RotateCw } from "lucide-react";
+import { Ban, Heart, Loader2, RotateCw, UserSearch } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { TOPIC_CATEGORIES } from "../../onboarding/constants";
 import { getString } from "../../../lib/i18n/index";
@@ -219,6 +220,22 @@ export function TasteTab() {
                 onBlock={blockLearned}
               />
             )}
+          </TasteSection>
+
+          <TasteSection
+            title={getString("discover_channels_title")}
+            description={getString("discover_channels_summary")}
+            action={
+              <Link
+                to="/settings/discover-channels"
+                className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-surface-container-high px-4 text-sm font-medium text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <UserSearch size={16} />
+                {getString("discover_channels_open")}
+              </Link>
+            }
+          >
+            <p className="text-sm text-chrome-neutral-500">{getString("discover_channels_like_yours_footer")}</p>
           </TasteSection>
 
           <TasteSection

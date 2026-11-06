@@ -518,6 +518,20 @@ export interface TasteOverview {
   rememberedChannels: NamedChannel[];
 }
 
+/** A channel several of the viewer's own sit next to in related lists. */
+export interface NeighbourChannel {
+  id: string;
+  name: string;
+  /** The viewer's channels that point here, strongest first. */
+  pointerNames: string[];
+  avatarUrl: string | null;
+}
+
+export async function getNeighbourChannels(): Promise<NeighbourChannel[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<NeighbourChannel[]>("get_neighbour_channels");
+}
+
 /** Home stops drawing on the channel until the viewer watches it again. */
 export async function forgetRememberedChannel(channelId: string): Promise<void> {
   if (!(await isTauriEnv())) return;

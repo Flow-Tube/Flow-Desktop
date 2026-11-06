@@ -1,16 +1,27 @@
 import React, { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Share2 } from "lucide-react";
+import { Button } from "../ui/Button";
 import { SubscribeButton } from "../ui/SubscribeButton";
 import { ChannelNote, ChannelNoteButton } from "../note/ChannelNote";
 import type { ChannelDetails } from "../../types/video";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl, upgradeChannelBannerUrl } from "../../lib/thumbnails";
+import { shareLink } from "../../lib/clipboard";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { youtubeChannelUrl } from "../../lib/youtubeUrl";
+import { useUiStore } from "../../store/useUiStore";
 
 interface ChannelHeroProps {
   channelInfo: ChannelDetails;
   /** Opens the About panel; without it the description expands in place. */
   onOpenAbout?: () => void;
+}
+
+async function shareChannel(channel: ChannelDetails) {
+  const result = await shareLink(channel.name, youtubeChannelUrl(channel.id));
+  const { showToast } = useUiStore.getState();
+  if (result === "copied") showToast({ variant: "success", message: getString("share_link_copied") });
+  if (result === "failed") showToast({ variant: "error", message: getString("share_link_copy_failed") });
 }
 
 export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbout }) => {
@@ -61,6 +72,10 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
               size="md"
             />
             <ChannelNoteButton channelInfo={channelInfo} />
+            <Button variant="tonal" onClick={() => void shareChannel(channelInfo)}>
+              <Share2 size={16} />
+              {getString("share")}
+            </Button>
           </div>
         </div>
 

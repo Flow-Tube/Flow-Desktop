@@ -58,6 +58,16 @@ export function useFeedVisibilityFilter(surface: HideWatchedSurface) {
   return useCallback((video: VideoSummary) => isHidden(video) || watched.has(video.id), [isHidden, watched]);
 }
 
+/** Subscriptions' filter. Hide watched videos has no say over Shorts, which answer to their own setting. */
+export function useSubscriptionsHiddenFilter() {
+  const isVideoHidden = useFeedVisibilityFilter("subscriptions");
+  const isShortHidden = useFeedHiddenFilter({ hideWatched: false });
+  return useCallback(
+    (video: VideoSummary) => (video.isShort ? isShortHidden(video) : isVideoHidden(video)),
+    [isShortHidden, isVideoHidden],
+  );
+}
+
 /** The videos history counts as watched, read only while something needs them. */
 export function useWatchedVideoIds(enabled: boolean): Set<string> {
   const threshold = useAppSettingsStore((state) => state.values[SETTINGS.WATCHED_THRESHOLD]) as WatchedThreshold;
@@ -65,7 +75,7 @@ export function useWatchedVideoIds(enabled: boolean): Set<string> {
   return useMemo(() => watchedVideoIds(history, threshold), [history, threshold]);
 }
 
-/** The Shorts a shelf leaves out, under the Shorts setting alone. */
+/** The Shorts Subscriptions leaves out, under the Shorts setting alone. */
 export function useFinishedShortIds(): Set<string> {
   const hideWatched = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_WATCHED_SHORTS] !== "false");
   const history = useWatchHistory(hideWatched);

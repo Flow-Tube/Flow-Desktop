@@ -173,6 +173,8 @@ LIBRARY
 - Subscriptions has a Refresh button that refreshes only the group you have open. Refresh subscriptions at startup now works.
 - Manage subscriptions can be sorted by name or latest upload, and shows video channels and music artists apart.
 - Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
+- The Subscribed menu on a channel can add it to a subscription group and hide that channel's Shorts from your feed. Channel pages have a Share button.
+- Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 
 NOTIFICATIONS
 - Remind me on an upcoming video or premiere puts it in your notifications when it starts. A reminder missed while Flow was closed arrives at the next launch.

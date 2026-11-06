@@ -5,6 +5,7 @@ import { parseSubscriptionExport } from "../lib/api/youtube";
 import { bootstrapFromSubscriptions } from "../lib/api/recommendation";
 import { SETTINGS } from "../lib/settings/schema";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
+import { useChannelShortsStore } from "../store/useChannelShortsStore";
 import { useNotificationStore } from "../store/useNotificationStore";
 import { useUiStore } from "../store/useUiStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
@@ -20,24 +21,22 @@ import { ShortsShelf } from "../components/shelf/ShortsShelf";
 import { ChannelAvatarImage, getAvatarUrl } from "../components/subscriptions/ChannelAvatarImage";
 import { LastRefreshedLine } from "../components/subscriptions/LastRefreshedLine";
 import { SubscriptionsManage } from "../components/subscriptions/SubscriptionsManage";
+import { channelCountLabel } from "../lib/channelGroupLabels";
 import { useSubscriptionChannelDetails, useSubscriptionFeed } from "../lib/useSubscriptionFeed";
 import { usePreference } from "../lib/usePreference";
 import { useShortsEnabled } from "../lib/useShortsContent";
 import { isVideoOfChannel } from "../lib/subscriptionFeedMerge";
 import { sortSubscriptions, type SubscriptionSortMode } from "../lib/subscriptionSort";
 import { useUnplayableVideoIds } from "../lib/useUnplayableVideoIds";
-import { useFeedVisibilityFilter } from "../lib/useWatchedFilter";
+import { useFinishedShortIds, useSubscriptionsHiddenFilter } from "../lib/useWatchedFilter";
+import { splitSubscriptionFeed } from "../lib/subscriptionFeedSplit";
 import type { SubscribedChannel, SubscriptionGroup } from "../store/useSubscriptionStore";
-import type { ShortVideoSummary, VideoSummary } from "../types/video";
+import type { VideoSummary } from "../types/video";
 import { Checkbox } from "../components/ui/Checkbox";
 
 interface SubscriptionsProps {
   onPlay: (video: VideoSummary) => void;
   onAddToQueue: (video: VideoSummary) => void;
-}
-
-function channelCountLabel(count: number) {
-  return getString("subscriptions_groups_channels", count);
 }
 
 export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQueue }) => {
@@ -79,9 +78,15 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   const channelDetails = useSubscriptionChannelDetails(subscriptions);
   const showSubscriptionVideos = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_VIDEOS] !== "false");
   const shortsEnabled = useShortsEnabled();
-  const showSubscriptionShorts = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_SHORTS] !== "false") && shortsEnabled;
+  const shortsExcludedChannels = useChannelShortsStore((state) => state.excluded);
+  const loadShortsExcluded = useChannelShortsStore((state) => state.load);
+  const showSubscriptionShorts =
+    useAppSettingsStore(
+      (state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_SHORTS] !== "false" && state.values[SETTINGS.SHORTS_SHELF_ENABLED] !== "false",
+    ) && shortsEnabled;
+  const finishedShorts = useFinishedShortIds();
   const showSubscriptionLive = useAppSettingsStore((state) => state.values[SETTINGS.SUBSCRIPTION_SHOW_LIVE] !== "false");
-  const isHidden = useFeedVisibilityFilter("subscriptions");
+  const isHidden = useSubscriptionsHiddenFilter();
   const showCheckedCount = useAppSettingsStore((state) => state.values[SETTINGS.SUBS_SHOW_CHECKED_VIDEO_COUNT] !== "false");
   const hideUnplayable = useAppSettingsStore((state) => state.values[SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS] === "true");
   const unplayableIds = useUnplayableVideoIds(hideUnplayable);
@@ -99,7 +104,8 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   useEffect(() => {
     loadSubscriptions();
     loadSubscriptionGroups();
-  }, [loadSubscriptionGroups, loadSubscriptions]);
+    void loadShortsExcluded();
+  }, [loadShortsExcluded, loadSubscriptionGroups, loadSubscriptions]);
 
   useEffect(() => {
     if (!channelPrefsLoaded) void loadChannelPreferences();
@@ -239,40 +245,17 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
   }, [isHidden, query, selectedChannelId, selectedGroup, unplayableIds, videos]);
 
 
-  const isLiveVideo = (video: VideoSummary) => {
-    const published = video.publishedText?.toLowerCase() ?? "";
-    const views = video.viewCountText?.toLowerCase() ?? "";
-    return Boolean(video.isLive) || published.includes("live") || views.includes("watching");
-  };
-
-  const { shortsForShelf, regularVideos } = useMemo(() => {
-    const shorts: ShortVideoSummary[] = [];
-    const regular: VideoSummary[] = [];
-    for (const video of filteredVideos) {
-      if (video.isShort) {
-        if (showSubscriptionShorts) {
-          shorts.push({
-            type: "short",
-            id: video.id,
-            title: video.title,
-            channelName: video.channelName,
-            channelId: video.channelId ?? null,
-            thumbnailUrl: video.thumbnailUrl ?? null,
-            channelAvatarUrl: video.channelAvatarUrl ?? null,
-            viewCountText: video.viewCountText ?? null,
-            publishedText: video.publishedText ?? null,
-          });
-        }
-      } else if (isLiveVideo(video)) {
-        if (showSubscriptionLive) {
-          regular.push(video);
-        }
-      } else if (showSubscriptionVideos) {
-        regular.push(video);
-      }
-    }
-    return { shortsForShelf: shorts, regularVideos: regular };
-  }, [filteredVideos, showSubscriptionLive, showSubscriptionShorts, showSubscriptionVideos]);
+  const { shortsForShelf, regularVideos } = useMemo(
+    () =>
+      splitSubscriptionFeed(filteredVideos, {
+        showShorts: showSubscriptionShorts,
+        showLive: showSubscriptionLive,
+        showVideos: showSubscriptionVideos,
+        excludedShortChannels: shortsExcludedChannels,
+        finishedShorts,
+      }),
+    [filteredVideos, finishedShorts, shortsExcludedChannels, showSubscriptionLive, showSubscriptionShorts, showSubscriptionVideos],
+  );
 
   const handleSelectChannel = (channel: SubscribedChannel) => {
     setSelectedChannelId((current) => current === channel.id ? null : channel.id);

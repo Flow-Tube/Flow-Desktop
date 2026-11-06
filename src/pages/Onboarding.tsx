@@ -112,7 +112,7 @@ export const Onboarding: React.FC = () => {
           )}
 
           {step === "channels" && (
-            <ChannelsStep selectedTopics={selectedTopics} />
+            <ChannelsStep />
           )}
 
           {step === "artists" && <ArtistsStep />}

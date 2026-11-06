@@ -16,6 +16,9 @@ export interface ArtistCardProps {
   fill?: boolean;
   className?: string;
   onOpen?: () => void;
+  /** Replace following on YouTube, for a surface with its own idea of picking an artist. */
+  following?: boolean;
+  onToggleFollow?: () => void;
 }
 
 function cx(...parts: Array<string | false | null | undefined>): string {
@@ -43,7 +46,7 @@ function CircleAvatar({ src, name }: { src?: string | null; name: string }) {
   );
 }
 
-export function ArtistCard({ artist, fill, className, onOpen }: ArtistCardProps) {
+export function ArtistCard({ artist, fill, className, onOpen, following: followingOverride, onToggleFollow }: ArtistCardProps) {
   const navigate = useNavigate();
   const washSrc = useProxiedImageUrl(upgradeAvatarUrl(artist.thumbnail));
   const wash = useHoverWashColor(washSrc);
@@ -51,7 +54,7 @@ export function ArtistCard({ artist, fill, className, onOpen }: ArtistCardProps)
   const isSubscribed = useSubscriptionStore((s) => s.isSubscribed);
   const subscribe = useSubscriptionStore((s) => s.subscribe);
   const unsubscribe = useSubscriptionStore((s) => s.unsubscribe);
-  const following = target ? isSubscribed(target) : false;
+  const following = followingOverride ?? (target ? isSubscribed(target) : false);
 
   const open = () => {
     if (onOpen) {
@@ -63,6 +66,10 @@ export function ArtistCard({ artist, fill, className, onOpen }: ArtistCardProps)
 
   const toggleFollow = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (onToggleFollow) {
+      onToggleFollow();
+      return;
+    }
     if (!target) return;
     if (following) {
       void unsubscribe(target);

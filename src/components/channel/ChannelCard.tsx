@@ -18,6 +18,8 @@ export interface ChannelCardProps {
   subtitle?: string | null;
   fill?: boolean;
   className?: string;
+  /** Replaces opening the channel's page. */
+  onOpen?: () => void;
 }
 
 function cx(...parts: Array<string | false | null | undefined>): string {
@@ -52,6 +54,7 @@ export function ChannelCard({
   subtitle,
   fill,
   className,
+  onOpen,
 }: ChannelCardProps) {
   const navigate = useNavigate();
   const washSrc = useProxiedImageUrl(upgradeAvatarUrl(avatarUrl));
@@ -64,6 +67,10 @@ export function ChannelCard({
 
   const route = `/channel/${cleanId}`;
   const open = (event?: React.MouseEvent) => {
+    if (onOpen) {
+      onOpen();
+      return;
+    }
     if (!cleanId || openedInBackgroundTab(event, route)) return;
     navigate(route);
   };
@@ -83,7 +90,7 @@ export function ChannelCard({
       role="button"
       tabIndex={0}
       onClick={open}
-      {...(cleanId ? backgroundTabClickProps(route) : {})}
+      {...(cleanId && !onOpen ? backgroundTabClickProps(route) : {})}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();

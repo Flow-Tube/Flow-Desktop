@@ -7,7 +7,6 @@ import { PipWindowApp } from "./components/pip/PipWindowApp";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installGlobalErrorHandlers } from "./lib/diagnostics";
 import { PIP_WINDOW_LABEL } from "./lib/api/pip";
-import "./lib/i18n";
 
 installGlobalErrorHandlers();
 

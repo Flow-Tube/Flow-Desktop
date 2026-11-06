@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Loader2, Play } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
@@ -60,7 +59,6 @@ function CollectionSkeleton() {
 }
 
 export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) {
-  const { t } = useTranslation('common');
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
@@ -296,7 +294,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
         )}
       </div>
       {kind === 'album' && otherVersions.length > 0 && <div className="mx-auto max-w-[1600px] px-8 pt-8">
-        <MusicShelf title={t('musicOtherVersions')} items={otherVersions}
+        <MusicShelf title={getString('music_other_versions')} items={otherVersions}
           renderItem={(album) => <MusicItemCard variant="album" item={album}
             onPlay={() => navigate(`/music/album/${album.browseId}`)}
             onOpen={() => navigate(`/music/album/${album.browseId}`)} />} />

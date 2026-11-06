@@ -1,5 +1,4 @@
 import { ChevronRight, Play } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { getString } from '../../lib/i18n/index';
 import { useProxyImageSrc } from '../../lib/useImageProxy';
@@ -24,7 +23,6 @@ export function MusicSectionHeader({
   onPlayAll,
   onSeeAll,
 }: MusicSectionHeaderProps) {
-  const { t } = useTranslation('common');
   const toSrc = useProxyImageSrc();
   const heading = (
     <div className="flex min-w-0 items-center gap-3">
@@ -66,7 +64,7 @@ export function MusicSectionHeader({
           className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-container-high px-3.5 py-1.5 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
         >
           <Play className="h-3.5 w-3.5" />
-          {t('musicPlayAll')}
+          {getString('music_play_all')}
         </button>
       ) : onSeeAll ? (
         <button

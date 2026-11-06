@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
@@ -49,7 +48,6 @@ function SquareSkeleton({ fill }: { fill?: boolean }) {
 }
 
 export default function MusicHome() {
-  const { t } = useTranslation('common');
   const gridStyle = useGridStyle({ density: 'dense' });
   const navigate = useNavigate();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
@@ -170,7 +168,7 @@ export default function MusicHome() {
         </div>;
       }
       if (!chipFilter.loading && items.length === 0) {
-        return <p className="py-20 text-center text-sm text-chrome-neutral-400">{t('musicChipEmpty')}</p>;
+        return <p className="py-20 text-center text-sm text-chrome-neutral-400">{getString('music_chip_empty')}</p>;
       }
       return (
         <div className="flow-grid gap-y-6" style={gridStyle}>
@@ -249,7 +247,7 @@ export default function MusicHome() {
     };
 
     if (!feed.length && !loading) {
-      return <p className="py-20 text-center text-sm text-chrome-neutral-400">{t('musicEmpty')}</p>;
+      return <p className="py-20 text-center text-sm text-chrome-neutral-400">{getString('music_empty')}</p>;
     }
     const quickTitle = getString('music_quick_picks');
     return (
@@ -269,7 +267,7 @@ export default function MusicHome() {
             return (
               <MusicMoodShelf
                 key="moods"
-                title={t('musicMoodsAndGenres')}
+                title={getString('music_moods_and_genres')}
                 moods={moodItems}
                 onOpen={openMood}
                 onBrowse={() => navigate('/music/moods')}

@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+import { getString } from '../../lib/i18n/index';
 import { ChevronRight, Play } from 'lucide-react';
 
 import { useProxyImageSrc } from '../../lib/useImageProxy';
@@ -16,7 +16,6 @@ const PREVIEW_ROWS = 3;
 
 /** A playlist sampler: cover mosaic, three playable tracks, then Play and Open. */
 export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPlayPreview }: Props) {
-  const { t } = useTranslation('common');
   const toSrc = useProxyImageSrc();
   const covers = preview.map((track) => track.thumbnail).filter(Boolean).slice(0, 4);
   const byline = playlist.author?.name || playlist.songCountText;
@@ -60,14 +59,14 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
           className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] transition-opacity duration-200 ease-out hover:opacity-90"
         >
           <Play className="h-4 w-4" />
-          {t('musicPlay')}
+          {getString('music_play')}
         </button>
         <button
           type="button"
           onClick={onOpen}
           className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-4 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
         >
-          {t('musicOpen')}
+          {getString('music_open')}
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>

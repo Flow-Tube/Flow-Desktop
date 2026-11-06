@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { AppWindow, Copy, Plus, Search, X, XCircle } from 'lucide-react';
 import { useTabsStore, type ParkedVideo, type TabTitle } from '../../store/useTabsStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
@@ -40,7 +39,6 @@ function TabIconView({ icon }: { icon: TabIcon }) {
 
 /** The name a tab shows: what its page published, or the best guess from its address. */
 function useTabLabel(tab: TabHistory, title: TabTitle | undefined, parked: ParkedVideo | undefined): string {
-  const { t } = useTranslation();
   const entry = currentEntry(tab);
   const watchId = watchVideoIdFromPath(entry.pathname);
   const playerTitle = usePlayerStore((s) => (watchId && s.currentVideo?.id === watchId ? s.currentVideo.title : null));
@@ -55,7 +53,7 @@ function useTabLabel(tab: TabHistory, title: TabTitle | undefined, parked: Parke
     if (query) return query;
   }
   const section = sectionTitleKey(entry.pathname);
-  return section ? t(section) : getString('tabs_untitled');
+  return section ? getString(section) : getString('tabs_untitled');
 }
 
 function TabRow({ tab, collapsed, onNavigate, onOpenMenu }: {

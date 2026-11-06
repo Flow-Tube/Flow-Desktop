@@ -695,6 +695,38 @@ pub fn summarize(
     }
 }
 
+/// Watching and listening time for each of the `count` days ending `today`, oldest first.
+#[must_use]
+pub fn daily_time(
+    video: &[LedgerRow<VideoMonth>],
+    music: &[LedgerRow<MusicMonth>],
+    today: NaiveDate,
+    count: u32,
+) -> Vec<(String, i64)> {
+    let mut days: HashMap<NaiveDate, i64> = HashMap::new();
+    let mut add = |key: &str, day_ms: &BTreeMap<u32, i64>| {
+        let Some((year, month)) = parse_month(key) else {
+            return;
+        };
+        for (day, ms) in day_ms {
+            if let Some(date) = NaiveDate::from_ymd_opt(year, month, *day) {
+                *days.entry(date).or_insert(0) += ms;
+            }
+        }
+    };
+    for (key, month, _) in video {
+        add(key, &month.day_ms);
+    }
+    for (key, month, _) in music {
+        add(key, &month.day_ms);
+    }
+    (0..count)
+        .rev()
+        .filter_map(|back| today.checked_sub_days(chrono::Days::new(u64::from(back))))
+        .map(|date| (date.to_string(), days.get(&date).copied().unwrap_or(0)))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -862,6 +894,29 @@ mod tests {
         assert_eq!(out.music.top_artists[0].id, "UCdp");
         assert_eq!(out.music.top_artists[0].count, 6);
         assert!(out.estimated);
+    }
+
+    #[test]
+    fn a_week_adds_both_ledgers_and_crosses_a_month_end() {
+        let mut august = video_month(0, 0);
+        august.day_ms = BTreeMap::from([(31, 100), (1, 999)]);
+        let mut september = video_month(0, 0);
+        september.day_ms = BTreeMap::from([(2, 50)]);
+        let music = MusicMonth {
+            day_ms: BTreeMap::from([(2, 25)]),
+            ..Default::default()
+        };
+        let days = daily_time(
+            &[row("2026-08", august), row("2026-09", september)],
+            &[row("2026-09", music)],
+            NaiveDate::from_ymd_opt(2026, 9, 3).unwrap(),
+            7,
+        );
+        assert_eq!(days.len(), 7);
+        assert_eq!(days[0], ("2026-08-28".to_string(), 0));
+        assert_eq!(days[3], ("2026-08-31".to_string(), 100));
+        assert_eq!(days[5], ("2026-09-02".to_string(), 75));
+        assert_eq!(days[6], ("2026-09-03".to_string(), 0));
     }
 
     #[test]

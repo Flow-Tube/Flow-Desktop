@@ -140,3 +140,13 @@ export function getRecapIndex(): Promise<RecapIndex> {
 export function getRecapSummary(period: string, source: RecapSource): Promise<RecapSummary> {
   return invokeBackend<RecapSummary>("recap_summary", { period, source });
 }
+
+export interface RecapWeek {
+  /** The seven local days ending today, oldest first: date and time spent. */
+  days: [string, number][];
+  startedAt: number;
+}
+
+export function getRecapWeek(): Promise<RecapWeek> {
+  return invokeBackend<RecapWeek>("recap_week");
+}

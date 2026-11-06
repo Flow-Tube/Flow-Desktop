@@ -62,9 +62,20 @@ export function BarStrip({ values, labels, axis, highlight, format, caption, ari
       </svg>
       {axis && (
         <div className="grid text-xs tabular-nums text-on-surface-variant" style={{ gridTemplateColumns: `repeat(${axis.length}, minmax(0, 1fr))` }}>
-          {axis.map((text, index) => (
-            <span key={index} className="overflow-visible whitespace-nowrap text-center">{text}</span>
-          ))}
+          {axis.map((text, index) =>
+            onSelect ? (
+              <button
+                key={index}
+                type="button"
+                onClick={() => onSelect(index)}
+                className="rounded-md py-0.5 text-center transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                {text}
+              </button>
+            ) : (
+              <span key={index} className="overflow-visible whitespace-nowrap text-center">{text}</span>
+            ),
+          )}
         </div>
       )}
       <p className="min-h-5 text-sm tabular-nums text-on-surface-variant">{readout}</p>

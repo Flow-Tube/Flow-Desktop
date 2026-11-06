@@ -707,6 +707,7 @@ pub fn run() {
             commands::recap::recap_record_batch,
             commands::recap::recap_index,
             commands::recap::recap_summary,
+            commands::recap::recap_week,
             commands::home_feed::home_feed_open,
             commands::home_feed::home_feed_refresh,
             commands::home_feed::home_feed_viewport,

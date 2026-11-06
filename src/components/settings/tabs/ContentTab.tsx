@@ -20,6 +20,7 @@ import { useHideWatched } from '../../../lib/useWatchedFilter';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
 import { SearchHistoryGroup } from '../SearchHistoryGroup';
+import { WellbeingSection } from '../WellbeingSection';
 
 export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
@@ -255,6 +256,8 @@ export function ContentTab() {
           />
         </SettingItem>
       </SettingsGroup>
+
+      <WellbeingSection />
 
       <SettingsGroup title={getString('settings_group_region')}>
         <SettingItem title={getString('settings_region_picker')} description={getString('settings_region_picker_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)}><ToggleSwitch checked={regionPicker} onChange={setRegionPicker} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)} /></SettingItem>

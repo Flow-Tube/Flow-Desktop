@@ -83,6 +83,7 @@ import { DeepLinkController } from "./components/handoff/DeepLinkController";
 import { DiscordPresenceController } from "./components/discord/DiscordPresenceController";
 import { MusicTrayController } from "./components/tray/MusicTrayController";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
+import { WellbeingController } from "./components/settings/WellbeingController";
 import { DownloadDialog } from "./components/downloads/DownloadDialog";
 import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
@@ -343,6 +344,7 @@ function App() {
           <DeepLinkController />
           <MusicTrayController />
           <ScrobbleController />
+          <WellbeingController />
         </>
       )}
       <EqualizerDialog />

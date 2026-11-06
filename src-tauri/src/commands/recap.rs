@@ -11,7 +11,7 @@ use crate::errors::{AppError, ErrorResponse};
 use crate::music_brain::store::MusicBrainStore;
 use crate::recap::model::{MusicMonth, RecapEntry, TOPICS_PER_VIEW, VideoMonth};
 use crate::recap::store;
-use crate::recap::summary::{RecapPeriod, RecapSource, RecapSummary, summarize};
+use crate::recap::summary::{RecapPeriod, RecapSource, RecapSummary, daily_time, summarize};
 use crate::services::recommendation_service::RecommendationService;
 
 fn now_ms() -> i64 {
@@ -99,4 +99,31 @@ pub async fn recap_summary(
     let video = store::read_months::<VideoMonth>(&pool, true).await?;
     let music = store::read_months::<MusicMonth>(&pool, false).await?;
     Ok(summarize(&period, source, &video, &music))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecapWeek {
+    /// The seven local days ending today, oldest first: date and time spent.
+    pub days: Vec<(String, i64)>,
+    pub started_at: i64,
+}
+
+const WEEK_DAYS: u32 = 7;
+
+/// The last week of watching and listening, for the Wellbeing chart in Settings.
+#[tauri::command]
+pub async fn recap_week(
+    pool: State<'_, SqlitePool>,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> Result<RecapWeek, ErrorResponse> {
+    let seen = seen_artists(&music_brain).await;
+    let started_at = store::ensure_started(&pool, &seen, now_ms()).await?;
+    let video = store::read_months::<VideoMonth>(&pool, true).await?;
+    let music = store::read_months::<MusicMonth>(&pool, false).await?;
+    let today = chrono::Local::now().date_naive();
+    Ok(RecapWeek {
+        days: daily_time(&video, &music, today, WEEK_DAYS),
+        started_at,
+    })
 }

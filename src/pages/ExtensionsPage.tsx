@@ -258,6 +258,7 @@ export const ExtensionsPage: React.FC = () => {
                   key={category}
                   name={SB_CATEGORY_META[category].name}
                   description={SB_CATEGORY_META[category].description}
+                  isHighlight={category === "poi_highlight"}
                   color={sponsorBlockColors[category] ?? DEFAULT_SB_COLORS[category]}
                   action={sponsorBlockActions[category] ?? "skip"}
                   defaultColor={DEFAULT_SB_COLORS[category]}

@@ -9,6 +9,8 @@ export interface SponsorBlockSegment {
   category: string;
   segment: [number, number];
   UUID: string;
+  /** "skip", "mute", "full" or "poi". */
+  actionType?: string;
 }
 
 export async function getSponsorBlockSegments(

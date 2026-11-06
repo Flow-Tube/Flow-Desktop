@@ -6,7 +6,7 @@ import { PlayerErrorState } from "../ui/PlayerErrorState";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
-import { useSettingsStore, type SponsorBlockCategory, type SponsorBlockAction } from "../../store/useSettingsStore";
+import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
   CaptionTrack,
@@ -45,7 +45,9 @@ import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
 import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
-import { segmentsToRearm } from "../../lib/sponsorBlockRearm";
+import { SponsorBlockTracker } from "../../lib/sponsorBlockPolicy";
+import { useManualSponsorSegment } from "../../lib/useManualSponsorSegment";
+import type { SponsorBlockSegment } from "../../lib/api/foss";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import {
@@ -54,6 +56,7 @@ import {
   type PlayerVolumeFeedback,
 } from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
+import { SponsorBlockSkipButton } from "./SponsorBlockSkipButton";
 import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
 import { useVideoEq } from "../../lib/audio/useVideoEq";
@@ -321,10 +324,8 @@ export const Player: React.FC<PlayerProps> = ({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
   const keyboardFocusInsideRef = useRef(false);
-  const skippedSegmentsRef = useRef<Set<string>>(new Set());
+  const sbTrackerRef = useRef(new SponsorBlockTracker());
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
-  const mutedSegmentsRecordedRef = useRef<Set<string>>(new Set());
-  const notifiedSegmentsRef = useRef<Set<string>>(new Set());
   const lastMediaIdentityRef = useRef<string>(src || dashManifestUrl || hlsManifestUrl || "");
   const desiredPlayingRef = useRef(false);
   const pendingResumeTimeRef = useRef(0);
@@ -478,6 +479,22 @@ export const Player: React.FC<PlayerProps> = ({
   const [notifyToast, setNotifyToast] = useState<{ segment: any; categoryName: string; visible: boolean } | null>(null);
   const notifyTimeoutRef = useRef<number | null>(null);
   const [currentSBMuteSegment, setCurrentSBMuteSegment] = useState<string | null>(null);
+  const sponsorBlockOff = usePlayerStore((state) => !!state.currentVideo && state.sponsorBlockOffVideoId === state.currentVideo.id);
+  const wasSponsorBlockOffRef = useRef(sponsorBlockOff);
+  useEffect(() => {
+    if (wasSponsorBlockOffRef.current && !sponsorBlockOff && videoRef.current) {
+      sbTrackerRef.current.leaveAlone(videoRef.current.currentTime, usePlayerStore.getState().sponsorBlockSegments);
+    }
+    wasSponsorBlockOffRef.current = sponsorBlockOff;
+  }, [sponsorBlockOff]);
+  // Off is for one video: moving to another turns it back on, even if the first one comes back later.
+  const sponsorBlockVideoId = usePlayerStore((state) => state.currentVideo?.id);
+  useEffect(() => {
+    const { sponsorBlockOffVideoId, setSponsorBlockOffVideoId } = usePlayerStore.getState();
+    if (sponsorBlockVideoId && sponsorBlockOffVideoId && sponsorBlockOffVideoId !== sponsorBlockVideoId) {
+      setSponsorBlockOffVideoId(null);
+    }
+  }, [sponsorBlockVideoId]);
   const [isPip, setIsPip] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -876,6 +893,7 @@ export const Player: React.FC<PlayerProps> = ({
   }, [loadSettings]);
 
   const mediaIdentity = src || dashManifestUrl || hlsManifestUrl || "";
+  const [manualSegment, setManualSegment] = useManualSponsorSegment(mediaIdentity, sponsorBlockEnabled && !sponsorBlockOff);
   const notePickedSpeed = usePlaybackStartSpeed(mediaIdentity, defaultPlaybackRate, category);
 
   const selectPlaybackRate = useCallback((nextRate: number) => {
@@ -1991,10 +2009,8 @@ export const Player: React.FC<PlayerProps> = ({
     const targetTime = Math.max(0, resumeTime || 0);
 
     pendingResumeTimeRef.current = targetTime;
-    skippedSegmentsRef.current.clear();
+    sbTrackerRef.current.reset();
     undoSkippedSegmentsRef.current.clear();
-    mutedSegmentsRecordedRef.current.clear();
-    notifiedSegmentsRef.current.clear();
     lastMediaIdentityRef.current = mediaIdentity;
     // A new source gets its own failure report; a re-resolve keeps the mode.
     retrySourceFiredRef.current = false;
@@ -2385,20 +2401,22 @@ export const Player: React.FC<PlayerProps> = ({
     audio.load();
   };
 
-  const handleSkipNotifySegment = (segment: any) => {
-    if (!segment) return;
-    const video = videoRef.current;
-    if (!video) return;
-
-    const [_, end] = segment.segment;
-    seekTo(end);
-
-    setNotifyToast(prev => prev ? { ...prev, visible: false } : null);
-    if (notifyTimeoutRef.current !== null) {
-      window.clearTimeout(notifyTimeoutRef.current);
+  const showSponsorBlockNotice = (segment: SponsorBlockSegment) => {
+    setNotifyToast({ segment, categoryName: sponsorBlockCategoryLabel(segment.category), visible: true });
+    if (notifyTimeoutRef.current !== null) window.clearTimeout(notifyTimeoutRef.current);
+    notifyTimeoutRef.current = window.setTimeout(() => {
+      setNotifyToast((prev) => (prev ? { ...prev, visible: false } : null));
       notifyTimeoutRef.current = null;
-    }
+    }, 2000);
   };
+
+  const skipManualSegment = () => {
+    if (!manualSegment) return;
+    sbTrackerRef.current.dismiss(manualSegment.UUID);
+    seekTo(manualSegment.segment[1]);
+    setManualSegment(null);
+  };
+
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
@@ -2421,66 +2439,28 @@ export const Player: React.FC<PlayerProps> = ({
 
     let inMuteSegment = false;
     let muteSegmentCategoryName = "";
+    let manualSegment: SponsorBlockSegment | null = null;
 
-    if (sponsorBlockEnabled) {
-      for (const { UUID } of segmentsToRearm(sponsorBlockSegments, nextTime)) {
-        skippedSegmentsRef.current.delete(UUID);
-        mutedSegmentsRecordedRef.current.delete(UUID);
-        notifiedSegmentsRef.current.delete(UUID);
+    if (sponsorBlockEnabled && !sponsorBlockOff) {
+      const sb = sbTrackerRef.current.tick(nextTime, sponsorBlockSegments, sponsorBlockActions, !!video?.ended);
+      if (sb.skip) {
+        const [start, end] = sb.skip.segment;
+        seekTo(end);
+        void incrementStats(sb.skip.category as SponsorBlockCategory, Math.max(0, end - start));
+        return;
       }
-
-      for (const segment of sponsorBlockSegments) {
-        const [start, end] = segment.segment;
-        const action: SponsorBlockAction = sponsorBlockActions[segment.category as SponsorBlockCategory] || "ignore";
-
-        if (action === "ignore") continue;
-
-        if (nextTime >= start && nextTime < end) {
-          if (action === "skip") {
-            if (!skippedSegmentsRef.current.has(segment.UUID)) {
-              skippedSegmentsRef.current.add(segment.UUID);
-
-              seekTo(end);
-
-              const durationSkipped = Math.max(0, end - start);
-              void incrementStats(segment.category as SponsorBlockCategory, durationSkipped);
-
-              return; 
-            }
-          } else if (action === "mute") {
-            inMuteSegment = true;
-            muteSegmentCategoryName = segment.category;
-
-            if (!mutedSegmentsRecordedRef.current.has(segment.UUID)) {
-              mutedSegmentsRecordedRef.current.add(segment.UUID);
-              const durationMuted = Math.max(0, end - start);
-              void incrementStats(segment.category as SponsorBlockCategory, durationMuted);
-            }
-          } else if (action === "notify") {
-            if (!notifiedSegmentsRef.current.has(segment.UUID)) {
-              notifiedSegmentsRef.current.add(segment.UUID);
-              
-              const catLabel = sponsorBlockCategoryLabel(segment.category);
-              setNotifyToast({
-                segment,
-                categoryName: catLabel,
-                visible: true
-              });
-
-              if (notifyTimeoutRef.current !== null) {
-                window.clearTimeout(notifyTimeoutRef.current);
-              }
-
-              notifyTimeoutRef.current = window.setTimeout(() => {
-                setNotifyToast(prev => prev ? { ...prev, visible: false } : null);
-                notifyTimeoutRef.current = null;
-              }, 2000);
-
-            }
-          }
-        }
+      if (sb.muteStarted) {
+        const [start, end] = sb.muteStarted.segment;
+        void incrementStats(sb.muteStarted.category as SponsorBlockCategory, Math.max(0, end - start));
       }
+      if (sb.mute) {
+        inMuteSegment = true;
+        muteSegmentCategoryName = sb.mute.category;
+      }
+      if (sb.notify) showSponsorBlockNotice(sb.notify);
+      manualSegment = sb.manual;
     }
+    setManualSegment((current) => (current?.UUID === manualSegment?.UUID ? current : manualSegment));
 
     if (inMuteSegment) {
       if (!sbMuted) {
@@ -2764,21 +2744,19 @@ export const Player: React.FC<PlayerProps> = ({
 
       {overlay}
 
+      {manualSegment && !overlay && (
+        <SponsorBlockSkipButton segment={manualSegment} compact={isPipMode} onClick={skipManualSegment} />
+      )}
+
       {/* SponsorBlock Notify Toast */}
       {notifyToast && notifyToast.visible && (
-        <div className="absolute bottom-20 right-6 z-40 bg-chrome-toast/95 border border-chrome-toast-border rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 transition-transform duration-300 animate-slide-up select-none animate-fade-in">
+        <div className="absolute bottom-32 right-3 z-40 sm:right-5 bg-chrome-toast/95 border border-chrome-toast-border rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 transition-transform duration-300 animate-slide-up select-none animate-fade-in">
           <div className="flex flex-col">
             <span className="text-[10px] font-bold text-chrome-neutral-400 uppercase tracking-wider">SponsorBlock</span>
             <span className="text-xs font-semibold text-chrome-neutral-200">
               {notifyToast.categoryName} Segment
             </span>
           </div>
-          <button
-            onClick={() => handleSkipNotifySegment(notifyToast.segment)}
-            className="ml-2 px-3.5 py-1.5 rounded-full bg-primary hover:bg-chrome-red-700 active:scale-95 text-chrome-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
-          >
-            Skip
-          </button>
         </div>
       )}
 

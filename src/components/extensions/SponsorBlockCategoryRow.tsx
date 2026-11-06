@@ -14,14 +14,25 @@ const PRESET_COLORS = [
 
 const ACTION_OPTIONS: { value: SponsorBlockAction; label: string }[] = [
   { value: "skip", label: getString('sponsorblock_auto_skip') },
+  { value: "skip_once", label: getString('sponsorblock_skip_once') },
+  { value: "skip_button", label: getString('sponsorblock_show_skip_button') },
+  { value: "notify", label: getString('sponsorblock_notify') },
   { value: "mute", label: getString('sponsorblock_mute_audio') },
-  { value: "notify", label: getString('sponsorblock_show_skip_button') },
-  { value: "ignore", label: getString('sponsorblock_ignore') },
+  { value: "ignore", label: getString('sponsorblock_show_in_seek_bar') },
+  { value: "disabled", label: getString('sponsorblock_disable') },
+];
+
+// A highlight is a point in the video, so it can't be skipped or muted.
+const HIGHLIGHT_ACTION_OPTIONS: { value: SponsorBlockAction; label: string }[] = [
+  { value: "ignore", label: getString('sponsorblock_show_in_seek_bar') },
+  { value: "skip_button", label: getString('sponsorblock_show_jump_button') },
+  { value: "disabled", label: getString('sponsorblock_disable') },
 ];
 
 export interface SponsorBlockCategoryRowProps {
   name: string;
   description: string;
+  isHighlight: boolean;
   color: string;
   action: SponsorBlockAction;
   defaultColor: string;
@@ -32,6 +43,7 @@ export interface SponsorBlockCategoryRowProps {
 export function SponsorBlockCategoryRow({
   name,
   description,
+  isHighlight,
   color,
   action,
   defaultColor,
@@ -64,7 +76,7 @@ export function SponsorBlockCategoryRow({
       <Select
         value={action}
         onChange={(value) => onActionChange(value as SponsorBlockAction)}
-        options={ACTION_OPTIONS}
+        options={isHighlight ? HIGHLIGHT_ACTION_OPTIONS : ACTION_OPTIONS}
         className="w-44"
       />
 

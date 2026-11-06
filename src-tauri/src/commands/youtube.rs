@@ -840,7 +840,7 @@ pub(crate) async fn fetch_sponsorblock_segments(
 
     let base_url = normalize_sponsorblock_server_url(server_url)?;
     let url = format!(
-        "{base_url}/api/skipSegments?videoID={video_id}&categories=[\"sponsor\",\"intro\",\"outro\",\"selfpromo\",\"interaction\",\"filler\",\"music_offtopic\",\"preview\",\"exclusive_access\"]"
+        "{base_url}/api/skipSegments?videoID={video_id}&categories=[\"sponsor\",\"intro\",\"outro\",\"selfpromo\",\"interaction\",\"filler\",\"music_offtopic\",\"preview\",\"exclusive_access\",\"hook\",\"poi_highlight\"]&actionTypes=[\"skip\",\"mute\",\"full\",\"poi\"]"
     );
 
     let res = crate::api::http::shared_client()
@@ -897,7 +897,7 @@ fn normalize_sponsorblock_server_url(server_url: Option<&str>) -> crate::errors:
 const SPONSORBLOCK_USER_AGENT: &str = "FlowDesktop/1.0";
 const SPONSORBLOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
-const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 9] = [
+const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 10] = [
     "sponsor",
     "intro",
     "outro",
@@ -907,6 +907,7 @@ const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 9] = [
     "filler",
     "preview",
     "exclusive_access",
+    "hook",
 ];
 
 #[tauri::command]

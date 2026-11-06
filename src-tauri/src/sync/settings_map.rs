@@ -143,7 +143,7 @@ const DESKTOP_ONLY: &[&str] = &[
 /// setting per category (`sponsorblock_action_<category>`), which both apps read.
 pub const SB_ACTIONS_KEY: &str = "sponsorblock_categories";
 const SB_ACTION_PREFIX: &str = "sponsorblock_action_";
-const SB_CATEGORIES: [&str; 9] = [
+const SB_CATEGORIES: [&str; 11] = [
     "sponsor",
     "intro",
     "outro",
@@ -153,13 +153,18 @@ const SB_CATEGORIES: [&str; 9] = [
     "filler",
     "preview",
     "exclusive_access",
+    "hook",
+    "poi_highlight",
 ];
 /// Desktop action to Android's `SponsorBlockAction` name.
-const SB_ACTIONS: [(&str, &str); 4] = [
+const SB_ACTIONS: [(&str, &str); 7] = [
     ("skip", "SKIP"),
+    ("skip_once", "SKIP_ONCE"),
+    ("skip_button", "SKIP_BUTTON"),
     ("mute", "MUTE"),
     ("notify", "SHOW_TOAST"),
     ("ignore", "IGNORE"),
+    ("disabled", "DISABLED"),
 ];
 
 const DESKTOP_PREFIX: &str = "desktop.";
@@ -341,6 +346,52 @@ mod tests {
         assert_eq!(
             from_wire("queue_autoplay", &json!(false)),
             Some(("queue_autoplay_enabled", "false".to_string()))
+        );
+    }
+
+    #[test]
+    fn every_android_sponsorblock_action_and_category_crosses_both_ways() {
+        let stored = serde_json::json!({
+            "sponsor": "skip_once",
+            "intro": "skip_button",
+            "outro": "disabled",
+            "hook": "notify",
+            "poi_highlight": "skip_button",
+        })
+        .to_string();
+        let wire = sb_actions_to_wire(&stored);
+        let sent = |key: &str| wire.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
+        assert_eq!(
+            sent("sponsorblock_action_sponsor"),
+            Some(json!("SKIP_ONCE"))
+        );
+        assert_eq!(
+            sent("sponsorblock_action_intro"),
+            Some(json!("SKIP_BUTTON"))
+        );
+        assert_eq!(sent("sponsorblock_action_outro"), Some(json!("DISABLED")));
+        assert_eq!(sent("sponsorblock_action_hook"), Some(json!("SHOW_TOAST")));
+        assert_eq!(
+            sent("sponsorblock_action_poi_highlight"),
+            Some(json!("SKIP_BUTTON"))
+        );
+
+        assert!(is_sb_action("sponsorblock_action_hook"));
+        assert!(is_sb_action("sponsorblock_action_poi_highlight"));
+        let hlc = Hlc::new(0, 0, "device");
+        let incoming: Vec<SettingEntry> = wire
+            .into_iter()
+            .map(|(key, value)| SettingEntry {
+                key,
+                value,
+                hlc: hlc.clone(),
+            })
+            .collect();
+        let (key, back) = sb_actions_from_wire(None, &incoming).unwrap();
+        assert_eq!(key, SB_ACTIONS_KEY);
+        assert_eq!(
+            serde_json::from_str::<Value>(&back).unwrap(),
+            serde_json::from_str::<Value>(&stored).unwrap()
         );
     }
 

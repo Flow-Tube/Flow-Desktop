@@ -36,6 +36,8 @@ import { getString } from "../../lib/i18n/index";
 import { MOTION_EASE, motionMs } from "../../lib/motion";
 import { PLAYER_MENU_ATTR } from "../../lib/playerMenuDismiss";
 import { VIDEO_FIT_LABELS, VIDEO_FITS } from "../../lib/videoFit";
+import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
+import { useSettingsStore } from "../../store/useSettingsStore";
 
 export type SettingsPane =
   | "root"
@@ -146,6 +148,10 @@ export function PlayerSettingsMenu({
   const canNoteVideo = notesEnabled && noteEditorHosted && !!currentVideo && !currentVideo.isLive;
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED);
   const videoFit = usePlayerStore((s) => s.videoFit);
+  const sponsorBlockEnabled = useSettingsStore((s) => s.sponsorBlockEnabled);
+  const currentVideoId = usePlayerStore((s) => s.currentVideo?.id ?? null);
+  const sponsorBlockOff = usePlayerStore((s) => !!s.currentVideo && s.sponsorBlockOffVideoId === s.currentVideo.id);
+  const setSponsorBlockOffVideoId = usePlayerStore((s) => s.setSponsorBlockOffVideoId);
   const setVideoFit = usePlayerStore((s) => s.setVideoFit);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
@@ -311,6 +317,14 @@ export function PlayerSettingsMenu({
               <AudioLines size={18} />,
               () => onPaneChange("audio"),
             )}
+            {sponsorBlockEnabled &&
+              currentVideoId &&
+              toggleRow(
+                getString("sponsorblock_off_for_video"),
+                sponsorBlockOff,
+                <SponsorBlockIcon className="h-[18px] w-[18px]" />,
+                (off) => setSponsorBlockOffVideoId(off ? currentVideoId : null),
+              )}
             {settingRow(getString("player_menu_resize"), getString(VIDEO_FIT_LABELS[videoFit]), <Scaling size={18} />, () => onPaneChange("resize"))}
             {settingRow(getString("sleep_timer"), <SleepTimerLabel />, <Pause size={18} />, () => onPaneChange("sleep"))}
             {canNoteVideo &&

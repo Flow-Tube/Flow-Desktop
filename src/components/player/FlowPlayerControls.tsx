@@ -47,6 +47,7 @@ import {
 } from "../../lib/playerProgress";
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
+import { isPointSegment, seekBarSegments } from "../../lib/sponsorBlockPolicy";
 import { getString } from "../../lib/i18n/index";
 import { isAtLiveEdge, liveEdgePosition, liveWindow, readLiveTiming, secondsBehindLive } from "../../lib/liveEdge";
 import { Slider } from "../ui/Slider";
@@ -214,7 +215,11 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const panelButtonClass = (panel: FullscreenPanel) =>
     cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", panelOpen(panel) && "bg-chrome-white/15 text-primary/90");
 
-  const { sponsorBlockColors, sponsorBlockEnabled, sbSubmitEnabled } = useSettingsStore();
+  const { sponsorBlockColors, sponsorBlockActions, sponsorBlockEnabled, sbSubmitEnabled } = useSettingsStore();
+  const barSegments = React.useMemo(
+    () => (sponsorBlockEnabled ? seekBarSegments(sponsorBlockSegments, sponsorBlockActions) : []),
+    [sponsorBlockActions, sponsorBlockEnabled, sponsorBlockSegments],
+  );
   const selectPlaybackRate = onSelectPlaybackRate ?? setPlaybackRate;
 
   const [settingsPane, setSettingsPane] = useState<SettingsPane>("root");
@@ -415,11 +420,9 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         : formatTime(time);
     }
     if (hoverSegmentRef.current && hoverSegmentDotRef.current && hoverSegmentLabelRef.current) {
-      const sbSegment = sponsorBlockEnabled
-        ? sponsorBlockSegments.find(
-            (candidate) => time >= candidate.segment[0] && time <= candidate.segment[1],
-          )
-        : undefined;
+      const sbSegment = barSegments.find(
+        (candidate) => time >= candidate.segment[0] && time <= candidate.segment[1],
+      );
       hoverSegmentRef.current.style.display = sbSegment ? "flex" : "none";
       if (sbSegment) {
         hoverSegmentDotRef.current.style.backgroundColor =
@@ -566,9 +569,10 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                       />
 
                       {/* SponsorBlock segments drawn above the progress fill so they stay visible after playback passes them. */}
-                      {sponsorBlockEnabled && sponsorBlockSegments.map((sbSeg) => {
+                      {barSegments.map((sbSeg) => {
                         const sStart = sbSeg.segment[0];
-                        const sEnd = sbSeg.segment[1];
+                        // A highlight is a single moment: a short mark, or it wouldn't be drawn.
+                        const sEnd = isPointSegment(sbSeg) ? sStart + Math.max(1, duration * 0.004) : sbSeg.segment[1];
                         const overlapStart = Math.max(segment.startSeconds, sStart);
                         const overlapEnd = Math.min(segment.endSeconds, sEnd);
                         if (overlapStart < overlapEnd) {

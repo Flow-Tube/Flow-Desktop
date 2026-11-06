@@ -20,6 +20,7 @@ import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
+import { useTrackDetailsAction } from './useTrackDetailsAction';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
 import { useTrackRadioAction } from './useTrackRadioAction';
 
@@ -132,6 +133,7 @@ export function AlbumTrackRow({
   const radioActions = useTrackRadioAction(track);
   const downloadActions = useTrackDownloadAction(track);
   const blockActions = useTrackBlockActions(track);
+  const detailsActions = useTrackDetailsAction(track);
   const openAddToAlbum = useAlbumLibraryStore((s) => s.openAddToAlbum);
   const isHighlighted = isHovered || showEq;
   const activeColor = dominantColor ?? preloadedColor;
@@ -168,6 +170,7 @@ export function AlbumTrackRow({
       group: 'library',
       onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
+    ...detailsActions,
     ...(onRemove
       ? ([
           {

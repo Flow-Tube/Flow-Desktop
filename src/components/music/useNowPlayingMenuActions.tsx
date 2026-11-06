@@ -6,6 +6,7 @@ import { youtubeMusicWatchUrl } from '../../lib/youtubeUrl';
 import { useAlbumLibraryStore } from '../../store/useAlbumLibraryStore';
 import type { SongItem } from '../../types/music';
 import type { MusicMenuAction } from './MusicCardMenu';
+import { useTrackDetailsAction } from './useTrackDetailsAction';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
 import { useTrackBlockActions } from './useTrackBlockActions';
 import { useTrackNavActions } from './useTrackNavActions';
@@ -27,6 +28,7 @@ export function useNowPlayingMenuActions(
   const navActions = useTrackNavActions(track, options);
   const downloadActions = useTrackDownloadAction(track);
   const blockActions = useTrackBlockActions(track);
+  const detailsActions = useTrackDetailsAction(track);
 
   if (!track) return [];
 
@@ -50,6 +52,7 @@ export function useNowPlayingMenuActions(
       group: 'library',
       onSelect: () => void shareLink(track.title, youtubeMusicWatchUrl(videoIdOf(track))),
     },
+    ...detailsActions,
     ...(onOpenEqualizer
       ? [{ id: 'equalizer', label: getString('music_equalizer'), icon: <SlidersHorizontal size={16} />, group: 'go' as const, onSelect: onOpenEqualizer }]
       : []),

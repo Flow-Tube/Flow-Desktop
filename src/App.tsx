@@ -74,6 +74,7 @@ import { ContinueWatchingMini } from "./components/player/ContinueWatchingMini";
 import { GlobalVideoPlayer } from "./components/watch/GlobalVideoPlayer";
 import { PipWindowController } from "./components/pip/PipWindowController";
 import { AddToAlbumModal } from "./components/music/AddToAlbumModal";
+import { SongDetailsDialog } from "./components/music/SongDetailsDialog";
 import { AddTracksToAlbumModal } from "./components/music/AddTracksToAlbumModal";
 import { AddToPlaylistModal } from "./components/playlist/AddToPlaylistModal";
 import { DeepFlowController } from "./components/deep-flow/DeepFlowController";
@@ -342,6 +343,7 @@ function App() {
       )}
       <EqualizerDialog />
       <AddToAlbumModal />
+      <SongDetailsDialog />
       <AddTracksToAlbumModal />
       <AddToPlaylistModal />
       <DiscordPresenceController />

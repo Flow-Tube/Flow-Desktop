@@ -8,6 +8,7 @@ import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import type { SongItem } from '../../types/music';
 import type { MusicMenuAction } from './MusicCardMenu';
 import { useTrackBlockActions } from './useTrackBlockActions';
+import { useTrackDetailsAction } from './useTrackDetailsAction';
 import { useTrackDownloadAction } from './useTrackDownloadAction';
 import { useTrackNavActions } from './useTrackNavActions';
 import { useTrackRadioAction } from './useTrackRadioAction';
@@ -24,6 +25,7 @@ export function useSongMenuActions(
   const navActions = useTrackNavActions(song, options);
   const downloadActions = useTrackDownloadAction(song);
   const blockActions = useTrackBlockActions(song);
+  const detailsActions = useTrackDetailsAction(song);
 
   if (!song) return [];
 
@@ -60,6 +62,7 @@ export function useSongMenuActions(
       group: 'library',
       onSelect: () => void shareLink(song.title, youtubeMusicWatchUrl(song.videoId ?? song.id)),
     },
+    ...detailsActions,
     ...navActions,
     ...blockActions,
   ];

@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 
+import type { CaptionTrack } from "../../types/video";
 import { invokeBackend } from "./errors";
 
 export type LocalMediaKind = "video" | "audio";
@@ -62,6 +63,8 @@ export interface LocalStreamInfo {
   audioCodec: string;
   durationSeconds: number;
   positionSeconds: number;
+  lyrics: { text: string; embedded: boolean } | null;
+  captions: CaptionTrack[];
 }
 
 export function getLocalMediaLibrary(): Promise<LocalMediaLibrary> {
@@ -95,6 +98,20 @@ export function saveLocalPlayback(id: string, positionSeconds: number, durationS
 
 export function getLocalStream(id: string): Promise<LocalStreamInfo> {
   return invokeBackend<LocalStreamInfo>("get_local_stream", { id });
+}
+
+/** A loopback link to the file's cover, or null when it has none. */
+export function getLocalCover(id: string): Promise<string | null> {
+  return invokeBackend<string | null>("local_media_cover", { id });
+}
+
+/** Opens the system's file picker for a video's subtitle file; null when it is cancelled. */
+export function pickLocalSubtitle(id: string, title: string, filterName: string): Promise<CaptionTrack | null> {
+  return invokeBackend<CaptionTrack | null>("local_media_pick_subtitle", { id, title, filterName });
+}
+
+export function trashLocalFile(id: string): Promise<void> {
+  return invokeBackend<void>("local_media_trash", { id });
 }
 
 export function onLocalScanStatus(handler: (status: LocalScanStatus) => void): Promise<() => void> {

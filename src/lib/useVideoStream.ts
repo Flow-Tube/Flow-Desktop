@@ -4,7 +4,7 @@ import { invalidateStreamInfo, resolveStreamInfo } from "./streamResolution";
 import { classifyPlayerError } from "./playerError";
 import { recordPlayerEvent } from "./playerDiagnostics";
 import { getOfflineStream } from "./api/downloads";
-import { getLocalStream } from "./api/localMedia";
+import { getLocalCover, getLocalStream } from "./api/localMedia";
 import { isLocalMediaId } from "./localMediaId";
 import { LOCAL_FORMAT_UNSUPPORTED, localPlaybackError } from "./localMedia/playability";
 import { findDownloadedRecord } from "./useDownloads";
@@ -217,6 +217,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const setCaptionsInStore = usePlayerStore((s) => s.setCaptions);
+  const captionsInStore = usePlayerStore((s) => s.captions);
   const preferredQuality = useAppSettingsStore((s) => s.values[SETTINGS.DEFAULT_QUALITY_WIFI] ?? "1080p");
   const preferredCodec = useAppSettingsStore((s) => s.values[SETTINGS.DEFAULT_VIDEO_CODEC] ?? "H.264");
 
@@ -297,9 +298,15 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
       setSourceMode("direct");
       setStreamUrl(local.url);
       setStreamVideoId(video.id);
+      publishCaptions(local.captions);
       setIsPlaying(handoff ? handoff.playing : true);
+      if (!video.thumbnailUrl) {
+        void getLocalCover(video.id).then((cover) => {
+          if (cover) usePlayerStore.getState().enrichCurrentVideo(video.id, { thumbnailUrl: cover });
+        }, () => {});
+      }
     },
-    [handResumeToSource, setIsPlaying],
+    [handResumeToSource, publishCaptions, setIsPlaying],
   );
 
   useEffect(() => {
@@ -707,7 +714,8 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
     streamUrl,
     streamVideoId,
     streamVariants,
-    captions,
+    // A subtitle file picked for a library video joins through the store.
+    captions: isLocalMediaId(videoId) ? captionsInStore : captions,
     audioTracks,
     storyboard,
     loudnessDb,

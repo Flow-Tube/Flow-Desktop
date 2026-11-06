@@ -1,8 +1,10 @@
+import { useRef } from "react";
 import { Film, Music2 } from "lucide-react";
 
 import type { LocalMediaFile } from "../../lib/api/localMedia";
 import { formatBytes, formatDuration } from "../../lib/downloadOptions";
 import { folderNameOf, watchStateOf, progressFraction, type PlaysById } from "../../lib/localMedia/filters";
+import { useLocalCover } from "../../lib/localMedia/useLocalCover";
 import { getString } from "../../lib/i18n/index";
 import { LocalFileMenuButton } from "./LocalFileMenuButton";
 
@@ -19,12 +21,18 @@ function subtitleOf(file: LocalMediaFile): string {
 }
 
 function Artwork({ file, plays, nowMs, className }: Omit<LocalFileItemProps, "onPlay"> & { className: string }) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const cover = useLocalCover(file.id, frameRef);
   const Icon = file.kind === "video" ? Film : Music2;
   const fraction = file.kind === "video" ? progressFraction(file, plays) : 0;
   const isNew = watchStateOf(file, plays, nowMs) === "new";
   return (
-    <div className={`relative flex items-center justify-center overflow-hidden rounded-xl bg-surface-container ${className}`}>
-      <Icon className="h-8 w-8 text-chrome-neutral-600" aria-hidden />
+    <div ref={frameRef} className={`relative flex items-center justify-center overflow-hidden rounded-xl bg-surface-container ${className}`}>
+      {cover ? (
+        <img src={cover} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <Icon className="h-8 w-8 text-chrome-neutral-600" aria-hidden />
+      )}
       {isNew && (
         <span className="absolute left-1.5 top-1.5 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-on-primary">
           {getString("local_new_badge")}

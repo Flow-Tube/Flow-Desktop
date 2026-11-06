@@ -15,7 +15,7 @@ import { localFileMenuActions } from "./useLocalFileMenu";
 
 const hide = (folderPath: string) => {
   const file = { id: "local_1", kind: "audio", folderPath } as never;
-  localFileMenuActions(file).find((action) => action.id === "hide-folder")!.onSelect();
+  localFileMenuActions(file, { onDetails: () => {}, navigate: () => {} }).find((action) => action.id === "hide-folder")!.onSelect();
 };
 
 describe("hiding a file's folder", () => {

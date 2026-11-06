@@ -9,13 +9,16 @@ import {
   removeLocalMediaFolder,
   rescanLocalMedia,
   saveLocalPlayback,
+  trashLocalFile,
   type LocalMediaFile,
   type LocalMediaFolder,
   type LocalMediaKind,
   type LocalMediaPlay,
   type LocalScanStatus,
 } from "../lib/api/localMedia";
+import { normalizeBackendError } from "../lib/api/errors";
 import { DEFAULT_LOCAL_FILTERS, type LocalFilters } from "../lib/localMedia/filters";
+import { useUiStore } from "./useUiStore";
 
 export type LocalView = "all" | "folders";
 
@@ -44,6 +47,8 @@ interface LocalMediaState {
   addFolder: (title: string, exclude: boolean) => Promise<void>;
   removeFolder: (path: string) => Promise<void>;
   excludeFolder: (path: string) => Promise<void>;
+  /** Gone from the list at once; back in it if the system refuses. */
+  trashFile: (id: string) => Promise<void>;
   notePlayback: (id: string, positionSeconds: number, durationSeconds: number) => void;
   setKind: (kind: LocalMediaKind) => void;
   setView: (view: LocalView) => void;
@@ -115,8 +120,12 @@ export const useLocalMediaStore = create<LocalMediaState>((set, get) => {
 
     addFolder: async (title, exclude) => {
       listenForScans();
-      const added = await addLocalMediaFolder(title, exclude);
-      if (added) await get().load();
+      try {
+        const added = await addLocalMediaFolder(title, exclude);
+        if (added) await get().load();
+      } catch (error) {
+        useUiStore.getState().showToast({ variant: "error", message: normalizeBackendError(error).message });
+      }
     },
 
     removeFolder: async (path) => {
@@ -134,12 +143,28 @@ export const useLocalMediaStore = create<LocalMediaState>((set, get) => {
     excludeFolder: async (path) => {
       const previous = get().files;
       set({
-        files: previous.filter((file) => file.folderPath !== path && !file.folderPath.startsWith(`${path}/`)),
+        files: previous.filter(
+          (file) =>
+            file.folderPath !== path &&
+            !file.folderPath.startsWith(`${path}/`) &&
+            !file.folderPath.startsWith(`${path}\\`),
+        ),
         openFolder: get().openFolder === path ? null : get().openFolder,
       });
       try {
         await excludeLocalMediaFolder(path);
         await get().load();
+      } catch (error) {
+        set({ files: previous });
+        throw error;
+      }
+    },
+
+    trashFile: async (id) => {
+      const previous = get().files;
+      set({ files: previous.filter((file) => file.id !== id) });
+      try {
+        await trashLocalFile(id);
       } catch (error) {
         set({ files: previous });
         throw error;

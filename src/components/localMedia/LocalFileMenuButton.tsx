@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MoreVertical } from "lucide-react";
 
 import type { LocalMediaFile } from "../../lib/api/localMedia";
@@ -6,9 +7,12 @@ import { getString } from "../../lib/i18n/index";
 import { localFileMenuActions } from "../../lib/localMedia/useLocalFileMenu";
 import type { MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { MediaMenu } from "../ui/MediaMenu";
+import { LocalFileDetailsDialog } from "./LocalFileDetailsDialog";
 
 export function LocalFileMenuButton({ file }: { file: LocalMediaFile }) {
+  const navigate = useNavigate();
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const open = () => {
@@ -34,10 +38,11 @@ export function LocalFileMenuButton({ file }: { file: LocalMediaFile }) {
         <MediaMenu
           anchor={anchor}
           onClose={() => setAnchor(null)}
-          actions={localFileMenuActions(file)}
+          actions={localFileMenuActions(file, { navigate, onDetails: () => setShowDetails(true) })}
           header={{ title: file.title, subtitle: file.fileName }}
         />
       )}
+      {showDetails && <LocalFileDetailsDialog file={file} onClose={() => setShowDetails(false)} />}
     </>
   );
 }

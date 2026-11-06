@@ -22,7 +22,7 @@ function FolderRows({ folders }: { folders: LocalMediaFolder[] }) {
   }
   const remove = (path: string) => {
     void removeFolder(path).catch(() =>
-      useUiStore.getState().showToast({ variant: 'error', message: getString('local_folder_hide_failed') }),
+      useUiStore.getState().showToast({ variant: 'error', message: getString('settings_local_media_remove_failed') }),
     );
   };
   return (

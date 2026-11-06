@@ -9,10 +9,12 @@ const api = vi.hoisted(() => ({
   rescanLocalMedia: vi.fn(() => Promise.resolve()),
   cancelLocalMediaScan: vi.fn(() => Promise.resolve()),
   saveLocalPlayback: vi.fn(() => Promise.resolve()),
+  trashLocalFile: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("../lib/api/localMedia", () => api);
 
 import { useLocalMediaStore } from "./useLocalMediaStore";
+import { useUiStore } from "./useUiStore";
 
 const emptyLibrary = {
   folders: [],
@@ -43,6 +45,26 @@ describe("useLocalMediaStore", () => {
     expect(useLocalMediaStore.getState().files.map((item) => item.id)).toEqual(["c"]);
     await expect(pending).rejects.toThrow("no");
     expect(useLocalMediaStore.getState().files).toHaveLength(3);
+  });
+
+  it("takes a trashed file off the list at once and brings it back if the system refuses", async () => {
+    useLocalMediaStore.setState({ files: [file("a", "/m"), file("b", "/m")] });
+    api.trashLocalFile.mockRejectedValueOnce(new Error("no"));
+    const pending = useLocalMediaStore.getState().trashFile("a");
+    expect(useLocalMediaStore.getState().files.map((item) => item.id)).toEqual(["b"]);
+    await expect(pending).rejects.toThrow("no");
+    expect(useLocalMediaStore.getState().files).toHaveLength(2);
+
+    await useLocalMediaStore.getState().trashFile("a");
+    expect(useLocalMediaStore.getState().files.map((item) => item.id)).toEqual(["b"]);
+  });
+
+  it("says why a chosen folder was refused", async () => {
+    const showToast = vi.fn();
+    useUiStore.setState({ showToast });
+    api.addLocalMediaFolder.mockRejectedValue({ kind: "validation", message: "Choose a folder inside the drive" });
+    await useLocalMediaStore.getState().addFolder("title", false);
+    expect(showToast).toHaveBeenCalledWith({ variant: "error", message: "Choose a folder inside the drive" });
   });
 
   it("does nothing when the folder picker is cancelled", async () => {

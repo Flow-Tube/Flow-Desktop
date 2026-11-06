@@ -12,7 +12,7 @@ vi.mock("../lib/lyrics/lyricsHelper", () => ({
 }));
 
 const { useLyricsStore } = await import("./useLyricsStore");
-const { seedOfflineLyrics } = await import("../lib/lyrics/offline");
+const { LOCAL_FILE_LYRICS_PROVIDER, lyricsSourceLabel, seedOfflineLyrics } = await import("../lib/lyrics/offline");
 
 let id = 0;
 const request = () => ({ videoId: `song-${++id}`, title: "Song", artist: "Band", durationSec: 200 });
@@ -178,5 +178,29 @@ describe("lyrics source choice for downloaded songs", () => {
     useLyricsStore.getState().refresh();
     await flush();
     expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
+  });
+});
+
+describe("a library song's lyrics", () => {
+  const LOCAL_ID = "local_0123456789abcdef";
+  const request = { videoId: LOCAL_ID, title: "A", artist: "B", durationSeconds: 10 } as never;
+
+  it("shows no lyrics rather than sending the file's name to a provider", () => {
+    const fetchStub = vi.fn();
+    vi.stubGlobal("fetch", fetchStub);
+    useLyricsStore.getState().load(request);
+    expect(useLyricsStore.getState().loading).toBe(false);
+    expect(useLyricsStore.getState().entries).toEqual([]);
+    expect(fetchStub).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("takes the file's own lyrics when they arrive after the song started, under its source", () => {
+    useLyricsStore.getState().load(request);
+    seedOfflineLyrics(LOCAL_ID, "[00:01.00]Hello", LOCAL_FILE_LYRICS_PROVIDER);
+    const state = useLyricsStore.getState();
+    expect(state.entries.map((entry) => entry.text)).toEqual(["Hello"]);
+    expect(state.providerName).toBe(LOCAL_FILE_LYRICS_PROVIDER);
+    expect(lyricsSourceLabel(state.providerName)).toBe("Lyrics file");
   });
 });

@@ -20,6 +20,7 @@ import { getLyricsSourceChoice, setLyricsSourceChoice } from "../lib/lyrics/sour
 import { isAbortError } from "../lib/lyrics/inFlight";
 import { entriesAreSynced, lyricsQuality } from "../lib/lyrics/sync";
 import { getString } from "../lib/i18n/index";
+import { isLocalMediaId } from "../lib/localMediaId";
 
 export interface LyricsView {
   entries: LyricsEntry[];
@@ -90,7 +91,7 @@ const SESSION_RESET = { syncOffsetMs: 0, fileOffsetMs: 0, showSyncControls: fals
 function offlineView(lyrics: OfflineLyrics, current: { syncOffsetMs: number; fileOffsetMs: number }) {
   const untouched = current.syncOffsetMs === current.fileOffsetMs;
   return {
-    ...viewOf({ entries: lyrics.entries, provider: OFFLINE_PROVIDER }),
+    ...viewOf({ entries: lyrics.entries, provider: lyrics.provider }),
     fileOffsetMs: lyrics.offsetMs,
     ...(untouched ? { syncOffsetMs: lyrics.offsetMs } : {}),
   };
@@ -103,6 +104,17 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     const controller = new AbortController();
     lookup = controller;
     const offline = getOfflineLyrics(request.videoId);
+    // As on Android, a file's own lyrics are all it gets: its name never goes to a provider.
+    if (isLocalMediaId(request.videoId)) {
+      lookup = null;
+      set({
+        videoId: request.videoId,
+        request,
+        ...SESSION_RESET,
+        ...(offline ? offlineView(offline, SESSION_RESET) : EMPTY_LYRICS),
+      });
+      return;
+    }
     const choice = getLyricsSourceChoice(request.videoId);
     const showSaved = offline !== null && choice !== "online";
     const sameSong = get().videoId === request.videoId;
@@ -179,7 +191,7 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     setShowSyncControls: (show) => set({ showSyncControls: show }),
     browseCandidates: () => {
       const { request } = get();
-      if (!request) return;
+      if (!request || isLocalMediaId(request.videoId)) return;
       browse?.abort();
       const controller = new AbortController();
       browse = controller;
@@ -237,6 +249,10 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
 onOfflineLyrics((videoId, lyrics) => {
   const state = useLyricsStore.getState();
   if (state.videoId !== videoId) return;
+  if (isLocalMediaId(videoId)) {
+    useLyricsStore.setState(offlineView(lyrics, state));
+    return;
+  }
   const choice = getLyricsSourceChoice(videoId);
   if (choice === "downloaded") {
     lookup?.abort();

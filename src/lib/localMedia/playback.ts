@@ -37,6 +37,34 @@ export function playLocalFiles(
   navigate(`/watch/${opened.id}`);
 }
 
+/**
+ * Takes a file that is going away out of both players. With nothing else queued the video player
+ * closes, and its page goes first, or the page would start the same file again from its route.
+ */
+export function stopPlayingLocalFile(id: string, navigate: (path: string) => void): void {
+  const video = usePlayerStore.getState();
+  const videoIndex = video.queue.findIndex((item) => item.id === id);
+  if (videoIndex >= 0) {
+    if (video.currentVideo?.id === id && video.queue.length === 1) {
+      navigate("/local-media");
+      video.dismissVideoPlayer();
+    } else {
+      video.removeFromQueue(videoIndex);
+    }
+  }
+  const music = useMusicPlayerStore.getState();
+  const songIndex = music.queue.findIndex((song) => (song.videoId ?? song.id) === id);
+  if (songIndex < 0) return;
+  if (songIndex !== music.currentIndex) {
+    music.removeFromQueue(songIndex);
+  } else if (songIndex + 1 < music.queue.length) {
+    music.next();
+    useMusicPlayerStore.getState().removeFromQueue(songIndex);
+  } else {
+    music.dismiss();
+  }
+}
+
 export function queueLocalFile(file: LocalMediaFile, next: boolean): void {
   if (file.kind === "audio") {
     const player = useMusicPlayerStore.getState();

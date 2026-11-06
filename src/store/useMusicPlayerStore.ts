@@ -11,10 +11,14 @@ import {
   prefetchMusicStream,
   resolveMusicStream,
 } from "../lib/musicStreamResolution";
-import { getLocalStream } from "../lib/api/localMedia";
+import { getLocalCover, getLocalStream } from "../lib/api/localMedia";
 import { isLocalMediaId } from "../lib/localMediaId";
 import { LOCAL_FORMAT_UNSUPPORTED, localPlaybackError } from "../lib/localMedia/playability";
-import { seedOfflineLyrics } from "../lib/lyrics/offline";
+import {
+  LOCAL_EMBEDDED_LYRICS_PROVIDER,
+  LOCAL_FILE_LYRICS_PROVIDER,
+  seedOfflineLyrics,
+} from "../lib/lyrics/offline";
 import { findDownloadedRecord } from "../lib/useDownloads";
 import { useDownloadsLibraryStore } from "./useDownloadsLibraryStore";
 import { normalizeBackendError } from "../lib/api/errors";
@@ -531,7 +535,19 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
         if (get().loadingStreamId !== videoId) return;
         const problem = localPlaybackError(local);
         if (problem) throw problem;
+        if (local.lyrics) {
+          seedOfflineLyrics(
+            videoId,
+            local.lyrics.text,
+            local.lyrics.embedded ? LOCAL_EMBEDDED_LYRICS_PROVIDER : LOCAL_FILE_LYRICS_PROVIDER,
+          );
+        }
         set({ loudnessDb: null, loadingStreamId: null });
+        // Decoding a cover is real work, so it follows the sound rather than holding it up.
+        void getLocalCover(videoId).then((cover) => {
+          const now = get().currentTrack;
+          if (cover && now && videoIdOf(now) === videoId) set({ currentTrack: { ...now, thumbnail: cover } });
+        }, () => {});
         musicAudioEngine.setLoudness(null, get().normalizationEnabled);
         await musicAudioEngine.load(local.url, local.contentType, track.duration ?? null);
         musicAudioEngine.seekWhenReady(options?.resumeAt ?? localResumeStart(local.positionSeconds, local.durationSeconds));

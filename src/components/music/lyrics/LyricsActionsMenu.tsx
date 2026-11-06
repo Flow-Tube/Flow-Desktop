@@ -27,6 +27,7 @@ import { useBoolPref, usePreference } from "../../../lib/usePreference";
 import { SETTINGS } from "../../../lib/settings/schema";
 import { IS_LINUX_RUNTIME } from "../../../lib/platform";
 import { getString } from "../../../lib/i18n/index";
+import { isLocalMediaId } from "../../../lib/localMediaId";
 import { lyricsSourceLabel } from "../../../lib/lyrics/offline";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { LyricsSourcesDialog } from "./LyricsSourcesDialog";
@@ -136,20 +137,25 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
             style={{ transformOrigin: "top right" }}
             className="absolute right-0 top-full z-30 mt-2 w-80 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-2"
           >
-            <MenuRow
-              icon={<RefreshCw className="h-5 w-5" />}
-              title={getString("music_refresh_lyrics")}
-              supporting={providerName ? getString("lyrics_current_source", lyricsSourceLabel(providerName)) : null}
-              onClick={run(refresh)}
-            />
-            <MenuRow
-              icon={<SearchCheck className="h-5 w-5" />}
-              title={getString("lyrics_choose_source")}
-              onClick={run(() => {
-                setSourcesOpen(true);
-                browseCandidates();
-              })}
-            />
+            {/* A library file's own lyrics are all it gets, so there is nothing to look up. */}
+            {!isLocalMediaId(useLyricsStore.getState().videoId) && (
+              <>
+                <MenuRow
+                  icon={<RefreshCw className="h-5 w-5" />}
+                  title={getString("music_refresh_lyrics")}
+                  supporting={providerName ? getString("lyrics_current_source", lyricsSourceLabel(providerName)) : null}
+                  onClick={run(refresh)}
+                />
+                <MenuRow
+                  icon={<SearchCheck className="h-5 w-5" />}
+                  title={getString("lyrics_choose_source")}
+                  onClick={run(() => {
+                    setSourcesOpen(true);
+                    browseCandidates();
+                  })}
+                />
+              </>
+            )}
             {hasLyrics && (
               <>
                 <MenuRow icon={<Pencil className="h-5 w-5" />} title={getString("lyrics_edit")} onClick={run(() => setEditText(currentLyricsText()))} />

@@ -18,7 +18,7 @@ const song = (id: string): SongItem => ({
   params: null,
 });
 
-const { engine, resolveMusicStream, prefetchMusicStream, getLocalStream, getMusicWatchQueue } = vi.hoisted(() => ({
+const { engine, resolveMusicStream, prefetchMusicStream, getLocalStream, getLocalCover, getMusicWatchQueue } = vi.hoisted(() => ({
   engine: {
     activatePreloaded: vi.fn(() => false),
     armSkipFade: vi.fn(),
@@ -38,6 +38,7 @@ const { engine, resolveMusicStream, prefetchMusicStream, getLocalStream, getMusi
   resolveMusicStream: vi.fn(),
   prefetchMusicStream: vi.fn(),
   getLocalStream: vi.fn(),
+  getLocalCover: vi.fn(),
   getMusicWatchQueue: vi.fn(),
 }));
 
@@ -53,7 +54,7 @@ vi.mock("../lib/useDownloads", () => ({ findDownloadedRecord: () => undefined })
 vi.mock("./useDownloadsLibraryStore", () => ({
   useDownloadsLibraryStore: { getState: () => ({ loaded: true, ensureLoaded: async () => {} }) },
 }));
-vi.mock("../lib/api/localMedia", () => ({ getLocalStream }));
+vi.mock("../lib/api/localMedia", () => ({ getLocalStream, getLocalCover }));
 vi.mock("../lib/api/music", () => ({
   getMusicWatchQueue,
   getMusicQueueContinuation: vi.fn(),
@@ -68,6 +69,7 @@ vi.mock("../lib/localMedia/playability", async (original) => {
   };
 });
 
+import { getOfflineLyrics } from "../lib/lyrics/offline";
 import { useMusicPlayerStore } from "./useMusicPlayerStore";
 
 const localStream = (overrides: Record<string, unknown> = {}) => ({
@@ -79,12 +81,15 @@ const localStream = (overrides: Record<string, unknown> = {}) => ({
   audioCodec: "mp3",
   durationSeconds: 200,
   positionSeconds: 0,
+  lyrics: null,
+  captions: [],
   ...overrides,
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   getLocalStream.mockResolvedValue(localStream());
+  getLocalCover.mockResolvedValue(null);
   useMusicPlayerStore.setState({
     queue: [],
     currentTrack: null,
@@ -143,5 +148,25 @@ describe("a library file in the music player", () => {
     useMusicPlayerStore.getState()._onPlaybackError();
     expect(useMusicPlayerStore.getState().streamErrorKind).toBe("localFormatUnsupported");
     expect(engine.load).not.toHaveBeenCalled();
+  });
+});
+
+describe("a library song's own lyrics and cover", () => {
+  it("offers its .lrc under the file's name, and takes its cover once it has started", async () => {
+    getLocalStream.mockResolvedValue(localStream({ lyrics: { text: "[00:01.00]Hello", embedded: false } }));
+    getLocalCover.mockResolvedValue("http://127.0.0.1:2/stream/cover");
+    await useMusicPlayerStore.getState().playQueue([song(LOCAL_ID)], 0);
+    expect(getOfflineLyrics(LOCAL_ID)?.provider).toBe("LocalFile");
+    await vi.waitFor(() =>
+      expect(useMusicPlayerStore.getState().currentTrack?.thumbnail).toBe("http://127.0.0.1:2/stream/cover"),
+    );
+  });
+
+  it("a failed cover read leaves the track as it was", async () => {
+    getLocalCover.mockRejectedValue(new Error("no"));
+    await useMusicPlayerStore.getState().playQueue([song(LOCAL_ID)], 0);
+    await Promise.resolve();
+    expect(useMusicPlayerStore.getState().currentTrack?.thumbnail).toBe("");
+    expect(useMusicPlayerStore.getState().streamError).toBeNull();
   });
 });

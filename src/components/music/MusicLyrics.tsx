@@ -59,6 +59,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
   const [alignPref] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
   const [showTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const [autoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
   const [blurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const { theme, variant: themeVariant } = useTheme();
   const textColor = useMemo(() => hexToRgb(theme.variants[themeVariant].onSurface), [theme, themeVariant]);
@@ -84,6 +85,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
         textAlign={isAlign(alignPref) ? alignPref : "center"}
         showTranslation={showTranslation}
         showRomanization={showRomanization}
+        autoRomanize={autoRomanize}
         blurOtherLines={blurOtherLines}
         syncOffsetMs={syncOffsetMs}
         active={active}

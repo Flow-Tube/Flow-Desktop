@@ -25,3 +25,8 @@ export function clearLyricsCache(): Promise<void> {
 export function saveDownloadLyrics(videoId: string, lrc: string): Promise<boolean> {
   return invokeBackend<boolean>("save_download_lyrics", { videoId, lrc });
 }
+
+/** A Latin line per lyric line, made on this computer; none for Japanese lyrics. */
+export function romanizeLyrics(lines: string[]): Promise<Array<string | null>> {
+  return invokeBackend<Array<string | null>>("romanize_lyrics", { lines });
+}

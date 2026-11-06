@@ -42,6 +42,8 @@ describe("lyrics presentation", () => {
     const lines: LyricsEntry[] = [{ time: 0, text: "사랑해", romanization: "saranghae" }, { time: 1000, text: "hello" }];
     expect(lyricsRomanizations(lines, true)).toEqual(["saranghae", null]);
     expect(lyricsRomanizations(lines, false)).toEqual([null, null]);
+    expect(lyricsRomanizations(lines, true, ["made here", "other"])).toEqual(["saranghae", "other"]);
+    expect(lyricsRomanizations(lines, false, ["made here", "other"])).toEqual([null, null]);
   });
 
   it("gives the second singer a readable colour of the backdrop's hue, and centres sung-together lines", () => {

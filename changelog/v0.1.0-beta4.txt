@@ -82,6 +82,7 @@ MUSIC
 - Artist pages also get a Featured on shelf and a Share button.
 - Crossfade can also blend when you skip a song, can fade between tracks of the same album, and has a choice of fade curves: Equal power, Smooth, Hold and Gentle.
 - Animated artwork: turn it on in Settings > Music and albums with motion artwork loop it over the cover in the full player.
+- Romanize on this device, in Settings > Music and the lyrics menu, adds Latin letters under lyrics in other scripts when the source has none. Japanese isn't covered yet.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

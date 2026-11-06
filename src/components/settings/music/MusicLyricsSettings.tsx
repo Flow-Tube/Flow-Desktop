@@ -22,6 +22,7 @@ export function MusicLyricsSettings() {
   const [align, setAlign] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const cache = useLyricsCache();
 
@@ -47,6 +48,11 @@ export function MusicLyricsSettings() {
       <SettingItem title={getString('lyrics_show_romanization')} description={getString('lyrics_show_romanization_summary')}>
         <ToggleSwitch checked={showRomanization} onChange={setShowRomanization} />
       </SettingItem>
+      {showRomanization && (
+        <SettingItem title={getString('lyrics_auto_romanize')} description={getString('lyrics_auto_romanize_summary')}>
+          <ToggleSwitch checked={autoRomanize} onChange={setAutoRomanize} />
+        </SettingItem>
+      )}
       {/* Linux never draws this blur, because the engine would do it on the CPU. */}
       {!IS_LINUX_RUNTIME && (
         <SettingItem title={getString('lyrics_blur_other_lines')} description={getString('lyrics_blur_other_lines_summary')}>

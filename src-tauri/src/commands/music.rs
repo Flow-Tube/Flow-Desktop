@@ -351,6 +351,12 @@ pub async fn get_music_lyrics_typed(
     music.lyrics(&video_id).await.map_err(ErrorResponse::from)
 }
 
+/// A Latin line per lyric line, made on this computer. Empty for Japanese lyrics.
+#[tauri::command]
+pub async fn romanize_lyrics(lines: Vec<String>) -> Vec<Option<String>> {
+    crate::api::lyrics_romanize::romanize_lines(&lines)
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsHttpResponse {

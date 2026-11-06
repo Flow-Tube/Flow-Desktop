@@ -84,6 +84,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [align, setAlign] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const { copy, save } = useLyricsActions(track);
 
@@ -193,6 +194,15 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
               checked={showRomanization}
               onChange={setShowRomanization}
             />
+            {showRomanization && (
+              <SwitchRow
+                icon={<Type className="h-5 w-5" />}
+                title={getString("lyrics_auto_romanize")}
+                supporting={getString("lyrics_auto_romanize_summary")}
+                checked={autoRomanize}
+                onChange={setAutoRomanize}
+              />
+            )}
             {/* Linux never draws this blur, because the engine would do it on the CPU. */}
             {!IS_LINUX_RUNTIME && (
               <SwitchRow

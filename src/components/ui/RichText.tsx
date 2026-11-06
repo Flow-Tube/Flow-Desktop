@@ -36,7 +36,7 @@ export function RichText({ value, onActivate, imageSrc, className }: RichTextPro
                 event.stopPropagation();
                 onActivate(target);
               }}
-              className="inline cursor-pointer break-all text-left font-medium text-primary hover:underline"
+              className="inline cursor-pointer break-all text-start font-medium text-primary hover:underline"
             >
               {segment.text}
             </button>

@@ -20,7 +20,7 @@ export function RemoteDock() {
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 h-[72px] w-[90%] max-w-5xl -translate-x-1/2">
-      <div className="relative flex h-full items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high pl-3 pr-4">
+      <div className="relative flex h-full items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high ps-3 pe-4">
         <div className="flex w-1/3 min-w-0 items-center gap-3">
           {art && <img src={art} alt="" className="aspect-video h-12 shrink-0 rounded-xl object-cover" />}
           <div className="min-w-0">

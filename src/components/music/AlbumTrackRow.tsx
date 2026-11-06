@@ -263,7 +263,7 @@ export function AlbumTrackRow({
       </div>
 
       {showArtwork ? (
-        <div className="mr-3 shrink-0">
+        <div className="me-3 shrink-0">
           <TrackArtwork
             track={track}
             imageRef={artworkRef}
@@ -287,12 +287,12 @@ export function AlbumTrackRow({
       </div>
 
       {showStreamsColumn ? (
-        <span className="hidden w-32 shrink-0 text-right font-mono text-sm tabular-nums text-chrome-neutral-500 lg:block">
+        <span className="hidden w-32 shrink-0 text-end font-mono text-sm tabular-nums text-chrome-neutral-500 lg:block">
           {streamsText ?? ''}
         </span>
       ) : null}
 
-      <div className="relative ml-4 h-8 w-20 shrink-0">
+      <div className="relative ms-4 h-8 w-20 shrink-0">
         <span
           className={cx(
             'absolute right-0 top-1/2 -translate-y-1/2 font-mono text-sm tabular-nums text-chrome-neutral-400 transition-opacity duration-200 ease-out',

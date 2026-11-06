@@ -61,7 +61,7 @@ export function Topbar() {
             <Logo size={36} showText={true} />
           </div>
         )}
-        <div className="hidden ml-1 items-center sm:flex">
+        <div className="hidden ms-1 items-center sm:flex">
           <IconButton
             title={getString('topbar_back')}
             aria-label={getString('topbar_back')}

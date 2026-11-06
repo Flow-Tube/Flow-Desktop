@@ -21,7 +21,7 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
   const byline = playlist.author?.name || playlist.songCountText;
   return (
     <div className="flex w-72 flex-col gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 md:w-80">
-      <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-left">
+      <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-start">
         <div className="grid h-20 w-20 shrink-0 grid-cols-2 overflow-hidden rounded-xl bg-surface-container-high">
           {covers.length === 4
             ? covers.map((url) => <img key={url} src={toSrc(url)} alt="" loading="lazy" className="h-full w-full object-cover" />)
@@ -41,7 +41,7 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
             key={track.videoId ?? track.id}
             type="button"
             onClick={() => onPlayPreview(track)}
-            className="flex items-center gap-3 px-1 py-2 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
+            className="flex items-center gap-3 px-1 py-2 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
           >
             <img src={track.thumbnail} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-md object-cover" />
             <span className="min-w-0 truncate text-sm text-chrome-neutral-200">

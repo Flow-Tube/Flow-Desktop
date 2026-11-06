@@ -689,7 +689,7 @@ function VideoCardComponent({
           <button
             type="button"
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="mt-1 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+            className="mt-1 truncate text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
@@ -795,7 +795,7 @@ function VideoCardComponent({
           <button
             type="button"
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="mt-0.5 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+            className="mt-0.5 truncate text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
@@ -899,7 +899,7 @@ function VideoCardComponent({
         <div className="pointer-events-none absolute inset-0 bg-chrome-black/0 group-hover:bg-chrome-black/10 transition-colors duration-200" />
       </div>
 
-      <div className="flex gap-3 pr-1 relative z-10">
+      <div className="flex gap-3 pe-1 relative z-10">
         {!hideChannelAvatar && (
           <div 
             onClick={(e) => { void handleChannelNavigate(e); }}

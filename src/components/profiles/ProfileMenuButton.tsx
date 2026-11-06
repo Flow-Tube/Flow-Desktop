@@ -12,7 +12,7 @@ import { profileErrorMessage } from "../../lib/profiles/profileErrors";
 import { useProfilesStore } from "../../store/useProfilesStore";
 import { useUiStore } from "../../store/useUiStore";
 
-const ROW = "flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none disabled:opacity-50";
+const ROW = "flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-start transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none disabled:opacity-50";
 
 /** The active profile in the top bar; opens a menu to switch or manage profiles. */
 export function ProfileMenuButton() {

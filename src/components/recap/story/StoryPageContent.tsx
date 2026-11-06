@@ -64,7 +64,7 @@ function ArtworkList({ items, value }: { items: RankedItem[]; value: (item: Rank
   return (
     <ol className="flex w-full flex-col gap-2">
       {items.map((item, index) => (
-        <li key={item.id} className="flex items-center gap-3 rounded-2xl bg-surface-container-high p-2.5 text-left">
+        <li key={item.id} className="flex items-center gap-3 rounded-2xl bg-surface-container-high p-2.5 text-start">
           <span className="w-6 shrink-0 text-center text-lg font-bold tabular-nums text-primary">{index + 1}</span>
           <ArtworkImage url={item.imageUrl} />
           <span className="min-w-0 flex-1 truncate text-base font-medium text-on-surface">{item.name || getString("recap_unnamed_item")}</span>

@@ -28,7 +28,7 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
         <button
           type="button"
           onClick={open}
-          className="flex min-w-0 flex-1 items-center gap-4 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex min-w-0 flex-1 items-center gap-4 rounded-xl text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <span className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-surface-container-high">
             {avatar ? <img src={avatar} alt={channel.name} className="h-full w-full object-cover" loading="lazy" /> : null}

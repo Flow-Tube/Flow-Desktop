@@ -166,7 +166,7 @@ export function FlowNeuroPersona() {
           </div>
 
           {choices.length > 1 && (
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ms-auto flex items-center gap-2">
               <span className="text-xs font-semibold text-[var(--color-on-surface-variant)]">
                 {getString("persona_profile_label")}
               </span>

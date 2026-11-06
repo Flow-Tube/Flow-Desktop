@@ -98,7 +98,7 @@ export function ChannelMemory({ brain, onBlockChannel }: ChannelMemoryProps) {
                           style={{ width: `${scorePct}%` }}
                         />
                       </div>
-                      <span className="w-9 text-right font-mono text-xs text-[var(--color-on-surface)]">
+                      <span className="w-9 text-end font-mono text-xs text-[var(--color-on-surface)]">
                         {scorePct}%
                       </span>
                     </div>

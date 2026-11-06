@@ -196,7 +196,7 @@ export function AddToPlaylistModal() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="mt-3 flex w-full items-center gap-3 rounded-lg p-2 text-left text-sm font-medium text-[var(--color-primary)] transition-colors hover:bg-surface-container-high"
+            className="mt-3 flex w-full items-center gap-3 rounded-lg p-2 text-start text-sm font-medium text-[var(--color-primary)] transition-colors hover:bg-surface-container-high"
           >
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-surface-container-high">
               <Plus size={18} />

@@ -161,7 +161,7 @@ export function SubscribeButton({
                 {notificationsOn ? <BellRing size={16} /> : <BellOff size={16} />}
               </span>
               {getString("subscribed")}
-              {showNotificationMenu && <ChevronDown size={16} className="-mr-2 text-chrome-neutral-400" />}
+              {showNotificationMenu && <ChevronDown size={16} className="-me-2 text-chrome-neutral-400" />}
             </>
           ) : (
             getString("search_subscribe")
@@ -278,7 +278,7 @@ function MenuRow({
         event.stopPropagation();
         onSelect();
       }}
-      className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm transition-colors duration-200 ease-out ${
+      className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-start text-sm transition-colors duration-200 ease-out ${
         destructive
           ? "text-chrome-red-400 hover:bg-chrome-red-950/30"
           : "text-chrome-zinc-300 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100"

@@ -72,7 +72,7 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
           </p>
         </div>
         {subscriptions.length > 0 && (
-          <span className="shrink-0 ml-4 py-2 px-4 bg-primary/10 text-primary border border-primary/20 text-xs font-black uppercase rounded-full self-start select-none">
+          <span className="shrink-0 ms-4 py-2 px-4 bg-primary/10 text-primary border border-primary/20 text-xs font-black uppercase rounded-full self-start select-none">
             {subscriptions.length} creators configured
           </span>
         )}
@@ -80,7 +80,7 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
 
       {/* Search Input Bar */}
       <div className="relative flex items-center bg-chrome-input-surface border border-chrome-zinc-800 focus-within:border-primary/60 rounded-2xl overflow-hidden mb-8 px-6 py-4 shadow-sm">
-        <span className="text-sm text-chrome-zinc-500 font-bold select-none mr-3">{getString('search_placeholder')}</span>
+        <span className="text-sm text-chrome-zinc-500 font-bold select-none me-3">{getString('search_placeholder')}</span>
         <input
           type="text"
           className="w-full bg-transparent outline-none border-none text-chrome-zinc-200 placeholder:text-chrome-zinc-600 text-sm font-medium"
@@ -89,7 +89,7 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
           onChange={(e) => setSearchQuery(e.target.value)}
         />
         {isSearching && (
-          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0 ml-2" />
+          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0 ms-2" />
         )}
       </div>
 

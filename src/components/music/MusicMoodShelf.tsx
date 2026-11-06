@@ -21,7 +21,7 @@ export function MusicMoodShelf({ title, moods, onOpen, onBrowse }: MusicMoodShel
             key={`${mood.browseId}:${mood.params ?? ''}`}
             type="button"
             onClick={() => onOpen(mood)}
-            className="flex h-12 snap-start items-center rounded-xl border border-chrome-neutral-800 bg-surface-container-low px-4 text-left text-sm font-medium text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
+            className="flex h-12 snap-start items-center rounded-xl border border-chrome-neutral-800 bg-surface-container-low px-4 text-start text-sm font-medium text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
           >
             <span className="truncate">{mood.title}</span>
           </button>

@@ -117,7 +117,7 @@ export function AddAllToPlaylistDialog({
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="mt-3 flex w-full items-center gap-3 rounded-lg p-2 text-left text-sm font-medium text-[var(--color-primary)] transition-colors hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="mt-3 flex w-full items-center gap-3 rounded-lg p-2 text-start text-sm font-medium text-[var(--color-primary)] transition-colors hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-surface-container-high">
                 <Plus size={18} />

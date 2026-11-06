@@ -41,11 +41,11 @@ function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; labe
       onClick={select}
       className={`flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out group ${select ? 'cursor-pointer' : ''}`}
     >
-      <div className="flex items-center gap-3 shrink-0 pr-4">
+      <div className="flex items-center gap-3 shrink-0 pe-4">
         <span className="text-chrome-neutral-400">{icon}</span>
         <span className="text-sm font-medium text-chrome-neutral-200">{label}</span>
       </div>
-      <div className="flex items-center justify-end gap-2 min-w-0 text-right">
+      <div className="flex items-center justify-end gap-2 min-w-0 text-end">
         {value && <span className="text-sm text-chrome-neutral-400 break-all">{value}</span>}
         {href && <ExternalLink size={12} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
         {onSelect && <ChevronRight size={14} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
@@ -151,7 +151,7 @@ export function AboutTab() {
         ) : (
           <>
             <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex-1 min-w-0 mr-4">
+              <div className="flex-1 min-w-0 me-4">
                 <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_check_for_updates')}</div>
                 <div className="text-xs text-chrome-neutral-400 mt-0.5">
                   {getString('settings_check_for_updates_desc', appMetadata?.version ?? unknown())}
@@ -164,7 +164,7 @@ export function AboutTab() {
             </div>
             <div className="border-t border-chrome-neutral-800/50" />
             <div className="flex items-center justify-between px-5 py-4">
-              <div className="flex-1 min-w-0 mr-4">
+              <div className="flex-1 min-w-0 me-4">
                 <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_auto_update')}</div>
                 <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_auto_update_desc')}</div>
               </div>

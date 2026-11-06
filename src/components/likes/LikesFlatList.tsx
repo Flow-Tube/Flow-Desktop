@@ -43,7 +43,7 @@ export function LikesFlatList({ items, selecting, selectedKeys, onToggle, onPlay
                 <MusicItemCard
                   variant="track-list"
                   item={item.song}
-                  className="bg-surface-container-low pr-3"
+                  className="bg-surface-container-low pe-3"
                   onPlay={() => void playQueue(songs, Math.max(0, songs.indexOf(item.song)))}
                   appendActions={[
                     {

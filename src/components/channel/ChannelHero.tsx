@@ -84,7 +84,7 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
         {channelInfo.description && (
           <button
             type="button"
-            className="group mb-8 block max-w-3xl text-left"
+            className="group mb-8 block max-w-3xl text-start"
             onClick={() => (onOpenAbout ? onOpenAbout() : setDescExpanded((open) => !open))}
           >
             <span

@@ -80,7 +80,7 @@ export function SectionHeader({
           onClick={onToggleCollapse}
           aria-expanded={!collapsed}
           aria-label={getString(collapsed ? 'sidebar_section_expand' : 'sidebar_section_collapse')}
-          className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-chrome-neutral-400 transition-colors hover:bg-surface-container-low hover:text-chrome-neutral-100"
+          className="me-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-chrome-neutral-400 transition-colors hover:bg-surface-container-low hover:text-chrome-neutral-100"
         >
           <ChevronDown
             className={`h-4 w-4 transition-transform duration-200 ease-out ${collapsed ? '-rotate-90' : ''}`}

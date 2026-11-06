@@ -66,7 +66,7 @@ export function CollectionSelectionBar({
       >
         <X className="h-4 w-4" />
       </button>
-      <span className="mr-2 text-sm font-medium tabular-nums text-chrome-neutral-100">
+      <span className="me-2 text-sm font-medium tabular-nums text-chrome-neutral-100">
         {getPlural('music_selected_count', count)}
       </span>
       <ToolbarButton

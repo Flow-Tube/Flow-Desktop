@@ -101,7 +101,7 @@ export const Notes: React.FC<{ onPlay: (video: VideoSummary) => void }> = ({ onP
         <>
           {page.selecting ? (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-2 text-sm font-medium tabular-nums text-chrome-neutral-200">
+              <span className="me-2 text-sm font-medium tabular-nums text-chrome-neutral-200">
                 {getPlural("notes_selected", page.selectedNotes.length)}
               </span>
               <Button variant="tonal" onClick={page.selectAll}>
@@ -143,7 +143,7 @@ export const Notes: React.FC<{ onPlay: (video: VideoSummary) => void }> = ({ onP
                 sticky={false}
                 className="py-0"
               />
-              <Button variant="tonal" className="md:ml-auto" onClick={page.startSelecting}>
+              <Button variant="tonal" className="md:ms-auto" onClick={page.startSelecting}>
                 <CheckSquare size={18} />
                 {getString("notes_select")}
               </Button>

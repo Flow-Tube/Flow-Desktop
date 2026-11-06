@@ -41,7 +41,7 @@ export function TitleBar() {
         </div>
 
         {/* Window controls */}
-        <div className="relative z-10 ml-auto flex h-full items-center">
+        <div className="relative z-10 ms-auto flex h-full items-center">
           <button
             type="button"
             aria-label={getString('window_minimize')}

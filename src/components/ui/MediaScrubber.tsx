@@ -218,7 +218,7 @@ export function MediaScrubber({
 
   return (
     <div className={`flex w-full items-center gap-3 ${className}`}>
-      <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-chrome-neutral-400">
+      <span className="w-10 shrink-0 text-end font-mono text-xs tabular-nums text-chrome-neutral-400">
         {formatTime(ratio * duration)}
       </span>
       {bar}

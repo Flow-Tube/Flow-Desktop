@@ -87,7 +87,7 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
       >
         <ChevronDown className="h-4 w-4" />
       </button>
-      <div className="ml-2 shrink-0">
+      <div className="ms-2 shrink-0">
         <ToggleSwitch checked={enabled} onChange={(next) => onToggle(name, next)} />
       </div>
     </div>

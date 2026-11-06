@@ -198,7 +198,7 @@ export function TasteTab() {
                 </p>
               </div>
             </div>
-            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pr-1">
+            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pe-1">
               {loading ? (
                 <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
                   <Loader2 size={16} className="animate-spin" />
@@ -274,7 +274,7 @@ export function TasteTab() {
               )
             }
           >
-            <div className="h-48 overflow-y-auto pr-1">
+            <div className="h-48 overflow-y-auto pe-1">
               <RememberedChannels
                 channels={taste.overview.rememberedChannels}
                 forgetting={taste.forgetting}
@@ -350,7 +350,7 @@ export function TasteTab() {
                 {getString("taste_blocked_count", blockedTopics.length)}
               </p>
             </div>
-            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pr-1">
+            <div className="flex h-40 flex-wrap content-start gap-2 overflow-y-auto pe-1">
               {loading ? (
                 <span className="inline-flex items-center gap-2 text-sm text-chrome-neutral-400">
                   <Loader2 size={16} className="animate-spin" />
@@ -376,7 +376,7 @@ export function TasteTab() {
             title={getString("taste_hidden_channels")}
             description={getString("taste_hidden_channels_desc")}
           >
-            <div className="h-72 overflow-y-auto pr-1">
+            <div className="h-72 overflow-y-auto pe-1">
               <HiddenChannels
                 channels={taste.overview.hiddenChannels}
                 resolvingNames={taste.resolvingNames}

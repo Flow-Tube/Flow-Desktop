@@ -119,7 +119,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
                 closeOverlay();
                 navigate(`/music/artist/${primaryArtist.id}`);
               }}
-              className="mt-2 line-clamp-1 max-w-full text-left text-base text-chrome-neutral-300 transition-colors hover:text-chrome-neutral-100 disabled:cursor-default disabled:hover:text-chrome-neutral-300 lg:text-lg"
+              className="mt-2 line-clamp-1 max-w-full text-start text-base text-chrome-neutral-300 transition-colors hover:text-chrome-neutral-100 disabled:cursor-default disabled:hover:text-chrome-neutral-300 lg:text-lg"
             >
               {artistsText(track.artists)}
             </button>

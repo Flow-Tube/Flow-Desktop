@@ -80,9 +80,9 @@ function ProfileRow({
           <ToggleSwitch checked={link !== null} disabled={controls.busy} onChange={onToggle} />
         )}
       </div>
-      {switchError && <p className="pl-12 text-sm text-chrome-red-400">{switchError}</p>}
+      {switchError && <p className="ps-12 text-sm text-chrome-red-400">{switchError}</p>}
       {choosing === "start" && (
-        <div className="flex flex-wrap items-center gap-2 pl-12">
+        <div className="flex flex-wrap items-center gap-2 ps-12">
           <span className="text-sm text-chrome-neutral-400">{getString("linked_profile_as")}</span>
           <Select
             value={joining}
@@ -101,7 +101,7 @@ function ProfileRow({
         </div>
       )}
       {choosing === "stop" && link && (
-        <div className="flex flex-wrap items-center gap-2 pl-12">
+        <div className="flex flex-wrap items-center gap-2 ps-12">
           <Button size="sm" variant="tonal" disabled={controls.busy} onClick={() => finish(controls.stop(profile.id))}>
             {getString("linked_profile_stop_here")}
           </Button>

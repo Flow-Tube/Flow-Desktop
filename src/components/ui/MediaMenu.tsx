@@ -124,7 +124,7 @@ export function MediaMenu({ anchor, onClose, actions, header, note, className = 
                 type="button"
                 role="menuitem"
                 onClick={() => select(action)}
-                className={`flex h-9 w-full items-center gap-3 rounded-md px-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none ${
+                className={`flex h-9 w-full items-center gap-3 rounded-md px-2.5 text-start transition-colors duration-150 ease-out hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:outline-none ${
                   action.danger ? "text-chrome-red-400" : ""
                 }`}
               >

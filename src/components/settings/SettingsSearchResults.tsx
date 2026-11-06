@@ -24,7 +24,7 @@ export function SettingsSearchResults({ results, onOpen }: SettingsSearchResults
           <button
             type="button"
             onClick={() => onOpen(entry)}
-            className="w-full rounded-[4px] bg-surface-container-high px-5 py-3 text-left transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="w-full rounded-[4px] bg-surface-container-high px-5 py-3 text-start transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span className="block text-sm font-medium text-chrome-neutral-200">{getString(entry.title)}</span>
             {entry.summary && (

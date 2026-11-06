@@ -13,7 +13,7 @@ export function HomeMixCard({ mix, onPlay }: HomeMixCardProps) {
     <button
       type="button"
       onClick={() => onPlay(mix)}
-      className="group flex w-full flex-col gap-3 rounded-xl text-left transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      className="group flex w-full flex-col gap-3 rounded-xl text-start transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <StackedPlaylistThumbnail
         thumbnailUrl={mix.seed.thumbnailUrl}

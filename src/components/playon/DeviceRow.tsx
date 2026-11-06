@@ -31,7 +31,7 @@ export function DeviceRow({ device, active, moving, disabled, onPick }: DeviceRo
       type="button"
       disabled={disabled}
       onClick={onPick}
-      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors duration-200 ease-out enabled:hover:bg-surface-container-high disabled:cursor-default"
+      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-start transition-colors duration-200 ease-out enabled:hover:bg-surface-container-high disabled:cursor-default"
     >
       <span
         className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-container-high ${

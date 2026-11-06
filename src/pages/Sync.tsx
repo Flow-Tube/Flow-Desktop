@@ -173,7 +173,7 @@ function SetupState() {
               key={c.key}
               className="flex items-center justify-between p-4 transition-colors hover:bg-surface-container"
             >
-              <div className="min-w-0 pr-4">
+              <div className="min-w-0 pe-4">
                 <p className="font-medium text-chrome-neutral-100">{collectionTitle(c.key)}</p>
                 <p className="text-sm text-chrome-neutral-400">{collectionDesc(c.key)}</p>
               </div>
@@ -454,7 +454,7 @@ const WITHHELD_STRINGS: Record<WithheldReason, StringKey> = {
 
 function WithheldNotes({ withheld }: { withheld: WithheldInfo[] }) {
   return (
-    <ul className="flex w-full flex-col gap-2 text-left">
+    <ul className="flex w-full flex-col gap-2 text-start">
       {withheld.map((item) => (
         <li
           key={item.collection}
@@ -477,7 +477,7 @@ function CompletedScreen() {
       </div>
       <h2 className="text-base font-medium text-chrome-neutral-100">{getString("sync_complete_title")}</h2>
       {status.direction === "received" && status.stats ? (
-        <div className="w-full text-left">
+        <div className="w-full text-start">
           <StatsTable stats={status.stats} />
         </div>
       ) : (

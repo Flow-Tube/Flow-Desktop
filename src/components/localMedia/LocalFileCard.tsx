@@ -82,7 +82,7 @@ export function LocalFileRow({ file, plays, nowMs, onPlay }: LocalFileItemProps)
       <button
         type="button"
         onClick={onPlay}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <Artwork
           file={file}

@@ -63,7 +63,7 @@ export function TabRailItem({
         onMouseLeave={collapsed ? () => setTooltipAnchor(null) : undefined}
         onFocus={collapsed ? (event) => setTooltipAnchor(event.currentTarget.getBoundingClientRect()) : undefined}
         onBlur={collapsed ? () => setTooltipAnchor(null) : undefined}
-        className="flex h-full min-w-0 flex-1 items-center rounded-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        className="flex h-full min-w-0 flex-1 items-center rounded-full text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
       >
         <span className="relative grid w-14 shrink-0 place-items-center">
           {icon}
@@ -77,7 +77,7 @@ export function TabRailItem({
             </span>
           )}
         </span>
-        <span className="sidebar-label min-w-0 flex-1 truncate pr-10">{label}</span>
+        <span className="sidebar-label min-w-0 flex-1 truncate pe-10">{label}</span>
       </button>
       {!collapsed && (
         <button

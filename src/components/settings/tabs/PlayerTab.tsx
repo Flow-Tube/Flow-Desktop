@@ -236,7 +236,7 @@ export function PlayerTab() {
                 disabled={!ambientMode}
               />
             </div>
-            <span className="w-9 text-right font-mono text-xs text-chrome-neutral-400">{ambientIntensity}%</span>
+            <span className="w-9 text-end font-mono text-xs text-chrome-neutral-400">{ambientIntensity}%</span>
             <ToggleSwitch checked={ambientMode} onChange={setAmbientMode} />
           </div>
         </SettingItem>

@@ -28,7 +28,7 @@ function QualityCard({
       role="radio"
       aria-checked={selected}
       onClick={onSelect}
-      className={`grid gap-0.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors duration-200 ease-out ${
+      className={`grid gap-0.5 rounded-xl border px-3 py-2.5 text-start text-sm transition-colors duration-200 ease-out ${
         selected
           ? "border-chrome-neutral-500 bg-surface-container"
           : "border-chrome-neutral-800 hover:bg-surface-container-low"
@@ -75,7 +75,7 @@ function TagRow({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-2 py-0.5 text-left transition-colors hover:text-chrome-neutral-100"
+            className="flex min-w-0 flex-1 items-center justify-between gap-2 py-0.5 text-start transition-colors hover:text-chrome-neutral-100"
           >
             <span className="truncate">{value || "—"}</span>
             <Pencil size={13} className="shrink-0 text-chrome-neutral-500" />

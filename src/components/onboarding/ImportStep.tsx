@@ -343,7 +343,7 @@ export const ImportStep: React.FC = () => {
 
       <div className="bg-chrome-zinc-950/40 border border-chrome-zinc-800/80 rounded-2xl p-6 flex flex-col space-y-4 select-none">
         <h4 className="text-xs font-bold uppercase tracking-widest text-chrome-zinc-500">{getString('import_supported_formats_title')}</h4>
-        <ul className="text-sm text-chrome-zinc-400 space-y-2 list-disc pl-5 leading-normal">
+        <ul className="text-sm text-chrome-zinc-400 space-y-2 list-disc ps-5 leading-normal">
           <li><strong>Google Takeout:</strong> CSV export containing subscriptions list.</li>
           <li><strong>Flow Mobile & Desktop:</strong> Upload exported Master Backups (.zip containing app_data.json) or raw database exports.</li>
           <li><strong>NewPipe & LibreTube:</strong> {getString('onboarding_standard_exported_json_backups')}</li>

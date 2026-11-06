@@ -21,7 +21,7 @@ export function LocalFolderList({
           type="button"
           onClick={() => onOpen(folder.path)}
           title={folder.path}
-          className="flex items-center gap-3 rounded-xl bg-surface-container-low px-4 py-3 text-left transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex items-center gap-3 rounded-xl bg-surface-container-low px-4 py-3 text-start transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <Folder className="h-5 w-5 shrink-0 text-chrome-neutral-400" aria-hidden />
           <span className="min-w-0 flex-1">

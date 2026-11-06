@@ -40,7 +40,7 @@ export function NoteRow({ note, active, checked, onClick }: NoteRowProps) {
       type="button"
       onClick={onClick}
       aria-pressed={checked ?? active}
-      className={`flex w-full items-start gap-3 rounded-xl p-2.5 text-left transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`flex w-full items-start gap-3 rounded-xl p-2.5 text-start transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         active || checked ? "bg-surface-container" : ""
       }`}
     >

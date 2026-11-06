@@ -146,7 +146,7 @@ export function GlobalMusicDock() {
                 }
                 openOverlay("full");
               }}
-              className={`relative flex h-full touch-none select-none items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high pl-3 pr-4 ${away ? "" : "cursor-pointer"}`}
+              className={`relative flex h-full touch-none select-none items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high ps-3 pe-4 ${away ? "" : "cursor-pointer"}`}
             >
               {/* Grab handle, shown on hover so the drag up is discoverable. */}
               <span
@@ -162,7 +162,7 @@ export function GlobalMusicDock() {
                   onClick={() => openOverlay("full")}
                   onContextMenu={menu.openMenuFromContext}
                   aria-label={getString("music_expand")}
-                  className="group/art flex min-w-0 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+                  className="group/art flex min-w-0 items-center gap-3 rounded-md text-start outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                 >
                   <div className="relative h-12 w-12 shrink-0">
                     <MusicArtwork

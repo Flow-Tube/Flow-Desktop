@@ -187,7 +187,7 @@ export function LikesToolbar({
         options={LIKES_SORT_ORDERS.map((order) => ({ value: order, label: playlistSortLabel(order) }))}
         className="w-56"
       />
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ms-auto flex items-center gap-2">
         <IconButton aria-label={getString("playlist_select")} title={getString("playlist_select")} disabled={empty} onClick={onStartSelecting}>
           <ListChecks size={18} />
         </IconButton>

@@ -186,7 +186,7 @@ export function TopbarSearch() {
       <form
         onSubmit={submit}
         role="search"
-        className={`flex h-10 w-full items-center gap-2 rounded-full border pl-1.5 pr-2 transition-colors duration-200 ease-out ${
+        className={`flex h-10 w-full items-center gap-2 rounded-full border ps-1.5 pe-2 transition-colors duration-200 ease-out ${
           panelVisible
             ? 'border-chrome-neutral-700 bg-surface-container'
             : 'border-chrome-neutral-800 bg-surface-container-low hover:border-chrome-neutral-700 focus-within:border-chrome-neutral-700 focus-within:bg-surface-container'

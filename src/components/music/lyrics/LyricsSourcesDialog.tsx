@@ -42,7 +42,7 @@ export function LyricsSourcesDialog({
                 <button
                   type="button"
                   onClick={() => onSelect(candidate)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors duration-200 ease-out ${
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-start transition-colors duration-200 ease-out ${
                     current ? "bg-surface-container-highest" : "bg-surface-container-high hover:bg-surface-container-highest"
                   }`}
                 >

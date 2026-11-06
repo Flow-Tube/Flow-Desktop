@@ -45,7 +45,7 @@ export function ChangelogDialog({ installedVersion, onClose }: { installedVersio
               {release.sections.map((section) => (
                 <div key={section.title} className="space-y-1">
                   <h4 className="text-xs font-semibold text-chrome-neutral-500">{section.title}</h4>
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-chrome-neutral-300">
+                  <ul className="list-disc space-y-1 ps-5 text-sm text-chrome-neutral-300">
                     {section.items.map((item) => (
                       <li key={item}>{item}</li>
                     ))}

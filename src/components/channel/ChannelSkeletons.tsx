@@ -96,7 +96,7 @@ export function PostsFeedSkeleton() {
               <div className="h-3 w-16 bg-chrome-zinc-800 rounded" />
             </div>
           </div>
-          <div className="pl-[52px] space-y-3">
+          <div className="ps-[52px] space-y-3">
             <div className="h-4 w-full bg-chrome-zinc-800 rounded" />
             <div className="h-4 w-5/6 bg-chrome-zinc-800 rounded" />
             <div className="h-4 w-2/3 bg-chrome-zinc-800 rounded" />

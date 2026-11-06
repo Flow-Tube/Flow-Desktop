@@ -90,7 +90,7 @@ export function NoteDetailPane({ note, onPlay, onCopy, onDelete }: NoteDetailPan
                   type="button"
                   onClick={() => onPlay(note, moment.seconds)}
                   aria-label={getString("note_play_from", formatTime(moment.seconds))}
-                  className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-start text-sm transition-colors duration-200 ease-out hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <span className="font-medium tabular-nums text-primary">{formatTime(moment.seconds)}</span>
                   <span className="min-w-0 truncate text-chrome-neutral-300">{moment.label}</span>

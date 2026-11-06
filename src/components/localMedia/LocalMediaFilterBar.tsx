@@ -75,7 +75,7 @@ export function LocalMediaFilterBar() {
             onClick={() => setAsGrid(!asGrid)}
             aria-label={getString(asGrid ? "local_list_view" : "local_grid_view")}
             title={getString(asGrid ? "local_list_view" : "local_grid_view")}
-            className="ml-auto"
+            className="ms-auto"
           >
             {asGrid ? <List size={18} /> : <LayoutGrid size={18} />}
           </IconButton>

@@ -80,7 +80,7 @@ export function DataTab() {
       <SettingsGroup title={getString('settings_group_actions')}>
         <div className="flex flex-col">
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 mr-4">
+            <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_import_restore')}</div>
               <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_import_restore_desc')}</div>
             </div>
@@ -88,7 +88,7 @@ export function DataTab() {
           </div>
           <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 mr-4">
+            <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_diagnostics')}</div>
               <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_diagnostics_desc')}</div>
             </div>
@@ -96,7 +96,7 @@ export function DataTab() {
           </div>
           <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 mr-4">
+            <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_data')}</div>
               <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_export_data_desc')}</div>
             </div>
@@ -104,7 +104,7 @@ export function DataTab() {
           </div>
           <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 mr-4">
+            <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_history')}</div>
               <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_export_history_desc')}</div>
             </div>
@@ -112,7 +112,7 @@ export function DataTab() {
           </div>
           <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 mr-4">
+            <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_newpipe')}</div>
               <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_export_newpipe_desc')}</div>
             </div>
@@ -120,7 +120,7 @@ export function DataTab() {
           </div>
           <div className="border-t border-chrome-neutral-800/50" />
           <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 mr-4">
+            <div className="flex-1 min-w-0 me-4">
               <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_clear_cache')}</div>
               <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_clear_cache_desc')}</div>
             </div>

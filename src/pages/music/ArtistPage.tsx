@@ -497,7 +497,7 @@ export default function ArtistPage() {
               }}
               aria-expanded={aboutExpanded}
               className={cx(
-                'group relative mt-12 mb-24 w-full overflow-hidden rounded-2xl bg-surface-container-low p-6 text-left outline-none transition-colors duration-200 ease-out md:p-8 focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
+                'group relative mt-12 mb-24 w-full overflow-hidden rounded-2xl bg-surface-container-low p-6 text-start outline-none transition-colors duration-200 ease-out md:p-8 focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
                 aboutExpandable
                   ? 'cursor-pointer pb-16 hover:bg-surface-container md:pb-16'
                   : 'cursor-default',

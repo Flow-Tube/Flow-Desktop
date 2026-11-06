@@ -101,7 +101,7 @@ export function LearningStats({ brain }: LearningStatsProps) {
             className="relative min-h-28 rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-4"
           >
             <Icon className="absolute right-4 top-4 h-5 w-5 text-[var(--color-on-surface-variant)] opacity-70" />
-            <div className="pr-8">
+            <div className="pe-8">
               <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                 {stat.label}
               </p>

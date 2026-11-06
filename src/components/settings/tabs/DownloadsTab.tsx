@@ -140,7 +140,7 @@ export function DownloadsTab() {
 
       <SettingsGroup title={getString('settings_group_storage_paths')}>
         <div aria-disabled={downloadLocationDisabled} className={`flex items-center justify-between px-5 py-4 transition-colors duration-200 ease-out ${downloadLocationDisabled ? 'opacity-50' : 'hover:bg-surface-container'}`}>
-          <div className="flex-1 min-w-0 mr-4">
+          <div className="flex-1 min-w-0 me-4">
             <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_video_download_folder')}</div>
             <div className="text-xs text-chrome-neutral-400 mt-0.5 truncate">{downloadPath || getString('settings_system_default_videos')}</div>
           </div>
@@ -151,7 +151,7 @@ export function DownloadsTab() {
         </div>
         <div className="border-t border-chrome-neutral-800/50" />
         <div aria-disabled={musicDownloadLocationDisabled} className={`flex items-center justify-between px-5 py-4 transition-colors duration-200 ease-out ${musicDownloadLocationDisabled ? 'opacity-50' : 'hover:bg-surface-container'}`}>
-          <div className="flex-1 min-w-0 mr-4">
+          <div className="flex-1 min-w-0 me-4">
             <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_music_download_folder')}</div>
             <div className="text-xs text-chrome-neutral-400 mt-0.5 truncate">{musicPath || getString('settings_system_default_music')}</div>
           </div>

@@ -67,7 +67,7 @@ export function MusicAudioOptions() {
               aria-label={getString("music_crossfade")}
               className="flex-1"
             />
-            <span className="w-10 text-right font-mono text-xs text-chrome-neutral-400">
+            <span className="w-10 text-end font-mono text-xs text-chrome-neutral-400">
               {getString("music_crossfade_seconds", crossfadeSeconds)}
             </span>
           </div>

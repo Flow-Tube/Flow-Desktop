@@ -38,7 +38,7 @@ function CommentText({ comment, className }: { comment: Comment; className: stri
             event.stopPropagation();
             setExpanded((value) => !value);
           }}
-          className="ml-1 cursor-pointer font-semibold text-primary hover:underline focus:outline-none"
+          className="ms-1 cursor-pointer font-semibold text-primary hover:underline focus:outline-none"
         >
           {expanded ? getString("watch_read_less") : getString("watch_read_more")}
         </button>

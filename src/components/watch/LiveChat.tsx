@@ -119,7 +119,7 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
       )}
       <p className="min-w-0 break-words text-sm leading-snug text-chrome-neutral-200">
         <span
-          className={`mr-1.5 inline-flex items-center gap-1 align-middle text-xs font-semibold ${authorNameClass(message)}`}
+          className={`me-1.5 inline-flex items-center gap-1 align-middle text-xs font-semibold ${authorNameClass(message)}`}
         >
           {message.author}
           <AuthorBadges message={message} />
@@ -230,7 +230,7 @@ function ChatPanel({
         <h3 className="text-base font-medium text-chrome-neutral-200">
           {getString(isReplay ? "live_chat_replay_title" : "live_chat_title")}
         </h3>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ms-auto flex items-center gap-2">
           {canSwitchView && <ViewToggle view={view} onViewChange={onViewChange} />}
           {ended ? (
             <button

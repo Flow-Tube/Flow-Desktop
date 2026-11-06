@@ -234,7 +234,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           </h1>
           <p className="mt-2 text-sm text-chrome-neutral-400">{statsText}</p>
         </div>
-        <Button type="button" variant="tonal" className="ml-auto shrink-0" onClick={() => navigate("/local-media")}>
+        <Button type="button" variant="tonal" className="ms-auto shrink-0" onClick={() => navigate("/local-media")}>
           <FolderOpen size={16} />
           {getString("library_local_media_label")}
         </Button>

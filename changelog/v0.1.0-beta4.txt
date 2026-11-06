@@ -153,6 +153,7 @@ SETTINGS
 - Flow can follow your computer's light or dark mode, with its own theme for each mode and a choice of dark or AMOLED, under Follow system in Appearance. It is off by default.
 - Appearance has a Font setting: Inter, or your system's font.
 - Pause watch history stops saving what you watch, in Settings > Content & UI under Search and history. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
+- A new setting, App language, shows Flow in any of the 33 languages Flow for Android ships, using Android's translations. Text that has no translation yet stays in English, and English stays the default. Right-to-left languages mirror the layout outside the player.
 
 LIBRARY
 - Edit a playlist's name and description, and search inside any playlist, even one too long to show at once.

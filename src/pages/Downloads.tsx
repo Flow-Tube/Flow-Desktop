@@ -402,7 +402,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                       <MusicItemCard
                         variant="track-list"
                         item={entry.song}
-                        className="bg-surface-container-low pr-3"
+                        className="bg-surface-container-low pe-3"
                         onPlay={() => void playQueue(musicSongs, index)}
                       />
                       {entry.detail ? (

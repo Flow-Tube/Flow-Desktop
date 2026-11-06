@@ -25,7 +25,7 @@ export function DownloadsStorageSummary({ records }: { records: DownloadRecord[]
   ].filter(Boolean);
 
   return (
-    <div className="ml-auto flex min-w-0 items-center gap-2 text-sm tabular-nums text-chrome-neutral-400">
+    <div className="ms-auto flex min-w-0 items-center gap-2 text-sm tabular-nums text-chrome-neutral-400">
       <HardDrive size={16} className="shrink-0" />
       <span className="truncate">{parts.join(" • ")}</span>
     </div>

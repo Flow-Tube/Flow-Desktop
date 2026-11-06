@@ -23,7 +23,7 @@ export default function MusicMoodsPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {group.items.map((item) => <button key={`${item.browseId}:${item.params ?? ''}`} type="button"
         onClick={() => navigate(musicSeeAllRoute(item.browseId, item.params, item.title))}
-        className="min-h-24 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 text-left font-medium text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]">
+        className="min-h-24 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5 text-start font-medium text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]">
         {item.title}
       </button>)}
         </div>

@@ -18,7 +18,7 @@ export function SearchInput({
       />
       <input
         type="search"
-        className={`h-10 w-full rounded-lg border border-chrome-neutral-800 bg-surface-container-low py-2 pl-10 pr-3 text-sm font-medium text-chrome-neutral-100 outline-none transition-colors duration-200 ease-out placeholder:text-chrome-neutral-500 hover:bg-surface-container focus:border-chrome-neutral-700 focus:bg-surface-container ${className}`}
+        className={`h-10 w-full rounded-lg border border-chrome-neutral-800 bg-surface-container-low py-2 ps-10 pe-3 text-sm font-medium text-chrome-neutral-100 outline-none transition-colors duration-200 ease-out placeholder:text-chrome-neutral-500 hover:bg-surface-container focus:border-chrome-neutral-700 focus:bg-surface-container ${className}`}
         {...props}
       />
     </div>

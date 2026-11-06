@@ -14,7 +14,7 @@ function SongCard({ song, onPlay }: { song: Extras["music"][number]; onPlay: () 
         event.stopPropagation();
         onPlay();
       }}
-      className="flex min-w-0 items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-surface-container-high"
+      className="flex min-w-0 items-center gap-3 rounded-xl p-2 text-start transition-colors hover:bg-surface-container-high"
     >
       <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-container-high">
         {thumbnail ? <img src={thumbnail} alt="" className="h-full w-full object-cover" /> : <Music2 size={18} />}

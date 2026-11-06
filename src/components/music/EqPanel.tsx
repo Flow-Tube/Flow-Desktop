@@ -110,7 +110,7 @@ export function EqPanel({
                 aria-label={getString("eq_bass_boost")}
                 className="flex-1"
               />
-              <span className="w-10 text-right font-mono text-xs text-chrome-neutral-400">
+              <span className="w-10 text-end font-mono text-xs text-chrome-neutral-400">
                 {formatDb(eq.state.bassBoost)}
               </span>
             </div>

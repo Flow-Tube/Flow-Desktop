@@ -27,7 +27,7 @@ export function SelectionBar({ summary, hasSelection, allSelected, onToggleAll, 
       <Button type="button" variant="ghost" size="sm" onClick={onToggleAll}>
         {getString(allSelected ? "deselect_all" : "select_all")}
       </Button>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
+      <div className="ms-auto flex flex-wrap items-center gap-2">
         {actions.map((action) => (
           <Button
             key={action.key}

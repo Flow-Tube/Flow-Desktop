@@ -61,7 +61,7 @@ export function SongDetailsDialog() {
               type="button"
               onClick={() => void copy(line.value)}
               aria-label={getString("music_details_copy", line.label)}
-              className="flex flex-col gap-0.5 rounded-lg px-2 py-2 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="flex flex-col gap-0.5 rounded-lg px-2 py-2 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <dt className="text-xs font-semibold text-chrome-neutral-500">{line.label}</dt>
               <dd className="break-words text-sm text-chrome-neutral-100">{line.value}</dd>

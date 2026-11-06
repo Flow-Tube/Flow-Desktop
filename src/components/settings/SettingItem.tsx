@@ -27,8 +27,8 @@ export function SettingItem({ title, description, disabled = false, icon, childr
         disabled ? 'opacity-50' : 'hover:bg-surface-container-highest'
       )}
     >
-      {icon && <span className="mr-3 shrink-0 text-chrome-neutral-400">{icon}</span>}
-      <div className="flex-1 min-w-0 mr-4">
+      {icon && <span className="me-3 shrink-0 text-chrome-neutral-400">{icon}</span>}
+      <div className="flex-1 min-w-0 me-4">
         <div className="flex items-center gap-2 text-sm font-medium text-chrome-neutral-200">
           {title}
           {isNew && (

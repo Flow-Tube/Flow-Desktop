@@ -34,7 +34,7 @@ import { LyricsSourcesDialog } from "./LyricsSourcesDialog";
 import { LyricsEditDialog } from "./LyricsEditDialog";
 
 const ROW =
-  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high";
+  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high";
 
 function MenuRow({ icon, title, supporting, onClick }: { icon: ReactNode; title: string; supporting?: string | null; onClick: () => void }) {
   return (

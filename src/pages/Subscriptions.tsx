@@ -350,7 +350,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({ onPlay, onAddToQue
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="mr-1 shrink-0"
+                    className="me-1 shrink-0"
                     onClick={() => setShowGroupsModal(true)}
                   >
                     <Pencil size={15} />
@@ -590,7 +590,7 @@ function GroupsModal({
                   <div key={group.name} className="flex items-center gap-2 px-3 py-2">
                     <button
                       type="button"
-                      className="min-w-0 flex-1 text-left"
+                      className="min-w-0 flex-1 text-start"
                       onClick={() => onEdit(group)}
                     >
                       <div className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{group.name}</div>

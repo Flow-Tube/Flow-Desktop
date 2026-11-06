@@ -66,7 +66,7 @@ export function CollectionDownloadDialog({ request, onClose }: { request: Collec
                 role="radio"
                 aria-checked={state.quality === quality}
                 onClick={() => state.setQuality(quality)}
-                className={`grid gap-0.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors duration-200 ease-out ${
+                className={`grid gap-0.5 rounded-xl border px-3 py-2.5 text-start text-sm transition-colors duration-200 ease-out ${
                   state.quality === quality
                     ? "border-chrome-neutral-500 bg-surface-container"
                     : "border-chrome-neutral-800 hover:bg-surface-container-low"

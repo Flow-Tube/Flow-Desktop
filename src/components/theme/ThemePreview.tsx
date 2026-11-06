@@ -36,7 +36,7 @@ export function ThemePreview({
         type="button"
         onClick={onSelect}
         aria-label={`${selectLabel}: ${name}`}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 p-4 text-left"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 p-4 text-start"
       >
         <span className="flex h-12 w-16 shrink-0 items-center justify-center gap-1 rounded-xl border border-chrome-neutral-800 bg-background">
           {swatches.map((color, index) => (
@@ -52,7 +52,7 @@ export function ThemePreview({
         </span>
       </button>
       {custom && (
-        <div className="mr-3 flex shrink-0 items-center gap-1">
+        <div className="me-3 flex shrink-0 items-center gap-1">
           <button type="button" onClick={onEdit} aria-label={`${editLabel}: ${name}`} className="cursor-pointer rounded-full p-2 text-chrome-neutral-400 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100">
             <Pencil size={16} />
           </button>

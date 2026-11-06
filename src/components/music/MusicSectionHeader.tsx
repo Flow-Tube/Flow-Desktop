@@ -34,7 +34,7 @@ export function MusicSectionHeader({
           className={`h-10 w-10 shrink-0 object-cover ${seedArt.round ? 'rounded-full' : 'rounded-md'}`}
         />
       )}
-      <div className="min-w-0 text-left">
+      <div className="min-w-0 text-start">
         {strapline && <p className="truncate text-sm text-chrome-neutral-400">{strapline}</p>}
         <h2 className="truncate text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
       </div>

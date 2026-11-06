@@ -83,7 +83,7 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
           type="button"
           onClick={() => scrollByPage(-1)}
           aria-label={getString('shelf_scroll_left')}
-          className={`${NAV_BUTTON} left-0 -ml-2 sm:-ml-4`}
+          className={`${NAV_BUTTON} left-0 -ms-2 sm:-ml-4`}
         >
           <ChevronLeft size={20} strokeWidth={2.5} />
         </button>
@@ -98,7 +98,7 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
           type="button"
           onClick={() => scrollByPage(1)}
           aria-label={getString('shelf_scroll_right')}
-          className={`${NAV_BUTTON} right-0 -mr-2 sm:-mr-4`}
+          className={`${NAV_BUTTON} right-0 -me-2 sm:-mr-4`}
         >
           <ChevronRight size={20} strokeWidth={2.5} />
         </button>

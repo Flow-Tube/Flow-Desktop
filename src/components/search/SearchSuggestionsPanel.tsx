@@ -49,7 +49,7 @@ function Completion({ text, query }: { text: string; query: string }) {
   );
 }
 
-const rowBase = "group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left text-sm transition-colors duration-150 ease-out";
+const rowBase = "group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-sm transition-colors duration-150 ease-out";
 
 export function SearchSuggestionsPanel({
   columns,
@@ -173,7 +173,7 @@ export function SearchSuggestionsPanel({
         {columns.main.map(renderMain)}
       </div>
       {hasSide ? (
-        <div className="min-w-0 border-t border-chrome-neutral-800 pt-1.5 md:border-l md:border-t-0 md:pl-1.5 md:pt-0">
+        <div className="min-w-0 border-t border-chrome-neutral-800 pt-1.5 md:border-l md:border-t-0 md:ps-1.5 md:pt-0">
           <p className="px-3 pb-1 pt-1.5 text-xs font-medium text-chrome-neutral-400">{getString("search_music_section")}</p>
           {columns.side.map(renderSide)}
         </div>

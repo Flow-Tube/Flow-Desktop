@@ -117,13 +117,13 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
             {cat.icon}
             {getString(SETTINGS_CATEGORY_LABELS[cat.id])}
             {newCategories.has(cat.id) && (
-              <span role="img" aria-label={getString('settings_new_badge')} className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+              <span role="img" aria-label={getString('settings_new_badge')} className="ms-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
             )}
           </button>
         ))}
       </nav>
 
-      <div ref={paneRef} className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
+      <div ref={paneRef} className="flex-1 overflow-y-auto py-6 ps-10 pe-4 scrollbar-none">
         {searching ? <SettingsSearchResults results={results} onOpen={openResult} /> : children(activeTab)}
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { appLanguageOptions } from '../../../lib/i18n/appLanguageOptions';
+import { useAppLanguage } from '../../../lib/i18n/useAppLanguage';
 import { SettingsGroup } from '../SettingsGroup';
 import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
@@ -71,6 +73,7 @@ export function ContentTab() {
   const [notificationInterval, setNotificationInterval] = usePreference(SETTINGS.NOTIFICATION_CHECK_INTERVAL, '360');
   const [regionPicker, setRegionPicker] = useBoolPref(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, true);
   const [trendingRegion, setTrendingRegion] = usePreference(SETTINGS.TRENDING_REGION, 'US');
+  const [appLanguage, setAppLanguage] = useAppLanguage();
   const [contentLanguage, setContentLanguage] = usePreference(SETTINGS.CONTENT_LANGUAGE, '');
   const [originalTitles, setOriginalTitles] = useBoolPref(SETTINGS.ORIGINAL_TITLES, false);
   const [deepFlowExpireHours, setDeepFlowExpireHours] = usePreference(SETTINGS.DEEP_FLOW_EXPIRE_HOURS, '4');
@@ -260,6 +263,9 @@ export function ContentTab() {
       <WellbeingSection />
 
       <SettingsGroup title={getString('settings_group_region')}>
+        <SettingItem title={getString('settings_app_language')} description={getString('settings_app_language_desc')}>
+          <Select value={appLanguage} onChange={setAppLanguage} options={appLanguageOptions()} />
+        </SettingItem>
         <SettingItem title={getString('settings_region_picker')} description={getString('settings_region_picker_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)}><ToggleSwitch checked={regionPicker} onChange={setRegionPicker} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)} /></SettingItem>
         <SettingItem title={getString('settings_trending_region')} description={getString('settings_trending_region_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)}><Select value={trendingRegion} onChange={setTrendingRegion} options={REGION_OPTIONS} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)} /></SettingItem>
         <SettingItem title={getString('settings_content_language')} description={getString('settings_content_language_desc')}>

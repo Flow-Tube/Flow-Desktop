@@ -49,7 +49,7 @@ export function RankRows({ items, value, portraits = false, images = true, onOpe
               <button
                 type="button"
                 onClick={() => onOpen(item)}
-                className="flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="flex w-full items-center gap-3 rounded-lg p-1.5 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {content}
               </button>

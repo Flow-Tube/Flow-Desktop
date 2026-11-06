@@ -13,7 +13,7 @@ function ArtistRow({ artist, picked }: { artist: FavouriteArtist; picked: boolea
       type="button"
       aria-pressed={picked}
       onClick={() => void toggle(artist)}
-      className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`flex items-center gap-3 rounded-2xl border p-3 text-start transition-colors duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         picked
           ? "border-primary bg-surface-container-high"
           : "border-chrome-neutral-800 bg-surface-container-low hover:bg-surface-container"

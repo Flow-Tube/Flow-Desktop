@@ -75,7 +75,7 @@ export function PlayOnPopover({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         onClick={manage}
-        className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-container-high text-chrome-neutral-300">
           <MonitorSmartphone className="h-[18px] w-[18px]" />

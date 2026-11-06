@@ -69,9 +69,9 @@ export function MusicCollectionTrackList({
       <div className="mb-4 flex items-center border-b border-chrome-neutral-800/50 px-4 pb-2 text-xs font-semibold uppercase tracking-wider text-chrome-neutral-500">
         <span className="w-12 shrink-0">#</span>
         <span className="min-w-0 flex-1">{getString('music_track_title_column')}</span>
-        <span className="hidden w-32 shrink-0 text-right lg:block">{getString('music_streams_column')}</span>
-        <span className="ml-4 w-[72px] shrink-0" aria-hidden="true" />
-        <span className="w-16 shrink-0 text-right">{getString('music_time_column')}</span>
+        <span className="hidden w-32 shrink-0 text-end lg:block">{getString('music_streams_column')}</span>
+        <span className="ms-4 w-[72px] shrink-0" aria-hidden="true" />
+        <span className="w-16 shrink-0 text-end">{getString('music_time_column')}</span>
       </div>
 
       <div className="flex flex-col">

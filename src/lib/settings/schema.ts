@@ -183,6 +183,7 @@ export const SETTINGS = {
   BREAK_FREQUENCY: "break_frequency",
   SHOW_REGION_PICKER_IN_EXPLORE: "show_region_picker_in_explore",
   TRENDING_REGION: "trending_region",
+  APP_LANGUAGE: "app_language",
   CONTENT_LANGUAGE: "content_language",
   ORIGINAL_TITLES: "original_titles",
   DEEP_FLOW_ACTIVE: "deep_flow_active",
@@ -425,6 +426,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.BREAK_FREQUENCY]: "profile",
   [SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE]: "device",
   [SETTINGS.TRENDING_REGION]: "device",
+  [SETTINGS.APP_LANGUAGE]: "device",
   [SETTINGS.CONTENT_LANGUAGE]: "device",
   [SETTINGS.ORIGINAL_TITLES]: "profile",
   [SETTINGS.DEEP_FLOW_ACTIVE]: "profile",
@@ -751,6 +753,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.BREAK_FREQUENCY, "content", "30", "wired", ["5", "10", "15", "20", "30", "45", "60", "90", "120"]),
   bool(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, "content", true, "wired"),
   str(SETTINGS.TRENDING_REGION, "content", "US", "wired"),
+  str(SETTINGS.APP_LANGUAGE, "content", "", "wired"),
   str(SETTINGS.CONTENT_LANGUAGE, "content", "", "wired"),
   bool(SETTINGS.ORIGINAL_TITLES, "content", false, "wired"),
   // Session state, not a preference: exporting it can permanently mute history recording

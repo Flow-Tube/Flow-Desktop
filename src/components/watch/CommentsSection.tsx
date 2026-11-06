@@ -71,7 +71,7 @@ export function CommentsSection({
   const loadMore = isTimed ? timed.loadMore : thread.loadMore;
   const emptyText = isTimed ? getString("comments_no_timed") : getString("watch_no_comments");
   // The Timed list scrolls by itself, so following it never moves the page or the player.
-  const listClass = fill ? "min-h-0 flex-1 overflow-y-auto pr-1" : isTimed ? "max-h-[70vh] overflow-y-auto pr-1" : "";
+  const listClass = fill ? "min-h-0 flex-1 overflow-y-auto pe-1" : isTimed ? "max-h-[70vh] overflow-y-auto pe-1" : "";
 
   return (
     <div className={fill ? "flex h-full flex-col gap-4" : "space-y-6 pt-4"}>
@@ -87,7 +87,7 @@ export function CommentsSection({
               type="button"
               aria-label={getString("close")}
               onClick={onClose}
-              className="ml-auto grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100"
+              className="ms-auto grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100"
             >
               <X size={18} />
             </button>
@@ -148,7 +148,7 @@ export function CommentsSection({
                 }`}
               >
                 <CommentItem comment={c} />
-                <div className="ml-14">
+                <div className="ms-14">
                   {(c.continuationToken || (c.replyCount != null && c.replyCount > 0)) && (
                     <button
                       onClick={() => {
@@ -164,7 +164,7 @@ export function CommentsSection({
                   )}
 
                   {thread.expanded[c.id] && (
-                    <div className="mt-4 space-y-4 border-l-2 border-chrome-neutral-800 pl-4">
+                    <div className="mt-4 space-y-4 border-l-2 border-chrome-neutral-800 ps-4">
                       {thread.replies[c.id]?.map((reply, rIdx) => (
                         <CommentItem key={reply.id || `reply-${rIdx}`} comment={reply} reply />
                       ))}

@@ -157,7 +157,7 @@ export function DialogFooter({
             disabled={!onRename}
             onClick={() => setEditing(true)}
             title={onRename ? getString("download_rename") : undefined}
-            className="block max-w-full truncate text-left text-sm text-chrome-neutral-200 enabled:hover:text-chrome-neutral-100"
+            className="block max-w-full truncate text-start text-sm text-chrome-neutral-200 enabled:hover:text-chrome-neutral-100"
           >
             {fileName}
             {extension ? <span className="text-chrome-neutral-500">.{extension}</span> : null}

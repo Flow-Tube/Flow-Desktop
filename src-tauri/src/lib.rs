@@ -62,7 +62,7 @@ use commands::downloads::{
     set_download_concurrency, show_download_notification, start_download,
 };
 use commands::external::open_external;
-use commands::files::{write_backup_file, write_lyrics_file};
+use commands::files::{save_recap_poster, write_backup_file, write_lyrics_file};
 use commands::linked::{
     linked_accept_join, linked_add_device, linked_added_by, linked_answer,
     linked_answer_recovery_notice, linked_ask_to_join, linked_cancel, linked_cancel_login_change,
@@ -655,6 +655,7 @@ pub fn run() {
             profiles_set_ask_whos_watching,
             relaunch_app,
             write_backup_file,
+            save_recap_poster,
             write_lyrics_file,
             get_cached_lyrics,
             put_cached_lyrics,

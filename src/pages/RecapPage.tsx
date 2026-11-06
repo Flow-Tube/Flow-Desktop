@@ -1,8 +1,10 @@
-import { ChartNoAxesColumn, Info } from "lucide-react";
+import { BookOpen, ChartNoAxesColumn, Info } from "lucide-react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "../components/ui/Button";
 import { RecapControls } from "../components/recap/RecapControls";
+import { RecapStory } from "../components/recap/story/RecapStory";
 import {
   DiscoveriesCard,
   FormatsCard,
@@ -50,6 +52,7 @@ function LoadingCards() {
 
 function RecapCards({ recap, onPlay }: { recap: RecapState; onPlay: (video: VideoSummary) => void }) {
   const open = useRecapLinks(onPlay);
+  const [storyOpen, setStoryOpen] = useState(false);
   const { summary, period, source, index } = recap;
   if (!summary || !index) return null;
   if (isEmptySummary(summary)) return <EmptyPanel title={getString("recap_period_empty")} />;
@@ -70,7 +73,20 @@ function RecapCards({ recap, onPlay }: { recap: RecapState; onPlay: (video: Vide
           {getString("recap_estimate_note", dateLabel(index.startedAt))}
         </p>
       )}
-      <OverviewCard summary={summary} activity={activity} source={source} />
+      <OverviewCard
+        summary={summary}
+        activity={activity}
+        source={source}
+        action={
+          !allTime && (
+            <Button variant="primary" size="md" onClick={() => setStoryOpen(true)}>
+              <BookOpen size={16} />
+              {getString("recap_play_story")}
+            </Button>
+          )
+        }
+      />
+      {storyOpen && <RecapStory summary={summary} period={period} onClose={() => setStoryOpen(false)} />}
       <TimeCard period={period} activity={activity} span={hasInsights ? "col-span-12 lg:col-span-8" : "col-span-12"} />
       {hasInsights && <InsightsCard summary={summary} />}
       <ClockCard activity={activity} />

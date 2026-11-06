@@ -16,6 +16,9 @@ vi.mock("../lib/recap/recapQueue", () => ({ flushRecapQueue: async () => {} }));
 vi.mock("../lib/useChannelAvatar", () => ({ useChannelAvatar: () => null }));
 vi.mock("../lib/useProxiedImageUrl", () => ({ useProxiedImageUrl: (src?: string) => src }));
 vi.mock("../store/useMusicPlayerStore", () => ({ useMusicPlayerStore: () => vi.fn() }));
+vi.mock("../lib/recap/useRecapPoster", () => ({
+  useRecapPoster: () => ({ previewUrl: null, failed: false, save: vi.fn(), copy: vi.fn() }),
+}));
 
 const { default: RecapPage } = await import("./RecapPage");
 
@@ -141,6 +144,19 @@ describe("RecapPage", () => {
     expect(host.textContent).toContain("A channel");
     expect(host.textContent).not.toContain("An artist");
     expect(host.textContent).not.toContain("Your calendar");
+  });
+
+  it("plays a month or a year as a story, but not all time", async () => {
+    api.getRecapIndex.mockResolvedValue(index());
+    api.getRecapSummary.mockResolvedValue(summary({ videoMs: 60_000 }));
+    await open();
+    const play = [...host.querySelectorAll("button")].find((button) => button.textContent === "Play your recap")!;
+    await act(async () => play.click());
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain("in Flow");
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await open("/recap?period=all");
+    expect(host.textContent).not.toContain("Play your recap");
   });
 
   it("labels a period holding an estimate", async () => {

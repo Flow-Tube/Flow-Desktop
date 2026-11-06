@@ -184,13 +184,23 @@ pub fn uploads(
 ) -> Vec<Card> {
     remembered
         .iter()
-        .filter_map(|r| entries.get(&r.channel_id))
-        .flat_map(|entry| entry.uploads.iter())
-        .filter(|card| {
-            card.age_ms(now_ms)
-                .is_some_and(|age| age <= UPLOAD_WINDOW_MS)
+        .filter_map(|r| entries.get(&r.channel_id).map(|entry| (r, entry)))
+        .flat_map(|(r, entry)| {
+            entry.uploads.iter().filter_map(|card| {
+                if !card
+                    .age_ms(now_ms)
+                    .is_some_and(|age| age <= UPLOAD_WINDOW_MS)
+                {
+                    return None;
+                }
+                let mut card = card.clone();
+                card.sanitize();
+                if card.video.channel_name.is_empty() && !r.name.is_empty() {
+                    card.video.channel_name.clone_from(&r.name);
+                }
+                Some(card)
+            })
         })
-        .cloned()
         .collect()
 }
 
@@ -235,7 +245,14 @@ async fn load_entries(pool: &SqlitePool) -> AppResult<HashMap<String, Entry>> {
         .map(|(channel, fetched, uploads, rejected, forgotten)| {
             let entry = Entry {
                 last_fetched_at: u64::try_from(fetched).unwrap_or(0),
-                uploads: serde_json::from_str(&uploads).unwrap_or_default(),
+                uploads: serde_json::from_str::<Vec<Card>>(&uploads)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|mut card| {
+                        card.sanitize();
+                        card
+                    })
+                    .collect(),
                 rejected_at: u64::try_from(rejected).unwrap_or(0),
                 forgotten_at: u64::try_from(forgotten).unwrap_or(0),
             };

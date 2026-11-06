@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::api::innertube::json::age::relative_age_ms;
+use crate::api::innertube::json::count::is_view_or_stream_count;
 use crate::flow_neuro::scoring::is_known_short;
 use crate::models::video::VideoSummary;
 
@@ -18,9 +19,28 @@ pub struct Card {
 }
 
 impl Card {
+    pub fn sanitize(&mut self) {
+        if is_view_or_stream_count(&self.video.channel_name) {
+            if self.video.view_count_text.is_none()
+                || self.video.view_count_text.as_deref() == Some("")
+            {
+                self.video.view_count_text = Some(std::mem::take(&mut self.video.channel_name));
+            } else {
+                self.video.channel_name.clear();
+            }
+        }
+    }
+
     /// A card from a feed item, its publish time read from the card's own text.
     #[must_use]
-    pub fn from_summary(video: VideoSummary, now_ms: u64) -> Self {
+    pub fn from_summary(mut video: VideoSummary, now_ms: u64) -> Self {
+        if is_view_or_stream_count(&video.channel_name) {
+            if video.view_count_text.is_none() || video.view_count_text.as_deref() == Some("") {
+                video.view_count_text = Some(std::mem::take(&mut video.channel_name));
+            } else {
+                video.channel_name.clear();
+            }
+        }
         let published_at_ms = video
             .published_text
             .as_deref()

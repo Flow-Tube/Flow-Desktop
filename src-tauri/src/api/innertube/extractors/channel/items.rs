@@ -5,6 +5,7 @@ use serde_json::Value;
 use super::posts::{post, post_renderer};
 use crate::api::innertube::core::utils::short_video_summary_from_item;
 use crate::api::innertube::json::continuation::continuation_token;
+use crate::api::innertube::json::count::is_view_or_stream_count;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
 use crate::api::innertube::renderers::lockup::{lockup_item, related_to_video};
@@ -18,6 +19,7 @@ use crate::models::video::VideoSummary;
 pub(super) struct Owner {
     pub id: Option<String>,
     pub name: String,
+    pub avatar_url: Option<String>,
 }
 
 impl Owner {
@@ -27,8 +29,11 @@ impl Owner {
         if video.channel_id.is_none() {
             video.channel_id.clone_from(&self.id);
         }
-        if video.channel_name.is_empty() {
+        if video.channel_name.is_empty() || is_view_or_stream_count(&video.channel_name) {
             video.channel_name.clone_from(&self.name);
+        }
+        if video.channel_avatar_url.is_none() {
+            video.channel_avatar_url.clone_from(&self.avatar_url);
         }
         video
     }
@@ -222,6 +227,7 @@ mod tests {
         Owner {
             id: Some("UCowner".into()),
             name: "Owner".into(),
+            avatar_url: Some("https://example.com/avatar.jpg".into()),
         }
     }
 

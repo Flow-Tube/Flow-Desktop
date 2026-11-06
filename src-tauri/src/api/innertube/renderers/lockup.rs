@@ -7,8 +7,9 @@ use serde_json::Value;
 
 use super::collaborators::collaborators_in;
 use crate::api::innertube::json::age::relative_age;
-use crate::api::innertube::json::count::parse_count;
+use crate::api::innertube::json::count::{is_view_or_stream_count, parse_count};
 use crate::api::innertube::json::duration::parse_duration;
+use crate::api::innertube::json::text::extract_channel_from_a11y_label;
 use crate::api::innertube::json::thumbnail::{
     largest_url, normalize_youtube_image_url, thumbnail_url_from_array,
 };
@@ -21,6 +22,7 @@ struct Part<'a> {
     /// full form of a compact age ("il y a 2 sem." is "il y a 2 semaines").
     label: Option<&'a str>,
     has_icon: bool,
+    has_channel_command: bool,
     is_verified: bool,
 }
 
@@ -59,22 +61,34 @@ fn parts(row: &Value) -> Vec<Part<'_>> {
         .into_iter()
         .flatten()
         .filter_map(|part| {
+            let text = part["text"]["content"]
+                .as_str()
+                .or_else(|| part["text"]["simpleText"].as_str())
+                .or_else(|| part["text"].as_str())
+                .or_else(|| part["text"]["runs"][0]["text"].as_str())
+                .or_else(|| part["text"]["runs"][0]["content"].as_str())?;
+            let has_channel_command = part["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"]["browseEndpoint"]["browseId"].as_str().is_some()
+                || part["command"]["innertubeCommand"]["browseEndpoint"]["browseId"].as_str().is_some()
+                || part["navigationEndpoint"]["browseEndpoint"]["browseId"].as_str().is_some();
+            let is_verified = part["text"]["attachmentRuns"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .chain(part["attachmentRuns"].as_array().into_iter().flatten())
+                .any(|run| {
+                    run["element"]["type"]["imageType"]["image"]["sources"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|source| source["clientResource"]["imageName"].as_str())
+                        .any(|name| name.contains("CHECK_CIRCLE") || name.contains("VERIFIED") || name.contains("ARTIST"))
+                });
             Some(Part {
-                text: part["text"]["content"].as_str()?,
+                text,
                 label: part["accessibilityLabel"].as_str(),
                 has_icon: part.get("leadingIcon").is_some(),
-                is_verified: part["text"]["attachmentRuns"]
-                    .as_array()
-                    .is_some_and(|runs| {
-                        runs.iter().any(|run| {
-                            run["element"]["type"]["imageType"]["image"]["sources"]
-                                .as_array()
-                                .into_iter()
-                                .flatten()
-                                .filter_map(|source| source["clientResource"]["imageName"].as_str())
-                                .any(|name| name.contains("CHECK_CIRCLE"))
-                        })
-                    }),
+                has_channel_command,
+                is_verified,
             })
         })
         .collect()
@@ -127,68 +141,6 @@ fn is_upcoming_text(text: &str) -> bool {
     text.starts_with("Premieres") || text.starts_with("Scheduled for") || text.ends_with("waiting")
 }
 
-fn is_compact_count_pattern(text: &str) -> bool {
-    let trimmed = text.trim();
-    if trimmed.is_empty() || trimmed.len() > 12 {
-        return false;
-    }
-    let chars: Vec<char> = trimmed.chars().collect();
-    if !chars.first().is_some_and(char::is_ascii_digit) {
-        return false;
-    }
-    let last = match chars.last() {
-        Some(c) => *c,
-        None => return false,
-    };
-    let is_multiplier = matches!(
-        last,
-        'k' | 'K' | 'm' | 'M' | 'b' | 'B' | '千' | '万' | '萬' | '億' | '亿' | '천' | '만'
-    );
-    if !is_multiplier {
-        return false;
-    }
-    chars[..chars.len() - 1]
-        .iter()
-        .all(|c| c.is_ascii_digit() || matches!(*c, '.' | ',' | ' ' | '\u{a0}' | '\u{202f}'))
-}
-
-fn is_view_or_stream_count(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    let has_digits = text.chars().any(|c| c.is_ascii_digit());
-    if !has_digits && !lower.starts_with("no view") {
-        return false;
-    }
-    const COUNT_KEYWORDS: &[&str] = &[
-        "view",
-        "watching",
-        "waiting",
-        "streamed",
-        "aufruf",
-        "vue",
-        "просмотр",
-        "visualizz",
-        "visualizaç",
-        "vista",
-        "reproducc",
-        "weergav",
-        "wyświetl",
-        "visning",
-        "näyttö",
-        "katselukert",
-        "lượt xem",
-        "조회수",
-        "回視聴",
-        "次观看",
-        "次觀看",
-        "mio.",
-        "mio",
-        "тыс",
-        "млн",
-        "млрд",
-    ];
-    COUNT_KEYWORDS.iter().any(|&kw| lower.contains(kw)) || is_compact_count_pattern(text)
-}
-
 fn is_count_part(part: &Part<'_>) -> bool {
     if part.has_icon {
         return true;
@@ -200,9 +152,11 @@ fn is_count_part(part: &Part<'_>) -> bool {
 }
 
 fn is_stats_row(row: &[Part<'_>]) -> bool {
-    row.iter()
-        .any(|part| part.is_age() || is_upcoming_text(part.text))
-        || row.first().is_some_and(is_count_part)
+    row.iter().any(|part| {
+        (part.is_age() || is_upcoming_text(part.text) || is_count_part(part))
+            && !part.has_channel_command
+            && !part.is_verified
+    })
 }
 
 fn thumbnail(lockup: &Value) -> Option<String> {
@@ -313,23 +267,31 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
     let byline_row = all_rows
         .iter()
         .find(|row| !row.is_empty() && !is_stats_row(row));
-    let channel = byline_row.and_then(|row| row.first());
+    let channel_part = all_parts()
+        .find(|part| {
+            (part.has_channel_command || part.is_verified) && !is_view_or_stream_count(part.text)
+        })
+        .or_else(|| {
+            byline_row.and_then(|row| {
+                row.iter().find(|part| {
+                    !is_count_part(part) && !part.is_age() && !is_upcoming_text(part.text)
+                })
+            })
+        });
     let published = all_parts()
         .find(|part| part.is_age() || is_upcoming_text(part.text))
         .map(|part| part.age_text().to_string());
     // Search for the view or stream count in rows that carry stats.
-    let views = all_parts()
-        .find(|part| part.has_icon)
+    let mut views = all_parts()
+        .find(|part| part.has_icon && is_count_part(part))
         .or_else(|| {
-            all_rows
-                .iter()
-                .filter(|row| is_stats_row(row))
-                .flatten()
-                .find(|part| {
-                    !part.is_age()
-                        && !is_upcoming_text(part.text)
-                        && (is_count_part(part) || part.text.chars().any(|c| c.is_ascii_digit()))
-                })
+            all_parts().find(|part| {
+                !part.is_age()
+                    && !is_upcoming_text(part.text)
+                    && !part.has_channel_command
+                    && !part.is_verified
+                    && (is_count_part(part) || is_view_or_stream_count(part.text))
+            })
         })
         .map(|part| part.text.to_string());
     let image = &metadata(lockup)["image"];
@@ -340,6 +302,41 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         .map(ToOwned::to_owned)
         .or_else(|| collaborators.first().map(|c| c.channel_id.clone()));
 
+    let mut channel_name = channel_part
+        .map(|part| part.text.to_string())
+        .unwrap_or_default();
+    if is_view_or_stream_count(&channel_name) {
+        if views.is_none() {
+            views = Some(channel_name.clone());
+        }
+        channel_name.clear();
+    }
+
+    if channel_name.is_empty()
+        && let Some(label) = image["decoratedAvatarViewModel"]["a11yLabel"].as_str()
+        && let Some(extracted) = extract_channel_from_a11y_label(label)
+    {
+        channel_name = extracted.to_string();
+    }
+
+    if channel_name.is_empty()
+        && let Some(base_url) = image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
+            ["innertubeCommand"]["browseEndpoint"]["canonicalBaseUrl"]
+            .as_str()
+    {
+        let handle = base_url
+            .strip_prefix("/@")
+            .or_else(|| base_url.strip_prefix("@"))
+            .unwrap_or(base_url)
+            .trim();
+        if !handle.is_empty() && !is_view_or_stream_count(handle) {
+            channel_name = handle.to_string();
+        }
+    }
+
+    let is_verified = channel_part.is_some_and(|part| part.is_verified)
+        || all_parts().any(|part| part.is_verified);
+
     Some(RelatedContentItem {
         id,
         item_type: item_type.to_string(),
@@ -347,9 +344,7 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
             .as_str()
             .unwrap_or_default()
             .to_string(),
-        channel_name: channel
-            .map(|part| part.text.to_string())
-            .unwrap_or_default(),
+        channel_name,
         channel_id,
         thumbnail_url: thumbnail(lockup),
         duration_seconds: duration(lockup),
@@ -365,7 +360,7 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
             &image["decoratedAvatarViewModel"]["avatar"]["avatarViewModel"]["image"]["sources"],
         )
         .map(|url| normalize_youtube_image_url(&url)),
-        is_verified: channel.is_some_and(|part| part.is_verified),
+        is_verified,
         is_members_only: row_badges(lockup)
             .any(|badge| badge["badgeStyle"] == "BADGE_MEMBERS_ONLY"),
         is_short: is_video && opens_shorts_player(lockup),

@@ -1,14 +1,24 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useSubscriptionStore } from '../store/useSubscriptionStore';
 import { getChannelDetails } from './api/youtube';
+import { isStatsString } from './videoStats';
 
 // ─── Shared singleton state ────────────────────────────────────
+
+export interface CachedChannelMeta {
+  name: string | null;
+  avatarUrl: string | null;
+  verified: boolean;
+}
 
 /** Resolved avatars: channelId → URL | null. */
 const avatarCache = new Map<string, string | null>();
 
+/** Resolved channel metadata: channelId → CachedChannelMeta. */
+const metaCache = new Map<string, CachedChannelMeta>();
+
 /** In-flight fetch promises keyed by channelId – deduplicates. */
-const pendingFetches = new Map<string, Promise<string | null>>();
+const pendingFetches = new Map<string, Promise<CachedChannelMeta | null>>();
 
 /** Queue of channelIds waiting to be fetched. */
 let fetchQueue: string[] = [];
@@ -66,19 +76,29 @@ function isValidAvatarUrl(url?: string | null): url is string {
 const MAX_CONCURRENT = 4;
 let activeFetches = 0;
 
-function fetchAvatarForChannel(channelId: string): Promise<string | null> {
+function fetchMetadataForChannel(channelId: string): Promise<CachedChannelMeta | null> {
   const existing = pendingFetches.get(channelId);
   if (existing) return existing;
 
   const promise = getChannelDetails(channelId)
     .then((details) => {
       const url = isValidAvatarUrl(details.avatarUrl) ? details.avatarUrl : null;
+      const rawName = details.name?.trim();
+      const cleanName = rawName && !isStatsString(rawName) && rawName !== "Unknown Channel" ? rawName : null;
+      const meta: CachedChannelMeta = {
+        name: cleanName,
+        avatarUrl: url,
+        verified: Boolean(details.verified),
+      };
       avatarCache.set(channelId, url);
+      metaCache.set(channelId, meta);
       notifyChannel(channelId);
-      return url;
+      return meta;
     })
     .catch(() => {
+      const fallback: CachedChannelMeta = { name: null, avatarUrl: null, verified: false };
       avatarCache.set(channelId, null);
+      metaCache.set(channelId, fallback);
       notifyChannel(channelId);
       return null;
     })
@@ -96,14 +116,14 @@ function drainQueue() {
   while (fetchQueue.length > 0 && activeFetches < MAX_CONCURRENT) {
     const channelId = fetchQueue.shift()!;
     // Skip if already resolved or in-flight
-    if (avatarCache.has(channelId) || pendingFetches.has(channelId)) continue;
+    if (metaCache.has(channelId) || pendingFetches.has(channelId)) continue;
     activeFetches += 1;
-    fetchAvatarForChannel(channelId);
+    void fetchMetadataForChannel(channelId);
   }
 }
 
-function enqueueAvatarFetch(channelId: string) {
-  if (avatarCache.has(channelId) || pendingFetches.has(channelId)) return;
+function enqueueFetch(channelId: string) {
+  if (metaCache.has(channelId) || pendingFetches.has(channelId)) return;
   if (fetchQueue.includes(channelId)) return;
   fetchQueue.push(channelId);
 
@@ -112,54 +132,63 @@ function enqueueAvatarFetch(channelId: string) {
   drainTimer = setTimeout(drainQueue, 50);
 }
 
-// ─── Public hook ───────────────────────────────────────────────
+// ─── Public hooks ──────────────────────────────────────────────
+
+const EMPTY_META: CachedChannelMeta = { name: null, avatarUrl: null, verified: false };
 
 /**
- * Resolves a channel avatar URL by:
+ * Resolves a channel's metadata (name, avatarUrl, verified status) by:
  * 1. Checking the subscription store (instant, free)
  * 2. Checking the in-memory cache
  * 3. Queueing a batched `getChannelDetails()` fetch (max 4 concurrent)
  *
- * Automatically re-renders when the avatar resolves.
+ * Automatically re-renders when the channel resolves.
  */
-export function useChannelAvatar(
+export function useChannelMetadata(
   channelId: string | null | undefined,
-): string | null {
-  const subAvatar = useSubscriptionStore((state) => {
-    if (!channelId) return null;
-    const sub = state.subscriptions.find((s) => s.id === channelId);
-    return sub && isValidAvatarUrl(sub.avatarUrl) ? sub.avatarUrl : null;
-  });
+): CachedChannelMeta {
+  const sub = useSubscriptionStore((state) =>
+    channelId ? state.subscriptions.find((s) => s.id === channelId) : undefined,
+  );
+  const rawSubName = sub?.name?.trim();
+  const cleanSubName = rawSubName && !isStatsString(rawSubName) && rawSubName !== "Unknown Channel" ? rawSubName : null;
+  const cleanSubAvatar = isValidAvatarUrl(sub?.avatarUrl) ? sub!.avatarUrl! : null;
 
-  // Re-render only when *this* channel resolves. The snapshot is the URL itself
-  // rather than a counter, so an unrelated channel landing is not an update.
   const subscribe = useCallback(
     (cb: () => void) => subscribeToChannel(channelId ?? null, cb),
     [channelId],
   );
   const getSnapshot = useCallback(
-    () => (channelId ? avatarCache.get(channelId) ?? null : null),
+    () => (channelId ? metaCache.get(channelId) ?? null : null),
     [channelId],
   );
-  const cachedAvatar = useSyncExternalStore(subscribe, getSnapshot);
+  const cachedMeta = useSyncExternalStore(subscribe, getSnapshot);
 
-  // Enqueue fetch if needed (inside effect to comply with React rules)
   useEffect(() => {
     if (!channelId) return;
-    // Already resolved in cache
-    if (avatarCache.has(channelId)) return;
-    // Already available from subscriptions
-    if (subAvatar) return;
+    if (metaCache.has(channelId)) return;
+    if (cleanSubName && cleanSubAvatar) return;
 
-    enqueueAvatarFetch(channelId);
-  }, [channelId, subAvatar]);
+    enqueueFetch(channelId);
+  }, [channelId, cleanSubName, cleanSubAvatar]);
 
-  // ── Resolve synchronously ────────────────────────────────────
-  if (!channelId) return null;
+  return useMemo(() => {
+    if (!channelId) return EMPTY_META;
+    return {
+      name: cleanSubName ?? cachedMeta?.name ?? null,
+      avatarUrl: cleanSubAvatar ?? cachedMeta?.avatarUrl ?? null,
+      verified: cachedMeta?.verified ?? false,
+    };
+  }, [channelId, cleanSubName, cleanSubAvatar, cachedMeta]);
+}
 
-  // 1. Avatar from the subscription store
-  if (subAvatar) return subAvatar;
-
-  // 2. Whatever the cache holds for this channel (null until it resolves)
-  return cachedAvatar;
+/**
+ * Resolves a channel avatar URL by using `useChannelMetadata`.
+ * Automatically re-renders when the avatar resolves.
+ */
+export function useChannelAvatar(
+  channelId: string | null | undefined,
+): string | null {
+  const meta = useChannelMetadata(channelId);
+  return meta.avatarUrl;
 }

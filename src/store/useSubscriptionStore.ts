@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { getSetting, setSetting } from "../lib/api/db";
 import { noteSubscription } from "../lib/api/recommendation";
+import { isStatsString } from "../lib/videoStats";
 
 export interface SubscribedChannel {
   id: string;
@@ -130,7 +131,14 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     try {
       const subsJson = await getSetting(SUBSCRIPTIONS_KEY);
       const parsed: SubscribedChannel[] = subsJson ? JSON.parse(subsJson) : [];
-      const cleaned = parsed.filter((channel) => !LEGACY_SEED_IDS.has(channel.id));
+      const cleaned = parsed
+        .filter((channel) => !LEGACY_SEED_IDS.has(channel.id))
+        .map((channel) => {
+          if (isStatsString(channel.name) || channel.name === "Unknown Channel") {
+            return { ...channel, name: "" };
+          }
+          return channel;
+        });
       // Channels saved before sync existed carry no timestamp, which would read as "epoch" and lose
       // to any tombstone the peer still holds — silently unsubscribing the user. Stamping them now
       // is the honest answer (this is when we first knew) and errs toward keeping the subscription.
@@ -154,20 +162,24 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     const cleanId = cleanChannelId(channelId);
     const existing = subscriptions.find((c) => c.id === cleanId);
     await clearTombstone(cleanId);
+    const safeName = isStatsString(channelName) || channelName === "Unknown Channel" ? "" : (channelName || "").trim();
     if (existing) {
       if (avatarUrl && !existing.avatarUrl) {
         await get().updateSubscription(cleanId, { avatarUrl });
+      }
+      if (safeName && (!existing.name || isStatsString(existing.name) || existing.name === "Unknown Channel")) {
+        await get().updateSubscription(cleanId, { name: safeName });
       }
       return;
     }
     const updated = [
       ...subscriptions,
-      { id: cleanId, name: channelName, avatarUrl, subscribedAt: Date.now() },
+      { id: cleanId, name: safeName, avatarUrl, subscribedAt: Date.now() },
     ];
     set({ subscriptions: updated });
     await persistSubscriptions(updated);
     if (options?.learn) {
-      void noteSubscription(cleanId, channelName, true).catch((err) => console.warn("Failed to learn a subscription", err));
+      void noteSubscription(cleanId, safeName || channelName, true).catch((err) => console.warn("Failed to learn a subscription", err));
     }
   },
 

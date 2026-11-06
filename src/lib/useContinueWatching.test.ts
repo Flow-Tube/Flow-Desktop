@@ -31,6 +31,19 @@ describe("buildContinueWatching", () => {
       [{ ...record("video1", 100, 600), channelName: "96K views" }],
       new Set(),
     );
-    expect(shelf[0]?.channelName).toBe("Unknown Channel");
+    expect(shelf[0]?.channelName).toBe("");
+  });
+
+  it("resolves channel name from subscription store if channelId matches", async () => {
+    const { useSubscriptionStore } = await import("../store/useSubscriptionStore");
+    useSubscriptionStore.setState({
+      subscriptions: [{ id: "UC123", name: "Maddock Films", subscribedAt: 0 }],
+    });
+
+    const shelf = buildContinueWatching(
+      [{ ...record("video1", 100, 600), channelId: "UC123", channelName: "96K views" }],
+      new Set(),
+    );
+    expect(shelf[0]?.channelName).toBe("Maddock Films");
   });
 });

@@ -56,16 +56,16 @@ fn remember_details(requested: &str, details: &ChannelDetails) {
 #[must_use]
 pub fn parse_tab(page: &Value, channel_id: &str) -> ChannelTabResponse {
     let header = parse_header(page, channel_id);
-    let owner_name = if header.name.is_empty() {
+    let (owner_name, owner_avatar) = if header.name.is_empty() {
         details_cache()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(channel_id)
-            .map(|(_, details)| details.name.clone())
+            .map(|(_, details)| (details.name.clone(), details.avatar_url.clone()))
             .unwrap_or_default()
     } else {
         remember_details(channel_id, &header);
-        header.name
+        (header.name, header.avatar_url)
     };
     let owner = items::Owner {
         id: Some(if header.id.is_empty() {
@@ -74,6 +74,7 @@ pub fn parse_tab(page: &Value, channel_id: &str) -> ChannelTabResponse {
             header.id
         }),
         name: owner_name,
+        avatar_url: owner_avatar,
     };
     let mut response = ChannelTabResponse {
         channel_id: owner.id.clone().unwrap_or_default(),

@@ -10,6 +10,7 @@ use super::filters::{
 use super::inputs::{Inputs, Subscriptions};
 use super::mixer::{Blend, FeedSource, Page, blend, quotas};
 use super::seeds::{GraphCandidate, apply_graph_boost};
+use crate::api::innertube::json::count::is_view_or_stream_count;
 use crate::flow_neuro::gates::LANE_RELEVANCE_FLOOR;
 use crate::services::recommendation_service::RecommendationService;
 
@@ -163,12 +164,13 @@ impl Lanes {
 }
 
 fn with_subscription_metadata(mut card: Card, subscriptions: &Subscriptions) -> Card {
+    card.sanitize();
     if card.video.channel_avatar_url.is_none()
         && let Some(avatar) = subscriptions.avatars.get(card.channel_id())
     {
         card.video.channel_avatar_url = Some(avatar.clone());
     }
-    if card.video.channel_name.is_empty()
+    if (card.video.channel_name.is_empty() || is_view_or_stream_count(&card.video.channel_name))
         && let Some(name) = subscriptions.names.get(card.channel_id())
     {
         card.video.channel_name = name.clone();

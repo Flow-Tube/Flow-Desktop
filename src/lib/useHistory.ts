@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { useHistoryStore } from "../store/useHistoryStore";
+import { useSubscriptionStore } from "../store/useSubscriptionStore";
+import { cleanChannelName } from "./videoStats";
 import type { WatchHistoryRecord } from "../types/db";
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
@@ -60,25 +62,24 @@ export function getHistoryDateLabel(watchDate: string, now = new Date()) {
   });
 }
 
-function cleanChannelName(channelName: string | null | undefined): string {
-  if (!channelName) return "";
-  const trimmed = channelName.trim();
-  if (/\bviews?\b|\bwatching\b/i.test(trimmed) || /^\d+(\.\d+)?[kKmMbB]$/.test(trimmed)) {
-    return "";
-  }
-  return trimmed;
-}
-
 export function mapHistoryRecordToVideo(record: WatchHistoryRecord): HistoryVideo {
   const duration = record.totalDurationSeconds ?? 0;
   const progress = duration > 0
     ? Math.min(100, Math.max(0, (record.watchDurationSeconds / duration) * 100))
     : 0;
 
+  let channelName = cleanChannelName(record.channelName);
+  if (!channelName && record.channelId) {
+    const sub = useSubscriptionStore.getState().subscriptions.find((s) => s.id === record.channelId);
+    if (sub?.name) {
+      channelName = sub.name;
+    }
+  }
+
   return {
     id: record.videoId,
     title: record.title,
-    channelName: cleanChannelName(record.channelName) || "Unknown Channel",
+    channelName: channelName || "",
     channelId: record.channelId || null,
     thumbnailUrl: `https://i.ytimg.com/vi/${record.videoId}/hqdefault.jpg`,
     durationSeconds: record.totalDurationSeconds || 0,

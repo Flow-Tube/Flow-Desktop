@@ -21,6 +21,7 @@ use super::sources::{
     channel_uploads, refresh_subscription_store, rotating_window, subscription_window_size,
 };
 use super::{HomeFeedService, cache, channel_memory, kind_checks, neighbours, now_ms};
+use crate::api::innertube::json::count::is_view_or_stream_count;
 use crate::flow_neuro::scoring::classify_persona;
 use crate::services::recommendation_service::{DiscoverySurface, RecommendationService};
 use crate::services::youtube_service::YoutubeService;
@@ -694,6 +695,23 @@ impl HomeFeedService {
             .await
             .into_iter()
             .flatten()
+            .map(|mut card| {
+                if card.video.channel_name.is_empty()
+                    || is_view_or_stream_count(&card.video.channel_name)
+                {
+                    if let Some(name) = after.inputs.subscriptions.names.get(card.channel_id()) {
+                        card.video.channel_name = name.clone();
+                    }
+                }
+                if card.video.channel_avatar_url.is_none() {
+                    if let Some(avatar) = after.inputs.subscriptions.avatars.get(card.channel_id())
+                    {
+                        card.video.channel_avatar_url = Some(avatar.clone());
+                    }
+                }
+                card.sanitize();
+                card
+            })
             .collect();
         if uploads.is_empty() {
             return;
@@ -835,9 +853,12 @@ impl HomeFeedService {
         let mut fresh = Vec::new();
         for (channel, name, mut uploads) in fetched {
             for card in &mut uploads {
-                if card.video.channel_name.is_empty() {
+                if card.video.channel_name.is_empty()
+                    || is_view_or_stream_count(&card.video.channel_name)
+                {
                     card.video.channel_name.clone_from(&name);
                 }
+                card.sanitize();
             }
             let kept = channel_memory::keep_uploads(uploads, now);
             let _ = channel_memory::save_uploads(pool, &channel, &name, &kept, now).await;
@@ -1005,13 +1026,23 @@ pub(super) async fn local_sources(
         .collect();
     let raw_neighbours: Vec<Card> = neighbour_list
         .iter()
-        .filter_map(|n| neighbour_store.get(&n.channel_id))
-        .flat_map(|s| s.uploads.iter())
-        .filter(|c| {
-            c.age_ms(now)
-                .is_some_and(|age| age <= neighbours::UPLOAD_WINDOW_MS)
+        .filter_map(|n| neighbour_store.get(&n.channel_id).map(|s| (n, s)))
+        .flat_map(|(n, s)| {
+            s.uploads.iter().filter_map(|c| {
+                if !c
+                    .age_ms(now)
+                    .is_some_and(|age| age <= neighbours::UPLOAD_WINDOW_MS)
+                {
+                    return None;
+                }
+                let mut card = c.clone();
+                card.sanitize();
+                if card.video.channel_name.is_empty() && !n.name.is_empty() {
+                    card.video.channel_name.clone_from(&n.name);
+                }
+                Some(card)
+            })
         })
-        .cloned()
         .collect();
     Local {
         store,

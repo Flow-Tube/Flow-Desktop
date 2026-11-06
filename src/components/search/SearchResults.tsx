@@ -9,6 +9,8 @@ import { ChannelCard } from '../channel/ChannelCard';
 import { PlaylistCard } from '../video/PlaylistCard';
 import { ShortsShelf } from '../shelf/ShortsShelf';
 import { SearchCorrectionLine } from './SearchCorrectionLine';
+import { SearchCreatorCard } from './SearchCreatorCard';
+import { ChannelShortsGrid } from '../channel/ChannelGrids';
 import { Button } from '../ui/Button';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
@@ -23,7 +25,9 @@ import type {
   UseCombinedSearchReturn,
 } from '../../lib/useCombinedSearch';
 import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
-import { episodeAsSong, withoutHidden } from '../../lib/searchResults';
+import { episodeAsSong, pairCreator, withWatchState, withoutHidden, withoutShorts } from '../../lib/searchResults';
+import { useShortsEnabled } from '../../lib/useShortsContent';
+import { useWatchedVideoIds } from '../../lib/useWatchedFilter';
 import { useFeedActionsStore } from '../../store/useFeedActionsStore';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
@@ -66,10 +70,16 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
 
   const dismissedVideoIds = useFeedActionsStore((s) => s.dismissedVideoIds);
   const blockedChannelIds = useFeedActionsStore((s) => s.blockedChannelIds);
-  const r = useMemo(
-    () => withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds }),
-    [search.results, dismissedVideoIds, blockedChannelIds],
-  );
+  const shortsEnabled = useShortsEnabled();
+  const watchState = search.filters.watchState;
+  const watchFilterApplies = search.filterType === 'videos' || search.filterType === 'shorts' || search.filterType === 'live';
+  const effectiveWatchState = watchFilterApplies ? watchState : 'any';
+  const watchedIds = useWatchedVideoIds(effectiveWatchState !== 'any');
+  const { creator, results: r } = useMemo(() => {
+    const visible = withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds });
+    const allowed = shortsEnabled ? visible : withoutShorts(visible);
+    return pairCreator(withWatchState(allowed, effectiveWatchState, watchedIds));
+  }, [search.results, dismissedVideoIds, blockedChannelIds, shortsEnabled, effectiveWatchState, watchedIds]);
 
   const {
     filterType,
@@ -92,22 +102,21 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   const visibleSongs = r.songs.filter((song) => !isHidden(song));
 
   // --- actions ------------------------------------------------------------
-  const playSong = (song: SongItem, context: SongItem[]) => {
-    const queue = context.length ? context : [song];
-    const id = song.videoId ?? song.id;
-    const start = Math.max(0, queue.findIndex((t) => (t.videoId ?? t.id) === id));
-    void playQueue(queue, start);
+  // The song alone, so Up next fills with related songs instead of the other results for the same title.
+  const playSong = (song: SongItem) => {
+    void playQueue([song], 0);
   };
   const openAlbum = (a: AlbumItem) => navigate(`/music/album/${a.browseId}`);
   const openArtist = (a: ArtistItem) => navigate(a.isProfile ? `/channel/${a.id}` : `/music/artist/${a.id}`);
   const openPodcast = (p: PodcastItem) => navigate(`/music/playlist/${p.id}`);
   const playEpisode = (episode: EpisodeItem, all: EpisodeItem[]) =>
-    playSong(episodeAsSong(episode), all.map(episodeAsSong));
+    void playQueue(all.map(episodeAsSong), Math.max(0, all.indexOf(episode)));
   const openPlaylist = (p: PlaylistItem) => navigate(`/music/playlist/${p.id}`);
   const openChannel = (c: SearchChannel) => navigate(`/channel/${c.channelId}`);
 
   const hasAny = Boolean(
-    r.topResult ||
+    creator ||
+      r.topResult ||
       r.songs.length ||
       r.videos.length ||
       r.live.length ||
@@ -173,6 +182,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
     return (
       <div className="flex flex-col gap-10 pb-12">
         <SearchCorrectionLine correction={r.correction} exact={search.exact} onSearchExactly={search.searchExactly} />
+        {creator && <SearchCreatorCard creator={creator} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />}
         {r.topResult && (
           <TopResultHero
             top={r.topResult}
@@ -197,7 +207,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
                   key={song.id}
                   variant="track-list"
                   item={song}
-                  onPlay={() => playSong(song, visibleSongs)}
+                  onPlay={() => playSong(song)}
                 />
               ))}
             </div>
@@ -297,12 +307,20 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   // ========================================================================
   return (
     <div className="pb-12">
-      {(filterType === 'videos' || filterType === 'live') && (
+      {(filterType === 'videos' || filterType === 'live' || filterType === 'shorts') && (
         <SearchCorrectionLine correction={r.correction} exact={search.exact} onSearchExactly={search.searchExactly} />
+      )}
+
+      {filterType === 'shorts' && (
+        <>
+          <ChannelShortsGrid shorts={r.shorts} />
+          {sentinel}
+        </>
       )}
 
       {filterType === 'videos' && (
         <div className="flex flex-col gap-8">
+          {creator && <SearchCreatorCard creator={creator} onPlay={onPlayVideo} onAddToQueue={onAddToQueue} />}
           {r.channels.length > 0 && (
             <MusicShelf<SearchChannel>
               title={getString('search_section_channels')}
@@ -333,7 +351,7 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
                 key={song.id}
                 variant="track-list"
                 item={song}
-                onPlay={() => playSong(song, visibleSongs)}
+                onPlay={() => playSong(song)}
               />
             ))}
           </div>
@@ -494,7 +512,7 @@ function TopResultHero({
   onOpenChannel,
 }: {
   top: TopResult;
-  onPlaySong: (s: SongItem, ctx: SongItem[]) => void;
+  onPlaySong: (s: SongItem) => void;
   onPlayVideo: (v: VideoSummary) => void;
   onOpenAlbum: (a: AlbumItem) => void;
   onOpenArtist: (a: ArtistItem) => void;
@@ -517,7 +535,7 @@ function TopResultHero({
       subtitle = artistsText(top.item.artists);
       actionLabel = getString('search_action_play');
       isPlay = true;
-      action = () => onPlaySong(top.item, [top.item]);
+      action = () => onPlaySong(top.item);
       break;
     case 'video':
       thumb = top.item.thumbnailUrl;

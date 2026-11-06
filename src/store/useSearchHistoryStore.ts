@@ -2,6 +2,11 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { deepFlowAllowsHistory } from "../lib/deepFlow";
 import { SETTINGS } from "../lib/settings/schema";
+import {
+  isDefaultFilterState,
+  sanitizeFilterState,
+  type SearchFilterState,
+} from "../lib/searchFilterState";
 import { profileStorage } from "../lib/storage/profileStorage";
 import { getSettingValue, useAppSettingsStore } from "./useAppSettingsStore";
 
@@ -15,6 +20,8 @@ const DAY_MS = 86_400_000;
 export interface SearchHistoryEntry {
   query: string;
   at: number;
+  /** The filters last used with this search, so running it again finds the same results. */
+  filters?: SearchFilterState;
 }
 
 function load(): SearchHistoryEntry[] {
@@ -25,6 +32,7 @@ function load(): SearchHistoryEntry[] {
     return parsed
       .filter((entry): entry is SearchHistoryEntry =>
         typeof entry?.query === "string" && entry.query.trim() !== "" && typeof entry?.at === "number")
+      .map((entry) => ({ ...entry, filters: sanitizeFilterState(entry.filters) }))
       .slice(0, SEARCH_HISTORY_STORED_LIMIT);
   } catch {
     return [];
@@ -64,26 +72,38 @@ interface SearchHistoryState {
   entries: SearchHistoryEntry[];
   /** Newest first; a repeated query moves to the top. Skipped when saving searches is off, and in Deep Flow unless history is allowed there. */
   record: (query: string) => void;
+  /** Keeps these filters on the search's entry; the default set clears them. No entry, no change. */
+  rememberFilters: (query: string, filters: SearchFilterState) => void;
+  filtersOf: (query: string) => SearchFilterState | undefined;
   remove: (query: string) => void;
   clear: () => void;
   /** Forgets what's past a new Max history size, so raising it again doesn't bring them back. */
   trimTo: (size: number) => void;
 }
 
-export const useSearchHistoryStore = create<SearchHistoryState>((set) => ({
+export const useSearchHistoryStore = create<SearchHistoryState>((set, get) => ({
   entries: load(),
   record: (query) => {
     const trimmed = query.trim();
     if (!trimmed || getSettingValue(SETTINGS.SEARCH_HISTORY_ENABLED) === "false" || !deepFlowAllowsHistory()) return;
     set((state) => {
+      const earlier = state.entries.find((entry) => sameQuery(entry.query, trimmed));
       const entries = [
-        { query: trimmed, at: Date.now() },
+        { query: trimmed, at: Date.now(), filters: earlier?.filters },
         ...state.entries.filter((entry) => !sameQuery(entry.query, trimmed)),
       ].slice(0, maxSize(getSettingValue(SETTINGS.SEARCH_HISTORY_MAX_SIZE)));
       persist(entries);
       return { entries };
     });
   },
+  rememberFilters: (query, filters) => set((state) => {
+    if (!state.entries.some((entry) => sameQuery(entry.query, query))) return state;
+    const kept = isDefaultFilterState(filters) ? undefined : filters;
+    const entries = state.entries.map((entry) => (sameQuery(entry.query, query) ? { ...entry, filters: kept } : entry));
+    persist(entries);
+    return { entries };
+  }),
+  filtersOf: (query) => get().entries.find((entry) => sameQuery(entry.query, query))?.filters,
   remove: (query) => set((state) => {
     const entries = state.entries.filter((entry) => !sameQuery(entry.query, query));
     persist(entries);

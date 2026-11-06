@@ -70,6 +70,7 @@ MUSIC
 - A new Blur other lines switch in the lyrics menu and Settings keeps every line of synced lyrics sharp. Linux never blurs them, so it doesn't show there.
 - Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
 - Follow on an artist's page now really follows them. It used to forget as soon as you left the page. Artists you follow, here or on an artist card, go to your phone as music artists.
+- A song played from search now plays alone, with radio filling up next, instead of queueing the other results.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
@@ -163,6 +164,10 @@ HOME
 SHORTS
 - A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.
 - Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
+
+SEARCH
+- Searching again from your history brings back the filters you used. Shorts is now its own chip, next to All.
+- New Unwatched, Watched and Recently uploaded chips, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

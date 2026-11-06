@@ -14,6 +14,7 @@ import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
+import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useUiStore } from '../../store/useUiStore';
 
 const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
@@ -74,16 +75,16 @@ export function TopbarSearch() {
     inputRef.current?.blur();
   };
 
-  const runTextSearch = (query: string) => {
+  const runTextSearch = (query: string, searchFilters?: SearchFilterState) => {
     recordSearch(query);
     setText(query);
     setSearchQuery(query);
     close();
-    navigate(`/search?q=${encodeURIComponent(query)}`);
+    navigate(`/search?q=${encodeURIComponent(query)}`, searchFilters ? { state: { searchFilters } } : undefined);
   };
 
   const pick = (row: SuggestionRow) => {
-    if (row.kind === 'history') return runTextSearch(row.query);
+    if (row.kind === 'history') return runTextSearch(row.query, useSearchHistoryStore.getState().filtersOf(row.query));
     if (row.kind === 'query') return runTextSearch(row.text);
     recordSearch(text);
     close();

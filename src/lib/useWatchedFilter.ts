@@ -53,11 +53,16 @@ function useWatchHistory(enabled: boolean): WatchHistoryRecord[] {
 /** The feed filter of a surface: what the viewer hid and, by their choice, what they watched. */
 export function useFeedVisibilityFilter(surface: HideWatchedSurface) {
   const hideWatched = useHideWatched(surface);
-  const threshold = useAppSettingsStore((state) => state.values[SETTINGS.WATCHED_THRESHOLD]) as WatchedThreshold;
   const isHidden = useFeedHiddenFilter({ hideWatched });
-  const history = useWatchHistory(hideWatched);
-  const watched = useMemo(() => watchedVideoIds(history, threshold), [history, threshold]);
+  const watched = useWatchedVideoIds(hideWatched);
   return useCallback((video: VideoSummary) => isHidden(video) || watched.has(video.id), [isHidden, watched]);
+}
+
+/** The videos history counts as watched, read only while something needs them. */
+export function useWatchedVideoIds(enabled: boolean): Set<string> {
+  const threshold = useAppSettingsStore((state) => state.values[SETTINGS.WATCHED_THRESHOLD]) as WatchedThreshold;
+  const history = useWatchHistory(enabled);
+  return useMemo(() => watchedVideoIds(history, threshold), [history, threshold]);
 }
 
 /** The Shorts a shelf leaves out, under the Shorts setting alone. */

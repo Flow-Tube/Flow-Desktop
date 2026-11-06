@@ -4,6 +4,7 @@ const deepFlow = vi.hoisted(() => ({ record: true }));
 vi.mock("../lib/deepFlow", () => ({ deepFlowAllowsHistory: () => deepFlow.record }));
 
 import { SETTINGS } from "../lib/settings/schema";
+import { DEFAULT_SEARCH_FILTER_STATE } from "../lib/searchFilterState";
 import { useAppSettingsStore } from "./useAppSettingsStore";
 import { SEARCH_HISTORY_DEFAULT_LIMIT as SEARCH_HISTORY_LIMIT, useSearchHistoryStore, visibleSearchEntries } from "./useSearchHistoryStore";
 
@@ -22,6 +23,26 @@ describe("search history", () => {
     record("the weeknd");
     record("  LOFI ");
     expect(queries()).toEqual(["LOFI", "the weeknd"]);
+  });
+
+  it("keeps a search's filters, across repeats, until they go back to the default", () => {
+    const store = useSearchHistoryStore.getState();
+    const narrowed = { ...DEFAULT_SEARCH_FILTER_STATE, category: "videos" as const };
+    store.record("lofi");
+    store.rememberFilters(" LOFI", narrowed);
+    expect(useSearchHistoryStore.getState().filtersOf("lofi")).toEqual(narrowed);
+    store.record("lofi");
+    expect(useSearchHistoryStore.getState().filtersOf("lofi")).toEqual(narrowed);
+    store.rememberFilters("lofi", DEFAULT_SEARCH_FILTER_STATE);
+    expect(useSearchHistoryStore.getState().filtersOf("lofi")).toBeUndefined();
+  });
+
+  it("does not make an entry just to hold filters", () => {
+    useSearchHistoryStore.getState().rememberFilters("never searched", {
+      ...DEFAULT_SEARCH_FILTER_STATE,
+      category: "live",
+    });
+    expect(queries()).toEqual([]);
   });
 
   it("is kept across launches", () => {

@@ -423,6 +423,59 @@ export const addVideoToStoredPlaylist = async (
   });
 };
 
+/** Adds every video the playlist lacks, in order; Watch Later keeps its newest-first order. */
+export const addVideosToStoredPlaylist = async (
+  playlistId: string,
+  videos: VideoSummary[],
+): Promise<{ playlist: StoredPlaylist; added: number } | null> => withLibraryWrite(async () => {
+  const playlists = await loadStoredPlaylists();
+  const target = playlists.find((playlist) => playlist.id === playlistId && playlist.source === "Owned");
+  if (!target) return null;
+
+  const held = new Set(target.tracks.map((track) => track.id));
+  const addedAt = Date.now();
+  const incoming = videos.filter((video) => {
+    if (held.has(video.id)) return false;
+    held.add(video.id);
+    return true;
+  }).map((video) => ({ ...video, addedAtInPlaylist: addedAt }));
+  if (incoming.length === 0) return { playlist: target, added: 0 };
+
+  const tracks = isProtectedPlaylistId(playlistId)
+    ? [...[...incoming].reverse(), ...target.tracks]
+    : [...target.tracks, ...incoming];
+  const updated = normalizePlaylist({
+    ...target,
+    tracks,
+    thumbnailUrl: target.thumbnailUrl ?? tracks[0]?.thumbnailUrl ?? null,
+    videoCount: tracks.length,
+    videoCountText: formatVideoCountText(tracks.length),
+  });
+  await persistStoredPlaylists(playlists.map((playlist) => (playlist.id === playlistId ? updated : playlist)));
+  return { playlist: updated, added: incoming.length };
+});
+
+/** Renames an owned playlist and sets its description. Built-in and saved playlists keep theirs. */
+export const updateStoredPlaylistDetails = async (
+  playlistId: string,
+  name: string,
+  description: string,
+): Promise<StoredPlaylist | null> => withLibraryWrite(async () => {
+  const playlists = await loadStoredPlaylists();
+  const target = playlists.find((playlist) => playlist.id === playlistId);
+  if (!target || target.source !== "Owned" || isProtectedPlaylistId(playlistId)) return null;
+
+  const updated = normalizePlaylist({
+    ...target,
+    name: name.trim() || target.name,
+    // The title captured on saving outranks the name, so it has to follow a rename.
+    sourceTitle: target.sourceTitle ? name.trim() || target.sourceTitle : target.sourceTitle,
+    description: description.trim(),
+  });
+  await persistStoredPlaylists(playlists.map((playlist) => (playlist.id === playlistId ? updated : playlist)));
+  return updated;
+});
+
 export const addVideoToWatchLater = async (video: VideoSummary) => withLibraryWrite(async () => {
   const playlists = await loadStoredPlaylists();
   const nextPlaylists = playlists.map((playlist) => {

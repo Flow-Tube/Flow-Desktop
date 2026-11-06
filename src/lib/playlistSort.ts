@@ -15,6 +15,8 @@ export const PLAYLIST_SORT_ORDERS = [
   "most_popular",
   "date_published_newest",
   "date_published_oldest",
+  "longest",
+  "shortest",
 ] as const;
 
 export type PlaylistSortOrder = (typeof PLAYLIST_SORT_ORDERS)[number];
@@ -102,6 +104,10 @@ function sortedByPublishDate(videos: VideoSummary[], descending: boolean, now: n
   return keyed.map(([video]) => video);
 }
 
+// A live stream or a row saved without its length has no duration; it sorts last by length either way.
+const shortestKey = (video: VideoSummary): number =>
+  video.durationSeconds && video.durationSeconds > 0 ? video.durationSeconds : Number.MAX_SAFE_INTEGER;
+
 /**
  * `storedNewestFirst` says how the list is kept: Watch Later prepends new tracks, other
  * playlists append. It orders tracks that have no add time.
@@ -127,5 +133,9 @@ export function sortPlaylistVideos(
       return sortedByPublishDate(videos, true, now);
     case "date_published_oldest":
       return sortedByPublishDate(videos, false, now);
+    case "longest":
+      return [...videos].sort((a, b) => (b.durationSeconds ?? 0) - (a.durationSeconds ?? 0));
+    case "shortest":
+      return [...videos].sort((a, b) => shortestKey(a) - shortestKey(b));
   }
 }

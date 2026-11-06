@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ListVideo, Plus, X } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
 import { Button } from "../ui/Button";
+import { PlaylistChoiceCard } from "./PlaylistChoiceCard";
 import {
   addVideoToStoredPlaylist,
   createStoredPlaylist,
@@ -9,64 +10,13 @@ import {
   loadStoredPlaylists,
   PLAYLIST_LIBRARY_UPDATED_EVENT,
   removeVideoFromWatchLater,
-  storedPlaylistToCardSummary,
   updateStoredPlaylistTracks,
-  WATCH_LATER_PLAYLIST_ID,
   type StoredPlaylist,
 } from "../../lib/playlistLibrary";
-import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlaylistModalStore } from "../../store/usePlaylistModalStore";
 import { useUiStore } from "../../store/useUiStore";
 import { noteVideoSaved } from "../../lib/videoSaved";
 import { showSaveFailedToast, showSaveToast, type SaveDestination } from "../../lib/saveToast";
-
-function PlaylistChoiceCard({
-  fallbackThumbnailUrl,
-  playlist,
-  onClick,
-}: {
-  fallbackThumbnailUrl?: string | null;
-  playlist: StoredPlaylist;
-  onClick: () => void;
-}) {
-  const summary = storedPlaylistToCardSummary(playlist);
-  const thumbnailUrl = summary.thumbnailUrl
-    ?? (playlist.id === WATCH_LATER_PLAYLIST_ID ? fallbackThumbnailUrl : null)
-    ?? null;
-  const imageSrc = useProxiedImageUrl(thumbnailUrl);
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-surface-container-high"
-    >
-      <span className="relative aspect-video w-20 shrink-0 overflow-hidden rounded-md bg-surface-container-high ring-1 ring-chrome-neutral-800/50">
-        {imageSrc ? (
-          <img
-            src={imageSrc}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <span className="grid h-full w-full place-items-center text-chrome-neutral-500">
-            <ListVideo size={20} />
-          </span>
-        )}
-      </span>
-
-      <span className="min-w-0 flex-1">
-        <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">
-          {summary.title}
-        </span>
-        <span className="line-clamp-1 text-xs text-chrome-neutral-500">
-          {summary.videoCountText}
-        </span>
-      </span>
-    </button>
-  );
-}
 
 export function AddToPlaylistModal() {
   const addTarget = usePlaylistModalStore((s) => s.addTarget);

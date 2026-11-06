@@ -2,7 +2,9 @@ import { getString } from "../lib/i18n/index";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AddAllToPlaylistDialog } from "../components/playlist/AddAllToPlaylistDialog";
 import { PlaylistAmbientHeader } from "../components/playlist/PlaylistAmbientHeader";
+import { PlaylistFormDialog } from "../components/playlist/PlaylistFormDialog";
 import { PlaylistLoadMore } from "../components/playlist/PlaylistLoadMore";
 import { PlaylistSortableList } from "../components/playlist/PlaylistSortableList";
 import {
@@ -17,8 +19,11 @@ import {
   isProtectedPlaylistId,
   removePlaylistFromLibrary,
   savePlaylistToLibrary,
+  updateStoredPlaylistDetails,
   updateStoredPlaylistTracks,
 } from "../lib/playlistLibrary";
+import { filterVideosBySearch } from "../lib/playlistSearch";
+import { useDebounce } from "../lib/useDebounce";
 import { usePlaylistDetails } from "../lib/usePlaylistDetails";
 import { usePublishTitle } from "../lib/usePublishTitle";
 import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
@@ -59,6 +64,8 @@ export function PlaylistDetailsPage({
     loadMore,
     loadAllVideos,
     setVideos,
+    applyDetails,
+    hidesUnavailable,
   } = usePlaylistDetails(playlistId);
   usePublishTitle(meta?.title);
 
@@ -66,9 +73,14 @@ export function PlaylistDetailsPage({
     playlistId ? loadPlaylistSortOrder(playlistId) : null,
   );
   const [savedInLibrary, setSavedInLibrary] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const appliedSearch = useDebounce(searchQuery, 150);
+  const [editing, setEditing] = useState(false);
+  const [addingAll, setAddingAll] = useState(false);
 
   useEffect(() => {
     setStoredSortOrder(playlistId ? loadPlaylistSortOrder(playlistId) : null);
+    setSearchQuery("");
   }, [playlistId]);
 
   useEffect(() => {
@@ -87,14 +99,19 @@ export function PlaylistDetailsPage({
   const isLocalPlaylist = savedInLibrary || isProtected;
   const sortOrder = resolvePlaylistSortOrder(storedSortOrder, isLocalPlaylist);
 
-  // Sorting by date or popularity is only right over the whole playlist.
+  // Sorting by date or popularity and searching are only right over the whole playlist.
+  const needsWholePlaylist = sortOrder !== "manual" || appliedSearch.trim() !== "";
   useEffect(() => {
-    if (sortOrder !== "manual" && hasMore) void loadAllVideos().catch(() => undefined);
-  }, [sortOrder, hasMore, loadAllVideos]);
+    if (needsWholePlaylist && hasMore) void loadAllVideos().catch(() => undefined);
+  }, [needsWholePlaylist, hasMore, loadAllVideos]);
 
   const displayVideos = useMemo(
     () => sortPlaylistVideos(videos, sortOrder, isProtected),
     [videos, sortOrder, isProtected],
+  );
+  const shownVideos = useMemo(
+    () => filterVideosBySearch(displayVideos, appliedSearch),
+    [displayVideos, appliedSearch],
   );
 
   const leadVideo = videos[0];
@@ -115,6 +132,19 @@ export function PlaylistDetailsPage({
       },
       load: () => (hasMore ? loadAllVideos().catch(() => videos) : Promise.resolve(videos)),
     });
+  };
+
+  const handleSaveDetails = async (name: string, description: string) => {
+    if (!meta) return;
+    try {
+      const updated = await updateStoredPlaylistDetails(meta.id, name, description);
+      if (!updated) throw new Error("Playlist not found");
+      applyDetails(updated);
+      setEditing(false);
+    } catch (saveError) {
+      console.error("Failed to edit playlist", saveError);
+      showToast({ variant: "error", message: getString("playlist_edit_failed") });
+    }
   };
 
   const handleReorder = async (nextVideos: VideoSummary[]) => {
@@ -259,6 +289,9 @@ export function PlaylistDetailsPage({
           onCopyLink={handleCopyLink}
           onSaveToLibrary={handleSaveToLibrary}
           onRemoveFromLibrary={handleRemoveFromLibrary}
+          onEdit={() => setEditing(true)}
+          onAddAll={() => setAddingAll(true)}
+          hidesUnavailable={hidesUnavailable}
           isSaved={savedInLibrary}
           isProtected={isProtected}
           isOwned={isOwned}
@@ -266,10 +299,12 @@ export function PlaylistDetailsPage({
 
         <PlaylistSortableList
           videos={videos}
-          displayVideos={displayVideos}
+          displayVideos={shownVideos}
           sortOrder={sortOrder}
           sortOptions={availablePlaylistSortOrders(isLocalPlaylist)}
           onSortChange={handleSortChange}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
           onReorder={handleReorder}
           onPlay={playFromPlaylist}
           onAddToQueue={onAddToQueue}
@@ -283,6 +318,24 @@ export function PlaylistDetailsPage({
           }
         />
       </div>
+
+      {editing && (
+        <PlaylistFormDialog
+          title={getString("playlist_edit")}
+          confirmLabel={getString("save")}
+          initialName={meta.title}
+          initialDescription={meta.description ?? ""}
+          onSubmit={handleSaveDetails}
+          onCancel={() => setEditing(false)}
+        />
+      )}
+      {addingAll && (
+        <AddAllToPlaylistDialog
+          excludePlaylistId={meta.id}
+          loadVideos={() => (hasMore ? loadAllVideos() : Promise.resolve(videos))}
+          onClose={() => setAddingAll(false)}
+        />
+      )}
     </div>
   );
 }

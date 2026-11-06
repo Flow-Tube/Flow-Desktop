@@ -19,11 +19,11 @@ const pluralRules = new Intl.PluralRules(APP_LOCALE);
 
 /**
  * The form of a counted string for `count`: `name_one`, `name_other` and so on, by the language's
- * own plural rules. `count` fills the first placeholder.
+ * own plural rules. `count` fills the first placeholder, `args` the ones after it.
  */
-export function getPlural(name: string, count: number): string {
+export function getPlural(name: string, count: number, ...args: unknown[]): string {
   const lookup = strings as Record<string, string>;
   const exact = `${name}_${pluralRules.select(count)}`;
   const key = (exact in lookup ? exact : `${name}_other`) as StringKey;
-  return getString(key, count);
+  return getString(key, count, ...args);
 }

@@ -1034,6 +1034,14 @@ pub async fn get_dearrow_override(
     }
 }
 
+/// The title a video was uploaded with, or `Ok(None)` to keep the one already shown. Only an invalid
+/// video ID is a real error.
+#[tauri::command]
+pub async fn get_original_title(video_id: String) -> Result<Option<String>, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    Ok(crate::api::original_title::original_title(video_id.trim()).await)
+}
+
 /// RYD is a graceful-degradation integration: fetch failures resolve to
 /// `Ok(None)` so the frontend simply omits the dislike counter. Only an
 /// invalid video ID is a real error.

@@ -96,7 +96,7 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
         artwork={video.thumbnailUrl}
         shape="landscape"
         fallbackIcon={<FileVideo2 size={22} />}
-        title={video.title}
+        title={state.displayTitle}
         subtitle={video.channelName}
         meta={video.publishedText ?? null}
         badge={video.durationSeconds ? formatDuration(video.durationSeconds) : null}

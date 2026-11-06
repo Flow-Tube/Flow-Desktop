@@ -24,6 +24,7 @@ import type {
 import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
 import { episodeAsSong } from '../../lib/searchResults';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
+import { useOriginalTitle } from '../../lib/useOriginalTitle';
 
 interface SearchResultsProps {
   search: UseCombinedSearchReturn;
@@ -492,6 +493,7 @@ function TopResultHero({
   onOpenChannel: (c: SearchChannel) => void;
 }) {
   const circle = top.kind === 'artist' || top.kind === 'channel';
+  const originalTitle = useOriginalTitle(top.kind === 'video' ? top.item.id : null);
 
   let thumb: string | null | undefined;
   let title = '';
@@ -511,7 +513,7 @@ function TopResultHero({
       break;
     case 'video':
       thumb = top.item.thumbnailUrl;
-      title = top.item.title;
+      title = originalTitle || top.item.title;
       subtitle = top.item.channelName;
       actionLabel = getString('search_action_play');
       isPlay = true;

@@ -31,6 +31,7 @@ import { copyText, shareLink } from "../../lib/clipboard";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 import type { ShortVideoSummary, VideoDetails, VideoSummary } from "../../types/video";
 import type { RydData } from "../../lib/api/foss";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 interface ShortActionBarProps {
   short: ShortItem;
@@ -59,7 +60,8 @@ export function ShortActionBar({
     : formatCount(short.likeCountText ?? details?.likeCountText) || "Like";
   const dislikeCountText = rydData ? formatCount(rydData.dislikes) : "Dislike";
   const resolvedCommentCountText = formatCount(commentCountText ?? short.commentCountText) || "Comments";
-  const resolvedTitle = details?.title?.trim() || short.title || "Short";
+  const originalTitle = useOriginalTitle(short.id);
+  const resolvedTitle = originalTitle || details?.title?.trim() || short.title || "Short";
   const resolvedChannelName = details?.channelName?.trim() || short.channelName;
   const resolvedChannelId = details?.channelId ?? short.channelId ?? null;
   const resolvedThumbnailUrl = details?.thumbnailUrl ?? short.thumbnailUrl;

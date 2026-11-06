@@ -536,14 +536,29 @@ impl<'a, S: Store> Session<'a, S> {
     /// This device's key of the entry that starts `epoch` with `commitment`.
     async fn unwrap_wrap(&self, epoch: u32, commitment: &[u8]) -> Result<Vec<u8>> {
         let did = self.device.did;
+        let (kc, name) = (kc_name(commitment), hex::encode(did));
         let wrap = self
             .store
-            .key(epoch, &kc_name(commitment), &hex::encode(did))
+            .key(epoch, &kc, &name)
             .await?
             .ok_or(Error::KeyCommitment)?;
-        let key = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)?;
-        check_epoch_key(&key, &self.group, epoch, commitment)?;
-        Ok(key)
+        let opened = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)
+            .and_then(|key| check_epoch_key(&key, &self.group, epoch, commitment).map(|()| key));
+        self.settle_key((epoch, &kc, &name), &wrap, opened).await
+    }
+
+    /// Tells the store how a wrap or chain box it gave turned out, so it keeps only good copies.
+    async fn settle_key(
+        &self,
+        (epoch, kc, name): (u32, &str, &str),
+        bytes: &[u8],
+        opened: std::result::Result<Vec<u8>, Error>,
+    ) -> Result<Vec<u8>> {
+        match &opened {
+            Ok(_) => self.store.keep_key(epoch, kc, name, bytes).await?,
+            Err(_) => self.store.drop_key(epoch, kc, name).await?,
+        }
+        Ok(opened?)
     }
 
     /// The key of `epoch`, walking the history chain back from the newest key this device holds.
@@ -554,17 +569,22 @@ impl<'a, S: Store> Session<'a, S> {
                 return Err(Error::KeyCommitment.into());
             }
             let known_commitment = self.commitments.get(&known).ok_or(Error::KeyCommitment)?;
+            let kc = kc_name(known_commitment);
             let chain = self
                 .store
-                .key(known, &kc_name(known_commitment), "chain")
+                .key(known, &kc, "chain")
                 .await?
                 .ok_or(Error::KeyCommitment)?;
-            let previous = open_chain(key, &self.group, known, &chain)?;
             let commitment = self
                 .commitments
                 .get(&(known - 1))
                 .ok_or(Error::KeyCommitment)?;
-            check_epoch_key(&previous, &self.group, known - 1, commitment)?;
+            let opened = open_chain(key, &self.group, known, &chain).and_then(|previous| {
+                check_epoch_key(&previous, &self.group, known - 1, commitment).map(|()| previous)
+            });
+            let previous = self
+                .settle_key((known, &kc, "chain"), &chain, opened)
+                .await?;
             self.keys.insert(known - 1, previous);
         }
         Ok(self.keys[&epoch].clone())
@@ -827,7 +847,7 @@ impl<'a, S: Store> Session<'a, S> {
             return Ok(None);
         };
         let read = async {
-            let object = self.verified(&bytes, did, seq)?;
+            let object = self.verified_copy(&bytes, path, did, seq).await?;
             let position = next_in_stream(last, &object)?;
             self.check_cut_chain(did, &object, last).await?;
             Ok((position, self.open_content(&object).await?))
@@ -850,6 +870,22 @@ impl<'a, S: Store> Session<'a, S> {
             did,
             seq,
         )?)
+    }
+
+    /// [`Session::verified`] for bytes the store gave for `path`, so it keeps only good copies.
+    pub(super) async fn verified_copy<'b>(
+        &self,
+        bytes: &'b [u8],
+        path: &str,
+        did: &str,
+        seq: u64,
+    ) -> Result<ParsedObject<'b>> {
+        let verified = self.verified(bytes, did, seq);
+        match &verified {
+            Ok(_) => self.store.keep_object(path, bytes).await?,
+            Err(_) => self.store.drop_object(path).await?,
+        }
+        verified
     }
 
     pub(super) fn senders(&self) -> &BTreeMap<String, Sender> {

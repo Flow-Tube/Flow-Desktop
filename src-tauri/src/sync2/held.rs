@@ -75,6 +75,17 @@ impl HeldStore {
         Ok(())
     }
 
+    pub async fn forget_key(&self, epoch: u32, kc: &str, name: &str) -> Result<()> {
+        sqlx::query("DELETE FROM sync2_held_keys WHERE epoch = ? AND kc = ? AND name = ?")
+            .bind(epoch)
+            .bind(kc)
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(StoreError::Local)?;
+        Ok(())
+    }
+
     /// The log objects held above `vv`, and every blob held.
     pub async fn listing(&self, vv: &BTreeMap<String, u64>) -> Result<(Vec<String>, Vec<String>)> {
         let rows: Vec<String> =
@@ -219,6 +230,12 @@ impl Store for HeldStore {
         .fetch_optional(&self.pool)
         .await
         .map_err(StoreError::Local)
+    }
+
+    /// A member can hand over a wrap this device can't check when it takes it. Without it, the
+    /// next meeting can get a good one. Objects were verified when taken, and may be the only copy.
+    async fn drop_key(&self, epoch: u32, kc: &str, name: &str) -> Result<()> {
+        self.forget_key(epoch, kc, name).await
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {

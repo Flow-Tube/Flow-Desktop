@@ -7,17 +7,20 @@ mod sync2_common;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync2::batches::apply_batches;
 use flow_desktop_lib::sync2::engine::{Session, now_ms};
+use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::hybrid::HybridStore;
 use flow_desktop_lib::sync2::keys::MemberSecrets;
 use flow_desktop_lib::sync2::lan_sync::{meet, serve};
-use flow_desktop_lib::sync2::paths::log_path;
+use flow_desktop_lib::sync2::paths::{kc_name, log_path};
 use flow_desktop_lib::sync2::roster::Entry;
 use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result, StoreError};
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{MemoryStore, device_pool, exported, group, watch, watched};
+use sync2_common::{MemoryStore, device_pool, exported, group, head, watch, watched};
 use tokio::net::TcpListener;
 
 /// The server's answer to every request: none while it works, else a 503 with this code.
@@ -198,4 +201,209 @@ async fn a_server_that_lost_the_group_is_not_covered_for() {
         store.roster_after(-1).await.is_err(),
         "a reset server is not hidden"
     );
+}
+
+/// A server that sends a damaged wrap, or damaged bytes for one path, until told to stop.
+struct Damaging<'a> {
+    store: &'a MemoryStore,
+    wrap: Mutex<bool>,
+    path: Mutex<Option<String>>,
+}
+
+impl<'a> Damaging<'a> {
+    fn new(store: &'a MemoryStore) -> Self {
+        Self {
+            store,
+            wrap: Mutex::new(false),
+            path: Mutex::new(None),
+        }
+    }
+
+    fn heal(&self) {
+        *self.wrap.lock().unwrap() = false;
+        *self.path.lock().unwrap() = None;
+    }
+}
+
+impl Store for &Damaging<'_> {
+    async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
+        self.store.roster_after(after).await
+    }
+
+    async fn append_roster(
+        &self,
+        head: &str,
+        entry: &Entry,
+        wraps: &BTreeMap<String, String>,
+        chain: Option<&str>,
+    ) -> Result<Appended> {
+        self.store.append_roster(head, entry, wraps, chain).await
+    }
+
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        if *self.wrap.lock().unwrap() {
+            return Ok(Some(vec![7; 80]));
+        }
+        self.store.key(epoch, kc, name).await
+    }
+
+    async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+        self.store.put_object(path, bytes).await
+    }
+
+    async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        let damaged = self.path.lock().unwrap().as_deref() == Some(path);
+        let found = self.store.get_object(path).await?;
+        Ok(found.map(|mut bytes| {
+            if damaged {
+                bytes[150] ^= 1;
+            }
+            bytes
+        }))
+    }
+
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        self.store.delete_object(path).await
+    }
+
+    async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
+        self.store.changes(cursor).await
+    }
+}
+
+async fn over<'a>(
+    server: &'a Damaging<'a>,
+    pool: &SqlitePool,
+    device: &MemberSecrets,
+) -> HybridStore<&'a Damaging<'a>> {
+    HybridStore::new(server, pool.clone(), hex::encode(device.did))
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_damaged_wrap_is_not_kept_and_the_good_one_opens_the_session_later() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    let server = Damaging::new(&g.store);
+    *server.wrap.lock().unwrap() = true;
+    assert!(
+        Session::open(&pool, over(&server, &pool, &g.b).await, &g.b)
+            .await
+            .is_err()
+    );
+
+    server.heal();
+    Session::open(&pool, over(&server, &pool, &g.b).await, &g.b)
+        .await
+        .unwrap();
+}
+
+/// A wrap that verified is kept, so a session opens while the server is out of reach.
+#[tokio::test]
+async fn a_wrap_that_opened_is_kept() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    let server = Damaging::new(&g.store);
+    Session::open(&pool, over(&server, &pool, &g.b).await, &g.b)
+        .await
+        .unwrap();
+    let held: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync2_held_keys")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(held > 0);
+}
+
+#[tokio::test]
+async fn a_damaged_wrap_held_from_before_gives_way_to_the_good_one() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    let commitment = URL_SAFE_NO_PAD.decode(&head(&g.store).kc).unwrap();
+    HeldStore::new(pool.clone())
+        .hold_key(0, &kc_name(&commitment), &hex::encode(g.b.did), &[7; 80])
+        .await
+        .unwrap();
+    let server = Damaging::new(&g.store);
+    assert!(
+        Session::open(&pool, over(&server, &pool, &g.b).await, &g.b)
+            .await
+            .is_err()
+    );
+    Session::open(&pool, over(&server, &pool, &g.b).await, &g.b)
+        .await
+        .unwrap();
+}
+
+/// On a LAN group a member can hand over a wrap this device can't check when it takes it.
+#[tokio::test]
+async fn a_damaged_wrap_taken_from_a_member_is_dropped_for_the_next_meeting() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    let server = Damaging::new(&g.store);
+    over(&server, &pool, &g.b).await;
+    let held = HeldStore::new(pool.clone());
+    let commitment = URL_SAFE_NO_PAD.decode(&head(&g.store).kc).unwrap();
+    let (kc, name) = (kc_name(&commitment), hex::encode(g.b.did));
+    held.hold_key(0, &kc, &name, &[7; 80]).await.unwrap();
+
+    assert!(Session::open(&pool, held.clone(), &g.b).await.is_err());
+    assert_eq!(held.key(0, &kc, &name).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_damaged_object_is_not_kept_and_the_good_one_is_read_later() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    let mut a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    let path = log_path(&hex::encode(g.a.did), 1);
+
+    let server = Damaging::new(&g.store);
+    *server.path.lock().unwrap() = Some(path.clone());
+    let mut b = Session::open(&pool_b, over(&server, &pool_b, &g.b).await, &g.b)
+        .await
+        .unwrap();
+    assert!(b.pull(&pool_b).await.unwrap().batches.is_empty());
+    assert_eq!(held_object(&pool_b, &path).await, None);
+    drop(b);
+
+    server.heal();
+    let mut b = Session::open(&pool_b, over(&server, &pool_b, &g.b).await, &g.b)
+        .await
+        .unwrap();
+    assert!(!b.pull(&pool_b).await.unwrap().batches.is_empty());
+    assert!(held_object(&pool_b, &path).await.is_some());
+}
+
+#[tokio::test]
+async fn a_damaged_object_held_from_before_gives_way_to_the_good_one() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    let mut a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    let path = log_path(&hex::encode(g.a.did), 1);
+    let mut damaged = (&g.store).get_object(&path).await.unwrap().unwrap();
+    damaged[150] ^= 1;
+    HeldStore::new(pool_b.clone())
+        .put_object(&path, damaged)
+        .await
+        .unwrap();
+
+    let server = Damaging::new(&g.store);
+    let mut b = Session::open(&pool_b, over(&server, &pool_b, &g.b).await, &g.b)
+        .await
+        .unwrap();
+    assert!(b.pull(&pool_b).await.unwrap().batches.is_empty());
+    assert!(!b.pull(&pool_b).await.unwrap().batches.is_empty());
+}
+
+async fn held_object(pool: &SqlitePool, path: &str) -> Option<Vec<u8>> {
+    HeldStore::new(pool.clone()).get_object(path).await.unwrap()
 }

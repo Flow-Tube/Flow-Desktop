@@ -117,6 +117,7 @@ export const SETTINGS = {
   SHOW_REGION_PICKER_IN_EXPLORE: "show_region_picker_in_explore",
   TRENDING_REGION: "trending_region",
   CONTENT_LANGUAGE: "content_language",
+  ORIGINAL_TITLES: "original_titles",
   DEEP_FLOW_ACTIVE: "deep_flow_active",
   DEEP_FLOW_ACTIVATED_AT: "deep_flow_activated_at",
   TAB_SESSION: "tab_session",
@@ -276,6 +277,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE]: "device",
   [SETTINGS.TRENDING_REGION]: "device",
   [SETTINGS.CONTENT_LANGUAGE]: "device",
+  [SETTINGS.ORIGINAL_TITLES]: "profile",
   [SETTINGS.DEEP_FLOW_ACTIVE]: "profile",
   [SETTINGS.DEEP_FLOW_ACTIVATED_AT]: "profile",
   [SETTINGS.TAB_SESSION]: "profile",
@@ -514,6 +516,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, "content", true, "wired"),
   str(SETTINGS.TRENDING_REGION, "content", "US", "wired"),
   str(SETTINGS.CONTENT_LANGUAGE, "content", "", "wired"),
+  bool(SETTINGS.ORIGINAL_TITLES, "content", false, "wired"),
   // Session state, not a preference: exporting it can permanently mute history recording
   // on the restoring device (its paired activated_at timestamp is internal too).
   bool(SETTINGS.DEEP_FLOW_ACTIVE, "content", false, "wired", "internal"),

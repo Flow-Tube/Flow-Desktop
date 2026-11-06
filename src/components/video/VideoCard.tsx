@@ -10,6 +10,7 @@ import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
+import { useOriginalTitle } from '../../lib/useOriginalTitle';
 import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
@@ -187,7 +188,8 @@ function VideoCardComponent({
   const overriddenTitle = dearrowOverride?.title || null;
   const overriddenThumbnail = dearrowOverride?.thumbnailUrl || null;
 
-  const displayTitle = overriddenTitle || video.title;
+  const originalTitle = useOriginalTitle(isChannel || overriddenTitle ? null : video.id, cardRef);
+  const displayTitle = overriddenTitle || originalTitle || video.title;
   const thumbnailCandidates = useMemo(
     () => resolveYoutubeThumbnailCandidates(video.id, overriddenThumbnail || video.thumbnailUrl, highResThumbnail),
     [highResThumbnail, overriddenThumbnail, video.id, video.thumbnailUrl],

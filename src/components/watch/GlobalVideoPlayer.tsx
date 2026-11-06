@@ -13,6 +13,7 @@ import { useTabsStore } from "../../store/useTabsStore";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
 import { glideFrame } from "../../lib/theaterGlide";
 import { FullscreenPanelHost } from "./FullscreenPanelHost";
+import { PLAYER_CHROME_HIDE_DELAY_MS } from "../../lib/playerChrome";
 
 type PlayerBounds = {
   top: number;
@@ -67,6 +68,55 @@ export function GlobalVideoPlayer() {
     frameRef,
     isFloating: isFloating && !isVideoFullscreen,
   });
+
+  const [miniChromeVisible, setMiniChromeVisible] = useState(false);
+  const miniChromeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isHoveringControlsRef = useRef(false);
+
+  const clearMiniChromeTimer = useCallback(() => {
+    if (miniChromeTimerRef.current !== null) {
+      clearTimeout(miniChromeTimerRef.current);
+      miniChromeTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleMiniChromeHide = useCallback(
+    (delayMs = PLAYER_CHROME_HIDE_DELAY_MS) => {
+      clearMiniChromeTimer();
+      if (isHoveringControlsRef.current) return;
+      miniChromeTimerRef.current = setTimeout(() => {
+        setMiniChromeVisible(false);
+        miniChromeTimerRef.current = null;
+      }, delayMs);
+    },
+    [clearMiniChromeTimer],
+  );
+
+  const handleFloatingPointerMove = useCallback(() => {
+    if (!isFloating) return;
+    setMiniChromeVisible(true);
+    scheduleMiniChromeHide();
+  }, [isFloating, scheduleMiniChromeHide]);
+
+  const handleFloatingPointerLeave = useCallback(() => {
+    if (!isFloating) return;
+    clearMiniChromeTimer();
+    isHoveringControlsRef.current = false;
+    setMiniChromeVisible(false);
+  }, [clearMiniChromeTimer, isFloating]);
+
+  useEffect(() => {
+    if (!isFloating) {
+      clearMiniChromeTimer();
+      isHoveringControlsRef.current = false;
+      setMiniChromeVisible(false);
+    }
+  }, [isFloating, clearMiniChromeTimer]);
+
+  useEffect(() => {
+    return () => clearMiniChromeTimer();
+  }, [clearMiniChromeTimer]);
+
   // The pop-out window owns playback in this mode, so this window renders no
   // media element — two decoding the same video would double audio and CPU.
   const isPoppedOut = videoPlayerMode === "window";
@@ -312,6 +362,12 @@ export function GlobalVideoPlayer() {
       <div
         ref={frameRef}
         onWheel={handleWheel}
+        {...dragBinds}
+        onPointerMove={(e) => {
+          dragBinds.onPointerMove?.(e);
+          if (isFloating) handleFloatingPointerMove();
+        }}
+        onPointerLeave={isFloating ? handleFloatingPointerLeave : undefined}
         className={
           isVideoFullscreen
             ? "fixed z-[300] flex overflow-hidden bg-chrome-black"
@@ -322,19 +378,30 @@ export function GlobalVideoPlayer() {
             : "fixed z-30 rounded-xl bg-chrome-black"
         }
         style={frameStyle}
-        {...dragBinds}
       >
         {isFloating && (
           <>
             <div
-              className="pointer-events-none absolute left-2 top-2 z-40 flex items-center justify-center rounded-full bg-chrome-black/80 px-2 py-1 text-chrome-white/60 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+              className={`pointer-events-none absolute left-2 top-2 z-40 flex items-center justify-center rounded-full bg-chrome-black/80 px-2 py-1 text-chrome-white/60 transition-opacity duration-200 ease-out ${
+                miniChromeVisible ? "opacity-100" : "opacity-0"
+              }`}
               aria-hidden="true"
             >
               <GripHorizontal size={14} />
             </div>
             <div
               data-drag-ignore="true"
-              className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+              onPointerEnter={() => {
+                isHoveringControlsRef.current = true;
+                clearMiniChromeTimer();
+              }}
+              onPointerLeave={() => {
+                isHoveringControlsRef.current = false;
+                scheduleMiniChromeHide();
+              }}
+              className={`absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 transition-opacity duration-200 ease-out focus-within:opacity-100 focus-within:pointer-events-auto ${
+                miniChromeVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              }`}
             >
               <button
                 type="button"

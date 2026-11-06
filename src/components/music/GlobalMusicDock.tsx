@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion, useTransform } from "framer-motion";
 import {
   Play,
@@ -8,6 +8,7 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
+  Volume1,
   Volume2,
   VolumeX,
   ListMusic,
@@ -59,7 +60,18 @@ export function GlobalMusicDock() {
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const volume = useMusicPlayerStore((s) => s.volume);
-  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>();
+  const [volumeFeedback, setVolumeFeedback] = useState<{ id: number; volume: number; muted: boolean } | null>(null);
+  const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showVolumeFeedback = useCallback((nextVolume: number, nextMuted: boolean) => {
+    setVolumeFeedback({ id: Date.now(), volume: nextVolume, muted: nextMuted });
+    if (volumeFeedbackTimerRef.current) clearTimeout(volumeFeedbackTimerRef.current);
+    volumeFeedbackTimerRef.current = setTimeout(() => {
+      setVolumeFeedback(null);
+    }, 1200);
+  }, []);
+
+  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>({ onFeedback: showVolumeFeedback });
 
   const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
   const next = useMusicPlayerStore((s) => s.next);
@@ -329,7 +341,27 @@ export function GlobalMusicDock() {
               />
             </div>
             <div className="absolute bottom-full right-2 mb-3">
-              <VolumePopover open={popover === "vol"} />
+              {volumeFeedback && popover !== "vol" && (
+                <div
+                  key={volumeFeedback.id}
+                  className="pointer-events-none mb-3 flex items-center gap-2 rounded-full border border-chrome-neutral-800 bg-surface-container px-3 py-1.5 text-chrome-neutral-100 animate-fade-in"
+                >
+                  {volumeFeedback.muted || volumeFeedback.volume === 0 ? (
+                    <VolumeX className="h-4 w-4 text-chrome-neutral-400" />
+                  ) : volumeFeedback.volume < 0.55 ? (
+                    <Volume1 className="h-4 w-4 text-chrome-neutral-300" />
+                  ) : (
+                    <Volume2 className="h-4 w-4 text-chrome-neutral-300" />
+                  )}
+                  <span className="font-mono text-xs tabular-nums text-chrome-neutral-200">
+                    {volumeFeedback.muted ? 0 : Math.round(volumeFeedback.volume * 100)}%
+                  </span>
+                </div>
+              )}
+              <VolumePopover
+                open={popover === "vol"}
+                onClose={() => setPopover((p) => (p === "vol" ? null : p))}
+              />
             </div>
           </motion.div>
         </motion.div>

@@ -180,6 +180,34 @@ async fn an_unlike_travels_and_an_older_peer_like_cannot_undo_it() {
 }
 
 #[tokio::test]
+async fn an_undone_history_removal_outlives_the_tombstone_a_peer_already_holds() {
+    let desk = memory_pool().await;
+    add_watch(&desk, "vid1", "2025-01-01T00:00:00+00:00").await;
+    delete_watch(&desk, "vid1").await;
+    add_watch(&desk, "vid1", "2025-01-01T00:00:00+00:00").await;
+    local_edits::stamp_restored_watch(&desk, "vid1")
+        .await
+        .unwrap();
+
+    let sent_before_undo = now_ms() - 1_000;
+    let tombstone = WatchHistoryRecord {
+        video_id: "vid1".to_string(),
+        hlc: Hlc::new(sent_before_undo, 0, PEER),
+        deleted: true,
+        ..WatchHistoryRecord::default()
+    };
+    apply_payload(
+        &desk,
+        DESK,
+        PEER,
+        &[stage(Collection::WatchHistory, &[tombstone], "w1")],
+    )
+    .await
+    .unwrap();
+    assert_eq!(watched_ids(&desk).await, ["vid1"]);
+}
+
+#[tokio::test]
 async fn an_undone_unlike_outlives_the_tombstone_a_peer_already_holds() {
     let desk = memory_pool().await;
     frontend_write(&desk, "liked_items", LIKED).await;

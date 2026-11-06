@@ -4,6 +4,7 @@ import { Clock, Disc3, Download, History, ListVideo, Music2, ThumbsUp } from "lu
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
+import { useHiddenLibrarySections } from "../lib/librarySections";
 import { useLibrary, type LibraryPlaylist } from "../lib/useLibrary";
 import { historyVideoToSong, type HistoryVideo } from "../lib/useHistory";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
@@ -205,6 +206,8 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
     loading,
   } = useLibrary();
 
+  const hidden = useHiddenLibrarySections();
+
   const isEmpty = (length: number) => !loading && length === 0;
 
   const statsText = getString(
@@ -230,90 +233,95 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
         </div>
       </header>
 
-      {/* History */}
-      <LibraryShelf
-        title={getString("library_history_label")}
-        icon={History}
-        viewAllTo="/history"
-        isEmpty={isEmpty(history.length)}
-      >
-        <HistoryShelfRow items={history} onPlay={onPlay} onAddToQueue={onAddToQueue} />
-      </LibraryShelf>
+      {!hidden.has("HISTORY") && (
+        <LibraryShelf
+          title={getString("library_history_label")}
+          icon={History}
+          viewAllTo="/history"
+          isEmpty={isEmpty(history.length)}
+        >
+          <HistoryShelfRow items={history} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </LibraryShelf>
+      )}
 
-      {/* Playlists */}
-      <LibraryShelf
-        title={getString("library_playlists_label")}
-        icon={ListVideo}
-        viewAllTo="/playlists"
-        isEmpty={isEmpty(playlists.length)}
-      >
-        <PlaylistShelfRow playlists={playlists} />
-      </LibraryShelf>
+      {!hidden.has("PLAYLISTS") && (
+        <LibraryShelf
+          title={getString("library_playlists_label")}
+          icon={ListVideo}
+          viewAllTo="/playlists"
+          isEmpty={isEmpty(playlists.length)}
+        >
+          <PlaylistShelfRow playlists={playlists} />
+        </LibraryShelf>
+      )}
 
-      {/* Albums */}
-      <LibraryShelf
-        title={getString("albums_title")}
-        icon={Disc3}
-        viewAllTo="/albums"
-        isEmpty={isEmpty(savedAlbums.length)}
-      >
-        <AlbumShelfRow albums={savedAlbums} onOpenAlbum={handleOpenAlbum} />
-      </LibraryShelf>
+      {!hidden.has("ALBUMS") && (
+        <LibraryShelf
+          title={getString("albums_title")}
+          icon={Disc3}
+          viewAllTo="/albums"
+          isEmpty={isEmpty(savedAlbums.length)}
+        >
+          <AlbumShelfRow albums={savedAlbums} onOpenAlbum={handleOpenAlbum} />
+        </LibraryShelf>
+      )}
 
-      {/* Saved Shorts */}
-      <LibraryShelf
-        title={getString("library_saved_shorts_label")}
-        icon={ShortsIcon}
-        viewAllTo="/saved-shorts"
-        isEmpty={isEmpty(savedShorts.length)}
-      >
-        <ShortsShelfRow shorts={savedShorts} />
-      </LibraryShelf>
+      {!hidden.has("SAVED_SHORTS") && (
+        <LibraryShelf
+          title={getString("library_saved_shorts_label")}
+          icon={ShortsIcon}
+          viewAllTo="/saved-shorts"
+          isEmpty={isEmpty(savedShorts.length)}
+        >
+          <ShortsShelfRow shorts={savedShorts} />
+        </LibraryShelf>
+      )}
 
-      {/* Watch Later */}
-      <LibraryShelf
-        title={getString("library_watch_later_label")}
-        icon={Clock}
-        viewAllTo="/watch-later"
-        isEmpty={isEmpty(watchLater.length)}
-      >
-        <VideoShelfRow videos={watchLater} onPlay={onPlay} onAddToQueue={onAddToQueue} />
-      </LibraryShelf>
+      {!hidden.has("WATCH_LATER") && (
+        <LibraryShelf
+          title={getString("library_watch_later_label")}
+          icon={Clock}
+          viewAllTo="/watch-later"
+          isEmpty={isEmpty(watchLater.length)}
+        >
+          <VideoShelfRow videos={watchLater} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </LibraryShelf>
+      )}
 
-      {/* Likes */}
-      <LibraryShelf
-        title={getString("library_likes_label")}
-        icon={ThumbsUp}
-        viewAllTo="/liked"
-        isEmpty={isEmpty(liked.length)}
-      >
-        <HistoryShelfRow items={liked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
-      </LibraryShelf>
+      {!hidden.has("LIKES") && (
+        <LibraryShelf
+          title={getString("library_likes_label")}
+          icon={ThumbsUp}
+          viewAllTo="/liked"
+          isEmpty={isEmpty(liked.length)}
+        >
+          <HistoryShelfRow items={liked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </LibraryShelf>
+      )}
 
-      {/* Notes */}
-      <NotesShelf />
+      {!hidden.has("NOTES") && <NotesShelf />}
 
-      {/* Video downloads */}
-      <LibraryShelf
-        title={getString("library_video_downloads_label")}
-        icon={Download}
-        viewAllTo="/downloads"
-        isEmpty={isEmpty(videoDownloads.length)}
-      >
-        <DownloadVideoShelfRow videos={videoDownloads} onPlay={onPlay} />
-      </LibraryShelf>
+      {!hidden.has("VIDEO_DOWNLOADS") && (
+        <LibraryShelf
+          title={getString("library_video_downloads_label")}
+          icon={Download}
+          viewAllTo="/downloads"
+          isEmpty={isEmpty(videoDownloads.length)}
+        >
+          <DownloadVideoShelfRow videos={videoDownloads} onPlay={onPlay} />
+        </LibraryShelf>
+      )}
 
-      {/* Music downloads */}
-      <LibraryShelf
-        title={getString("library_music_downloads_label")}
-        icon={Music2}
-        viewAllTo="/downloads"
-        isEmpty={isEmpty(musicDownloads.length)}
-      >
-        <MusicDownloadShelfRow songs={musicDownloads} />
-      </LibraryShelf>
-
-      {/* STEP 5 — MD3 empty states */}
+      {!hidden.has("MUSIC_DOWNLOADS") && (
+        <LibraryShelf
+          title={getString("library_music_downloads_label")}
+          icon={Music2}
+          viewAllTo="/downloads"
+          isEmpty={isEmpty(musicDownloads.length)}
+        >
+          <MusicDownloadShelfRow songs={musicDownloads} />
+        </LibraryShelf>
+      )}
     </div>
   );
 };

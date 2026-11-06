@@ -50,6 +50,23 @@ pub async fn add_watch_record(
     Ok(())
 }
 
+/// Undo of a removal, which unlike a new watch must beat the deletion it takes back.
+#[tauri::command]
+pub async fn restore_watch_record(
+    app: AppHandle,
+    record: WatchHistoryRecord,
+    pool: State<'_, SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    watch_history::upsert_watch_record(&pool, &record)
+        .await
+        .map_err(ErrorResponse::from)?;
+    note_sync_failure(local_edits::stamp_restored_watch(&pool, &record.video_id).await);
+    if edits_sync(&app).await {
+        push_soon(&app);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn add_watch_records_bulk(
     app: AppHandle,
@@ -76,6 +93,42 @@ pub async fn delete_watch_record(
         push_soon(&app);
     }
     watch_history::delete_watch_record(&pool, &video_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_watch_records(
+    video_ids: Vec<String>,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<WatchHistoryRecord>, ErrorResponse> {
+    watch_history::get_watch_records(&pool, &video_ids)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_watch_history_years(
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<i64>, ErrorResponse> {
+    watch_history::watch_history_years(&pool)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn delete_short_watch_records(
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    if edits_sync(&app).await {
+        let shorts = watch_history::short_video_ids(&pool)
+            .await
+            .map_err(ErrorResponse::from)?;
+        note_sync_failure(local_edits::record_watch_deletions(&pool, shorts).await);
+        push_soon(&app);
+    }
+    watch_history::delete_short_watch_records(&pool)
         .await
         .map_err(ErrorResponse::from)
 }

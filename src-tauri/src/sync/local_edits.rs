@@ -13,6 +13,7 @@ use crate::sync::canonical::{Hlc, Playlist, SubscriptionGroup};
 use crate::sync::changes::{self, Change};
 use crate::sync::clock;
 use crate::sync::error::SyncError;
+use crate::sync::ledger;
 use crate::sync::mapping;
 use crate::sync::saved_shorts;
 
@@ -52,6 +53,11 @@ pub async fn record_watch_deletion(
                 .await?
         }
     };
+    record_watch_deletions(pool, ids).await
+}
+
+/// Record the deletion of these watch history rows.
+pub async fn record_watch_deletions(pool: &SqlitePool, ids: Vec<String>) -> Result<(), SyncError> {
     let now = clock::edit_ms(pool).await?;
     let edits: Vec<Change> = ids
         .into_iter()
@@ -59,6 +65,19 @@ pub async fn record_watch_deletion(
         .collect();
     let mut conn = pool.acquire().await?;
     changes::record(&mut conn, &edits).await
+}
+
+/// A row put back by Undo counts as written now: a deletion that has already left this device would
+/// beat its old time and delete it again here.
+pub async fn stamp_restored_watch(pool: &SqlitePool, video_id: &str) -> Result<(), SyncError> {
+    let at = clock::edit_ms(pool).await?;
+    let device_id = ledger::get_or_create_device_id(pool).await?;
+    sqlx::query("UPDATE watch_history SET updated_hlc = ? WHERE video_id = ?")
+        .bind(Hlc::new(at, 0, &device_id).to_string())
+        .bind(video_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 /// Whether writing settings `key` changes data that sync sends to other devices.

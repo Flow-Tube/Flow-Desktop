@@ -1,5 +1,5 @@
 import { getString } from "../lib/i18n/index";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AddAllToPlaylistDialog } from "../components/playlist/AddAllToPlaylistDialog";
@@ -23,7 +23,9 @@ import {
   savePlaylistToLibrary,
   updateStoredPlaylistDetails,
   updateStoredPlaylistTracks,
+  WATCH_LATER_PLAYLIST_ID,
 } from "../lib/playlistLibrary";
+import { sweepWatchedFromWatchLater } from "../lib/watchLaterCleanup";
 import { videoToFileEntry } from "../lib/playlistFile";
 import { filterVideosBySearch } from "../lib/playlistSearch";
 import { savePlaylistWhenLoaded } from "../lib/playlistTransfer";
@@ -144,6 +146,15 @@ export function PlaylistDetailsPage({
       load: () => (hasMore ? loadAllVideos().catch(() => videos) : Promise.resolve(videos)),
     });
   };
+
+  // Watched elsewhere since this list was last open.
+  const swept = useRef(false);
+  useEffect(() => {
+    if (playlistId !== WATCH_LATER_PLAYLIST_ID || loading || swept.current) return;
+    swept.current = true;
+    void sweepWatchedFromWatchLater(videos, handleTracksChanged);
+    // Once per visit, over what the page first loaded.
+  }, [playlistId, loading]);
 
   const handleExport = async () => {
     if (!meta) return;

@@ -16,6 +16,7 @@ import { isMusicVideo } from "../../lib/utils";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { shouldRecordWatchHistory } from "../../lib/deepFlow";
+import { noteWatchLaterFinished, noteWatchLaterProgress } from "../../lib/watchLaterCleanup";
 import { seekToTime } from "../../lib/playerSeek";
 import { progressTickBelongsTo } from "../../lib/playerProgress";
 import { classifyPlayerError } from "../../lib/playerError";
@@ -134,6 +135,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       // the 5s gate instead of every timeupdate tick. The history effect
       // below flushes the exact final position when the video changes.
       saveLocalWatchProgress(currentVideo.id, time, nextDuration);
+      noteWatchLaterProgress(currentVideo.id, time, nextDuration);
       void addWatchRecord({
         videoId: currentVideo.id,
         title: currentVideo.title,
@@ -200,6 +202,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     if (!currentVideo) return;
     endWatchSession();
     clearLocalWatchProgress(currentVideo.id);
+    noteWatchLaterFinished(currentVideo.id);
     if (repeatMode === "one") {
       seekToTime(0);
       setIsPlaying(true);

@@ -78,6 +78,8 @@ export function mapHistoryRecordToVideo(record: WatchHistoryRecord): HistoryVide
     watchDate: record.watchDate,
     watchProgressPercent: progress,
     isMusic: record.isMusic ?? false,
+    // A Short stays a Short from history, and opens in the Shorts player.
+    isShort: record.isShort ?? false,
   };
 }
 
@@ -105,7 +107,10 @@ export function useHistory() {
   const hasMore = useHistoryStore((state) => state.hasMore);
   const load = useHistoryStore((state) => state.load);
   const loadMore = useHistoryStore((state) => state.loadMore);
+  const offset = useHistoryStore((state) => state.offset);
   const removeHistoryItem = useHistoryStore((state) => state.remove);
+  const restoreHistoryItem = useHistoryStore((state) => state.restore);
+  const removeShorts = useHistoryStore((state) => state.removeShorts);
   const clearHistory = useHistoryStore((state) => state.clear);
 
   useEffect(() => {
@@ -117,9 +122,12 @@ export function useHistory() {
     loading: loading && !loaded,
     loadingMore,
     hasMore,
+    offset,
     loadMore,
     refreshHistory: () => load(true),
     removeHistoryItem,
+    restoreHistoryItem,
+    removeShorts,
     clearHistory,
   };
 }

@@ -17,6 +17,7 @@ import { REGION_OPTIONS } from '../../../lib/regionOptions';
 import { CONTENT_LANGUAGE_OPTIONS } from '../../../lib/contentLanguages';
 import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridColumns';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
+import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
 
 export function ContentTab() {
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
@@ -35,6 +36,7 @@ export function ContentTab() {
   const [liveChat, setLiveChat] = useBoolPref(SETTINGS.LIVE_CHAT_ENABLED, true);
   const [hideWatched, setHideWatched] = useBoolPref(SETTINGS.HIDE_WATCHED_VIDEOS, false);
   const [hideSeen, setHideSeen] = useBoolPref(SETTINGS.HIDE_SEEN_VIDEOS, false);
+  const [removeWatched, setRemoveWatched] = useBoolPref(SETTINGS.REMOVE_WATCHED_FROM_WATCH_LATER, false);
   const [blockedMode, setBlockedMode] = usePreference(SETTINGS.BLOCKED_CONTENT_MODE, 'blur');
   const [disableShorts, setDisableShorts] = useBoolPref(SETTINGS.DISABLE_SHORTS_PLAYER, false);
   const [shortsNav, setShortsNav] = useBoolPref(SETTINGS.SHORTS_NAVIGATION_ENABLED, true);
@@ -149,6 +151,7 @@ export function ContentTab() {
         <SettingItem title={getString('settings_live_chat')} description={getString('settings_live_chat_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)}><ToggleSwitch checked={liveChat} onChange={setLiveChat} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched')} description={getString('settings_hide_watched_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)}><ToggleSwitch checked={hideWatched} onChange={setHideWatched} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_hide_seen')} description={getString('settings_hide_seen_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_SEEN_VIDEOS)}><ToggleSwitch checked={hideSeen} onChange={setHideSeen} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_SEEN_VIDEOS)} /></SettingItem>
+        <SettingItem title={getString('settings_remove_watched_watch_later')} description={getString('settings_remove_watched_watch_later_desc')}><ToggleSwitch checked={removeWatched} onChange={setRemoveWatched} /></SettingItem>
         <SettingItem title={getString('settings_blocked_mode')} description={getString('settings_blocked_mode_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.BLOCKED_CONTENT_MODE)}>
           <Select value={blockedMode} onChange={setBlockedMode} disabled={isSettingDisabledUntilWired(SETTINGS.BLOCKED_CONTENT_MODE)} options={[
             { value: 'blur', label: getString('settings_blocked_mode_blur') },
@@ -173,6 +176,8 @@ export function ContentTab() {
           </SettingItem>
         )}
       </SettingsGroup>
+
+      <LibrarySectionsGroup />
 
       <SettingsGroup title={getString('settings_group_nav_tabs')}>
         <SettingItem title={getString('settings_tabs_enabled')} description={getString('settings_tabs_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)}><ToggleSwitch checked={tabsOn} onChange={setTabsOn} disabled={isSettingDisabledUntilWired(SETTINGS.TABS_ENABLED)} /></SettingItem>

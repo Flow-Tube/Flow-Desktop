@@ -296,9 +296,14 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         .map(|part| part.text.to_string());
     let image = &metadata(lockup)["image"];
     let collaborators = collaborators_in(&image["avatarStackViewModel"]);
-    let channel_id = image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
-        ["innertubeCommand"]["browseEndpoint"]["browseId"]
-        .as_str()
+    let avatar_vm = &image["decoratedAvatarViewModel"];
+    let browse_endpoint = avatar_vm["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"]["browseEndpoint"]
+        .as_object()
+        .or_else(|| avatar_vm["onTap"]["innertubeCommand"]["browseEndpoint"].as_object())
+        .or_else(|| avatar_vm["avatar"]["avatarViewModel"]["rendererContext"]["commandContext"]["onTap"]["innertubeCommand"]["browseEndpoint"].as_object());
+    let channel_id = browse_endpoint
+        .and_then(|e| e.get("browseId"))
+        .and_then(|id| id.as_str())
         .map(ToOwned::to_owned)
         .or_else(|| collaborators.first().map(|c| c.channel_id.clone()));
 
@@ -312,21 +317,32 @@ pub fn lockup_item(lockup: &Value) -> Option<RelatedContentItem> {
         channel_name.clear();
     }
 
-    if channel_name.is_empty()
-        && let Some(label) = image["decoratedAvatarViewModel"]["a11yLabel"].as_str()
-        && let Some(extracted) = extract_channel_from_a11y_label(label)
-    {
-        channel_name = extracted.to_string();
+    if channel_name.is_empty() {
+        let label_candidate = avatar_vm["a11yLabel"]
+            .as_str()
+            .or_else(|| avatar_vm["accessibilityLabel"].as_str())
+            .or_else(|| avatar_vm["accessibility"]["accessibilityData"]["label"].as_str())
+            .or_else(|| avatar_vm["avatar"]["avatarViewModel"]["accessibility"]["accessibilityData"]["label"].as_str())
+            .or_else(|| avatar_vm["avatar"]["avatarViewModel"]["image"]["accessibility"]["accessibilityData"]["label"].as_str());
+        if let Some(label) = label_candidate
+            && let Some(extracted) = extract_channel_from_a11y_label(label)
+        {
+            channel_name = extracted.to_string();
+        }
     }
 
     if channel_name.is_empty()
-        && let Some(base_url) = image["decoratedAvatarViewModel"]["rendererContext"]["commandContext"]["onTap"]
-            ["innertubeCommand"]["browseEndpoint"]["canonicalBaseUrl"]
-            .as_str()
+        && let Some(base_url) = browse_endpoint
+            .and_then(|e| e.get("canonicalBaseUrl"))
+            .and_then(|u| u.as_str())
     {
         let handle = base_url
             .strip_prefix("/@")
             .or_else(|| base_url.strip_prefix("@"))
+            .or_else(|| base_url.strip_prefix("/c/"))
+            .or_else(|| base_url.strip_prefix("/channel/"))
+            .or_else(|| base_url.strip_prefix("/user/"))
+            .or_else(|| base_url.strip_prefix("/"))
             .unwrap_or(base_url)
             .trim();
         if !handle.is_empty() && !is_view_or_stream_count(handle) {

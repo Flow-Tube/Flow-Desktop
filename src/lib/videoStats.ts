@@ -25,7 +25,11 @@ export function isStatsString(text: string | null | undefined): boolean {
 export function cleanChannelName(channelName: string | null | undefined): string {
   if (!channelName) return "";
   const trimmed = channelName.trim();
-  if (isStatsString(trimmed)) {
+  if (
+    isStatsString(trimmed) ||
+    trimmed === "Unknown Channel" ||
+    trimmed === "Unknown"
+  ) {
     return "";
   }
   return trimmed;

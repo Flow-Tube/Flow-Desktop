@@ -29,6 +29,8 @@ describe("videoStats", () => {
   it("cleans channel names properly", () => {
     expect(cleanChannelName("105K views")).toBe("");
     expect(cleanChannelName("4.9M views")).toBe("");
+    expect(cleanChannelName("Unknown Channel")).toBe("");
+    expect(cleanChannelName("Unknown")).toBe("");
     expect(cleanChannelName("Maddock Films")).toBe("Maddock Films");
   });
 });

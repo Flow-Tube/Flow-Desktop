@@ -96,6 +96,7 @@ pub struct ProfilesView {
     pub default_id: String,
     pub active_id: String,
     pub max_profiles: usize,
+    pub ask_whos_watching: bool,
 }
 
 pub struct ProfileService {
@@ -104,6 +105,8 @@ pub struct ProfileService {
     edits: Mutex<()>,
     /// The profile a committed switch is heading to.
     switching: std::sync::Mutex<Option<String>>,
+    /// The launch question is for the first window of a process, not for a reload or a later one.
+    launch_question_taken: std::sync::atomic::AtomicBool,
     /// Removes a deleted profile's scrobbling item; tests swap it so they never touch the
     /// real keychain.
     forget_keychain_item: fn(&str) -> bool,
@@ -116,6 +119,7 @@ impl ProfileService {
             running,
             edits: Mutex::new(()),
             switching: std::sync::Mutex::new(None),
+            launch_question_taken: std::sync::atomic::AtomicBool::new(false),
             forget_keychain_item: forget_in_keychain,
         }
     }
@@ -149,9 +153,31 @@ impl ProfileService {
             // The process runs as one profile for its whole life, even if the registry already
             // names the next one during a switch.
             active_id: self.running_id(&state),
+            ask_whos_watching: state.ask_whos_watching,
             profiles: state.profiles,
             max_profiles: registry::MAX_PROFILES,
         })
+    }
+
+    /// Whether this launch should ask who's watching. True once per process at most, and never
+    /// right after a switch, whose choice has just been made.
+    pub fn take_launch_question(&self) -> AppResult<bool> {
+        if self
+            .launch_question_taken
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+            || self.running.after_switch
+        {
+            return Ok(false);
+        }
+        let state = self.load()?;
+        Ok(state.ask_whos_watching && state.profiles.len() >= 2)
+    }
+
+    pub async fn set_ask_whos_watching(&self, ask: bool) -> AppResult<()> {
+        let _edit = self.edits.lock().await;
+        let mut state = self.load()?;
+        state.ask_whos_watching = ask;
+        self.save(&state)
     }
 
     /// A locked keychain must not stop a delete; the item is retried at the next start.
@@ -791,6 +817,55 @@ mod tests {
             default_id,
             "this process stays Default"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_launch_question_needs_two_profiles_and_comes_once() {
+        let (dir, service, pool) = setup().await;
+        assert!(!service.take_launch_question().unwrap(), "one profile");
+        std::fs::remove_dir_all(dir).unwrap();
+        pool.close().await;
+
+        let (dir, service, pool) = setup().await;
+        service
+            .create(&pool, request("Study", CopyParts::default()))
+            .await
+            .unwrap();
+        assert!(service.list().unwrap().ask_whos_watching);
+        assert!(service.take_launch_question().unwrap());
+        assert!(!service.take_launch_question().unwrap(), "only once");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_launch_question_can_be_turned_off() {
+        let (dir, service, pool) = setup().await;
+        service
+            .create(&pool, request("Study", CopyParts::default()))
+            .await
+            .unwrap();
+        service.set_ask_whos_watching(false).await.unwrap();
+        assert!(!service.list().unwrap().ask_whos_watching);
+        assert!(!service.take_launch_question().unwrap());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_switch_is_not_asked_about_again() {
+        let (dir, service, pool) = setup().await;
+        service
+            .create(&pool, request("Study", CopyParts::default()))
+            .await
+            .unwrap();
+        let after_switch = ProfileService::new(
+            dir.clone(),
+            ActiveProfile {
+                after_switch: true,
+                ..ActiveProfile::fallback_default()
+            },
+        );
+        assert!(!after_switch.take_launch_question().unwrap());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

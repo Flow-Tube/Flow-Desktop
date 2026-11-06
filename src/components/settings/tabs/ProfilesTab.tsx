@@ -6,6 +6,8 @@ import { MediaMenu } from "../../ui/MediaMenu";
 import { ProfileAvatar } from "../../ui/ProfileAvatar";
 import { SkeletonLoader } from "../../ui/SkeletonLoader";
 import type { MenuAnchor } from "../../ui/AnchoredPortalMenu";
+import { ToggleSwitch } from "../../ui/ToggleSwitch";
+import { SettingItem } from "../SettingItem";
 import { SettingsGroup } from "../SettingsGroup";
 import { ProfileEditorDialog } from "../../profiles/ProfileEditorDialog";
 import type { Profile } from "../../../lib/api/profiles";
@@ -101,11 +103,17 @@ export function ProfilesTab() {
   const loading = useProfilesStore((state) => state.loading);
   const loadError = useProfilesStore((state) => state.loadError);
   const load = useProfilesStore((state) => state.load);
+  const setAsk = useProfilesStore((state) => state.setAsk);
+  const showToast = useUiStore((state) => state.showToast);
   const [editing, setEditing] = useState<Editing>(null);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const onAskChange = (ask: boolean) => {
+    setAsk(ask).catch(() => showToast({ message: getString("profiles_ask_whos_watching_failed"), variant: "error" }));
+  };
 
   const atLimit = view ? view.profiles.length >= view.maxProfiles : true;
 
@@ -152,6 +160,14 @@ export function ProfilesTab() {
           <span className="text-xs text-chrome-neutral-400">{getString("profiles_limit_reached", view.maxProfiles)}</span>
         )}
       </div>
+
+      {view && (
+        <SettingsGroup>
+          <SettingItem title={getString('profiles_ask_whos_watching')} description={getString('profiles_ask_whos_watching_summary')}>
+            <ToggleSwitch checked={view.askWhosWatching} onChange={onAskChange} />
+          </SettingItem>
+        </SettingsGroup>
+      )}
 
       {editing && <ProfileEditorDialog profile={editing.profile} onClose={() => setEditing(null)} />}
     </div>

@@ -56,6 +56,9 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "theme_custom" },
     { title: "theme_file", summary: "theme_file_description" },
   ]),
+  ...rows("profiles", [
+    { title: "profiles_ask_whos_watching", summary: "profiles_ask_whos_watching_summary", keywords: ["launch", "startup", "picker"] },
+  ]),
   ...rows("player", [
     { title: "settings_autoplay", summary: "settings_autoplay_desc" },
     { title: "settings_loop_video", summary: "settings_loop_video_desc" },

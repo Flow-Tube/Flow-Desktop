@@ -82,6 +82,25 @@ pub async fn profiles_delete(
         .map_err(|e| crate::commands::linked::err(&e))
 }
 
+/// Whether this launch should ask who's watching; true once per process at most.
+#[tauri::command]
+pub fn profiles_take_launch_question(
+    service: State<'_, ProfileService>,
+) -> Result<bool, ErrorResponse> {
+    service.take_launch_question().map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn profiles_set_ask_whos_watching(
+    ask: bool,
+    service: State<'_, ProfileService>,
+) -> Result<(), ErrorResponse> {
+    service
+        .set_ask_whos_watching(ask)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
 #[tauri::command]
 pub async fn profiles_prepare_switch(
     id: String,

@@ -116,8 +116,8 @@ use commands::pip::{
 use commands::process::relaunch_app;
 use commands::profiles::{
     profiles_cancel_switch, profiles_create, profiles_delete, profiles_hold_link, profiles_list,
-    profiles_prepare_switch, profiles_rename, profiles_set_look, profiles_set_photo,
-    profiles_switch, profiles_take_held_link,
+    profiles_prepare_switch, profiles_rename, profiles_set_ask_whos_watching, profiles_set_look,
+    profiles_set_photo, profiles_switch, profiles_take_held_link, profiles_take_launch_question,
 };
 use commands::recommendation::{
     add_blocked_topic, add_preferred_topic, block_channel, bootstrap_from_history,
@@ -644,6 +644,8 @@ pub fn run() {
             profiles_switch,
             profiles_hold_link,
             profiles_take_held_link,
+            profiles_take_launch_question,
+            profiles_set_ask_whos_watching,
             relaunch_app,
             write_backup_file,
             write_lyrics_file,

@@ -12,6 +12,7 @@ PROFILES
 - A new profile starts fresh with a short setup, or copies your settings, subscriptions or recommendations. Profiles are not locked: anyone using the computer can switch.
 - Only the Default profile syncs with your phone. A master backup now holds every profile and restores them all.
 - The recommendation engine's profile is now called your taste profile.
+- With two or more profiles, Flow can ask who's watching when it opens. Turn Ask who's watching off in Settings > Profiles.
 
 SYNC
 - Restoring with your recovery key now asks which devices you still have, and signs out the rest before it syncs anything new, so a lost device can't read what comes next.

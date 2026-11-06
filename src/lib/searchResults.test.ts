@@ -6,9 +6,11 @@ import {
   isCategoryOffered,
   pickTopResult,
   videoSections,
+  withoutHidden,
+  type CombinedSearchResults,
 } from './searchResults';
 import type { ArtistItem } from '../types/music';
-import type { SearchChannel } from '../types/video';
+import type { SearchChannel, VideoSummary } from '../types/video';
 
 const channel = (channelId: string): SearchChannel => ({ channelId, name: channelId, isVerified: false });
 
@@ -61,5 +63,35 @@ describe('music results', () => {
     expect(isCategoryOffered('playlists', ['featured_playlists'])).toBe(true);
     expect(isCategoryOffered('videos', ['songs'])).toBe(true);
     expect(isCategoryOffered('episodes', null)).toBe(true);
+  });
+});
+
+describe('withoutHidden', () => {
+  const video = (id: string, channelId: string) => ({ id, channelId, title: id }) as VideoSummary;
+  const results = {
+    ...emptyResults(),
+    topResult: { kind: 'video', item: video('top', 'UCblocked') },
+    videos: [video('a', 'UCok'), video('b', 'channel:UCblocked'), video('dismissed', 'UCok')],
+    live: [video('c', 'UCblocked')],
+    channels: [{ channelId: 'UCblocked' }, { channelId: 'UCok' }],
+    shelves: [
+      { title: 'gone', videos: [video('d', 'UCblocked')] },
+      { title: 'kept', videos: [video('e', 'UCok')] },
+    ],
+  } as CombinedSearchResults;
+  const hidden = { videoIds: new Set(['dismissed']), channelIds: new Set(['UCblocked']) };
+
+  it('removes blocked channels and dismissed videos everywhere', () => {
+    const visible = withoutHidden(results, hidden);
+
+    expect(visible.topResult).toBeNull();
+    expect(visible.videos.map((v) => v.id)).toEqual(['a']);
+    expect(visible.live).toEqual([]);
+    expect(visible.channels.map((c) => c.channelId)).toEqual(['UCok']);
+    expect(visible.shelves.map((s) => s.title)).toEqual(['kept']);
+  });
+
+  it('returns the same results when nothing is hidden', () => {
+    expect(withoutHidden(results, { videoIds: new Set(), channelIds: new Set() })).toBe(results);
   });
 });

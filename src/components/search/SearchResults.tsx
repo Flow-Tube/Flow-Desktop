@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Loader2, Play, Search as SearchIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { VideoGrid } from '../video/VideoGrid';
@@ -22,7 +23,8 @@ import type {
   UseCombinedSearchReturn,
 } from '../../lib/useCombinedSearch';
 import type { AlbumItem, ArtistItem, EpisodeItem, PlaylistItem, PodcastItem, SongItem } from '../../types/music';
-import { episodeAsSong } from '../../lib/searchResults';
+import { episodeAsSong, withoutHidden } from '../../lib/searchResults';
+import { useFeedActionsStore } from '../../store/useFeedActionsStore';
 import type { PlaylistSummary, SearchChannel, SearchShelf, VideoSummary } from '../../types/video';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
 
@@ -62,8 +64,14 @@ export function SearchResults({ search, onPlayVideo, onAddToQueue }: SearchResul
   const wideGridStyle = useGridStyle();
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
 
+  const dismissedVideoIds = useFeedActionsStore((s) => s.dismissedVideoIds);
+  const blockedChannelIds = useFeedActionsStore((s) => s.blockedChannelIds);
+  const r = useMemo(
+    () => withoutHidden(search.results, { videoIds: dismissedVideoIds, channelIds: blockedChannelIds }),
+    [search.results, dismissedVideoIds, blockedChannelIds],
+  );
+
   const {
-    results: r,
     filterType,
     setFilterType,
     isLoading,

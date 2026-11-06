@@ -44,6 +44,36 @@ export interface CombinedSearchResults {
   correction: SearchCorrection | null;
 }
 
+/** What you said outright you don't want. Inferred signals don't apply, since a search is your own request. */
+export interface SearchExclusions {
+  videoIds: ReadonlySet<string>;
+  channelIds: ReadonlySet<string>;
+}
+
+const cleanChannelId = (id?: string | null) => (id ?? '').replace('channel:', '');
+
+export function withoutHidden(results: CombinedSearchResults, hidden: SearchExclusions): CombinedSearchResults {
+  if (hidden.videoIds.size === 0 && hidden.channelIds.size === 0) return results;
+  const hidesChannel = (id?: string | null) => hidden.channelIds.has(cleanChannelId(id));
+  const visible = <T extends { id: string; channelId?: string | null }>(videos: T[]) =>
+    videos.filter((video) => !hidden.videoIds.has(video.id) && !hidesChannel(video.channelId));
+  const top = results.topResult;
+  const topHidden =
+    (top?.kind === 'video' && visible([top.item]).length === 0) ||
+    (top?.kind === 'channel' && hidesChannel(top.item.channelId));
+  return {
+    ...results,
+    topResult: topHidden ? null : top,
+    videos: visible(results.videos),
+    live: visible(results.live),
+    shorts: visible(results.shorts),
+    channels: results.channels.filter((channel) => !hidesChannel(channel.channelId)),
+    shelves: results.shelves
+      .map((shelf) => ({ ...shelf, videos: visible(shelf.videos) }))
+      .filter((shelf) => shelf.videos.length > 0),
+  };
+}
+
 export function emptyResults(): CombinedSearchResults {
   return {
     topResult: null,

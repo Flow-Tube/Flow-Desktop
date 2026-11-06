@@ -141,6 +141,16 @@ export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> 
 }
 
 /** The video's category, from a small request of its own. */
+export interface PaidPromotionLabel {
+  text: string | null;
+  durationMs: number;
+}
+
+export async function getPaidPromotion(videoId: string): Promise<PaidPromotionLabel | null> {
+  if (!(await isTauriEnv())) return null;
+  return invokeBackend<PaidPromotionLabel | null>("get_paid_promotion", { videoId });
+}
+
 export async function getVideoCategory(videoId: string): Promise<string | null> {
   if (!(await isTauriEnv())) return null;
   return invokeBackend<string | null>("get_video_category", { videoId });

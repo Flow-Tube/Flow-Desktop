@@ -68,6 +68,7 @@ import { RemoteDock } from "./components/playon/RemoteDock";
 import { ConsentDialog } from "./components/playon/ConsentDialog";
 import { MusicOverlay } from "./components/music/MusicOverlay";
 import { EqualizerDialog } from "./components/music/eq/EqualizerDialog";
+import { ContinueWatchingMini } from "./components/player/ContinueWatchingMini";
 import { GlobalVideoPlayer } from "./components/watch/GlobalVideoPlayer";
 import { PipWindowController } from "./components/pip/PipWindowController";
 import { AddToAlbumModal } from "./components/music/AddToAlbumModal";
@@ -320,6 +321,7 @@ function App() {
       {IS_MAIN_WINDOW && (
         <>
           <GlobalMusicAudio />
+          <ContinueWatchingMini />
           <LayoutGroup>
             <GlobalMusicDock />
             <RemoteDock />

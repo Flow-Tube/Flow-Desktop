@@ -5,13 +5,15 @@
 
 /// Device settings defined in `src/lib/settings/schema.ts` (`SETTING_SCOPES`); a test keeps the
 /// two lists equal.
-pub const SCHEMA_DEVICE_KEYS: [&str; 50] = [
+pub const SCHEMA_DEVICE_KEYS: [&str; 52] = [
     "allow_volume_boost",
     "player_volume",
     "player_volume_boost",
     "player_muted",
     "long_press_playback_speed",
     "double_tap_seek_seconds",
+    "idle_progress_strip_enabled",
+    "frame_step_buttons_enabled",
     "show_region_picker_in_explore",
     "trending_region",
     "content_language",

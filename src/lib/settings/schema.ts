@@ -1,5 +1,6 @@
 import type { StringKey } from "../i18n/index";
 import { IS_LINUX_RUNTIME } from "../platform";
+import { MINI_PLAYER_SIZES } from "../miniPlayerSize";
 
 export type SettingValueType = "boolean" | "number" | "string" | "json";
 export type SettingArea =
@@ -71,6 +72,8 @@ export const SETTINGS = {
   SUBTITLE_BOLD: "subtitle_bold",
   MINI_PLAYER_SHOW_SKIP_CONTROLS: "mini_player_show_skip_controls",
   MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS: "mini_player_show_next_prev_controls",
+  MINI_PLAYER_CONTINUE_WATCHING_ENABLED: "mini_player_continue_watching_enabled",
+  MINI_PLAYER_SIZE: "mini_player_size",
   MINI_PLAYER_POSITION: "mini_player_position",
   SHOW_FULLSCREEN_TITLE: "show_fullscreen_title",
   PLAYER_BUTTON_NEXT_PREVIOUS: "player_button_next_previous",
@@ -89,6 +92,9 @@ export const SETTINGS = {
   AMBIENT_GLOW_ENABLED: "ambient_glow_enabled",
   AMBIENT_MODE_INTENSITY: "ambient_mode_intensity",
   ADAPTIVE_PLAYER_SIZE_ENABLED: "adaptive_player_size_enabled",
+  PAID_PROMOTION_LABEL: "paid_promotion_label",
+  IDLE_PROGRESS_STRIP_ENABLED: "idle_progress_strip_enabled",
+  FRAME_STEP_BUTTONS_ENABLED: "frame_step_buttons_enabled",
   AUTO_PIP_ENABLED: "auto_pip_enabled",
   MANUAL_PIP_BUTTON_ENABLED: "manual_pip_button_enabled",
   PIP_SEPARATE_WINDOW: "pip_separate_window",
@@ -272,6 +278,8 @@ export const SETTING_SCOPES = {
   [SETTINGS.SUBTITLE_BOLD]: "profile",
   [SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS]: "profile",
   [SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS]: "profile",
+  [SETTINGS.MINI_PLAYER_CONTINUE_WATCHING_ENABLED]: "profile",
+  [SETTINGS.MINI_PLAYER_SIZE]: "profile",
   [SETTINGS.MINI_PLAYER_POSITION]: "profile",
   [SETTINGS.SHOW_FULLSCREEN_TITLE]: "profile",
   [SETTINGS.PLAYER_BUTTON_NEXT_PREVIOUS]: "profile",
@@ -290,6 +298,9 @@ export const SETTING_SCOPES = {
   [SETTINGS.AMBIENT_GLOW_ENABLED]: "profile",
   [SETTINGS.AMBIENT_MODE_INTENSITY]: "profile",
   [SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED]: "profile",
+  [SETTINGS.PAID_PROMOTION_LABEL]: "profile",
+  [SETTINGS.IDLE_PROGRESS_STRIP_ENABLED]: "device",
+  [SETTINGS.FRAME_STEP_BUTTONS_ENABLED]: "device",
   [SETTINGS.AUTO_PIP_ENABLED]: "profile",
   [SETTINGS.MANUAL_PIP_BUTTON_ENABLED]: "profile",
   [SETTINGS.PIP_SEPARATE_WINDOW]: "profile",
@@ -550,6 +561,8 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.SUBTITLE_BOLD, "player", true, "wired"),
   bool(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS, "player", true, "wired"),
   bool(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, "player", true, "wired"),
+  bool(SETTINGS.MINI_PLAYER_CONTINUE_WATCHING_ENABLED, "player", true, "wired"),
+  str(SETTINGS.MINI_PLAYER_SIZE, "player", "medium", "wired", MINI_PLAYER_SIZES),
   json(SETTINGS.MINI_PLAYER_POSITION, "player", "null", "wired", "internal", "internal"),
   bool(SETTINGS.SHOW_FULLSCREEN_TITLE, "player", false, "wired"),
   bool(SETTINGS.PLAYER_BUTTON_NEXT_PREVIOUS, "player", true, "wired"),
@@ -568,6 +581,9 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.AMBIENT_GLOW_ENABLED, "player", false, "wired"),
   num(SETTINGS.AMBIENT_MODE_INTENSITY, "player", 60, "wired", 10, 100),
   bool(SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED, "player", true, "wired"),
+  bool(SETTINGS.PAID_PROMOTION_LABEL, "player", false, "wired"),
+  bool(SETTINGS.IDLE_PROGRESS_STRIP_ENABLED, "player", true, "wired"),
+  bool(SETTINGS.FRAME_STEP_BUTTONS_ENABLED, "player", false, "wired"),
   bool(SETTINGS.AUTO_PIP_ENABLED, "player", true, "wired"),
   bool(SETTINGS.MANUAL_PIP_BUTTON_ENABLED, "player", true, "wired"),
   bool(SETTINGS.PIP_SEPARATE_WINDOW, "player", true, "wired"),

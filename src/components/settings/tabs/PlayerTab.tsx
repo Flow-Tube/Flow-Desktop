@@ -61,6 +61,12 @@ export function PlayerTab() {
   const [miniSkip, setMiniSkip] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_SKIP_CONTROLS, true);
   const [miniNextPrev, setMiniNextPrev] = useBoolPref(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS, true);
 
+  const [miniContinueWatching, setMiniContinueWatching] = useBoolPref(SETTINGS.MINI_PLAYER_CONTINUE_WATCHING_ENABLED);
+  const [miniPlayerSize, setMiniPlayerSize] = usePreference(SETTINGS.MINI_PLAYER_SIZE);
+  const [paidPromotion, setPaidPromotion] = useBoolPref(SETTINGS.PAID_PROMOTION_LABEL);
+  const [idleProgress, setIdleProgress] = useBoolPref(SETTINGS.IDLE_PROGRESS_STRIP_ENABLED);
+  const [frameStep, setFrameStep] = useBoolPref(SETTINGS.FRAME_STEP_BUTTONS_ENABLED);
+
   const [fullscreenTitle, setFullscreenTitle] = useBoolPref(SETTINGS.SHOW_FULLSCREEN_TITLE, false);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
@@ -177,6 +183,16 @@ export function PlayerTab() {
         <SettingItem title={getString('settings_next_previous')} description={getString('settings_next_previous_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS)}>
           <ToggleSwitch checked={miniNextPrev} onChange={setMiniNextPrev} disabled={isSettingDisabledUntilWired(SETTINGS.MINI_PLAYER_SHOW_NEXT_PREV_CONTROLS)} />
         </SettingItem>
+        <SettingItem title={getString('settings_mini_continue_watching')} description={getString('settings_mini_continue_watching_desc')}>
+          <ToggleSwitch checked={miniContinueWatching} onChange={setMiniContinueWatching} />
+        </SettingItem>
+        <SettingItem title={getString('settings_mini_player_size')}>
+          <Select value={miniPlayerSize} onChange={setMiniPlayerSize} options={[
+            { value: 'small', label: getString('settings_mini_player_size_small') },
+            { value: 'medium', label: getString('settings_mini_player_size_medium') },
+            { value: 'large', label: getString('settings_mini_player_size_large') },
+          ]} />
+        </SettingItem>
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_pip')}>
@@ -228,6 +244,15 @@ export function PlayerTab() {
         </SettingItem>
         <SettingItem title={getString('settings_adaptive_player')} description={getString('settings_adaptive_player_desc')}>
           <ToggleSwitch checked={adaptiveSize} onChange={setAdaptiveSize} />
+        </SettingItem>
+        <SettingItem title={getString('settings_paid_promotion')} description={getString('settings_paid_promotion_desc')}>
+          <ToggleSwitch checked={paidPromotion} onChange={setPaidPromotion} />
+        </SettingItem>
+        <SettingItem title={getString('settings_idle_progress')} description={getString('settings_idle_progress_desc')}>
+          <ToggleSwitch checked={idleProgress} onChange={setIdleProgress} />
+        </SettingItem>
+        <SettingItem title={getString('settings_frame_step')} description={getString('settings_frame_step_desc')}>
+          <ToggleSwitch checked={frameStep} onChange={setFrameStep} />
         </SettingItem>
       </SettingsGroup>
     </div>

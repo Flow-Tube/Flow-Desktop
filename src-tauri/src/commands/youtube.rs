@@ -12,7 +12,8 @@ use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::{
-    RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata, VideoSummary,
+    PaidPromotionLabel, RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata,
+    VideoSummary,
 };
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
@@ -385,6 +386,18 @@ pub async fn get_video_category(
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
     youtube_service
         .get_video_category(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_paid_promotion(
+    video_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<Option<PaidPromotionLabel>, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_paid_promotion(&video_id)
         .await
         .map_err(ErrorResponse::from)
 }

@@ -140,6 +140,8 @@ type PlayerProps = {
   category?: string | null;
   /** Drawn over the video and the controls, such as the Up next card. */
   overlay?: React.ReactNode;
+  /** A small label on the picture, left out of the mini player. */
+  badge?: React.ReactNode;
   onRetrySource?: (reason: string) => void;
   sourceMode?: string;
   className?: string;
@@ -314,6 +316,7 @@ export const Player: React.FC<PlayerProps> = ({
   onOpenInBrowser,
   category,
   overlay,
+  badge,
   onRetrySource,
   sourceMode,
   className,
@@ -2765,6 +2768,7 @@ export const Player: React.FC<PlayerProps> = ({
       )}
 
       {overlay}
+      {!isPipMode && badge}
 
       {manualSegment && !overlay && (
         <SponsorBlockSkipButton segment={manualSegment} compact={isPipMode} onClick={skipManualSegment} />
@@ -2840,6 +2844,7 @@ export const Player: React.FC<PlayerProps> = ({
         showFullscreenTitle={showFullscreenTitle}
         seekTo={seekTo}
         togglePlay={togglePlay}
+        stepFrame={isLive ? undefined : stepFrame}
         speedOptions={configuredSpeedOptions}
         speedSliderEnabled={speedSliderEnabled}
         onSelectPlaybackRate={selectPlaybackRate}

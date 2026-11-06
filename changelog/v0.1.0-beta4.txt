@@ -115,6 +115,9 @@ PLAYER
 - A video picks up where you left it from half a second in, and starts over only in the last 1.5 seconds or past 98%, as on Android.
 - Moving through a queue starts each video from the top. Picking one yourself still resumes it.
 - A queue moves past a video that can't play and tells you, up to 2 in a row, then stops on the error.
+- Flow can offer the last unfinished video when it opens, in a small card that plays it in the mini player or opens it. Continue watching mini player in Settings turns it off.
+- The mini player comes in three sizes. A thin progress bar stays at the bottom of the video when the controls hide, and clicking the time switches to what's left.
+- Optional frame step buttons while paused and a paid promotion label. The Save button shows Saved, Stats for nerds has more rows and Copy, and the description lists its tags and can be copied.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

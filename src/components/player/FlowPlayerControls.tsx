@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   Captions,
+  ChevronLeft,
   ChevronRight,
   Expand,
   ListVideo,
@@ -54,6 +55,8 @@ import { Slider } from "../ui/Slider";
 import { useWheelVolume } from "../../lib/useWheelVolume";
 import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 import { usePlayerButton } from "../../lib/playerButtons";
+import { SETTINGS } from "../../lib/settings/schema";
+import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 
 export interface FlowPlayerControlsProps {
   title?: string;
@@ -96,6 +99,7 @@ export interface FlowPlayerControlsProps {
 
   seekTo: (time: number) => void;
   togglePlay: () => void;
+  stepFrame?: (direction: 1 | -1) => void;
   speedOptions?: PlaybackRate[];
   speedSliderEnabled?: boolean;
   onSelectPlaybackRate?: (playbackRate: PlaybackRate) => void;
@@ -117,6 +121,11 @@ const defaultSpeedOptions: PlaybackRate[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+/** The time pill's first number: where playback is, or with a minus how much is left. */
+export function elapsedOrRemaining(current: number, duration: number, remaining: boolean): string {
+  return remaining && duration > 0 ? `-${formatTime(Math.max(0, duration - current))}` : formatTime(current);
 }
 
 function formatTime(value: number) {
@@ -160,6 +169,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   showFullscreenTitle = false,
   seekTo,
   togglePlay,
+  stepFrame,
   speedOptions = defaultSpeedOptions,
   speedSliderEnabled = false,
   onSelectPlaybackRate,
@@ -206,6 +216,12 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   const showPlayOn = usePlayerButton("playOn");
   const showTheater = usePlayerButton("theater");
   const showFullscreen = usePlayerButton("fullscreen");
+  const frameStepEnabled = useAppSettingsStore((s) => s.values[SETTINGS.FRAME_STEP_BUTTONS_ENABLED] === "true");
+  const idleStripEnabled = useAppSettingsStore((s) => s.values[SETTINGS.IDLE_PROGRESS_STRIP_ENABLED] !== "false");
+  const [showRemaining, setShowRemaining] = useState(false);
+  const showRemainingRef = useRef(showRemaining);
+  showRemainingRef.current = showRemaining;
+  const idleStripRef = useRef<HTMLDivElement>(null);
 
   const { level: volumeLevel, maxLevel, setLevel: setVolumeLevel } = useVolumeLevel();
   const changeVolume = (value: number) => {
@@ -342,7 +358,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
         setStyleIfChanged(fill, "width", `${segmentFillPercent(bufferedTime, start, end)}%`);
       }
 
-      setTextIfChanged(currentTimeRef.current, formatTime(cur));
+      setStyleIfChanged(idleStripRef.current, "width", pct);
+      setTextIfChanged(currentTimeRef.current, elapsedOrRemaining(cur, dur, showRemainingRef.current));
       setTextIfChanged(durationTimeRef.current, formatTime(dur));
 
       const activeChapter = segments?.find((c) => cur >= c.startSeconds && cur <= c.endSeconds);
@@ -371,7 +388,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
       if (frame !== null) cancelAnimationFrame(frame);
       for (const event of PROGRESS_EVENTS) source?.removeEventListener(event, updateProgress);
     };
-  }, [animateProgress, containerRef, duration, segments, isLive]);
+  }, [animateProgress, containerRef, duration, segments, isLive, showRemaining]);
 
   const progressPct =
     duration > 0
@@ -521,6 +538,11 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
 
   return (
     <>
+      {idleStripEnabled && !isLive && !shouldShowControls && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[3px] bg-chrome-white/25">
+          <div ref={idleStripRef} className="h-full bg-primary" style={{ width: `${progressPct}%` }} />
+        </div>
+      )}
       <div
         className={cx(
           "pointer-events-none absolute inset-0 z-20 flex h-full w-full flex-col justify-end bg-gradient-to-t from-chrome-black/85 via-chrome-black/40 to-transparent pt-24 transition-opacity duration-200",
@@ -689,6 +711,28 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <Play size={24} fill="currentColor" className="ml-0.5" />
                 )}
               </button>
+              {frameStepEnabled && !isPlaying && stepFrame && (
+                <>
+                  <button
+                    type="button"
+                    title={getString("player_previous_frame")}
+                    aria-label={getString("player_previous_frame")}
+                    onClick={() => stepFrame(-1)}
+                    className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                  >
+                    <ChevronLeft size={19} />
+                  </button>
+                  <button
+                    type="button"
+                    title={getString("player_next_frame")}
+                    aria-label={getString("player_next_frame")}
+                    onClick={() => stepFrame(1)}
+                    className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
+                  >
+                    <ChevronRight size={19} />
+                  </button>
+                </>
+              )}
               {showNextPrevious && (
                 <button
                   type="button"
@@ -731,7 +775,13 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               )}
 
               <div className="ml-1 flex items-center gap-1.5">
-                <div ref={timePillRef} className="whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm bg-chrome-black/20 rounded-full px-2 py-1">
+                <div
+                  ref={timePillRef}
+                  role={isLive ? undefined : "button"}
+                  title={isLive ? undefined : getString("player_time_toggle")}
+                  onClick={isLive ? undefined : () => setShowRemaining((value) => !value)}
+                  className={cx("whitespace-nowrap text-xs font-semibold text-chrome-white sm:text-sm bg-chrome-black/20 rounded-full px-2 py-1 tabular-nums", !isLive && "cursor-pointer")}
+                >
                   <span ref={currentTimeRef} />
                   {!isLive && (
                     <>

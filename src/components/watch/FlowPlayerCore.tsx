@@ -32,6 +32,7 @@ import { useOriginalCurrentVideo } from "../../lib/useOriginalCurrentVideo";
 import { nextAutoAdvanceVideo } from "../../lib/autoAdvance";
 import { useCaptionsWithLocal } from "../../lib/localSubtitles";
 import { useSkipUnplayable } from "../../lib/useSkipUnplayable";
+import { usePaidPromotion } from "../../lib/usePaidPromotion";
 import { useAutoplayCountdown } from "../../lib/useAutoplayCountdown";
 import { UpNextCard } from "../player/UpNextCard";
 
@@ -63,6 +64,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const stream = useVideoStream(videoId);
   const captions = useCaptionsWithLocal(videoId, stream.captions);
   useSkipUnplayable(videoId, stream.streamError);
+  const paidPromotion = usePaidPromotion(videoId);
   useSponsorBlockSegments(videoId);
   const {
     state: countdown,
@@ -343,6 +345,13 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       onTimeUpdate={handleTimeUpdate}
       onEnded={handleEnded}
       onRetry={stream.onHardRetry}
+      badge={
+        paidPromotion && (
+          <span className="pointer-events-none absolute left-3 top-3 z-30 rounded-full bg-chrome-black/70 px-3 py-1.5 text-xs font-medium text-chrome-white">
+            {paidPromotion.text || getString("player_paid_promotion")}
+          </span>
+        )
+      }
       overlay={
         countdown && (
           <UpNextCard

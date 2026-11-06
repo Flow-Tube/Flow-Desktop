@@ -43,8 +43,8 @@ function LoadingCards() {
   const spans = ["col-span-12 h-36", "col-span-12 lg:col-span-8 h-64", "col-span-12 lg:col-span-4 h-64", "col-span-12 md:col-span-6 h-64", "col-span-12 md:col-span-6 h-64"];
   return (
     <>
-      {spans.map((span) => (
-        <div key={span} className={`${span} animate-pulse rounded-2xl border border-outline-variant bg-surface-container-low`} />
+      {spans.map((span, index) => (
+        <div key={index} className={`${span} animate-pulse rounded-2xl border border-outline-variant bg-surface-container-low`} />
       ))}
     </>
   );

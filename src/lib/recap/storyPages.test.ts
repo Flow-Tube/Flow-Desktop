@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { RecapSummary } from "../api/recap";
-import { advanceStory, STORY_PAGE_MS, storyPageAt } from "./storyClock";
+import { advanceStory, hasFinished, STORY_PAGE_MS, storyPageAt, storyPageMs } from "./storyClock";
 import { storyPages } from "./storyPages";
 
 const item = (name: string, count = 1) => ({ id: name, name, count, durationMs: 0, detail: "", imageUrl: "", kind: "OTHER" as const });
@@ -67,19 +67,31 @@ describe("storyPages", () => {
 });
 
 describe("advanceStory", () => {
-  it("runs a page for its time and then turns it", () => {
+  const durations = [STORY_PAGE_MS, STORY_PAGE_MS, STORY_PAGE_MS];
+
+  it("moves to the next page when one runs out", () => {
     let position = { page: 0, elapsedMs: STORY_PAGE_MS - 10 };
-    position = advanceStory(position, 5, 3);
+    position = advanceStory(position, 5, durations);
     expect(position).toEqual({ page: 0, elapsedMs: STORY_PAGE_MS - 5 });
-    expect(advanceStory(position, 5, 3)).toEqual({ page: 1, elapsedMs: 0 });
+    expect(advanceStory(position, 5, durations)).toEqual({ page: 1, elapsedMs: 0 });
   });
 
-  it("waits on the last page", () => {
-    expect(advanceStory({ page: 2, elapsedMs: STORY_PAGE_MS }, 16, 3)).toEqual({ page: 2, elapsedMs: STORY_PAGE_MS });
+  it("waits on the last page, and only then counts as finished", () => {
+    const end = advanceStory({ page: 2, elapsedMs: STORY_PAGE_MS - 1 }, 16, durations);
+    expect(end).toEqual({ page: 2, elapsedMs: STORY_PAGE_MS });
+    expect(hasFinished(end, durations)).toBe(true);
+    expect(hasFinished({ page: 2, elapsedMs: 10 }, durations)).toBe(false);
+    expect(hasFinished({ page: 0, elapsedMs: STORY_PAGE_MS }, durations)).toBe(false);
   });
 
-  it("doesn't count time the window was hidden", () => {
-    expect(advanceStory({ page: 0, elapsedMs: 0 }, 60_000, 3)).toEqual({ page: 0, elapsedMs: 100 });
+  it("doesn't count time away as time on the page", () => {
+    expect(advanceStory({ page: 0, elapsedMs: 0 }, 60_000, durations).page).toBe(0);
+  });
+
+  it("gives a page with a list longer to read", () => {
+    expect(storyPageMs("songs")).toBeGreaterThan(storyPageMs("intro"));
+    const lists = [storyPageMs("songs"), STORY_PAGE_MS];
+    expect(advanceStory({ page: 0, elapsedMs: STORY_PAGE_MS }, 16, lists).page).toBe(0);
   });
 });
 

@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import type { RecapSummary } from "../api/recap";
 import { proxyImageUrl } from "../api/images";
 import { getPlural, getString } from "../i18n/index";
@@ -10,8 +12,10 @@ export const POSTER_HEIGHT = 1920;
 const PADDING = 72;
 const TILE_GAP = 24;
 const TILE_HEIGHT = 168;
-const PORTRAIT = 372;
-const PORTRAIT_OVERLAP = 90;
+const MAX_PORTRAIT = 520;
+/** How much of a portrait the second one covers. */
+const PORTRAIT_OVERLAP = 0.24;
+const HEADER_BOTTOM = PADDING + 136;
 const LOAD_TIMEOUT_MS = 5_000;
 
 export interface PosterData {
@@ -48,17 +52,28 @@ export interface PosterPalette {
   font: string;
 }
 
-/** The active theme's colors, read at draw time so the poster follows the theme. */
-export function posterPalette(): PosterPalette {
-  const styles = getComputedStyle(document.documentElement);
-  const token = (name: string) => styles.getPropertyValue(name).trim();
-  return {
-    ground: token("--color-primary"),
-    ink: token("--color-on-primary"),
-    tile: token("--color-surface-container-high"),
-    tileInk: token("--color-on-surface"),
+/**
+ * The last story page's colours turned around, accent ground and page-coloured ink, so the card reads
+ * as an object on its page and as a poster alone. A canvas can't read CSS variables or `color-mix`,
+ * so they are resolved through an element first.
+ */
+export function posterPalette(tint: CSSProperties): PosterPalette {
+  const probe = document.createElement("div");
+  for (const [name, value] of Object.entries(tint)) probe.style.setProperty(name, String(value));
+  document.body.append(probe);
+  const resolve = (color: string) => {
+    probe.style.color = color;
+    return getComputedStyle(probe).color;
+  };
+  const palette = {
+    ground: resolve("var(--story-accent)"),
+    ink: resolve("var(--story-ground)"),
+    tile: resolve("var(--story-raised)"),
+    tileInk: resolve("var(--color-on-surface)"),
     font: getComputedStyle(document.body).fontFamily,
   };
+  probe.remove();
+  return palette;
 }
 
 /** Shortens `text` with an ellipsis until it fits. */
@@ -75,11 +90,12 @@ function drawPortrait(
   name: string,
   x: number,
   y: number,
+  size: number,
   fill: string,
   ink: string,
   font: string,
 ) {
-  const radius = PORTRAIT / 2;
+  const radius = size / 2;
   ctx.save();
   ctx.beginPath();
   ctx.arc(x + radius, y + radius, radius, 0, Math.PI * 2);
@@ -97,8 +113,8 @@ function drawPortrait(
       side,
       x,
       y,
-      PORTRAIT,
-      PORTRAIT,
+      size,
+      size,
     );
   } else {
     ctx.fillStyle = ink;
@@ -132,15 +148,7 @@ export function drawPoster(
   ctx.font = `700 36px ${font}`;
   ctx.fillText(getString("recap_title"), PADDING, PADDING + 36);
   ctx.font = `800 84px ${font}`;
-  ctx.fillText(fitText(ctx, data.periodLabel, contentWidth), PADDING, PADDING + 136);
-
-  const portraitsY = PADDING + 190;
-  let portraitX = PADDING;
-  if (data.channelName) {
-    drawPortrait(ctx, images.channel, data.channelName, portraitX, portraitsY, tile, tileInk, font);
-    portraitX += PORTRAIT - PORTRAIT_OVERLAP;
-  }
-  if (data.artistName) drawPortrait(ctx, images.artist, data.artistName, portraitX, portraitsY, ink, ground, font);
+  ctx.fillText(fitText(ctx, data.periodLabel, contentWidth), PADDING, HEADER_BOTTOM);
 
   let y = POSTER_HEIGHT - PADDING;
   ctx.fillStyle = ink;
@@ -188,7 +196,21 @@ export function drawPoster(
   ctx.font = `500 34px ${font}`;
   ctx.fillText(getString("recap_total_time"), PADDING, tilesTop - 32);
   ctx.font = `900 112px ${font}`;
-  ctx.fillText(fitText(ctx, data.totalTime, contentWidth), PADDING, tilesTop - 84);
+  const figureBaseline = tilesTop - 84;
+  ctx.fillText(fitText(ctx, data.totalTime, contentWidth), PADDING, figureBaseline);
+
+  // The two faces fill what the words leave, so the card has no hole in the middle.
+  const room = figureBaseline - 112 - HEADER_BOTTOM - 2 * TILE_GAP;
+  const faces = [data.channelName, data.artistName].filter(Boolean).length;
+  const across = faces > 1 ? contentWidth / (2 - PORTRAIT_OVERLAP) : contentWidth;
+  const size = Math.min(MAX_PORTRAIT, room, across);
+  const portraitsY = HEADER_BOTTOM + TILE_GAP + (room - size) / 2;
+  let portraitX = PADDING;
+  if (data.channelName) {
+    drawPortrait(ctx, images.channel, data.channelName, portraitX, portraitsY, size, tile, tileInk, font);
+    portraitX += size * (1 - PORTRAIT_OVERLAP);
+  }
+  if (data.artistName) drawPortrait(ctx, images.artist, data.artistName, portraitX, portraitsY, size, ink, ground, font);
 }
 
 /** An image the canvas may read back, through the local proxy that allows it; null if it won't load. */
@@ -220,7 +242,7 @@ export async function loadPosterImage(url: string | null | undefined): Promise<H
 export async function renderPosterBlob(
   data: PosterData,
   images: { channel: HTMLImageElement | null; artist: HTMLImageElement | null },
-  palette: PosterPalette = posterPalette(),
+  palette: PosterPalette,
 ): Promise<Blob | null> {
   const encode = (withImages: typeof images) =>
     new Promise<Blob | null>((resolve) => {

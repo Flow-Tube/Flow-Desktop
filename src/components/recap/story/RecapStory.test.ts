@@ -94,4 +94,83 @@ describe("RecapStory", () => {
     expect(copy).toHaveBeenCalledOnce();
     expect(dialog().querySelector("img")?.getAttribute("src")).toBe("blob:poster");
   });
+
+  it("stays on the first page without restarting its clock when stepped back", () => {
+    press("ArrowLeft");
+    expect(dialog().textContent).toContain("Page 1 of 3");
+    expect(dialog().querySelector('[aria-current="step"]')?.getAttribute("aria-label")).toBe("Page 1 of 3");
+  });
+
+  it("jumps to a page from its segment", () => {
+    const segments = dialog().querySelectorAll<HTMLButtonElement>('button[aria-label^="Page "]');
+    expect(segments).toHaveLength(3);
+    act(() => segments[1]!.click());
+    expect(dialog().textContent).toContain("Your top channel");
+  });
+
+  describe("with the clock running", () => {
+    let frames: FrameRequestCallback[] = [];
+    let now = 0;
+    const run = (ms: number) =>
+      act(() => {
+        const end = now + ms;
+        while (now < end) {
+          now += 50;
+          const pending = frames;
+          frames = [];
+          pending.forEach((frame) => frame(now));
+        }
+      });
+
+    beforeEach(() => {
+      act(() => root.unmount());
+      frames = [];
+      now = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => now);
+      vi.stubGlobal("requestAnimationFrame", (frame: FrameRequestCallback) => frames.push(frame));
+      vi.stubGlobal("cancelAnimationFrame", () => { frames = []; });
+      root = createRoot(host);
+      act(() => root.render(createElement(RecapStory, { summary, period: "2026-09", onClose })));
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it("plays through by itself, then offers to play again", () => {
+      run(7_000);
+      expect(dialog().textContent).toContain("Page 2 of 3");
+      run(7_000);
+      expect(dialog().textContent).toContain("Page 3 of 3");
+      expect(dialog().querySelector('[aria-label="Pause"]')).not.toBeNull();
+      run(7_000);
+      expect(dialog().querySelector('[aria-label="Play again"]')).not.toBeNull();
+
+      press(" ");
+      expect(dialog().textContent).toContain("Page 1 of 3");
+      expect(dialog().querySelector('[aria-label="Pause"]')).not.toBeNull();
+      run(7_000);
+      expect(dialog().textContent).toContain("Page 2 of 3");
+    });
+
+    it("stops the clock while paused and while the window is in the background", () => {
+      press(" ");
+      run(20_000);
+      expect(dialog().textContent).toContain("Page 1 of 3");
+      press(" ");
+
+      act(() => {
+        window.dispatchEvent(new Event("blur"));
+      });
+      run(20_000);
+      expect(dialog().textContent).toContain("Page 1 of 3");
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      run(7_000);
+      expect(dialog().textContent).toContain("Page 2 of 3");
+    });
+  });
 });

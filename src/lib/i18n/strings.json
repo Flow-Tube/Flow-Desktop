@@ -379,6 +379,7 @@
   "recap_story_copy_failed": "Couldn't copy the image. Try saving it instead",
   "recap_story_poster_loading": "Making your card…",
   "recap_story_poster_failed": "Couldn't make your card",
+  "recap_story_replay": "Play again",
   "recap_story_next": "Next",
   "recap_story_previous": "Previous",
   "recap_story_page": "Page %1$s of %2$s",

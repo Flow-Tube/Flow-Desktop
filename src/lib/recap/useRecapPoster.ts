@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 import { useUiStore } from "../../store/useUiStore";
 import type { RecapSummary } from "../api/recap";
@@ -6,10 +6,10 @@ import { saveRecapPoster } from "../api/files";
 import { copyPng } from "../clipboard";
 import { getString } from "../i18n/index";
 import { useChannelAvatar } from "../useChannelAvatar";
-import { blobToBase64, loadPosterImage, posterData, renderPosterBlob } from "./recapPoster";
+import { blobToBase64, loadPosterImage, posterData, posterPalette, renderPosterBlob } from "./recapPoster";
 
 /** Builds the poster once per summary, for showing, saving as a PNG and copying. */
-export function useRecapPoster(summary: RecapSummary, period: string, periodLabel: string) {
+export function useRecapPoster(summary: RecapSummary, period: string, periodLabel: string, tint: CSSProperties) {
   const showToast = useUiStore((state) => state.showToast);
   const channel = summary.video.topChannels[0];
   const lookedUp = useChannelAvatar(channel && !channel.imageUrl ? channel.id : null);
@@ -24,7 +24,7 @@ export function useRecapPoster(summary: RecapSummary, period: string, periodLabe
     let url: string | null = null;
     setFailed(false);
     const rendering = Promise.all([loadPosterImage(channelImage), loadPosterImage(artistImage)]).then(([channelPicture, artistPicture]) =>
-      renderPosterBlob(posterData(summary, periodLabel), { channel: channelPicture, artist: artistPicture }),
+      renderPosterBlob(posterData(summary, periodLabel), { channel: channelPicture, artist: artistPicture }, posterPalette(tint)),
     );
     blob.current = rendering;
     void rendering.then((rendered) => {
@@ -40,7 +40,7 @@ export function useRecapPoster(summary: RecapSummary, period: string, periodLabe
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [summary, periodLabel, channelImage, artistImage]);
+  }, [summary, periodLabel, channelImage, artistImage, tint]);
 
   const save = useCallback(async () => {
     const image = await blob.current;

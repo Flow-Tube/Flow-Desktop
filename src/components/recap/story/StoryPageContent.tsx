@@ -4,6 +4,8 @@ import type { RankedItem, RecapSummary } from "../../../lib/api/recap";
 import { getPlural, getString } from "../../../lib/i18n/index";
 import { dayLabel, INSIGHT_LABELS, scopeOf, spentTimeLabel } from "../../../lib/recap/recapFormat";
 import type { StoryPage } from "../../../lib/recap/storyPages";
+import type { useRecapPoster } from "../../../lib/recap/useRecapPoster";
+import { useCountUp } from "../../../lib/recap/useCountUp";
 import { useChannelAvatar } from "../../../lib/useChannelAvatar";
 import { useProxiedImageUrl } from "../../../lib/useProxiedImageUrl";
 import { CalendarChart } from "../charts/CalendarChart";
@@ -17,12 +19,16 @@ const SHORT_LIST = 3;
 
 const Eyebrow = ({ children }: { children: ReactNode }) => <p className="text-base font-semibold text-primary">{children}</p>;
 const Hero = ({ children }: { children: ReactNode }) => (
-  <p className="text-6xl font-black tabular-nums tracking-tight text-on-surface md:text-7xl">{children}</p>
+  <p className="text-7xl font-black tabular-nums tracking-tight text-on-surface md:text-8xl">{children}</p>
 );
+/** A length of time that counts up as its page lands. */
+function HeroTime({ ms }: { ms: number }) {
+  return <Hero>{spentTimeLabel(useCountUp(ms))}</Hero>;
+}
 const Headline = ({ children }: { children: ReactNode }) => (
-  <h2 className="line-clamp-3 text-4xl font-bold tracking-tight text-on-surface">{children}</h2>
+  <h2 className="line-clamp-3 text-4xl font-bold tracking-tight text-on-surface md:text-5xl">{children}</h2>
 );
-const Body = ({ children }: { children: ReactNode }) => <p className="text-base text-on-surface-variant">{children}</p>;
+const Body = ({ children }: { children: ReactNode }) => <p className="text-lg text-on-surface">{children}</p>;
 
 function Pill({ value, label, strong = false }: { value: string; label: string; strong?: boolean }) {
   return (
@@ -49,11 +55,11 @@ function Portrait({ item, size }: { item: RankedItem; size: string }) {
 function FaceRow({ items }: { items: RankedItem[] }) {
   if (items.length === 0) return null;
   return (
-    <ul className="flex flex-wrap justify-center gap-3">
+    <ul className="story-stagger flex flex-wrap justify-center gap-3">
       {items.map((item) => (
         <li key={item.id} className="flex w-20 flex-col items-center gap-1">
           <Portrait item={item} size="h-14 w-14" />
-          <span className="w-full truncate text-center text-xs text-on-surface-variant">{item.name}</span>
+          <span className="w-full truncate text-center text-xs text-on-surface">{item.name}</span>
         </li>
       ))}
     </ul>
@@ -62,13 +68,13 @@ function FaceRow({ items }: { items: RankedItem[] }) {
 
 function ArtworkList({ items, value }: { items: RankedItem[]; value: (item: RankedItem) => string }) {
   return (
-    <ol className="flex w-full flex-col gap-2">
+    <ol className="story-stagger flex w-full flex-col gap-2">
       {items.map((item, index) => (
         <li key={item.id} className="flex items-center gap-3 rounded-2xl bg-surface-container-high p-2.5 text-start">
           <span className="w-6 shrink-0 text-center text-lg font-bold tabular-nums text-primary">{index + 1}</span>
           <ArtworkImage url={item.imageUrl} />
           <span className="min-w-0 flex-1 truncate text-base font-medium text-on-surface">{item.name || getString("recap_unnamed_item")}</span>
-          <span className="shrink-0 text-sm tabular-nums text-on-surface-variant">{value(item)}</span>
+          <span className="shrink-0 text-sm tabular-nums text-on-surface">{value(item)}</span>
         </li>
       ))}
     </ol>
@@ -77,7 +83,7 @@ function ArtworkList({ items, value }: { items: RankedItem[]; value: (item: Rank
 
 function ArtworkImage({ url }: { url: string }) {
   const src = useProxiedImageUrl(url);
-  return src ? <img src={src} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" /> : <span className="h-12 w-12 shrink-0 rounded-xl bg-surface-container" />;
+  return src ? <img src={src} alt="" className="h-12 w-12 shrink-0 rounded-xl object-cover" /> : <span className="h-12 w-12 shrink-0 rounded-xl bg-surface-container-high" />;
 }
 
 function RepeatArtwork({ video }: { video: RankedItem }) {
@@ -107,19 +113,20 @@ interface StoryPageContentProps {
   summary: RecapSummary;
   period: string;
   periodLabel: string;
+  poster: ReturnType<typeof useRecapPoster>;
 }
 
 /** The words, figures and portraits of one story page, in a readable centered column. */
-export function StoryPageContent({ page, summary, period, periodLabel }: StoryPageContentProps) {
+export function StoryPageContent({ page, summary, period, periodLabel, poster }: StoryPageContentProps) {
   const { video, music, combined } = summary;
   switch (page.kind) {
     case "intro":
       return (
         <>
           <Eyebrow>{getString("recap_story_intro", periodLabel)}</Eyebrow>
-          <Hero>{spentTimeLabel(combined.totalMs)}</Hero>
+          <HeroTime ms={combined.totalMs} />
           <Body>{getPlural("recap_story_intro_body", combined.activeDays)}</Body>
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className="story-stagger flex flex-wrap justify-center gap-2">
             {video.views > 0 && <Pill value={String(video.views)} label={getString("recap_views")} />}
             {music.plays > 0 && <Pill value={String(music.plays)} label={getString("recap_plays")} />}
             <Pill value={String(combined.longestStreak)} label={getString("recap_streak")} />
@@ -129,7 +136,7 @@ export function StoryPageContent({ page, summary, period, periodLabel }: StoryPa
     case "topChannel":
       return (
         <>
-          <Portrait item={page.channel} size="h-44 w-44 text-6xl" />
+          <Portrait item={page.channel} size="h-52 w-52 text-7xl" />
           <Eyebrow>{getString("recap_story_top_channel")}</Eyebrow>
           <Headline>{page.channel.name}</Headline>
           <Body>{getString("recap_story_top_channel_body", getPlural("recap_views_count", page.channel.count), spentTimeLabel(page.channel.durationMs))}</Body>
@@ -149,7 +156,7 @@ export function StoryPageContent({ page, summary, period, periodLabel }: StoryPa
       return (
         <>
           <Eyebrow>{getString("recap_story_topics")}</Eyebrow>
-          <ul className="flex flex-wrap items-center justify-center gap-2">
+          <ul className="story-stagger flex flex-wrap items-center justify-center gap-2">
             {video.topTopics.slice(0, STORY_LIST + 2).map((topic, index) => (
               <li
                 key={topic.id}
@@ -173,7 +180,9 @@ export function StoryPageContent({ page, summary, period, periodLabel }: StoryPa
               <Body>{getString(INSIGHT_LABELS[insight][1])}</Body>
             </>
           )}
-          <ClockChart hourCounts={combined.hourCounts} ariaLabel={getString("recap_clock_subtitle")} />
+          <div className="story-dial w-full [&_svg]:max-w-[420px]">
+            <ClockChart hourCounts={combined.hourCounts} ariaLabel={getString("recap_clock_subtitle")} />
+          </div>
         </>
       );
     }
@@ -193,7 +202,7 @@ export function StoryPageContent({ page, summary, period, periodLabel }: StoryPa
     case "topArtist":
       return (
         <>
-          <Portrait item={page.artist} size="h-44 w-44 text-6xl" />
+          <Portrait item={page.artist} size="h-52 w-52 text-7xl" />
           <Eyebrow>{getString("recap_story_artist")}</Eyebrow>
           <Headline>{page.artist.name}</Headline>
           <Body>{getString("recap_story_artist_body", getPlural("recap_plays_count", page.artist.count), page.sharePercent)}</Body>
@@ -252,11 +261,11 @@ export function StoryPageContent({ page, summary, period, periodLabel }: StoryPa
       return (
         <>
           <Eyebrow>{getString("recap_story_sponsor")}</Eyebrow>
-          <Hero>{spentTimeLabel(video.sponsorSavedMs)}</Hero>
+          <HeroTime ms={video.sponsorSavedMs} />
           <Body>{getString("recap_sponsor_label")}</Body>
         </>
       );
     case "summary":
-      return <StoryPosterPage summary={summary} period={period} periodLabel={periodLabel} />;
+      return <StoryPosterPage periodLabel={periodLabel} poster={poster} />;
   }
 }

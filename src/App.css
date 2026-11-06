@@ -225,6 +225,67 @@
   animation: pane-fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* The recap story: a page slides in the way it was stepped, then its parts rise in turn. */
+@keyframes story-page-next {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+}
+
+@keyframes story-page-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-48px);
+  }
+}
+
+@keyframes story-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}
+
+@keyframes story-dial {
+  from {
+    opacity: 0;
+    transform: rotate(-24deg) scale(0.86);
+  }
+}
+
+.story-page-next {
+  animation: story-page-next 320ms var(--motion-ease) both;
+}
+
+.story-page-prev {
+  animation: story-page-prev 320ms var(--motion-ease) both;
+}
+
+.story-stagger > * {
+  animation: story-rise 420ms var(--motion-ease) both;
+}
+
+.story-stagger > :nth-child(2) { animation-delay: 60ms; }
+.story-stagger > :nth-child(3) { animation-delay: 120ms; }
+.story-stagger > :nth-child(4) { animation-delay: 180ms; }
+.story-stagger > :nth-child(5) { animation-delay: 240ms; }
+.story-stagger > :nth-child(n + 6) { animation-delay: 300ms; }
+
+.story-dial {
+  animation: story-dial 520ms var(--motion-ease) both;
+  animation-delay: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-page-next,
+  .story-page-prev,
+  .story-stagger > *,
+  .story-dial {
+    animation: none;
+  }
+}
+
 @keyframes slide-up {
   from {
     opacity: 0;

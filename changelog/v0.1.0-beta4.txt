@@ -89,6 +89,7 @@ PLAYER
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 - A video that falls back to its backup stream now keeps the audio you chose, usually the original, instead of playing an auto-dubbed language. The audio menu works on that stream too.
 - Original titles, in Settings under Content, keeps video titles in the video's own language instead of YouTube's automatic translation, on cards, Shorts, the queue and the watch page. It is off by default, and DeArrow titles still come first when DeArrow is on. A single video you download is named the same way (#377).
+- Audio Track Language in Settings now works. Videos with several audio tracks start in your language, and fall back to the original when it isn't offered. The choice also syncs with your phone.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

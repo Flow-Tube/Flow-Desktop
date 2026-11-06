@@ -532,7 +532,7 @@ export const SETTING_DEFINITIONS = [
   str(SETTINGS.MUSIC_AUDIO_QUALITY, "quality", "Auto", "wired", ["Auto", "High", "Medium", "Low"]),
   str(SETTINGS.MUSIC_QUEUE_SWIPE_LEFT, "player", "PLAY_NEXT", "wired", ["PLAY_NEXT", "MOVE_TO_END", "REMOVE"]),
   str(SETTINGS.MUSIC_QUEUE_SWIPE_RIGHT, "player", "REMOVE", "wired", ["PLAY_NEXT", "MOVE_TO_END", "REMOVE"]),
-  str(SETTINGS.PREFERRED_AUDIO_LANGUAGE, "quality", "original", "persisted-only"),
+  str(SETTINGS.PREFERRED_AUDIO_LANGUAGE, "quality", "original", "wired"),
 
   bool(SETTINGS.MUSIC_LOUDNESS_NORMALIZATION, "player", true, "wired"),
   // Flow for Android's equalizer JSON, shared by music and video and synced as `equalizer`.

@@ -393,6 +393,7 @@ export const Player: React.FC<PlayerProps> = ({
   const speedSliderEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SPEED_SLIDER_ENABLED] === "true");
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
+  const preferredAudioLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_AUDIO_LANGUAGE]);
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
   // Silences this player while it warms up behind a handoff the other window is
   // still playing out loud; user mute and volume stay untouched.
@@ -897,8 +898,8 @@ export const Player: React.FC<PlayerProps> = ({
   }, [captions, preferredSubtitleLanguage, subtitlesEnabled]);
 
   useEffect(() => {
-    setSelectedAudioTrackId(selectPreferredAudioTrackId(audioTracks, "original"));
-  }, [audioTracks]);
+    setSelectedAudioTrackId(selectPreferredAudioTrackId(audioTracks, preferredAudioLanguage ?? "original"));
+  }, [audioTracks, preferredAudioLanguage]);
 
   useEffect(() => {
     const video = videoRef.current;

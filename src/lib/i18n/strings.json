@@ -920,6 +920,8 @@
   "settings_group_cache": "Cache",
   "settings_media_cache_limit": "Media Cache Limit",
   "settings_media_cache_limit_desc": "Max storage for stream buffering",
+  "settings_search_placeholder": "Search settings",
+  "settings_search_empty": "No settings match your search",
   "settings_group_proxy": "Proxy",
   "settings_group_playback_sources": "Playback sources",
   "settings_remote_signature_fallback": "Remote signature fallback",

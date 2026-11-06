@@ -1,0 +1,199 @@
+import type { StringKey } from "../i18n/index";
+
+export type SettingsCategory =
+  | "appearance"
+  | "profiles"
+  | "player"
+  | "music"
+  | "content"
+  | "taste"
+  | "quality"
+  | "network"
+  | "downloads"
+  | "data"
+  | "about";
+
+export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategory, StringKey> = {
+  appearance: "settings_appearance",
+  profiles: "settings_profiles",
+  player: "settings_player",
+  music: "settings_music",
+  content: "settings_content_ui",
+  taste: "settings_taste",
+  quality: "settings_quality_codecs",
+  network: "settings_network_buffer",
+  downloads: "settings_downloads",
+  data: "settings_data_backup",
+  about: "settings_about",
+};
+
+export interface SettingEntry {
+  /** The row's title. A row's title is unique enough to find it again on its tab. */
+  title: StringKey;
+  summary?: StringKey;
+  /** Other words someone might search for. */
+  keywords?: readonly string[];
+  category: SettingsCategory;
+}
+
+const rows = (category: SettingsCategory, entries: Omit<SettingEntry, "category">[]): SettingEntry[] =>
+  entries.map((entry) => ({ ...entry, category }));
+
+/** Every option in Settings, in the order the tabs show them. `settingsIndex.test.ts` checks it covers them all. */
+export const SETTINGS_INDEX: SettingEntry[] = [
+  ...rows("appearance", [
+    { title: "settings_expressive_sliders", summary: "settings_expressive_sliders_desc" },
+    { title: "settings_graphics_compat", summary: "settings_graphics_compat_desc" },
+    { title: "theme_presets", keywords: ["color", "palette", "dark", "light"] },
+    { title: "theme_variant" },
+    { title: "theme_custom" },
+    { title: "theme_file", summary: "theme_file_description" },
+  ]),
+  ...rows("player", [
+    { title: "settings_autoplay", summary: "settings_autoplay_desc" },
+    { title: "settings_loop_video", summary: "settings_loop_video_desc" },
+    { title: "settings_skip_silence", summary: "settings_skip_silence_desc" },
+    { title: "settings_stable_volume", summary: "settings_stable_volume_desc" },
+    { title: "settings_video_loudness", summary: "settings_video_loudness_desc" },
+    { title: "settings_volume_boost", summary: "settings_volume_boost_desc" },
+    { title: "settings_remember_speed", summary: "settings_remember_speed_desc" },
+    { title: "settings_default_speed" },
+    { title: "settings_custom_speed_presets", summary: "settings_custom_speed_presets_desc" },
+    { title: "settings_speed_values", summary: "settings_speed_values_desc" },
+    { title: "settings_long_press_speed", summary: "settings_long_press_speed_desc" },
+    { title: "settings_speed_slider", summary: "settings_speed_slider_desc" },
+    { title: "settings_seek_interval", summary: "settings_seek_interval_desc" },
+    { title: "settings_closed_captions", summary: "settings_closed_captions_desc" },
+    { title: "settings_preferred_language" },
+    { title: "settings_font_size" },
+    { title: "settings_bold_subtitles" },
+    { title: "settings_skip_controls", summary: "settings_skip_controls_desc" },
+    { title: "settings_next_previous", summary: "settings_next_previous_desc" },
+    { title: "settings_auto_pip", summary: "settings_auto_pip_desc" },
+    { title: "settings_pip_toggle", summary: "settings_pip_toggle_desc" },
+    { title: "settings_pip_separate_window", summary: "settings_pip_separate_window_desc" },
+    { title: "settings_pip_always_on_top", summary: "settings_pip_always_on_top_desc" },
+    { title: "settings_pip_on_minimize", summary: "settings_pip_on_minimize_desc" },
+    { title: "settings_fullscreen_title", summary: "settings_fullscreen_title_desc" },
+    { title: "settings_ambient_mode", summary: "settings_ambient_mode_desc" },
+    { title: "settings_ambient_glow", summary: "settings_ambient_glow_desc" },
+    { title: "settings_adaptive_player", summary: "settings_adaptive_player_desc" },
+  ]),
+  ...rows("music", [
+    { title: "music_equalizer", summary: "settings_music_equalizer_desc" },
+    { title: "music_loudness_normalization", summary: "music_loudness_normalization_desc" },
+    { title: "music_playback_speed", summary: "settings_music_speed_desc" },
+    { title: "music_crossfade", summary: "music_crossfade_desc" },
+    { title: "settings_music_crossfade_length" },
+    { title: "lyrics_alignment" },
+    { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
+    { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
+    { title: "lyrics_blur_other_lines", summary: "lyrics_blur_other_lines_summary" },
+    { title: "settings_lyrics_providers" },
+    { title: "settings_lyrics_cache" },
+    { title: "settings_music_player_background", summary: "settings_music_player_background_desc" },
+    { title: "settings_music_artwork_control_colors", summary: "settings_music_artwork_control_colors_desc" },
+    { title: "settings_music_plain_control_colors", summary: "settings_music_plain_control_colors_desc" },
+    { title: "settings_music_player_follow_light_theme", summary: "settings_music_player_follow_light_theme_desc" },
+    { title: "settings_music_audio_quality", summary: "settings_music_audio_quality_desc" },
+    { title: "settings_music_restore_queue", summary: "settings_music_restore_queue_desc" },
+    { title: "settings_music_resume_long_tracks", summary: "settings_music_resume_long_tracks_desc" },
+    { title: "settings_music_queue_swipe_left", summary: "settings_music_queue_swipe_desc" },
+    { title: "settings_music_queue_swipe_right", summary: "settings_music_queue_swipe_desc" },
+    { title: "settings_music_sleep_timer_button", summary: "settings_music_sleep_timer_button_desc" },
+    { title: "settings_music_tray" },
+  ]),
+  ...rows("content", [
+    { title: "deep_flow_mode_title" },
+    { title: "deep_flow_expire_duration_title" },
+    { title: "deep_flow_save_history_title", summary: "deep_flow_save_history_subtitle" },
+    { title: "settings_grid_columns" },
+    { title: "settings_video_title_lines", summary: "settings_video_title_lines_desc" },
+    { title: "settings_home_feed", summary: "settings_home_feed_desc" },
+    { title: "settings_app_logo", summary: "settings_app_logo_desc" },
+    { title: "settings_shorts_shelf", summary: "settings_shorts_shelf_desc" },
+    { title: "settings_home_shorts_shelf", summary: "settings_home_shorts_shelf_desc" },
+    { title: "settings_continue_watching", summary: "settings_continue_watching_desc" },
+    { title: "settings_home_max_age", summary: "settings_home_max_age_desc" },
+    { title: "settings_comments", summary: "settings_comments_desc" },
+    { title: "settings_related_videos", summary: "settings_related_videos_desc" },
+    { title: "settings_live_chat", summary: "settings_live_chat_desc" },
+    { title: "settings_hide_watched", summary: "settings_hide_watched_desc" },
+    { title: "settings_hide_seen", summary: "settings_hide_seen_desc" },
+    { title: "settings_blocked_mode", summary: "settings_blocked_mode_desc" },
+    { title: "settings_disable_shorts_player", summary: "settings_disable_shorts_player_desc" },
+    { title: "settings_shorts_playback_mode", summary: "settings_shorts_playback_mode_desc" },
+    { title: "settings_shorts_auto_scroll_seconds" },
+    { title: "settings_tabs_enabled", summary: "settings_tabs_enabled_desc" },
+    { title: "settings_shorts_tab" },
+    { title: "settings_music_tab" },
+    { title: "settings_categories_tab", summary: "settings_categories_tab_desc" },
+    { title: "settings_refresh_startup", summary: "settings_refresh_startup_desc" },
+    { title: "settings_show_videos" },
+    { title: "settings_show_shorts" },
+    { title: "settings_show_live" },
+    { title: "settings_hide_unplayable", summary: "settings_hide_unplayable_desc" },
+    { title: "settings_notifications_enabled", summary: "settings_notifications_enabled_desc" },
+    { title: "settings_notification_interval", summary: "settings_notification_interval_desc" },
+    { title: "settings_region_picker", summary: "settings_region_picker_desc" },
+    { title: "settings_trending_region", summary: "settings_trending_region_desc", keywords: ["region", "location", "gl"] },
+    { title: "settings_content_language", summary: "settings_content_language_desc" },
+    { title: "settings_original_titles", summary: "settings_original_titles_desc" },
+  ]),
+  ...rows("taste", [
+    { title: "taste_add_interest" },
+    { title: "taste_current_interests" },
+    { title: "taste_browse_interests" },
+    { title: "taste_block_topic" },
+    { title: "taste_current_blocked" },
+    { title: "taste_quick_block" },
+    { title: "taste_groups_title", summary: "taste_groups_desc" },
+    { title: "taste_remembered_title" },
+    { title: "taste_hidden_channels" },
+  ]),
+  ...rows("quality", [
+    { title: "settings_default_resolution", summary: "settings_default_resolution_desc" },
+    { title: "settings_preferred_codec" },
+    { title: "settings_fast_quality_switch", summary: "settings_fast_quality_switch_desc" },
+    { title: "settings_shorts_resolution", summary: "settings_shorts_resolution_desc" },
+    { title: "settings_audio_track_language", summary: "settings_audio_track_language_desc", keywords: ["dub", "dubbed", "language"] },
+  ]),
+  ...rows("network", [
+    { title: "settings_buffering_strategy", summary: "settings_buffering_strategy_desc" },
+    { title: "settings_min_buffer", summary: "settings_min_buffer_desc" },
+    { title: "settings_max_buffer", summary: "settings_max_buffer_desc" },
+    { title: "settings_startup_prebuffer", summary: "settings_startup_prebuffer_desc" },
+    { title: "settings_rebuffer_recovery", summary: "settings_rebuffer_recovery_desc" },
+    { title: "settings_media_cache_limit", summary: "settings_media_cache_limit_desc" },
+    { title: "settings_remote_signature_fallback", summary: "settings_remote_signature_fallback_desc" },
+    { title: "settings_enable_proxy", summary: "settings_enable_proxy_desc", keywords: ["vpn", "socks", "network"] },
+    { title: "settings_proxy_protocol" },
+    { title: "settings_proxy_host" },
+    { title: "settings_proxy_port" },
+    { title: "settings_proxy_username", summary: "settings_proxy_username_desc" },
+    { title: "settings_proxy_password" },
+  ]),
+  ...rows("downloads", [
+    { title: "settings_download_quality", summary: "settings_download_quality_desc" },
+    { title: "settings_download_codec", summary: "settings_download_codec_desc" },
+    { title: "settings_download_music_quality", summary: "settings_download_music_quality_desc" },
+    { title: "settings_download_concurrency", summary: "settings_download_concurrency_desc" },
+    { title: "settings_download_notifications", summary: "settings_download_notifications_desc" },
+    { title: "settings_parallel_fragments", summary: "settings_parallel_fragments_desc" },
+    { title: "settings_concurrent_threads", summary: "settings_concurrent_threads_desc" },
+    { title: "settings_download_poster_sidecar", summary: "settings_download_poster_sidecar_desc" },
+    { title: "settings_download_lyrics_file", summary: "settings_download_lyrics_file_desc" },
+    { title: "settings_download_subtitles", summary: "settings_download_subtitles_desc" },
+  ]),
+  ...rows("data", [
+    { title: "settings_backup_frequency", summary: "settings_backup_frequency_desc", keywords: ["automatic", "schedule"] },
+    { title: "settings_backup_scope" },
+    { title: "settings_history_records" },
+    { title: "settings_subscriptions_count" },
+  ]),
+  ...rows("about", [
+    { title: "settings_auto_update", summary: "settings_auto_update_desc" },
+    { title: "settings_check_for_updates" },
+    { title: "settings_version" },
+  ]),
+];

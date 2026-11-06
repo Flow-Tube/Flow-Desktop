@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   PlayCircle,
   LayoutGrid,
@@ -14,39 +14,34 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { getString } from '../../lib/i18n/index';
+import { SETTINGS_CATEGORY_LABELS, SETTINGS_INDEX, type SettingEntry, type SettingsCategory } from '../../lib/settings/settingsIndex';
+import { searchSettings } from '../../lib/settings/settingsSearch';
+import { useDebounce } from '../../lib/useDebounce';
 import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
+import { SearchInput } from '../ui/SearchInput';
+import { SettingsSearchResults } from './SettingsSearchResults';
 
-export type SettingsCategory =
-  | 'appearance'
-  | 'profiles'
-  | 'player'
-  | 'music'
-  | 'content'
-  | 'taste'
-  | 'quality'
-  | 'network'
-  | 'downloads'
-  | 'data'
-  | 'about';
+export type { SettingsCategory };
+
+const HIGHLIGHT_MS = 1600;
 
 interface CategoryDef {
   id: SettingsCategory;
-  labelKey: Parameters<typeof getString>[0];
   icon: ReactNode;
 }
 
 const categories: CategoryDef[] = [
-  { id: 'appearance', labelKey: 'settings_appearance', icon: <Palette size={18} /> },
-  { id: 'profiles', labelKey: 'settings_profiles', icon: <UsersRound size={18} /> },
-  { id: 'player', labelKey: 'settings_player', icon: <PlayCircle size={18} /> },
-  { id: 'music', labelKey: 'settings_music', icon: <Music2 size={18} /> },
-  { id: 'content', labelKey: 'settings_content_ui', icon: <LayoutGrid size={18} /> },
-  { id: 'taste', labelKey: 'settings_taste', icon: <Heart size={18} /> },
-  { id: 'quality', labelKey: 'settings_quality_codecs', icon: <Gauge size={18} /> },
-  { id: 'network', labelKey: 'settings_network_buffer', icon: <Wifi size={18} /> },
-  { id: 'downloads', labelKey: 'settings_downloads', icon: <Download size={18} /> },
-  { id: 'data', labelKey: 'settings_data_backup', icon: <Database size={18} /> },
-  { id: 'about', labelKey: 'settings_about', icon: <Info size={18} /> },
+  { id: 'appearance', icon: <Palette size={18} /> },
+  { id: 'profiles', icon: <UsersRound size={18} /> },
+  { id: 'player', icon: <PlayCircle size={18} /> },
+  { id: 'music', icon: <Music2 size={18} /> },
+  { id: 'content', icon: <LayoutGrid size={18} /> },
+  { id: 'taste', icon: <Heart size={18} /> },
+  { id: 'quality', icon: <Gauge size={18} /> },
+  { id: 'network', icon: <Wifi size={18} /> },
+  { id: 'downloads', icon: <Download size={18} /> },
+  { id: 'data', icon: <Database size={18} /> },
+  { id: 'about', icon: <Info size={18} /> },
 ];
 
 interface SettingsLayoutProps {
@@ -59,31 +54,64 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
   const [activeTab, setActiveTab] = useState<SettingsCategory>(
     requested && categories.some((cat) => cat.id === requested) ? requested : 'appearance',
   );
+  const [query, setQuery] = useState('');
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const debouncedQuery = useDebounce(query, 120);
+  const results = useMemo(() => searchSettings(debouncedQuery, SETTINGS_INDEX), [debouncedQuery]);
+  const searching = debouncedQuery.trim().length > 0;
   const paneRef = useRef<HTMLDivElement>(null);
   usePageEnterMotion(paneRef, activeTab, true);
+
+  const openResult = (entry: SettingEntry) => {
+    setActiveTab(entry.category);
+    setQuery('');
+    setHighlight(getString(entry.title));
+  };
+
+  useEffect(() => {
+    if (!highlight || searching) return;
+    const row = paneRef.current?.querySelector<HTMLElement>(`[data-setting-title="${CSS.escape(highlight)}"]`);
+    row?.scrollIntoView({ block: 'center' });
+    row?.classList.add('setting-row-highlight');
+    const timer = window.setTimeout(() => {
+      row?.classList.remove('setting-row-highlight');
+      setHighlight(null);
+    }, HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [highlight, searching]);
 
   return (
     <div className="mx-auto w-full h-[calc(100vh-64px)] flex">
       <nav className="w-56 shrink-0 border-r border-chrome-neutral-800 overflow-y-auto py-6 px-3 flex flex-col gap-1">
         <h2 className="text-lg font-bold text-chrome-neutral-100 px-3 mb-4">{getString('settings_title')}</h2>
+        <SearchInput
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={getString('settings_search_placeholder')}
+          aria-label={getString('settings_search_placeholder')}
+          containerClassName="mb-3"
+        />
         {categories.map((cat) => (
           <button
             key={cat.id}
-            onClick={() => setActiveTab(cat.id)}
+            onClick={() => {
+              setActiveTab(cat.id);
+              setQuery('');
+            }}
             className={`px-4 py-2.5 rounded-full flex items-center gap-3 text-sm font-medium transition-colors cursor-pointer ${
-              activeTab === cat.id
+              !searching && activeTab === cat.id
                 ? 'bg-surface-container-high text-[var(--color-primary)]'
                 : 'text-chrome-neutral-400 hover:bg-surface-container-low hover:text-chrome-neutral-200'
             }`}
           >
             {cat.icon}
-            {getString(cat.labelKey)}
+            {getString(SETTINGS_CATEGORY_LABELS[cat.id])}
           </button>
         ))}
       </nav>
 
       <div ref={paneRef} className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
-        {children(activeTab)}
+        {searching ? <SettingsSearchResults results={results} onOpen={openResult} /> : children(activeTab)}
       </div>
     </div>
   );

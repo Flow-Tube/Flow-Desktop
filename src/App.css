@@ -824,3 +824,9 @@
     var(--flow-grid-track-w, calc(100vw / var(--flow-grid-columns, 4))) * 0.5625 + 4.5rem
   );
 }
+
+/* A setting opened from search, so the eye finds it on the page. */
+.setting-row-highlight {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}

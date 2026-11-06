@@ -6,16 +6,7 @@ Frontend lives at `src/`, backend at `src-tauri/src/`. Run all `cargo` commands 
 
 ## Design system — Design.md is the source of truth
 
-**[Design.md](Design.md)** is the absolute source of truth for all UI/UX design and React architecture in this repository. You must read and adhere to it before writing or editing any React/Tailwind code. It defines the anti-slop rules, the color/depth system, layout patterns (Bento grid vs. content-feed grids), typography scale, component blueprints (radii, buttons, icons), interaction/animation rules, the container/presentational architecture (`components/ui/` dumb primitives, `components/[domain]/` smart containers, `pages/` route composition, `lib/` hooks-only backend access, `store/` Zustand), and the performance rules (optimistic UI, debounced search, graceful FOSS-API degradation).
-
-Quick-reference summary (Design.md governs on any conflict or ambiguity):
-- ❌ No gradients, no glassmorphism/backdrop-blur, no drop shadows/glows, no colored card borders, no arbitrary hex codes — everything maps to the CSS variables in `src/App.css`.
-- Depth comes from contrast + 1px neutral borders (`border-neutral-800`), not shadows.
-- Radii: pills/chips `rounded-full`, cards/dialogs `rounded-2xl`, thumbnails `rounded-xl`, inputs/menus `rounded-lg`/`rounded-md`.
-- Never call `invoke(...)` or `fetch(...)` directly inside a component's `useEffect` — wrap backend calls in a custom hook under `src/lib/`.
-- Never hardcode UI strings — use `react-i18next` and `src/locales/`.
-
-If your proposed code contains `shadow-`, `bg-gradient-`, business logic inside `components/ui/`, or an arbitrary hex color instead of a `src/App.css` variable, rewrite it before presenting it to the user — see Design.md's Agent Execution Directive.
+Before writing or editing any React/Tailwind code, read **[Design.md](Design.md)** and follow its Agent Execution Directive. It covers the anti-slop rules and their allowed exceptions, theme-aware color tokens, layout, typography, components, focus states, frontend architecture, localization (`getString`) and performance rules. The rules are kept only there, so don't rely on a summary.
 
 ## graphify
 

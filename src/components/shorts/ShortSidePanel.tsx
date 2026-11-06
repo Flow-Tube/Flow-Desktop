@@ -7,6 +7,7 @@ import { formatCount } from "../../lib/utils";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
 import type { VideoDetails } from "../../types/video";
 import type { RydData } from "../../lib/api/foss";
+import { useOriginalTitle } from "../../lib/useOriginalTitle";
 
 interface ShortSidePanelProps {
   short: ShortItem;
@@ -77,7 +78,8 @@ function ShortDescription({
   const { details: fetchedDetails, loading } = useShortDetails(short.id, !details);
   const resolvedDetails = details ?? fetchedDetails;
   const description = resolvedDetails?.description?.trim();
-  const title = short.title.trim() && short.title !== "Short" ? short.title : resolvedDetails?.title || short.title;
+  const originalTitle = useOriginalTitle(short.id);
+  const title = originalTitle || (short.title.trim() && short.title !== "Short" ? short.title : resolvedDetails?.title || short.title);
   const likes = rydData
     ? formatCount(rydData.likes)
     : formatCount(short.likeCountText ?? resolvedDetails?.likeCountText) || "-";

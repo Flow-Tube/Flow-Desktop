@@ -28,6 +28,7 @@ import { noteVideoSaved } from "./videoSaved";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
+import { useOriginalTitle } from "./useOriginalTitle";
 
 export type VideoDownloadMode = "video" | "audio";
 
@@ -73,6 +74,7 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
   const [error, setError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
   const preferred = preferredCodec(values, IS_MACOS_RUNTIME);
+  const originalTitle = useOriginalTitle(video?.id);
 
   useEffect(() => {
     setFormats([]);
@@ -108,6 +110,11 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
       cancelled = true;
     };
   }, [video, attempt]);
+
+  // The answer can land after the dialog opened, and a name the user typed stays.
+  useEffect(() => {
+    if (originalTitle) setTitle((current) => (current === video?.title ? originalTitle : current));
+  }, [originalTitle, video, attempt]);
 
   const rows = useMemo(() => qualityRows(formats, codec, preferred), [formats, codec, preferred]);
   const availableCodecs = useMemo(
@@ -179,6 +186,7 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
     availableCodecs,
     captions,
     codec,
+    displayTitle: originalTitle || video?.title || "",
     error,
     errorMessage: error ? getBackendErrorMessage(error) : null,
     folder,

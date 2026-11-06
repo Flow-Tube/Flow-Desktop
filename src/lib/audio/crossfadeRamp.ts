@@ -1,9 +1,29 @@
 const CURVE_POINTS = 32;
 const STEP_MS = 100;
 
-/** Equal-power gains for `t` in 0..1: the sum of both sides' power stays constant. */
-export const fadeInGain = (t: number): number => Math.sin((Math.max(0, Math.min(1, t)) * Math.PI) / 2);
-export const fadeOutGain = (t: number): number => Math.cos((Math.max(0, Math.min(1, t)) * Math.PI) / 2);
+export type CrossfadeCurve = "equal_power" | "s_curve" | "hold" | "gentle";
+
+/** The gentle curve's shape: its two gains add up to one, so the middle of the fade dips a little. */
+const GENTLE_POWER = 1.6;
+
+const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
+
+/** Equal-power curves differ only in how time passes through them, so all keep the blend's loudness. */
+function eased(t: number, shape: CrossfadeCurve): number {
+  if (shape === "s_curve") return t * t * (3 - 2 * t);
+  if (shape === "hold") return t * t;
+  return t;
+}
+
+export function fadeInGain(t: number, shape: CrossfadeCurve = "equal_power"): number {
+  const p = clamp01(t);
+  return shape === "gentle" ? 1 - (1 - p) ** GENTLE_POWER : Math.sin((eased(p, shape) * Math.PI) / 2);
+}
+
+export function fadeOutGain(t: number, shape: CrossfadeCurve = "equal_power"): number {
+  const p = clamp01(t);
+  return shape === "gentle" ? (1 - p) ** GENTLE_POWER : Math.cos((eased(p, shape) * Math.PI) / 2);
+}
 
 function curve(gain: (t: number) => number): Float32Array<ArrayBuffer> {
   const values = new Float32Array(CURVE_POINTS);
@@ -15,9 +35,16 @@ function curve(gain: (t: number) => number): Float32Array<ArrayBuffer> {
  * Schedules a whole fade on the audio clock, so it runs smoothly even while the window is hidden
  * and timers are throttled.
  */
-export function scheduleFade(param: AudioParam, direction: "in" | "out", startTime: number, seconds: number): void {
+export function scheduleFade(
+  param: AudioParam,
+  direction: "in" | "out",
+  startTime: number,
+  seconds: number,
+  shape: CrossfadeCurve = "equal_power",
+): void {
   param.cancelScheduledValues(startTime);
-  param.setValueCurveAtTime(curve(direction === "in" ? fadeInGain : fadeOutGain), startTime, seconds);
+  const gain = direction === "in" ? fadeInGain : fadeOutGain;
+  param.setValueCurveAtTime(curve((t) => gain(t, shape)), startTime, seconds);
 }
 
 /** Puts `param` back at full level at once, dropping any fade still scheduled on it. */

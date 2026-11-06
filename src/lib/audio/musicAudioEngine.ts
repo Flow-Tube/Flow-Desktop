@@ -1,7 +1,8 @@
 import { loudnessFactor, MUSIC_MAX_CUT_DB } from "../loudness";
 import { IS_LINUX_RUNTIME, IS_MACOS_RUNTIME } from "../platform";
 import { createAudioContext, keepRunning, resumeWithin, webAudioSupported } from "./audioContext";
-import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade } from "./crossfadeRamp";
+import { skipFadeLength } from "./crossfade";
+import { fadeInGain, fadeOutGain, resetFade, scheduleFade, steppedFade, type CrossfadeCurve } from "./crossfadeRamp";
 import { EQ_GRAPH_OFF, type EqGraphSpec } from "./eq/graphPlan";
 import { EqChain, RAMP_TIME_CONSTANT } from "./eqChain";
 import { pastListedEnd, playableLength } from "./listedLength";
@@ -80,8 +81,11 @@ class MusicAudioEngine {
   private eqEngaged = false;
   private speed = 1;
   private crossfadeEnabled = false;
+  private crossfadeCurve: CrossfadeCurve = "equal_power";
+  private skipFadeSeconds = 0;
   private armedFadeSeconds: number | null = null;
   private fading: Fade | null = null;
+  private preloadAfterFade: (() => void) | null = null;
 
   private get active(): Slot {
     return this.slots[this.activeIndex];
@@ -99,6 +103,7 @@ class MusicAudioEngine {
     this.slots = [emptySlot(), emptySlot()];
     this.activeIndex = 0;
     this.fading = null;
+    this.preloadAfterFade = null;
     for (const [i, el] of elements.entries()) {
       // Required for WebAudio to receive (non-silent) cross-origin samples.
       el.crossOrigin = "anonymous";
@@ -184,7 +189,7 @@ class MusicAudioEngine {
   /**
    * Start buffering `url` on the standby element for the track `key`, so it can
    * take over the moment the current track ends. A no-op when it already holds
-   * that track, or while it is still fading out the last one.
+   * that track. While it is still fading out the last one, this waits for that fade to run its course.
    */
   preload(
     key: string,
@@ -193,8 +198,12 @@ class MusicAudioEngine {
     mime: string | null,
     listedSeconds: number | null = null,
   ): void {
+    if (this.fading) {
+      this.preloadAfterFade = () => this.preload(key, url, loudnessDb, mime, listedSeconds);
+      return;
+    }
     const slot = this.standby;
-    if (!slot.el || slot.key === key || this.fading) return;
+    if (!slot.el || slot.key === key) return;
     slot.key = key;
     slot.loudnessDb = loudnessDb;
     slot.mime = mime;
@@ -231,6 +240,11 @@ class MusicAudioEngine {
   /** Makes the next `activatePreloaded` a crossfade of `seconds` instead of a cut. */
   armCrossfade(seconds: number): void {
     this.armedFadeSeconds = seconds > 0 ? seconds : null;
+  }
+
+  /** Fades the song being skipped under `key`, if the setting is on and `key` is already buffered. */
+  armSkipFade(key: string, progress: number, duration: number): void {
+    if (this.canPlayPreloaded(key)) this.armCrossfade(skipFadeLength(this.skipFadeSeconds, progress, duration));
   }
 
   /**
@@ -271,16 +285,20 @@ class MusicAudioEngine {
     let cancelSteps: (() => void) | null = null;
     if (this.ctx && this.routes(previous) && this.routes(next) && previous.fadeGain && next.fadeGain) {
       const t = this.ctx.currentTime;
-      scheduleFade(previous.fadeGain.gain, "out", t, seconds);
-      scheduleFade(next.fadeGain.gain, "in", t, seconds);
+      scheduleFade(previous.fadeGain.gain, "out", t, seconds, this.crossfadeCurve);
+      scheduleFade(next.fadeGain.gain, "in", t, seconds, this.crossfadeCurve);
     } else {
       cancelSteps = steppedFade(seconds, (progress) => {
-        previous.fade = fadeOutGain(progress);
-        next.fade = fadeInGain(progress);
+        previous.fade = fadeOutGain(progress, this.crossfadeCurve);
+        next.fade = fadeInGain(progress, this.crossfadeCurve);
         this.applyGain();
       });
     }
-    const done = setTimeout(() => this.finishFade(), seconds * 1_000 + 50);
+    const done = setTimeout(() => {
+      const preload = this.preloadAfterFade;
+      this.finishFade();
+      preload?.();
+    }, seconds * 1_000 + 50);
     this.fading = { previous, done, cancelSteps };
   }
 
@@ -289,6 +307,7 @@ class MusicAudioEngine {
     const fading = this.fading;
     if (!fading) return;
     this.fading = null;
+    this.preloadAfterFade = null;
     clearTimeout(fading.done);
     fading.cancelSteps?.();
     this.release(fading.previous);
@@ -502,6 +521,14 @@ class MusicAudioEngine {
   }
 
   // --- crossfade ----------------------------------------------------------
+
+  setCrossfadeCurve(curve: CrossfadeCurve): void {
+    this.crossfadeCurve = curve;
+  }
+
+  setSkipFadeSeconds(seconds: number): void {
+    this.skipFadeSeconds = seconds;
+  }
 
   /** Crossfades are timed on the audio clock, so turning them on brings WebAudio in. */
   setCrossfadeEnabled(enabled: boolean): void {

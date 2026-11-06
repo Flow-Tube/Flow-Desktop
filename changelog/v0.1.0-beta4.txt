@@ -80,6 +80,7 @@ MUSIC
 - If you're signed in to Last.fm, the music home gets a Discover with Last.fm shelf picked from what you have on repeat.
 - Artist pages show how often you've played an artist and whether you liked them, with your most played songs of theirs under Your history.
 - Artist pages also get a Featured on shelf and a Share button.
+- Crossfade can also blend when you skip a song, can fade between tracks of the same album, and has a choice of fade curves: Equal power, Smooth, Hold and Gentle.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

@@ -59,7 +59,10 @@ vi.mock("../lib/api/music", () => ({
   rankMusicCandidates: (items: SongItem[]) => Promise.resolve(items),
 }));
 
+import { useAppSettingsStore } from "./useAppSettingsStore";
 import { useMusicPlayerStore } from "./useMusicPlayerStore";
+import { preloadTrack } from "../lib/musicPreload";
+import { SETTINGS } from "../lib/settings/schema";
 
 const stream = (id: string) =>
   ({ videoId: id, audioUrl: `http://127.0.0.1/stream/${id}`, loudnessDb: -2 }) as MusicStreamInfo;
@@ -116,6 +119,31 @@ describe("starting a track", () => {
     expect(resolveMusicStream).toHaveBeenCalledTimes(2);
     expect(engine.play).toHaveBeenCalledTimes(1);
     expect(useMusicPlayerStore.getState().streamError).toBeNull();
+  });
+});
+
+describe("Fade when you skip", () => {
+  afterEach(() => useAppSettingsStore.setState({ values: {} }));
+
+  const preloadedOnStart = async (values: Record<string, string>) => {
+    useAppSettingsStore.setState({ values });
+    vi.mocked(preloadTrack).mockClear();
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 0);
+    return vi.mocked(preloadTrack).mock.calls.map(([track]) => track.id);
+  };
+
+  it("buffers the next song as soon as one starts, since a skip can come any time", async () => {
+    expect(
+      await preloadedOnStart({
+        [SETTINGS.MUSIC_CROSSFADE_ENABLED]: "true",
+        [SETTINGS.MUSIC_CROSSFADE_ON_SKIP]: "true",
+      }),
+    ).toEqual(["b"]);
+  });
+
+  it("leaves it to the last seconds otherwise", async () => {
+    expect(await preloadedOnStart({})).toEqual([]);
+    expect(await preloadedOnStart({ [SETTINGS.MUSIC_CROSSFADE_ON_SKIP]: "true" })).toEqual([]);
   });
 });
 

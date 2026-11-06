@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SongItem } from "../../types/music";
-import { crossfadeTarget, type CrossfadeQueue } from "./crossfade";
+import { crossfadeTarget, skipFadeLength, type CrossfadeQueue } from "./crossfade";
 
 const song = (id: string, albumId: string | null = null): SongItem => ({
   id,
@@ -57,5 +57,32 @@ describe("crossfadeTarget", () => {
 
   it("never fades a song too short to hold the fade twice", () => {
     expect(crossfadeTarget(near({ duration: 8, progress: 5 }), 5)).toBe(-1);
+  });
+});
+
+describe("skipFadeLength", () => {
+  it("fades for the chosen length, or what's left of the song", () => {
+    expect(skipFadeLength(5, 30, 200)).toBe(5);
+    expect(skipFadeLength(5, 197, 200)).toBe(3);
+  });
+
+  it("cuts when off, barely heard or too near the end", () => {
+    expect(skipFadeLength(0, 30, 200)).toBe(0);
+    expect(skipFadeLength(5, 0.5, 200)).toBe(0);
+    expect(skipFadeLength(5, 199, 200)).toBe(0);
+  });
+});
+
+describe("keep albums off", () => {
+  it("fades between tracks of the same album", () => {
+    const album = { name: "A", id: "same" };
+    const q = near();
+    const inOrder = {
+      ...q,
+      currentTrack: { ...q.currentTrack!, album },
+      queue: q.queue.map((track) => ({ ...track, album })),
+    };
+    expect(crossfadeTarget(inOrder, 5, true)).toBe(-1);
+    expect(crossfadeTarget(inOrder, 5, false)).toBe(1);
   });
 });

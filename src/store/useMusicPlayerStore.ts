@@ -325,6 +325,15 @@ export function warmMusicStream(videoId: string): void {
   prefetchMusicStream(videoId, getMusicAudioQualitySetting(), { preferAac: musicAudioEngine.wantsAac() });
 }
 
+function armSkipFade(s: Pick<MusicPlayerState, "isPlaying" | "progress" | "duration" | "queue">, index: number): void {
+  const target = s.queue[index];
+  if (s.isPlaying && target) musicAudioEngine.armSkipFade(videoIdOf(target), s.progress, s.duration);
+}
+
+/** A skip can only fade into a song already buffered, so the next one can't wait for this one's last seconds. */
+const fadesOnSkip = () =>
+  getSettingValue(SETTINGS.MUSIC_CROSSFADE_ENABLED) === "true" && getSettingValue(SETTINGS.MUSIC_CROSSFADE_ON_SKIP) === "true";
+
 export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   currentTrack: null,
   queue: [],
@@ -472,6 +481,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       unplayableSkips = 0;
       void get()._ensureRadio();
       get()._prefetchUpcoming();
+      if (fadesOnSkip()) get()._preloadUpcoming();
     };
 
     // A fresh play of a long track picks up where it was left (a setting).
@@ -723,6 +733,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
         return;
       }
     }
+    armSkipFade(get(), nextIndex);
     void get()._loadIndex(nextIndex);
   },
 
@@ -737,6 +748,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     }
     let prevIndex = currentIndex - 1;
     if (prevIndex < 0) prevIndex = repeatMode === "all" ? queue.length - 1 : 0;
+    armSkipFade(get(), prevIndex);
     void get()._loadIndex(prevIndex);
   },
 

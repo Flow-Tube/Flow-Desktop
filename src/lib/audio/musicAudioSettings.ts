@@ -3,6 +3,7 @@ import { getSettingValue, useAppSettingsStore } from "../../store/useAppSettings
 import { bindEqPersistence, useEqStore } from "../../store/useEqStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { crossfadeTarget } from "./crossfade";
+import type { CrossfadeCurve } from "./crossfadeRamp";
 import { REFERENCE_SAMPLE_RATE } from "./eq/filterMath";
 import { graphChangesSound, graphSpec } from "./eq/graphPlan";
 import { changesSound } from "./eq/stateOps";
@@ -29,7 +30,13 @@ export function bindMusicAudioSettings(): void {
     getSettingValue(SETTINGS.MUSIC_CROSSFADE_ENABLED) === "true"
       ? Number(getSettingValue(SETTINGS.MUSIC_CROSSFADE_SECONDS))
       : 0;
-  const applyCrossfade = () => musicAudioEngine.setCrossfadeEnabled(crossfadeSeconds() > 0);
+  const applyCrossfade = () => {
+    musicAudioEngine.setCrossfadeEnabled(crossfadeSeconds() > 0);
+    musicAudioEngine.setCrossfadeCurve(getSettingValue(SETTINGS.MUSIC_CROSSFADE_CURVE) as CrossfadeCurve);
+    musicAudioEngine.setSkipFadeSeconds(
+      getSettingValue(SETTINGS.MUSIC_CROSSFADE_ON_SKIP) === "true" ? crossfadeSeconds() : 0,
+    );
+  };
 
   applyNormalization();
   applySpeed();
@@ -46,7 +53,7 @@ export function bindMusicAudioSettings(): void {
   useMusicPlayerStore.subscribe((state, previous) => {
     if (state.progress === previous.progress) return;
     const seconds = crossfadeSeconds();
-    const index = crossfadeTarget(state, seconds);
+    const index = crossfadeTarget(state, seconds, getSettingValue(SETTINGS.MUSIC_CROSSFADE_KEEP_ALBUMS) === "true");
     const next = state.queue[index];
     if (!next || !musicAudioEngine.canPlayPreloaded(next.videoId ?? next.id)) return;
     musicAudioEngine.armCrossfade(Math.min(seconds, state.duration - state.progress));

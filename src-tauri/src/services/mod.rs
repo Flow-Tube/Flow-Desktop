@@ -14,6 +14,7 @@ pub mod shorts_service;
 pub mod subscription_feed;
 pub mod taste_service;
 pub mod theme_file;
+pub mod upcoming_reminders;
 #[cfg(windows)]
 pub mod win_mixer;
 #[cfg(windows)]

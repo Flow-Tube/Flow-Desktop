@@ -104,8 +104,9 @@ use commands::notes::{
     delete_notes, list_notes, restore_notes, save_note, save_note_subject, save_notes_order,
 };
 use commands::notifications::{
-    check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
-    get_unread_notification_count, mark_notifications_read,
+    cancel_upcoming_reminder, check_subscriptions_now, clear_notifications, delete_notification,
+    get_notifications, get_unread_notification_count, get_upcoming_reminders,
+    mark_notifications_read, restore_notification, set_upcoming_reminder,
 };
 #[cfg(not(target_os = "macos"))]
 use commands::pip::PIP_WINDOW_LABEL;
@@ -887,7 +888,11 @@ pub fn run() {
             get_unread_notification_count,
             mark_notifications_read,
             delete_notification,
+            restore_notification,
             clear_notifications,
+            get_upcoming_reminders,
+            set_upcoming_reminder,
+            cancel_upcoming_reminder,
             check_subscriptions_now,
             // --- Discord Rich Presence ---
             set_discord_presence,

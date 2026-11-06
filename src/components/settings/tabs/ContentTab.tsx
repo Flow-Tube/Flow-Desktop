@@ -65,6 +65,7 @@ export function ContentTab() {
   const [homeMaxVideoAge, setHomeMaxVideoAge] = usePreference(SETTINGS.HOME_MAX_VIDEO_AGE, '0');
   const [subsHideUnplayable, setSubsHideUnplayable] = useBoolPref(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS, false);
   const [notificationsEnabled, setNotificationsEnabled] = useBoolPref(SETTINGS.NOTIFICATIONS_ENABLED, true);
+  const [notifShorts, setNotifShorts] = useBoolPref(SETTINGS.NOTIF_SHORTS_ENABLED, true);
   const [notificationInterval, setNotificationInterval] = usePreference(SETTINGS.NOTIFICATION_CHECK_INTERVAL, '360');
   const [regionPicker, setRegionPicker] = useBoolPref(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, true);
   const [trendingRegion, setTrendingRegion] = usePreference(SETTINGS.TRENDING_REGION, 'US');
@@ -229,6 +230,7 @@ export function ContentTab() {
         <SettingItem title={getString('settings_notifications_enabled')} description={getString('settings_notifications_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.NOTIFICATIONS_ENABLED)}>
           <ToggleSwitch checked={notificationsEnabled} onChange={setNotificationsEnabled} disabled={isSettingDisabledUntilWired(SETTINGS.NOTIFICATIONS_ENABLED)} />
         </SettingItem>
+        <SettingItem title={getString('settings_notif_shorts')} description={getString('settings_notif_shorts_desc')} disabled={!notificationsEnabled || !shortsContent}><ToggleSwitch checked={notifShorts} onChange={setNotifShorts} disabled={!notificationsEnabled || !shortsContent} /></SettingItem>
         <SettingItem title={getString('settings_notification_interval')} description={getString('settings_notification_interval_desc')} disabled={!notificationsEnabled || isSettingDisabledUntilWired(SETTINGS.NOTIFICATION_CHECK_INTERVAL)}>
           <Select
             value={notificationInterval}

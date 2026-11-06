@@ -3,6 +3,7 @@ import * as dashjs from "dashjs";
 import Hls from "hls.js";
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
+import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
@@ -2715,6 +2716,9 @@ export const Player: React.FC<PlayerProps> = ({
               onRetry={onRetry}
               onCopyLogs={onCopyLogs}
               onOpenInBrowser={onOpenInBrowser}
+              upcomingAction={
+                errorInfo.startsAtMs != null ? <CurrentVideoReminderButton startsAtMs={errorInfo.startsAtMs} /> : undefined
+              }
             />
           ) : (
             <div className="max-w-md space-y-4">

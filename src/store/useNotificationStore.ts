@@ -6,6 +6,7 @@ import {
   getNotifications,
   getUnreadNotificationCount,
   markNotificationsRead,
+  restoreNotification,
   type NotificationRecord,
 } from "../lib/api/notifications";
 
@@ -25,6 +26,8 @@ interface NotificationState {
   prependNotifications: (records: NotificationRecord[]) => void;
   markAllRead: () => Promise<void>;
   removeNotification: (id: number) => Promise<void>;
+  /** Undoes a removal, in its old place. */
+  restoreRemoved: (notification: NotificationRecord) => Promise<void>;
   clearAll: () => Promise<void>;
 
   loadChannelPreferences: () => Promise<void>;
@@ -108,6 +111,22 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       await deleteNotification(id);
     } catch (error) {
       console.error("Failed to delete notification", error);
+      set({ notifications: previous });
+      await get().refreshUnreadCount();
+    }
+  },
+
+  restoreRemoved: async (notification) => {
+    const previous = get().notifications;
+    if (previous.some((item) => item.id === notification.id)) return;
+    set({
+      notifications: [...previous, notification].sort((a, b) => b.createdAt - a.createdAt || b.id - a.id),
+      unreadCount: get().unreadCount + (notification.isRead ? 0 : 1),
+    });
+    try {
+      await restoreNotification(notification);
+    } catch (error) {
+      console.error("Failed to restore notification", error);
       set({ notifications: previous });
       await get().refreshUnreadCount();
     }

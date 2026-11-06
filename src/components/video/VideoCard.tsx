@@ -4,7 +4,7 @@ import { useBlockedKeywordMatch, useFeedActionsStore } from '../../store/useFeed
 import { useBlockedRevealStore } from '../../lib/blockedContent';
 import { BlockedVideoCard } from './BlockedVideoCard';
 import { useLiveStore } from '../../store/useLiveStore';
-import { Plus, Ban, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, ListVideo, Download, User, Share2 } from 'lucide-react';
+import { Plus, Ban, Bell, BellRing, Check, MoreVertical, Trash2, GripHorizontal, Sparkles, Eye, EyeOff, Clock, ListPlus, ListVideo, Download, User, Share2 } from 'lucide-react';
 import type { VideoSummary } from '../../types/video';
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -24,6 +24,7 @@ import { MediaMenu, type MediaMenuAction } from '../ui/MediaMenu';
 import { shareLink } from '../../lib/clipboard';
 import { youtubeWatchUrl } from '../../lib/youtubeUrl';
 import { getString } from '../../lib/i18n/index';
+import { useUpcomingReminderStore } from '../../store/useUpcomingReminderStore';
 import { useWatchLaterStore } from '../../store/useWatchLaterStore';
 import { useUiStore } from '../../store/useUiStore';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
@@ -167,6 +168,8 @@ function VideoCardComponent({
   // IPC round trip plus a parse of the whole playlist library, several hundred
   // times over, to label a single context-menu entry.
   const isSavedToWatchLater = useWatchLaterStore((s) => s.ids.has(video.id));
+  const isReminded = useUpcomingReminderStore((s) => s.ids.has(video.id));
+  const toggleReminder = useUpcomingReminderStore((s) => s.toggle);
   const saveToWatchLater = useWatchLaterStore((s) => s.add);
   const removeFromWatchLater = useWatchLaterStore((s) => s.remove);
 
@@ -451,6 +454,15 @@ function VideoCardComponent({
         group: "library" as const,
         onSelect: handleShare,
       }]),
+    ...(video.isUpcoming && video.upcomingStartMs
+      ? [{
+        id: "remind-me",
+        label: getString(isReminded ? "upcoming_reminder_enabled" : "upcoming_reminder_action"),
+        icon: isReminded ? <BellRing size={16} /> : <Bell size={16} />,
+        group: "library" as const,
+        onSelect: () => void toggleReminder(video, video.upcomingStartMs ?? 0),
+      }]
+      : []),
     ...(onRemoveFromContinueWatching
       ? [{
         id: "remove-continue",

@@ -158,6 +158,7 @@ const DESKTOP_ONLY: &[&str] = &[
     "subscription_refresh_on_startup",
     "subscription_collaborations_enabled",
     "subs_sort_mode",
+    "notif_shorts_enabled",
     "hide_unplayable_subscriptions",
     "show_region_picker_in_explore",
     "deep_flow_expire_hours",

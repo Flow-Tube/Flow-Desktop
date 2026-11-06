@@ -174,6 +174,11 @@ LIBRARY
 - Manage subscriptions can be sorted by name or latest upload, and shows video channels and music artists apart.
 - Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
 
+NOTIFICATIONS
+- Remind me on an upcoming video or premiere puts it in your notifications when it starts. A reminder missed while Flow was closed arrives at the next launch.
+- New Shorts from your subscriptions can be left out of alerts, with a Shorts switch in Settings. Several uploads since the last check now each get a notification.
+- In the notifications panel you can save a video to Watch later and undo a removal. New and Last 7 days sections join Today, Yesterday and Earlier.
+
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.

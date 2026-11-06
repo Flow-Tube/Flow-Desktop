@@ -51,6 +51,7 @@ MUSIC
 - Hiding or showing the Queue or Lyrics pane in the full player no longer stretches the title and controls, and the artwork moves with the text.
 - A new Blur other lines switch in the lyrics menu and Settings keeps every line of synced lyrics sharp. Linux never blurs them, so it doesn't show there.
 - Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
+- The Podcasts category chip on Music Home now loads podcast shelves and episodes instead of showing an empty result.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

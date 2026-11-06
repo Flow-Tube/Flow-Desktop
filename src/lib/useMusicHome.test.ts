@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('./api/music', () => api);
 
-import { MUSIC_HOME_CACHE_FRESH_MS, useMusicHome } from './useMusicHome';
+import { MUSIC_HOME_CACHE_FRESH_MS, useMusicChipFilter, useMusicHome } from './useMusicHome';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -103,5 +103,51 @@ describe('useMusicHome', () => {
     expect(api.getMusicHomePage).toHaveBeenNthCalledWith(3, 'live-token');
     expect(titles()).toEqual(['Live', 'More']);
     expect(state.current?.loadMoreError).toBeNull();
+  });
+});
+
+describe('useMusicChipFilter', () => {
+  it('loads items for a chip filter including podcast episodes', async () => {
+    const chipState: { current: ReturnType<typeof useMusicChipFilter> | null } = { current: null };
+    function ChipProbe() {
+      chipState.current = useMusicChipFilter({
+        title: 'Podcasts',
+        browseId: 'FEmusic_home',
+        params: 'ggMPOg1uZXdfcG9kY2FzdHM%3D',
+        orderBy: 0,
+      });
+      return null;
+    }
+    api.getMusicMoodGenre.mockResolvedValueOnce({
+      items: [
+        {
+          type: 'episode',
+          id: 'ep1',
+          title: 'Ep 1',
+          author: { name: 'Show', id: null },
+          podcastId: 'PL1',
+          thumbnail: 'thumb.jpg',
+          explicit: false,
+          publishDateText: '1d ago',
+        },
+      ],
+      sections: [],
+      continuation: null,
+    });
+
+    const chipRoot = createRoot(document.createElement('div'));
+    await act(async () => {
+      chipRoot.render(createElement(ChipProbe));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(chipState.current?.items).toHaveLength(1);
+    expect(chipState.current?.items[0]?.type).toBe('episode');
+
+    await act(async () => {
+      chipRoot.unmount();
+    });
   });
 });

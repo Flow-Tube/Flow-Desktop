@@ -34,6 +34,7 @@ pub fn video_id(r: &Value) -> Option<String> {
     r["playlistItemData"]["videoId"]
         .as_str()
         .or_else(|| r["navigationEndpoint"]["watchEndpoint"]["videoId"].as_str())
+        .or_else(|| r["onTap"]["watchEndpoint"]["videoId"].as_str())
         .or_else(|| {
             r["overlay"]["musicItemThumbnailOverlayRenderer"]["content"]["musicPlayButtonRenderer"]
                 ["playNavigationEndpoint"]["watchEndpoint"]["videoId"]

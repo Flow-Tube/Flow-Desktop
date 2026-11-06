@@ -8,6 +8,7 @@ import {
   CirclePlay,
   Gauge,
   Monitor,
+  Scaling,
   Pause,
   Sliders,
   SlidersHorizontal,
@@ -34,6 +35,7 @@ import { videoCodecLabel } from "../../lib/settings/playerRuntime";
 import { getString } from "../../lib/i18n/index";
 import { MOTION_EASE, motionMs } from "../../lib/motion";
 import { PLAYER_MENU_ATTR } from "../../lib/playerMenuDismiss";
+import { VIDEO_FIT_LABELS, VIDEO_FITS } from "../../lib/videoFit";
 
 export type SettingsPane =
   | "root"
@@ -43,7 +45,8 @@ export type SettingsPane =
   | "captions-translate"
   | "captions-customize"
   | "audio"
-  | "sleep";
+  | "sleep"
+  | "resize";
 
 // How deep a pane sits, so going deeper slides in from the right and going back from the left.
 const PANE_DEPTH: Record<SettingsPane, number> = {
@@ -53,6 +56,7 @@ const PANE_DEPTH: Record<SettingsPane, number> = {
   captions: 1,
   audio: 1,
   sleep: 1,
+  resize: 1,
   "captions-translate": 2,
   "captions-customize": 2,
 };
@@ -66,6 +70,7 @@ const PANE_TITLE = {
   "captions-customize": "player_menu_subtitle_style",
   audio: "player_menu_audio",
   sleep: "sleep_timer",
+  resize: "player_menu_resize",
 } as const satisfies Record<Exclude<SettingsPane, "root">, string>;
 
 const ROW = "flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-200 ease-out";
@@ -140,6 +145,8 @@ export function PlayerSettingsMenu({
   const noteEditorHosted = useNotesStore((s) => s.editorHosted);
   const canNoteVideo = notesEnabled && noteEditorHosted && !!currentVideo && !currentVideo.isLive;
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED);
+  const videoFit = usePlayerStore((s) => s.videoFit);
+  const setVideoFit = usePlayerStore((s) => s.setVideoFit);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
 
@@ -304,6 +311,7 @@ export function PlayerSettingsMenu({
               <AudioLines size={18} />,
               () => onPaneChange("audio"),
             )}
+            {settingRow(getString("player_menu_resize"), getString(VIDEO_FIT_LABELS[videoFit]), <Scaling size={18} />, () => onPaneChange("resize"))}
             {settingRow(getString("sleep_timer"), <SleepTimerLabel />, <Pause size={18} />, () => onPaneChange("sleep"))}
             {canNoteVideo &&
               settingRow(
@@ -506,6 +514,22 @@ export function PlayerSettingsMenu({
                 );
               })
             )}
+          </div>
+        )}
+
+        {pane === "resize" && (
+          <div className={LIST}>
+            {VIDEO_FITS.map((fit) => (
+              <button
+                key={fit}
+                type="button"
+                onClick={() => pick(() => setVideoFit(fit))}
+                className={cx(ROW, "hover:bg-chrome-white/10")}
+              >
+                <span>{getString(VIDEO_FIT_LABELS[fit])}</span>
+                {check(videoFit === fit)}
+              </button>
+            ))}
           </div>
         )}
 

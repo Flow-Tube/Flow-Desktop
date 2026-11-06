@@ -96,6 +96,8 @@ const DESKTOP_ONLY: &[&str] = &[
     "autoplay_countdown_seconds",
     "allow_volume_boost",
     "remember_playback_speed",
+    "speed_per_channel",
+    "music_at_normal_speed",
     "custom_speeds_enabled",
     "custom_speed_presets",
     "long_press_playback_speed",

@@ -69,6 +69,8 @@ import {
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import { openPopoutPlayer } from "../../lib/pipHandoff";
 import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
+import { usePlaybackStartSpeed } from "../../lib/playbackStartSpeed";
+import { VIDEO_FIT_CLASS } from "../../lib/videoFit";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -126,6 +128,8 @@ type PlayerProps = {
   onRetry?: () => void;
   onCopyLogs?: () => Promise<boolean> | boolean | void;
   onOpenInBrowser?: () => void;
+  /** YouTube's category, once known, for the music at normal speed setting. */
+  category?: string | null;
   /** Drawn over the video and the controls, such as the Up next card. */
   overlay?: React.ReactNode;
   onRetrySource?: (reason: string) => void;
@@ -300,6 +304,7 @@ export const Player: React.FC<PlayerProps> = ({
   onRetry,
   onCopyLogs,
   onOpenInBrowser,
+  category,
   overlay,
   onRetrySource,
   sourceMode,
@@ -369,6 +374,8 @@ export const Player: React.FC<PlayerProps> = ({
     setCurrentTime,
     setDuration,
     playNext,
+    playPrevious,
+    videoFit,
     isTheaterMode,
     setIsTheaterMode,
     sponsorBlockSegments,
@@ -583,6 +590,7 @@ export const Player: React.FC<PlayerProps> = ({
     !isPipMode &&
     !isFullscreen &&
     !error &&
+    videoFit === "fit" &&
     (isTheaterSurface || ambient.glow);
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
   const logPlayerEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
@@ -868,21 +876,16 @@ export const Player: React.FC<PlayerProps> = ({
   }, [loadSettings]);
 
   const mediaIdentity = src || dashManifestUrl || hlsManifestUrl || "";
-  const appliedInitialRateForRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!mediaIdentity || appliedInitialRateForRef.current === mediaIdentity) return;
-    appliedInitialRateForRef.current = mediaIdentity;
-    setPlaybackRate(defaultPlaybackRate);
-  }, [defaultPlaybackRate, mediaIdentity, setPlaybackRate]);
+  const notePickedSpeed = usePlaybackStartSpeed(mediaIdentity, defaultPlaybackRate, category);
 
   const selectPlaybackRate = useCallback((nextRate: number) => {
     const normalizedRate = normalizePlaybackRate(nextRate);
     setPlaybackRate(normalizedRate);
+    notePickedSpeed(normalizedRate);
     if (rememberPlaybackSpeed) {
       void setSettingValue(SETTINGS.PLAYBACK_SPEED, formatPlaybackRate(normalizedRate));
     }
-  }, [rememberPlaybackSpeed, setPlaybackRate]);
+  }, [notePickedSpeed, rememberPlaybackSpeed, setPlaybackRate]);
 
   const toggleLoopSetting = useCallback(() => {
     void setSettingValue(SETTINGS.VIDEO_LOOP_ENABLED, String(!videoLoopEnabled));
@@ -2157,6 +2160,12 @@ export const Player: React.FC<PlayerProps> = ({
           event.preventDefault();
           togglePlay();
           break;
+        case "n":
+          if (event.shiftKey) playNext(true);
+          break;
+        case "p":
+          if (event.shiftKey) playPrevious();
+          break;
         case "j":
           seekBy(-seekIntervalSeconds);
           break;
@@ -2285,6 +2294,8 @@ export const Player: React.FC<PlayerProps> = ({
     isLive,
     jumpChapter,
     nudgeSubtitleFontSize,
+    playNext,
+    playPrevious,
     setIsTheaterMode,
     setMuted,
     setVolume,
@@ -2598,7 +2609,7 @@ export const Player: React.FC<PlayerProps> = ({
             setPlaybackDesired(false);
           }
         }}
-        className="relative z-10 h-full w-full object-contain"
+        className={cx("relative z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit])}
       />
 
       {usesExternalAudio && selectedAudioTrack?.localUrl && (

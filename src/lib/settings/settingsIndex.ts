@@ -69,6 +69,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_video_loudness", summary: "settings_video_loudness_desc" },
     { title: "settings_volume_boost", summary: "settings_volume_boost_desc" },
     { title: "settings_remember_speed", summary: "settings_remember_speed_desc" },
+    { title: "settings_speed_per_channel", summary: "settings_speed_per_channel_desc" },
+    { title: "settings_music_normal_speed", summary: "settings_music_normal_speed_desc" },
     { title: "settings_default_speed" },
     { title: "settings_custom_speed_presets", summary: "settings_custom_speed_presets_desc" },
     { title: "settings_speed_values", summary: "settings_speed_values_desc" },

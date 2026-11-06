@@ -101,6 +101,8 @@ PLAYER
 - An optional Autoplay delay shows an Up next card with Cancel, Restart and Play now. It is off by default, and the player's settings menu has an Autoplay switch.
 - Comments now open in the fullscreen side panel, from a new button on the fullscreen controls.
 - Comments can be sorted by Oldest and Timed. Timed lists comments by the moment in the video they point at, and Follow the video moves the list along as it plays.
+- Remember speed per channel starts each channel at the speed you last chose, and Play music at normal speed starts music videos at 1x. A channel's speed comes first, and neither changes the default for the next video.
+- The player's settings menu has Resize with Fit, Fill and Zoom. Shift+N plays the next video and Shift+P the previous one.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

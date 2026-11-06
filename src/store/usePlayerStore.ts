@@ -126,6 +126,8 @@ export interface PlayerState {
   playbackStartedVideoId: string | null;
 
   isTheaterMode: boolean;
+  /** How the picture fills the player, for this session as on Flow for Android. */
+  videoFit: VideoFit;
   sponsorBlockSegments: SponsorBlockSegment[];
   dearrowData: DeArrowOverride | null;
   rydData: RydData | null;
@@ -186,6 +188,7 @@ export interface PlayerState {
   clearWatchPageCache: (videoId?: string) => void;
 
   setIsTheaterMode: (isTheaterMode: boolean) => void;
+  setVideoFit: (videoFit: VideoFit) => void;
   setSponsorBlockSegments: (segments: SponsorBlockSegment[]) => void;
   setDearrowData: (data: DeArrowOverride | null) => void;
   setRydData: (data: RydData | null) => void;
@@ -210,6 +213,8 @@ export interface PlayerState {
   isCommentsAvailable: boolean;
   setIsCommentsAvailable: (available: boolean) => void;
 }
+
+export type VideoFit = "fit" | "fill" | "zoom";
 
 export type FullscreenPanel = "chapters" | "queue" | "chat" | "comments";
 
@@ -240,6 +245,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackStartedVideoId: null,
 
   isTheaterMode: getSavedTheaterMode(),
+  videoFit: "fit",
   sponsorBlockSegments: [],
   dearrowData: null,
   rydData: null,
@@ -735,6 +741,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ watchPageCache: null });
   },
 
+  setVideoFit: (videoFit) => set({ videoFit }),
   setIsTheaterMode: (isTheaterMode) => {
     profileStorage.setItem("flow_theater_mode", String(isTheaterMode));
     set({ isTheaterMode });

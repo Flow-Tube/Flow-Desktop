@@ -26,6 +26,8 @@ export function PlayerTab() {
   const [volumeBoost, setVolumeBoost] = useBoolPref(SETTINGS.ALLOW_VOLUME_BOOST, false);
 
   const [rememberSpeed, setRememberSpeed] = useBoolPref(SETTINGS.REMEMBER_PLAYBACK_SPEED, false);
+  const [speedPerChannel, setSpeedPerChannel] = useBoolPref(SETTINGS.SPEED_PER_CHANNEL);
+  const [musicNormalSpeed, setMusicNormalSpeed] = useBoolPref(SETTINGS.MUSIC_AT_NORMAL_SPEED);
   const [playbackSpeed, setPlaybackSpeed] = usePreference(SETTINGS.PLAYBACK_SPEED, '1.0');
   const [customSpeeds, setCustomSpeeds] = useBoolPref(SETTINGS.CUSTOM_SPEEDS_ENABLED, false);
   const [customPresets, setCustomPresets] = usePreference(SETTINGS.CUSTOM_SPEED_PRESETS, '');
@@ -89,6 +91,12 @@ export function PlayerTab() {
       <SettingsGroup title={getString('settings_group_speed')}>
         <SettingItem title={getString('settings_remember_speed')} description={getString('settings_remember_speed_desc')}>
           <ToggleSwitch checked={rememberSpeed} onChange={setRememberSpeed} />
+        </SettingItem>
+        <SettingItem title={getString('settings_speed_per_channel')} description={getString('settings_speed_per_channel_desc')}>
+          <ToggleSwitch checked={speedPerChannel} onChange={setSpeedPerChannel} />
+        </SettingItem>
+        <SettingItem title={getString('settings_music_normal_speed')} description={getString('settings_music_normal_speed_desc')}>
+          <ToggleSwitch checked={musicNormalSpeed} onChange={setMusicNormalSpeed} />
         </SettingItem>
         <SettingItem title={getString('settings_default_speed')}>
           <Select value={playbackSpeed} onChange={setPlaybackSpeed} options={[

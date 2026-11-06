@@ -333,6 +333,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       heatmap={videoDetails?.heatmap}
       storyboard={stream.storyboard}
       loudnessDb={stream.loudnessDb}
+      category={category}
       onRetrySource={stream.onRetrySource}
       onSelectQuality={stream.onSelectQuality}
       onTimeUpdate={handleTimeUpdate}

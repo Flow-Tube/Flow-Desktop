@@ -198,6 +198,51 @@ pub async fn delete_files(pool: &SqlitePool, ids: &[String]) -> AppResult<()> {
     Ok(())
 }
 
+pub async fn remove_file(pool: &SqlitePool, id: &str) -> AppResult<()> {
+    sqlx::query("DELETE FROM local_media_files WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM local_media_subtitle_picks WHERE file_id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn subtitle_picks(pool: &SqlitePool, file_id: &str) -> AppResult<Vec<(String, String)>> {
+    let rows = sqlx::query(
+        "SELECT path, name FROM local_media_subtitle_picks WHERE file_id = ? ORDER BY added_ms",
+    )
+    .bind(file_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("path"), row.get("name")))
+        .collect())
+}
+
+pub async fn add_subtitle_pick(
+    pool: &SqlitePool,
+    file_id: &str,
+    path: &str,
+    name: &str,
+    now_ms: i64,
+) -> AppResult<()> {
+    sqlx::query(
+        "INSERT INTO local_media_subtitle_picks (file_id, path, name, added_ms) VALUES (?, ?, ?, ?)
+         ON CONFLICT(file_id, path) DO UPDATE SET added_ms = excluded.added_ms",
+    )
+    .bind(file_id)
+    .bind(path)
+    .bind(name)
+    .bind(now_ms)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn plays(pool: &SqlitePool) -> AppResult<Vec<LocalMediaPlay>> {
     Ok(sqlx::query_as::<_, LocalMediaPlay>(
         "SELECT file_id, position_ms, duration_ms, last_played_ms FROM local_media_plays",
@@ -315,6 +360,22 @@ pub(crate) mod tests {
         );
         remove_folder(&pool, "/m").await.unwrap();
         assert!(folders(&pool).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn removing_a_file_takes_its_subtitle_picks_along() {
+        let pool = memory_pool().await;
+        upsert_files(&pool, &[row("a", "/m/a.mp4")]).await.unwrap();
+        add_subtitle_pick(&pool, "a", "/s/a.srt", "a.srt", 1)
+            .await
+            .unwrap();
+        add_subtitle_pick(&pool, "a", "/s/a.srt", "a.srt", 2)
+            .await
+            .unwrap();
+        assert_eq!(subtitle_picks(&pool, "a").await.unwrap().len(), 1);
+        remove_file(&pool, "a").await.unwrap();
+        assert!(file(&pool, "a").await.unwrap().is_none());
+        assert!(subtitle_picks(&pool, "a").await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -68,6 +68,7 @@ table	settings	PROFILE	settings	Mixed table: device keys are routed to Default's
 table	local_media_files	PROFILE	library	Index of the folders this profile chose, kept with its other library data
 table	local_media_folders	PROFILE	library	The folders this profile chose for its local library
 table	local_media_plays	PROFILE	library	Resume and play counts for local files, kept out of the shared watch history
+table	local_media_subtitle_picks	PROFILE	library	Subtitle files picked for local videos
 setting	user_neuro_brain	PROFILE	private	FlowNeuro brain
 setting	user_neuro_brain_before_v14	PROFILE	private	Pre-migration copy, written for any brain that lacks one
 setting	user_music_brain	PROFILE	private	MusicBrain

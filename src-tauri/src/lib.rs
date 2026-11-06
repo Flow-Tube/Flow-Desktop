@@ -550,6 +550,7 @@ pub fn run() {
             app.manage(services::blocked_channel_names::BlockedChannelNames::default());
             app.manage(services::home_feed::HomeFeedService::new());
             app.manage(DownloadManager::default());
+            app.manage(commands::local_media::LocalCoverLimit::default());
             let local_media_scanner = Arc::new(local_media::scanner::LocalMediaScanner::default());
             app.manage(Arc::clone(&local_media_scanner));
             local_media::scanner::scan_at_launch(
@@ -734,6 +735,9 @@ pub fn run() {
             commands::local_media::local_media_cancel_scan,
             commands::local_media::local_media_report_playback,
             commands::local_media::get_local_stream,
+            commands::local_media::local_media_cover,
+            commands::local_media::local_media_pick_subtitle,
+            commands::local_media::local_media_trash,
             delete_downloads,
             clear_downloads,
             create_download_collection,

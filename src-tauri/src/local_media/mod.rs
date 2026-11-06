@@ -5,10 +5,15 @@
 //! `validate_video_id` refuses it). Nothing keyed by one reaches a sync collection, a
 //! recommendation engine or the network.
 
+pub mod bounds;
+pub mod covers;
 pub mod formats;
+pub mod lyrics;
 pub mod probe;
 pub mod scan;
 pub mod scanner;
+pub mod subtitles;
+pub mod text;
 
 use std::path::Path;
 

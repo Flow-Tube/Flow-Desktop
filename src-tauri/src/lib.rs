@@ -92,8 +92,8 @@ use commands::music::{
 };
 use commands::music_brain::{
     block_music_artist, dislike_music_artist, favourite_music_artist, get_blocked_music_artists,
-    get_daily_mixes, get_heavy_rotation, get_music_brain_snapshot, get_music_rediscover,
-    get_music_taste_profile, get_music_time_rotation, rank_music_candidates,
+    get_daily_mixes, get_heavy_rotation, get_music_artist_insights, get_music_brain_snapshot,
+    get_music_rediscover, get_music_taste_profile, get_music_time_rotation, rank_music_candidates,
     record_music_interaction, reset_music_brain, set_favourite_music_artist, unblock_music_artist,
 };
 use commands::music_queue::{
@@ -810,6 +810,7 @@ pub fn run() {
             dislike_music_artist,
             set_favourite_music_artist,
             favourite_music_artist,
+            get_music_artist_insights,
             block_music_artist,
             unblock_music_artist,
             get_blocked_music_artists,

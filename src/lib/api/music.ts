@@ -316,6 +316,17 @@ export function resetMusicBrain(): Promise<void> {
   return invokeBackend<void>("reset_music_brain");
 }
 
+export interface MusicArtistInsights {
+  plays: number;
+  liked: boolean;
+  topTracks: SongItem[];
+}
+
+/** Your own listening for one artist, or null when no play was ever counted. */
+export function getMusicArtistInsights(artistId: string | null, artistName: string): Promise<MusicArtistInsights | null> {
+  return invokeBackend<MusicArtistInsights | null>("get_music_artist_insights", { artistId, artistName });
+}
+
 export function getMusicTasteProfile(): Promise<MusicTasteProfile> {
   return invokeBackend<MusicTasteProfile>("get_music_taste_profile");
 }

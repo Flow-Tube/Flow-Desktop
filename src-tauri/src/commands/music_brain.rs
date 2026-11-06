@@ -8,7 +8,7 @@ use crate::errors::ErrorResponse;
 use crate::models::music::{Artist, SongItem};
 use crate::music_brain::mixes::{DailyMixSeed, daily_mixes};
 use crate::music_brain::model::MusicBrain;
-use crate::music_brain::profile::{MusicTasteProfile, taste_profile};
+use crate::music_brain::profile::{MusicTasteProfile, artist_insights, taste_profile};
 use crate::music_brain::rank::{
     RankInput, day_slot, heavy_rotation, rank, rediscover, time_of_day_rotation,
 };
@@ -297,6 +297,34 @@ pub async fn get_music_taste_profile(
     let now = now_ms();
     let brain = music_brain.read().await;
     Ok(taste_profile(&brain, now))
+}
+
+/// What an artist's page shows from your own listening.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInsightsView {
+    pub plays: u32,
+    pub liked: bool,
+    pub top_tracks: Vec<SongItem>,
+}
+
+/// `None` when no play was ever counted for this artist.
+#[tauri::command]
+pub async fn get_music_artist_insights(
+    artist_id: Option<String>,
+    artist_name: String,
+    music_brain: State<'_, Arc<MusicBrainStore>>,
+) -> CmdResult<Option<ArtistInsightsView>> {
+    let brain = music_brain.read().await;
+    Ok(
+        artist_insights(&brain, artist_id.as_deref(), &artist_name, 10).map(|insights| {
+            ArtistInsightsView {
+                plays: insights.plays,
+                liked: insights.liked,
+                top_tracks: songs_from_ids(&brain, insights.top_track_ids),
+            }
+        }),
+    )
 }
 
 /// Like `reset_brain`, leaves the sync group first in the profile that syncs.

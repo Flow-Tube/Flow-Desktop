@@ -131,6 +131,59 @@ pub(super) fn bucket_for(ms: u64) -> Option<TimeBucket> {
 
 /// Builds the full taste profile from a borrowed brain. Cheap: a few linear scans over the
 /// bounded maps, no clones of the brain itself.
+/// The brain's view of one artist, for that artist's page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtistInsights {
+    pub plays: u32,
+    pub liked: bool,
+    /// Most played first, then most recently played.
+    pub top_track_ids: Vec<String>,
+}
+
+/// `None` when no play was ever counted for this artist. The same artist can be keyed by id on
+/// tracks that carry one and by name on those that don't, so both keys count.
+pub fn artist_insights(
+    brain: &MusicBrain,
+    artist_id: Option<&str>,
+    artist_name: &str,
+    limit: usize,
+) -> Option<ArtistInsights> {
+    let name_key = artist_name.trim().to_lowercase();
+    let id_key = artist_id.map(str::trim).filter(|id| !id.is_empty());
+    let is_artist = |key: &str| id_key == Some(key) || (!name_key.is_empty() && key == name_key);
+
+    let affinity = brain
+        .artist_affinity
+        .iter()
+        .filter(|(key, _)| is_artist(key))
+        .map(|(_, affinity)| affinity)
+        .max_by_key(|affinity| affinity.plays)?;
+    if affinity.plays == 0 {
+        return None;
+    }
+
+    let mut tracks: Vec<(&String, usize, u64)> = brain
+        .track_meta
+        .iter()
+        .filter(|(_, meta)| is_artist(&meta.artist_key))
+        .filter_map(|(id, _)| {
+            let plays = brain.track_plays.get(id)?;
+            Some((id, plays.len(), plays.iter().copied().max()?))
+        })
+        .collect();
+    tracks.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)).then(a.0.cmp(b.0)));
+
+    Some(ArtistInsights {
+        plays: affinity.plays,
+        liked: affinity.liked,
+        top_track_ids: tracks
+            .into_iter()
+            .take(limit)
+            .map(|(id, _, _)| id.clone())
+            .collect(),
+    })
+}
+
 pub fn taste_profile(brain: &MusicBrain, now_ms: u64) -> MusicTasteProfile {
     // artist_key -> display name (first non-empty wins).
     let mut names: HashMap<&str, &str> = HashMap::new();
@@ -300,5 +353,34 @@ mod tests {
         assert_eq!(taste_profile(&brain, 0).maturity, "warming");
         brain.total_plays = 81;
         assert_eq!(taste_profile(&brain, 0).maturity, "mature");
+    }
+
+    #[test]
+    fn artist_insights_count_both_keys_and_order_by_plays() {
+        let mut brain = MusicBrain::default();
+        listen(&mut brain, "once", "UCa", "Artist A", 1_000);
+        listen(&mut brain, "twice", "UCa", "Artist A", 2_000);
+        listen(&mut brain, "twice", "UCa", "Artist A", 3_000);
+        listen(&mut brain, "by-name", "artist a", "Artist A", 4_000);
+        listen(&mut brain, "other", "UCb", "Artist B", 5_000);
+
+        let insights = artist_insights(&brain, Some("UCa"), "Artist A", 10).unwrap();
+        assert_eq!(insights.plays, 3);
+        assert!(!insights.liked);
+        assert_eq!(insights.top_track_ids, vec!["twice", "by-name", "once"]);
+        assert_eq!(
+            artist_insights(&brain, Some("UCa"), "Artist A", 1)
+                .unwrap()
+                .top_track_ids,
+            vec!["twice"]
+        );
+    }
+
+    #[test]
+    fn artist_insights_are_empty_without_a_counted_play() {
+        let mut brain = MusicBrain::default();
+        assert_eq!(artist_insights(&brain, Some("UCx"), "Nobody", 10), None);
+        crate::music_brain::learn::favourite_artist(&mut brain, "UCx", "Nobody");
+        assert_eq!(artist_insights(&brain, Some("UCx"), "Nobody", 10), None);
     }
 }

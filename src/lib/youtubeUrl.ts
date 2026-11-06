@@ -143,6 +143,10 @@ export function youtubeMusicAlbumUrl(browseId: string): string {
   return `https://music.youtube.com/browse/${browseId}`;
 }
 
+export function youtubeMusicArtistUrl(channelId: string): string {
+  return `https://music.youtube.com/channel/${channelId}`;
+}
+
 export function youtubeMusicPlaylistUrl(playlistId: string): string {
   return `https://music.youtube.com/playlist?list=${playlistId.replace(/^VL/, "")}`;
 }

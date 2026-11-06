@@ -284,6 +284,82 @@ impl Store for Repeating<'_> {
     }
 }
 
+/// A store whose cursor keeps advancing, naming a new object of `sender`'s on every page.
+struct Endless<'a> {
+    store: &'a MemoryStore,
+    sender: String,
+}
+
+impl Store for Endless<'_> {
+    async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
+        self.store.roster_after(after).await
+    }
+    async fn append_roster(
+        &self,
+        head: &str,
+        entry: &Entry,
+        wraps: &BTreeMap<String, String>,
+        chain: Option<&str>,
+    ) -> Result<Appended> {
+        self.store.append_roster(head, entry, wraps, chain).await
+    }
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        self.store.key(epoch, kc, name).await
+    }
+    async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+        self.store.put_object(path, bytes).await
+    }
+    async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        self.store.get_object(path).await
+    }
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        self.store.delete_object(path).await
+    }
+    async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
+        // Lets the test's timeout fire on a reader that never stops.
+        tokio::task::yield_now().await;
+        let path = log_path(&self.sender, cursor + 2);
+        Ok((vec![ChangedObject { path, size: 0 }], cursor + 1))
+    }
+}
+
+#[tokio::test]
+async fn a_scan_for_a_new_reader_ends_on_a_cursor_that_never_runs_out() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    let store = Endless {
+        store: &g.store,
+        sender: hex::encode(g.a.did),
+    };
+    let mut b = Session::open(&pool, store, &g.b).await.unwrap();
+    let read = tokio::time::timeout(Duration::from_secs(20), b.pull(&pool))
+        .await
+        .expect("the scan ends");
+    assert!(read.is_err(), "a partial scan can't pick a starting point");
+}
+
+#[tokio::test]
+async fn a_read_ends_on_a_cursor_that_never_runs_out_and_keeps_its_place() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    sqlx::query("UPDATE sync2_group SET cursor = 5")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let store = Endless {
+        store: &g.store,
+        // This device's own log, which a reader skips.
+        sender: hex::encode(g.b.did),
+    };
+    let mut b = Session::open(&pool, store, &g.b).await.unwrap();
+    let pulled = tokio::time::timeout(Duration::from_secs(20), b.pull(&pool))
+        .await
+        .expect("the read ends")
+        .unwrap();
+    b.finish(&pool, pulled).await.unwrap();
+    assert!(b.record().cursor > 5, "the next sync goes on from here");
+}
+
 #[tokio::test]
 async fn a_page_that_does_not_advance_ends_the_read() {
     let g = group().await;

@@ -472,6 +472,41 @@ async fn a_server_reset_needs_the_admin_token_and_says_when_it_is_refused() {
     ));
 }
 
+/// A roster that always has one more entry, with a higher `seq` than was asked for.
+struct EndlessRoster;
+
+impl Respond for EndlessRoster {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let after: i64 = request
+            .url
+            .query_pairs()
+            .find(|(name, _)| name == "after")
+            .and_then(|(_, value)| value.parse().ok())
+            .unwrap();
+        ResponseTemplate::new(200).set_body_json(json!({ "entries": [{
+            "v": 2, "group": GROUP, "seq": after + 1, "prev": "00".repeat(32), "op": "rename",
+            "signer": "00".repeat(16), "meta": { "00000000000000000000000000000000": "x" }, "sigs": {}
+        }] }))
+    }
+}
+
+#[tokio::test]
+async fn a_roster_that_never_runs_out_ends_the_read() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/roster"))
+        .respond_with(EndlessRoster)
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        store.roster_view().await,
+        Err(StoreError::Malformed)
+    ));
+}
+
 #[tokio::test]
 async fn answers_past_their_limit_are_refused() {
     let (server, _) = server(INSTANCE).await;

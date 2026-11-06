@@ -22,6 +22,7 @@ use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
+use super::read_budget::ReadBudget;
 use super::recovery_notice::note_recovery_changes;
 use super::roster::{
     Entry, Op, Role, RosterState, Sender, check_sender, entry_hash, replay_roster,
@@ -198,6 +199,38 @@ impl Pulled {
                 .entry(writer)
                 .or_default()
                 .extend(snapshot.batches),
+        }
+    }
+
+    /// Moves `did`'s log to `position`, and takes what the object there carries.
+    fn read(
+        &mut self,
+        did: String,
+        position: StreamPosition,
+        content: Content,
+        reading: Option<&Reading>,
+        floors: &Floors,
+    ) {
+        let seq = position.seq;
+        self.positions.insert(did.clone(), position);
+        if !matches!(content, Content::Ack(_)) {
+            self.consumed += 1;
+        }
+        match content {
+            Content::Batch(batch) => {
+                self.links.push(batch.link.clone());
+                self.take(did, seq, batch, reading, floors);
+            }
+            Content::Snapshot(manifest) => {
+                self.links.push(manifest.link.clone());
+                self.manifests.push(Logged { did, seq, manifest });
+            }
+            Content::Ack(ack) => {
+                self.acks.insert(did, ack.vv);
+            }
+            Content::Login(login) => {
+                self.login = login.or(self.login.take());
+            }
         }
     }
 
@@ -713,6 +746,7 @@ impl<'a, S: Store> Session<'a, S> {
         }
         let mut floors = floors(pool).await?;
         floors.extend(pulled.floors.clone());
+        let mut budget = ReadBudget::default();
         loop {
             let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
             let read: BTreeMap<String, u64> = pulled
@@ -724,6 +758,7 @@ impl<'a, S: Store> Session<'a, S> {
             if changes.is_empty() {
                 return Ok(pulled);
             }
+            let listed = changes.len();
             // Objects of one sender may be listed out of order: retry while a pass makes progress.
             let (past_cut, mut waiting): (Vec<_>, Vec<_>) = changes
                 .into_iter()
@@ -746,27 +781,7 @@ impl<'a, S: Store> Session<'a, S> {
                         .await?
                     {
                         Some((position, content)) => {
-                            let seq = position.seq;
-                            pulled.positions.insert(did.clone(), position);
-                            if !matches!(content, Content::Ack(_)) {
-                                pulled.consumed += 1;
-                            }
-                            match content {
-                                Content::Batch(batch) => {
-                                    pulled.links.push(batch.link.clone());
-                                    pulled.take(did, seq, batch, reading, &floors);
-                                }
-                                Content::Snapshot(manifest) => {
-                                    pulled.links.push(manifest.link.clone());
-                                    pulled.manifests.push(Logged { did, seq, manifest });
-                                }
-                                Content::Ack(ack) => {
-                                    pulled.acks.insert(did, ack.vv);
-                                }
-                                Content::Login(login) => {
-                                    pulled.login = login.or(pulled.login.take());
-                                }
-                            }
+                            pulled.read(did, position, content, reading, &floors);
                         }
                         None => still.push((did, seq, path)),
                     }
@@ -790,6 +805,11 @@ impl<'a, S: Store> Session<'a, S> {
                 return Ok(pulled);
             }
             pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
+            // The next sync goes on from here, and a restored device doesn't choose its link yet.
+            if !budget.take(listed) {
+                pulled.stalled = true;
+                return Ok(pulled);
+            }
         }
     }
 

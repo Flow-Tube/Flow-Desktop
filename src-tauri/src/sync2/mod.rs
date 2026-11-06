@@ -51,6 +51,7 @@ pub mod pipe;
 pub mod profile_actions;
 pub mod profile_links;
 pub mod profile_names;
+pub mod read_budget;
 pub mod recovery;
 pub mod recovery_flow;
 pub mod recovery_notice;

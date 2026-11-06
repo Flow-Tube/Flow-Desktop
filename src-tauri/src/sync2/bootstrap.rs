@@ -11,6 +11,8 @@ use super::envelope::{ObjectType, ParsedObject, StreamPosition};
 use super::epoch::purpose_key;
 use super::paths::{blob_path, log_path, parse_log_path};
 use super::payload::decode_payload;
+use super::read_budget::ReadBudget;
+use super::server::StoreError;
 use super::snapshot::{Manifest, Tip};
 use super::store::Store;
 use super::{Error, array};
@@ -92,6 +94,7 @@ impl<S: Store> Session<'_, S> {
         let me = hex::encode(self.device().did);
         let mut logs: BTreeMap<String, Vec<u64>> = BTreeMap::new();
         let mut cursor = 0;
+        let mut budget = ReadBudget::default();
         loop {
             let (changes, next) = self.store().changes(cursor).await?;
             for (did, seq) in changes.iter().filter_map(|c| parse_log_path(&c.path)) {
@@ -100,6 +103,10 @@ impl<S: Store> Session<'_, S> {
             // A cursor that doesn't move would hand out the same page forever.
             if changes.is_empty() || next <= cursor {
                 break;
+            }
+            // A partial list could pick a snapshot that doesn't cover the logs left out.
+            if !budget.take(changes.len()) {
+                return Err(StoreError::Malformed.into());
             }
             cursor = next;
         }

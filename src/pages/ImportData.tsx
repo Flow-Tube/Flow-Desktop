@@ -23,10 +23,10 @@ import {
   type BackupCollections,
 } from "../lib/settings/backup";
 import { SETTINGS, SETTING_SCOPES, type SettingKey } from "../lib/settings/schema";
-import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
-import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../store/useLikesStore";
-import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
-import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "../lib/playlistLibrary";
+import { setSettingValue } from "../store/useAppSettingsStore";
+import { refreshAfterRestore } from "../lib/backup/refreshAfterRestore";
+import { importFailureMessage, importReportSummary, runOtherAppImport } from "../lib/backup/otherAppImport";
+import { ImportSourceChooser } from "../components/import/ImportSourceChooser";
 import type { VideoSummary } from "../types/video";
 import type { WatchHistoryRecord } from "../types/db";
 import { isProfilesMaster, restoreMasterProfiles } from "../lib/settings/masterRestore";
@@ -44,20 +44,6 @@ const UNREADABLE_MESSAGES: Record<UnreadableReason, StringKey> = {
 
 interface ParseChannelResult { id: string; name: string; }
 interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
-
-/// A backend collection restore writes SQLite directly, so the Zustand-cached stores must
-/// reload afterwards (mirrors the sync session's `sync://refresh` handling).
-async function refreshStoresAfterRestore() {
-  await useAppSettingsStore.getState().loadSettings();
-  useLikesStore.setState({ loaded: false });
-  await useLikesStore.getState().load();
-  window.dispatchEvent(new Event(LIKES_LIBRARY_UPDATED_EVENT));
-  await useAlbumLibraryStore.getState().load();
-  window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
-  await useSubscriptionStore.getState().loadSubscriptions();
-  await useSubscriptionStore.getState().loadSubscriptionGroups();
-  void useHistoryStore.getState().load(true);
-}
 
 export const ImportData: React.FC = () => {
   const [importSubs, setImportSubs] = useState(true);
@@ -168,13 +154,25 @@ export const ImportData: React.FC = () => {
   };
 
   const pickAndImport = async () => {
-    const path = await pickFile(getString("import_select_file"), [{ name: getString("import_supported_formats_title"), extensions: ["zip", "json", "xml", "opml", "csv", "txt", "html"] }]);
+    const path = await pickFile(getString("import_select_file"), [{ name: getString("import_supported_formats_title"), extensions: ["zip", "json", "db", "xml", "opml", "csv", "txt", "html"] }]);
     if (!path) return;
     setImportState("reading"); setProgress(15); setStatusMessage(getString("import_reading")); setErrorMessage("");
     setSubsCount(0); setPlaylistsCount(0); setHistoryCount(0); setNeuroCount(0); setSettingsCount(0); setLikesCount(0);
       try {
         const read = await readBackupFile(path);
         if (read.type === "unreadable") throw new Error(getString(UNREADABLE_MESSAGES[read.reason]));
+        if (read.type === "external") {
+          setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
+          const outcome = await runOtherAppImport(read.kind, [path]);
+          if (outcome.type === "failed") throw new Error(importFailureMessage(outcome.reason));
+          setSubsCount(outcome.report.subscriptions);
+          setHistoryCount(outcome.report.history);
+          setPlaylistsCount(outcome.report.playlists);
+          setLikesCount(outcome.report.likes);
+          setProgress(100); setImportState("success");
+          showToast({ message: importReportSummary(outcome.report), variant: "success" });
+          return;
+        }
         setImportState("parsing"); setProgress(40); setStatusMessage(getString("import_parsing"));
         const text = read.type === "text" ? read.text : "{}";
         let backupData: any = read.type === "backup" ? read.data : null;
@@ -276,7 +274,7 @@ export const ImportData: React.FC = () => {
               setLikesCount(restoredOf("likes"));
               if (restoredOf("flow_neuro_brain") + restoredOf("music_brain") > 0) setNeuroCount(1);
               setProgress(90);
-              await refreshStoresAfterRestore();
+              await refreshAfterRestore();
             } catch (err) {
               console.error("Backend collection restore failed; falling back to legacy parsing", err);
             }
@@ -354,6 +352,10 @@ export const ImportData: React.FC = () => {
         await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVE, "false");
         await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVATED_AT, "0");
 
+        if (subbedCount + playCount + timelineCount + importedSettingsCount === 0 && !restoredViaCollections && !(importNeuro && brainToImport)) {
+          throw new Error(getString("import_file_not_recognized"));
+        }
+
         setProgress(100); setImportState("success");
       } catch (err: any) { console.error("Import failure", err); setImportState("error"); setErrorMessage(err?.message || getString("import_file_not_recognized")); }
   };
@@ -370,9 +372,11 @@ export const ImportData: React.FC = () => {
 
   const formatItems = [
     { label: getString("import_format_flow"), ext: ".zip / .json" },
-    { label: getString("import_format_takeout"), ext: ".csv / .html / .json" },
-    { label: getString("import_format_newpipe"), ext: ".json" },
-    { label: getString("import_format_freetube"), ext: ".json (NDJSON)" },
+    { label: getString("import_format_takeout"), ext: ".zip / .csv / .html / .json" },
+    { label: getString("import_format_newpipe"), ext: ".zip / .db / .json" },
+    { label: getString("import_format_libretube"), ext: ".json" },
+    { label: getString("import_format_freetube"), ext: ".db / .json (NDJSON)" },
+    { label: getString("import_format_metrolist"), ext: ".zip" },
     { label: getString("import_format_opml"), ext: ".xml / .opml" },
   ];
 
@@ -464,6 +468,8 @@ export const ImportData: React.FC = () => {
         </div>
 
         <div className="col-span-12 space-y-6 lg:col-span-5">
+          <ImportSourceChooser disabled={["reading", "parsing", "saving"].includes(importState)} />
+
           <SettingsGroup title={getString("import_supported_formats_title")}>
             {formatItems.map((format) => (
               <SettingItem key={format.label} icon={<FileText size={16} />} title={format.label}>

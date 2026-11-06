@@ -222,6 +222,7 @@ LOCAL MEDIA
 - Automatic backups run at launch and on a timer while Flow is open: daily, weekly or monthly, into a folder you pick, with the last run and Back up now in Settings. Each run replaces the last file of its type, as on Android.
 - Master backups are now the same zip Flow for Android makes, so a backup from either app restores on the other, brains and profiles included. Old Flow Desktop .json backups still restore. Proxy credentials and other private settings are never in a backup.
 - Export your watch history as YouTube-history JSON, and your subscriptions in NewPipe format.
+- Import from another app, chosen by the app you are leaving: a Google Takeout export, even split across several zips, with likes, playlists and Watch Later; YouTube Music playlist CSVs; NewPipe history and playlists from its backup; LibreTube subscriptions and playlists; Metrolist music playlists. Imports only teach recommendations the way Android does.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

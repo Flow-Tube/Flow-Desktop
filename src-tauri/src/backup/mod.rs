@@ -17,6 +17,7 @@ pub mod archive;
 pub mod auto;
 pub mod build;
 pub mod exports;
+pub mod import;
 pub mod reader;
 
 /// Settings the schema marks `private`. They never enter a backup file, even if a caller asks for

@@ -709,6 +709,7 @@ pub fn run() {
             export_backup_data,
             commands::backup_files::export_backup_file,
             commands::backup_files::read_backup,
+            commands::backup_files::import_other_app,
             commands::backup_files::auto_backup_register,
             commands::backup_files::auto_backup_status,
             commands::backup_files::auto_backup_run_now,

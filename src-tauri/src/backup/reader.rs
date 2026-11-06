@@ -17,6 +17,7 @@ use crate::backup::app_data::{DESKTOP_KEY, from_app_data, is_android_app_data};
 use crate::backup::archive::{
     APP_DATA_ENTRY, AVATARS_DIR, ENGINE_ENTRY, MANIFEST_ENTRY, MUSIC_ENTRY, PROFILES_DIR,
 };
+use crate::backup::import::{ImportKind, open_zip};
 use crate::flow_neuro::scoring::UserBrain;
 use crate::sync::brainmap::{musicbrain_to_snapshot, userbrain_to_snapshot};
 use crate::sync::canonical::Hlc;
@@ -27,6 +28,7 @@ const MAX_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_AVATAR_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
+const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
 const BACKUP_DEVICE: &str = "android-backup";
 
 /// Why a file can't be read, in a form the frontend can word.
@@ -40,6 +42,17 @@ pub enum ReadError {
     Io(#[from] io::Error),
     #[error("the archive can't be read: {0}")]
     Zip(#[from] zip::result::ZipError),
+    #[error("the archive can't be opened")]
+    Unopenable,
+}
+
+impl From<crate::backup::import::ImportError> for ReadError {
+    fn from(error: crate::backup::import::ImportError) -> Self {
+        match error {
+            crate::backup::import::ImportError::TooLarge => Self::TooLarge,
+            _ => Self::Unopenable,
+        }
+    }
 }
 
 /// What a picked file turned out to be.
@@ -48,6 +61,8 @@ pub enum BackupFile {
     Backup(Value),
     /// Not a Flow backup: another app's export, left to the format parsers.
     Text(String),
+    /// Another app's backup, for its importer.
+    External(ImportKind),
 }
 
 /// Reads one zip entry, refusing more than `limit` however large its header says it is.
@@ -186,14 +201,34 @@ fn is_safe_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+/// Which other app's backup an archive is, by the files only that app writes. Takeout comes first:
+/// it can be far larger than anything else, and needs none of its contents read to know.
+fn other_apps_archive(names: &[String]) -> Option<ImportKind> {
+    let is = |wanted: &str| {
+        names
+            .iter()
+            .any(|name| name == wanted || name.ends_with(&format!("/{wanted}")))
+    };
+    if names.iter().any(|name| name.starts_with("Takeout/")) {
+        return Some(ImportKind::Takeout);
+    }
+    if is(APP_DATA_ENTRY) {
+        return None;
+    }
+    if is("newpipe.db") {
+        return Some(ImportKind::NewpipeBackup);
+    }
+    is("song.db").then_some(ImportKind::Metrolist)
+}
+
 fn read_archive<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     now_ms: u64,
 ) -> Result<BackupFile, ReadError> {
+    let names: Vec<String> = archive.file_names().map(str::to_string).collect();
     if archive.len() > MAX_ENTRIES {
         return Err(ReadError::TooLarge);
     }
-    let names: Vec<String> = archive.file_names().map(str::to_string).collect();
     let mut budget = MAX_TOTAL_BYTES;
     let app_data = read_json(archive, APP_DATA_ENTRY, &mut budget)?;
     let engine = read_json(archive, ENGINE_ENTRY, &mut budget)?;
@@ -285,6 +320,18 @@ fn read_text(bytes: &[u8], now_ms: u64) -> BackupFile {
     if let Some(desktop) = value.get(DESKTOP_KEY) {
         return BackupFile::Backup(desktop.clone());
     }
+    if value.get("localPlaylists").is_some()
+        || value.get("format").and_then(Value::as_str) == Some("Piped")
+    {
+        return BackupFile::External(ImportKind::LibretubeBackup);
+    }
+    let names_a_service = value
+        .get("subscriptions")
+        .and_then(|subscriptions| subscriptions.get(0))
+        .is_some_and(|entry| entry.get("service_id").is_some());
+    if names_a_service {
+        return BackupFile::External(ImportKind::NewpipeSubscriptions);
+    }
     if is_android_app_data(&value) || is_android_music_brain(&value) {
         let (app, music) = if is_android_music_brain(&value) {
             (None, Some(&value))
@@ -307,14 +354,23 @@ fn read_text(bytes: &[u8], now_ms: u64) -> BackupFile {
 pub fn read_backup_file(path: &Path, now_ms: u64) -> Result<BackupFile, ReadError> {
     let mut file = File::open(path)?;
     let size = file.metadata()?.len();
-    let mut magic = [0_u8; 2];
-    let is_zip = file.read_exact(&mut magic).is_ok() && magic == *b"PK";
+    let mut magic = [0_u8; 16];
+    let read = file.read(&mut magic)?;
     file.rewind()?;
-    if is_zip {
+    if read >= 2 && magic[..2] == *b"PK" {
+        let mut archive = open_zip(path)?;
+        // A Takeout archive may hold many gigabytes of video it never reads.
+        let names: Vec<String> = archive.file_names().map(str::to_string).collect();
+        if let Some(kind) = other_apps_archive(&names) {
+            return Ok(BackupFile::External(kind));
+        }
         if size > MAX_ARCHIVE_BYTES {
             return Err(ReadError::TooLarge);
         }
-        return read_archive(&mut ZipArchive::new(file)?, now_ms);
+        return read_archive(&mut archive, now_ms);
+    }
+    if magic == *SQLITE_MAGIC {
+        return Ok(BackupFile::External(ImportKind::NewpipeBackup));
     }
     if size > MAX_TEXT_BYTES {
         return Err(ReadError::TooLarge);
@@ -364,6 +420,46 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn other_apps_archives_are_told_by_what_they_hold() {
+        let names = |list: &[&str]| list.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_eq!(
+            other_apps_archive(&names(&["Takeout/YouTube/x.csv"])),
+            Some(ImportKind::Takeout)
+        );
+        assert_eq!(
+            other_apps_archive(&names(&["newpipe.db", "newpipe.settings"])),
+            Some(ImportKind::NewpipeBackup)
+        );
+        assert_eq!(
+            other_apps_archive(&names(&["settings.preferences_pb", "song.db"])),
+            Some(ImportKind::Metrolist)
+        );
+        assert_eq!(other_apps_archive(&names(&["app_data.json"])), None);
+        assert_eq!(other_apps_archive(&names(&["readme.txt"])), None);
+    }
+
+    #[test]
+    fn other_apps_files_are_told_by_their_fields() {
+        let is_external = |text: &str, kind: ImportKind| matches!(read_text(text.as_bytes(), 0), BackupFile::External(found) if found == kind);
+        assert!(is_external(
+            r#"{"localPlaylists":[],"subscriptions":[]}"#,
+            ImportKind::LibretubeBackup
+        ));
+        assert!(is_external(
+            r#"{"format":"Piped","subscriptions":[]}"#,
+            ImportKind::LibretubeBackup
+        ));
+        assert!(is_external(
+            r#"{"app_version":"1","subscriptions":[{"service_id":0,"url":"u","name":"n"}]}"#,
+            ImportKind::NewpipeSubscriptions
+        ));
+        assert!(matches!(
+            read_text(br#"{"videoId":"x"}"#, 0),
+            BackupFile::Text(_)
+        ));
     }
 
     #[test]

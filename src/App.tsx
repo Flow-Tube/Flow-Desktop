@@ -85,6 +85,7 @@ import { MusicTrayController } from "./components/tray/MusicTrayController";
 import { ShellPagesController } from "./components/tray/ShellPagesController";
 import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKeysController";
 import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
+import { CrashReportHost } from "./components/diagnostics/CrashReportHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
 import { WellbeingController } from "./components/settings/WellbeingController";
 import { DownloadDialog } from "./components/downloads/DownloadDialog";
@@ -367,6 +368,7 @@ function App() {
       <DonationPromptHost enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       {IS_MAIN_WINDOW && <WhosWatchingOverlay />}
+      {IS_MAIN_WINDOW && location.pathname !== "/onboarding" && <CrashReportHost />}
       <ProfileSwitchOverlay />
       <NoteEditorHost />
       <KeyboardHelpHost />

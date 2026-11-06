@@ -1,4 +1,5 @@
 pub mod blocked_channel_names;
+pub mod crash_report;
 pub mod discord_presence;
 pub mod home_engine;
 pub mod home_feed;

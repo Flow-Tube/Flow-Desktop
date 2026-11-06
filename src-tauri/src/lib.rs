@@ -50,9 +50,9 @@ use commands::db::{
     get_watch_history_years, get_watch_records, reset_app_data, restore_watch_record, set_setting,
 };
 use commands::diagnostics::{
-    clear_logs, get_graphics_mode, log_frontend_event, logs_dir_path, read_logs,
-    reset_visitor_identity, reveal_logs_folder, set_graphics_mode, startup_render_ok,
-    updates_supported,
+    clear_logs, crash_report_delete, crash_report_dismiss, crash_report_read, get_graphics_mode,
+    log_frontend_event, logs_dir_path, read_logs, reset_visitor_identity, reveal_logs_folder,
+    set_graphics_mode, startup_render_ok, updates_supported,
 };
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
@@ -238,6 +238,14 @@ pub fn run() {
     // GTK/WebKitGTK init (which happens in `.build()` below).
     let context = tauri::generate_context!();
     relaunch::capture_launch_env();
+    let crash_folder = profiles::app_data_dir(context.config().identifier.as_str())
+        .map(|dir| services::crash_report::folder(&dir));
+    if let Some(folder) = &crash_folder {
+        services::crash_report::install_hook(
+            folder.clone(),
+            context.package_info().version.to_string(),
+        );
+    }
 
     // The profile must be known before the builder registers anything that opens a store.
     let (active_profile, profile_warning) =
@@ -363,6 +371,11 @@ pub fn run() {
                     app_data_dir.display()
                 );
             }
+            app.manage(services::crash_report::CrashReports::new(
+                crash_folder
+                    .clone()
+                    .unwrap_or_else(|| services::crash_report::folder(&app_data_dir)),
+            ));
             app.manage(active_profile.clone());
             app.manage(services::profile_service::ProfileService::new(
                 app_data_dir.clone(),
@@ -763,6 +776,9 @@ pub fn run() {
             read_subtitle_file,
             get_sabr_debug_state,
             log_frontend_event,
+            crash_report_read,
+            crash_report_dismiss,
+            crash_report_delete,
             read_logs,
             clear_logs,
             logs_dir_path,

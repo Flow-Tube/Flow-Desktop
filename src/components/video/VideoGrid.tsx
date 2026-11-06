@@ -27,18 +27,15 @@ interface VideoGridProps {
   getReasonLine?: (video: VideoSummary) => string | undefined;
   /** The position of the last card on screen, for a feed that pages as it nears the end. */
   onLastVisibleIndex?: (index: number) => void;
-  /** Rows of the list card instead of the grid. */
-  listLayout?: boolean;
 }
 
 /**
  * The card the slot follows: the end of the first row, whatever the resolved column count is, so a
- * fixed index cannot strand the row's leftovers on a second row above it. -1 while a grid is not
- * measured yet; a list always has one column.
+ * fixed index cannot strand the row's leftovers on a second row above it. -1 while the grid is not
+ * measured yet.
  */
-export function insertAfterCard(hasSlot: boolean, columns: number, cardCount: number, listLayout: boolean): number {
+export function insertAfterCard(hasSlot: boolean, columns: number, cardCount: number): number {
   if (!hasSlot) return -1;
-  if (listLayout) return 0;
   return columns > 0 ? Math.min(columns, cardCount) - 1 : -1;
 }
 
@@ -72,7 +69,6 @@ function VideoGridComponent({
   getReason,
   getReasonLine,
   onLastVisibleIndex,
-  listLayout = false,
 }: VideoGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
   useFeedImpressions(gridRef, videos, trackImpressions && !loading);
@@ -83,7 +79,7 @@ function VideoGridComponent({
   const highResThumbnails = trackWidth > 0 ? thumbnailNeedsHighRes(trackWidth) : undefined;
   const gridClass = "flow-grid gap-y-8 pb-8";
 
-  const insertAfterIndex = insertAfterCard(Boolean(insertNode), columns, videos.length, listLayout);
+  const insertAfterIndex = insertAfterCard(Boolean(insertNode), columns, videos.length);
 
   if (loading) {
     return (
@@ -98,8 +94,8 @@ function VideoGridComponent({
   return (
     <div
       ref={gridRef}
-      className={listLayout ? "flex flex-col gap-1 pb-8" : gridClass}
-      style={listLayout ? undefined : gridStyle}
+      className={gridClass}
+      style={gridStyle}
     >
       {videos.map((video, index) => (
         <Fragment key={getVideoKey ? getVideoKey(video, index) : `${video.id}-${index}`}>
@@ -111,7 +107,7 @@ function VideoGridComponent({
             at the peak of its expansion — even at two columns on a wide window.
           */}
           <div
-            className={listLayout ? undefined : "flow-grid-card p-2 -m-2"}
+            className="flow-grid-card p-2 -m-2"
             {...(trackImpressions ? { [IMPRESSION_ATTRIBUTE]: video.id } : {})}
             {...(onLastVisibleIndex ? { [GRID_INDEX_ATTRIBUTE]: index } : {})}
           >
@@ -120,7 +116,7 @@ function VideoGridComponent({
               onPlay={onPlay}
               onAddToQueue={onAddToQueue}
               onRemoveFromHistory={onRemoveFromHistory}
-              variant={listLayout ? "list" : variant}
+              variant={variant}
               hideChannelAvatar={hideChannelAvatar}
               reason={getReason?.(video)}
               reasonLine={getReasonLine?.(video)}

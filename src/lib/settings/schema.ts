@@ -127,7 +127,6 @@ export const SETTINGS = {
 
   VIDEO_TITLE_MAX_LINES: "video_title_max_lines",
   GRID_COLUMNS: "grid_columns",
-  HOME_VIEW_MODE: "home_view_mode",
   HIGHLIGHT_NEW_SETTINGS: "highlight_new_settings",
   HIGHLIGHT_NEW_SETTINGS_DAYS: "highlight_new_settings_days",
   HOME_FEED_ENABLED: "home_feed_enabled",
@@ -370,7 +369,6 @@ export const SETTING_SCOPES = {
   [SETTINGS.LYRICS_BLUR_OTHER_LINES]: "profile",
   [SETTINGS.VIDEO_TITLE_MAX_LINES]: "profile",
   [SETTINGS.GRID_COLUMNS]: "profile",
-  [SETTINGS.HOME_VIEW_MODE]: "profile",
   [SETTINGS.HIGHLIGHT_NEW_SETTINGS]: "device",
   [SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS]: "device",
   [SETTINGS.HOME_FEED_ENABLED]: "profile",
@@ -692,7 +690,6 @@ export const SETTING_DEFINITIONS = [
 
   num(SETTINGS.VIDEO_TITLE_MAX_LINES, "content", 1, "wired", 0, 3),
   num(SETTINGS.GRID_COLUMNS, "content", 4, "wired", 2, 8),
-  str(SETTINGS.HOME_VIEW_MODE, "content", "GRID", "wired", ["GRID", "LIST"]),
   bool(SETTINGS.HIGHLIGHT_NEW_SETTINGS, "appearance", false, "wired"),
   str(SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS, "appearance", "7", "wired", NEW_SETTING_DAYS),
   bool(SETTINGS.HOME_FEED_ENABLED, "content", true, "wired"),

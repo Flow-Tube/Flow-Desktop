@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutGrid, List, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
@@ -26,7 +26,6 @@ import {
 import { homeOriginLabel, homeReasonLine } from "../lib/homeOrigin";
 import { HOME_RESELECTED_EVENT, homeReselectAction } from "../lib/homeReselect";
 import { useScrollContainer } from "../lib/useScrollContainer";
-import { usePreference } from "../lib/usePreference";
 import type { HomeMix } from "../lib/api/homeFeed";
 import type { VideoSummary } from "../types/video";
 import { VideoGrid } from "../components/video/VideoGrid";
@@ -39,7 +38,6 @@ import { HomeFeedMessage } from "../components/home/HomeFeedMessage";
 import { HomeFeedButton } from "../components/home/HomeFeedButton";
 import { HomeChipRow } from "../components/home/HomeChipRow";
 import { HomeMixCard } from "../components/home/HomeMixCard";
-import { IconButton } from "../components/ui/IconButton";
 
 interface HomeProps {
   onPlay: (video: VideoSummary) => void;
@@ -60,8 +58,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   const navigate = useNavigate();
   const setQueue = usePlayerStore((state) => state.setQueue);
   const scrollContainer = useScrollContainer();
-  const [viewMode, setViewMode] = usePreference(SETTINGS.HOME_VIEW_MODE);
-  const listLayout = viewMode === "LIST";
   const { snapshot, failed, refresh, retryMore, reportViewport } = useHomeFeed(homeFeedEnabled);
   const continueWatching = useContinueWatching(continueWatchingEnabled);
   const chips = useHomeChips(homeFeedEnabled);
@@ -221,7 +217,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           onPlay={onPlay}
           onAddToQueue={onAddToQueue}
           trackImpressions
-          listLayout={listLayout}
         />
       );
     }
@@ -256,7 +251,6 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           trackImpressions
           getReason={reasonOf}
           getReasonLine={reasonLineOf}
-          listLayout={listLayout}
           onLastVisibleIndex={handleLastVisible}
         />
         <HomeFeedFooter
@@ -275,17 +269,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
   return (
     <div className="flex-1 space-y-6 px-8 py-6">
       {homeFeedEnabled && (
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <HomeChipRow chips={chipOptions} selected={chips.selected} onSelect={chips.select} />
-          </div>
-          <IconButton
-            title={getString(listLayout ? "ui_grid_view" : "ui_list_view")}
-            onClick={() => setViewMode(listLayout ? "GRID" : "LIST")}
-          >
-            {listLayout ? <LayoutGrid /> : <List />}
-          </IconButton>
-        </div>
+        <HomeChipRow chips={chipOptions} selected={chips.selected} onSelect={chips.select} />
       )}
       {body}
     </div>

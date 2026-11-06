@@ -186,7 +186,7 @@ HOME
 - Home has three new chips. Mixes builds queues from videos you liked or finished, Live shows streams on now, and Watched brings back videos worth seeing again.
 - A Subscriptions on Home switch keeps channels you follow out of Home. Clicking Home again scrolls to the top, then refreshes, and you can turn the refresh off.
 - Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.
-- Card menus add Play next, Details and Mark as unwatched. Home can show a list instead of a grid, from a button beside the chips or from Settings.
+- Card menus add Play next, Details and Mark as unwatched.
 
 SHORTS
 - A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.

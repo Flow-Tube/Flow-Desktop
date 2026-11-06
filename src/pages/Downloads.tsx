@@ -304,18 +304,8 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
           </div>
         </header>
 
-        <CategoryChips
-          categories={filters.map((entry) => entry.label)}
-          activeCategory={activeLabel}
-          onCategoryChange={(label) =>
-            setFilter(filters.find((entry) => entry.label === label)?.key ?? "all")
-          }
-          sticky={false}
-          className="mt-2"
-        />
-
-        {!loading && !isEmpty ? (
-          <div className="mt-4 flex flex-wrap items-center gap-4">
+        <div className="mt-6 mb-2 flex flex-col gap-4 md:flex-row md:items-center">
+          {!loading && !isEmpty ? (
             <Select
               value={sort}
               onChange={(value) => {
@@ -323,11 +313,24 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 saveDownloadSort(value as DownloadSort);
               }}
               options={DOWNLOAD_SORTS.map((option) => ({ value: option, label: downloadSortLabel(option) }))}
-              className="w-44"
+              className="w-full md:w-44"
             />
-            <DownloadsStorageSummary records={records} />
-          </div>
-        ) : null}
+          ) : null}
+        <CategoryChips
+          categories={filters.map((entry) => entry.label)}
+          activeCategory={activeLabel}
+          onCategoryChange={(label) =>
+            setFilter(filters.find((entry) => entry.label === label)?.key ?? "all")
+          }
+          sticky={false}
+          className="py-0"
+        />
+          {!loading && !isEmpty ? (
+            <div className="md:ms-auto">
+              <DownloadsStorageSummary records={records} />
+            </div>
+          ) : null}
+        </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32">

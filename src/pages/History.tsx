@@ -214,17 +214,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
           </div>
         </header>
 
-        <CategoryChips
-          categories={filters.map((f) => f.label)}
-          activeCategory={activeLabel}
-          onCategoryChange={(label) =>
-            setFilter(filters.find((f) => f.label === label)?.key ?? "all")
-          }
-          sticky={false}
-          className="mt-2"
-        />
-
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-6 mb-2 flex flex-col gap-4 md:flex-row md:items-center">
           <Select
             value={sort}
             onChange={(value) => setSort(value as HistorySort)}
@@ -232,7 +222,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
               { value: "newest", label: getString("history_sort_newest") },
               { value: "oldest", label: getString("history_sort_oldest") },
             ]}
-            className="w-44"
+            className="w-full md:w-44"
           />
           <Select
             value={year === null ? "" : String(year)}
@@ -241,8 +231,17 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
               { value: "", label: getString("history_filter_all_years") },
               ...years.map((option) => ({ value: String(option), label: String(option) })),
             ]}
-            className="w-36"
+            className="w-full md:w-36"
           />
+        <CategoryChips
+          categories={filters.map((f) => f.label)}
+          activeCategory={activeLabel}
+          onCategoryChange={(label) =>
+            setFilter(filters.find((f) => f.label === label)?.key ?? "all")
+          }
+          sticky={false}
+          className="py-0"
+        />
         </div>
       </div>
 

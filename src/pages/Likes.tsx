@@ -137,29 +137,30 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
           </div>
         </header>
 
-        <CategoryChips
-          categories={filters.map((f) => f.label)}
-          activeCategory={activeLabel}
-          onCategoryChange={(label) =>
-            setFilter(filters.find((f) => f.label === label)?.key ?? "all")
-          }
-          sticky={false}
-          className="mt-2"
-        />
-
-        {!loading && items.length > 0 ? (
-          <LikesToolbar
-            items={visibleItems}
-            sortOrder={sortOrder}
-            onSortChange={handleSortChange}
-            selecting={selection.selecting}
-            selected={selectedItems}
-            allSelected={selection.allSelected}
-            onStartSelecting={selection.start}
-            onToggleAll={() => selection.toggleAll(visibleKeys)}
-            onDoneSelecting={selection.stop}
+        <div className="mt-6 mb-2 flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center">
+          <CategoryChips
+            categories={filters.map((f) => f.label)}
+            activeCategory={activeLabel}
+            onCategoryChange={(label) =>
+              setFilter(filters.find((f) => f.label === label)?.key ?? "all")
+            }
+            sticky={false}
+            className="py-0"
           />
-        ) : null}
+          {!loading && items.length > 0 ? (
+            <LikesToolbar
+              items={visibleItems}
+              sortOrder={sortOrder}
+              onSortChange={handleSortChange}
+              selecting={selection.selecting}
+              selected={selectedItems}
+              allSelected={selection.allSelected}
+              onStartSelecting={selection.start}
+              onToggleAll={() => selection.toggleAll(visibleKeys)}
+              onDoneSelecting={selection.stop}
+            />
+          ) : null}
+        </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32">

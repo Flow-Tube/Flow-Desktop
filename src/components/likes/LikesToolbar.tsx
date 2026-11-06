@@ -133,7 +133,7 @@ export function LikesToolbar({
 
   if (selecting) {
     return (
-      <div className="mt-4 flex items-center">
+      <div className="flex items-center md:ms-auto">
         <SelectionBar
           summary={getPlural("playlist_selected_count", selected.length)}
           hasSelection={selected.length > 0}
@@ -172,7 +172,7 @@ export function LikesToolbar({
   }
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 md:ms-auto">
       <Button type="button" size="sm" disabled={empty} onClick={() => play(false)}>
         <Play size={16} fill="currentColor" />
         {getString("music_play")}

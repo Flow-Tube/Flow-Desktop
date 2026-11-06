@@ -13,7 +13,7 @@ export function SelectableRow({
   onToggle?: () => void;
   children: ReactNode;
 }) {
-  if (!selecting || !onToggle) return <>{children}</>;
+  if (!selecting || !onToggle) return <div className="min-w-0">{children}</div>;
   return (
     <div
       role="checkbox"

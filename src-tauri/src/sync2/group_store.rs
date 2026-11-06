@@ -77,6 +77,22 @@ impl Store for GroupStore {
         each!(self, store => store.key(epoch, kc, name).await)
     }
 
+    async fn keep_key(&self, epoch: u32, kc: &str, name: &str, bytes: &[u8]) -> Result<()> {
+        each!(self, store => store.keep_key(epoch, kc, name, bytes).await)
+    }
+
+    async fn drop_key(&self, epoch: u32, kc: &str, name: &str) -> Result<()> {
+        each!(self, store => store.drop_key(epoch, kc, name).await)
+    }
+
+    async fn keep_object(&self, path: &str, bytes: &[u8]) -> Result<()> {
+        each!(self, store => store.keep_object(path, bytes).await)
+    }
+
+    async fn drop_object(&self, path: &str) -> Result<()> {
+        each!(self, store => store.drop_object(path).await)
+    }
+
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
         each!(self, store => store.put_object(path, bytes).await)
     }

@@ -22,6 +22,7 @@ use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
+use super::read_budget::ReadBudget;
 use super::recovery_notice::note_recovery_changes;
 use super::roster::{
     Entry, Op, Role, RosterState, Sender, check_sender, entry_hash, replay_roster,
@@ -198,6 +199,38 @@ impl Pulled {
                 .entry(writer)
                 .or_default()
                 .extend(snapshot.batches),
+        }
+    }
+
+    /// Moves `did`'s log to `position`, and takes what the object there carries.
+    fn read(
+        &mut self,
+        did: String,
+        position: StreamPosition,
+        content: Content,
+        reading: Option<&Reading>,
+        floors: &Floors,
+    ) {
+        let seq = position.seq;
+        self.positions.insert(did.clone(), position);
+        if !matches!(content, Content::Ack(_)) {
+            self.consumed += 1;
+        }
+        match content {
+            Content::Batch(batch) => {
+                self.links.push(batch.link.clone());
+                self.take(did, seq, batch, reading, floors);
+            }
+            Content::Snapshot(manifest) => {
+                self.links.push(manifest.link.clone());
+                self.manifests.push(Logged { did, seq, manifest });
+            }
+            Content::Ack(ack) => {
+                self.acks.insert(did, ack.vv);
+            }
+            Content::Login(login) => {
+                self.login = login.or(self.login.take());
+            }
         }
     }
 
@@ -503,14 +536,29 @@ impl<'a, S: Store> Session<'a, S> {
     /// This device's key of the entry that starts `epoch` with `commitment`.
     async fn unwrap_wrap(&self, epoch: u32, commitment: &[u8]) -> Result<Vec<u8>> {
         let did = self.device.did;
+        let (kc, name) = (kc_name(commitment), hex::encode(did));
         let wrap = self
             .store
-            .key(epoch, &kc_name(commitment), &hex::encode(did))
+            .key(epoch, &kc, &name)
             .await?
             .ok_or(Error::KeyCommitment)?;
-        let key = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)?;
-        check_epoch_key(&key, &self.group, epoch, commitment)?;
-        Ok(key)
+        let opened = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)
+            .and_then(|key| check_epoch_key(&key, &self.group, epoch, commitment).map(|()| key));
+        self.settle_key((epoch, &kc, &name), &wrap, opened).await
+    }
+
+    /// Tells the store how a wrap or chain box it gave turned out, so it keeps only good copies.
+    async fn settle_key(
+        &self,
+        (epoch, kc, name): (u32, &str, &str),
+        bytes: &[u8],
+        opened: std::result::Result<Vec<u8>, Error>,
+    ) -> Result<Vec<u8>> {
+        match &opened {
+            Ok(_) => self.store.keep_key(epoch, kc, name, bytes).await?,
+            Err(_) => self.store.drop_key(epoch, kc, name).await?,
+        }
+        Ok(opened?)
     }
 
     /// The key of `epoch`, walking the history chain back from the newest key this device holds.
@@ -521,17 +569,22 @@ impl<'a, S: Store> Session<'a, S> {
                 return Err(Error::KeyCommitment.into());
             }
             let known_commitment = self.commitments.get(&known).ok_or(Error::KeyCommitment)?;
+            let kc = kc_name(known_commitment);
             let chain = self
                 .store
-                .key(known, &kc_name(known_commitment), "chain")
+                .key(known, &kc, "chain")
                 .await?
                 .ok_or(Error::KeyCommitment)?;
-            let previous = open_chain(key, &self.group, known, &chain)?;
             let commitment = self
                 .commitments
                 .get(&(known - 1))
                 .ok_or(Error::KeyCommitment)?;
-            check_epoch_key(&previous, &self.group, known - 1, commitment)?;
+            let opened = open_chain(key, &self.group, known, &chain).and_then(|previous| {
+                check_epoch_key(&previous, &self.group, known - 1, commitment).map(|()| previous)
+            });
+            let previous = self
+                .settle_key((known, &kc, "chain"), &chain, opened)
+                .await?;
             self.keys.insert(known - 1, previous);
         }
         Ok(self.keys[&epoch].clone())
@@ -713,6 +766,7 @@ impl<'a, S: Store> Session<'a, S> {
         }
         let mut floors = floors(pool).await?;
         floors.extend(pulled.floors.clone());
+        let mut budget = ReadBudget::default();
         loop {
             let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
             let read: BTreeMap<String, u64> = pulled
@@ -724,6 +778,7 @@ impl<'a, S: Store> Session<'a, S> {
             if changes.is_empty() {
                 return Ok(pulled);
             }
+            let listed = changes.len();
             // Objects of one sender may be listed out of order: retry while a pass makes progress.
             let (past_cut, mut waiting): (Vec<_>, Vec<_>) = changes
                 .into_iter()
@@ -746,27 +801,7 @@ impl<'a, S: Store> Session<'a, S> {
                         .await?
                     {
                         Some((position, content)) => {
-                            let seq = position.seq;
-                            pulled.positions.insert(did.clone(), position);
-                            if !matches!(content, Content::Ack(_)) {
-                                pulled.consumed += 1;
-                            }
-                            match content {
-                                Content::Batch(batch) => {
-                                    pulled.links.push(batch.link.clone());
-                                    pulled.take(did, seq, batch, reading, &floors);
-                                }
-                                Content::Snapshot(manifest) => {
-                                    pulled.links.push(manifest.link.clone());
-                                    pulled.manifests.push(Logged { did, seq, manifest });
-                                }
-                                Content::Ack(ack) => {
-                                    pulled.acks.insert(did, ack.vv);
-                                }
-                                Content::Login(login) => {
-                                    pulled.login = login.or(pulled.login.take());
-                                }
-                            }
+                            pulled.read(did, position, content, reading, &floors);
                         }
                         None => still.push((did, seq, path)),
                     }
@@ -790,6 +825,11 @@ impl<'a, S: Store> Session<'a, S> {
                 return Ok(pulled);
             }
             pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
+            // The next sync goes on from here, and a restored device doesn't choose its link yet.
+            if !budget.take(listed) {
+                pulled.stalled = true;
+                return Ok(pulled);
+            }
         }
     }
 
@@ -807,7 +847,7 @@ impl<'a, S: Store> Session<'a, S> {
             return Ok(None);
         };
         let read = async {
-            let object = self.verified(&bytes, did, seq)?;
+            let object = self.verified_copy(&bytes, path, did, seq).await?;
             let position = next_in_stream(last, &object)?;
             self.check_cut_chain(did, &object, last).await?;
             Ok((position, self.open_content(&object).await?))
@@ -830,6 +870,22 @@ impl<'a, S: Store> Session<'a, S> {
             did,
             seq,
         )?)
+    }
+
+    /// [`Session::verified`] for bytes the store gave for `path`, so it keeps only good copies.
+    pub(super) async fn verified_copy<'b>(
+        &self,
+        bytes: &'b [u8],
+        path: &str,
+        did: &str,
+        seq: u64,
+    ) -> Result<ParsedObject<'b>> {
+        let verified = self.verified(bytes, did, seq);
+        match &verified {
+            Ok(_) => self.store.keep_object(path, bytes).await?,
+            Err(_) => self.store.drop_object(path).await?,
+        }
+        verified
     }
 
     pub(super) fn senders(&self) -> &BTreeMap<String, Sender> {

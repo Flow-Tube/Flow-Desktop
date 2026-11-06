@@ -16,8 +16,10 @@ use crate::backup::android_brain::{
 use crate::backup::app_data::{DESKTOP_KEY, from_app_data, is_android_app_data};
 use crate::backup::archive::{
     APP_DATA_ENTRY, AVATARS_DIR, ENGINE_ENTRY, MANIFEST_ENTRY, MUSIC_ENTRY, PROFILES_DIR,
+    RECAP_ENTRY,
 };
 use crate::backup::import::{ImportKind, open_zip};
+use crate::commands::backup::RECAP_STATS_ENTRY;
 use crate::flow_neuro::scoring::UserBrain;
 use crate::sync::brainmap::{musicbrain_to_snapshot, userbrain_to_snapshot};
 use crate::sync::canonical::Hlc;
@@ -27,6 +29,8 @@ const MAX_TEXT_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_ENTRY_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_AVATAR_BYTES: u64 = 16 * 1024 * 1024;
+/// Far above a full ledger: 36 months of each kind, with every per-month list at its cap.
+const MAX_RECAP_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
 const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
 const BACKUP_DEVICE: &str = "android-backup";
@@ -96,6 +100,22 @@ fn read_json<R: Read + Seek>(
         return Ok(None);
     };
     Ok(serde_json::from_slice(&bytes).ok())
+}
+
+/// A slice's ledger, on top of any an older file kept among its collections. One that can't be
+/// parsed is left out, which keeps the device's own.
+fn read_recap<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    prefix: &str,
+    collections: &mut Map<String, Value>,
+    budget: &mut u64,
+) -> Result<(), ReadError> {
+    let name = format!("{prefix}{RECAP_ENTRY}");
+    let bytes = read_limited(archive, &name, MAX_RECAP_BYTES, budget)?;
+    if let Some(ledger) = bytes.and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()) {
+        collections.insert(RECAP_STATS_ENTRY.to_string(), json!([ledger]));
+    }
+    Ok(())
 }
 
 fn brain_record(brain: &UserBrain, now_ms: u64) -> Option<Value> {
@@ -245,8 +265,9 @@ fn read_archive<R: Read + Seek>(
         return Ok(read_text(&bytes, now_ms));
     }
 
-    let (settings, collections) =
+    let (settings, mut collections) =
         slice_to_desktop(app_data.as_ref(), engine.as_ref(), music.as_ref(), now_ms);
+    read_recap(archive, "", &mut collections, &mut budget)?;
     let mut backup = json!({
         "schemaVersion": 2,
         "scope": "MASTER",
@@ -280,9 +301,10 @@ fn read_archive<R: Read + Seek>(
         let app = read_json(archive, &format!("{prefix}{APP_DATA_ENTRY}"), &mut budget)?;
         let engine = read_json(archive, &format!("{prefix}{ENGINE_ENTRY}"), &mut budget)?;
         let music = read_json(archive, &format!("{prefix}{MUSIC_ENTRY}"), &mut budget)?;
-        if app.is_some() || engine.is_some() || music.is_some() {
-            let (settings, collections) =
-                slice_to_desktop(app.as_ref(), engine.as_ref(), music.as_ref(), now_ms);
+        let (settings, mut collections) =
+            slice_to_desktop(app.as_ref(), engine.as_ref(), music.as_ref(), now_ms);
+        read_recap(archive, &prefix, &mut collections, &mut budget)?;
+        if app.is_some() || engine.is_some() || music.is_some() || !collections.is_empty() {
             profiles.insert(
                 id.clone(),
                 json!({ "settings": settings, "collections": collections }),

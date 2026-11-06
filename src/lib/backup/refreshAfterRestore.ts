@@ -3,6 +3,7 @@ import { useAlbumLibraryStore } from "../../store/useAlbumLibraryStore";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { useHistoryStore } from "../../store/useHistoryStore";
 import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../../store/useLikesStore";
+import { useNotesStore } from "../../store/useNotesStore";
 import { useSubscriptionStore } from "../../store/useSubscriptionStore";
 
 /**
@@ -18,5 +19,6 @@ export async function refreshAfterRestore(): Promise<void> {
   window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
   await useSubscriptionStore.getState().loadSubscriptions();
   await useSubscriptionStore.getState().loadSubscriptionGroups();
+  await useNotesStore.getState().load();
   void useHistoryStore.getState().load(true);
 }

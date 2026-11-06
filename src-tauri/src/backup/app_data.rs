@@ -13,7 +13,7 @@ use serde_json::{Map, Value, json};
 
 use crate::commands::backup::SUBSCRIPTION_CHANNELS_KEY;
 use crate::sync::canonical::{
-    Hlc, Like, LikeKind, LikeState, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
+    Hlc, Like, LikeKind, LikeState, Note, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
     SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::mapping::{WATCH_LATER_SYNC_ID, video_thumbnail};
@@ -30,6 +30,7 @@ const BACKUP_DEVICE: &str = "android-backup";
 const MAX_HISTORY: usize = 500_000;
 const MAX_LIST: usize = 100_000;
 const MAX_TEXT: usize = 2_000;
+const MAX_NOTE_TEXT: usize = 1_000_000;
 const MAX_ID: usize = 128;
 
 #[derive(Clone, Copy)]
@@ -347,6 +348,7 @@ pub fn to_app_data(parts: AppDataParts<'_>) -> Value {
     let playlists = playlists.map(|playlists| android_playlists(&playlists, now_ms));
     let likes: Option<Vec<Like>> = records(collections, "likes");
     let groups: Option<Vec<SubscriptionGroup>> = records(collections, "subscriptions");
+    let notes: Option<Vec<Note>> = records(collections, "notes");
 
     let (playlist_rows, cross_refs, videos) = match playlists {
         Some(all) => (
@@ -384,7 +386,10 @@ pub fn to_app_data(parts: AppDataParts<'_>) -> Value {
                 })
                 .collect::<Vec<_>>()
         })),
-        "notes": Value::Null,
+        // `NoteEntity` has no tombstones; those stay in the desktop's own export.
+        "notes": or_null(notes.map(|notes| {
+            notes.into_iter().filter(|note| !note.deleted).collect::<Vec<_>>()
+        })),
         "likedVideos": or_null(likes.map(|likes| {
             likes.iter().filter_map(liked_info).collect::<Vec<_>>()
         })),
@@ -670,6 +675,52 @@ fn groups_from_android(value: &Value, now_ms: u64) -> Vec<SubscriptionGroup> {
         .collect()
 }
 
+/// Kept as written, line breaks included: the merge compares it with this device's copy.
+fn note_text(value: Option<&Value>) -> String {
+    value
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
+        .take(MAX_NOTE_TEXT)
+        .collect()
+}
+
+fn notes_from_android(value: &Value) -> Vec<Note> {
+    list(value, "notes", MAX_LIST)
+        .filter_map(|note| {
+            let kind = note.get("kind")?.as_str()?;
+            let text = note_text(note.get("text"));
+            if !matches!(kind, "Video" | "Channel") || text.trim().is_empty() {
+                return None;
+            }
+            let part = |key: &str| {
+                let text = text_of(note.get(key), MAX_TEXT);
+                (!text.is_empty()).then_some(text)
+            };
+            Some(Note {
+                id: id_of(note.get("id"))?,
+                target_id: id_of(note.get("targetId"))?,
+                kind: kind.to_string(),
+                text,
+                updated_at: i64::try_from(u64_of(note.get("updatedAt"))).unwrap_or(i64::MAX),
+                deleted: false,
+                title: part("title"),
+                channel_name: part("channelName"),
+                channel_id: part("channelId"),
+                thumbnail_url: part("thumbnailUrl"),
+                duration_seconds: note
+                    .get("durationSeconds")
+                    .and_then(Value::as_i64)
+                    .and_then(|seconds| i32::try_from(seconds).ok()),
+                channel_avatar_url: part("channelAvatarUrl"),
+                channel_handle: part("channelHandle"),
+                subscriber_count_text: part("subscriberCountText"),
+            })
+        })
+        .collect()
+}
+
 /// Android's settings, as stored desktop values by desktop key, for the schema check on restore.
 fn settings_from_android(value: &Value) -> Map<String, Value> {
     let mut out = Map::new();
@@ -720,6 +771,7 @@ pub fn from_app_data(value: &Value, now_ms: u64) -> DesktopSlice {
     put("watch_history", to_values(history_from_android(value)));
     put("playlists", to_values(playlists_from_android(value)));
     put("likes", to_values(likes_from_android(value)));
+    put("notes", to_values(notes_from_android(value)));
     put(
         "subscriptions",
         to_values(groups_from_android(value, now_ms)),
@@ -794,6 +846,21 @@ mod tests {
                 channel_ids: vec!["UCabc".into(), "UCdef".into()],
                 ..SubscriptionGroup::default()
             }],
+            "notes": [Note {
+                id: "video:abcdefghijk".into(),
+                target_id: "abcdefghijk".into(),
+                kind: "Video".into(),
+                text: "12:34 first\nsecond".into(),
+                updated_at: 1234,
+                title: Some("A video".into()),
+                duration_seconds: Some(100),
+                ..Note::default()
+            }, Note {
+                id: "channel:UCgone".into(),
+                updated_at: 9,
+                deleted: true,
+                ..Note::default()
+            }],
         })
         .as_object()
         .unwrap()
@@ -825,7 +892,10 @@ mod tests {
         let data = written();
         assert_eq!(data["version"], 2);
         assert!(data["searchHistory"].is_null());
-        assert!(data["notes"].is_null());
+        assert_eq!(data["notes"].as_array().unwrap().len(), 1);
+        assert_eq!(data["notes"][0]["id"], "video:abcdefghijk");
+        assert_eq!(data["notes"][0]["targetId"], "abcdefghijk");
+        assert_eq!(data["notes"][0]["updatedAt"], 1234);
         assert_eq!(data["viewHistory"][0]["position"], 50_000);
         assert_eq!(data["viewHistory"][0]["duration"], 100_000);
         let video = &data["videos"][0];
@@ -895,6 +965,13 @@ mod tests {
 
         let likes: Vec<Like> = serde_json::from_value(slice.collections["likes"].clone()).unwrap();
         assert_eq!(likes[0].kind, LikeKind::Music);
+        let notes: Vec<Note> = serde_json::from_value(slice.collections["notes"].clone()).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, "video:abcdefghijk");
+        assert_eq!(notes[0].text, "12:34 first\nsecond");
+        assert_eq!(notes[0].updated_at, 1234);
+        assert_eq!(notes[0].title.as_deref(), Some("A video"));
+        assert_eq!(notes[0].duration_seconds, Some(100));
         assert_eq!(
             slice.collections[SUBSCRIPTION_CHANNELS_KEY][0]["id"],
             "UCabc"
@@ -912,9 +989,17 @@ mod tests {
                 "not an object",
             ],
             "subscriptions": [{ "channelId": "UCa" }, { "channelId": "UCa" }],
+            "notes": [
+                { "id": "video:a", "targetId": "a", "kind": "Playlist", "text": "x" },
+                { "id": "video:b", "targetId": "b", "kind": "Video", "text": " \n " },
+                { "id": "x".repeat(MAX_ID + 1), "targetId": "c", "kind": "Video", "text": "x" },
+                { "id": "video:d", "kind": "Video", "text": "x" },
+                "not an object",
+            ],
         });
         let slice = from_app_data(&data, 0);
         assert!(!slice.collections.contains_key("watch_history"));
+        assert!(!slice.collections.contains_key("notes"));
         assert_eq!(
             slice.collections[SUBSCRIPTION_CHANNELS_KEY]
                 .as_array()

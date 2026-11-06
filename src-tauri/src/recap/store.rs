@@ -407,9 +407,8 @@ fn sorted(keys: HashSet<String>) -> Vec<String> {
 /// Puts a backup's ledger in place of this one's: restoring a device's own backup must not double
 /// every count. Returns how many months it holds.
 pub async fn restore(pool: &SqlitePool, backup: &RecapBackup, now_ms: i64) -> AppResult<u64> {
-    // A device that never started its ledger has nothing to put here, and this one's history can
-    // still fill its own.
-    if backup.started_at == 0 && backup.video.months.is_empty() && backup.music.months.is_empty() {
+    // This one's history can still fill its own.
+    if backup.never_started() {
         return Ok(0);
     }
     let _guard = LEDGER.lock().await;

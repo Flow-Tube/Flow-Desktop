@@ -12,6 +12,7 @@ use zip::write::{SimpleFileOptions, ZipWriter};
 pub const APP_DATA_ENTRY: &str = "app_data.json";
 pub const ENGINE_ENTRY: &str = "engine_brain.json";
 pub const MUSIC_ENTRY: &str = "music_brain.json";
+pub const RECAP_ENTRY: &str = "recap_stats.json";
 pub const MANIFEST_ENTRY: &str = "manifest.json";
 pub const PROFILES_DIR: &str = "profiles/";
 pub const AVATARS_DIR: &str = "profile_avatars/";
@@ -21,6 +22,7 @@ pub struct Slice {
     pub app_data: Value,
     pub engine: Option<Value>,
     pub music: Option<Value>,
+    pub recap: Option<Value>,
 }
 
 /// A master or brain backup. Default's slice sits at the root, where an older app restores it.
@@ -81,6 +83,9 @@ fn write_slice<W: Write + io::Seek>(
     }
     if let Some(music) = &slice.music {
         entry(MUSIC_ENTRY, music)?;
+    }
+    if let Some(recap) = &slice.recap {
+        entry(RECAP_ENTRY, recap)?;
     }
     Ok(())
 }

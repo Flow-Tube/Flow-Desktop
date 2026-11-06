@@ -4,15 +4,19 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use base64::Engine;
-use serde_json::{Value, json};
+use serde::Deserialize;
+use serde_json::{Map, Value, json};
 use sqlx::SqlitePool;
 
 use crate::backup::android_brain::{music_brain_to_android, user_brain_to_android};
 use crate::backup::app_data::{AppDataParts, to_app_data};
 use crate::backup::archive::{Archive, Slice};
-use crate::commands::backup::{BackupExport, export_backup, get_setting_value, raw_settings};
+use crate::commands::backup::{
+    BackupExport, RECAP_STATS_ENTRY, export_backup, get_setting_value, raw_settings,
+};
 use crate::flow_neuro::scoring::UserBrain;
 use crate::music_brain::model::MusicBrain;
+use crate::recap::model::RecapBackup;
 use crate::services::profile_service::ProfileService;
 use crate::sync::apply::{MUSIC_BRAIN_KEY, NEURO_BRAIN_KEY};
 use crate::sync::brain_rekey::align_flow;
@@ -48,6 +52,18 @@ async fn stored_music(pool: &SqlitePool) -> Result<Option<MusicBrain>, SyncError
     Ok(serde_json::from_str(&raw).ok())
 }
 
+/// The ledger leaves the export for its own entry, where Android reads it, so a file holds it once.
+/// One that never started stays out: Android would replace the phone's with it.
+fn take_recap(collections: &mut Map<String, Value>) -> Option<Value> {
+    let Value::Array(mut ledgers) = collections.remove(RECAP_STATS_ENTRY)? else {
+        return None;
+    };
+    let ledger = ledgers.pop()?;
+    RecapBackup::deserialize(&ledger)
+        .is_ok_and(|backup| !backup.never_started())
+        .then_some(ledger)
+}
+
 fn desktop_section(export: &BackupExport, settings: &HashMap<String, String>, now: u64) -> Value {
     json!({
         "schemaVersion": 2,
@@ -68,7 +84,8 @@ pub async fn build_slice(
     with_device_keys: bool,
     now: u64,
 ) -> Result<Slice, SyncError> {
-    let export = export_backup(pool, scope).await?;
+    let mut export = export_backup(pool, scope).await?;
+    let recap = take_recap(&mut export.collections);
     let is_brain_only = scope == "BRAIN";
     let settings = if is_brain_only {
         HashMap::new()
@@ -104,6 +121,7 @@ pub async fn build_slice(
             .await?
             .filter(|_| with_brains)
             .map(|music| music_brain_to_android(&music)),
+        recap,
     })
 }
 

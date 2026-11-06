@@ -7,6 +7,9 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::SqlitePoolOptions;
 
+use flow_desktop_lib::backup::archive::{Archive, write_archive};
+use flow_desktop_lib::backup::build::build_slice;
+use flow_desktop_lib::backup::reader::{BackupFile, read_backup_file};
 use flow_desktop_lib::commands::backup::{
     RECAP_STATS_ENTRY, SUBSCRIPTION_CHANNELS_KEY, export_backup, import_backup,
 };
@@ -324,4 +327,116 @@ async fn an_unreadable_recap_entry_leaves_the_ledger_alone() {
     let payload = serde_json::json!({ "collections": { RECAP_STATS_ENTRY: ["junk"] } });
     import_backup(&pool, &payload).await.unwrap();
     assert_eq!(ledger_months(&pool).await, 1);
+}
+
+async fn restore_through_a_zip(source: &SqlitePool, target: &SqlitePool) -> Vec<String> {
+    let dir = std::env::temp_dir().join(format!("flow-roundtrip-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("master.zip");
+    let archive = Archive {
+        root: build_slice(source, "MASTER", &[], true, 1_000)
+            .await
+            .unwrap(),
+        manifest: None,
+        profiles: Vec::new(),
+        avatars: Vec::new(),
+    };
+    write_archive(&path, &archive).unwrap();
+    let zip = zip::ZipArchive::new(std::fs::File::open(&path).unwrap()).unwrap();
+    let names = zip.file_names().map(str::to_string).collect();
+    let BackupFile::Backup(backup) = read_backup_file(&path, 2_000).unwrap() else {
+        panic!("a master reads as a backup");
+    };
+    std::fs::remove_dir_all(&dir).unwrap();
+    import_backup(
+        target,
+        &serde_json::json!({ "collections": backup["collections"] }),
+    )
+    .await
+    .unwrap();
+    names
+}
+
+#[tokio::test]
+async fn a_note_and_a_ledger_survive_a_desktop_zip_round_trip() {
+    let source = memory_pool().await;
+    for (id, target, text) in [
+        (
+            "video:abc12345678",
+            "abc12345678",
+            "12:34 the good part\nand this",
+        ),
+        ("video:gone1234567", "gone1234567", "Deleted later"),
+    ] {
+        sqlx::query(
+            "INSERT INTO notes (id, target_id, kind, text, updated_at, title)
+             VALUES (?, ?, 'Video', ?, 1700000000000, 'A video')",
+        )
+        .bind(id)
+        .bind(target)
+        .bind(text)
+        .execute(&source)
+        .await
+        .unwrap();
+    }
+    // A deletion as it arrives from a peer. Its time has to be recent: tombstones expire after a year.
+    let tombstone = serde_json::json!({
+        "id": "video:gone1234567", "deleted": true,
+        "updatedAt": chrono::Utc::now().timestamp_millis(),
+    });
+    import_backup(
+        &source,
+        &serde_json::json!({ "collections": { "notes": [tombstone] } }),
+    )
+    .await
+    .unwrap();
+    seed_ledger(&source, 3).await;
+
+    let target = memory_pool().await;
+    seed_ledger(&target, 99).await;
+    let names = restore_through_a_zip(&source, &target).await;
+    assert!(names.iter().any(|name| name == "recap_stats.json"));
+
+    let notes: Vec<(String, String, i64, String)> =
+        sqlx::query_as("SELECT id, text, updated_at, title FROM notes")
+            .fetch_all(&target)
+            .await
+            .unwrap();
+    assert_eq!(
+        notes,
+        [(
+            "video:abc12345678".to_string(),
+            "12:34 the good part\nand this".to_string(),
+            1_700_000_000_000,
+            "A video".to_string(),
+        )]
+    );
+    let restored = export_backup(&target, "APP_DATA").await.unwrap();
+    let deletion = restored.collections["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["id"] == "video:gone1234567")
+        .expect("the deletion comes along, so a peer's copy can't bring the note back");
+    assert_eq!(deletion["deleted"], true);
+
+    let record: String = sqlx::query_scalar("SELECT record FROM recap_months")
+        .fetch_one(&target)
+        .await
+        .unwrap();
+    assert!(record.contains("\"views\":3"), "replaced, not added to");
+}
+
+#[tokio::test]
+async fn a_ledger_that_never_started_is_no_entry_and_leaves_the_target_alone() {
+    let source = memory_pool().await;
+    let target = memory_pool().await;
+    seed_ledger(&target, 99).await;
+    let names = restore_through_a_zip(&source, &target).await;
+    assert!(!names.iter().any(|name| name == "recap_stats.json"));
+    let record: String = sqlx::query_scalar("SELECT record FROM recap_months")
+        .fetch_one(&target)
+        .await
+        .unwrap();
+    assert!(record.contains("\"views\":99"));
 }

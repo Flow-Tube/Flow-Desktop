@@ -248,6 +248,14 @@ pub struct RecapBackup {
     pub estimated: Vec<String>,
 }
 
+impl RecapBackup {
+    /// From a device that never started its ledger, so it has nothing to replace another's with.
+    #[must_use]
+    pub fn never_started(&self) -> bool {
+        self.started_at == 0 && self.video.months.is_empty() && self.music.months.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct VideoSnapshot {

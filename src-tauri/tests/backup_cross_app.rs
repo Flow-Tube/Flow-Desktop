@@ -18,8 +18,8 @@ use zip::write::{SimpleFileOptions, ZipWriter};
 
 use flow_desktop_lib::backup::archive::{Archive, Slice, write_archive, write_json};
 use flow_desktop_lib::backup::build::build_slice;
-use flow_desktop_lib::backup::reader::{BackupFile, read_backup_file};
-use flow_desktop_lib::commands::backup::import_backup;
+use flow_desktop_lib::backup::reader::{BackupFile, ReadError, read_backup_file};
+use flow_desktop_lib::commands::backup::{export_backup, import_backup};
 
 #[allow(dead_code)] // Mirrors whole classes; not every field is asserted on.
 mod android {
@@ -39,10 +39,113 @@ mod android {
         pub playlist_videos: Option<Vec<PlaylistVideoCrossRef>>,
         pub videos: Option<Vec<VideoEntity>>,
         pub subscription_groups: Option<Vec<SubscriptionGroupEntity>>,
-        pub notes: Option<Vec<serde_json::Value>>,
+        pub notes: Option<Vec<NoteEntity>>,
         pub liked_videos: Option<Vec<LikedVideoInfo>>,
         pub content_preferences: Option<ContentPreferencesBackup>,
         pub settings: Option<SettingsBackup>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct NoteEntity {
+        pub id: String,
+        pub target_id: String,
+        pub kind: String,
+        pub text: String,
+        pub updated_at: i64,
+        pub title: Option<String>,
+        pub channel_name: Option<String>,
+        pub channel_id: Option<String>,
+        pub thumbnail_url: Option<String>,
+        pub duration_seconds: Option<i32>,
+        pub channel_avatar_url: Option<String>,
+        pub channel_handle: Option<String>,
+        pub subscriber_count_text: Option<String>,
+        #[serde(default)]
+        pub position: Option<i32>,
+    }
+
+    /// kotlinx refuses an enum name it doesn't know, in a map key too.
+    #[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+    #[serde(rename_all = "UPPERCASE")]
+    pub enum ViewFormat {
+        Long,
+        Short,
+        Live,
+    }
+
+    #[derive(Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    pub enum LedgerAction {
+        Like,
+        Save,
+        Download,
+        NotInterested,
+        BlockChannel,
+        Search,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct RecapBackup {
+        pub version: i32,
+        pub video: Option<VideoStatsSnapshot>,
+        pub music: Option<SerializableStats>,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(default, rename_all = "camelCase")]
+    pub struct VideoStatsSnapshot {
+        pub months: BTreeMap<String, VideoMonthRecord>,
+        pub seed_channels: Vec<String>,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(default, rename_all = "camelCase")]
+    pub struct VideoMonthRecord {
+        pub views: i32,
+        pub sessions: i32,
+        pub watched_ms: i64,
+        pub format_views: BTreeMap<ViewFormat, i32>,
+        pub format_ms: BTreeMap<ViewFormat, i64>,
+        pub channel_views: BTreeMap<String, i32>,
+        pub channel_names: BTreeMap<String, String>,
+        pub discovered_channels: Vec<String>,
+        pub dislikes: Vec<DislikedVideo>,
+        pub actions: BTreeMap<LedgerAction, i32>,
+        pub day_views: BTreeMap<i32, i32>,
+        pub day_ms: BTreeMap<i32, i64>,
+        pub hour_views: BTreeMap<i32, i32>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct DislikedVideo {
+        pub video_id: String,
+        pub title: String,
+        pub channel_name: String,
+        pub at: i64,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(default, rename_all = "camelCase")]
+    pub struct SerializableStats {
+        pub schema_version: i32,
+        pub months: BTreeMap<String, SerializableMonth>,
+    }
+
+    #[derive(Deserialize, Default)]
+    #[serde(default, rename_all = "camelCase")]
+    pub struct SerializableMonth {
+        pub plays: i32,
+        pub sessions: i32,
+        pub listened_ms: i64,
+        pub artist_plays: BTreeMap<String, i32>,
+        pub artist_names: BTreeMap<String, String>,
+        pub discovered_artists: Vec<String>,
+        pub day_plays: BTreeMap<i32, i32>,
+        pub hour_plays: BTreeMap<i32, i32>,
+        pub day_ms: BTreeMap<i32, i64>,
     }
 
     #[derive(Deserialize)]
@@ -408,7 +511,10 @@ async fn a_desktop_master_is_the_zip_android_reads() {
         "null leaves the phone's alone"
     );
     assert!(data.music_search_history.is_none());
-    assert!(data.notes.is_none());
+    assert!(
+        data.notes.unwrap().is_empty(),
+        "an empty list leaves the phone's alone too"
+    );
 
     let history = data.view_history.unwrap();
     assert_eq!(history[0].video_id, "vvvvvvvvvvv");
@@ -829,28 +935,395 @@ async fn a_backup_never_holds_a_private_setting() {
 async fn an_app_data_file_carries_no_brains_and_a_brain_file_no_library() {
     let pool = memory_pool().await;
     seed_desktop(&pool).await;
+    seed_note(&pool, "video:abc12345678", "A note", 5).await;
+    seed_ledger(&pool).await;
 
     let app = build_slice(&pool, "APP_DATA", &[], true, 1).await.unwrap();
     assert!(app.engine.is_none());
     assert!(app.music.is_none());
+    assert!(app.recap.is_none(), "the ledger is only for a master");
     assert!(app.app_data["viewHistory"].is_null());
     assert!(app.app_data["settings"].is_object());
+    assert_eq!(app.app_data["notes"][0]["id"], "video:abc12345678");
 
     let brain = build_slice(&pool, "BRAIN", &[], true, 1).await.unwrap();
     assert!(brain.engine.is_some());
     assert!(brain.music.is_some());
+    assert!(brain.recap.is_none(), "the ledger is only for a master");
     for key in [
         "viewHistory",
         "playlists",
         "likedVideos",
         "subscriptions",
         "settings",
+        "notes",
     ] {
         assert!(
             brain.app_data[key].is_null(),
             "{key} must not touch the phone's"
         );
     }
+}
+
+const NOTE_TEXT: &str = "12:34 the good part\n\n\tand this";
+
+/// As Gson writes `NoteEntity`: a null field is left out.
+fn android_note() -> Value {
+    json!({
+        "id": "video:abc12345678", "targetId": "abc12345678", "kind": "Video", "text": NOTE_TEXT,
+        "updatedAt": 1_700_000_000_000_i64, "title": "A video", "channelName": "A channel",
+        "durationSeconds": 754, "position": 2,
+    })
+}
+
+/// As `RecapBackup.encode()` writes it: kotlinx leaves out what still holds its default.
+fn android_ledger() -> Value {
+    json!({
+        "video": {
+            "months": { "2026-09": {
+                "views": 3, "sessions": 4, "watchedMs": 9000,
+                "formatViews": { "LONG": 3 }, "formatMs": { "LONG": 9000 },
+                "channelViews": { "UCa": 3 }, "channelNames": { "UCa": "A" },
+                "discoveredChannels": ["UCa"],
+                "dislikes": [{ "videoId": "v", "title": "t", "channelName": "A", "at": 5 }],
+                "actions": { "NOT_INTERESTED": 1 },
+                "dayViews": { "12": 3 }, "dayMs": { "12": 9000 }, "hourViews": { "20": 3 },
+            } },
+            "seedChannels": ["UCold"],
+        },
+        "music": {
+            "months": { "2026-08": {
+                "plays": 2, "listenedMs": 400, "artistPlays": { "UCb": 2 },
+                "artistNames": { "UCb": "B" }, "genrePlays": { "rock": 2 },
+                "discoveredArtists": ["UCb"], "dayPlays": { "3": 2 },
+            } },
+        },
+    })
+}
+
+async fn seed_note(pool: &SqlitePool, id: &str, text: &str, at: i64) {
+    let (kind, target) = id.split_once(':').unwrap();
+    sqlx::query("INSERT INTO notes (id, target_id, kind, text, updated_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(id)
+        .bind(target)
+        .bind(if kind == "video" { "Video" } else { "Channel" })
+        .bind(text)
+        .bind(at)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+/// A deletion as it arrives from a peer. Its time has to be recent: tombstones expire after a year.
+async fn delete_note(pool: &SqlitePool, id: &str) {
+    let tombstone = json!({
+        "id": id, "deleted": true, "updatedAt": chrono::Utc::now().timestamp_millis(),
+    });
+    import_backup(pool, &json!({ "collections": { "notes": [tombstone] } }))
+        .await
+        .unwrap();
+}
+
+async fn seed_ledger(pool: &SqlitePool) {
+    import_backup(
+        pool,
+        &json!({ "collections": { "recap_stats": [android_ledger()] } }),
+    )
+    .await
+    .unwrap();
+}
+
+async fn note_of(pool: &SqlitePool, id: &str) -> Option<(String, i64)> {
+    sqlx::query_as("SELECT text, updated_at FROM notes WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .unwrap()
+}
+
+/// This database's ledger, read the way a backup reads it.
+async fn ledger_of(pool: &SqlitePool) -> Value {
+    export_backup(pool, "MASTER").await.unwrap().collections["recap_stats"][0].clone()
+}
+
+#[tokio::test]
+async fn a_desktop_master_gives_android_its_notes_and_its_ledger() {
+    let dir = TempDir::new();
+    let pool = memory_pool().await;
+    seed_note(&pool, "video:abc12345678", NOTE_TEXT, 1_700_000_000_000).await;
+    seed_note(&pool, "channel:UCgone", "Gone", 5).await;
+    delete_note(&pool, "channel:UCgone").await;
+    seed_ledger(&pool).await;
+
+    let path = dir.file("master.zip");
+    let archive = Archive {
+        root: build_slice(&pool, "MASTER", &[], true, 1_000)
+            .await
+            .unwrap(),
+        manifest: None,
+        profiles: Vec::new(),
+        avatars: Vec::new(),
+    };
+    write_archive(&path, &archive).unwrap();
+    let files = entries(&path);
+
+    let data: android::BackupData = serde_json::from_slice(&files["app_data.json"]).unwrap();
+    let notes = data.notes.unwrap();
+    assert_eq!(notes.len(), 1, "Room has no tombstones to hold");
+    assert_eq!(notes[0].id, "video:abc12345678");
+    assert_eq!(notes[0].target_id, "abc12345678");
+    assert_eq!(notes[0].kind, "Video");
+    assert_eq!(notes[0].text, NOTE_TEXT);
+    assert_eq!(notes[0].updated_at, 1_700_000_000_000);
+
+    let ledger: android::RecapBackup = serde_json::from_slice(&files["recap_stats.json"]).unwrap();
+    assert_eq!(ledger.version, 1);
+    let video = ledger.video.unwrap();
+    assert_eq!(video.months["2026-09"].views, 3);
+    assert!(video.seed_channels.contains(&"UCold".to_string()));
+    assert_eq!(ledger.music.unwrap().months["2026-08"].plays, 2);
+
+    let raw: Value = serde_json::from_slice(&files["app_data.json"]).unwrap();
+    assert!(
+        raw["desktop"]["collections"].get("recap_stats").is_none(),
+        "one copy of the ledger in a file"
+    );
+    assert!(raw["desktop"]["collections"]["notes"].is_array());
+}
+
+#[tokio::test]
+async fn an_android_master_restores_its_notes_and_replaces_the_ledger() {
+    let dir = TempDir::new();
+    let path = dir.file("flow_master_backup_1.zip");
+    let mut data = android_app_data();
+    data["notes"] = json!([android_note()]);
+    zip_of(
+        &path,
+        &[
+            ("app_data.json", bytes(&data)),
+            ("recap_stats.json", bytes(&android_ledger())),
+        ],
+    );
+    let BackupFile::Backup(backup) = read_backup_file(&path, 1).unwrap() else {
+        panic!("an Android master reads as a backup");
+    };
+
+    let pool = memory_pool().await;
+    sqlx::query(
+        "INSERT INTO recap_months (source, month, record, estimated)
+         VALUES ('video', '2020-01', '{\"views\":99}', 0)",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    import_backup(&pool, &json!({ "collections": backup["collections"] }))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        note_of(&pool, "video:abc12345678").await,
+        Some((NOTE_TEXT.to_string(), 1_700_000_000_000))
+    );
+    let (title, duration): (String, i32) =
+        sqlx::query_as("SELECT title, duration_seconds FROM notes WHERE id = 'video:abc12345678'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!((title.as_str(), duration), ("A video", 754));
+
+    let ledger = ledger_of(&pool).await;
+    assert_eq!(ledger["video"]["months"]["2026-09"]["views"], 3);
+    assert_eq!(
+        ledger["video"]["months"]["2026-09"]["actions"]["NOT_INTERESTED"],
+        1
+    );
+    assert_eq!(ledger["music"]["months"]["2026-08"]["plays"], 2);
+    assert!(
+        ledger["video"]["months"].get("2020-01").is_none(),
+        "a restore replaces the ledger"
+    );
+    // The two ledgers stay apart.
+    assert!(ledger["video"]["months"].get("2026-08").is_none());
+    assert!(ledger["music"]["months"].get("2026-09").is_none());
+}
+
+#[tokio::test]
+async fn a_restored_note_goes_through_the_merge() {
+    let restore = |pool: SqlitePool, note: Value| async move {
+        let mut data = android_app_data();
+        data["notes"] = json!([note]);
+        let slice = flow_desktop_lib::backup::app_data::from_app_data(&data, 1);
+        import_backup(
+            &pool,
+            &json!({ "collections": { "notes": slice.collections["notes"] } }),
+        )
+        .await
+        .unwrap();
+        pool
+    };
+    let id = "video:abc12345678";
+
+    // Older than the deletion: stays deleted, and the deletion still travels.
+    let pool = memory_pool().await;
+    seed_note(&pool, id, "Mine", 5).await;
+    delete_note(&pool, id).await;
+    let pool = restore(pool, android_note()).await;
+    assert_eq!(note_of(&pool, id).await, None);
+    let notes = export_backup(&pool, "APP_DATA").await.unwrap().collections["notes"].clone();
+    assert_eq!(notes[0]["deleted"], true);
+
+    // Newer than the deletion: it was edited after, so it comes back.
+    let later = chrono::Utc::now().timestamp_millis() + 86_400_000;
+    let mut newer = android_note();
+    newer["updatedAt"] = json!(later);
+    let pool = restore(pool, newer).await;
+    assert_eq!(
+        note_of(&pool, id).await,
+        Some((NOTE_TEXT.to_string(), later))
+    );
+
+    // Older than this device's own edit: the edit stays.
+    let pool = memory_pool().await;
+    seed_note(&pool, id, "Mine", 1_800_000_000_000).await;
+    let pool = restore(pool, android_note()).await;
+    assert_eq!(
+        note_of(&pool, id).await,
+        Some(("Mine".to_string(), 1_800_000_000_000))
+    );
+}
+
+#[tokio::test]
+async fn each_profile_in_a_master_keeps_its_own_ledger() {
+    let dir = TempDir::new();
+    let manifest = json!({
+        "format": "flow-master", "version": 1, "defaultId": "default-1",
+        "profiles": [
+            { "id": "default-1", "name": "", "colorKey": "", "createdAt": 1 },
+            { "id": "study", "name": "Study", "colorKey": "blue", "createdAt": 2 },
+            { "id": "ledger-only", "name": "L", "colorKey": "red", "createdAt": 3 },
+        ],
+        "included": ["default-1", "study", "ledger-only"],
+    });
+    let mut study_ledger = android_ledger();
+    study_ledger["video"]["months"]["2026-09"]["views"] = json!(77);
+
+    // Android's zip: every slice carries the entries of a whole profile, under its folder.
+    let path = dir.file("android.zip");
+    zip_of(
+        &path,
+        &[
+            ("app_data.json", bytes(&android_app_data())),
+            ("recap_stats.json", bytes(&android_ledger())),
+            (
+                "profiles/study/app_data.json",
+                bytes(&json!({ "version": 2 })),
+            ),
+            ("profiles/study/recap_stats.json", bytes(&study_ledger)),
+            (
+                "profiles/ledger-only/recap_stats.json",
+                bytes(&study_ledger),
+            ),
+            ("manifest.json", bytes(&manifest)),
+        ],
+    );
+    let BackupFile::Backup(backup) = read_backup_file(&path, 1).unwrap() else {
+        panic!("reads as a backup");
+    };
+    let views = |collections: &Value| {
+        collections["recap_stats"][0]["video"]["months"]["2026-09"]["views"].clone()
+    };
+    assert_eq!(views(&backup["collections"]), 3);
+    assert_eq!(views(&backup["profiles"]["study"]["collections"]), 77);
+    assert_eq!(views(&backup["profiles"]["ledger-only"]["collections"]), 77);
+
+    let closed_profile = memory_pool().await;
+    import_backup(
+        &closed_profile,
+        &json!({ "collections": backup["profiles"]["study"]["collections"] }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        ledger_of(&closed_profile).await["video"]["months"]["2026-09"]["views"],
+        77
+    );
+
+    // The desktop's zip lays a profile's ledger out the same way.
+    let default = memory_pool().await;
+    seed_ledger(&default).await;
+    let archive = Archive {
+        root: build_slice(&default, "MASTER", &[], true, 1).await.unwrap(),
+        manifest: Some(manifest),
+        profiles: vec![(
+            "study".to_string(),
+            build_slice(&closed_profile, "MASTER", &[], false, 1)
+                .await
+                .unwrap(),
+        )],
+        avatars: Vec::new(),
+    };
+    let path = dir.file("desktop.zip");
+    write_archive(&path, &archive).unwrap();
+    let files = entries(&path);
+    assert!(files.contains_key("recap_stats.json"));
+    assert!(files.contains_key("profiles/study/recap_stats.json"));
+    let BackupFile::Backup(backup) = read_backup_file(&path, 1).unwrap() else {
+        panic!("reads as a backup");
+    };
+    assert_eq!(views(&backup["collections"]), 3);
+    assert_eq!(views(&backup["profiles"]["study"]["collections"]), 77);
+}
+
+#[tokio::test]
+async fn an_old_desktop_json_restores_its_notes_and_its_ledger() {
+    let dir = TempDir::new();
+    let path = dir.file("flow_backup_master_2026-01-01.json");
+    let old = json!({
+        "schemaVersion": 2, "scope": "MASTER", "settings": {},
+        "collections": {
+            "notes": [{
+                "id": "video:abc12345678", "targetId": "abc12345678", "kind": "Video",
+                "text": NOTE_TEXT, "updatedAt": 1_700_000_000_000_i64, "deleted": false,
+            }],
+            "recap_stats": [android_ledger()],
+        },
+    });
+    std::fs::write(&path, old.to_string()).unwrap();
+    let BackupFile::Text(text) = read_backup_file(&path, 0).unwrap() else {
+        panic!("the frontend parses an old desktop file itself");
+    };
+    let parsed: Value = serde_json::from_str(&text).unwrap();
+
+    let pool = memory_pool().await;
+    import_backup(&pool, &json!({ "collections": parsed["collections"] }))
+        .await
+        .unwrap();
+    assert_eq!(
+        note_of(&pool, "video:abc12345678").await,
+        Some((NOTE_TEXT.to_string(), 1_700_000_000_000))
+    );
+    assert_eq!(
+        ledger_of(&pool).await["video"]["months"]["2026-09"]["views"],
+        3
+    );
+}
+
+#[test]
+fn a_ledger_past_its_bound_is_refused() {
+    let dir = TempDir::new();
+    let path = dir.file("huge.zip");
+    let huge = vec![b' '; 64 * 1024 * 1024 + 1];
+    zip_of(
+        &path,
+        &[
+            ("app_data.json", bytes(&android_app_data())),
+            ("recap_stats.json", huge),
+        ],
+    );
+    assert!(matches!(
+        read_backup_file(&path, 0),
+        Err(ReadError::TooLarge)
+    ));
 }
 
 #[test]

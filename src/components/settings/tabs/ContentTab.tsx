@@ -207,7 +207,7 @@ export function ContentTab() {
 
       <SettingsGroup title={getString('settings_group_region')}>
         <SettingItem title={getString('settings_region_picker')} description={getString('settings_region_picker_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)}><ToggleSwitch checked={regionPicker} onChange={setRegionPicker} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)} /></SettingItem>
-        <SettingItem title={getString('settings_trending_region')} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)}><Select value={trendingRegion} onChange={setTrendingRegion} options={REGION_OPTIONS} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)} /></SettingItem>
+        <SettingItem title={getString('settings_trending_region')} description={getString('settings_trending_region_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)}><Select value={trendingRegion} onChange={setTrendingRegion} options={REGION_OPTIONS} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)} /></SettingItem>
         <SettingItem title={getString('settings_content_language')} description={getString('settings_content_language_desc')}>
           <Select
             value={contentLanguage}

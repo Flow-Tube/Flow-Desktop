@@ -85,12 +85,16 @@ pub struct YouTubeClient {
 impl YouTubeClient {
     /// Build the `context` object for this client.
     ///
-    /// `gl` overrides the region for feeds that are region-scoped (the Shorts reel
-    /// sequence); everything else extracts against `US` so responses are
-    /// deterministic regardless of where the user is.
+    /// `gl` overrides the region for a request that names its own; everything else
+    /// follows the content country the user chose.
     #[must_use]
     pub fn context(&self, visitor_data: Option<&str>, gl: Option<&str>) -> Value {
-        self.context_in(visitor_data, gl, &super::locale::content_language())
+        let country = gl.map_or_else(super::locale::content_country, ToOwned::to_owned);
+        self.context_in(
+            visitor_data,
+            Some(&country),
+            &super::locale::content_language(),
+        )
     }
 
     /// [`Self::context`] in a given host language. Player requests use English,

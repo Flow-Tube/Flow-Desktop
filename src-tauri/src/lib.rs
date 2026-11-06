@@ -6,6 +6,7 @@ pub mod api;
 mod appimage;
 pub mod backup;
 mod bridge;
+mod cache_usage;
 #[cfg(target_os = "linux")]
 mod codec_probe;
 pub mod commands;
@@ -257,6 +258,15 @@ pub fn run() {
                 Some("no app data folder for the profile registry".to_string()),
             ),
         };
+
+    // Before any window opens, since the web view holds its cache while it runs.
+    if let Some(dir) = profiles::app_data_dir(context.config().identifier.as_str()) {
+        let cache_dirs = cache_usage::artwork_cache_dirs(
+            context.config().identifier.as_str(),
+            context.config().product_name.as_deref().unwrap_or_default(),
+        );
+        cache_usage::tidy_artwork_at_launch(&dir, &cache_dirs);
+    }
 
     #[cfg(target_os = "linux")]
     let boot_report = linux_startup::begin(
@@ -587,6 +597,7 @@ pub fn run() {
             services::notification_service::spawn_poll_loop(app.handle().clone(), pool.clone());
             app.manage(backup::auto::AutoBackupState::default());
             backup::auto::spawn(app.handle().clone(), pool.clone());
+            commands::cache::spawn_startup_trim(app.handle().clone(), pool.clone());
 
             // Register the flow:// scheme at runtime. Production installers
             // (NSIS/MSI, .desktop) do this, but dev builds and Linux need it.
@@ -707,6 +718,9 @@ pub fn run() {
             clear_lyrics_cache,
             save_download_lyrics,
             export_backup_data,
+            commands::cache::cache_usage,
+            commands::cache::clear_cache,
+            commands::cache::set_cache_limit,
             commands::backup_files::export_backup_file,
             commands::backup_files::read_backup,
             commands::backup_files::import_other_app,

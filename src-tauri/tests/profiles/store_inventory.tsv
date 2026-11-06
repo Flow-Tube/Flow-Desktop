@@ -149,5 +149,6 @@ setting	auto_backup_last_error	DEVICE	-	Why the automatic backup last failed
 file	profiles_registry.json	DEVICE	-	The list of profiles and the active one, in Android's JSON shape
 dir_site	src/profiles/mod.rs	PROFILE	-	The registry and each profile's folder
 dir_site	src/commands/local_media.rs	CACHE	-	local_covers, disposable covers read from local files
+dir_site	src/commands/cache.rs	CACHE	-	Reports and clears the disposable caches
 file	profiles_local.json	DEVICE	-	Desktop-only profile state: keychain deletes to retry
 file	profile_avatars	DEVICE	-	Profile photos, <id>.webp

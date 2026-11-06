@@ -143,6 +143,11 @@ DOWNLOADS
 - Deleting a download now offers Undo.
 - Player buttons, in Settings under Player, shows or hides each control on the player bar. The bar looks the same with all of them on, which is the default.
 
+SHORTS
+- Shorts work from the keyboard: Up and Down move between Shorts, Space or K plays and pauses, M mutes, and the arrows, J, L and the number keys seek.
+- A shelf or a channel's Shorts now carries on into more Shorts when it runs out, instead of stopping. Saved Shorts still ends where your list ends.
+- Home has a Shorts shelf, which Home Shorts Shelf in Settings turns off.
+
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.

@@ -182,6 +182,7 @@ function ShortsShelfRow({ shorts }: { shorts: ShortVideoSummary[] }) {
     <>
       {shorts.map((short) => (
         <ShortCard
+          finiteQueue
           key={short.id}
           short={short}
           queue={shorts}

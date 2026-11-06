@@ -14,7 +14,7 @@ async function currentSubIds(): Promise<string[]> {
 }
 
 const inFlightFeeds = new Map<string, Promise<ShortsFeed>>();
-function dedupedGetFeed(seedId?: string): Promise<ShortsFeed> {
+export function fetchFeedShorts(seedId?: string): Promise<ShortsFeed> {
   const key = seedId ?? "__home__";
   const existing = inFlightFeeds.get(key);
   if (existing) return existing;
@@ -55,7 +55,7 @@ function mergeInitialItems(items: ShortItem[], initial: ShortItem[]): ShortItem[
   return [...initial, ...fresh];
 }
 
-function visibleFetchedShorts(items: ShortItem[]): ShortItem[] {
+export function visibleFetchedShorts<T extends Pick<ShortItem, "id"> & { channelId?: string | null }>(items: T[]): T[] {
   const {
     dismissedVideoIds,
     blockedChannelIds,
@@ -75,11 +75,18 @@ function visibleFetchedShorts(items: ShortItem[]): ShortItem[] {
   });
 }
 
+/**
+ * What happens when an opened queue runs out. A shelf or a channel tab continues into the feed seeded
+ * from the Short that was opened, so a swipe never dead-ends. Saved Shorts is a deliberate collection,
+ * and trailing recommendations onto it would misrepresent it.
+ */
+export type ShortsQueueEnd = "feed" | "stop";
+
 export function useShortsFeed(
   seedId?: string,
   initialSeedItem?: ShortItem | null,
   initialQueue?: ShortItem[] | null,
-  queueOnly = false,
+  queueEnd?: ShortsQueueEnd,
 ) {
   const [items, setItems] = useState<ShortItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +96,7 @@ export function useShortsFeed(
   const continuationRef = useRef<string | null>(null);
   const inFlightRef = useRef(false);
   const seenIdsRef = useRef<Set<string>>(new Set());
+  const waitingToHandOverRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,14 +107,16 @@ export function useShortsFeed(
     seenIdsRef.current = new Set();
     queuedItems.forEach((item) => seenIdsRef.current.add(item.id));
     setItems(queuedItems);
-    if (queueOnly && queuedItems.length > 0) {
+    waitingToHandOverRef.current = false;
+    if (queueEnd && queuedItems.length > 0) {
       continuationRef.current = null;
+      waitingToHandOverRef.current = queueEnd === "feed";
       setLoading(false);
       return () => {
         cancelled = true;
       };
     }
-    dedupedGetFeed(seedId)
+    fetchFeedShorts(seedId)
       .then((feed) => {
         if (cancelled) return;
         const mergedItems = mergeInitialItems(visibleFetchedShorts(feed.items), queuedItems);
@@ -128,15 +138,18 @@ export function useShortsFeed(
     return () => {
       cancelled = true;
     };
-  }, [seedId, initialSeedItem, initialQueue, queueOnly]);
+  }, [seedId, initialSeedItem, initialQueue, queueEnd]);
 
   const loadMore = useCallback(async () => {
-    if (queueOnly) return;
+    if (queueEnd === "stop") return;
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setLoadingMore(true);
     try {
-      const feed = await loadMoreShorts(await currentSubIds(), continuationRef.current);
+      const feed = waitingToHandOverRef.current
+        ? await fetchFeedShorts(seedId)
+        : await loadMoreShorts(await currentSubIds(), continuationRef.current);
+      waitingToHandOverRef.current = false;
       continuationRef.current = feed.continuation;
       const fresh = visibleFetchedShorts(feed.items).filter((s) => !seenIdsRef.current.has(s.id));
       if (fresh.length) {
@@ -149,7 +162,7 @@ export function useShortsFeed(
       inFlightRef.current = false;
       setLoadingMore(false);
     }
-  }, [queueOnly]);
+  }, [queueEnd, seedId]);
 
   const reset = useCallback(() => {
     void resetShortsFeed();

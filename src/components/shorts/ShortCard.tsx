@@ -38,9 +38,11 @@ interface ShortCardProps {
   short: ShortVideoSummary;
   queue: ShortVideoSummary[];
   variant?: "shelf" | "grid";
+  /** The player stops at the end of `queue` instead of continuing into the feed: Saved Shorts. */
+  finiteQueue?: boolean;
 }
 
-export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
+export function ShortCard({ short, queue, variant = "grid", finiteQueue = false }: ShortCardProps) {
   const navigate = useNavigate();
   const toSrc = useProxyImageSrc();
   const showToast = useUiStore((s) => s.showToast);
@@ -98,7 +100,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
       state: {
         initialShort: shortSummaryToItem(short),
         initialQueue: buildShortQueue(queue),
-        queueOnly: true,
+        queueEnd: finiteQueue ? "stop" : "feed",
       },
     });
   };

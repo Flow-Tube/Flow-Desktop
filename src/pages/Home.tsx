@@ -18,6 +18,8 @@ import { homeOriginLabel } from "../lib/homeOrigin";
 import type { VideoSummary } from "../types/video";
 import { VideoGrid } from "../components/video/VideoGrid";
 import { VideoShelf } from "../components/shelf/VideoShelf";
+import { ShortsShelf } from "../components/shelf/ShortsShelf";
+import { useHomeShortsShelf } from "../lib/useHomeShortsShelf";
 import { HomeFeedFooter } from "../components/home/HomeFeedFooter";
 import { HomeFeedMessage } from "../components/home/HomeFeedMessage";
 import { HomeFeedButton } from "../components/home/HomeFeedButton";
@@ -81,23 +83,33 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
     [snapshot.origins],
   );
 
+  const homeShortsEnabled = useAppSettingsStore(
+    (state) => state.values[SETTINGS.HOME_SHORTS_SHELF_ENABLED] !== "false",
+  );
+  const shortsShelvesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_SHELF_ENABLED] !== "false");
+  const homeShorts = useHomeShortsShelf(homeFeedEnabled && homeShortsEnabled && shortsShelvesEnabled);
   const shelfVideos = useMemo(
     () => continueWatching.videos.filter((video) => !isHidden(video)),
     [continueWatching.videos, isHidden],
   );
-  const continueShelf = useMemo(
+  const homeShelves = useMemo(
     () =>
-      shelfVideos.length > 0 ? (
-        <VideoShelf
-          title={getString("continue_watching_shelf_title")}
-          videos={shelfVideos}
-          onPlay={onPlay}
-          onAddToQueue={onAddToQueue}
-          onRemoveFromContinueWatching={continueWatching.hide}
-          variant="continue"
-        />
-      ) : null,
-    [shelfVideos, onPlay, onAddToQueue, continueWatching.hide],
+      shelfVideos.length === 0 && homeShorts.length === 0 ? null : (
+      <>
+        {shelfVideos.length > 0 && (
+          <VideoShelf
+            title={getString("continue_watching_shelf_title")}
+            videos={shelfVideos}
+            onPlay={onPlay}
+            onAddToQueue={onAddToQueue}
+            onRemoveFromContinueWatching={continueWatching.hide}
+            variant="continue"
+          />
+        )}
+        <ShortsShelf title={getString("search_section_shorts")} shorts={homeShorts} onPlay={onPlay} />
+      </>
+    ),
+    [shelfVideos, homeShorts, onPlay, onAddToQueue, continueWatching.hide],
   );
 
   const refreshButton = (
@@ -163,7 +175,7 @@ export const Home: React.FC<HomeProps> = ({ onPlay, onAddToQueue }) => {
           videos={visibleVideos}
           onPlay={onPlay}
           onAddToQueue={onAddToQueue}
-          insertNode={continueShelf}
+          insertNode={homeShelves}
           trackImpressions
           getReason={reasonOf}
           onLastVisibleIndex={handleLastVisible}

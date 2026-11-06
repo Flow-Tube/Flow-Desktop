@@ -596,7 +596,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.HOME_FEED_ENABLED, "content", true, "wired"),
   bool(SETTINGS.SHOW_APP_LOGO_ICON, "content", true, "wired"),
   bool(SETTINGS.SHORTS_SHELF_ENABLED, "content", true, "wired"),
-  bool(SETTINGS.HOME_SHORTS_SHELF_ENABLED, "content", true, "persisted-only"),
+  bool(SETTINGS.HOME_SHORTS_SHELF_ENABLED, "content", true, "wired"),
   bool(SETTINGS.CONTINUE_WATCHING_ENABLED, "content", true, "wired"),
   str(SETTINGS.HOME_MAX_VIDEO_AGE, "content", "0", "wired", ["0", "24", "72", "168", "720", "4320", "8760"]),
   bool(SETTINGS.COMMENTS_ENABLED, "content", true, "wired"),

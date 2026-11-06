@@ -121,6 +121,9 @@ export function AddToPlaylistModal() {
       onClick={close}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={getString("playlist_add_modal_title")}
         className="w-full max-w-sm rounded-2xl border border-chrome-neutral-800 bg-surface-container p-5"
         onClick={(event) => event.stopPropagation()}
       >

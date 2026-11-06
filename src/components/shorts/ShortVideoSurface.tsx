@@ -38,6 +38,7 @@ import { SubtitleOverlay } from "../player/SubtitleOverlay";
 import { StatsForNerds } from "../player/StatsForNerds";
 import { MediaScrubber } from "../ui/MediaScrubber";
 import { noteShortEnded, noteShortProgress } from "../../lib/shortViews";
+import { listenForShortsKeys } from "../../lib/shortsKeys";
 
 interface ShortVideoSurfaceProps {
   videoId: string;
@@ -603,6 +604,28 @@ export function ShortVideoSurface({
     },
     [duration, hasSeparateAudio],
   );
+
+  const seekIntervalSeconds = useAppSettingsStore((state) => Number(state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? 10));
+  useEffect(() => {
+    if (!active) return;
+    return listenForShortsKeys((action) => {
+      const video = videoRef.current;
+      if (action.type === "toggle") {
+        togglePlayback();
+        return true;
+      }
+      if (!video) return false;
+      if (action.type === "seek") {
+        seekTo(video.currentTime + action.direction * (Number.isFinite(seekIntervalSeconds) ? seekIntervalSeconds : 10));
+        return true;
+      }
+      if (action.type === "jump") {
+        seekTo((duration * action.tenths) / 10);
+        return true;
+      }
+      return false;
+    });
+  }, [active, duration, seekIntervalSeconds, seekTo, togglePlayback]);
 
   useEffect(() => {
     if (!active) return;

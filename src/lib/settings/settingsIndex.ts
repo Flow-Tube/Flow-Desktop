@@ -61,6 +61,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
   ]),
   ...rows("player", [
     { title: "settings_autoplay", summary: "settings_autoplay_desc" },
+    { title: "settings_queue_autoplay", summary: "settings_queue_autoplay_desc", keywords: ["playlist", "watch later", "up next"] },
+    { title: "settings_autoplay_delay", summary: "settings_autoplay_delay_desc", keywords: ["countdown", "up next"] },
     { title: "settings_loop_video", summary: "settings_loop_video_desc" },
     { title: "settings_skip_silence", summary: "settings_skip_silence_desc" },
     { title: "settings_stable_volume", summary: "settings_stable_volume_desc" },

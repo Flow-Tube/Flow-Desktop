@@ -6,14 +6,18 @@ import { TextInput } from '../../ui/TextInput';
 import { Slider } from '../../ui/Slider';
 import { AmbientModeIcon } from '../../ui/AmbientModeIcon';
 import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePreference';
-import { getString } from '../../../lib/i18n/index';
+import { getPlural, getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
 
+const AUTOPLAY_DELAY_OPTIONS = [0, 3, 5, 10, 15, 20, 30];
+
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
+  const [queueAutoplay, setQueueAutoplay] = useBoolPref(SETTINGS.QUEUE_AUTOPLAY_ENABLED, true);
+  const [autoplayDelay, setAutoplayDelay] = useNumberPref(SETTINGS.AUTOPLAY_COUNTDOWN_SECONDS, 0);
   const [loop, setLoop] = useBoolPref(SETTINGS.VIDEO_LOOP_ENABLED, false);
   const [skipSilence, setSkipSilence] = useBoolPref(SETTINGS.SKIP_SILENCE_ENABLED, false);
   const skipSilenceDisabled = isSettingDisabledUntilWired(SETTINGS.SKIP_SILENCE_ENABLED);
@@ -55,6 +59,14 @@ export function PlayerTab() {
       <SettingsGroup title={getString('settings_group_playback')}>
         <SettingItem title={getString('settings_autoplay')} description={getString('settings_autoplay_desc')}>
           <ToggleSwitch checked={autoplay} onChange={setAutoplay} />
+        </SettingItem>
+        <SettingItem title={getString('settings_queue_autoplay')} description={getString('settings_queue_autoplay_desc')}>
+          <ToggleSwitch checked={queueAutoplay} onChange={setQueueAutoplay} />
+        </SettingItem>
+        <SettingItem title={getString('settings_autoplay_delay')} description={getString('settings_autoplay_delay_desc')}>
+          <Select value={String(autoplayDelay)} onChange={(v) => setAutoplayDelay(Number(v))} options={AUTOPLAY_DELAY_OPTIONS.map((seconds) => (
+            { value: String(seconds), label: seconds === 0 ? getString('settings_autoplay_delay_none') : getPlural('settings_autoplay_delay_seconds', seconds) }
+          ))} />
         </SettingItem>
         <SettingItem title={getString('settings_loop_video')} description={getString('settings_loop_video_desc')}>
           <ToggleSwitch checked={loop} onChange={setLoop} />

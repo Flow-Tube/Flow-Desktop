@@ -1,5 +1,6 @@
 import { Maximize2, Pin, PinOff, X } from "lucide-react";
 import { useProfileSwitchListener } from "../../lib/profiles/useProfileSwitchListener";
+import { useOtherWindowSettings } from "../../lib/useOtherWindowSettings";
 
 import { IS_MACOS_RUNTIME } from "../../lib/platform";
 import { useNativeWindowTitle } from "../../lib/useNativeWindowTitle";
@@ -25,6 +26,7 @@ export function PipWindowApp() {
     usePipSession();
   usePipWindowAspectLock();
   useProfileSwitchListener();
+  useOtherWindowSettings();
 
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   useNativeWindowTitle(currentVideo?.title ?? getString("pip_window_title"));

@@ -126,6 +126,8 @@ type PlayerProps = {
   onRetry?: () => void;
   onCopyLogs?: () => Promise<boolean> | boolean | void;
   onOpenInBrowser?: () => void;
+  /** Drawn over the video and the controls, such as the Up next card. */
+  overlay?: React.ReactNode;
   onRetrySource?: (reason: string) => void;
   sourceMode?: string;
   className?: string;
@@ -298,6 +300,7 @@ export const Player: React.FC<PlayerProps> = ({
   onRetry,
   onCopyLogs,
   onOpenInBrowser,
+  overlay,
   onRetrySource,
   sourceMode,
   className,
@@ -2747,6 +2750,8 @@ export const Player: React.FC<PlayerProps> = ({
           </div>
         </div>
       )}
+
+      {overlay}
 
       {/* SponsorBlock Notify Toast */}
       {notifyToast && notifyToast.visible && (

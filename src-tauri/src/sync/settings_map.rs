@@ -41,6 +41,7 @@ const fn shared(canonical: &'static str, desktop: &'static str, kind: Kind) -> S
 /// Settings both platforms have, mirroring Android's `SettingsMapper.WHITELIST`.
 const SHARED: &[Shared] = &[
     shared("autoplay", "autoplay_enabled", Kind::Bool),
+    shared("queue_autoplay", "queue_autoplay_enabled", Kind::Bool),
     shared("default_quality_wifi", "default_quality_wifi", Kind::Text),
     shared("playback_speed", "playback_speed", Kind::Number),
     shared("sponsorblock_enabled", "sponsorblock_enabled", Kind::Bool),
@@ -92,6 +93,7 @@ const SHARED: &[Shared] = &[
 /// Player, content and extension preferences only the desktop has. Download paths, proxy
 /// credentials, cache sizes, private ids and Deep Flow runtime state are deliberately absent.
 const DESKTOP_ONLY: &[&str] = &[
+    "autoplay_countdown_seconds",
     "allow_volume_boost",
     "remember_playback_speed",
     "custom_speeds_enabled",
@@ -320,5 +322,29 @@ fn typed(kind: Kind, stored: &str) -> Value {
             .and_then(serde_json::Number::from_f64)
             .map_or_else(|| Value::String(stored.to_string()), Value::Number),
         Kind::Text => Value::String(stored.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn queue_autoplay_uses_androids_name_both_ways() {
+        assert_eq!(
+            to_wire("queue_autoplay_enabled", "false"),
+            Some(("queue_autoplay".to_string(), json!(false)))
+        );
+        assert_eq!(
+            from_wire("queue_autoplay", &json!(false)),
+            Some(("queue_autoplay_enabled", "false".to_string()))
+        );
+    }
+
+    #[test]
+    fn the_autoplay_delay_stays_among_desktops() {
+        let (key, _) = to_wire("autoplay_countdown_seconds", "5").unwrap();
+        assert_eq!(key, "desktop.autoplay_countdown_seconds");
     }
 }

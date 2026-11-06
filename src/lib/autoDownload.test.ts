@@ -17,7 +17,7 @@ vi.mock("../store/useDownloadStore", () => ({
   useDownloadStore: { getState: () => ({ active }) },
 }));
 
-import { autoDownloadLikedSong, noteOpenedVideoResolved, skipAutoDownloadForNextVideo } from "./autoDownload";
+import { advanceWithoutAutoDownload, autoDownloadLikedSong, noteOpenedVideoResolved } from "./autoDownload";
 import { SETTINGS } from "./settings/schema";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useUiStore } from "../store/useUiStore";
@@ -80,9 +80,15 @@ describe("download what you open", () => {
   });
 
   it("leaves out what autoplay moved to, and only that", async () => {
-    skipAutoDownloadForNextVideo();
+    advanceWithoutAutoDownload(() => video());
     await noteOpenedVideoResolved(video());
     expect(startVideoDownload).not.toHaveBeenCalled();
+    await noteOpenedVideoResolved(video());
+    expect(startVideoDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it("still saves what the viewer opens after autoplay found nothing to play", async () => {
+    advanceWithoutAutoDownload(() => null);
     await noteOpenedVideoResolved(video());
     expect(startVideoDownload).toHaveBeenCalledTimes(1);
   });

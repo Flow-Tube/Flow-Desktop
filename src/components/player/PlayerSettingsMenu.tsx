@@ -5,6 +5,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CirclePlay,
   Gauge,
   Monitor,
   Pause,
@@ -138,6 +139,7 @@ export function PlayerSettingsMenu({
   const openVideoNote = useOpenVideoNote(currentVideo);
   const noteEditorHosted = useNotesStore((s) => s.editorHosted);
   const canNoteVideo = notesEnabled && noteEditorHosted && !!currentVideo && !currentVideo.isLive;
+  const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
 
@@ -260,6 +262,7 @@ export function PlayerSettingsMenu({
 
         {pane === "root" && (
           <div className="space-y-0.5">
+            {toggleRow(getString("player_menu_autoplay"), autoplay, <CirclePlay size={18} />, setAutoplay)}
             {settingRow(getString("player_menu_speed"), speedLabel(playbackRate), <Gauge size={18} />, () => onPaneChange("speed"))}
             {/* The pop-out draws no glow, and its settings copy never reaches the main window. */}
             {IS_MAIN_WINDOW &&

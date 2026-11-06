@@ -46,6 +46,8 @@ export const SETTINGS = {
   CUSTOM_THEMES: "custom_themes",
 
   AUTOPLAY_ENABLED: "autoplay_enabled",
+  QUEUE_AUTOPLAY_ENABLED: "queue_autoplay_enabled",
+  AUTOPLAY_COUNTDOWN_SECONDS: "autoplay_countdown_seconds",
   VIDEO_LOOP_ENABLED: "video_loop_enabled",
   SKIP_SILENCE_ENABLED: "skip_silence_enabled",
   STABLE_VOLUME_ENABLED: "stable_volume_enabled",
@@ -229,6 +231,8 @@ export const SETTING_SCOPES = {
   [SETTINGS.EXPRESSIVE_SLIDERS_ENABLED]: "profile",
   [SETTINGS.CUSTOM_THEMES]: "profile",
   [SETTINGS.AUTOPLAY_ENABLED]: "profile",
+  [SETTINGS.QUEUE_AUTOPLAY_ENABLED]: "profile",
+  [SETTINGS.AUTOPLAY_COUNTDOWN_SECONDS]: "profile",
   [SETTINGS.VIDEO_LOOP_ENABLED]: "profile",
   [SETTINGS.SKIP_SILENCE_ENABLED]: "profile",
   [SETTINGS.STABLE_VOLUME_ENABLED]: "profile",
@@ -488,6 +492,8 @@ export const SETTING_DEFINITIONS = [
   json(SETTINGS.CUSTOM_THEMES, "appearance", "[]", "wired"),
 
   bool(SETTINGS.AUTOPLAY_ENABLED, "player", true, "wired"),
+  bool(SETTINGS.QUEUE_AUTOPLAY_ENABLED, "player", true, "wired"),
+  num(SETTINGS.AUTOPLAY_COUNTDOWN_SECONDS, "player", 0, "wired", 0, 30),
   bool(SETTINGS.VIDEO_LOOP_ENABLED, "player", false, "wired"),
   bool(SETTINGS.SKIP_SILENCE_ENABLED, "player", false, "deferred", "disabled-until-wired", "settings_note_skip_silence_requires_audio_analysis"),
   bool(SETTINGS.STABLE_VOLUME_ENABLED, "player", false, "wired"),

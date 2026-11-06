@@ -16,9 +16,9 @@ let lastSeen: string | null = null;
 // Undone this session; nothing else remembers it once the download is cancelled.
 const declined = new Set<string>();
 
-/** Autoplay moved on by itself; only what the viewer opens is saved. */
-export function skipAutoDownloadForNextVideo() {
-  skipNext = true;
+/** Autoplay moves on by itself; only what the viewer opens is saved. With nothing to move to, the next video is theirs. */
+export function advanceWithoutAutoDownload(advance: () => VideoSummary | null) {
+  if (advance()) skipNext = true;
 }
 
 /** A download already there wins, whatever its state: a failed or paused one was the viewer's call. */

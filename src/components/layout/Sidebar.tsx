@@ -146,6 +146,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
                   <SidebarItem onOpenInNewTab={openInNewTab} to="/notes" {...navIconPair('notes')} label={getString('notes_title')} onClick={closeOverlay} />
                 )}
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/local-media" {...navIconPair('localMedia')} label={getString('library_local_media_label')} onClick={closeOverlay} />
               </nav>
             </section>
           </div>

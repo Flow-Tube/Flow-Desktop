@@ -23,6 +23,7 @@ const STATIC_TITLES: Record<string, StringKey> = {
   "/notes": "notes_title",
   "/history": "history",
   "/downloads": "downloads",
+  "/local-media": "library_local_media_label",
   "/liked": "liked",
   "/settings": "settings",
   "/settings/import": "import_data",

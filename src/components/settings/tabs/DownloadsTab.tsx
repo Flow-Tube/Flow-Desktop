@@ -1,4 +1,5 @@
 import { FolderOpen } from 'lucide-react';
+import { LocalMediaSettings } from '../LocalMediaSettings';
 import { SettingsGroup } from '../SettingsGroup';
 import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
@@ -160,6 +161,8 @@ export function DownloadsTab() {
           </button>
         </div>
       </SettingsGroup>
+
+      <LocalMediaSettings />
     </div>
   );
 }

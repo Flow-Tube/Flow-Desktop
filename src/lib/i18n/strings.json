@@ -220,6 +220,7 @@
   "local_menu_hide_folder": "Hide this folder",
   "local_folder_hidden": "Hid %1$s",
   "local_folder_hide_failed": "Couldn't hide that folder",
+  "local_folder_hide_chosen": "This is a folder you chose. Remove it in Settings",
   "local_file_options": "More options",
   "local_back_to_folders": "All folders",
   "local_no_remote": "You're controlling another device. Stop that to play files from this computer.",

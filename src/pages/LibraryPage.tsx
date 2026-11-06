@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Clock, Disc3, Download, History, ListVideo, Music2, ThumbsUp } from "lucide-react";
+import { Clock, Disc3, Download, FolderOpen, History, ListVideo, Music2, ThumbsUp } from "lucide-react";
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
@@ -16,6 +16,7 @@ import {
 } from "../store/useAlbumLibraryStore";
 import { LibraryShelf } from "../components/library/LibraryShelf";
 import { RecapEntryCard } from "../components/recap/RecapEntryCard";
+import { Button } from "../components/ui/Button";
 import { VideoCard } from "../components/video/VideoCard";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
@@ -233,6 +234,10 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           </h1>
           <p className="mt-2 text-sm text-chrome-neutral-400">{statsText}</p>
         </div>
+        <Button type="button" variant="tonal" className="ml-auto shrink-0" onClick={() => navigate("/local-media")}>
+          <FolderOpen size={16} />
+          {getString("library_local_media_label")}
+        </Button>
       </header>
 
       <RecapEntryCard />

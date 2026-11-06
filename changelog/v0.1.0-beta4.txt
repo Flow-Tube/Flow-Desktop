@@ -213,6 +213,11 @@ NOTIFICATIONS
 - About has a Changelog with the notes of every release, and Open source notices listing the projects Flow is built on.
 - Flow looks for updates every 12 hours while it stays open, not only when it starts.
 
+LOCAL MEDIA
+- Local media: choose folders and play the videos and music in them. Search, sort, filter by length, quality and Unwatched, browse by folder, Continue watching, New marks, Play all and Shuffle.
+- Folders are rescanned at launch and on Rescan, in the background. Settings > Downloads holds the folder lists, and can hide voice notes and short audio.
+- Files stay on this computer: they don't sync, and playing them teaches no recommendations. A file Flow can't play says why, naming a sound format this computer can't decode.
+
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.

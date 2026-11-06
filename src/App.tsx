@@ -44,6 +44,7 @@ import Subscriptions from "./pages/Subscriptions";
 import History from "./pages/History";
 import RecapPage from "./pages/RecapPage";
 import Downloads from "./pages/Downloads";
+import LocalMedia from "./pages/LocalMedia";
 import Likes from "./pages/Likes";
 import LibraryPage from "./pages/LibraryPage";
 import AlbumsLibrary from "./pages/AlbumsLibrary";
@@ -301,6 +302,9 @@ function App() {
           } />
           <Route path="downloads" element={
             <Downloads onPlay={handlePlayVideo} />
+          } />
+          <Route path="local-media" element={
+            <LocalMedia />
           } />
           <Route path="liked" element={
             <Likes onPlay={handlePlayVideo} />

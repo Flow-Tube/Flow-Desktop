@@ -68,6 +68,7 @@ import { useVideoEq } from "../../lib/audio/useVideoEq";
 import { useVolumeLevel } from "../../lib/audio/volumeBoost";
 import { adaptivePlayerAspect, useReportVideoAspect } from "../../lib/adaptivePlayer";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { videoPlayerKeyAction } from "../../lib/videoPlayerKeys";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
 import { AmbientGlow } from "./AmbientGlow";
@@ -2191,127 +2192,100 @@ export const Player: React.FC<PlayerProps> = ({
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      switch (event.key.toLowerCase()) {
-        case " ":
-        case "k":
-          event.preventDefault();
+      const action = videoPlayerKeyAction(event.key, event.shiftKey);
+      if (action && action.kind !== "exit-fullscreen") event.preventDefault();
+      switch (action?.kind) {
+        case "toggle-play":
           togglePlay();
           break;
-        case "n":
-          if (event.shiftKey) playNext(true);
+        case "next":
+          playNext(true);
           break;
-        case "p":
-          if (event.shiftKey) playPrevious();
+        case "previous":
+          playPrevious();
           break;
-        case "j":
+        case "seek-back":
           seekBy(-seekIntervalSeconds);
           break;
-        case "l":
+        case "seek-forward":
           seekBy(seekIntervalSeconds);
           break;
-        case "arrowleft":
-          event.preventDefault();
-          seekBy(-seekIntervalSeconds);
-          break;
-        case "arrowright":
-          event.preventDefault();
-          seekBy(seekIntervalSeconds);
-          break;
-        case "arrowup": {
-          event.preventDefault();
+        case "volume-up": {
           const raised = Math.min(maxLevel, volumeLevelNow + 0.05);
           setVolumeLevel(raised);
           setMuted(false);
           showVolumeFeedback(raised, false);
           break;
         }
-        case "arrowdown": {
-          event.preventDefault();
+        case "volume-down": {
           const lowered = Math.max(0, volumeLevelNow - 0.05);
           setVolumeLevel(lowered);
           showVolumeFeedback(lowered, muted);
           break;
         }
-        case "m":
+        case "toggle-mute":
           setMuted((value) => !value);
           showVolumeFeedback(volume, !muted);
           break;
-        case "escape":
+        case "exit-fullscreen":
           if (isFullscreen && !event.defaultPrevented) {
             event.preventDefault();
             toggleFullscreen();
           }
           break;
-        case "f":
+        case "toggle-fullscreen":
           toggleFullscreen();
           break;
-        case "t":
+        case "toggle-theater":
           if (!isFullscreen) setIsTheaterMode(!isTheaterMode);
           break;
-        case "i":
+        case "toggle-pip":
           togglePictureInPicture();
           break;
-        case "c":
-          event.preventDefault();
+        case "toggle-captions":
           toggleCaptions();
           break;
-        case "+":
-        case "=":
-          event.preventDefault();
+        case "captions-larger":
           nudgeSubtitleFontSize(1);
           break;
-        case "-":
-          event.preventDefault();
+        case "captions-smaller":
           nudgeSubtitleFontSize(-1);
           break;
-        case ",":
-          event.preventDefault();
+        case "frame-back":
           stepFrame(-1);
           break;
-        case ".":
-          event.preventDefault();
+        case "frame-forward":
           stepFrame(1);
           break;
-        case "<":
-          event.preventDefault();
+        case "slower":
           stepPlaybackRate(-1);
           break;
-        case ">":
-          event.preventDefault();
+        case "faster":
           stepPlaybackRate(1);
           break;
-        case "[":
-          event.preventDefault();
+        case "previous-chapter":
           jumpChapter(-1);
           break;
-        case "]":
-          event.preventDefault();
+        case "next-chapter":
           jumpChapter(1);
           break;
-        case "home":
-          event.preventDefault();
+        case "seek-start":
           if (isLive && videoRef.current?.seekable.length) {
             seekTo(liveWindow(videoRef.current).start);
           } else {
             seekTo(0);
           }
           break;
-        case "end":
-          event.preventDefault();
+        case "seek-end":
           if (isLive && videoRef.current?.seekable.length) {
             seekTo(liveEdgePosition(liveWindow(videoRef.current), readLiveTiming(videoRef.current)));
           } else {
             seekTo(duration);
           }
           break;
-        default: {
-          const digit = Number(event.key);
-          if (event.key.length === 1 && Number.isInteger(digit) && !isLive && duration > 0) {
-            event.preventDefault();
-            seekTo((duration * digit) / 10);
-          }
+        case "seek-to-fraction":
+          if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
-        }
       }
       revealControls();
     };

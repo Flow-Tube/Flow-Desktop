@@ -109,6 +109,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_button_play_on", summary: "settings_button_play_on_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_theater", summary: "settings_button_theater_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_fullscreen", summary: "settings_button_fullscreen_desc", keywords: ["player bar", "hide"] },
+    { title: "settings_global_media_keys", summary: "settings_global_media_keys_desc", keywords: ["hotkey", "shortcut", "keyboard", "media"] },
   ]),
   ...rows("music", [
     { title: "music_equalizer", summary: "settings_music_equalizer_desc" },

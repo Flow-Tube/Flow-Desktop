@@ -8,6 +8,7 @@ import { getString } from "../../lib/i18n/index";
 import { usePipSession } from "../../lib/usePipSession";
 import { usePipWindowAspectLock } from "../../lib/usePipWindowAspectLock";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
+import { useMediaCommands } from "../../lib/useMediaCommands";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { WindowResizeEdges } from "../ui/WindowResizeEdges";
 import { FlowPlayerCore } from "../watch/FlowPlayerCore";
@@ -34,6 +35,7 @@ export function PipWindowApp() {
   // This window holds the media element while it is open, so it also owns the
   // OS transport controls.
   useMediaSessionMetadata(isPlaying);
+  useMediaCommands();
 
   return (
     <div className="group relative flex h-screen w-screen items-center justify-center overflow-hidden bg-chrome-black text-chrome-zinc-100">

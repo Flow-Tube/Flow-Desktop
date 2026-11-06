@@ -82,6 +82,8 @@ import { DeepFlowController } from "./components/deep-flow/DeepFlowController";
 import { DeepLinkController } from "./components/handoff/DeepLinkController";
 import { DiscordPresenceController } from "./components/discord/DiscordPresenceController";
 import { MusicTrayController } from "./components/tray/MusicTrayController";
+import { GlobalMediaKeysController } from "./components/shortcuts/GlobalMediaKeysController";
+import { KeyboardHelpHost } from "./components/shortcuts/KeyboardHelpHost";
 import { ScrobbleController } from "./components/scrobbling/ScrobbleController";
 import { WellbeingController } from "./components/settings/WellbeingController";
 import { DownloadDialog } from "./components/downloads/DownloadDialog";
@@ -97,6 +99,7 @@ import { useTabShortcuts } from "./lib/tabs/useTabShortcuts";
 import { useActiveTabTitle } from "./lib/tabs/useActiveTabTitle";
 import { useTabSession } from "./lib/tabs/useTabSession";
 import { useSingleTabWhenOff } from "./lib/tabs/useSingleTabWhenOff";
+import { useMediaCommands } from "./lib/useMediaCommands";
 import { useCrossWindowSync } from "./lib/useCrossWindowSync";
 import { useLinkedSyncEvents } from "./lib/useLinkedSyncEvents";
 import { useLiveNow } from "./lib/live/useLiveNow";
@@ -133,6 +136,7 @@ function App() {
   const tabsRestored = useTabSession();
   useSingleTabWhenOff();
   useCrossWindowSync();
+  useMediaCommands();
   useLinkedSyncEvents();
   useLiveNow();
   usePlayOnEvents();
@@ -343,6 +347,7 @@ function App() {
           <DeepFlowController />
           <DeepLinkController />
           <MusicTrayController />
+          <GlobalMediaKeysController />
           <ScrobbleController />
           <WellbeingController />
         </>
@@ -362,6 +367,7 @@ function App() {
       {IS_MAIN_WINDOW && <WhosWatchingOverlay />}
       <ProfileSwitchOverlay />
       <NoteEditorHost />
+      <KeyboardHelpHost />
       <ConfirmHost />
       <ToastHost />
     </div>

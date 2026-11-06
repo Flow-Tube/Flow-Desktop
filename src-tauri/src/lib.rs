@@ -80,6 +80,7 @@ use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
     put_cached_lyrics, save_download_lyrics,
 };
+use commands::media_keys::{global_media_keys_set, global_media_keys_supported};
 use commands::music::{
     get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
     get_music_artist_items, get_music_artist_page, get_music_captions_lrc, get_music_charts_page,
@@ -529,6 +530,8 @@ pub fn run() {
             app.manage(DiscordPresence::new());
             app.manage(commands::discord::DiscordPresenceOwner::default());
             app.manage(services::music_tray::MusicTray::default());
+            app.manage(services::media_keys::PlaybackTarget::default());
+            services::media_keys::watch_playback_claims(app.handle());
 
             // Initialize and manage streaming proxy
             let (streaming_manager, proxy_listeners) = streaming::proxy::StreamingManager::new();
@@ -914,6 +917,8 @@ pub fn run() {
             // --- Music tray ---
             music_tray_supported,
             music_tray_update,
+            global_media_keys_supported,
+            global_media_keys_set,
             music_tray_hide,
             // --- Scrobbling ---
             scrobble_status,

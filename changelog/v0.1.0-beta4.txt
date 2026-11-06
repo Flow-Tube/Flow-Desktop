@@ -141,6 +141,8 @@ LIBRARY
 - Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.
 - Flow Recap: open it from Library or Settings > Taste to see your month, your year or all time, for videos, music or both. It shows time per day, your clock, weekdays, a calendar, top channels, videos, artists and songs, topics, what stood out, and the time SponsorBlock saved you.
 - Play your recap as a full-window story. Space pauses, the arrow keys step and Esc closes. It ends on a card you can save as a PNG or copy.
+- Global media keys, under Keyboard in Settings > Player, let your keyboard's play, next and previous keys control Flow while it is in the background. It is off by default, and Linux needs an X11 session.
+- Press ? to see every video and music key. The same list is in Settings > Player.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

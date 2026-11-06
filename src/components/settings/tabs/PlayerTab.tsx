@@ -32,6 +32,7 @@ function PlayerButtonSwitch({ row }: { row: PlayerButtonRow }) {
     </SettingItem>
   );
 }
+import { KeyboardSettings } from '../KeyboardSettings';
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -255,6 +256,8 @@ export function PlayerTab() {
           <ToggleSwitch checked={frameStep} onChange={setFrameStep} />
         </SettingItem>
       </SettingsGroup>
+
+      <KeyboardSettings />
     </div>
   );
 }

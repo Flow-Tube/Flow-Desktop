@@ -133,6 +133,8 @@ objc2 = "0.6"
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-window-state = "2"
+# Global media keys. Installed at runtime only once the setting is turned on (services/media_keys.rs).
+tauri-plugin-global-shortcut = "2"
 
 # tauri-plugin-deep-link 2.6.2 builds `ini::ParseOption` with only the fields rust-ini 0.21.1
 # has, so 0.21.3 breaks its Linux build. Drop this pin once deep-link ships a fix.

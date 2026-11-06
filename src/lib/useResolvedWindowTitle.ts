@@ -19,6 +19,7 @@ const STATIC_TITLES: Record<string, StringKey> = {
   "/library": "library",
   "/albums": "albums",
   "/saved-shorts": "saved_shorts",
+  "/notes": "notes_title",
   "/history": "history",
   "/downloads": "downloads",
   "/liked": "liked",

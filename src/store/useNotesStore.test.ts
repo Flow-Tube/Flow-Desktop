@@ -4,6 +4,9 @@ const api = vi.hoisted(() => ({
   listNotes: vi.fn(),
   saveNote: vi.fn(),
   deleteNotes: vi.fn(),
+  restoreNotes: vi.fn(),
+  saveNotesOrder: vi.fn(),
+  saveNoteSubject: vi.fn(),
 }));
 vi.mock("../lib/api/notes", async (original) => ({
   ...(await original<typeof import("../lib/api/notes")>()),
@@ -60,6 +63,41 @@ describe("useNotesStore", () => {
     api.deleteNotes.mockRejectedValue(new Error("disk"));
     await useNotesStore.getState().remove(["video:a"]);
     expect(Object.keys(useNotesStore.getState().notes)).toEqual(["video:a", "video:b"]);
+  });
+
+  it("adopts the stored copy of a restored note and takes it away again on failure", async () => {
+    api.restoreNotes.mockResolvedValueOnce([{ ...note("a", "x"), updatedAt: 50 }]);
+    await useNotesStore.getState().restore([note("a", "x")]);
+    expect(useNotesStore.getState().notes["video:a"]?.updatedAt).toBe(50);
+
+    useNotesStore.setState({ notes: {} });
+    api.restoreNotes.mockRejectedValueOnce(new Error("disk"));
+    await useNotesStore.getState().restore([note("a", "x")]);
+    expect(useNotesStore.getState().notes).toEqual({});
+  });
+
+  it("numbers a new order at once and rolls it back on failure", async () => {
+    useNotesStore.setState({ notes: { "video:a": note("a", "x"), "video:b": note("b", "y") } });
+    api.saveNotesOrder.mockResolvedValueOnce(undefined);
+    await useNotesStore.getState().saveOrder(["video:b", "video:a"]);
+    expect(useNotesStore.getState().notes["video:b"]?.position).toBe(0);
+    expect(useNotesStore.getState().notes["video:a"]?.position).toBe(1);
+
+    api.saveNotesOrder.mockRejectedValueOnce(new Error("disk"));
+    await useNotesStore.getState().saveOrder(["video:a", "video:b"]);
+    expect(useNotesStore.getState().notes["video:b"]?.position).toBe(0);
+  });
+
+  it("fills a subject in without touching the text or a note deleted meanwhile", async () => {
+    const a = note("a", "x");
+    useNotesStore.setState({ notes: { "video:a": a } });
+    api.saveNoteSubject.mockResolvedValue(undefined);
+    await useNotesStore.getState().fillSubject(a, { title: "Found" });
+    expect(useNotesStore.getState().notes["video:a"]).toMatchObject({ text: "x", title: "Found", updatedAt: 1 });
+
+    useNotesStore.setState({ notes: {} });
+    await useNotesStore.getState().fillSubject(a, { title: "Again" });
+    expect(useNotesStore.getState().notes).toEqual({});
   });
 
   it("marks a failed load so a page can say so", async () => {

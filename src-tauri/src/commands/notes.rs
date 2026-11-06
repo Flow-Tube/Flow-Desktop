@@ -57,3 +57,42 @@ pub async fn delete_notes(
     announce(&app).await;
     Ok(())
 }
+
+#[tauri::command]
+pub async fn save_note_subject(
+    app: AppHandle,
+    kind: String,
+    target_id: String,
+    subject: NoteSubject,
+    pool: State<'_, SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    notes_service::fill_subject(&pool, &notes_service::note_id(&kind, &target_id), subject)
+        .await
+        .map_err(sync_err)?;
+    announce(&app).await;
+    Ok(())
+}
+
+/// Stays on this device: the hand-made order never travels.
+#[tauri::command]
+pub async fn save_notes_order(
+    ids: Vec<String>,
+    pool: State<'_, SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    notes_service::save_order(&pool, &ids)
+        .await
+        .map_err(sync_err)
+}
+
+#[tauri::command]
+pub async fn restore_notes(
+    app: AppHandle,
+    notes: Vec<NoteRow>,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<NoteRow>, ErrorResponse> {
+    let restored = notes_service::restore_notes(&pool, notes)
+        .await
+        .map_err(sync_err)?;
+    announce(&app).await;
+    Ok(restored)
+}

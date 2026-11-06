@@ -77,6 +77,20 @@ pub async fn save_note(
     Ok(saved)
 }
 
+fn with_subject(row: &NoteRow, subject: NoteSubject) -> Note {
+    Note {
+        title: subject.title,
+        channel_name: subject.channel_name,
+        channel_id: subject.channel_id,
+        thumbnail_url: subject.thumbnail_url,
+        duration_seconds: subject.duration_seconds,
+        channel_avatar_url: subject.channel_avatar_url,
+        channel_handle: subject.channel_handle,
+        subscriber_count_text: subject.subscriber_count_text,
+        ..row.to_canonical()
+    }
+}
+
 fn subject_of(row: &NoteRow) -> NoteSubject {
     NoteSubject {
         title: row.title.clone(),
@@ -88,6 +102,52 @@ fn subject_of(row: &NoteRow) -> NoteSubject {
         channel_handle: row.channel_handle.clone(),
         subscriber_count_text: row.subscriber_count_text.clone(),
     }
+}
+
+/// Fills in what a note is about. Its text and edit time stay: the merge lets the copy that knows
+/// win at equal times, so this reaches other devices without undoing an edit made there.
+pub async fn fill_subject(
+    pool: &SqlitePool,
+    id: &str,
+    subject: NoteSubject,
+) -> Result<(), SyncError> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    if let Some(row) = notes::get(&mut tx, id).await? {
+        let note = with_subject(&row, subject);
+        notes::upsert(&mut tx, &note).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn save_order(pool: &SqlitePool, ids: &[String]) -> Result<(), SyncError> {
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    notes::set_positions(&mut tx, ids).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Puts deleted notes back for Undo, their place included. Android keeps the old edit time, but
+/// the deletion may already have left this device, and a peer's tombstone would beat that time and
+/// delete the note again here, so a restored note counts as edited now.
+pub async fn restore_notes(
+    pool: &SqlitePool,
+    rows: Vec<NoteRow>,
+) -> Result<Vec<NoteRow>, SyncError> {
+    let at = i64::try_from(clock::edit_ms(pool).await?).unwrap_or(i64::MAX);
+    let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    let mut restored = Vec::with_capacity(rows.len());
+    for row in rows {
+        let note = Note {
+            updated_at: at,
+            ..row.to_canonical()
+        };
+        notes::upsert(&mut tx, &note).await?;
+        notes::set_position(&mut tx, &row.id, row.position).await?;
+        restored.extend(notes::get(&mut tx, &row.id).await?);
+    }
+    tx.commit().await?;
+    Ok(restored)
 }
 
 pub async fn delete_notes(pool: &SqlitePool, ids: &[String]) -> Result<(), SyncError> {
@@ -212,6 +272,72 @@ mod tests {
             .unwrap();
         let line = exported(&pool).await;
         assert!(line.contains(r#""text":"back""#) && !line.contains(r#""deleted":true"#));
+    }
+
+    #[tokio::test]
+    async fn filling_a_subject_leaves_the_text_and_time() {
+        let pool = pool().await;
+        let saved = save_note(&pool, "Video", "abc", "one", None)
+            .await
+            .unwrap()
+            .unwrap();
+        fill_subject(&pool, "video:abc", titled("Found"))
+            .await
+            .unwrap();
+        let row = notes::all(&pool).await.unwrap().remove(0);
+        assert_eq!(row.title.as_deref(), Some("Found"));
+        assert_eq!(
+            (row.text.as_str(), row.updated_at),
+            ("one", saved.updated_at)
+        );
+    }
+
+    #[tokio::test]
+    async fn filling_a_subject_never_brings_a_deleted_note_back() {
+        let pool = pool().await;
+        fill_subject(&pool, "video:gone", titled("Found"))
+            .await
+            .unwrap();
+        assert!(notes::all(&pool).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_hand_made_order_stays_local() {
+        let pool = pool().await;
+        save_note(&pool, "Video", "a", "one", None).await.unwrap();
+        save_note(&pool, "Video", "b", "two", None).await.unwrap();
+        let before = exported(&pool).await;
+        save_order(&pool, &["video:b".to_owned(), "video:a".to_owned()])
+            .await
+            .unwrap();
+        let rows = notes::all(&pool).await.unwrap();
+        let place = |id: &str| rows.iter().find(|r| r.id == id).unwrap().position;
+        assert_eq!((place("video:b"), place("video:a")), (Some(0), Some(1)));
+        assert_eq!(exported(&pool).await, before);
+    }
+
+    #[tokio::test]
+    async fn undo_outlives_a_tombstone_already_sent_and_keeps_the_place() {
+        let pool = pool().await;
+        let mut row = save_note(&pool, "Video", "abc", "one", Some(titled("T")))
+            .await
+            .unwrap()
+            .unwrap();
+        row.position = Some(4);
+        delete_notes(&pool, std::slice::from_ref(&row.id))
+            .await
+            .unwrap();
+        let deleted_line = exported(&pool).await;
+        let deleted: Note = serde_json::from_str(&deleted_line).unwrap();
+
+        let restored = restore_notes(&pool, vec![row]).await.unwrap().remove(0);
+        assert!(restored.updated_at > deleted.updated_at);
+        assert_eq!(restored.position, Some(4));
+        assert_eq!(restored.title.as_deref(), Some("T"));
+
+        let peers_tombstone =
+            crate::sync::merge::merge_notes(vec![restored.to_canonical()], vec![deleted]);
+        assert!(!peers_tombstone[0].deleted);
     }
 
     #[tokio::test]

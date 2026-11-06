@@ -98,7 +98,9 @@ use commands::music_queue::{
     clear_music_queue_state, get_music_resume_position, load_music_queue_state,
     save_music_queue_state, save_music_resume_position,
 };
-use commands::notes::{delete_notes, list_notes, save_note};
+use commands::notes::{
+    delete_notes, list_notes, restore_notes, save_note, save_note_subject, save_notes_order,
+};
 use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
     get_unread_notification_count, mark_notifications_read,
@@ -861,6 +863,9 @@ pub fn run() {
             list_notes,
             save_note,
             delete_notes,
+            save_note_subject,
+            save_notes_order,
+            restore_notes,
             get_notifications,
             get_unread_notification_count,
             mark_notifications_read,

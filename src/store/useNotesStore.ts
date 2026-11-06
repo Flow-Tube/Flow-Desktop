@@ -3,7 +3,10 @@ import {
   deleteNotes,
   listNotes,
   noteId,
+  restoreNotes,
   saveNote,
+  saveNotesOrder,
+  saveNoteSubject,
   type Note,
   type NoteKind,
   type NoteSubject,
@@ -30,6 +33,9 @@ interface NotesState {
   load: () => Promise<void>;
   save: (kind: NoteKind, targetId: string, text: string, subject: NoteSubject | null) => Promise<void>;
   remove: (ids: string[]) => Promise<void>;
+  restore: (notes: Note[]) => Promise<void>;
+  saveOrder: (ids: string[]) => Promise<void>;
+  fillSubject: (note: Note, subject: NoteSubject) => Promise<void>;
   openEditor: (target: NoteEditorTarget) => void;
   closeEditor: () => void;
 }
@@ -84,6 +90,41 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       set({ notes: before });
       useUiStore.getState().showToast({ message: getString("note_delete_failed"), variant: "error" });
     }
+  },
+  restore: async (notes) => {
+    const before = get().notes;
+    set({ notes: { ...before, ...byId(notes) } });
+    try {
+      const restored = await restoreNotes(notes);
+      set((state) => ({ notes: { ...state.notes, ...byId(restored) } }));
+    } catch (error) {
+      console.warn("Failed to restore notes", error);
+      set({ notes: before });
+      useUiStore.getState().showToast({ message: getString("note_save_failed"), variant: "error" });
+    }
+  },
+  saveOrder: async (ids) => {
+    const before = get().notes;
+    const placed = { ...before };
+    ids.forEach((id, position) => {
+      const note = placed[id];
+      if (note) placed[id] = { ...note, position };
+    });
+    set({ notes: placed });
+    try {
+      await saveNotesOrder(ids);
+    } catch (error) {
+      console.warn("Failed to save the order of notes", error);
+      set({ notes: before });
+      useUiStore.getState().showToast({ message: getString("note_save_failed"), variant: "error" });
+    }
+  },
+  fillSubject: async (note, subject) => {
+    await saveNoteSubject(note.kind, note.targetId, subject);
+    set((state) => {
+      const current = state.notes[note.id];
+      return current ? { notes: { ...state.notes, [note.id]: { ...current, ...subject } } } : {};
+    });
   },
   openEditor: (editor) => set({ editor }),
   closeEditor: () => set({ editor: null }),

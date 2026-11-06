@@ -1,6 +1,6 @@
 //! The `notes` table: a note on a video or a channel, in Flow for Android's shape.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqliteConnection, SqlitePool};
 
 use crate::sync::canonical::Note;
@@ -9,7 +9,7 @@ const SELECT: &str = "SELECT id, target_id, kind, text, updated_at, title, chann
      thumbnail_url, duration_seconds, channel_avatar_url, channel_handle, subscriber_count_text, \
      position FROM notes";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, FromRow)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteRow {
     pub id: String,
@@ -108,6 +108,27 @@ pub async fn get(conn: &mut SqliteConnection, id: &str) -> Result<Option<NoteRow
         .bind(id)
         .fetch_optional(conn)
         .await
+}
+
+pub async fn set_position(
+    conn: &mut SqliteConnection,
+    id: &str,
+    position: Option<i64>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE notes SET position = ? WHERE id = ?")
+        .bind(position)
+        .bind(id)
+        .execute(conn)
+        .await?;
+    Ok(())
+}
+
+/// Stores `ids` as the hand-made order, first to last.
+pub async fn set_positions(conn: &mut SqliteConnection, ids: &[String]) -> Result<(), sqlx::Error> {
+    for (position, id) in ids.iter().enumerate() {
+        set_position(conn, id, i64::try_from(position).ok()).await?;
+    }
+    Ok(())
 }
 
 pub async fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), sqlx::Error> {

@@ -21,6 +21,7 @@ const NAV_ICONS: Array<[prefix: string, name: SidebarNavIconName]> = [
   ["/albums", "albums"],
   ["/watch-later", "watchLater"],
   ["/saved-shorts", "watchLater"],
+  ["/notes", "notes"],
   ["/liked", "liked"],
   ["/downloads", "downloads"],
   ["/settings", "settings"],

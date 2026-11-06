@@ -18,6 +18,7 @@ import { PlaylistCard } from "../components/video/PlaylistCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
 import { DownloadVideoCard } from "../components/downloads/DownloadVideoCard";
 import { ShortCard } from "../components/shorts/ShortCard";
+import { NotesShelf } from "../components/note/NotesShelf";
 import { ShortsIcon } from "../components/ui/ShortsIcon";
 import type { ShortVideoSummary } from "../types/video";
 
@@ -288,6 +289,9 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
       >
         <HistoryShelfRow items={liked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
       </LibraryShelf>
+
+      {/* Notes */}
+      <NotesShelf />
 
       {/* Video downloads */}
       <LibraryShelf

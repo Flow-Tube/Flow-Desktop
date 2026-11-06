@@ -13,6 +13,7 @@ import { SidebarTabs } from './SidebarTabs';
 import { getString } from '../../lib/i18n/index';
 import { openInNewTab } from '../../lib/openTarget';
 import { SETTINGS } from '../../lib/settings/schema';
+import { useNotesEnabled } from '../../lib/useNotes';
 
 type SidebarProps = {
   mode?: 'normal' | 'overlay';
@@ -58,6 +59,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const showShortsNav = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
   const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
   const showCategoriesNav = useAppSettingsStore((state) => state.values[SETTINGS.CATEGORIES_NAV_TAB_ENABLED] !== 'false');
+  const notesEnabled = useNotesEnabled();
 
   const isOverlay = mode === 'overlay';
   const expanded = isOverlay || isSidebarExpanded;
@@ -133,6 +135,9 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
+                {notesEnabled && (
+                  <SidebarItem onOpenInNewTab={openInNewTab} to="/notes" {...navIconPair('notes')} label={getString('notes_title')} onClick={closeOverlay} />
+                )}
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
               </nav>
             </section>

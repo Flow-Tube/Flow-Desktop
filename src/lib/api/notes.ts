@@ -37,3 +37,13 @@ export const saveNote = (
 ): Promise<Note | null> => invokeBackend<Note | null>("save_note", { kind, targetId, text, subject });
 
 export const deleteNotes = (ids: string[]): Promise<void> => invokeBackend<void>("delete_notes", { ids });
+
+/** Fills in what a note is about, leaving its text and edit time alone. */
+export const saveNoteSubject = (kind: NoteKind, targetId: string, subject: NoteSubject): Promise<void> =>
+  invokeBackend<void>("save_note_subject", { kind, targetId, subject });
+
+/** Stores this order for the Custom order sort. */
+export const saveNotesOrder = (ids: string[]): Promise<void> => invokeBackend<void>("save_notes_order", { ids });
+
+/** Puts deleted notes back; returns them as stored. */
+export const restoreNotes = (notes: Note[]): Promise<Note[]> => invokeBackend<Note[]>("restore_notes", { notes });

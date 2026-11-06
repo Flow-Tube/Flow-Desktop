@@ -1,5 +1,5 @@
 import { getString } from "../../lib/i18n/index";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Volume1, Volume2, VolumeX } from "lucide-react";
 import { getReturnYouTubeDislike, type RydData } from "../../lib/api/foss";
@@ -34,6 +34,7 @@ interface ShortPlayerProps {
   onToggleMute: () => void;
   onVolumeChange: (volume: number) => void;
   onRequestAdvance: () => void;
+  onMoreLikeThis: () => void;
   onUnavailable: () => void;
 }
 
@@ -50,8 +51,10 @@ export function ShortPlayer({
   onToggleMute,
   onVolumeChange,
   onRequestAdvance,
+  onMoreLikeThis,
   onUnavailable,
 }: ShortPlayerProps) {
+  const likeFromSurfaceRef = useRef<() => void>(() => {});
   const [activeRetryToken, setActiveRetryToken] = useState(0);
   const [activeRetryAttempted, setActiveRetryAttempted] = useState(false);
   const thumbnail = useProxiedImageUrl(short.thumbnailUrl);
@@ -88,6 +91,9 @@ export function ShortPlayer({
     dashUrl,
     videoUrl,
     audioUrl,
+    audioTracks,
+    selectedAudioTrackId,
+    selectAudioTrack,
     variants,
     captions,
     selectedQualityId,
@@ -151,6 +157,10 @@ export function ShortPlayer({
               dashUrl={active ? dashUrl : null}
               videoUrl={active ? videoUrl : null}
               audioUrl={active ? audioUrl : null}
+              audioTracks={audioTracks}
+              selectedAudioTrackId={selectedAudioTrackId}
+              onSelectAudioTrack={selectAudioTrack}
+              onDoubleClickLike={() => likeFromSurfaceRef.current()}
               qualities={variants}
               captions={captions}
               selectedQualityId={selectedQualityId}
@@ -240,6 +250,8 @@ export function ShortPlayer({
             commentCountText={commentCountText}
             onRequestPanel={onRequestPanel}
             onRequestAdvance={onRequestAdvance}
+            onMoreLikeThis={onMoreLikeThis}
+            likeFromSurfaceRef={likeFromSurfaceRef}
           />
         ) : (
           <div className="mb-4 w-[260px] lg:w-[280px]" />

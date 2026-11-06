@@ -147,6 +147,9 @@ SHORTS
 - Shorts work from the keyboard: Up and Down move between Shorts, Space or K plays and pauses, M mutes, and the arrows, J, L and the number keys seek.
 - A shelf or a channel's Shorts now carries on into more Shorts when it runs out, instead of stopping. Saved Shorts still ends where your list ends.
 - Home has a Shorts shelf, which Home Shorts Shelf in Settings turns off.
+- More like this, in a Short's More menu, teaches your recommendations and puts similar Shorts right after it.
+- A Short that links to a full video shows a chip that opens it. Double-click a Short to like it.
+- A Short with several audio tracks offers them in its settings, and the equalizer now applies to Shorts.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

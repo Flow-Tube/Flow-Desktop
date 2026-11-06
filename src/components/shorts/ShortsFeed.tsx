@@ -36,7 +36,7 @@ export function ShortsFeed() {
     if (!candidate.some((short) => short.id === videoId)) return null;
     return candidate;
   }, [routeState, videoId]);
-  const { items, loading, error, loadMore } = useShortsFeed(
+  const { items, loading, error, loadMore, moreLikeThis } = useShortsFeed(
     videoId,
     initialShort,
     initialQueue,
@@ -255,6 +255,7 @@ export function ShortsFeed() {
                     setMuted(value === 0);
                   }}
                   onRequestAdvance={advanceToNext}
+                  onMoreLikeThis={() => void moreLikeThis(short)}
                   onUnavailable={() => markUnavailable(short.id)}
                 />
               )}

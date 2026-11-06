@@ -68,6 +68,20 @@ describe("useShortsFeed queue ends", () => {
     expect(ids()).toEqual(["a", "x"]);
   });
 
+  it("puts more like this right after the Short, and never into Saved", async () => {
+    getShortsFeed.mockResolvedValue({ items: [item("a"), item("z")], continuation: null });
+    await render("feed");
+    await act(async () => hook.moreLikeThis(item("a")));
+    expect(getShortsFeed).toHaveBeenCalledWith([], "a");
+    expect(ids()).toEqual(["a", "z", "b"]);
+
+    getShortsFeed.mockClear();
+    await render("stop");
+    await act(async () => hook.moreLikeThis(item("a")));
+    expect(getShortsFeed).not.toHaveBeenCalled();
+    expect(ids()).toEqual(["a", "b"]);
+  });
+
   it("can retry a hand-over that failed", async () => {
     getShortsFeed.mockRejectedValueOnce(new Error("down")).mockResolvedValue({ items: [item("c")], continuation: null });
     await render("feed");

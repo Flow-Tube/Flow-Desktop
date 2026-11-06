@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   Ban,
@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useVideoReactions } from "../../lib/useVideoReactions";
+import { logInteraction } from "../../lib/api/recommendation";
 import { useExitGhost } from "../../lib/useExitGhost";
 import { useUiStore } from "../../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
@@ -26,7 +27,7 @@ import {
   saveShortToLibrary,
 } from "../../lib/savedShortsLibrary";
 import { getString } from "../../lib/i18n/index";
-import { formatCount } from "../../lib/utils";
+import { formatCount, isMusicVideo } from "../../lib/utils";
 import { youtubeShortsUrl } from "../../lib/youtubeUrl";
 import { copyText, shareLink } from "../../lib/clipboard";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
@@ -41,6 +42,9 @@ interface ShortActionBarProps {
   commentCountText?: string | null;
   onRequestPanel: (panel: ShortsPanelState) => void;
   onRequestAdvance?: () => void;
+  onMoreLikeThis: () => void;
+  /** Filled with what a double click on the video does: like it, never take a like back. */
+  likeFromSurfaceRef: MutableRefObject<() => void>;
 }
 
 export function ShortActionBar({
@@ -50,6 +54,8 @@ export function ShortActionBar({
   commentCountText,
   onRequestPanel,
   onRequestAdvance,
+  onMoreLikeThis,
+  likeFromSurfaceRef,
 }: ShortActionBarProps) {
   const showToast = useUiStore((s) => s.showToast);
   const notInterestedAction = useFeedActionsStore((s) => s.notInterested);
@@ -114,6 +120,11 @@ export function ShortActionBar({
     ],
   );
   const { state, like, dislike } = useVideoReactions(video, { channelId: short.channelId ?? null });
+  useEffect(() => {
+    likeFromSurfaceRef.current = () => {
+      if (state !== "liked") like();
+    };
+  });
 
   useEffect(() => {
     let active = true;
@@ -144,6 +155,27 @@ export function ShortActionBar({
       variant: result === "copied" ? "success" : "error",
       message: getString(result === "copied" ? "shorts_link_copied" : "share_link_copy_failed"),
     });
+  };
+
+  const moreLikeThis = () => {
+    setMenuOpen(false);
+    // Music played in the Shorts player never teaches the video engine.
+    if (!isMusicVideo(video)) {
+      void logInteraction(
+        video.id,
+        video.title,
+        video.channelName,
+        resolvedChannelId ?? "",
+        null,
+        video.durationSeconds ?? null,
+        false,
+        true,
+        "LIKED",
+        1,
+      ).catch((error) => console.warn("Failed to log more like this", error));
+    }
+    onMoreLikeThis();
+    showToast({ variant: "success", message: getString("shorts_showing_more_like_this") });
   };
 
   const notInterested = () => {
@@ -247,6 +279,7 @@ export function ShortActionBar({
                 {getString(savedToLibrary ? "shorts_menu_remove_from_library" : "shorts_menu_save_to_library")}
               </MenuItem>
               <MenuItem icon={Download} onClick={downloadShort}>{getString("shorts_menu_download")}</MenuItem>
+              <MenuItem icon={ThumbsUp} onClick={moreLikeThis}>{getString("shorts_menu_more_like_this")}</MenuItem>
               <MenuItem icon={Ban} onClick={notInterested}>{getString("shorts_menu_not_interested")}</MenuItem>
               {short.channelId && (
                 <MenuItem icon={EyeOff} onClick={dontRecommendChannel}>

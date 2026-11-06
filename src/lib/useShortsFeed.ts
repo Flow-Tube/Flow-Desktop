@@ -164,9 +164,29 @@ export function useShortsFeed(
     }
   }, [queueEnd, seedId]);
 
+  /** Puts the opened Short's own chain right after it. Saved Shorts keeps its list as it is. */
+  const moreLikeThis = useCallback(
+    async (short: ShortItem) => {
+      if (queueEnd === "stop") return;
+      try {
+        const feed = await fetchFeedShorts(short.id);
+        const fresh = visibleFetchedShorts(feed.items).filter((item) => !seenIdsRef.current.has(item.id));
+        if (fresh.length === 0) return;
+        fresh.forEach((item) => seenIdsRef.current.add(item.id));
+        setItems((previous) => {
+          const at = previous.findIndex((item) => item.id === short.id);
+          return at < 0 ? [...previous, ...fresh] : [...previous.slice(0, at + 1), ...fresh, ...previous.slice(at + 1)];
+        });
+      } catch (e) {
+        console.warn("[shorts] more like this failed", e);
+      }
+    },
+    [queueEnd],
+  );
+
   const reset = useCallback(() => {
     void resetShortsFeed();
   }, []);
 
-  return { items, loading, loadingMore, error, loadMore, reset };
+  return { items, loading, loadingMore, error, loadMore, moreLikeThis, reset };
 }

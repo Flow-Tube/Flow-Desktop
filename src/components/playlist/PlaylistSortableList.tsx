@@ -1,6 +1,6 @@
 import { getString } from "../../lib/i18n/index";
 import { useMemo, useState, type ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import { ListChecks, Search, X } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -12,6 +12,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { resolveDragMove, sortableRowStyle, useListDragSensors } from "../../lib/sortableList";
+import { SelectableRow } from "../common/SelectableRow";
 import { VideoCard } from "../video/VideoCard";
 import { IconButton } from "../ui/IconButton";
 import { SearchInput } from "../ui/SearchInput";
@@ -33,6 +34,12 @@ interface PlaylistSortableListProps {
   onAddToQueue?: (video: VideoSummary) => void;
   /** Shown after the last row, such as the next-page loader. */
   footer?: ReactNode;
+  selecting: boolean;
+  selectedIds: ReadonlySet<string>;
+  onToggleSelected: (videoId: string) => void;
+  onStartSelecting: () => void;
+  /** Takes the toolbar's place while rows are being picked. */
+  selectionBar?: ReactNode;
 }
 
 interface SortablePlaylistRowProps {
@@ -87,6 +94,9 @@ function PlaylistVideoRows({
   sortEnabled,
   showAddedDate,
   searchQuery,
+  selecting,
+  selectedIds,
+  onToggleSelected,
   onPlay,
   onAddToQueue,
 }: {
@@ -94,6 +104,9 @@ function PlaylistVideoRows({
   sortEnabled: boolean;
   showAddedDate: boolean;
   searchQuery: string;
+  selecting: boolean;
+  selectedIds: ReadonlySet<string>;
+  onToggleSelected: (videoId: string) => void;
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
 }) {
@@ -128,15 +141,21 @@ function PlaylistVideoRows({
   return (
     <div className="flex flex-col gap-3">
       {displayVideos.map((video) => (
-        <VideoCard
+        <SelectableRow
           key={video.id}
-          variant="list"
-          video={video}
-          onPlay={onPlay}
-          onAddToQueue={onAddToQueue}
-          showDragHandle={false}
-          showAddedDate={showAddedDate}
-        />
+          selecting={selecting}
+          selected={selectedIds.has(video.id)}
+          onToggle={() => onToggleSelected(video.id)}
+        >
+          <VideoCard
+            variant="list"
+            video={video}
+            onPlay={onPlay}
+            onAddToQueue={onAddToQueue}
+            showDragHandle={false}
+            showAddedDate={showAddedDate}
+          />
+        </SelectableRow>
       ))}
     </div>
   );
@@ -154,9 +173,14 @@ export function PlaylistSortableList({
   onPlay,
   onAddToQueue,
   footer,
+  selecting,
+  selectedIds,
+  onToggleSelected,
+  onStartSelecting,
+  selectionBar,
 }: PlaylistSortableListProps) {
   const [searchOpen, setSearchOpen] = useState(false);
-  const sortEnabled = sortOrder === "manual" && !searchOpen;
+  const sortEnabled = sortOrder === "manual" && !searchOpen && !selecting;
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -187,6 +211,9 @@ export function PlaylistSortableList({
       sortEnabled={sortEnabled}
       showAddedDate={showsDateAdded(sortOrder)}
       searchQuery={searchQuery}
+      selecting={selecting}
+      selectedIds={selectedIds}
+      onToggleSelected={onToggleSelected}
       onPlay={onPlay}
       onAddToQueue={onAddToQueue}
     />
@@ -195,6 +222,8 @@ export function PlaylistSortableList({
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800/50 bg-background pb-4">
+        {selecting ? selectionBar : (
+          <>
           <Select
             value={sortOrder}
             onChange={(val) => onSortChange(val as PlaylistSortOrder)}
@@ -223,6 +252,16 @@ export function PlaylistSortableList({
               <Search size={18} />
             </IconButton>
           )}
+          <IconButton
+            aria-label={getString("playlist_select")}
+            title={getString("playlist_select")}
+            disabled={displayVideos.length === 0}
+            onClick={onStartSelecting}
+          >
+            <ListChecks size={18} />
+          </IconButton>
+          </>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pt-4">

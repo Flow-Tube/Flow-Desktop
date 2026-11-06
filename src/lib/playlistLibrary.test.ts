@@ -24,7 +24,9 @@ import {
   getStoredPlaylistById,
   moveStoredPlaylistTrack,
   removeVideoFromStoredPlaylist,
+  removeVideosFromStoredPlaylist,
   restoreStoredPlaylistTrack,
+  restoreStoredPlaylistTracks,
   savePlaylistToLibrary,
   updateStoredPlaylistDetails,
   updateStoredPlaylistTracks,
@@ -262,5 +264,27 @@ describe("updateStoredPlaylistDetails", () => {
   it("leaves saved and built-in playlists alone", async () => {
     expect(await updateStoredPlaylistDetails(SAVED_ID, "New", "")).toBeNull();
     expect(await updateStoredPlaylistDetails(WATCH_LATER_PLAYLIST_ID, "New", "")).toBeNull();
+  });
+});
+
+describe("removing several tracks", () => {
+  const trackIds = async () => (await getStoredPlaylistById(WATCH_LATER_PLAYLIST_ID))?.tracks.map((track) => track.id);
+
+  beforeEach(() => {
+    seed([{ id: WATCH_LATER_PLAYLIST_ID, name: "Watch Later", tracks: [video("a"), video("b"), video("c"), video("d")], source: "Owned" }]);
+  });
+
+  it("removes them in one write", async () => {
+    setSetting.mockClear();
+    const removed = await removeVideosFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, new Set(["b", "c"]));
+    expect(removed.map((entry) => entry.track.id)).toEqual(["b", "c"]);
+    expect(await trackIds()).toEqual(["a", "d"]);
+    expect(setSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts them back where they were, even neighbours and the first", async () => {
+    const removed = await removeVideosFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, new Set(["a", "b", "c"]));
+    await restoreStoredPlaylistTracks(WATCH_LATER_PLAYLIST_ID, removed);
+    expect(await trackIds()).toEqual(["a", "b", "c", "d"]);
   });
 });

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Download as DownloadIcon, Loader2, ListChecks, Trash2 } from "lucide-react";
+import { Download as DownloadIcon, Loader2, ListChecks, Trash2 } from "lucide-react";
 
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
@@ -19,6 +19,7 @@ import {
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
+import { SelectableRow } from "../components/common/SelectableRow";
 import { Button } from "../components/ui/Button";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
@@ -76,44 +77,6 @@ function progressToSong(progress: DownloadProgress): SongItem {
 function matchesQuery(query: string, title: string, author?: string | null): boolean {
   if (!query) return true;
   return `${title} ${author ?? ""}`.toLowerCase().includes(query);
-}
-
-function SelectableMusicRow({
-  selecting,
-  selected,
-  onToggle,
-  children,
-}: {
-  selecting: boolean;
-  selected: boolean;
-  onToggle?: () => void;
-  children: React.ReactNode;
-}) {
-  if (!selecting || !onToggle) return <>{children}</>;
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onToggle();
-      }}
-      className={`relative cursor-pointer rounded-lg ring-2 transition-colors ${
-        selected ? "ring-[var(--color-primary)]" : "ring-transparent"
-      }`}
-    >
-      <div className="pointer-events-none">{children}</div>
-      <span
-        className={`absolute right-3 top-1/2 z-10 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full border transition-colors ${
-          selected
-            ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-            : "border-chrome-neutral-600 bg-surface-container text-transparent"
-        }`}
-      >
-        <Check size={14} />
-      </span>
-    </div>
-  );
 }
 
 export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
@@ -383,7 +346,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 </h2>
                 <div className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
                   {musicEntries.map((entry, index) => (
-                    <SelectableMusicRow
+                    <SelectableRow
                       key={entry.key}
                       selecting={selecting && entry.recordId != null}
                       selected={entry.recordId != null && selectedIds.has(entry.recordId)}
@@ -395,7 +358,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                         className="bg-surface-container-low pr-3"
                         onPlay={() => void playQueue(musicSongs, index)}
                       />
-                    </SelectableMusicRow>
+                    </SelectableRow>
                   ))}
                 </div>
               </section>

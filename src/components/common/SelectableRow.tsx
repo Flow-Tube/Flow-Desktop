@@ -1,0 +1,45 @@
+import type { ReactNode } from "react";
+import { Check } from "lucide-react";
+
+/** A row that, while picking, toggles on click instead of doing what it normally does. */
+export function SelectableRow({
+  selecting,
+  selected,
+  onToggle,
+  children,
+}: {
+  selecting: boolean;
+  selected: boolean;
+  onToggle?: () => void;
+  children: ReactNode;
+}) {
+  if (!selecting || !onToggle) return <>{children}</>;
+  return (
+    <div
+      role="checkbox"
+      aria-checked={selected}
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onToggle();
+        }
+      }}
+      className={`relative cursor-pointer rounded-lg ring-2 transition-colors focus-visible:outline-none focus-visible:ring-primary ${
+        selected ? "ring-[var(--color-primary)]" : "ring-transparent"
+      }`}
+    >
+      <div className="pointer-events-none">{children}</div>
+      <span
+        className={`absolute right-3 top-1/2 z-10 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full border transition-colors ${
+          selected
+            ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+            : "border-chrome-neutral-600 bg-surface-container text-transparent"
+        }`}
+      >
+        <Check size={14} />
+      </span>
+    </div>
+  );
+}

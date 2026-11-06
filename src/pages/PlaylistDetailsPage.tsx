@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { AddAllToPlaylistDialog } from "../components/playlist/AddAllToPlaylistDialog";
 import { PlaylistAmbientHeader } from "../components/playlist/PlaylistAmbientHeader";
 import { PlaylistFormDialog } from "../components/playlist/PlaylistFormDialog";
+import { addVideosToQueueWithToast, PlaylistSelectionActions } from "../components/playlist/PlaylistSelectionActions";
 import { PlaylistLoadMore } from "../components/playlist/PlaylistLoadMore";
 import { PlaylistSortableList } from "../components/playlist/PlaylistSortableList";
 import {
@@ -16,6 +17,7 @@ import {
   type PlaylistSortOrder,
 } from "../lib/playlistSort";
 import {
+  formatVideoCountText,
   isProtectedPlaylistId,
   removePlaylistFromLibrary,
   savePlaylistToLibrary,
@@ -24,6 +26,7 @@ import {
 } from "../lib/playlistLibrary";
 import { filterVideosBySearch } from "../lib/playlistSearch";
 import { useDebounce } from "../lib/useDebounce";
+import { useMultiSelect } from "../lib/useMultiSelect";
 import { usePlaylistDetails } from "../lib/usePlaylistDetails";
 import { usePublishTitle } from "../lib/usePublishTitle";
 import { useCollectionDownloadState } from "../lib/useCollectionDownloads";
@@ -49,7 +52,6 @@ export function PlaylistDetailsPage({
   const playlistId = playlistIdOverride ?? params.playlistId;
   const navigate = useNavigate();
   const setQueue = usePlayerStore((state) => state.setQueue);
-  const addToQueue = usePlayerStore((state) => state.addToQueue);
   const showToast = useUiStore((state) => state.showToast);
 
   const {
@@ -114,6 +116,13 @@ export function PlaylistDetailsPage({
     [displayVideos, appliedSearch],
   );
 
+  const shownIds = useMemo(() => shownVideos.map((video) => video.id), [shownVideos]);
+  const selection = useMultiSelect(shownIds);
+  const selectedVideos = useMemo(
+    () => shownVideos.filter((video) => selection.selectedIds.has(video.id)),
+    [shownVideos, selection.selectedIds],
+  );
+
   const leadVideo = videos[0];
   const heroThumbnailUrl = leadVideo?.thumbnailUrl ?? meta?.thumbnailUrl ?? null;
 
@@ -147,26 +156,22 @@ export function PlaylistDetailsPage({
     }
   };
 
+  const handleTracksChanged = (tracks: VideoSummary[]) => {
+    setVideos(tracks);
+    if (storedPlaylist) {
+      applyDetails({
+        ...storedPlaylist,
+        videoCount: tracks.length,
+        videoCountText: formatVideoCountText(tracks.length),
+      });
+    }
+  };
+
   const handleReorder = async (nextVideos: VideoSummary[]) => {
     setVideos(nextVideos);
     if (storedPlaylist) {
       await updateStoredPlaylistTracks(storedPlaylist.id, nextVideos);
     }
-  };
-
-  const handleAddAllToQueue = () => {
-    if (displayVideos.length === 0) return;
-    let added = 0;
-    for (const video of displayVideos) {
-      if (addToQueue(video) === "added") added += 1;
-    }
-    showToast({
-      variant: added > 0 ? "success" : "info",
-      message:
-        added > 0
-          ? `Added ${added} ${added === 1 ? "video" : "videos"} to queue`
-          : "Already in your queue",
-    });
   };
 
   const handleCopyLink = async () => {
@@ -285,7 +290,7 @@ export function PlaylistDetailsPage({
           onDownload={() => void handleDownloadPlaylist()}
           downloadActive={downloadState.active}
           downloadComplete={downloadState.isComplete}
-          onAddToQueue={handleAddAllToQueue}
+          onAddToQueue={() => addVideosToQueueWithToast(displayVideos)}
           onCopyLink={handleCopyLink}
           onSaveToLibrary={handleSaveToLibrary}
           onRemoveFromLibrary={handleRemoveFromLibrary}
@@ -308,6 +313,21 @@ export function PlaylistDetailsPage({
           onReorder={handleReorder}
           onPlay={playFromPlaylist}
           onAddToQueue={onAddToQueue}
+          selecting={selection.selecting}
+          selectedIds={selection.selectedIds}
+          onToggleSelected={selection.toggle}
+          onStartSelecting={selection.start}
+          selectionBar={
+            <PlaylistSelectionActions
+              playlistId={meta.id}
+              editable={editable}
+              selected={selectedVideos}
+              allSelected={selection.allSelected}
+              onToggleAll={() => selection.toggleAll(shownIds)}
+              onDone={selection.stop}
+              onTracksChanged={handleTracksChanged}
+            />
+          }
           footer={
             <PlaylistLoadMore
               hasMore={hasMore}

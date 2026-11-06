@@ -208,13 +208,15 @@ export function usePlaylistDetails(playlistId: string | undefined) {
     return walk.current;
   }, [playlistId, nextPageToken, videos]);
 
-  /** Shows a saved rename or description without reading the playlist again. */
+  /** Shows a saved rename, description or count without reading the playlist again. */
   const applyDetails = useCallback((updated: StoredPlaylist) => {
     setStoredPlaylist(updated);
     setMeta((current) => current && {
       ...current,
       title: updated.name,
       description: updated.description ?? null,
+      videoCount: updated.videoCount ?? current.videoCount,
+      videoCountText: updated.videoCountText ?? current.videoCountText,
     });
   }, []);
 

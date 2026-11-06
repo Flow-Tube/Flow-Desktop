@@ -109,6 +109,7 @@ LIBRARY
 - Edit a playlist's name and description, and search inside any playlist, even one too long to show at once.
 - Add a whole playlist to one of your own, or merge two of yours, from the playlist's menu. Playlists also sort by Longest and Shortest, and the Playlists page has a Custom order you can drag.
 - A YouTube playlist now says when unavailable videos are hidden from it.
+- Select many videos in a playlist to add them to the queue, add them to another playlist, download them, or remove them with Undo.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

@@ -253,6 +253,38 @@ export const restoreStoredPlaylistTrack = (
     : moveAfterId([...tracks, track], track.id, afterId),
 );
 
+export interface RemovedTrack {
+  track: VideoSummary;
+  /** The track it followed, for putting it back. */
+  afterId: string | null;
+}
+
+/** Takes several tracks out in one write and returns what Undo needs to put them back. */
+export const removeVideosFromStoredPlaylist = async (
+  playlistId: string,
+  videoIds: ReadonlySet<string>,
+): Promise<RemovedTrack[]> => {
+  let removed: RemovedTrack[] = [];
+  await updateStoredPlaylistTracks(playlistId, (tracks) => {
+    removed = tracks.flatMap((track, index) => (
+      videoIds.has(track.id) ? [{ track, afterId: tracks[index - 1]?.id ?? null }] : []
+    ));
+    return removed.length > 0 ? tracks.filter((track) => !videoIds.has(track.id)) : tracks;
+  });
+  return removed;
+};
+
+/** Undoes {@link removeVideosFromStoredPlaylist}; each track follows one restored before it. */
+export const restoreStoredPlaylistTracks = (playlistId: string, removed: RemovedTrack[]) =>
+  updateStoredPlaylistTracks(playlistId, (tracks) => removed.reduce(
+    (current, { track, afterId }) => (
+      current.some((held) => held.id === track.id)
+        ? current
+        : moveAfterId([...current, track], track.id, afterId)
+    ),
+    tracks,
+  ));
+
 /** Move one track to sit right after another (or first, when `afterId` is null). */
 export const moveStoredPlaylistTrack = (
   playlistId: string,

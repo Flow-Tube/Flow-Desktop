@@ -202,6 +202,11 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_concurrent_threads", summary: "settings_concurrent_threads_desc" },
     { title: "settings_download_poster_sidecar", summary: "settings_download_poster_sidecar_desc" },
     { title: "settings_download_lyrics_file", summary: "settings_download_lyrics_file_desc" },
+    { title: "settings_auto_download_opened", summary: "settings_auto_download_opened_desc", keywords: ["automatic", "offline"] },
+    { title: "settings_auto_download_likes", summary: "settings_auto_download_likes_desc", keywords: ["automatic", "offline", "music"] },
+    { title: "settings_downloads_storage_card", summary: "settings_downloads_storage_card_desc", keywords: ["disk", "space"] },
+    { title: "settings_find_earlier_downloads", summary: "settings_find_earlier_downloads_desc", keywords: ["recover", "restore"] },
+    { title: "settings_retag_downloads", summary: "settings_retag_downloads_desc", keywords: ["metadata"] },
     { title: "settings_download_subtitles", summary: "settings_download_subtitles_desc" },
   ]),
   ...rows("data", [

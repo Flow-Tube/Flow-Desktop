@@ -103,6 +103,7 @@ mdns-sd = "0.21.6"
 quick-xml = "0.42"
 # Reading the segment index of fragmented MP4 audio, to serve it as HLS.
 mp4-atom = { version = "0.17", default-features = false }
+fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 
 # Native Windows toast notifications: build the toast XML directly so we can attach
 # the app logo + a video thumbnail (hero image) and register a proper AppUserModelID,

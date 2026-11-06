@@ -47,6 +47,8 @@ interface DownloadVideoCardProps {
   onToggleSelect?: () => void;
   onPlay?: (video: VideoSummary) => void;
   onDelete?: () => void;
+  /** A finished download's size and date. */
+  detail?: string;
 }
 
 export function DownloadVideoCard({
@@ -57,6 +59,7 @@ export function DownloadVideoCard({
   onToggleSelect,
   onPlay,
   onDelete,
+  detail,
 }: DownloadVideoCardProps) {
   const thumbnail = useProxiedImageUrl(video.thumbnailUrl);
   const downloading = Boolean(progress);
@@ -191,6 +194,7 @@ export function DownloadVideoCard({
         {video.channelName ? (
           <div className="mt-0.5 truncate text-[13px] text-chrome-neutral-400">{video.channelName}</div>
         ) : null}
+        {detail ? <div className="mt-0.5 truncate text-xs tabular-nums text-chrome-neutral-500">{detail}</div> : null}
       </div>
     </div>
   );

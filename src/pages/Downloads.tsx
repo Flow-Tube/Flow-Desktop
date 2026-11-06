@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Download as DownloadIcon, Loader2, ListChecks, Trash2 } from "lucide-react";
+import { Download as DownloadIcon, Loader2, ListChecks, Search, Trash2 } from "lucide-react";
 
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
@@ -20,10 +20,22 @@ import { useDownloadStore } from "../store/useDownloadStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { SelectableRow } from "../components/common/SelectableRow";
+import { DownloadsStorageSummary } from "../components/downloads/DownloadsStorageSummary";
 import { Button } from "../components/ui/Button";
+import { Select } from "../components/ui/Select";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { useDebounce } from "../lib/useDebounce";
+import {
+  DOWNLOAD_SORTS,
+  downloadDetail,
+  downloadSortLabel,
+  loadDownloadSort,
+  saveDownloadSort,
+  sortDownloadRecords,
+  type DownloadSort,
+} from "../lib/downloadsSort";
+import { useDownloadRecovery } from "../lib/useDownloadRecovery";
 import { DownloadVideoCard } from "../components/downloads/DownloadVideoCard";
 import { DownloadCollectionCard } from "../components/downloads/DownloadCollectionCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
@@ -40,12 +52,14 @@ interface VideoEntry {
   recordId?: number;
   video: VideoSummary;
   progress?: DownloadProgress;
+  detail?: string;
 }
 
 interface MusicEntry {
   key: string;
   recordId?: number;
   song: SongItem;
+  detail?: string;
 }
 
 function progressToVideo(progress: DownloadProgress): VideoSummary {
@@ -83,7 +97,8 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   const navigate = useNavigate();
   const cardGridStyle = useGridStyle();
   const collectionGridStyle = useGridStyle({ density: "dense" });
-  const { records, loading, remove, clear } = useDownloadsLibrary();
+  const { records, loading, removeWithUndo, clear } = useDownloadsLibrary();
+  const recovery = useDownloadRecovery();
   const { records: collectionRecords, remove: removeCollections } = useDownloadCollectionsLibrary();
   const collectionRuns = useCollectionDownloadStore((state) => state.runs);
   const active = useDownloadStore((state) => state.active);
@@ -91,6 +106,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<DownloadsFilter>("all");
+  const [sort, setSort] = useState<DownloadSort>(loadDownloadSort);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -114,37 +130,41 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     [active],
   );
 
+  const sortedRecords = useMemo(() => sortDownloadRecords(records, sort), [records, sort]);
+
   const videoEntries = useMemo<VideoEntry[]>(() => {
     const fromActive = inProgress
       .filter((item) => item.mediaKind === "video")
       .map<VideoEntry>((item) => ({ key: `active-${item.id}`, video: progressToVideo(item), progress: item }));
-    const fromRecords = records
+    const fromRecords = sortedRecords
       .filter((record) => record.mediaKind === "video" && record.collectionDbId == null)
       .map<VideoEntry>((record) => ({
         key: `record-${record.id}`,
         recordId: record.id,
         video: downloadRecordToVideo(record),
+        detail: downloadDetail(record),
       }));
     return [...fromActive, ...fromRecords].filter((entry) =>
       matchesQuery(query, entry.video.title, entry.video.channelName),
     );
-  }, [inProgress, records, query]);
+  }, [inProgress, sortedRecords, query]);
 
   const musicEntries = useMemo<MusicEntry[]>(() => {
     const fromActive = inProgress
       .filter((item) => item.mediaKind !== "video")
       .map<MusicEntry>((item) => ({ key: `active-${item.id}`, song: progressToSong(item) }));
-    const fromRecords = records
+    const fromRecords = sortedRecords
       .filter((record) => record.mediaKind !== "video" && record.collectionDbId == null)
       .map<MusicEntry>((record) => ({
         key: `record-${record.id}`,
         recordId: record.id,
         song: downloadRecordToSong(record),
+        detail: downloadDetail(record),
       }));
     return [...fromActive, ...fromRecords].filter((entry) =>
       matchesQuery(query, entry.song.title, entry.song.artists.map((artist) => artist.name).join(" ")),
     );
-  }, [inProgress, records, query]);
+  }, [inProgress, sortedRecords, query]);
 
   const musicSongs = useMemo(() => musicEntries.map((entry) => entry.song), [musicEntries]);
 
@@ -207,10 +227,10 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     setSelectedIds(new Set());
   };
 
-  const deleteSelected = async () => {
+  const deleteSelected = () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    await remove(ids);
+    removeWithUndo(ids);
     stopSelecting();
   };
 
@@ -248,7 +268,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <Button
                   type="button"
                   variant="destructive"
-                  onClick={() => void deleteSelected()}
+                  onClick={deleteSelected}
                   disabled={selectedIds.size === 0}
                 >
                   <Trash2 size={16} />
@@ -293,6 +313,21 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
           className="mt-2"
         />
 
+        {!loading && !isEmpty ? (
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <Select
+              value={sort}
+              onChange={(value) => {
+                setSort(value as DownloadSort);
+                saveDownloadSort(value as DownloadSort);
+              }}
+              options={DOWNLOAD_SORTS.map((option) => ({ value: option, label: downloadSortLabel(option) }))}
+              className="w-44"
+            />
+            <DownloadsStorageSummary records={records} />
+          </div>
+        ) : null}
+
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32">
             <Loader2 className="h-9 w-9 animate-spin text-[var(--color-primary)]" />
@@ -303,6 +338,16 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
             <DownloadIcon className="mb-4 h-12 w-12 text-chrome-neutral-700" />
             <h3 className="font-bold text-chrome-neutral-300">{getString("downloads_empty_title")}</h3>
             <p className="mt-1 max-w-sm text-sm text-chrome-neutral-500">{getString("downloads_empty_body")}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-4"
+              disabled={recovery.running !== null}
+              onClick={() => void recovery.findEarlier()}
+            >
+              {recovery.running !== null ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+              {getString(recovery.running !== null ? "downloads_find_earlier_running" : "downloads_find_earlier")}
+            </Button>
           </div>
         ) : !hasResults ? (
           <div className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
@@ -330,8 +375,9 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                         }
                         onPlay={onPlay}
                         onDelete={
-                          entry.recordId != null ? () => void remove([entry.recordId!]) : undefined
+                          entry.recordId != null ? () => removeWithUndo([entry.recordId!]) : undefined
                         }
+                        detail={entry.detail}
                       />
                     );
                   })}
@@ -358,6 +404,9 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                         className="bg-surface-container-low pr-3"
                         onPlay={() => void playQueue(musicSongs, index)}
                       />
+                      {entry.detail ? (
+                        <p className="truncate px-3 pb-1 pt-0.5 text-xs tabular-nums text-chrome-neutral-500">{entry.detail}</p>
+                      ) : null}
                     </SelectableRow>
                   ))}
                 </div>

@@ -16,6 +16,7 @@ import { isMusicVideo } from "../../lib/utils";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 import { shouldRecordWatchHistory } from "../../lib/deepFlow";
+import { noteOpenedVideoResolved, skipAutoDownloadForNextVideo } from "../../lib/autoDownload";
 import { noteWatchLaterFinished, noteWatchLaterProgress } from "../../lib/watchLaterCleanup";
 import { seekToTime } from "../../lib/playerSeek";
 import { progressTickBelongsTo } from "../../lib/playerProgress";
@@ -198,6 +199,14 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
     };
   }, [currentVideoId]);
 
+  const resolvedVideo =
+    currentVideo && !stream.loadingStream && !stream.streamError && !stream.isLive && stream.streamVideoId === currentVideo.id
+      ? currentVideo
+      : null;
+  useEffect(() => {
+    if (resolvedVideo) void noteOpenedVideoResolved(resolvedVideo);
+  }, [resolvedVideo]);
+
   const handleEnded = useCallback(() => {
     if (!currentVideo) return;
     endWatchSession();
@@ -210,6 +219,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       return;
     }
     if (autoplayEnabled) {
+      skipAutoDownloadForNextVideo();
       playNext(true);
     } else {
       setIsPlaying(false);

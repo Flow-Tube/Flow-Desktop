@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { getSetting, setSetting } from "../lib/api/db";
 import { getMusicQueue } from "../lib/api/music";
+import { autoDownloadLikedSong } from "../lib/autoDownload";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
 
@@ -170,6 +171,7 @@ export const useLikesStore = create<LikesState>((set, get) => ({
         ];
     set({ items: normalizeItems(next) });
     await persist(next);
+    if (!exists) void autoDownloadLikedSong(song);
     return !exists;
   },
 

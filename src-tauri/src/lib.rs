@@ -54,10 +54,11 @@ use commands::diagnostics::{
 use commands::discord::{clear_discord_presence, set_discord_presence};
 use commands::downloads::{
     DownloadManager, cancel_download, clear_downloads, create_download_collection,
-    delete_download_collections, delete_downloads, discard_download, get_download_formats,
-    get_download_logs, get_downloaded_video_ids, get_offline_stream, list_download_collections,
-    list_downloads, pause_download, restore_downloads, resume_download, retry_download,
-    reveal_download, set_download_concurrency, show_download_notification, start_download,
+    delete_download_collections, delete_downloads, discard_download, find_earlier_downloads,
+    get_download_formats, get_download_free_space, get_download_logs, get_downloaded_video_ids,
+    get_offline_stream, list_download_collections, list_downloads, pause_download,
+    restore_downloads, resume_download, retag_older_downloads, retry_download, reveal_download,
+    set_download_concurrency, show_download_notification, start_download,
 };
 use commands::external::open_external;
 use commands::files::{write_backup_file, write_lyrics_file};
@@ -670,6 +671,9 @@ pub fn run() {
             reveal_download,
             show_download_notification,
             list_downloads,
+            find_earlier_downloads,
+            retag_older_downloads,
+            get_download_free_space,
             get_downloaded_video_ids,
             get_offline_stream,
             delete_downloads,

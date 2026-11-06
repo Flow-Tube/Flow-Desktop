@@ -242,6 +242,25 @@ export function clearDownloads(): Promise<void> {
   return invokeBackend<void>("clear_downloads");
 }
 
+/** Lists tagged files in the download folders that the library doesn't, and returns how many. */
+export function findEarlierDownloads(videoFolder: string | null, musicFolder: string | null): Promise<number> {
+  return invokeBackend<number>("find_earlier_downloads", { videoFolder, musicFolder });
+}
+
+export interface RetagResult {
+  tagged: number;
+  skipped: number;
+}
+
+export function retagOlderDownloads(): Promise<RetagResult> {
+  return invokeBackend<RetagResult>("retag_older_downloads");
+}
+
+/** Free bytes on the volume videos are saved to, or null when it can't be read. */
+export function getDownloadFreeSpace(videoFolder: string | null): Promise<number | null> {
+  return invokeBackend<number | null>("get_download_free_space", { videoFolder });
+}
+
 export interface OfflineStreamInfo {
   url: string;
   contentType: string;

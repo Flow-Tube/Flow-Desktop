@@ -9,6 +9,8 @@ import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { autoCodec } from '../../../lib/downloadOptions';
+import { useDownloadRecovery } from '../../../lib/useDownloadRecovery';
+import { Button } from '../../ui/Button';
 import { IS_MACOS_RUNTIME } from '../../../lib/platform';
 
 /** Subtitle languages offered for downloads that skip the dialog. */
@@ -35,6 +37,10 @@ export function DownloadsTab() {
   const [musicPath, setMusicPath] = usePreference(SETTINGS.MUSIC_DOWNLOAD_LOCATION, '');
   const [posterSidecar, setPosterSidecar] = useBoolPref(SETTINGS.DOWNLOAD_POSTER_SIDECAR, false);
   const [lyricsFile, setLyricsFile] = useBoolPref(SETTINGS.DOWNLOAD_LYRICS_FILE, true);
+  const [autoOpened, setAutoOpened] = useBoolPref(SETTINGS.AUTO_DOWNLOAD_OPENED_VIDEOS, false);
+  const [autoLiked, setAutoLiked] = useBoolPref(SETTINGS.AUTO_DOWNLOAD_LIKED_MUSIC, false);
+  const [storageCard, setStorageCard] = useBoolPref(SETTINGS.DOWNLOADS_STORAGE_CARD, true);
+  const recovery = useDownloadRecovery();
 
   const downloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.DOWNLOAD_LOCATION);
   const musicDownloadLocationDisabled = isSettingDisabledUntilWired(SETTINGS.MUSIC_DOWNLOAD_LOCATION);
@@ -103,6 +109,31 @@ export function DownloadsTab() {
             { value: '', label: getString('download_subtitles_off') },
             ...SUBTITLE_LANGUAGES.map((code) => ({ value: code, label: languageName(code) })),
           ]} />
+        </SettingItem>
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('settings_group_automatic_downloads')}>
+        <SettingItem title={getString('settings_auto_download_opened')} description={getString('settings_auto_download_opened_desc')}>
+          <ToggleSwitch checked={autoOpened} onChange={setAutoOpened} />
+        </SettingItem>
+        <SettingItem title={getString('settings_auto_download_likes')} description={getString('settings_auto_download_likes_desc')}>
+          <ToggleSwitch checked={autoLiked} onChange={setAutoLiked} />
+        </SettingItem>
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('settings_group_your_downloads')}>
+        <SettingItem title={getString('settings_downloads_storage_card')} description={getString('settings_downloads_storage_card_desc')}>
+          <ToggleSwitch checked={storageCard} onChange={setStorageCard} />
+        </SettingItem>
+        <SettingItem title={getString('settings_find_earlier_downloads')} description={getString('settings_find_earlier_downloads_desc')}>
+          <Button type="button" variant="secondary" size="sm" disabled={recovery.running !== null} onClick={() => void recovery.findEarlier()}>
+            {getString(recovery.running === 'find' ? 'downloads_find_earlier_running' : 'settings_run_action')}
+          </Button>
+        </SettingItem>
+        <SettingItem title={getString('settings_retag_downloads')} description={getString('settings_retag_downloads_desc')}>
+          <Button type="button" variant="secondary" size="sm" disabled={recovery.running !== null} onClick={() => void recovery.retag()}>
+            {getString(recovery.running === 'retag' ? 'downloads_retag_running' : 'settings_run_action')}
+          </Button>
         </SettingItem>
       </SettingsGroup>
 

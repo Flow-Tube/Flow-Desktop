@@ -21,6 +21,7 @@ import { useSongMenuActions } from './useSongMenuActions';
 import { useDownloadStore } from '../../store/useDownloadStore';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
+import { useMusicCardWidth } from '../../lib/useMusicCardWidth';
 import { youtubeMusicAlbumUrl } from '../../lib/youtubeUrl';
 import { shareLink } from '../../lib/clipboard';
 import { ExplicitBadge } from './ExplicitBadge';
@@ -260,6 +261,7 @@ function SquareCard({
   const openCollectionDownload = useDownloadStore((s) => s.openCollection);
   const washSrc = useProxiedImageUrl(upgradeMusicImageUrl(thumbnail, 320));
   const wash = useHoverWashColor(washSrc);
+  const cardWidth = useMusicCardWidth();
   const menuActions: MusicMenuAction[] = isTrack
     ? songActions
     : isAlbum
@@ -331,7 +333,7 @@ function SquareCard({
       onMouseLeave={wash.onMouseLeave}
       className={cx(
         `group ${COLOR_WASH_HOST} flex cursor-pointer flex-col gap-3`,
-        fill ? 'w-full' : 'w-40 md:w-48 lg:w-56',
+        fill ? 'w-full' : cardWidth,
         'rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]',
         className,
       )}

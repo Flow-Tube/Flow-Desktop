@@ -2,6 +2,7 @@ import React from 'react';
 import { ShelfScroller } from '../ui/ShelfScroller';
 import { MusicSectionHeader } from './MusicSectionHeader';
 import type { MusicSeedArt } from '../../types/music';
+import { useMusicCardWidth } from '../../lib/useMusicCardWidth';
 
 interface MusicShelfProps<T> {
   title: string;
@@ -24,11 +25,12 @@ function cx(...parts: Array<string | false | null | undefined>): string {
 }
 
 function ShelfSkeleton({ shape }: { shape: 'square' | 'circle' }) {
+  const cardWidth = useMusicCardWidth();
   return (
     <div
       className={cx(
         'flex shrink-0 animate-pulse flex-col gap-3',
-        shape === 'circle' ? 'w-32 md:w-40' : 'w-40 md:w-48 lg:w-56',
+        shape === 'circle' ? 'w-32 md:w-40' : cardWidth,
       )}
     >
       <div

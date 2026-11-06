@@ -5,6 +5,8 @@ import { Heart, MoreHorizontal } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
 import { artistsText } from "../../../lib/musicFormat";
+import { SETTINGS } from "../../../lib/settings/schema";
+import { useBoolPref } from "../../../lib/usePreference";
 import { useElementSize } from "../../../lib/useElementSize";
 import { useLikesStore } from "../../../store/useLikesStore";
 import { useMusicPlayerStore } from "../../../store/useMusicPlayerStore";
@@ -17,6 +19,7 @@ import { MusicScrubber } from "../MusicScrubber";
 import { MusicSleepTimerButton } from "../MusicSleepTimerButton";
 import { useNowPlayingMenuActions } from "../useNowPlayingMenuActions";
 import { AnimatedArtworkLoop } from "./AnimatedArtworkLoop";
+import { HiddenArtworkPlate } from "./HiddenArtworkPlate";
 import { PlayerTransport } from "./PlayerTransport";
 
 const META_BTN =
@@ -49,6 +52,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
   const { width, height } = useElementSize(columnRef);
   const artSize = Math.round(Math.max(MIN_ART, Math.min(MAX_ART, height - DETAILS_HEIGHT, width)));
 
+  const [hideArtwork] = useBoolPref(SETTINGS.MUSIC_HIDE_ARTWORK);
   const loading = useMusicPlayerStore((s) => s.isBuffering || s.loadingStreamId !== null);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
   const likedItems = useLikesStore((s) => s.items);
@@ -80,14 +84,20 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
         className={`relative aspect-square shrink-0 overflow-hidden rounded-2xl ${artworkHidden ? "invisible" : ""}`}
         style={{ width: artSize }}
       >
-        <MusicArtwork
-          src={track.thumbnail}
-          alt={track.title}
-          loading={loading}
-          iconClassName="h-16 w-16"
-          className="h-full w-full rounded-2xl"
-        />
-        {!artworkHidden && <AnimatedArtworkLoop track={track} />}
+        {hideArtwork ? (
+          <HiddenArtworkPlate track={track} />
+        ) : (
+          <>
+            <MusicArtwork
+              src={track.thumbnail}
+              alt={track.title}
+              loading={loading}
+              iconClassName="h-16 w-16"
+              className="h-full w-full rounded-2xl"
+            />
+            {!artworkHidden && <AnimatedArtworkLoop track={track} />}
+          </>
+        )}
       </motion.div>
 
       {/* Its own layout lets framer undo the column's resize scale. Position only, so a change in its own width can't squash the text either. */}

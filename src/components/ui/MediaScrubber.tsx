@@ -17,6 +17,8 @@ interface MediaScrubberProps {
   className?: string;
   /** Opt in to the Material 3 Expressive look; ignored when the user turns it off. */
   expressive?: boolean;
+  /** Which shape the Expressive look takes. */
+  barStyle?: string;
   /**
    * The media's own clock. While `playing`, the bar follows it every frame
    * instead of waiting for `progress`, which only changes about once a second.
@@ -36,6 +38,7 @@ export function MediaScrubber({
   ariaLabel = getString("music_seek"),
   className = "",
   expressive = false,
+  barStyle = "default",
   clock,
   playing = false,
 }: MediaScrubberProps) {
@@ -175,6 +178,7 @@ export function MediaScrubber({
       {...sliderProps}
       className="m3-slider flex-1 cursor-pointer outline-none"
       data-pressed={dragging}
+      data-bar-style={barStyle}
       style={{ "--m3-fill": ratio } as CSSProperties}
     >
       <span className="m3-slider__track m3-slider__track--active" />

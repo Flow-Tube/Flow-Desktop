@@ -10,6 +10,7 @@ import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { Select } from "../components/ui/Select";
+import { OpenPlaylistFileButton } from "../components/playlist/OpenPlaylistFileButton";
 import { PlaylistFormDialog } from "../components/playlist/PlaylistFormDialog";
 import { useGridStyle } from "../lib/useGridColumns";
 import { resolveDragMove, sortableRowStyle, useListDragSensors } from "../lib/sortableList";
@@ -164,6 +165,7 @@ export const Playlists: React.FC<PlaylistsProps> = ({ onPlay: _onPlay }) => {
                 placeholder={getString('playlists_search_playlists')}
                 containerClassName="w-full sm:w-72"
               />
+              <OpenPlaylistFileButton />
               <Button onClick={() => setShowCreateModal(true)} className="shrink-0">
                 <Plus size={16} />
                 Create Playlist

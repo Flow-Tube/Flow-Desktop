@@ -24,7 +24,9 @@ import {
   updateStoredPlaylistDetails,
   updateStoredPlaylistTracks,
 } from "../lib/playlistLibrary";
+import { videoToFileEntry } from "../lib/playlistFile";
 import { filterVideosBySearch } from "../lib/playlistSearch";
+import { savePlaylistWhenLoaded } from "../lib/playlistTransfer";
 import { useDebounce } from "../lib/useDebounce";
 import { useMultiSelect } from "../lib/useMultiSelect";
 import { usePlaylistDetails } from "../lib/usePlaylistDetails";
@@ -141,6 +143,16 @@ export function PlaylistDetailsPage({
       },
       load: () => (hasMore ? loadAllVideos().catch(() => videos) : Promise.resolve(videos)),
     });
+  };
+
+  const handleExport = async () => {
+    if (!meta) return;
+    await savePlaylistWhenLoaded(async () => ({
+      name: meta.title,
+      description: isOwned ? meta.description ?? "" : "",
+      isMusic: false,
+      videos: (hasMore ? await loadAllVideos() : videos).map(videoToFileEntry),
+    }));
   };
 
   const handleSaveDetails = async (name: string, description: string) => {
@@ -296,6 +308,7 @@ export function PlaylistDetailsPage({
           onRemoveFromLibrary={handleRemoveFromLibrary}
           onEdit={() => setEditing(true)}
           onAddAll={() => setAddingAll(true)}
+          onExport={() => void handleExport()}
           hidesUnavailable={hidesUnavailable}
           isSaved={savedInLibrary}
           isProtected={isProtected}

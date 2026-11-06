@@ -1,4 +1,4 @@
-import { Bookmark, Check, Download, Loader2, Music2, Play, Search, Shuffle } from 'lucide-react';
+import { Bookmark, Check, Download, Loader2, Music2, Play, Save, Search, Shuffle } from 'lucide-react';
 
 import { getString } from '../../lib/i18n/index';
 import type { CollectionMeta } from '../../lib/useMusicCollection';
@@ -20,6 +20,7 @@ interface MusicCollectionHeaderProps {
   onDownload?: () => void;
   downloadActive?: boolean;
   downloadComplete?: boolean;
+  onExport?: () => void;
 }
 
 function Cover({ src, alt }: { src: string | null | undefined; alt: string }) {
@@ -56,6 +57,7 @@ export function MusicCollectionHeader({
   onDownload,
   downloadActive,
   downloadComplete,
+  onExport,
 }: MusicCollectionHeaderProps) {
   const thumbnailUrl = useProxiedImageUrl(upgradeMusicImageUrl(meta.thumbnail));
   const metaParts = [
@@ -199,6 +201,18 @@ export function MusicCollectionHeader({
                 ) : (
                   <Download className="h-5 w-5" />
                 )}
+              </button>
+            ) : null}
+
+            {onExport ? (
+              <button
+                type="button"
+                aria-label={getString('playlist_export')}
+                title={getString('playlist_export')}
+                onClick={onExport}
+                className="grid h-12 w-12 place-items-center rounded-full bg-surface-container-high text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <Save className="h-5 w-5" />
               </button>
             ) : null}
           </div>

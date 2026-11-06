@@ -79,6 +79,8 @@ interface AlbumLibraryState {
   toggle: (album: AlbumItem) => Promise<boolean>;
   createAlbum: (name: string, description?: string) => Promise<StoredAlbum>;
   saveMix: (id: string, title: string, tracks: SongItem[]) => Promise<void>;
+  /** A new album of your own holding `tracks`, as read from a playlist file. */
+  importAlbum: (title: string, description: string, tracks: SongItem[]) => Promise<StoredAlbum>;
   removeAlbum: (id: string) => Promise<void>;
   addTrack: (albumId: string, track: SongItem) => Promise<void>;
   removeTrack: (albumId: string, trackVideoId: string) => Promise<void>;
@@ -173,6 +175,28 @@ export const useAlbumLibraryStore = create<AlbumLibraryState>((set, get) => ({
       set({ albums: previous });
       throw error;
     }
+  },
+
+  importAlbum: async (title, description, tracks) => {
+    const album: StoredAlbum = {
+      id: `album-${Date.now()}`,
+      title,
+      source: "Owned",
+      description,
+      tracks,
+      thumbnail: tracks[0]?.thumbnail ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    const previous = get().albums;
+    const next = [...previous, album];
+    set({ albums: next });
+    try {
+      await setSetting(ALBUMS_SETTING_KEY, JSON.stringify(next));
+    } catch (error) {
+      set({ albums: previous });
+      throw error;
+    }
+    return album;
   },
 
   removeAlbum: async (id) => {

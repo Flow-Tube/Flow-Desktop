@@ -9,6 +9,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Save,
   Shuffle,
   Trash2,
 } from "lucide-react";
@@ -37,6 +38,7 @@ interface PlaylistAmbientHeaderProps {
   onRemoveFromLibrary?: () => void;
   onEdit?: () => void;
   onAddAll?: () => void;
+  onExport?: () => void;
   hidesUnavailable?: boolean;
   isSaved?: boolean;
   isProtected?: boolean;
@@ -90,6 +92,7 @@ export function PlaylistAmbientHeader({
   onRemoveFromLibrary,
   onEdit,
   onAddAll,
+  onExport,
   hidesUnavailable = false,
   isSaved = false,
   isProtected = false,
@@ -123,8 +126,9 @@ export function PlaylistAmbientHeader({
   const canRemove = !isProtected && isSaved && Boolean(onRemoveFromLibrary);
   const canEdit = isOwned && Boolean(onEdit);
   const canAddAll = canPlay && Boolean(onAddAll);
-  const showMenuDivider = (canEdit || canAddToQueue || canAddAll || canCopyLink) && (canSave || canRemove);
-  const hasMenuItems = canEdit || canAddToQueue || canAddAll || canCopyLink || canSave || canRemove;
+  const canExport = canPlay && Boolean(onExport);
+  const showMenuDivider = (canEdit || canAddToQueue || canAddAll || canExport || canCopyLink) && (canSave || canRemove);
+  const hasMenuItems = canEdit || canAddToQueue || canAddAll || canExport || canCopyLink || canSave || canRemove;
 
   const statsParts = [
     meta.videoCountText,
@@ -253,6 +257,13 @@ export function PlaylistAmbientHeader({
                   icon={<ListMusic size={16} />}
                   label={getString(isOwned ? "playlist_merge" : "playlist_add_all")}
                   onClick={() => runAction(onAddAll)}
+                />
+              )}
+              {canExport && (
+                <PlaylistMenuItem
+                  icon={<Save size={16} />}
+                  label={getString("playlist_export")}
+                  onClick={() => runAction(onExport)}
                 />
               )}
               {canCopyLink && (

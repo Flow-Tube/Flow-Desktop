@@ -17,6 +17,8 @@ import { getString } from '../../lib/i18n/index';
 import { artistsText } from '../../lib/musicFormat';
 import type { AlbumItem, SongItem } from '../../types/music';
 import { shuffled } from '../../lib/musicRecall';
+import { songToFileEntry } from '../../lib/playlistFile';
+import { savePlaylistFileWithToast } from '../../lib/playlistTransfer';
 import { showSaveFailedToast, showSaveToast } from '../../lib/saveToast';
 
 const videoIdOf = (t: SongItem) => t.videoId ?? t.id;
@@ -153,6 +155,15 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
     });
   };
 
+  const handleExport = () => {
+    void savePlaylistFileWithToast({
+      name: meta.title,
+      description: ownedAlbumId ? meta.description ?? '' : '',
+      isMusic: true,
+      videos: songs.map(songToFileEntry),
+    });
+  };
+
   const handleToggleSave = () => {
     if (!id) return;
     const albumItem: AlbumItem = {
@@ -227,6 +238,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
         onDownload={kind === 'album' ? handleDownloadAlbum : undefined}
         downloadActive={albumDownloadState.active}
         downloadComplete={albumDownloadState.isComplete}
+        onExport={songs.length > 0 && !hasMore ? handleExport : undefined}
       />
 
       <div className="mx-auto flex max-w-[1600px] flex-col gap-4 px-8 pt-6">

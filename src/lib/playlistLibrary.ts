@@ -421,6 +421,27 @@ export const createStoredPlaylist = async (
   return playlist;
 });
 
+/** A new playlist of your own holding `tracks`, as read from a playlist file. */
+export const importStoredPlaylist = async (
+  name: string,
+  description: string,
+  tracks: VideoSummary[],
+) => withLibraryWrite(async () => {
+  const playlists = await loadStoredPlaylists();
+  const playlist = normalizePlaylist({
+    id: `playlist-${Date.now()}`,
+    name,
+    description,
+    tracks,
+    createdAt: new Date().toISOString(),
+    source: "Owned",
+    videoCount: tracks.length,
+    videoCountText: formatVideoCountText(tracks.length),
+  });
+  await persistStoredPlaylists([...playlists, playlist]);
+  return playlist;
+});
+
 export const addVideoToStoredPlaylist = async (
   playlistId: string,
   video: VideoSummary,

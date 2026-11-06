@@ -110,6 +110,7 @@ LIBRARY
 - Add a whole playlist to one of your own, or merge two of yours, from the playlist's menu. Playlists also sort by Longest and Shortest, and the Playlists page has a Custom order you can drag.
 - A YouTube playlist now says when unavailable videos are hidden from it.
 - Select many videos in a playlist to add them to the queue, add them to another playlist, download them, or remove them with Undo.
+- Save any playlist or music collection as a file from its menu, and import one with Import from file on the Playlists or Albums page. The files are the same ones Flow for Android saves and opens. A music playlist imports into your Albums.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

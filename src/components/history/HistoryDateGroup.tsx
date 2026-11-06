@@ -2,7 +2,7 @@ import { useState } from "react";
 import { VideoShelf } from "../shelf/VideoShelf";
 import { VideoGrid } from "../video/VideoGrid";
 import { Button } from "../ui/Button";
-import { getString } from "../../lib/i18n/index";
+import { getPlural, getString } from "../../lib/i18n/index";
 import { MusicHistoryGrid } from "./MusicHistoryGrid";
 import type { HistoryDateGroup as HistoryDateGroupData } from "../../lib/useHistory";
 import type { VideoSummary } from "../../types/video";
@@ -39,12 +39,8 @@ export function HistoryDateGroup({
   };
 
   const countLabel = [
-    plainVideos.length > 0
-      ? `${plainVideos.length} ${plainVideos.length === 1 ? "video" : "videos"}`
-      : null,
-    musicVideos.length > 0
-      ? `${musicVideos.length} ${musicVideos.length === 1 ? "song" : "songs"}`
-      : null,
+    plainVideos.length > 0 ? getPlural("history_videos_count", plainVideos.length) : null,
+    musicVideos.length > 0 ? getPlural("history_songs_count", musicVideos.length) : null,
   ]
     .filter(Boolean)
     .join(" • ");

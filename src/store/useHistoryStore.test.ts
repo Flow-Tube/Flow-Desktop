@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const restoreWatchRecord = vi.fn();
+const getWatchHistory = vi.fn();
 const deleteShortWatchRecords = vi.fn();
 vi.mock("../lib/api/db", () => ({
   restoreWatchRecord: (record: unknown) => restoreWatchRecord(record),
   deleteShortWatchRecords: () => deleteShortWatchRecords(),
   clearWatchHistory: vi.fn(),
   deleteWatchRecord: vi.fn(),
-  getWatchHistory: vi.fn(),
+  getWatchHistory: (limit: number, offset: number) => getWatchHistory(limit, offset),
 }));
 
 import { useHistoryStore } from "./useHistoryStore";
@@ -54,5 +55,18 @@ describe("useHistoryStore", () => {
     deleteShortWatchRecords.mockRejectedValue(new Error("db"));
     await expect(useHistoryStore.getState().removeShorts()).rejects.toThrow("db");
     expect(ids()).toEqual(["newest", "oldest"]);
+  });
+
+  it("picks up what was watched since the last visit when forced to reload", async () => {
+    getWatchHistory.mockReset().mockResolvedValue([newest]);
+    useHistoryStore.setState({ records: [], offset: 0, loaded: false });
+    await useHistoryStore.getState().load();
+    getWatchHistory.mockResolvedValue([record("watched-since", "2026-04-01T00:00:00.000Z"), newest]);
+
+    await useHistoryStore.getState().load();
+    expect(ids()).toEqual(["newest"]);
+
+    await useHistoryStore.getState().load(true);
+    expect(ids()).toEqual(["watched-since", "newest"]);
   });
 });

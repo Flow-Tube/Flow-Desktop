@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { getString } from "./i18n/index";
 import { useHistoryStore } from "../store/useHistoryStore";
 import type { WatchHistoryRecord } from "../types/db";
 import type { VideoSummary } from "../types/video";
@@ -42,16 +43,16 @@ export function getHistoryDateLabel(watchDate: string, now = new Date()) {
   const watchedAt = new Date(watchDate);
 
   if (Number.isNaN(watchedAt.getTime())) {
-    return "Recently";
+    return getString("history_date_recently");
   }
 
   const today = startOfLocalDay(now);
   const watchedDay = startOfLocalDay(watchedAt);
   const dayDiff = Math.floor((today.getTime() - watchedDay.getTime()) / DAY_IN_MS);
 
-  if (dayDiff === 0) return "Today";
-  if (dayDiff === 1) return "Yesterday";
-  if (dayDiff > 1 && dayDiff < 7) return "This Week";
+  if (dayDiff === 0) return getString("history_date_today");
+  if (dayDiff === 1) return getString("history_date_yesterday");
+  if (dayDiff > 1 && dayDiff < 7) return getString("history_date_this_week");
 
   return watchedAt.toLocaleDateString(undefined, {
     month: "long",
@@ -69,12 +70,11 @@ export function mapHistoryRecordToVideo(record: WatchHistoryRecord): HistoryVide
   return {
     id: record.videoId,
     title: record.title,
-    channelName: record.channelName || "Unknown Channel",
+    channelName: record.channelName || getString("history_unknown_channel"),
     channelId: record.channelId || null,
     thumbnailUrl: `https://i.ytimg.com/vi/${record.videoId}/hqdefault.jpg`,
     durationSeconds: record.totalDurationSeconds || 0,
     publishedText: getHistoryDateLabel(record.watchDate),
-    viewCountText: "History",
     watchDate: record.watchDate,
     watchProgressPercent: progress,
     isMusic: record.isMusic ?? false,
@@ -113,8 +113,9 @@ export function useHistory() {
   const removeShorts = useHistoryStore((state) => state.removeShorts);
   const clearHistory = useHistoryStore((state) => state.clear);
 
+  // Every player writes history straight to SQLite, so the rows here go stale after the first visit.
   useEffect(() => {
-    void load();
+    void load(true);
   }, [load]);
 
   return {

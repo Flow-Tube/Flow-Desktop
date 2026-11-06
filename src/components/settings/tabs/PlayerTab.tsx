@@ -11,8 +11,16 @@ import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { SUBTITLE_FONT_SCALES } from '../../../store/usePlayerStore';
 import { LONG_PRESS_OFF } from '../../../lib/pointerGesture';
+import { audioLanguageOptions } from '../../../lib/audioLanguages';
+import { NO_PREFERRED_LANGUAGE } from '../../../lib/settings/playerRuntime';
+import { APP_LOCALE } from '../../../lib/i18n/index';
 
 const AUTOPLAY_DELAY_OPTIONS = [0, 3, 5, 10, 15, 20, 30];
+
+const subtitleLanguageOptions = [
+  { value: NO_PREFERRED_LANGUAGE, label: getString('settings_language_none') },
+  ...audioLanguageOptions(APP_LOCALE),
+];
 
 export function PlayerTab() {
   const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED, true);
@@ -141,13 +149,7 @@ export function PlayerTab() {
           <ToggleSwitch checked={subtitles} onChange={setSubtitles} />
         </SettingItem>
         <SettingItem title={getString('settings_preferred_language')}>
-          <Select value={subtitleLang} onChange={setSubtitleLang} options={[
-            { value: 'en', label: getString('settings_language_english') }, { value: 'es', label: getString('settings_language_spanish') },
-            { value: 'fr', label: getString('settings_language_french') }, { value: 'de', label: getString('settings_language_german') },
-            { value: 'pt', label: getString('settings_language_portuguese') }, { value: 'ja', label: getString('settings_language_japanese') },
-            { value: 'ko', label: getString('settings_language_korean') }, { value: 'zh', label: getString('settings_language_chinese') },
-            { value: 'ar', label: getString('settings_language_arabic') }, { value: 'hi', label: getString('settings_language_hindi') }, { value: 'ru', label: getString('settings_language_russian') },
-          ]} />
+          <Select value={subtitleLang} onChange={setSubtitleLang} options={subtitleLanguageOptions} />
         </SettingItem>
         <SettingItem title={getString('settings_font_size')}>
           <Select value={subtitleScale} onChange={setSubtitleScale} options={SUBTITLE_FONT_SCALES.map((scale) => (

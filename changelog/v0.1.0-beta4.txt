@@ -106,6 +106,9 @@ PLAYER
 - SponsorBlock has every action Android has: Skip automatically once, Show a skip button, Notify, Mute, Show in seek bar and Disable. Your choices sync with your phone.
 - SponsorBlock off for this video, in the player's settings menu, turns it off until the next video.
 - New SponsorBlock types Hook and Highlight. A highlight is marked on the seek bar and can offer Jump to highlight as the video starts. Segments submitted as a mute are muted instead of skipped.
+- Subtitle timing moves captions earlier or later in steps, for each video. Add an SRT or VTT file from the subtitles menu or by dropping it on the player, and Flow remembers it for that video.
+- Subtitle style adds window color and opacity, edge styles, custom colors and a position for fullscreen.
+- Preferred subtitle language now lists every language and has No preference, which syncs with your phone. The transcript has a search field.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

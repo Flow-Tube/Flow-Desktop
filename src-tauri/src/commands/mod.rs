@@ -21,6 +21,7 @@ pub mod profiles;
 pub mod recommendation;
 pub mod scrobble;
 pub mod shorts;
+pub mod subtitle_file;
 pub mod sync;
 pub mod theme;
 pub mod tray;

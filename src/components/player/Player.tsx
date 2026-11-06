@@ -56,6 +56,9 @@ import {
   type PlayerVolumeFeedback,
 } from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
+import { isLocalCaption } from "../../lib/captionText";
+import { useSubtitleFileDrop } from "../../lib/localSubtitles";
+import { useLocalSubtitleStore, videoSubtitleState } from "../../store/useLocalSubtitleStore";
 import { SponsorBlockSkipButton } from "./SponsorBlockSkipButton";
 import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
@@ -558,6 +561,7 @@ export const Player: React.FC<PlayerProps> = ({
 
   const decodeFailures = useCodecHealthStore((state) => state.failures);
   const currentVideoId = usePlayerStore((state) => state.currentVideo?.id);
+  const subtitleOffsetMs = useLocalSubtitleStore((state) => videoSubtitleState(state.videos, currentVideoId).offsetMs);
   const supportedQualities = useMemo(() => {
     if (!isDashPlayback) return qualities;
     const decodable = qualities.filter((quality) => isVariantSupported(quality.mimeType));
@@ -910,8 +914,15 @@ export const Player: React.FC<PlayerProps> = ({
   }, [videoLoopEnabled]);
 
   useSubtitleSettingsSync();
+  useSubtitleFileDrop(containerRef, currentVideoId);
 
   useEffect(() => {
+    // A file added for this video is what the viewer wants, whatever the switch in Settings says.
+    const added = captions.find(isLocalCaption);
+    if (added) {
+      setSelectedCaptionId(added.id);
+      return;
+    }
     if (!subtitlesEnabled) {
       setSelectedCaptionId("off");
       return;
@@ -2673,6 +2684,7 @@ export const Player: React.FC<PlayerProps> = ({
         selectedCaptionId={selectedCaptionId}
         currentTime={currentTime}
         shouldShowControls={shouldShowControls}
+        offsetMs={subtitleOffsetMs}
       />
 
       {(isLoading || error || errorInfo) && (

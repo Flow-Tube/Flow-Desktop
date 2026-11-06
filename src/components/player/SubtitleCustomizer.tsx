@@ -3,10 +3,12 @@ import {
   usePlayerStore,
   DEFAULT_SUBTITLE_STYLE,
   SUBTITLE_FONT_SCALES,
+  type SubtitleEdgeType,
   type SubtitleStyle,
 } from "../../store/usePlayerStore";
 import { Undo2 } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { captionEdgeShadow, colorWithOpacity } from "../../lib/subtitleStyleCss";
 
 const textColors = [
   "#FFFFFF", // White
@@ -26,6 +28,55 @@ const backgroundColors = [
   "#37474F", // Blue Gray
 ];
 
+const EDGE_STYLES = [
+  { value: "none", label: "subtitle_edge_none" },
+  { value: "outline", label: "subtitle_edge_outline" },
+  { value: "drop_shadow", label: "subtitle_edge_drop_shadow" },
+  { value: "raised", label: "subtitle_edge_raised" },
+  { value: "depressed", label: "subtitle_edge_depressed" },
+] as const satisfies readonly { value: SubtitleEdgeType; label: string }[];
+
+function ColorChoices({
+  label,
+  colors,
+  value,
+  onChange,
+}: {
+  label: string;
+  colors: readonly string[];
+  value: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-xs font-semibold text-chrome-zinc-300">{label}</div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        {colors.map((color) => (
+          <button
+            key={color}
+            type="button"
+            onClick={() => onChange(color)}
+            className="relative w-8 h-8 rounded-full border border-chrome-white/10 transition-transform active:scale-95 shadow-md hover:scale-105"
+            style={{ backgroundColor: color }}
+          >
+            {value.toLowerCase() === color.toLowerCase() && (
+              <span className="absolute inset-0 rounded-full border-2 border-primary scale-110 shadow-lg shadow-primary/30" />
+            )}
+          </button>
+        ))}
+        <input
+          type="color"
+          aria-label={getString("subtitle_custom_color")}
+          title={getString("subtitle_custom_color")}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-8 w-8 cursor-pointer rounded-full border border-chrome-white/10 bg-transparent"
+        />
+      </div>
+    </div>
+  );
+}
+
 export const SubtitleCustomizer: React.FC = () => {
   const subtitleStyle = usePlayerStore((s) => s.subtitleStyle);
   const setSubtitleStyle = usePlayerStore((s) => s.setSubtitleStyle);
@@ -41,11 +92,7 @@ export const SubtitleCustomizer: React.FC = () => {
     setSubtitleStyle(DEFAULT_SUBTITLE_STYLE);
   };
 
-  const hex = (subtitleStyle.backgroundColor || "#000000").replace("#", "");
-  const r = parseInt(hex.substring(0, 2), 16) || 0;
-  const g = parseInt(hex.substring(2, 4), 16) || 0;
-  const b = parseInt(hex.substring(4, 6), 16) || 0;
-  const bgRgba = `rgba(${r}, ${g}, ${b}, ${subtitleStyle.backgroundOpacity})`;
+  const bgRgba = colorWithOpacity(subtitleStyle.backgroundColor, subtitleStyle.backgroundOpacity);
   const scaleIndex = Math.max(0, SUBTITLE_FONT_SCALES.indexOf(subtitleStyle.fontScale));
 
   return (
@@ -64,6 +111,10 @@ export const SubtitleCustomizer: React.FC = () => {
             fontSize: `${Math.min(32, (16 * subtitleStyle.fontScale) / 100)}px`,
             fontWeight: subtitleStyle.isBold ? "700" : "500",
             lineHeight: "1.35",
+            textShadow: captionEdgeShadow(subtitleStyle.edgeType, subtitleStyle.edgeColor),
+            outline: subtitleStyle.windowOpacity > 0
+              ? `0.5em solid ${colorWithOpacity(subtitleStyle.windowColor, subtitleStyle.windowOpacity)}`
+              : undefined,
             boxShadow: "0 10px 25px -5px color-mix(in srgb, var(--color-chrome-black) 50%, transparent)",
           }}
         >
@@ -106,51 +157,35 @@ export const SubtitleCustomizer: React.FC = () => {
         <p className="text-xs text-chrome-zinc-400">{getString("subtitles_drag_hint")}</p>
       </div>
 
-      {/* Text Colors Grid */}
-      <div className="flex flex-col gap-2">
-        <div className="text-xs font-semibold text-chrome-zinc-300">{getString('player_text_color')}</div>
-        <div className="flex flex-wrap gap-2.5">
-          {textColors.map((color) => {
-            const isSelected = subtitleStyle.textColor.toLowerCase() === color.toLowerCase();
-            return (
-              <button
-                key={color}
-                type="button"
-                onClick={() => handleUpdate({ textColor: color })}
-                className="relative w-8 h-8 rounded-full border border-chrome-white/10 transition-transform active:scale-95 shadow-md hover:scale-105"
-                style={{ backgroundColor: color }}
-              >
-                {isSelected && (
-                  <span className="absolute inset-0 rounded-full border-2 border-primary scale-110 shadow-lg shadow-primary/30" />
-                )}
-              </button>
-            );
-          })}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
+          <span>{getString('subtitle_fullscreen_position')}</span>
+          <span className="text-chrome-red-400 font-mono">{subtitleStyle.fullscreenBottomOffset}%</span>
         </div>
+        <input
+          type="range"
+          min={2}
+          max={30}
+          step={0.5}
+          value={subtitleStyle.fullscreenBottomOffset}
+          onChange={(e) => handleUpdate({ fullscreenBottomOffset: Number(e.target.value) })}
+          className="w-full h-1 bg-chrome-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary"
+        />
       </div>
 
-      {/* Background Colors Grid */}
-      <div className="flex flex-col gap-2">
-        <div className="text-xs font-semibold text-chrome-zinc-300">{getString('player_background_color')}</div>
-        <div className="flex flex-wrap gap-2.5">
-          {backgroundColors.map((color) => {
-            const isSelected = subtitleStyle.backgroundColor.toLowerCase() === color.toLowerCase();
-            return (
-              <button
-                key={color}
-                type="button"
-                onClick={() => handleUpdate({ backgroundColor: color })}
-                className="relative w-8 h-8 rounded-full border border-chrome-white/10 transition-transform active:scale-95 shadow-md hover:scale-105"
-                style={{ backgroundColor: color }}
-              >
-                {isSelected && (
-                  <span className="absolute inset-0 rounded-full border-2 border-primary scale-110 shadow-lg shadow-primary/30" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <ColorChoices
+        label={getString('player_text_color')}
+        colors={textColors}
+        value={subtitleStyle.textColor}
+        onChange={(textColor) => handleUpdate({ textColor })}
+      />
+
+      <ColorChoices
+        label={getString('player_background_color')}
+        colors={backgroundColors}
+        value={subtitleStyle.backgroundColor}
+        onChange={(backgroundColor) => handleUpdate({ backgroundColor })}
+      />
 
       {/* Background Opacity Slider */}
       <div className="flex flex-col gap-1.5">
@@ -170,6 +205,59 @@ export const SubtitleCustomizer: React.FC = () => {
           className="w-full h-1 bg-chrome-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary"
         />
       </div>
+
+      <ColorChoices
+        label={getString('subtitle_window_color')}
+        colors={backgroundColors}
+        value={subtitleStyle.windowColor}
+        onChange={(windowColor) => handleUpdate({ windowColor })}
+      />
+
+      <div className="flex flex-col gap-1.5">
+        <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
+          <span>{getString('subtitle_window_opacity')}</span>
+          <span className="text-chrome-red-400 font-mono">{Math.round(subtitleStyle.windowOpacity * 100)}%</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={subtitleStyle.windowOpacity}
+          onChange={(e) => handleUpdate({ windowOpacity: Number(e.target.value) })}
+          className="w-full h-1 bg-chrome-zinc-800 rounded-lg appearance-none cursor-pointer accent-primary"
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="text-xs font-semibold text-chrome-zinc-300">{getString('subtitle_edge_style')}</div>
+        <div className="flex flex-wrap gap-1.5">
+          {EDGE_STYLES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={subtitleStyle.edgeType === value}
+              onClick={() => handleUpdate({ edgeType: value })}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors duration-200 ease-out ${
+                subtitleStyle.edgeType === value
+                  ? "bg-chrome-white text-chrome-black"
+                  : "bg-chrome-white/10 text-chrome-zinc-200 hover:bg-chrome-white/15"
+              }`}
+            >
+              {getString(label)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {subtitleStyle.edgeType !== "none" && (
+        <ColorChoices
+          label={getString('subtitle_edge_color')}
+          colors={backgroundColors}
+          value={subtitleStyle.edgeColor}
+          onChange={(edgeColor) => handleUpdate({ edgeColor })}
+        />
+      )}
 
       {/* Bold Text Switch Row */}
       <div className="flex justify-between items-center py-1">

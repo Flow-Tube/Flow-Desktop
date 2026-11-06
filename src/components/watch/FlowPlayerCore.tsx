@@ -30,6 +30,7 @@ import { onBeforeProfileSwitch } from "../../lib/profiles/beforeSwitch";
 import { useSponsorBlockSegments } from "../../lib/useSponsorBlockSegments";
 import { useOriginalCurrentVideo } from "../../lib/useOriginalCurrentVideo";
 import { nextAutoAdvanceVideo } from "../../lib/autoAdvance";
+import { useCaptionsWithLocal } from "../../lib/localSubtitles";
 import { useAutoplayCountdown } from "../../lib/useAutoplayCountdown";
 import { UpNextCard } from "../player/UpNextCard";
 
@@ -59,6 +60,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
   const showToast = useUiStore((s) => s.showToast);
 
   const stream = useVideoStream(videoId);
+  const captions = useCaptionsWithLocal(videoId, stream.captions);
   useSponsorBlockSegments(videoId);
   const {
     state: countdown,
@@ -321,7 +323,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       onCopyLogs={handleCopyLogs}
       onOpenInBrowser={handleOpenInBrowser}
       qualities={stream.streamVariants}
-      captions={stream.captions}
+      captions={captions}
       audioTracks={stream.audioTracks}
       dashManifestUrl={stream.dashManifestUrl}
       hlsManifestUrl={stream.hlsManifestUrl}

@@ -51,7 +51,16 @@ export interface SubtitleStyle {
   isBold: boolean;
   /** Percent of the player's height between its bottom and the captions'. */
   bottomOffset: number;
+  /** The same gap while the video is fullscreen. */
+  fullscreenBottomOffset: number;
+  /** Behind the whole caption, where the background sits behind each line. */
+  windowColor: string;
+  windowOpacity: number;
+  edgeType: SubtitleEdgeType;
+  edgeColor: string;
 }
+
+export type SubtitleEdgeType = "none" | "outline" | "drop_shadow" | "raised" | "depressed";
 
 /** YouTube's caption font size options. */
 export const SUBTITLE_FONT_SCALES = [50, 75, 100, 150, 200, 300, 400];
@@ -64,6 +73,11 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   isBold: true,
   // YouTube's: its caption box sits 2% of the player's height above the bottom.
   bottomOffset: 2,
+  fullscreenBottomOffset: 2,
+  windowColor: "#000000",
+  windowOpacity: 0,
+  edgeType: "none",
+  edgeColor: "#000000",
 };
 
 const getSavedSubtitleStyle = (): SubtitleStyle => {

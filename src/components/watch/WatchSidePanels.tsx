@@ -5,6 +5,7 @@ import { useFullscreenPanelHost } from "../../lib/fullscreenPanelHost";
 import { useLingeringValue } from "../../lib/useLingeringValue";
 import { motionMs } from "../../lib/motion";
 import { seekToTime } from "../../lib/playerSeek";
+import { useCaptionsWithLocal } from "../../lib/localSubtitles";
 import { Chapters } from "../player/chapters";
 import { QueuePanel } from "../player/QueuePanel";
 import { LiveChat } from "./LiveChat";
@@ -38,7 +39,7 @@ export function WatchSidePanels({ videoId, chat, commentsAvailable, chapters, au
   const isQueuePanelOpen = usePlayerStore((s) => s.isQueuePanelOpen);
   const setIsLiveChatAvailable = usePlayerStore((s) => s.setIsLiveChatAvailable);
   const setIsCommentsAvailable = usePlayerStore((s) => s.setIsCommentsAvailable);
-  const captions = usePlayerStore((s) => s.captions);
+  const captions = useCaptionsWithLocal(videoId, usePlayerStore((s) => s.captions));
   const host = useFullscreenPanelHost();
   const shownPanel = useLingeringValue(isFullscreen ? fullscreenPanel : null, motionMs("--motion-panel"));
 

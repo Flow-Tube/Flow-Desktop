@@ -1,10 +1,14 @@
-//! The pages offered by the Dock menu and the Jump List. A Jump List task can only start Flow
-//! again with arguments, so the single-instance plugin hands them to the running app, and a cold
-//! start keeps them until the main window asks. Only these fixed pages can be named this way.
+//! What Flow can be started with: the pages offered by the Dock menu and the Jump List, and a
+//! `YouTube` link on the command line. A second launch reaches the running app through the
+//! single-instance plugin; a cold start keeps its request until the main window asks, once, so
+//! reloading the page doesn't repeat it. A restart runs with no arguments (see `relaunch`), so it
+//! doesn't either. Only these fixed pages and validated links can be named this way.
 
 use std::sync::{Mutex, PoisonError};
 
 use tauri::{AppHandle, Emitter, Manager};
+
+use crate::security::validation::is_openable_link;
 
 pub const OPEN_PAGE_ARG: &str = "--open-page=";
 
@@ -43,17 +47,41 @@ impl ShellLabels {
     }
 }
 
-/// The page a launch was asked to open, kept until the main window takes it.
+/// What a launch was asked to open, kept until the main window takes it.
 #[derive(Default)]
-pub struct LaunchPage(Mutex<Option<&'static str>>);
+pub struct LaunchRequest {
+    page: Mutex<Option<&'static str>>,
+    link: Mutex<Option<String>>,
+}
 
-impl LaunchPage {
-    pub fn new(route: Option<&'static str>) -> Self {
-        Self(Mutex::new(route))
+/// The process's arguments. `std::env::args` panics on one that isn't Unicode, which at startup
+/// would stop the app opening at all.
+pub fn lossy_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect()
+}
+
+impl LaunchRequest {
+    pub fn from_args<S: AsRef<str>>(args: impl IntoIterator<Item = S> + Clone) -> Self {
+        Self {
+            page: Mutex::new(route_from_args(args.clone())),
+            link: Mutex::new(link_from_args(args)),
+        }
     }
 
-    pub fn take(&self) -> Option<&'static str> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner).take()
+    pub fn take_page(&self) -> Option<&'static str> {
+        self.page
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+    }
+
+    pub fn take_link(&self) -> Option<String> {
+        self.link
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
     }
 }
 
@@ -73,6 +101,29 @@ pub fn route_for_page(name: &str) -> Option<&'static str> {
 pub fn route_from_args<S: AsRef<str>>(args: impl IntoIterator<Item = S>) -> Option<&'static str> {
     args.into_iter()
         .find_map(|arg| route_for_page(arg.as_ref().strip_prefix(OPEN_PAGE_ARG)?))
+}
+
+/// The first link among the arguments Flow would open, as the `flow://open` link the frontend's
+/// handoff reads. Anything else on the command line is ignored.
+pub fn link_from_args<S: AsRef<str>>(args: impl IntoIterator<Item = S>) -> Option<String> {
+    let link = args
+        .into_iter()
+        .find(|arg| is_openable_link(arg.as_ref()))?;
+    let mut handoff = reqwest::Url::parse("flow://open").ok()?;
+    handoff.query_pairs_mut().append_pair("url", link.as_ref());
+    Some(handoff.into())
+}
+
+/// Raises the main window on a link from a second launch.
+pub fn open_link(app: &AppHandle, handoff: &str) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    if let Err(error) = app.emit_to("main", "handoff://url", handoff) {
+        tracing::warn!(%error, "Could not open a link from the command line");
+    }
 }
 
 /// Raises the main window on `route`.
@@ -103,9 +154,57 @@ mod tests {
     }
 
     #[test]
-    fn a_launch_page_is_taken_once() {
-        let page = LaunchPage::new(route_for_page("music"));
-        assert_eq!(page.take(), Some("/music"));
-        assert_eq!(page.take(), None);
+    fn what_a_launch_asked_for_is_taken_once() {
+        let request =
+            LaunchRequest::from_args(["flow", "--open-page=music", "https://youtu.be/dQw4w9WgXcQ"]);
+        assert_eq!(request.take_page(), Some("/music"));
+        assert_eq!(request.take_page(), None);
+        assert!(request.take_link().is_some());
+        assert_eq!(request.take_link(), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_argument_that_isnt_unicode_doesnt_stop_the_launch() {
+        use std::os::unix::ffi::OsStringExt;
+        let args = lossy_args([
+            std::ffi::OsString::from("flow"),
+            std::ffi::OsString::from_vec(vec![0x66, 0xff]),
+            std::ffi::OsString::from("--open-page=music"),
+        ]);
+        assert_eq!(
+            LaunchRequest::from_args(args.iter()).take_page(),
+            Some("/music")
+        );
+    }
+
+    #[test]
+    fn a_restart_has_no_arguments_so_it_opens_nothing() {
+        let request = LaunchRequest::from_args(["flow"]);
+        assert_eq!(request.take_page(), None);
+        assert_eq!(request.take_link(), None);
+    }
+
+    #[test]
+    fn a_link_is_wrapped_whole_for_the_handoff() {
+        let handoff = link_from_args([
+            "flow",
+            "--new-window",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc",
+        ])
+        .unwrap();
+        let parsed = reqwest::Url::parse(&handoff).unwrap();
+        assert_eq!(parsed.scheme(), "flow");
+        assert_eq!(parsed.host_str(), Some("open"));
+        assert_eq!(
+            parsed.query_pairs().next().unwrap().1,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc"
+        );
+    }
+
+    #[test]
+    fn links_to_anywhere_else_are_ignored() {
+        assert_eq!(link_from_args(["flow", "https://evil.example/watch"]), None);
+        assert_eq!(link_from_args(["flow", "/tmp/file.mp4"]), None);
     }
 }

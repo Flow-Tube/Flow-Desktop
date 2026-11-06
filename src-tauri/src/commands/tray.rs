@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 use crate::errors::{AppError, ErrorResponse};
 use crate::services::music_tray::{MusicTray, TrayUpdate};
-use crate::services::shell_pages::{LaunchPage, ShellLabels};
+use crate::services::shell_pages::{LaunchRequest, ShellLabels};
 
 /// Whether the system can show tray icons (false on Linux without an `AppIndicator` library).
 #[tauri::command]
@@ -55,8 +55,16 @@ pub async fn set_shell_pages(app: AppHandle, labels: ShellLabels) -> Result<(), 
 
 /// The page this launch was asked to open, once.
 #[tauri::command]
-pub fn take_launch_page(page: State<'_, LaunchPage>) -> Option<&'static str> {
-    page.take()
+#[must_use]
+pub fn take_launch_page(request: State<'_, LaunchRequest>) -> Option<&'static str> {
+    request.take_page()
+}
+
+/// The `flow://open` link for a URL on this launch's command line, once.
+#[tauri::command]
+#[must_use]
+pub fn take_launch_link(request: State<'_, LaunchRequest>) -> Option<String> {
+    request.take_link()
 }
 
 /// Show download progress on the taskbar or Dock icon. `percent` is null when a size is unknown,

@@ -513,6 +513,7 @@
   "download_resolution": "Resolution",
   "download_video_codec": "Video codec",
   "handoff_video_unavailable": "Couldn't open that video in Flow.",
+  "handoff_link_unavailable": "Couldn't open that link in Flow.",
   "download_complete": "Download complete",
   "download_cancel": "Cancel download",
   "download_no_adaptive_formats": "No compatible adaptive video formats are available for this item.",

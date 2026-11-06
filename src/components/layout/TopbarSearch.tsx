@@ -126,7 +126,7 @@ export function TopbarSearch() {
     if (parsed) {
       const route = routeForYoutubeUrl(parsed);
       if (route) {
-        if (parsed.kind === 'video') prefetchStreamInfo(parsed.videoId);
+        if (parsed.kind === 'video' || parsed.kind === 'short') prefetchStreamInfo(parsed.videoId);
         close();
         navigate(route);
         return;

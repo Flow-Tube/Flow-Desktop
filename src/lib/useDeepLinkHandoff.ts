@@ -4,10 +4,13 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { listen } from "@tauri-apps/api/event";
 import { sessionStore } from "./storage/profileStorage";
 import { holdLinkForNextProfile, takeHeldLink } from "./api/profiles";
+import { takeLaunchLink } from "./api/tray";
 import { useProfilesStore } from "../store/useProfilesStore";
 
-import { getVideoDetails } from "./api/youtube";
-import { getMusicQueue } from "./api/music";
+import { getVideoDetails, resolveChannelId } from "./api/youtube";
+import { getMusicQueue, getMusicWatchQueue } from "./api/music";
+import { parseFlowUrl, type Handoff } from "./flowHandoff";
+import { playLinkedPlaylist } from "./linkedPlaylist";
 import { addWatchRecord } from "./api/db";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import { seekWhenVideoReady } from "./playerSeek";
@@ -18,44 +21,6 @@ import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useUiStore } from "../store/useUiStore";
 import type { SongItem } from "../types/music";
-
-const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
-const PLAYLIST_ID = /^[A-Za-z0-9_-]{10,64}$/;
-
-type Handoff =
-  | { action: "watch"; v: string; t?: number; list?: string }
-  | { action: "music"; v: string }
-  | { action: "download"; v: string }
-  | { action: "music-download"; v: string };
-
-// Both transports deliver the same `flow://action?…` string: the deep-link
-// plugin (app launched or already running) and the loopback bridge (silent
-// handoff from the extension, re-emitted on the `handoff://url` event).
-function parseFlowUrl(raw: string): Handoff | null {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "flow:") return null;
-
-  // flow://watch → host "watch"; tolerate flow:///watch → path "/watch".
-  const action = (url.host || url.pathname.replace(/^\/+/, "")).toLowerCase();
-  const v = url.searchParams.get("v") ?? "";
-  if (!VIDEO_ID.test(v)) return null;
-
-  if (action === "download") return { action: "download", v };
-  if (action === "music-download") return { action: "music-download", v };
-  if (action === "music") return { action: "music", v };
-  if (action === "watch") {
-    const rawT = url.searchParams.get("t");
-    const t = rawT && /^\d{1,9}$/.test(rawT) ? Number(rawT) : undefined;
-    const list = url.searchParams.get("list");
-    return { action: "watch", v, t, list: list && PLAYLIST_ID.test(list) ? list : undefined };
-  }
-  return null;
-}
 
 // The music player and music download dialog both need a full SongItem, not a
 // bare id. A single-video music queue resolves the track's metadata (title,
@@ -70,10 +35,24 @@ async function resolveSong(videoId: string): Promise<SongItem | null> {
   }
 }
 
+/** Plays a song from the playlist its link named. False when the list can't be read. */
+async function playSongFromList(videoId: string, playlistId: string): Promise<boolean> {
+  try {
+    const { items } = await getMusicWatchQueue(videoId, playlistId);
+    const index = items.findIndex((track) => (track.videoId ?? track.id) === videoId);
+    if (index < 0) return false;
+    await useMusicPlayerStore.getState().playQueue(items, index);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Subscribes to `flow://` deep links and bridge handoffs and routes them:
- * `watch`/`music` → the Watch page (which resolves the video from its id),
- * `download` → the global download dialog. Mounted once at the App root.
+ * `watch` → the Watch page (which resolves the video from its id), `music` → the
+ * music player, `download` → the global download dialog, and the rest of what a
+ * link can name to its own page. Mounted once at the App root.
  */
 export function useDeepLinkHandoff() {
   const navigate = useNavigate();
@@ -85,6 +64,21 @@ export function useDeepLinkHandoff() {
 
   const route = useCallback(
     async (handoff: Handoff) => {
+      if (handoff.action === "page") {
+        navigate(handoff.route);
+        return;
+      }
+
+      if (handoff.action === "channel") {
+        try {
+          const channelId = await resolveChannelId(handoff.url);
+          navigate(handoff.music ? `/music/artist/${channelId}` : `/channel/${channelId}`);
+        } catch {
+          useUiStore.getState().showToast({ variant: "error", message: getString("handoff_link_unavailable") });
+        }
+        return;
+      }
+
       if (handoff.action === "download") {
         try {
           const details = await getVideoDetails(handoff.v);
@@ -122,7 +116,8 @@ export function useDeepLinkHandoff() {
           useDownloadStore.getState().openMusic(song);
           return;
         }
-        void useMusicPlayerStore.getState().playTrack(song);
+        const fromList = handoff.action === "music" && handoff.list ? await playSongFromList(handoff.v, handoff.list) : false;
+        if (!fromList) void useMusicPlayerStore.getState().playTrack(song);
         // Seed the history row immediately; GlobalMusicAudio upserts real
         // progress as the track plays, so a very short listen still lands here.
         if (shouldRecordWatchHistory()) {
@@ -174,6 +169,7 @@ export function useDeepLinkHandoff() {
         // its own error state if the video is unavailable.
       }
 
+      if (handoff.list) void playLinkedPlaylist(handoff.list, handoff.v);
       prefetchStreamInfo(handoff.v);
       navigate(`/watch/${handoff.v}`);
       if (handoff.t && handoff.t > 0) seekWhenVideoReady(handoff.t);
@@ -238,6 +234,9 @@ export function useDeepLinkHandoff() {
         if (url) acceptRef.current(url);
       })
       .catch(() => {});
+    void takeLaunchLink().then((url) => {
+      if (url) acceptRef.current(url);
+    });
     void onOpenUrl((urls) => {
       const url = latest(urls);
       if (url) acceptRef.current(url);

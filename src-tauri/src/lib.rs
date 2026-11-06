@@ -150,7 +150,7 @@ use commands::sync::{
 };
 use commands::tray::{
     music_tray_hide, music_tray_supported, music_tray_update, set_download_progress,
-    set_shell_pages, take_launch_page,
+    set_shell_pages, take_launch_link, take_launch_page,
 };
 use commands::window::{PlayerFullscreenState, set_player_fullscreen};
 use commands::youtube::{
@@ -300,6 +300,10 @@ pub fn run() {
             }
             if let Some(route) = services::shell_pages::route_from_args(argv.iter()) {
                 services::shell_pages::open_route(app, route);
+                return;
+            }
+            if let Some(handoff) = services::shell_pages::link_from_args(argv.iter()) {
+                services::shell_pages::open_link(app, &handoff);
                 return;
             }
             if let Some(window) = app.get_webview_window("main") {
@@ -553,8 +557,8 @@ pub fn run() {
             app.manage(commands::discord::DiscordPresenceOwner::default());
             app.manage(services::music_tray::MusicTray::default());
             app.manage(services::media_keys::PlaybackTarget::default());
-            app.manage(services::shell_pages::LaunchPage::new(
-                services::shell_pages::route_from_args(std::env::args()),
+            app.manage(services::shell_pages::LaunchRequest::from_args(
+                services::shell_pages::lossy_args(std::env::args_os()).iter(),
             ));
             services::media_keys::watch_playback_claims(app.handle());
 
@@ -947,6 +951,7 @@ pub fn run() {
             music_tray_update,
             set_shell_pages,
             take_launch_page,
+            take_launch_link,
             set_download_progress,
             global_media_keys_supported,
             global_media_keys_set,

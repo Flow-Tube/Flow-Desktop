@@ -139,9 +139,74 @@ pub fn validate_app_route(route: &str) -> AppResult<()> {
     }
 }
 
+/// Hosts Flow opens links from, the same ones `src/lib/youtubeUrl.ts` reads.
+const LINK_DOMAINS: [&str; 5] = [
+    "youtube.com",
+    "youtube-nocookie.com",
+    "youtu.be",
+    "piped.video",
+    "yewtu.be",
+];
+const MAX_LINK_CHARS: usize = 2048;
+
+/// Whether a link from outside Flow, such as a command-line argument, is one to open at all.
+/// The frontend then decides what it points at, and ignores anything else.
+pub fn is_openable_link(link: &str) -> bool {
+    if link.len() > MAX_LINK_CHARS || link.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return false;
+    }
+    let Ok(url) = reqwest::Url::parse(link) else {
+        return false;
+    };
+    matches!(url.scheme(), "http" | "https")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.host_str().is_some_and(|host| {
+            let host = host.to_ascii_lowercase();
+            LINK_DOMAINS
+                .iter()
+                .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
+        })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{validate_app_route, validate_external_url};
+    use super::{is_openable_link, validate_app_route, validate_external_url};
+
+    #[test]
+    fn only_youtube_and_its_front_ends_are_openable_links() {
+        for link in [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabc",
+            "http://youtu.be/dQw4w9WgXcQ",
+            "https://music.youtube.com/browse/MPREb_abc",
+            "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+            "https://piped.video/watch?v=dQw4w9WgXcQ",
+            "https://yewtu.be/watch?v=dQw4w9WgXcQ",
+        ] {
+            assert!(is_openable_link(link), "{link}");
+        }
+        for link in [
+            "https://evil.example/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com.evil.example/watch",
+            "https://notyoutube.com/watch",
+            "https://www.youtube.com@evil.example/watch",
+            "https://user:pass@youtube.com/watch",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "flow://watch?v=dQw4w9WgXcQ",
+            "youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://youtube.com/a b",
+            "https://youtube.com/a\nb",
+            "--new-window",
+            "",
+        ] {
+            assert!(!is_openable_link(link), "{link}");
+        }
+        assert!(!is_openable_link(&format!(
+            "https://youtube.com/{}",
+            "a".repeat(2048)
+        )));
+    }
 
     #[test]
     fn app_routes_stay_inside_flow() {

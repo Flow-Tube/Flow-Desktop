@@ -67,6 +67,16 @@ export async function takeLaunchPage(): Promise<string | null> {
   }
 }
 
+/** The `flow://open` link for a URL this launch was given on its command line, once. */
+export async function takeLaunchLink(): Promise<string | null> {
+  if (!(await isTauriEnv())) return null;
+  try {
+    return await invokeBackend<string | null>("take_launch_link");
+  } catch {
+    return null;
+  }
+}
+
 export interface DownloadProgressBadge {
   percent: number | null;
   count: number;

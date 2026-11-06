@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import React, { useState, useEffect } from "react";
 import { useSubscriptionStore } from "../../store/useSubscriptionStore";
 import { CuratedChannel } from "./constants";
@@ -79,11 +80,11 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
 
       {/* Search Input Bar */}
       <div className="relative flex items-center bg-chrome-input-surface border border-chrome-zinc-800 focus-within:border-primary/60 rounded-2xl overflow-hidden mb-8 px-6 py-4 shadow-sm">
-        <span className="text-sm text-chrome-zinc-500 font-bold select-none mr-3">Search</span>
+        <span className="text-sm text-chrome-zinc-500 font-bold select-none mr-3">{getString('search_placeholder')}</span>
         <input
           type="text"
           className="w-full bg-transparent outline-none border-none text-chrome-zinc-200 placeholder:text-chrome-zinc-600 text-sm font-medium"
-          placeholder="Type creator or channel name..."
+          placeholder={getString('onboarding_type_creator_or_channel_name')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -96,7 +97,7 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
       <div className="space-y-4 select-none">
         {searchQuery.trim() ? (
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-widest text-chrome-zinc-500 mb-4">Search Results</h3>
+            <h3 className="text-sm font-bold uppercase tracking-widest text-chrome-zinc-500 mb-4">{getString('onboarding_search_results')}</h3>
             {searchResults.length === 0 && !isSearching ? (
               <p className="text-sm text-chrome-zinc-500 py-8 font-semibold text-center bg-chrome-zinc-900/10 rounded-2xl border border-zinc-850">
                 No channels matched your search query.
@@ -139,7 +140,7 @@ export const ChannelsStep: React.FC<ChannelsStepProps> = ({ selectedTopics: _sel
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <h4 className="text-chrome-zinc-300 font-bold text-sm mb-1">Search for creators</h4>
+            <h4 className="text-chrome-zinc-300 font-bold text-sm mb-1">{getString('onboarding_search_for_creators')}</h4>
             <p className="text-chrome-zinc-500 text-xs max-w-xs leading-relaxed">
               Use the search bar above to look up channels, creators, or content topics to customize your subscription feed.
             </p>

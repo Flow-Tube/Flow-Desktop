@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import React, { useState, useRef } from "react";
 import { unzipSync } from "fflate";
 import { parseSubscriptionExport } from "../../lib/api/youtube";
@@ -278,7 +279,7 @@ export const ImportStep: React.FC = () => {
               </svg>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg font-bold text-chrome-zinc-200">Click to browse files</h4>
+              <h4 className="text-lg font-bold text-chrome-zinc-200">{getString('onboarding_click_to_browse_files')}</h4>
               <p className="text-sm text-chrome-zinc-500 max-w-md mx-auto leading-relaxed">
                 Upload backup .zip, backup .json, Google Takeout CSV/XML, or standard OPML backups.
               </p>
@@ -315,7 +316,7 @@ export const ImportStep: React.FC = () => {
               </svg>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg font-bold text-chrome-emerald-400">Import successful</h4>
+              <h4 className="text-lg font-bold text-chrome-emerald-400">{getString('onboarding_import_successful')}</h4>
               <p className="text-sm text-chrome-zinc-400 max-w-md mx-auto leading-relaxed">
                 Natively registered {importedCount} creators to your subscriptions. Click to import another payload.
               </p>
@@ -331,7 +332,7 @@ export const ImportStep: React.FC = () => {
               </svg>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg font-bold text-chrome-red-400">Extraction error</h4>
+              <h4 className="text-lg font-bold text-chrome-red-400">{getString('onboarding_extraction_error')}</h4>
               <p className="text-sm text-chrome-zinc-400 max-w-md mx-auto leading-relaxed">
                 {errorMessage || "The backup layout could not be recognized."} Click to retry with another file.
               </p>
@@ -341,11 +342,11 @@ export const ImportStep: React.FC = () => {
       </div>
 
       <div className="bg-chrome-zinc-950/40 border border-chrome-zinc-800/80 rounded-2xl p-6 flex flex-col space-y-4 select-none">
-        <h4 className="text-xs font-bold uppercase tracking-widest text-chrome-zinc-500">Supported formats</h4>
+        <h4 className="text-xs font-bold uppercase tracking-widest text-chrome-zinc-500">{getString('import_supported_formats_title')}</h4>
         <ul className="text-sm text-chrome-zinc-400 space-y-2 list-disc pl-5 leading-normal">
           <li><strong>Google Takeout:</strong> CSV export containing subscriptions list.</li>
           <li><strong>Flow Mobile & Desktop:</strong> Upload exported Master Backups (.zip containing app_data.json) or raw database exports.</li>
-          <li><strong>NewPipe & LibreTube:</strong> Standard exported JSON backups.</li>
+          <li><strong>NewPipe & LibreTube:</strong> {getString('onboarding_standard_exported_json_backups')}</li>
           <li><strong>Standard OPML / XML:</strong> Feed schemas exported from FreeTube, RSS readers, or other players.</li>
         </ul>
       </div>

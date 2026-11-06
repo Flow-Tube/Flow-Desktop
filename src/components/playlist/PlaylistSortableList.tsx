@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useMemo, type ReactNode } from "react";
 import {
   DndContext,
@@ -91,7 +92,7 @@ function PlaylistVideoRows({
   if (displayVideos.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-chrome-neutral-800 py-20 text-center">
-        <p className="text-sm font-medium text-chrome-neutral-400">This playlist has no videos yet.</p>
+        <p className="text-sm font-medium text-chrome-neutral-400">{getString('playlist_this_playlist_has_no_videos_yet')}</p>
       </div>
     );
   }

@@ -307,7 +307,7 @@ export function PlaylistCard({
           <button
             type="button"
             onClick={openMenuFromDots}
-            aria-label="Open playlist actions"
+            aria-label={getString('video_open_playlist_actions')}
             className="mt-0.5 rounded-full p-1 text-chrome-zinc-500 opacity-0 transition-all duration-150 hover:bg-chrome-zinc-800 hover:text-chrome-zinc-200 group-hover:opacity-100"
           >
             <MoreVertical size={18} />

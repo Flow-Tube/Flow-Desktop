@@ -74,7 +74,7 @@ export const SubtitleCustomizer: React.FC = () => {
       {/* Font Size Slider */}
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
-          <span>Font Size</span>
+          <span>{getString('settings_font_size')}</span>
           <span className="text-chrome-red-400 font-mono">{subtitleStyle.fontScale}%</span>
         </div>
         <input
@@ -91,7 +91,7 @@ export const SubtitleCustomizer: React.FC = () => {
       {/* Position Slider */}
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
-          <span>Bottom Position</span>
+          <span>{getString('player_bottom_position')}</span>
           <span className="text-chrome-red-400 font-mono">{subtitleStyle.bottomOffset}%</span>
         </div>
         <input
@@ -108,7 +108,7 @@ export const SubtitleCustomizer: React.FC = () => {
 
       {/* Text Colors Grid */}
       <div className="flex flex-col gap-2">
-        <div className="text-xs font-semibold text-chrome-zinc-300">Text Color</div>
+        <div className="text-xs font-semibold text-chrome-zinc-300">{getString('player_text_color')}</div>
         <div className="flex flex-wrap gap-2.5">
           {textColors.map((color) => {
             const isSelected = subtitleStyle.textColor.toLowerCase() === color.toLowerCase();
@@ -131,7 +131,7 @@ export const SubtitleCustomizer: React.FC = () => {
 
       {/* Background Colors Grid */}
       <div className="flex flex-col gap-2">
-        <div className="text-xs font-semibold text-chrome-zinc-300">Background Color</div>
+        <div className="text-xs font-semibold text-chrome-zinc-300">{getString('player_background_color')}</div>
         <div className="flex flex-wrap gap-2.5">
           {backgroundColors.map((color) => {
             const isSelected = subtitleStyle.backgroundColor.toLowerCase() === color.toLowerCase();
@@ -155,7 +155,7 @@ export const SubtitleCustomizer: React.FC = () => {
       {/* Background Opacity Slider */}
       <div className="flex flex-col gap-1.5">
         <div className="flex justify-between items-center text-xs font-semibold text-chrome-zinc-300">
-          <span>Background Opacity</span>
+          <span>{getString('player_background_opacity')}</span>
           <span className="text-chrome-red-400 font-mono">
             {Math.round(subtitleStyle.backgroundOpacity * 100)}%
           </span>
@@ -173,7 +173,7 @@ export const SubtitleCustomizer: React.FC = () => {
 
       {/* Bold Text Switch Row */}
       <div className="flex justify-between items-center py-1">
-        <span className="text-xs font-semibold text-chrome-zinc-300">Bold Text</span>
+        <span className="text-xs font-semibold text-chrome-zinc-300">{getString('player_bold_text')}</span>
         <button
           type="button"
           onClick={() => handleUpdate({ isBold: !subtitleStyle.isBold })}

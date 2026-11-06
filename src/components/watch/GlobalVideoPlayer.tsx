@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GripHorizontal, Maximize2, X } from "lucide-react";
 import { useMiniPlayerDrag } from "../../lib/useMiniPlayerDrag";
@@ -338,7 +339,7 @@ export function GlobalVideoPlayer() {
             >
               <button
                 type="button"
-                aria-label="Expand video"
+                aria-label={getString('player_expand_video')}
                 onClick={expandFromFloating}
                 className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
               >
@@ -346,7 +347,7 @@ export function GlobalVideoPlayer() {
               </button>
               <button
                 type="button"
-                aria-label="Close video"
+                aria-label={getString('player_close_video')}
                 onClick={dismissVideoPlayer}
                 className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
               >

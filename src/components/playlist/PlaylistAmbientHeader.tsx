@@ -200,7 +200,7 @@ export function PlaylistAmbientHeader({
               )}
             </IconButton>
             <IconButton
-              aria-label="Playlist menu"
+              aria-label={getString('playlist_playlist_menu')}
               onClick={toggleMenu}
               disabled={!hasMenuItems}
             >
@@ -217,14 +217,14 @@ export function PlaylistAmbientHeader({
               {canAddToQueue && (
                 <PlaylistMenuItem
                   icon={<ListPlus size={16} />}
-                  label="Add to queue"
+                  label={getString('music_add_to_queue')}
                   onClick={() => runAction(onAddToQueue)}
                 />
               )}
               {canCopyLink && (
                 <PlaylistMenuItem
                   icon={<Link2 size={16} />}
-                  label="Copy link"
+                  label={getString('shorts_menu_copy_link')}
                   onClick={() => runAction(onCopyLink)}
                 />
               )}
@@ -234,7 +234,7 @@ export function PlaylistAmbientHeader({
               {canSave && (
                 <PlaylistMenuItem
                   icon={<Plus size={16} />}
-                  label="Save to library"
+                  label={getString('shorts_menu_save_to_library')}
                   onClick={() => runAction(onSaveToLibrary)}
                 />
               )}

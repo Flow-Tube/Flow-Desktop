@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useState, type MouseEvent } from "react";
 import { Check, RotateCcw } from "lucide-react";
 import { Select } from "../ui/Select";
@@ -12,10 +13,10 @@ const PRESET_COLORS = [
 ];
 
 const ACTION_OPTIONS: { value: SponsorBlockAction; label: string }[] = [
-  { value: "skip", label: "Auto-skip" },
-  { value: "mute", label: "Mute audio" },
-  { value: "notify", label: "Show skip button" },
-  { value: "ignore", label: "Ignore" },
+  { value: "skip", label: getString('sponsorblock_auto_skip') },
+  { value: "mute", label: getString('sponsorblock_mute_audio') },
+  { value: "notify", label: getString('sponsorblock_show_skip_button') },
+  { value: "ignore", label: getString('sponsorblock_ignore') },
 ];
 
 export interface SponsorBlockCategoryRowProps {

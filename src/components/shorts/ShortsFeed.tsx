@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
@@ -244,14 +245,14 @@ export function ShortsFeed() {
 
       <div className="absolute right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-3">
         <NavButton
-          ariaLabel="Previous Short"
+          ariaLabel={getString('shorts_previous_short')}
           disabled={activeIndex <= 0}
           onClick={() => scrollToIndex(activeIndex - 1)}
         >
           <ChevronUp className="h-5 w-5" />
         </NavButton>
         <NavButton
-          ariaLabel="Next Short"
+          ariaLabel={getString('shorts_next_short')}
           disabled={activeIndex >= items.length - 1}
           onClick={() => scrollToIndex(activeIndex + 1)}
         >

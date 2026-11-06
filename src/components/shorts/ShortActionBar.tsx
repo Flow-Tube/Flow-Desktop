@@ -58,11 +58,11 @@ export function ShortActionBar({
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   const likeCountText = rydData
     ? formatCount(rydData.likes)
-    : formatCount(short.likeCountText ?? details?.likeCountText) || "Like";
+    : formatCount(short.likeCountText ?? details?.likeCountText) || getString('like');
   const dislikeCountText = rydData ? formatCount(rydData.dislikes) : "Dislike";
-  const resolvedCommentCountText = formatCount(commentCountText ?? short.commentCountText) || "Comments";
+  const resolvedCommentCountText = formatCount(commentCountText ?? short.commentCountText) || getString('settings_comments');
   const originalTitle = useOriginalTitle(short.id);
-  const resolvedTitle = originalTitle || details?.title?.trim() || short.title || "Short";
+  const resolvedTitle = originalTitle || details?.title?.trim() || short.title || getString('shorts_short');
   const resolvedChannelName = details?.channelName?.trim() || short.channelName;
   const resolvedChannelId = details?.channelId ?? short.channelId ?? null;
   const resolvedThumbnailUrl = details?.thumbnailUrl ?? short.thumbnailUrl;
@@ -205,27 +205,27 @@ export function ShortActionBar({
   return (
     <motion.div layout className="mb-4 flex w-[260px] flex-col items-start gap-5 lg:w-[280px]">
       <ActionButton
-        ariaLabel="Like"
+        ariaLabel={getString('like')}
         active={state === "liked"}
         countText={likeCountText}
         onClick={like}
         icon={<ThumbsUp className="h-6 w-6" fill={state === "liked" ? "currentColor" : "none"} />}
       />
       <ActionButton
-        ariaLabel="Dislike"
+        ariaLabel={getString('watch_dislike')}
         active={state === "disliked"}
         countText={dislikeCountText}
         onClick={dislike}
         icon={<ThumbsDown className="h-6 w-6" fill={state === "disliked" ? "currentColor" : "none"} />}
       />
       <ActionButton
-        ariaLabel="Comments"
+        ariaLabel={getString('settings_comments')}
         countText={resolvedCommentCountText}
         onClick={() => onRequestPanel("comments")}
         icon={<MessageCircle className="h-6 w-6" />}
       />
       <ActionButton
-        ariaLabel="Share"
+        ariaLabel={getString('share')}
         countText="Share"
         onClick={shareShort}
         icon={<Share2 className="h-6 w-6" />}
@@ -233,7 +233,7 @@ export function ShortActionBar({
 
       <div className="relative">
         <ActionButton
-          ariaLabel="More options"
+          ariaLabel={getString('more_options')}
           active={menuOpen}
           countText="More"
           onClick={() => setMenuOpen((open) => !open)}

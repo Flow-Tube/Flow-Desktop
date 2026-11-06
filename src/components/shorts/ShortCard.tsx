@@ -53,7 +53,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
   );
   const cardRef = useRef<HTMLDivElement>(null);
   const originalTitle = useOriginalTitle(short.id, cardRef);
-  const title = originalTitle || short.title?.trim() || "Short";
+  const title = originalTitle || short.title?.trim() || getString('shorts_short');
   const video = useMemo<VideoSummary>(
     () => ({
       id: short.id,

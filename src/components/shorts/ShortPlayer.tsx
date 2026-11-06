@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useEffect, useState, type CSSProperties } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Volume1, Volume2, VolumeX } from "lucide-react";
@@ -175,7 +176,7 @@ export function ShortPlayer({
 
             {active && unavailable && (
               <div className="pointer-events-none absolute inset-0 grid place-items-center bg-chrome-black/40">
-                <p className="text-sm text-chrome-white/70">Skipping unavailable Short...</p>
+                <p className="text-sm text-chrome-white/70">{getString('shorts_skipping_unavailable_short')}</p>
               </div>
             )}
 
@@ -197,7 +198,7 @@ export function ShortPlayer({
                 </button>
                 <div className="w-0 overflow-hidden opacity-0 transition-all group-hover/volume:w-24 group-hover/volume:opacity-100">
                   <Slider
-                    aria-label="Volume"
+                    aria-label={getString('music_volume')}
                     min={0}
                     max={1}
                     step={0.01}

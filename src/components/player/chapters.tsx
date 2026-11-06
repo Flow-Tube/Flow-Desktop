@@ -237,7 +237,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
         {/* Transcript Language Selector */}
         {activeTab === "transcript" && captions && captions.length > 1 && (
           <div className="px-4 py-2 border-b border-chrome-white/5 bg-chrome-white/5 flex items-center justify-between shrink-0">
-            <span className="text-xs font-semibold text-chrome-zinc-400">Language</span>
+            <span className="text-xs font-semibold text-chrome-zinc-400">{getString('player_language')}</span>
             <Select
               value={selectedCaptionId}
               onChange={setSelectedCaptionId}
@@ -320,7 +320,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
                     <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 pr-1">
                       <button
                         type="button"
-                        title="Loop Chapter"
+                        title={getString('player_loop_chapter')}
                         onClick={(e) => handleLoop(e, chapter)}
                         className="grid h-8 w-8 place-items-center rounded-full text-chrome-white/80 hover:bg-chrome-white/10 hover:text-chrome-white transition-colors cursor-pointer"
                       >
@@ -328,7 +328,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
                       </button>
                       <button
                         type="button"
-                        title="Share Chapter Link"
+                        title={getString('player_share_chapter_link')}
                         onClick={(e) => handleShare(e, chapter)}
                         className="grid h-8 w-8 place-items-center rounded-full text-chrome-white/80 hover:bg-chrome-white/10 hover:text-chrome-white transition-colors cursor-pointer"
                       >
@@ -344,7 +344,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
               {loadingTranscript && (
                 <div className="flex flex-col items-center justify-center py-16 text-chrome-zinc-500 gap-3">
                   <Loader2 className="animate-spin text-primary" size={24} />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-chrome-zinc-400">Loading transcript...</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-chrome-zinc-400">{getString('player_loading_transcript')}</span>
                 </div>
               )}
               {transcriptError && (
@@ -393,7 +393,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
             className="flex items-center gap-1.5 px-4 py-2 bg-chrome-white hover:bg-chrome-zinc-100 text-chrome-black font-bold text-xs rounded-full transition-all duration-150 cursor-pointer shadow-lg active:scale-95 whitespace-nowrap"
           >
             <Repeat size={12} className="rotate-180 text-chrome-black" />
-            <span>Sync to video time</span>
+            <span>{getString('player_sync_to_video_time')}</span>
           </button>
         </div>
       </div>

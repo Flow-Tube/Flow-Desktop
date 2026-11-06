@@ -645,7 +645,7 @@ export function ShortVideoSurface({
         <div className="absolute left-4 top-4 z-30 flex gap-2">
           <button
             type="button"
-            aria-label="Short settings"
+            aria-label={getString('shorts_short_settings')}
             onClick={(event) => {
               event.stopPropagation();
               setSettingsOpen((value) => !value);
@@ -661,7 +661,7 @@ export function ShortVideoSurface({
           {captions.length > 0 && (
             <button
               type="button"
-              aria-label="Short captions"
+              aria-label={getString('shorts_short_captions')}
               onClick={(event) => {
                 event.stopPropagation();
                 setSettingsOpen(true);
@@ -702,19 +702,19 @@ export function ShortVideoSurface({
             <div className="space-y-1">
               <SettingsRow
                 icon={<Gauge size={18} />}
-                label="Playback speed"
+                label={getString('player_menu_speed')}
                 value={playbackRate === 1 ? "Normal" : `${playbackRate}x`}
                 onClick={() => setSettingsPane("speed")}
               />
               <SettingsRow
                 icon={<Monitor size={18} />}
-                label="Quality"
+                label={getString('player_menu_quality')}
                 value={selectedQualityLabel}
                 onClick={() => setSettingsPane("quality")}
               />
               <SettingsRow
                 icon={<Captions size={18} />}
-                label="Subtitles/CC"
+                label={getString('player_menu_subtitles')}
                 value={selectedCaption ? selectedCaption.label : "Off"}
                 onClick={() => setSettingsPane("captions")}
               />
@@ -726,11 +726,11 @@ export function ShortVideoSurface({
               {speedSliderEnabled && (
                 <div className="rounded-md px-3 py-3 text-sm text-chrome-zinc-100">
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold text-chrome-zinc-300">
-                    <span>Speed</span>
+                    <span>{getString('player_menu_speed_label')}</span>
                     <span className="font-mono text-primary">{playbackRate}x</span>
                   </div>
                   <input
-                    aria-label="Playback speed"
+                    aria-label={getString('player_menu_speed')}
                     type="range"
                     min={0.25}
                     max={4}
@@ -759,7 +759,7 @@ export function ShortVideoSurface({
             <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
               <MenuChoice
                 checked={selectedQualityId === "auto"}
-                label="Auto"
+                label={getString('player_menu_quality_auto')}
                 onClick={() => {
                   onSelectQuality("auto");
                   setSettingsPane("root");
@@ -789,7 +789,7 @@ export function ShortVideoSurface({
             <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
               <MenuChoice
                 checked={selectedCaptionId === "off"}
-                label="Off"
+                label={getString('subscription_notifications_off')}
                 onClick={() => {
                   setSelectedCaptionId("off");
                   setSettingsPane("root");
@@ -826,7 +826,7 @@ export function ShortVideoSurface({
       {userPaused && (
         <button
           type="button"
-          aria-label="Play"
+          aria-label={getString('download_play')}
           onClick={togglePlayback}
           className="absolute inset-0 z-20 grid place-items-center bg-chrome-black/10 text-chrome-white"
         >
@@ -842,7 +842,7 @@ export function ShortVideoSurface({
             duration={duration}
             onSeek={seekTo}
             variant="edge"
-            ariaLabel="Seek Short"
+            ariaLabel={getString('shorts_seek_short')}
           />
         </div>
       )}
@@ -863,7 +863,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<PictureInPicture2 size={20} />}
-            label="Miniplayer"
+            label={getString('player_menu_miniplayer')}
             onClick={() => {
               togglePictureInPicture();
               setContextMenu(null);
@@ -871,7 +871,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Link size={20} />}
-            label="Copy video URL"
+            label={getString('player_menu_copy_url')}
             onClick={() => {
               void copyText(getCurrentUrl(false)).then((copied) => showCopied(getString(copied ? "player_video_url_copied" : "player_url_copy_failed")));
               setContextMenu(null);
@@ -879,7 +879,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Link size={20} />}
-            label="Copy video URL at current time"
+            label={getString('player_menu_copy_url_at_time')}
             onClick={() => {
               void copyText(getCurrentUrl(true)).then((copied) => showCopied(getString(copied ? "player_timed_url_copied" : "player_url_copy_failed")));
               setContextMenu(null);
@@ -887,7 +887,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Bug size={20} />}
-            label="Copy debug info"
+            label={getString('player_menu_copy_debug')}
             onClick={() => {
               void copyDebugInfo();
               setContextMenu(null);
@@ -895,7 +895,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Info size={20} />}
-            label="Stats for nerds"
+            label={getString('player_menu_stats')}
             onClick={() => {
               setStatsVisible((value) => !value);
               setContextMenu(null);

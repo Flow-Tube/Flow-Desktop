@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import React, { useEffect, useRef } from "react";
 import { FastForward, Pause, Play, Rewind, SkipBack, SkipForward } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
@@ -123,7 +124,7 @@ export const MiniPlayerControls: React.FC<MiniPlayerControlsProps> = ({
         {/* Transport row */}
         <div className="mt-0.5 flex items-center justify-center gap-2">
           {showNextPrevControls && (
-            <button type="button" title="Previous" onClick={playPrevious} className={sideBtn}>
+            <button type="button" title={getString('previous')} onClick={playPrevious} className={sideBtn}>
               <SkipBack size={16} fill="currentColor" />
             </button>
           )}
@@ -160,7 +161,7 @@ export const MiniPlayerControls: React.FC<MiniPlayerControlsProps> = ({
             </button>
           )}
           {showNextPrevControls && (
-            <button type="button" title="Next" onClick={() => playNext()} className={sideBtn}>
+            <button type="button" title={getString('next')} onClick={() => playNext()} className={sideBtn}>
               <SkipForward size={16} fill="currentColor" />
             </button>
           )}

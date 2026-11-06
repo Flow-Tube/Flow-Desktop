@@ -42,7 +42,7 @@ export function ShortSidePanel({
         </div>
         <button
           type="button"
-          aria-label="Close panel"
+          aria-label={getString('shorts_close_panel')}
           onClick={onClose}
           className="grid h-8 w-8 place-items-center rounded-full text-chrome-neutral-400 transition-colors hover:bg-surface-container-highest hover:text-chrome-neutral-100"
         >
@@ -91,7 +91,7 @@ function ShortDescription({
     <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
       <div className="grid grid-cols-2 gap-2 p-4">
         <StatPill label={getString("shorts_stat_likes")} value={likes} />
-        <StatPill label="Dislikes" value={dislikes} />
+        <StatPill label={getString('shorts_dislikes')} value={dislikes} />
         <StatPill label={getString("shorts_stat_views")} value={views} />
         <StatPill label={getString("shorts_comments_title")} value={comments} />
       </div>

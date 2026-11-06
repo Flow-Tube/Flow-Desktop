@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useState } from "react";
 import { ArrowUpDown, Loader2 } from "lucide-react";
 import { useSettingsStore } from "../../store/useSettingsStore";
@@ -98,7 +99,7 @@ export function SponsorBlockSubmitDialog({
         userId,
         serverUrl,
       });
-      showToast({ variant: "success", message: "Segment submitted to SponsorBlock" });
+      showToast({ variant: "success", message: getString('player_segment_submitted_to_sponsorblock') });
       onClose();
     } catch (submitError) {
       setError(getBackendErrorMessage(submitError));
@@ -121,12 +122,12 @@ export function SponsorBlockSubmitDialog({
       >
         <div className="mb-5 flex items-center gap-2.5">
           <SponsorBlockIcon className="h-5 w-5 text-[var(--color-primary)]" />
-          <h2 className="text-lg font-semibold text-chrome-neutral-100">Submit segment</h2>
+          <h2 className="text-lg font-semibold text-chrome-neutral-100">{getString('player_submit_segment')}</h2>
         </div>
 
         <div className="flex items-end gap-2">
           <label className="flex-1 space-y-1.5">
-            <span className="block text-xs font-medium text-chrome-neutral-400">Start</span>
+            <span className="block text-xs font-medium text-chrome-neutral-400">{getString('sleep_timer_start')}</span>
             <TextInput
               value={startTime}
               onChange={(value) => {
@@ -140,13 +141,13 @@ export function SponsorBlockSubmitDialog({
           <button
             type="button"
             onClick={swapTimes}
-            title="Swap start and end"
+            title={getString('player_swap_start_and_end')}
             className="mb-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-chrome-neutral-800 text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200"
           >
             <ArrowUpDown size={16} />
           </button>
           <label className="flex-1 space-y-1.5">
-            <span className="block text-xs font-medium text-chrome-neutral-400">End</span>
+            <span className="block text-xs font-medium text-chrome-neutral-400">{getString('player_end')}</span>
             <TextInput
               value={endTime}
               onChange={(value) => {
@@ -160,7 +161,7 @@ export function SponsorBlockSubmitDialog({
         </div>
 
         <div className="mt-4 space-y-1.5">
-          <span className="block text-xs font-medium text-chrome-neutral-400">Category</span>
+          <span className="block text-xs font-medium text-chrome-neutral-400">{getString('player_category')}</span>
           <Select value={category} onChange={setCategory} options={SB_SUBMIT_CATEGORIES} className="w-full" />
         </div>
 

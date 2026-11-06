@@ -139,7 +139,7 @@ export const ImportData: React.FC = () => {
 
   const parseFreeTubeWatchHistory = (text: string): WatchHistoryRecord[] => {
     return text.split("\n").filter(l => l.trim()).map(line => {
-      try { const item = JSON.parse(line); if (!item.videoId) return null; return { videoId: item.videoId, title: item.title || "FreeTube Video", channelName: item.author || "Creator", watchDate: item.timeWatched ? new Date(item.timeWatched).toISOString() : new Date().toISOString(), watchDurationSeconds: item.watchProgress ? Math.round((item.lengthSeconds || 0) * item.watchProgress) : 0, totalDurationSeconds: item.lengthSeconds || 0 }; } catch { return null; }
+      try { const item = JSON.parse(line); if (!item.videoId) return null; return { videoId: item.videoId, title: item.title || "FreeTube Video", channelName: item.author || getString('settings_creator'), watchDate: item.timeWatched ? new Date(item.timeWatched).toISOString() : new Date().toISOString(), watchDurationSeconds: item.watchProgress ? Math.round((item.lengthSeconds || 0) * item.watchProgress) : 0, totalDurationSeconds: item.lengthSeconds || 0 }; } catch { return null; }
     }).filter(Boolean) as WatchHistoryRecord[];
   };
 
@@ -315,7 +315,7 @@ export const ImportData: React.FC = () => {
           const crossRefs = backupData.playlistVideos || []; const vids = backupData.videos || [];
           const parsed: LocalPlaylist[] = backupData.playlists.map((pl: any) => {
             const refs = crossRefs.filter((r: any) => r.playlistId === pl.id).sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
-            const tracks: VideoSummary[] = refs.map((ref: any) => ({ ref, vid: vids.find((v: any) => v.id === ref.videoId) })).filter(({ vid }: any) => vid).map(({ ref, vid }: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || "Unknown", thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track", addedAtInPlaylist: ref.addedAt > 0 ? ref.addedAt : null }));
+            const tracks: VideoSummary[] = refs.map((ref: any) => ({ ref, vid: vids.find((v: any) => v.id === ref.videoId) })).filter(({ vid }: any) => vid).map(({ ref, vid }: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || getString('download_size_unknown'), thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track", addedAtInPlaylist: ref.addedAt > 0 ? ref.addedAt : null }));
             return { id: pl.id || `imported-${Date.now()}-${Math.random()}`, name: pl.name || "Imported Playlist", description: pl.description || "Imported from backup", tracks };
           });
           const merged = [...existing];
@@ -326,7 +326,7 @@ export const ImportData: React.FC = () => {
 
         if (importHistory && !restoredViaCollections) {
           let ph: WatchHistoryRecord[] = [];
-          if (isJson && backupData) { if (backupData.isFreeTubeHistory) ph = parseFreeTubeWatchHistory(backupData.rawText); else if (backupData.viewHistory && Array.isArray(backupData.viewHistory)) ph = backupData.viewHistory.map((item: any) => ({ videoId: item.videoId, title: item.title || "Watched Video", channelName: item.channelName || "Unknown", watchDate: typeof item.timestamp === "number" ? new Date(item.timestamp).toISOString() : new Date().toISOString(), watchDurationSeconds: item.position ? Math.round(item.position / 1000) : 0, totalDurationSeconds: item.duration ? Math.round(item.duration / 1000) : 0 })); else ph = parseJsonWatchHistory(backupData); }
+          if (isJson && backupData) { if (backupData.isFreeTubeHistory) ph = parseFreeTubeWatchHistory(backupData.rawText); else if (backupData.viewHistory && Array.isArray(backupData.viewHistory)) ph = backupData.viewHistory.map((item: any) => ({ videoId: item.videoId, title: item.title || "Watched Video", channelName: item.channelName || getString('download_size_unknown'), watchDate: typeof item.timestamp === "number" ? new Date(item.timestamp).toISOString() : new Date().toISOString(), watchDurationSeconds: item.position ? Math.round(item.position / 1000) : 0, totalDurationSeconds: item.duration ? Math.round(item.duration / 1000) : 0 })); else ph = parseJsonWatchHistory(backupData); }
           else if (isHtml) ph = parseHtmlWatchHistory(text);
           if (ph.length > 0) {
             setStatusMessage(getString("import_importing_history", ph.length));

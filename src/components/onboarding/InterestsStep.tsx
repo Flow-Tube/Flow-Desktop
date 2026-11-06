@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import React from "react";
 import { TOPIC_CATEGORIES } from "./constants";
 
@@ -24,7 +25,7 @@ export const InterestsStep: React.FC<InterestsStepProps> = ({
           {remaining > 0 ? (
             <span className="text-primary font-medium">{remaining} left.</span>
           ) : (
-            <span className="text-chrome-emerald-400 font-medium">Ready to go.</span>
+            <span className="text-chrome-emerald-400 font-medium">{getString('onboarding_ready_to_go')}</span>
           )}
         </p>
       </div>

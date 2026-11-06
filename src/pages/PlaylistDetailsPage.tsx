@@ -1,3 +1,4 @@
+import { getString } from "../lib/i18n/index";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -141,9 +142,9 @@ export function PlaylistDetailsPage({
   const handleCopyLink = async () => {
     if (!meta) return;
     if (await copyText(youtubePlaylistUrl(meta.id))) {
-      showToast({ variant: "success", message: "Playlist link copied" });
+      showToast({ variant: "success", message: getString('playlist_playlist_link_copied') });
     } else {
-      showToast({ variant: "error", message: "Could not copy link" });
+      showToast({ variant: "error", message: getString('playlist_could_not_copy_link') });
     }
   };
 
@@ -169,7 +170,7 @@ export function PlaylistDetailsPage({
       });
     } catch (saveError) {
       console.error("Failed to save playlist to library", saveError);
-      showToast({ variant: "error", message: "Could not save playlist" });
+      showToast({ variant: "error", message: getString('playlist_could_not_save_playlist') });
     }
   };
 
@@ -190,7 +191,7 @@ export function PlaylistDetailsPage({
       navigate("/playlists");
     } catch (removeError) {
       console.error("Failed to remove playlist from library", removeError);
-      showToast({ variant: "error", message: "Could not update library" });
+      showToast({ variant: "error", message: getString('playlist_could_not_update_library') });
     }
   };
 
@@ -221,7 +222,7 @@ export function PlaylistDetailsPage({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin text-[var(--color-primary)]" size={36} />
-        <p className="text-sm font-medium text-chrome-neutral-500">Loading playlist...</p>
+        <p className="text-sm font-medium text-chrome-neutral-500">{getString('playlist_loading_playlist')}</p>
       </div>
     );
   }

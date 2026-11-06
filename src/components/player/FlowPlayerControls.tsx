@@ -243,7 +243,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     const firstChapter = sorted[0];
     if (firstChapter && firstChapter.startSeconds > 0) {
       sorted.unshift({
-        title: "Intro",
+        title: getString('player_intro'),
         startSeconds: 0,
         endSeconds: firstChapter.startSeconds,
       });
@@ -647,7 +647,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
             <div className="flex min-w-0 items-center gap-1 sm:gap-2">
               <button
                 type="button"
-                title="Previous"
+                title={getString('previous')}
                 onClick={playPrevious}
                 className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
               >
@@ -667,7 +667,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               </button>
               <button
                 type="button"
-                title="Next"
+                title={getString('next')}
                 onClick={() => playNext()}
                 className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
               >
@@ -677,7 +677,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               <div ref={volumeWheelRef} className="group/volume hidden items-center sm:flex bg-chrome-black/20 rounded-full hover:pr-2">
                 <button
                   type="button"
-                  title="Mute"
+                  title={getString('music_mute')}
                   onClick={() => setMuted((value) => !value)}
                   className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
                 >
@@ -691,7 +691,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 </button>
                 <div className="w-0 overflow-hidden opacity-0 transition-all group-hover/volume:w-20 group-hover/volume:opacity-100">
                   <Slider
-                    aria-label="Volume"
+                    aria-label={getString('music_volume')}
                     min={0}
                     max={1}
                     step={0.01}
@@ -716,7 +716,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                 {isLive && (
                   <button
                     type="button"
-                    title="Go to live"
+                    title={getString('player_go_to_live')}
                     onClick={seekToLiveEdge}
                     className="flex items-center gap-1 whitespace-nowrap rounded-full bg-chrome-black/20 px-2 py-1 text-xs font-bold uppercase tracking-wide text-chrome-white hover:bg-chrome-white/10"
                   >
@@ -775,8 +775,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               {sbSubmitEnabled && currentVideo && (
                 <button
                   type="button"
-                  title="Submit SponsorBlock segment"
-                  aria-label="Submit SponsorBlock segment"
+                  title={getString('player_submit_sponsorblock_segment')}
+                  aria-label={getString('player_submit_sponsorblock_segment')}
                   onClick={() => {
                     setSubmitAtSeconds(usePlayerStore.getState().currentTime);
                     setSubmitDialogOpen(true);
@@ -849,7 +849,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               {showPipButton && (
                 <button
                   type="button"
-                  title="Picture in picture"
+                  title={getString('player_picture_in_picture')}
                   onClick={togglePictureInPicture}
                   className={cx(
                     "hidden h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10 sm:grid",
@@ -862,7 +862,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               {!isFullscreen && (
                 <button
                   type="button"
-                  title="Theater mode"
+                  title={getString('player_theater_mode')}
                   onClick={() => setIsTheaterMode(!isTheaterMode)}
                   className={cx(
                     "grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10",
@@ -874,7 +874,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
               )}
               <button
                 type="button"
-                title="Fullscreen"
+                title={getString('player_fullscreen')}
                 onClick={toggleFullscreen}
                 className="grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10"
               >

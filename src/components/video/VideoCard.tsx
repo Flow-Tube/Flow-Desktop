@@ -533,7 +533,7 @@ function VideoCardComponent({
         <h3 className="font-bold text-center text-chrome-zinc-100 line-clamp-1 group-hover:text-primary transition-colors">
           {video.title}
         </h3>
-        <p className="text-xs text-chrome-zinc-400 mb-4">{video.publishedText || "Channel"}</p>
+        <p className="text-xs text-chrome-zinc-400 mb-4">{video.publishedText || getString('search_role_channel')}</p>
         
         <Button
           variant={subStatus ? "secondary" : "primary"}
@@ -542,9 +542,9 @@ function VideoCardComponent({
           onClick={handleSubscribeToggle}
         >
           {subStatus ? (
-            <span className="flex items-center gap-1.5"><Check size={14} /> Subscribed</span>
+            <span className="flex items-center gap-1.5"><Check size={14} /> {getString('subscribed')}</span>
           ) : (
-            <span className="flex items-center gap-1.5"><Plus size={14} /> Subscribe</span>
+            <span className="flex items-center gap-1.5"><Plus size={14} /> {getString('search_subscribe')}</span>
           )}
         </Button>
       </div>
@@ -800,8 +800,8 @@ function VideoCardComponent({
               <button
                 type="button"
                 onClick={handleRemoveFromHistory}
-                title="Remove from history"
-                aria-label="Remove from history"
+                title={getString('music_remove_from_history')}
+                aria-label={getString('music_remove_from_history')}
                 className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors duration-200 ease-out hover:bg-chrome-red-950/50 hover:text-chrome-red-300 group-hover:opacity-100"
               >
                 <Trash2 size={15} />

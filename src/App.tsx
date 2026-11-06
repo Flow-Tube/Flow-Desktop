@@ -7,6 +7,7 @@ import { useAppSettingsStore } from "./store/useAppSettingsStore";
 import { useSettingsStore } from "./store/useSettingsStore";
 import { useAlbumLibraryStore } from "./store/useAlbumLibraryStore";
 import { useLikesStore } from "./store/useLikesStore";
+import { useNotesStore } from "./store/useNotesStore";
 import { useDownloadsLibraryStore } from "./store/useDownloadsLibraryStore";
 import { useDownloadCollectionsLibraryStore } from "./store/useDownloadCollectionsLibraryStore";
 import { useWatchLaterStore } from "./store/useWatchLaterStore";
@@ -80,6 +81,7 @@ import { DownloadActivity } from "./components/downloads/DownloadActivity";
 import { DonationPromptHost } from "./components/donations/DonationPrompt";
 import { UpdateManager } from "./components/updater/UpdateManager";
 import { ConfirmHost } from "./components/common/ConfirmHost";
+import { NoteEditorHost } from "./components/note/NoteEditorHost";
 import { ThemeController } from "./lib/useTheme";
 import { useTabHistoryShortcuts } from "./lib/tabs/useTabHistoryShortcuts";
 import { installTabPlaybackSync } from "./lib/tabs/tabPlayback";
@@ -139,6 +141,7 @@ function App() {
     void useSettingsStore.getState().loadSettings();
     void useAlbumLibraryStore.getState().load();
     void useLikesStore.getState().load();
+    void useNotesStore.getState().load();
     void useDownloadsLibraryStore.getState().load();
     void useDownloadCollectionsLibraryStore.getState().load();
     void useWatchLaterStore.getState().load();
@@ -336,6 +339,7 @@ function App() {
       <DonationPromptHost enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <UpdateManager enabled={IS_MAIN_WINDOW && location.pathname !== "/onboarding"} />
       <ProfileSwitchOverlay />
+      <NoteEditorHost />
       <ConfirmHost />
       <ToastHost />
     </div>

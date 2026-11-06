@@ -7,6 +7,7 @@ import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useNotificationStore } from "../store/useNotificationStore";
 import { useFeedActionsStore } from "../store/useFeedActionsStore";
 import { useMusicActionsStore } from "../store/useMusicActionsStore";
+import { useNotesStore } from "../store/useNotesStore";
 import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "./playlistLibrary";
 import { SAVED_SHORTS_LIBRARY_UPDATED_EVENT } from "./savedShortsLibrary";
 import { isSettingKey } from "./settings/values";
@@ -52,6 +53,7 @@ export async function refreshSyncedCollections(collections: string[]): Promise<v
     if (collections.includes("playlists")) await reloadPlaylists();
     if (collections.includes("subscribed_channels")) await useSubscriptionStore.getState().loadSubscriptions();
     if (collections.includes("subscriptions")) await useSubscriptionStore.getState().loadSubscriptionGroups();
+    if (collections.includes("notes")) await useNotesStore.getState().load();
   } catch (error) {
     console.warn("Failed to refresh local stores after sync", error);
   }

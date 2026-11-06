@@ -56,6 +56,9 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 - Notes sync with Flow for Android, over the QR code and Linked devices, and are part of backups. Notes your phone sent before this version come back on the next sync, and a device that joins later gets them from this computer.
 
+LIBRARY
+- Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note, and Note at this time in the player's settings. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
+
 MUSIC
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Instrumental songs no longer show KuGou's notice as their lyrics.

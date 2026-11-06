@@ -13,6 +13,7 @@ pub mod lyrics;
 pub mod music;
 pub mod music_brain;
 pub mod music_queue;
+pub mod notes;
 pub mod notifications;
 pub mod pip;
 pub mod process;

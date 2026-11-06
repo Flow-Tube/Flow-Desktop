@@ -28,6 +28,9 @@ export function ContentTab() {
   const [homeShortsShelf, setHomeShortsShelf] = useBoolPref(SETTINGS.HOME_SHORTS_SHELF_ENABLED, true);
   const [continueWatching, setContinueWatching] = useBoolPref(SETTINGS.CONTINUE_WATCHING_ENABLED, true);
   const [comments, setComments] = useBoolPref(SETTINGS.COMMENTS_ENABLED, true);
+  const [notes, setNotes] = useBoolPref(SETTINGS.NOTES_ENABLED, true);
+  const [channelNotes, setChannelNotes] = useBoolPref(SETTINGS.CHANNEL_NOTES_ENABLED, true);
+  const [videoNotes, setVideoNotes] = useBoolPref(SETTINGS.VIDEO_NOTES_ENABLED, true);
   const [relatedVideos, setRelatedVideos] = useBoolPref(SETTINGS.SHOW_RELATED_VIDEOS, true);
   const [liveChat, setLiveChat] = useBoolPref(SETTINGS.LIVE_CHAT_ENABLED, true);
   const [hideWatched, setHideWatched] = useBoolPref(SETTINGS.HIDE_WATCHED_VIDEOS, false);
@@ -139,6 +142,9 @@ export function ContentTab() {
 
       <SettingsGroup title={getString('settings_group_content')}>
         <SettingItem title={getString('settings_comments')} description={getString('settings_comments_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)}><ToggleSwitch checked={comments} onChange={setComments} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)} /></SettingItem>
+        <SettingItem title={getString('settings_notes')} description={getString('settings_notes_desc')}><ToggleSwitch checked={notes} onChange={setNotes} /></SettingItem>
+        <SettingItem title={getString('settings_channel_notes')} description={getString('settings_channel_notes_desc')} disabled={!notes}><ToggleSwitch checked={channelNotes} onChange={setChannelNotes} disabled={!notes} /></SettingItem>
+        <SettingItem title={getString('settings_video_notes')} description={getString('settings_video_notes_desc')} disabled={!notes}><ToggleSwitch checked={videoNotes} onChange={setVideoNotes} disabled={!notes} /></SettingItem>
         <SettingItem title={getString('settings_related_videos')} description={getString('settings_related_videos_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)}><ToggleSwitch checked={relatedVideos} onChange={setRelatedVideos} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_live_chat')} description={getString('settings_live_chat_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)}><ToggleSwitch checked={liveChat} onChange={setLiveChat} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched')} description={getString('settings_hide_watched_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)}><ToggleSwitch checked={hideWatched} onChange={setHideWatched} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_WATCHED_VIDEOS)} /></SettingItem>

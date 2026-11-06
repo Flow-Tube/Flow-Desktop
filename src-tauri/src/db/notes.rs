@@ -65,8 +65,8 @@ pub async fn all_on(conn: &mut SqliteConnection) -> Result<Vec<NoteRow>, sqlx::E
     .await
 }
 
-/// Writes a note a merge kept. The hand-made order is this device's own, so `position` stays.
-pub async fn upsert_merged(conn: &mut SqliteConnection, note: &Note) -> Result<(), sqlx::Error> {
+/// Writes a note. The hand-made order is this device's own, so `position` stays.
+pub async fn upsert(conn: &mut SqliteConnection, note: &Note) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO notes (id, target_id, kind, text, updated_at, title, channel_name, channel_id,
             thumbnail_url, duration_seconds, channel_avatar_url, channel_handle, subscriber_count_text)
@@ -101,6 +101,13 @@ pub async fn upsert_merged(conn: &mut SqliteConnection, note: &Note) -> Result<(
     .execute(conn)
     .await?;
     Ok(())
+}
+
+pub async fn get(conn: &mut SqliteConnection, id: &str) -> Result<Option<NoteRow>, sqlx::Error> {
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} WHERE id = ?")))
+        .bind(id)
+        .fetch_optional(conn)
+        .await
 }
 
 pub async fn delete(conn: &mut SqliteConnection, id: &str) -> Result<(), sqlx::Error> {

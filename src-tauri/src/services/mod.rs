@@ -4,6 +4,7 @@ pub mod home_engine;
 pub mod home_feed;
 pub mod music_service;
 pub mod music_tray;
+pub mod notes_service;
 pub mod notification_service;
 pub mod profile_interests;
 pub mod profile_service;

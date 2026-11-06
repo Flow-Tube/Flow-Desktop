@@ -10,9 +10,10 @@ import {
   Pause,
   Sliders,
   SlidersHorizontal,
+  StickyNote,
   SunDim,
 } from "lucide-react";
-import type { PlaybackRate } from "../../store/usePlayerStore";
+import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
 import type { AudioTrack, CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleCustomizer } from "./SubtitleCustomizer";
 import { useBoolPref } from "../../lib/usePreference";
@@ -21,6 +22,9 @@ import { AmbientModeIcon } from "../ui/AmbientModeIcon";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { SETTINGS } from "../../lib/settings/schema";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
+import { CurrentTimeLabel, useOpenVideoNote } from "../note/WatchNote";
+import { useNotesEnabled } from "../../lib/useNotes";
+import { useNotesStore } from "../../store/useNotesStore";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
@@ -129,6 +133,11 @@ export function PlayerSettingsMenu({
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
+  const currentVideo = usePlayerStore((s) => s.currentVideo);
+  const notesEnabled = useNotesEnabled("Video");
+  const openVideoNote = useOpenVideoNote(currentVideo);
+  const noteEditorHosted = useNotesStore((s) => s.editorHosted);
+  const canNoteVideo = notesEnabled && noteEditorHosted && !!currentVideo && !currentVideo.isLive;
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
 
@@ -293,6 +302,16 @@ export function PlayerSettingsMenu({
               () => onPaneChange("audio"),
             )}
             {settingRow(getString("sleep_timer"), <SleepTimerLabel />, <Pause size={18} />, () => onPaneChange("sleep"))}
+            {canNoteVideo &&
+              settingRow(
+                getString("note_at_current_time"),
+                open ? <CurrentTimeLabel /> : null,
+                <StickyNote size={18} />,
+                () => {
+                  onClose();
+                  openVideoNote();
+                },
+              )}
             {eqEditorHosted &&
               settingRow(
                 getString("music_equalizer"),

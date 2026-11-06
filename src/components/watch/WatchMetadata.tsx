@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ThumbsUp, ThumbsDown, Share2, Bookmark, Download, Check, WandSparkles } from "lucide-react";
 import { Button } from "../ui/Button";
 import { WatchOwner } from "./WatchOwner";
+import { WatchNoteButton } from "../note/WatchNote";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { usePlaylistModalStore } from "../../store/usePlaylistModalStore";
 import { useDownloadStore } from "../../store/useDownloadStore";
@@ -168,6 +169,7 @@ export function WatchMetadata({
             </button>
           </div>
 
+          <WatchNoteButton video={currentVideo} videoData={videoData} />
           <Button variant="tonal" onClick={() => void shareVideo()}>
             <Share2 size={18} />
             {getString("share")}

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Check } from "lucide-react";
 import { SubscribeButton } from "../ui/SubscribeButton";
+import { ChannelNote, ChannelNoteButton } from "../note/ChannelNote";
 import type { ChannelDetails } from "../../types/video";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl, upgradeChannelBannerUrl } from "../../lib/thumbnails";
@@ -59,8 +60,11 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
               avatarUrl={avatarUrl || undefined}
               size="md"
             />
+            <ChannelNoteButton channelInfo={channelInfo} />
           </div>
         </div>
+
+        <ChannelNote channelInfo={channelInfo} />
 
         {channelInfo.description && (
           <button

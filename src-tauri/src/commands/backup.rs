@@ -58,7 +58,7 @@ pub struct ImportSummary {
     pub collections: Vec<CollectionImportSummary>,
 }
 
-fn sync_err(e: SyncError) -> ErrorResponse {
+pub(crate) fn sync_err(e: SyncError) -> ErrorResponse {
     ErrorResponse {
         message: e.to_string(),
         kind: "sync".to_string(),

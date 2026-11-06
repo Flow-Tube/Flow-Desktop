@@ -67,7 +67,7 @@ pub(super) async fn apply_notes(
             // Blank is never a note; Android doesn't write one either.
             stat.skipped += 1;
         } else {
-            table::upsert_merged(tx, &note).await?;
+            table::upsert(tx, &note).await?;
             if had_row {
                 stat.updated += 1;
             } else {

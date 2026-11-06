@@ -98,6 +98,7 @@ use commands::music_queue::{
     clear_music_queue_state, get_music_resume_position, load_music_queue_state,
     save_music_queue_state, save_music_resume_position,
 };
+use commands::notes::{delete_notes, list_notes, save_note};
 use commands::notifications::{
     check_subscriptions_now, clear_notifications, delete_notification, get_notifications,
     get_unread_notification_count, mark_notifications_read,
@@ -857,6 +858,9 @@ pub fn run() {
             sync_scan_join,
             sync_respond_consent,
             sync_cancel,
+            list_notes,
+            save_note,
+            delete_notes,
             get_notifications,
             get_unread_notification_count,
             mark_notifications_read,

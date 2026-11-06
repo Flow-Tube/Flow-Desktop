@@ -14,6 +14,7 @@ import { useRelatedLane } from "../lib/useRelatedLane";
 import { useUnseenFilter } from "../lib/useUnseenFilter";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { decideWatchRouteSync } from "../lib/watchRouteSync";
+import { WatchNote } from "../components/note/WatchNote";
 import {
   WatchLayout,
   WatchMetadata,
@@ -252,7 +253,12 @@ export function Watch() {
           rydData={rydData}
         />
       }
-      description={<DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />}
+      description={
+        <>
+          <WatchNote video={currentVideo} videoData={videoDetails} />
+          <DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />
+        </>
+      }
       comments={commentsEnabled && !offlineRecord && playbackSettled ? (
         <Suspense fallback={<div className="h-32" />}>
           <CommentsSection videoId={videoId} />

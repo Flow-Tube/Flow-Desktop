@@ -18,6 +18,9 @@ import { SETTINGS_CATEGORY_LABELS, SETTINGS_INDEX, type SettingEntry, type Setti
 import { searchSettings } from '../../lib/settings/settingsSearch';
 import { useDebounce } from '../../lib/useDebounce';
 import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
+import { SETTINGS } from '../../lib/settings/schema';
+import { useAppSettingsStore } from '../../store/useAppSettingsStore';
+import { useNewSettingsStore } from '../../store/useNewSettingsStore';
 import { SearchInput } from '../ui/SearchInput';
 import { SettingsSearchResults } from './SettingsSearchResults';
 
@@ -61,6 +64,13 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
   const searching = debouncedQuery.trim().length > 0;
   const paneRef = useRef<HTMLDivElement>(null);
   usePageEnterMotion(paneRef, activeTab, true);
+
+  const newCategories = useNewSettingsStore((state) => state.categories);
+  const highlightNew = useAppSettingsStore((state) => state.values[SETTINGS.HIGHLIGHT_NEW_SETTINGS] === 'true');
+  const highlightDays = Number(useAppSettingsStore((state) => state.values[SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS]) || 7);
+  useEffect(() => {
+    useNewSettingsStore.getState().refresh(highlightNew, highlightDays);
+  }, [highlightNew, highlightDays]);
 
   const openResult = (entry: SettingEntry) => {
     setActiveTab(entry.category);
@@ -106,6 +116,9 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
           >
             {cat.icon}
             {getString(SETTINGS_CATEGORY_LABELS[cat.id])}
+            {newCategories.has(cat.id) && (
+              <span role="img" aria-label={getString('settings_new_badge')} className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+            )}
           </button>
         ))}
       </nav>

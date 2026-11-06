@@ -7,8 +7,9 @@ import { ThemeFileSection } from "../../theme/ThemeFileSection";
 import { ThemePreview } from "../../theme/ThemePreview";
 import { Button } from "../../ui/Button";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
-import { useBoolPref } from "../../../lib/usePreference";
-import { SETTINGS } from "../../../lib/settings/schema";
+import { useBoolPref, usePreference } from "../../../lib/usePreference";
+import { NEW_SETTING_DAYS, SETTINGS } from "../../../lib/settings/schema";
+import { Select } from "../../ui/Select";
 import { confirmAction } from "../../../lib/dialogs";
 import { getString } from "../../../lib/i18n/index";
 import {
@@ -35,6 +36,8 @@ export function AppearanceTab() {
   } = useTheme();
   const [editingTheme, setEditingTheme] = useState<CustomThemeDefinition | null>(null);
   const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
+  const [highlightNew, setHighlightNew] = useBoolPref(SETTINGS.HIGHLIGHT_NEW_SETTINGS, false);
+  const [highlightDays, setHighlightDays] = usePreference(SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS, "7");
   const { exportThemes, importThemes } = useThemeTransfer();
   const importInputRef = useRef<HTMLInputElement>(null);
   const usingThemeFile = themeId === THEME_FILE_ID;
@@ -118,6 +121,18 @@ export function AppearanceTab() {
           <SettingItem title={getString("settings_expressive_sliders")} description={getString("settings_expressive_sliders_desc")}>
             <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
           </SettingItem>
+          <SettingItem title={getString("settings_highlight_new")} description={getString("settings_highlight_new_desc")}>
+            <ToggleSwitch checked={highlightNew} onChange={setHighlightNew} />
+          </SettingItem>
+          {highlightNew && (
+            <SettingItem title={getString("settings_highlight_new_days")}>
+              <Select
+                value={highlightDays}
+                onChange={setHighlightDays}
+                options={NEW_SETTING_DAYS.map((days) => ({ value: days, label: getString("settings_highlight_new_days_option", days) }))}
+              />
+            </SettingItem>
+          )}
         </SettingsGroup>
       </div>
 

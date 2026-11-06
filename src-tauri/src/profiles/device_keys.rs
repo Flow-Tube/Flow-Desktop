@@ -5,7 +5,7 @@
 
 /// Device settings defined in `src/lib/settings/schema.ts` (`SETTING_SCOPES`); a test keeps the
 /// two lists equal.
-pub const SCHEMA_DEVICE_KEYS: [&str; 44] = [
+pub const SCHEMA_DEVICE_KEYS: [&str; 46] = [
     "allow_volume_boost",
     "player_volume",
     "player_muted",
@@ -28,6 +28,8 @@ pub const SCHEMA_DEVICE_KEYS: [&str; 44] = [
     "buffer_for_playback_after_rebuffer_ms",
     "media_cache_size_mb",
     "remote_signature_fallback",
+    "highlight_new_settings",
+    "highlight_new_settings_days",
     "proxy_enabled",
     "proxy_type",
     "proxy_host",

@@ -1,6 +1,7 @@
 import { getHeavyRotation, searchMusicTyped } from './api/music';
 import { getScrobbleSimilarTracks, type SimilarTrack } from './api/scrobble';
 import { audioMusicOnly, songIdOf } from './musicRecall';
+import { foldForSearch } from './musicVideoMatching';
 import type { SongItem, YTItem } from '../types/music';
 
 const SEEDS = 3;
@@ -11,7 +12,7 @@ const TTL_MS = 6 * 60 * 60 * 1000;
 
 /** Case, accents and spacing ignored, so "Beyoncé" matches "BEYONCE". */
 export function matchKey(text: string): string {
-  return text.trim().toLowerCase().normalize('NFD').replace(/\p{Mn}+/gu, '').replace(/\s+/g, ' ');
+  return foldForSearch(text).trim().replace(/\s+/g, ' ');
 }
 
 const pairKey = (track: SimilarTrack) => `${matchKey(track.artist)} ${matchKey(track.title)}`;

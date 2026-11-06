@@ -79,16 +79,6 @@ export class SponsorBlockTracker {
     this.dismissed.add(uuid);
   }
 
-  /** SponsorBlock came back on inside a segment: that segment is left alone, so playback doesn't jump. */
-  leaveAlone(position: number, segments: SponsorBlockSegment[]): void {
-    for (const { UUID, segment } of segments) {
-      if (position >= segment[0] && position < segment[1]) {
-        this.handled.add(UUID);
-        this.dismissed.add(UUID);
-      }
-    }
-  }
-
   tick(position: number, segments: SponsorBlockSegment[], actions: Actions, ended: boolean): SponsorBlockTick {
     const result: SponsorBlockTick = { skip: null, mute: null, muteStarted: null, notify: null, manual: null };
     for (const { UUID } of segmentsToRearm(segments, position)) {

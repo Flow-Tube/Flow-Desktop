@@ -3,7 +3,6 @@ import { StickyNote } from "lucide-react";
 import { Button } from "../ui/Button";
 import { NoteCard } from "./NoteCard";
 import { getString } from "../../lib/i18n/index";
-import { formatTime } from "../../lib/musicFormat";
 import { seekToTime } from "../../lib/playerSeek";
 import { useNote, useNotesEnabled } from "../../lib/useNotes";
 import { useNotesStore } from "../../store/useNotesStore";
@@ -25,7 +24,7 @@ function subjectOf(video: VideoSummary, details: VideoDetails | null): NoteSubje
 }
 
 /** Opens the editor on the playing video, with its position ready to write in unless it is live. */
-export function useOpenVideoNote(video: VideoSummary | null, details: VideoDetails | null = null): () => void {
+function useOpenVideoNote(video: VideoSummary | null, details: VideoDetails | null = null): () => void {
   return useCallback(() => {
     if (!video) return;
     const { currentTime } = usePlayerStore.getState();
@@ -36,12 +35,6 @@ export function useOpenVideoNote(video: VideoSummary | null, details: VideoDetai
       insertAtSeconds: details?.isLive || video.isLive ? undefined : currentTime,
     });
   }, [video, details]);
-}
-
-/** The position right now, for a menu row. Mounted only while that menu is open. */
-export function CurrentTimeLabel() {
-  const seconds = usePlayerStore((state) => Math.floor(state.currentTime));
-  return <span className="tabular-nums">{formatTime(seconds)}</span>;
 }
 
 interface WatchNoteProps {

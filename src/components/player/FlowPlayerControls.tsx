@@ -35,6 +35,7 @@ import { HeatmapStrip } from "./HeatmapStrip";
 import { PREVIEW_WIDTH, pickStoryboardLevel, storyboardFrameAt } from "../../lib/seekPreview";
 import { proxiedImage } from "../../lib/imageProxy";
 import { useImageProxyStore } from "../../store/useImageProxyStore";
+import { AutoplaySwitch } from "./AutoplaySwitch";
 import { PlayerSettingsMenu, qualityLabel, type SettingsPane } from "./PlayerSettingsMenu";
 import { PlayOnButton } from "../playon/PlayOnButton";
 import { PLAYER_MENU_OWNER_ATTR } from "../../lib/playerMenuDismiss";
@@ -202,12 +203,15 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     setFullscreenPanel,
     isLiveChatAvailable,
     isCommentsAvailable,
+    queue,
+    playlistContext,
   } = usePlayerStore();
 
   const showNextPrevious = usePlayerButton("nextPrevious");
   const showVolume = usePlayerButton("volume");
   const showChapters = usePlayerButton("chapters");
-  const showQueue = usePlayerButton("queue");
+  const showQueue = usePlayerButton("queue") && (queue.length > 1 || playlistContext !== null);
+  const showAutoplay = usePlayerButton("autoplay");
   const showLiveChat = usePlayerButton("liveChat");
   const showComments = usePlayerButton("comments");
   const showSponsorBlock = usePlayerButton("sponsorBlock");
@@ -878,6 +882,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <SponsorBlockIcon className="h-[18px] w-[18px]" />
                 </button>
               )}
+              {showAutoplay && <AutoplaySwitch />}
               {showQuality && (
               <button
                 type="button"

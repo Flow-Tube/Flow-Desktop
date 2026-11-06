@@ -7,7 +7,6 @@ import { appendUniqueVideos } from "../lib/playlistPages";
 import { queueWith, remoteControl } from "./useRemoteControlStore";
 import { queueWithNext } from "../lib/videoQueueEdits";
 import { profileStorage } from "../lib/storage/profileStorage";
-import { isPopOutWindow } from "../lib/api/pip";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
 
@@ -152,7 +151,6 @@ export interface PlayerState {
   volumeBoost: number;
   sponsorBlockSegments: SponsorBlockSegment[];
   /** SponsorBlock is off for this one video. Kept in shared storage so a pop-out opened for it agrees. */
-  sponsorBlockOffVideoId: string | null;
   dearrowData: DeArrowOverride | null;
   rydData: RydData | null;
   captions: CaptionTrack[];
@@ -218,7 +216,6 @@ export interface PlayerState {
   setIsTheaterMode: (isTheaterMode: boolean) => void;
   setVideoFit: (videoFit: VideoFit) => void;
   setSponsorBlockSegments: (segments: SponsorBlockSegment[]) => void;
-  setSponsorBlockOffVideoId: (videoId: string | null) => void;
   setDearrowData: (data: DeArrowOverride | null) => void;
   setRydData: (data: RydData | null) => void;
   setCaptions: (captions: CaptionTrack[]) => void;
@@ -243,7 +240,6 @@ export interface PlayerState {
   setIsCommentsAvailable: (available: boolean) => void;
 }
 
-const SPONSORBLOCK_OFF_VIDEO_KEY = "flow_sponsorblock_off_video";
 
 export type VideoFit = "fit" | "fill" | "zoom";
 
@@ -281,7 +277,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   videoAspect: null,
   volumeBoost: 1,
   sponsorBlockSegments: [],
-  sponsorBlockOffVideoId: isPopOutWindow() ? profileStorage.getItem(SPONSORBLOCK_OFF_VIDEO_KEY) : null,
   dearrowData: null,
   rydData: null,
   captions: [],
@@ -822,11 +817,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ isTheaterMode });
   },
   setSponsorBlockSegments: (sponsorBlockSegments) => set({ sponsorBlockSegments }),
-  setSponsorBlockOffVideoId: (sponsorBlockOffVideoId) => {
-    if (sponsorBlockOffVideoId) profileStorage.setItem(SPONSORBLOCK_OFF_VIDEO_KEY, sponsorBlockOffVideoId);
-    else profileStorage.removeItem(SPONSORBLOCK_OFF_VIDEO_KEY);
-    set({ sponsorBlockOffVideoId });
-  },
   setDearrowData: (dearrowData) => set({ dearrowData }),
   setRydData: (rydData) => set({ rydData }),
   setCaptions: (captions) => set({ captions }),

@@ -91,15 +91,6 @@ describe("SponsorBlockTracker", () => {
     expect(new SponsorBlockTracker().tick(12, [segment], sponsor("skip_button"), true).manual).toBeNull();
   });
 
-  it("leaves a segment alone when SponsorBlock comes back on inside it", () => {
-    const t = new SponsorBlockTracker();
-    t.leaveAlone(12, [segment]);
-    expect(t.tick(13, [segment], sponsor("skip"), false).skip).toBeNull();
-    expect(t.tick(13, [segment], sponsor("mute"), false).mute).toBeNull();
-    t.tick(5, [segment], sponsor("skip"), false);
-    expect(t.tick(11, [segment], sponsor("skip"), false).skip).toBe(segment);
-  });
-
   describe("highlight", () => {
     const point = seg("h", "poi_highlight", 300, 300);
     const actions = { poi_highlight: "skip_button", sponsor: "skip" } as const;

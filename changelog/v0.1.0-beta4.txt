@@ -60,7 +60,7 @@ SYNC
 - Saved Shorts sync with your phone in both directions, as the same list on each device, once the phone has saved a Short of its own. Saved Shorts that an earlier sync brought in as a playlist move to the Saved Shorts page.
 
 LIBRARY
-- Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note, and Note at this time in the player's settings. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
+- Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
 - A Notes page in Library and the sidebar: search, filter by videos or channels, sort by edit time, title or your own order, and select notes to copy, delete or reorder. Each note lists its times, and Play from starts the video there.
 - Play on is now in the full music player too. Its list says when playback is moving, links to Manage linked devices, and Flow tells you when another device hands playback to this one.
 
@@ -123,7 +123,6 @@ PLAYER
 - Remember speed per channel starts each channel at the speed you last chose, and Play music at normal speed starts music videos at 1x. A channel's speed comes first, and neither changes the default for the next video.
 - The player's settings menu has Resize with Fit, Fill and Zoom. Shift+N plays the next video and Shift+P the previous one.
 - SponsorBlock has every action Android has: Skip automatically once, Show a skip button, Notify, Mute, Show in seek bar and Disable. Your choices sync with your phone.
-- SponsorBlock off for this video, in the player's settings menu, turns it off until the next video.
 - New SponsorBlock types Hook and Highlight. A highlight is marked on the seek bar and can offer Jump to highlight as the video starts. Segments submitted as a mute are muted instead of skipped.
 - Subtitle timing moves captions earlier or later in steps, for each video. Add an SRT or VTT file from the subtitles menu or by dropping it on the player, and Flow remembers it for that video.
 - Subtitle style adds window color and opacity, edge styles, custom colors and a position for fullscreen.
@@ -137,6 +136,7 @@ PLAYER
 - Flow can offer the last unfinished video when it opens, in a small card that plays it in the mini player or opens it. Continue watching mini player in Settings turns it off.
 - The mini player comes in three sizes. A thin progress bar stays at the bottom of the video when the controls hide, and clicking the time switches to what's left.
 - Optional frame step buttons while paused and a paid promotion label. The Save button shows Saved, Stats for nerds has more rows and Copy, and the description lists its tags and can be copied.
+- An Autoplay switch sits next to the quality on the player bar, and the Queue button only shows when there's a queue.
 
 LIBRARY
 - Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.

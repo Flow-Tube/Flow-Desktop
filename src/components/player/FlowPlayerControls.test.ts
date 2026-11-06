@@ -12,6 +12,7 @@ const { useAppSettingsStore } = await import("../../store/useAppSettingsStore");
 const { usePlayerStore } = await import("../../store/usePlayerStore");
 const { PLAYER_BUTTON_ROWS } = await import("../../lib/playerButtons");
 const { getString } = await import("../../lib/i18n/index");
+const { SETTINGS } = await import("../../lib/settings/schema");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -52,11 +53,13 @@ const setButton = (id: string, shown: boolean) => {
   useAppSettingsStore.setState((s) => ({ values: { ...s.values, [row.setting]: String(shown) } }));
 };
 
+const video = { id: "first", title: "First", channelName: "A channel" };
+
 beforeEach(() => {
   useAppSettingsStore.setState((s) => ({
     values: { ...s.values, ...Object.fromEntries(PLAYER_BUTTON_ROWS.map((row) => [row.setting, "true"])) },
   }));
-  usePlayerStore.setState({ isCommentsAvailable: true });
+  usePlayerStore.setState({ isCommentsAvailable: true, queue: [video, { ...video, id: "second" }], playlistContext: null });
   root = createRoot(host);
 });
 afterEach(() => act(() => root.unmount()));
@@ -126,5 +129,45 @@ describe("small controls", () => {
     expect(elapsedOrRemaining(65, 300, true)).toBe("-3:55");
     expect(elapsedOrRemaining(400, 300, true)).toBe("-0:00");
     expect(elapsedOrRemaining(65, 0, true)).toBe("1:05");
+  });
+});
+
+describe("queue button", () => {
+  const queueButton = () => hasButton(getString("queue_title"));
+
+  it("is hidden for a single video with nothing queued", () => {
+    usePlayerStore.setState({ queue: [video], playlistContext: null });
+    render();
+    expect(queueButton()).toBe(false);
+  });
+
+  it("shows once there is a queue", () => {
+    render();
+    expect(queueButton()).toBe(true);
+  });
+
+  it("shows for a playlist, however short", () => {
+    usePlayerStore.setState({ queue: [video], playlistContext: { id: "list", title: "A list" } as never });
+    render();
+    expect(queueButton()).toBe(true);
+  });
+});
+
+describe("autoplay switch", () => {
+  const autoplay = () => host.querySelector<HTMLButtonElement>('button[role="switch"]');
+
+  it("turns autoplay off and on from the bar", () => {
+    useAppSettingsStore.setState((s) => ({ values: { ...s.values, [SETTINGS.AUTOPLAY_ENABLED]: "true" } }));
+    render();
+    expect(autoplay()?.getAttribute("aria-checked")).toBe("true");
+    act(() => autoplay()!.click());
+    expect(useAppSettingsStore.getState().values[SETTINGS.AUTOPLAY_ENABLED]).toBe("false");
+    expect(autoplay()?.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("can be taken off the bar", () => {
+    setButton("autoplay", false);
+    render();
+    expect(autoplay()).toBeNull();
   });
 });

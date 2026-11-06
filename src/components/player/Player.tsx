@@ -489,22 +489,6 @@ export const Player: React.FC<PlayerProps> = ({
   const [notifyToast, setNotifyToast] = useState<{ segment: any; categoryName: string; visible: boolean } | null>(null);
   const notifyTimeoutRef = useRef<number | null>(null);
   const [currentSBMuteSegment, setCurrentSBMuteSegment] = useState<string | null>(null);
-  const sponsorBlockOff = usePlayerStore((state) => !!state.currentVideo && state.sponsorBlockOffVideoId === state.currentVideo.id);
-  const wasSponsorBlockOffRef = useRef(sponsorBlockOff);
-  useEffect(() => {
-    if (wasSponsorBlockOffRef.current && !sponsorBlockOff && videoRef.current) {
-      sbTrackerRef.current.leaveAlone(videoRef.current.currentTime, usePlayerStore.getState().sponsorBlockSegments);
-    }
-    wasSponsorBlockOffRef.current = sponsorBlockOff;
-  }, [sponsorBlockOff]);
-  // Off is for one video: moving to another turns it back on, even if the first one comes back later.
-  const sponsorBlockVideoId = usePlayerStore((state) => state.currentVideo?.id);
-  useEffect(() => {
-    const { sponsorBlockOffVideoId, setSponsorBlockOffVideoId } = usePlayerStore.getState();
-    if (sponsorBlockVideoId && sponsorBlockOffVideoId && sponsorBlockOffVideoId !== sponsorBlockVideoId) {
-      setSponsorBlockOffVideoId(null);
-    }
-  }, [sponsorBlockVideoId]);
   const [isPip, setIsPip] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
@@ -908,7 +892,7 @@ export const Player: React.FC<PlayerProps> = ({
   }, [loadSettings]);
 
   const mediaIdentity = src || dashManifestUrl || hlsManifestUrl || "";
-  const [manualSegment, setManualSegment] = useManualSponsorSegment(mediaIdentity, sponsorBlockEnabled && !sponsorBlockOff);
+  const [manualSegment, setManualSegment] = useManualSponsorSegment(mediaIdentity, sponsorBlockEnabled);
   const notePickedSpeed = usePlaybackStartSpeed(mediaIdentity, defaultPlaybackRate, category);
 
   const selectPlaybackRate = useCallback((nextRate: number) => {
@@ -2438,7 +2422,7 @@ export const Player: React.FC<PlayerProps> = ({
     let muteSegmentCategoryName = "";
     let manualSegment: SponsorBlockSegment | null = null;
 
-    if (sponsorBlockEnabled && !sponsorBlockOff) {
+    if (sponsorBlockEnabled) {
       const sb = sbTrackerRef.current.tick(nextTime, sponsorBlockSegments, sponsorBlockActions, !!video?.ended);
       if (sb.skip) {
         const [start, end] = sb.skip.segment;

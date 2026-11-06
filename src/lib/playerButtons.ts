@@ -17,6 +17,7 @@ export type PlayerButtonId =
   | "liveChat"
   | "comments"
   | "sponsorBlock"
+  | "autoplay"
   | "quality"
   | "captions"
   | "playOn"
@@ -32,6 +33,7 @@ export const PLAYER_BUTTON_ROWS: readonly PlayerButtonRow[] = [
   { id: "liveChat", setting: SETTINGS.PLAYER_BUTTON_LIVE_CHAT, title: "settings_button_live_chat", summary: "settings_button_live_chat_desc" },
   { id: "comments", setting: SETTINGS.PLAYER_BUTTON_COMMENTS, title: "settings_button_comments", summary: "settings_button_comments_desc" },
   { id: "sponsorBlock", setting: SETTINGS.PLAYER_BUTTON_SPONSORBLOCK, title: "settings_button_sponsorblock", summary: "settings_button_sponsorblock_desc" },
+  { id: "autoplay", setting: SETTINGS.PLAYER_BUTTON_AUTOPLAY, title: "settings_button_autoplay", summary: "settings_button_autoplay_desc" },
   { id: "quality", setting: SETTINGS.PLAYER_BUTTON_QUALITY, title: "settings_button_quality", summary: "settings_button_quality_desc" },
   { id: "captions", setting: SETTINGS.PLAYER_BUTTON_CAPTIONS, title: "settings_button_captions", summary: "settings_button_captions_desc" },
   { id: "playOn", setting: SETTINGS.PLAYER_BUTTON_PLAY_ON, title: "settings_button_play_on", summary: "settings_button_play_on_desc" },

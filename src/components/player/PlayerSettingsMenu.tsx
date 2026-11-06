@@ -5,14 +5,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  CirclePlay,
   Gauge,
   Monitor,
   Scaling,
   Pause,
   Sliders,
   SlidersHorizontal,
-  StickyNote,
   SunDim,
 } from "lucide-react";
 import { usePlayerStore, type PlaybackRate } from "../../store/usePlayerStore";
@@ -26,9 +24,6 @@ import { AmbientModeIcon } from "../ui/AmbientModeIcon";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { SETTINGS } from "../../lib/settings/schema";
 import { SleepTimerLabel } from "../sleep/SleepTimerLabel";
-import { CurrentTimeLabel, useOpenVideoNote } from "../note/WatchNote";
-import { useNotesEnabled } from "../../lib/useNotes";
-import { useNotesStore } from "../../store/useNotesStore";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
@@ -38,8 +33,6 @@ import { getString } from "../../lib/i18n/index";
 import { MOTION_EASE, motionMs } from "../../lib/motion";
 import { PLAYER_MENU_ATTR } from "../../lib/playerMenuDismiss";
 import { VIDEO_FIT_LABELS, VIDEO_FITS } from "../../lib/videoFit";
-import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
-import { useSettingsStore } from "../../store/useSettingsStore";
 
 export type SettingsPane =
   | "root"
@@ -143,17 +136,7 @@ export function PlayerSettingsMenu({
   const eqActive = useEqActive();
   const eqEditorHosted = useEqStore((s) => s.editorHosted);
   const openEqEditor = useEqStore((s) => s.setEditorOpen);
-  const currentVideo = usePlayerStore((s) => s.currentVideo);
-  const notesEnabled = useNotesEnabled("Video");
-  const openVideoNote = useOpenVideoNote(currentVideo);
-  const noteEditorHosted = useNotesStore((s) => s.editorHosted);
-  const canNoteVideo = notesEnabled && noteEditorHosted && !!currentVideo && !currentVideo.isLive;
-  const [autoplay, setAutoplay] = useBoolPref(SETTINGS.AUTOPLAY_ENABLED);
   const videoFit = usePlayerStore((s) => s.videoFit);
-  const sponsorBlockEnabled = useSettingsStore((s) => s.sponsorBlockEnabled);
-  const currentVideoId = usePlayerStore((s) => s.currentVideo?.id ?? null);
-  const sponsorBlockOff = usePlayerStore((s) => !!s.currentVideo && s.sponsorBlockOffVideoId === s.currentVideo.id);
-  const setSponsorBlockOffVideoId = usePlayerStore((s) => s.setSponsorBlockOffVideoId);
   const setVideoFit = usePlayerStore((s) => s.setVideoFit);
   const [ambientMode, setAmbientMode] = useBoolPref(SETTINGS.AMBIENT_MODE_ENABLED);
   const [ambientGlow, setAmbientGlow] = useBoolPref(SETTINGS.AMBIENT_GLOW_ENABLED);
@@ -277,24 +260,7 @@ export function PlayerSettingsMenu({
 
         {pane === "root" && (
           <div className="space-y-0.5">
-            {toggleRow(getString("player_menu_autoplay"), autoplay, <CirclePlay size={18} />, setAutoplay)}
             {settingRow(getString("player_menu_speed"), speedLabel(playbackRate), <Gauge size={18} />, () => onPaneChange("speed"))}
-            {/* The pop-out draws no glow, and its settings copy never reaches the main window. */}
-            {IS_MAIN_WINDOW &&
-              toggleRow(
-                getString("settings_ambient_mode"),
-                ambientMode,
-                <AmbientModeIcon size={18} />,
-                setAmbientMode,
-              )}
-            {IS_MAIN_WINDOW &&
-              ambientMode &&
-              toggleRow(
-                getString("settings_ambient_glow"),
-                ambientGlow,
-                <SunDim size={18} />,
-                setAmbientGlow,
-              )}
             {settingRow(
               getString("player_menu_quality"),
               qualityLabel(selectedQualityId, qualities, activeQualityLabel),
@@ -319,26 +285,8 @@ export function PlayerSettingsMenu({
               <AudioLines size={18} />,
               () => onPaneChange("audio"),
             )}
-            {sponsorBlockEnabled &&
-              currentVideoId &&
-              toggleRow(
-                getString("sponsorblock_off_for_video"),
-                sponsorBlockOff,
-                <SponsorBlockIcon className="h-[18px] w-[18px]" />,
-                (off) => setSponsorBlockOffVideoId(off ? currentVideoId : null),
-              )}
             {settingRow(getString("player_menu_resize"), getString(VIDEO_FIT_LABELS[videoFit]), <Scaling size={18} />, () => onPaneChange("resize"))}
             {settingRow(getString("sleep_timer"), <SleepTimerLabel />, <Pause size={18} />, () => onPaneChange("sleep"))}
-            {canNoteVideo &&
-              settingRow(
-                getString("note_at_current_time"),
-                open ? <CurrentTimeLabel /> : null,
-                <StickyNote size={18} />,
-                () => {
-                  onClose();
-                  openVideoNote();
-                },
-              )}
             {eqEditorHosted &&
               settingRow(
                 getString("music_equalizer"),
@@ -349,6 +297,22 @@ export function PlayerSettingsMenu({
                   onClose();
                   openEqEditor(true);
                 },
+              )}
+            {/* The pop-out draws no glow, and its settings copy never reaches the main window. */}
+            {IS_MAIN_WINDOW &&
+              toggleRow(
+                getString("settings_ambient_mode"),
+                ambientMode,
+                <AmbientModeIcon size={18} />,
+                setAmbientMode,
+              )}
+            {IS_MAIN_WINDOW &&
+              ambientMode &&
+              toggleRow(
+                getString("settings_ambient_glow"),
+                ambientGlow,
+                <SunDim size={18} />,
+                setAmbientGlow,
               )}
           </div>
         )}

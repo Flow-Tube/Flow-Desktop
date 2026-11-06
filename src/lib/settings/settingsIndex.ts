@@ -100,6 +100,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_button_next_previous", summary: "settings_button_next_previous_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_volume", summary: "settings_button_volume_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_chapters", summary: "settings_button_chapters_desc", keywords: ["player bar", "hide"] },
+    { title: "settings_button_autoplay", summary: "settings_button_autoplay_desc" },
     { title: "settings_button_queue", summary: "settings_button_queue_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_live_chat", summary: "settings_button_live_chat_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_comments", summary: "settings_button_comments_desc", keywords: ["player bar", "hide"] },

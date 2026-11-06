@@ -39,7 +39,7 @@ function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; labe
   return (
     <div
       onClick={select}
-      className={`flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out group ${select ? 'cursor-pointer' : ''}`}
+      className={`flex items-center justify-between px-5 py-4 hover:bg-surface-row-hover transition-colors duration-200 ease-out group ${select ? 'cursor-pointer' : ''}`}
     >
       <div className="flex items-center gap-3 shrink-0 pe-4">
         <span className="text-chrome-neutral-400">{icon}</span>

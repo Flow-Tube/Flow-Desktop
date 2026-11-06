@@ -61,7 +61,7 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
   };
 
   return (
-    <div className="flex items-center gap-3 px-5 py-3 transition-colors duration-200 ease-out hover:bg-surface-container">
+    <div className="flex items-center gap-3 px-5 py-3 transition-colors duration-200 ease-out hover:bg-surface-row-hover">
       <ProfileAvatar
         name={name}
         colorKey={profile.colorKey}

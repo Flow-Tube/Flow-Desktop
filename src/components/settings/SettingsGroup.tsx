@@ -13,7 +13,7 @@ export function SettingsGroup({ title, children }: SettingsGroupProps) {
           {title}
         </h3>
       )}
-      <div className="flex flex-col gap-0.5 [&>*]:rounded-[4px] [&>*]:bg-surface-container-low [&>*:first-child]:rounded-t-2xl [&>*:last-child]:rounded-b-2xl">
+      <div className="flex flex-col gap-0.5 [--color-surface-container-high:var(--color-surface-row-control)] [--color-surface-container-highest:var(--color-surface-row-control-hover)] [&>*]:rounded-[4px] [&>*]:bg-surface-row [&>*:first-child]:rounded-t-2xl [&>*:last-child]:rounded-b-2xl">
         {children}
       </div>
     </div>

@@ -24,7 +24,7 @@ export function SettingItem({ title, description, disabled = false, icon, childr
       data-setting-title={title}
       className={cx(
         'flex justify-between items-center px-5 py-4 transition-colors duration-200 ease-out',
-        disabled ? 'opacity-50' : 'hover:bg-surface-container'
+        disabled ? 'opacity-50' : 'hover:bg-surface-row-hover'
       )}
     >
       {icon && <span className="me-3 shrink-0 text-chrome-neutral-400">{icon}</span>}

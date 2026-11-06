@@ -324,6 +324,8 @@ const DARK_CHROME = ["onSurface", "onSurface", "onSurface", "onSurfaceVariant", 
 const CHROME_STEPS = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"] as const;
 
 export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): Record<string, string> {
+  // Against a white or pure black page the low container all but vanishes, so rows sit higher there.
+  const lowRow = variant === "dark";
   const variables: Record<string, string> = {
     "--color-primary": colors.primary,
     "--color-primary-val": colors.primary,
@@ -335,6 +337,10 @@ export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): R
     "--color-surface-container-val": colors.surfaceContainer,
     "--color-surface-container-high-val": colors.surfaceContainerHigh,
     "--color-surface-container-highest-val": colors.surfaceContainerHighest,
+    "--color-surface-row-val": lowRow ? colors.surfaceContainerLow : colors.surfaceContainerHigh,
+    "--color-surface-row-hover-val": lowRow ? colors.surfaceContainer : colors.surfaceContainerHighest,
+    "--color-surface-row-control": lowRow ? colors.surfaceContainerHigh : `color-mix(in srgb, ${colors.onSurface} 10%, ${colors.surfaceContainerHigh})`,
+    "--color-surface-row-control-hover": lowRow ? colors.surfaceContainerHighest : `color-mix(in srgb, ${colors.onSurface} 16%, ${colors.surfaceContainerHigh})`,
     "--color-outline-variant-val": colors.outline,
     "--color-on-surface-val": colors.onSurface,
     "--color-on-surface-variant-val": colors.onSurfaceVariant,

@@ -78,50 +78,24 @@ export function DataTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_actions')}>
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 me-4">
-              <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_import_restore')}</div>
-              <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_import_restore_desc')}</div>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => navigate('/settings/import')}><Upload size={14} />{getString('settings_import')}</Button>
-          </div>
-          <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 me-4">
-              <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_diagnostics')}</div>
-              <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_diagnostics_desc')}</div>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => navigate('/settings/diagnostics')}><FileText size={14} />{getString('settings_open')}</Button>
-          </div>
-          <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 me-4">
-              <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_data')}</div>
-              <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_export_data_desc')}</div>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => handleExport(backupType as BackupFileKind, getString('settings_export_data'))}><Download size={14} />{getString('settings_export')}</Button>
-          </div>
-          <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 me-4">
-              <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_history')}</div>
-              <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_export_history_desc')}</div>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => handleExport('WATCH_HISTORY', getString('settings_export_history'))}><Download size={14} />{getString('settings_export')}</Button>
-          </div>
-          <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 me-4">
-              <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_export_newpipe')}</div>
-              <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_export_newpipe_desc')}</div>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => handleExport('NEWPIPE_SUBSCRIPTIONS', getString('settings_export_newpipe'))}><Download size={14} />{getString('settings_export')}</Button>
-          </div>
-          <div className="flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors duration-200 ease-out">
-            <div className="flex-1 min-w-0 me-4">
-              <div className="text-sm font-medium text-chrome-neutral-200">{getString('settings_clear_cache')}</div>
-              <div className="text-xs text-chrome-neutral-400 mt-0.5">{getString('settings_clear_cache_desc')}</div>
-            </div>
-            <Button variant="destructive" size="sm" onClick={handleClearData} disabled={clearing}><Trash2 size={14} />{clearing ? getString('settings_clearing') : getString('clear')}</Button>
-          </div>
-        </div>
+        <SettingItem title={getString('settings_import_restore')} description={getString('settings_import_restore_desc')}>
+          <Button variant="secondary" size="sm" onClick={() => navigate('/settings/import')}><Upload size={14} />{getString('settings_import')}</Button>
+        </SettingItem>
+        <SettingItem title={getString('settings_diagnostics')} description={getString('settings_diagnostics_desc')}>
+          <Button variant="secondary" size="sm" onClick={() => navigate('/settings/diagnostics')}><FileText size={14} />{getString('settings_open')}</Button>
+        </SettingItem>
+        <SettingItem title={getString('settings_export_data')} description={getString('settings_export_data_desc')}>
+          <Button variant="secondary" size="sm" onClick={() => handleExport(backupType as BackupFileKind, getString('settings_export_data'))}><Download size={14} />{getString('settings_export')}</Button>
+        </SettingItem>
+        <SettingItem title={getString('settings_export_history')} description={getString('settings_export_history_desc')}>
+          <Button variant="secondary" size="sm" onClick={() => handleExport('WATCH_HISTORY', getString('settings_export_history'))}><Download size={14} />{getString('settings_export')}</Button>
+        </SettingItem>
+        <SettingItem title={getString('settings_export_newpipe')} description={getString('settings_export_newpipe_desc')}>
+          <Button variant="secondary" size="sm" onClick={() => handleExport('NEWPIPE_SUBSCRIPTIONS', getString('settings_export_newpipe'))}><Download size={14} />{getString('settings_export')}</Button>
+        </SettingItem>
+        <SettingItem title={getString('settings_clear_cache')} description={getString('settings_clear_cache_desc')}>
+          <Button variant="destructive" size="sm" onClick={handleClearData} disabled={clearing}><Trash2 size={14} />{clearing ? getString('settings_clearing') : getString('clear')}</Button>
+        </SettingItem>
       </SettingsGroup>
     </div>
   );

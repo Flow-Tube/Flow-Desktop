@@ -77,6 +77,15 @@ describe("themes", () => {
     expect(variables["--color-chrome-neutral-900"]).toBe(colors.surfaceContainer);
   });
 
+  it("keeps settings rows visible against a white or pure black page", () => {
+    const theme = BUILTIN_THEMES[0]!;
+    const row = (variant: "light" | "dark" | "amoled") => themeCssVariables(theme.variants[variant], variant);
+    expect(row("dark")["--color-surface-row-val"]).toBe(theme.variants.dark.surfaceContainerLow);
+    expect(row("light")["--color-surface-row-val"]).toBe(theme.variants.light.surfaceContainerHigh);
+    expect(row("amoled")["--color-surface-row-val"]).toBe(theme.variants.amoled.surfaceContainerHigh);
+    expect(row("amoled")["--color-surface-row-hover-val"]).toBe(theme.variants.amoled.surfaceContainerHighest);
+  });
+
   it("scopes one variant, including the tokens Tailwind derives from -val variables", () => {
     const theme = BUILTIN_THEMES[0]!;
     const dark = scopeVariables(theme, "dark");

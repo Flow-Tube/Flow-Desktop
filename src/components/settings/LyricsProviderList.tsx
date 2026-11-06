@@ -50,7 +50,7 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex items-center gap-2 px-3 py-3 transition-colors duration-200 ease-out ${
-        isDragging ? 'relative z-10 bg-surface-container-high' : 'hover:bg-surface-container'
+        isDragging ? 'relative z-10 bg-surface-container-high' : 'hover:bg-surface-row-hover'
       }`}
     >
       <button

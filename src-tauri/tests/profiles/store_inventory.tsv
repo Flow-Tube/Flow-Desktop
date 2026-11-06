@@ -32,6 +32,7 @@ table	sync2_profiles	DEVICE	-	The group's state, in Default's file whichever pro
 table	sync2_floors	DEVICE	-	The group's state, in Default's file whichever profile runs: how far a link read from a snapshot already goes
 table	sync2_reading	DEVICE	-	The group's state, in Default's file whichever profile runs: links still to be read from their snapshot
 table	watch_history	PROFILE	library	Video and music history (is_music)
+table	notes	PROFILE	library	The profile's notes on videos and channels; never copied to another profile
 table	notifications	PROFILE	library	New-upload inbox written by the poll loop for this profile's subscriptions
 table	recommendation_events	PROFILE	private	FlowNeuro event log
 table	seen_videos	PROFILE	private	Cards this viewer has seen
@@ -66,6 +67,7 @@ setting	user_neuro_brain_before_v14	PROFILE	private	Pre-migration copy, written 
 setting	user_music_brain	PROFILE	private	MusicBrain
 setting	music_brain_backfilled	PROFILE	private	Follows user_music_brain
 setting	liked_items	PROFILE	library	Likes
+setting	sync2_notes_missed	DEFAULT_ONLY	sync	The group's state, in Default's file: notes other devices sent before this build kept them are still to be read
 setting	user_playlists	PROFILE	library	Playlists
 setting	saved_albums	PROFILE	library	Saved albums
 setting	subscription_groups	PROFILE	library	Channel groups

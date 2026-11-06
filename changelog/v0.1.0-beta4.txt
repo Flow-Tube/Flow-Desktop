@@ -54,6 +54,7 @@ SYNC
 - When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
 - On the local network, a connection that stays silent is dropped after a few seconds, and it no longer stops this computer from meeting your other devices or answering them.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
+- Notes sync with Flow for Android, over the QR code and Linked devices, and are part of backups. Notes your phone sent before this version come back on the next sync, and a device that joins later gets them from this computer.
 
 MUSIC
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.

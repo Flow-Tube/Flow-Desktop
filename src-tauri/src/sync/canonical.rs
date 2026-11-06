@@ -26,11 +26,12 @@ pub enum Collection {
     MusicBrain,
     Subscriptions,
     SubscribedChannels,
+    Notes,
 }
 
 impl Collection {
     /// Every collection, in a stable order (used to iterate capabilities/selection).
-    pub const ALL: [Collection; 8] = [
+    pub const ALL: [Collection; 9] = [
         Collection::WatchHistory,
         Collection::Playlists,
         Collection::Likes,
@@ -39,6 +40,7 @@ impl Collection {
         Collection::MusicBrain,
         Collection::Subscriptions,
         Collection::SubscribedChannels,
+        Collection::Notes,
     ];
 
     /// The stable wire key (matches the `snake_case` serde form), e.g. `"watch_history"`.
@@ -52,6 +54,7 @@ impl Collection {
             Collection::MusicBrain => "music_brain",
             Collection::Subscriptions => "subscriptions",
             Collection::SubscribedChannels => "subscribed_channels",
+            Collection::Notes => "notes",
         }
     }
 }
@@ -687,4 +690,33 @@ pub struct SubscribedChannel {
     pub hlc: Hlc,
     /// `true` = unsubscribed.
     pub deleted: bool,
+}
+
+// ===========================================================================================
+// Collection: notes
+// ===========================================================================================
+
+/// A note on a video or a channel (Android's `CanonicalNote`). Merged whole by `updated_at`, the
+/// edit time in ms: it has no `hlc`, and a deletion is a tombstone carrying its own time. The
+/// fields that may be absent stay `null` on the wire, as Android writes them, so both apps produce
+/// the same bytes for the same note.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Note {
+    /// `video:<id>` or `channel:<id>`; canonical sort order is `id` ascending.
+    pub id: String,
+    pub target_id: String,
+    /// `Video` or `Channel`; empty on a tombstone.
+    pub kind: String,
+    pub text: String,
+    pub updated_at: i64,
+    pub deleted: bool,
+    pub title: Option<String>,
+    pub channel_name: Option<String>,
+    pub channel_id: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub duration_seconds: Option<i32>,
+    pub channel_avatar_url: Option<String>,
+    pub channel_handle: Option<String>,
+    pub subscriber_count_text: Option<String>,
 }

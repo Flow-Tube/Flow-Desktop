@@ -16,6 +16,7 @@ pub mod ledger;
 pub mod local_edits;
 pub mod mapping;
 pub mod merge;
+pub mod notes;
 pub mod protocol;
 pub mod qr;
 pub mod runtime;

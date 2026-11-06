@@ -29,6 +29,7 @@ use crate::sync::changes::{self, Stamp};
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchRow};
 use crate::sync::merge::{MergedFlowNeuroBrain, MergedMusicBrain};
+use crate::sync::notes;
 use crate::sync::protocol::OutgoingCollection;
 use crate::sync::settings_map;
 use crate::sync::tombstones;
@@ -56,6 +57,7 @@ pub async fn export_collections(
             Collection::MusicBrain => export_music(pool, device_id).await?,
             Collection::Subscriptions => export_subscriptions(pool, device_id).await?,
             Collection::SubscribedChannels => export_subscribed_channels(pool, device_id).await?,
+            Collection::Notes => export_notes(pool).await?,
         };
         out.push(OutgoingCollection { collection, ndjson });
     }
@@ -209,6 +211,13 @@ async fn export_subscribed_channels(
         None => Vec::new(),
     };
     Ok(to_ndjson(&channels))
+}
+
+/// Notes plus the deletions still to be announced, in Android's byte form and order.
+async fn export_notes(pool: &SqlitePool) -> Result<Vec<u8>, SyncError> {
+    let mut conn = pool.acquire().await?;
+    let records = notes::local_notes(&mut conn).await?;
+    Ok(to_ndjson(&records))
 }
 
 async fn export_settings(pool: &SqlitePool, device_id: &str) -> Result<Vec<u8>, SyncError> {

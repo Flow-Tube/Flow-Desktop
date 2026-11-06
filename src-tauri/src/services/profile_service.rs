@@ -927,6 +927,7 @@ mod tests {
             "INSERT INTO notifications (video_id, title, channel_id, channel_name, created_at) VALUES ('zzleakNotify', 't', 'UC', 'c', 1)",
             "INSERT INTO settings (key, value) VALUES ('flow_search', 'zzleakSearch'), ('user_playlists', 'zzleakPlaylist'), ('saved_albums', 'zzleakAlbum'), ('blocked_reveal_pin', 'zzleakPin'), ('sync_neuro_merged', 'zzleakSync')",
             "UPDATE settings SET value = 'zzleakLikes' WHERE key = 'liked_items'",
+            "INSERT INTO notes (id, target_id, kind, text, updated_at) VALUES ('video:zzleakNote', 'zzleakNote', 'Video', 'zzleakNoteText', 1)",
         ] {
             sqlx::query(sqlx::AssertSqlSafe(statement))
                 .execute(&pool)

@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::de::DeserializeOwned;
 
 use crate::sync::canonical::{
-    GroupMember, Hlc, Like, LikeKind, LikeState, Playlist, PlaylistItem, SubscriptionGroup,
+    GroupMember, Hlc, Like, LikeKind, LikeState, Note, Playlist, PlaylistItem, SubscriptionGroup,
     WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Stamp};
@@ -88,6 +88,20 @@ pub fn groups(
                 deleted: true,
                 hlc: Hlc::new(s.at_ms, 0, device_id),
                 ..SubscriptionGroup::default()
+            })
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn notes(stamps: &BTreeMap<String, Stamp>, live: &BTreeSet<String>) -> Vec<Note> {
+    deletions(stamps, live)
+        .map(|(key, s)| {
+            peer_record(s).unwrap_or_else(|| Note {
+                id: key.clone(),
+                updated_at: i64::try_from(s.at_ms).unwrap_or(i64::MAX),
+                deleted: true,
+                ..Note::default()
             })
         })
         .collect()

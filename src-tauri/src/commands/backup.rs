@@ -19,7 +19,7 @@ use crate::services::profile_service::{MasterManifest, ProfileService, RestoreTa
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::apply;
 use crate::sync::canonical::{
-    Collection, FlowNeuroBrainSnapshot, Like, MusicBrainSnapshot, Playlist, SettingEntry,
+    Collection, FlowNeuroBrainSnapshot, Like, MusicBrainSnapshot, Note, Playlist, SettingEntry,
     SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::codec;
@@ -76,6 +76,7 @@ fn scope_collections(scope: &str) -> Option<Vec<Collection>> {
             Collection::Settings,
             Collection::Subscriptions,
             Collection::SubscribedChannels,
+            Collection::Notes,
         ]),
         "MASTER" => Some(Collection::ALL.to_vec()),
         _ => None,
@@ -121,6 +122,7 @@ fn filter_parseable(collection: Collection, values: &[Value]) -> (Vec<Value>, u6
         Collection::MusicBrain => ok::<MusicBrainSnapshot>(v, |s| !s.device_id.is_empty()),
         Collection::Subscriptions => ok::<SubscriptionGroup>(v, |g| !g.name.is_empty()),
         Collection::SubscribedChannels => ok::<SubscribedChannel>(v, |c| !c.channel_id.is_empty()),
+        Collection::Notes => ok::<Note>(v, |n| !n.id.is_empty()),
     };
     let kept: Vec<Value> = values.iter().filter(|v| parses(v)).cloned().collect();
     let dropped = (values.len() - kept.len()) as u64;
@@ -493,6 +495,7 @@ mod tests {
         assert!(app_data.contains(&Collection::Likes));
         assert!(app_data.contains(&Collection::Subscriptions));
         assert!(app_data.contains(&Collection::Playlists));
+        assert!(app_data.contains(&Collection::Notes));
         assert!(!app_data.contains(&Collection::WatchHistory));
         assert_eq!(
             scope_collections("MASTER").unwrap().len(),

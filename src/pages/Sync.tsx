@@ -51,6 +51,7 @@ const COLLECTION_STRINGS: Record<string, { title: StringKey; desc: StringKey }> 
   music_brain: { title: "sync_collection_music_brain", desc: "sync_collection_music_brain_desc" },
   subscribed_channels: { title: "sync_collection_subscribed_channels", desc: "sync_collection_subscribed_channels_desc" },
   subscriptions: { title: "sync_collection_subscriptions", desc: "sync_collection_subscriptions_desc" },
+  notes: { title: "sync_collection_notes", desc: "sync_collection_notes_desc" },
 };
 
 function collectionTitle(key: string): string {

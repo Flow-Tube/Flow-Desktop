@@ -26,13 +26,15 @@ use crate::sync::brain_rekey;
 use crate::sync::brainmap;
 use crate::sync::canonical::{
     Collection, FlowNeuroBrainSnapshot, GroupMember, Hlc, Like, LikeState, MusicBrainSnapshot,
-    Playlist, PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
+    Note, Playlist, PlaylistItem, SettingEntry, SubscribedChannel, SubscriptionGroup,
+    WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Change};
 use crate::sync::clock;
 use crate::sync::error::SyncError;
 use crate::sync::mapping::{self, WatchInsert, WatchRow};
 use crate::sync::merge::{self, MergedFlowNeuroBrain, MergedMusicBrain};
+use crate::sync::notes;
 use crate::sync::protocol::StagedCollection;
 use crate::sync::settings_map;
 use crate::sync::tombstones;
@@ -156,6 +158,10 @@ async fn apply(
             ),
             Collection::SubscribedChannels => (
                 apply_subscribed_channels(&mut tx, our_device_id, &sc.ndjson).await?,
+                true,
+            ),
+            Collection::Notes => (
+                notes::apply_notes(&mut tx, parse_ndjson(&sc.ndjson)?).await?,
                 true,
             ),
 
@@ -948,6 +954,10 @@ async fn backup_snapshot(
                     serde_json::json!(tombs),
                 );
             }
+            Collection::Notes => {
+                let notes = crate::db::notes::all(pool).await?;
+                obj.insert("notes".to_string(), serde_json::to_value(notes)?);
+            }
             #[allow(unreachable_patterns)]
             _ => {}
         }
@@ -978,6 +988,7 @@ pub fn readable_record(collection: Collection, line: &[u8]) -> bool {
         Collection::MusicBrain => reads::<MusicBrainSnapshot>(line),
         Collection::Subscriptions => reads::<SubscriptionGroup>(line),
         Collection::SubscribedChannels => reads::<SubscribedChannel>(line),
+        Collection::Notes => reads::<Note>(line),
     }
 }
 

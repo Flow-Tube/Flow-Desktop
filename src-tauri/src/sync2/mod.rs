@@ -43,6 +43,7 @@ pub mod live_state;
 pub mod mailbox;
 pub mod membership;
 pub mod meta;
+pub mod missed_notes;
 pub mod names;
 pub mod pairing;
 pub mod paths;

@@ -20,6 +20,7 @@ use super::error_log;
 use super::group_store::GroupStore;
 use super::kept::{applied as applied_kept, keep, kept, kept_count};
 use super::live_hub::forget_keys;
+use super::missed_notes::{notes_caught_up, notes_missed};
 use super::names::device_names;
 use super::profile_actions::name_linked;
 use super::profile_links::reading;
@@ -181,6 +182,7 @@ async fn exchange(
         apply_kept(app, local, link, &mut applied).await?;
     }
     read_joined_links(app, local, session, &mut applied).await?;
+    read_missed_notes(app, local, session, &mut applied).await?;
 
     let exported = if reading.active.is_some() {
         flush_brains(app).await;
@@ -306,6 +308,35 @@ async fn read_joined_links(
         save_floors(pool, &read.floors).await?;
         link_read(pool, &link).await?;
     }
+    Ok(())
+}
+
+/// Once after updating from a build that dropped notes: reads them again, for every profile that
+/// syncs, before this run's export and snapshot.
+async fn read_missed_notes(
+    app: &AppHandle,
+    local: &Local,
+    session: &mut Session<'_, GroupStore>,
+    applied: &mut Applied,
+) -> Result<()> {
+    let pool = &local.pool;
+    if !notes_missed(pool).await? {
+        return Ok(());
+    }
+    let links: Vec<String> = session.reading().links().map(str::to_owned).collect();
+    for link in links {
+        let read = session.missed_notes(pool, &link).await?;
+        if session.reading().active.as_deref() == Some(link.as_str()) {
+            let groups: Vec<_> = read
+                .iter()
+                .map(|k| (k.sender.as_str(), std::slice::from_ref(&k.batch)))
+                .collect();
+            apply(app, local, &groups, applied).await?;
+        } else {
+            keep(pool, &read).await?;
+        }
+    }
+    notes_caught_up(pool).await?;
     Ok(())
 }
 

@@ -14,6 +14,7 @@ pub const PLAYLISTS: &str = "playlists";
 pub const PLAYLIST_ITEMS: &str = "playlist_items";
 pub const GROUPS: &str = "subscriptions";
 pub const GROUP_MEMBERS: &str = "subscription_members";
+pub const NOTES: &str = "notes";
 
 /// One local edit or deletion.
 #[derive(Debug, Clone, PartialEq, Eq)]

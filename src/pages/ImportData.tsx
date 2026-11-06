@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
+import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal, StickyNote } from "lucide-react";
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
@@ -61,6 +61,7 @@ export const ImportData: React.FC = () => {
   const [importNeuro, setImportNeuro] = useState(true);
   const [importSettings, setImportSettings] = useState(true);
   const [importLikes, setImportLikes] = useState(true);
+  const [importNotes, setImportNotes] = useState(true);
 
   const [importState, setImportState] = useState<"idle" | "reading" | "parsing" | "saving" | "success" | "error">("idle");
   const showToast = useUiStore((state) => state.showToast);
@@ -255,6 +256,7 @@ export const ImportData: React.FC = () => {
               case "subscription_channels": return importSubs;
               case "playlists": return importPlaylists;
               case "likes": return importLikes;
+              case "notes": return importNotes;
               case "settings": return importSettings;
               default: return false;
             }
@@ -374,6 +376,7 @@ export const ImportData: React.FC = () => {
     { key: "playlists", label: getString("import_playlists"), desc: getString("import_playlists_desc"), icon: <FolderHeart size={16} />, checked: importPlaylists, toggle: () => setImportPlaylists(!importPlaylists) },
     { key: "history", label: getString("import_watch_history"), desc: getString("import_watch_history_desc"), icon: <History size={16} />, checked: importHistory, toggle: () => setImportHistory(!importHistory) },
     { key: "likes", label: getString("import_likes"), desc: getString("import_likes_desc"), icon: <Heart size={16} />, checked: importLikes, toggle: () => setImportLikes(!importLikes) },
+    { key: "notes", label: getString("import_notes"), desc: getString("import_notes_desc"), icon: <StickyNote size={16} />, checked: importNotes, toggle: () => setImportNotes(!importNotes) },
     { key: "neuro", label: getString("import_neuro_profile"), desc: getString("import_neuro_profile_desc"), icon: <Brain size={16} />, checked: importNeuro, toggle: () => setImportNeuro(!importNeuro) },
   ];
 

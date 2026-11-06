@@ -88,6 +88,7 @@ export const SYNC_COLLECTIONS: ReadonlyArray<{ key: string; label: string; descr
   { key: "music_brain", label: "Music taste", description: "Artist affinities and listening history" },
   { key: "subscribed_channels", label: "Subscriptions", description: "The channels you follow" },
   { key: "subscriptions", label: "Subscription groups", description: "The folders you sort your channels into" },
+  { key: "notes", label: "Notes", description: "Your notes on videos and channels" },
 ];
 
 export const SYNC_STATUS_EVENT = "sync://status";

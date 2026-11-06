@@ -37,6 +37,11 @@ export const NEW_SETTING_DAYS = ["3", "7", "14", "30"] as const;
 export const SETTINGS = {
   THEME_ID: "theme_id",
   THEME_VARIANT: "theme_variant",
+  THEME_FOLLOW_SYSTEM: "theme_follow_system",
+  THEME_LIGHT_ID: "theme_light_id",
+  THEME_DARK_ID: "theme_dark_id",
+  THEME_DARK_STYLE: "theme_dark_style",
+  APP_FONT: "app_font",
   EXPRESSIVE_SLIDERS_ENABLED: "expressive_sliders_enabled",
   CUSTOM_THEMES: "custom_themes",
 
@@ -201,6 +206,11 @@ export type SettingKey = (typeof SETTINGS)[keyof typeof SETTINGS];
 export const SETTING_SCOPES = {
   [SETTINGS.THEME_ID]: "profile",
   [SETTINGS.THEME_VARIANT]: "profile",
+  [SETTINGS.THEME_FOLLOW_SYSTEM]: "profile",
+  [SETTINGS.THEME_LIGHT_ID]: "profile",
+  [SETTINGS.THEME_DARK_ID]: "profile",
+  [SETTINGS.THEME_DARK_STYLE]: "profile",
+  [SETTINGS.APP_FONT]: "profile",
   [SETTINGS.EXPRESSIVE_SLIDERS_ENABLED]: "profile",
   [SETTINGS.CUSTOM_THEMES]: "profile",
   [SETTINGS.AUTOPLAY_ENABLED]: "profile",
@@ -439,6 +449,11 @@ const QUALITY_VALUES = ["Auto", "4320p", "2160p", "1440p", "1080p", "720p", "480
 export const SETTING_DEFINITIONS = [
   str(SETTINGS.THEME_ID, "appearance", "default", "wired"),
   str(SETTINGS.THEME_VARIANT, "appearance", "dark", "wired", ["light", "dark", "amoled"]),
+  bool(SETTINGS.THEME_FOLLOW_SYSTEM, "appearance", false, "wired"),
+  str(SETTINGS.THEME_LIGHT_ID, "appearance", "default", "wired"),
+  str(SETTINGS.THEME_DARK_ID, "appearance", "default", "wired"),
+  str(SETTINGS.THEME_DARK_STYLE, "appearance", "dark", "wired", ["dark", "amoled"]),
+  str(SETTINGS.APP_FONT, "appearance", "inter", "wired", ["inter", "system"]),
   bool(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, "appearance", true, "wired"),
   json(SETTINGS.CUSTOM_THEMES, "appearance", "[]", "wired"),
 

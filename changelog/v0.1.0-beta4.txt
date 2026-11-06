@@ -96,6 +96,8 @@ SETTINGS
 - The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
 - Settings has a search box. It finds a setting by its name, description or a related word, the same way Flow for Android ranks them, then opens the right tab and points out the row.
 - A new switch in Appearance, Highlight new settings, puts a dot on settings added in an update and on their tab, for as long as you choose. It is off by default.
+- Flow can follow your computer's light or dark mode, with its own theme for each mode and a choice of dark or AMOLED, under Follow system in Appearance. It is off by default.
+- Appearance has a Font setting: Inter, or your system's font.
 
 FIXES
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.

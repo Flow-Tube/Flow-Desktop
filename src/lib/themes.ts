@@ -241,6 +241,27 @@ export const BUILTIN_THEMES = seeds.map(createTheme);
 
 export const DEFAULT_THEME: ThemeDefinition = BUILTIN_THEMES[0]!;
 
+export interface ThemeChoice {
+  themeId: string;
+  variant: ThemeVariant;
+}
+
+export interface ThemeSettings extends ThemeChoice {
+  followSystem: boolean;
+  systemDark: boolean;
+  lightThemeId: string;
+  darkThemeId: string;
+  darkStyle: Exclude<ThemeVariant, "light">;
+}
+
+/** The theme in force: the one picked, or with Follow system the one picked for the system's current mode. */
+export function resolveThemeChoice(settings: ThemeSettings): ThemeChoice {
+  if (!settings.followSystem) return { themeId: settings.themeId, variant: settings.variant };
+  return settings.systemDark
+    ? { themeId: settings.darkThemeId, variant: settings.darkStyle }
+    : { themeId: settings.lightThemeId, variant: "light" };
+}
+
 export function isThemeVariant(value: string): value is ThemeVariant {
   return THEME_VARIANTS.includes(value as ThemeVariant);
 }

@@ -30,11 +30,18 @@ export function AppearanceTab() {
     themeId,
     variant,
     customThemes,
+    followSystem,
     setTheme,
     setVariant,
     saveCustomThemes,
   } = useTheme();
   const [editingTheme, setEditingTheme] = useState<CustomThemeDefinition | null>(null);
+  const [, setFollowSystem] = useBoolPref(SETTINGS.THEME_FOLLOW_SYSTEM, false);
+  const [lightThemeId, setLightThemeId] = usePreference(SETTINGS.THEME_LIGHT_ID, "default");
+  const [darkThemeId, setDarkThemeId] = usePreference(SETTINGS.THEME_DARK_ID, "default");
+  const [darkStyle, setDarkStyle] = usePreference(SETTINGS.THEME_DARK_STYLE, "dark");
+  const [appFont, setAppFont] = usePreference(SETTINGS.APP_FONT, "inter");
+  const themeOptions = [...BUILTIN_THEMES, ...customThemes].map((theme) => ({ value: theme.id, label: theme.name }));
   const [expressiveSliders, setExpressiveSliders] = useBoolPref(SETTINGS.EXPRESSIVE_SLIDERS_ENABLED, true);
   const [highlightNew, setHighlightNew] = useBoolPref(SETTINGS.HIGHLIGHT_NEW_SETTINGS, false);
   const [highlightDays, setHighlightDays] = usePreference(SETTINGS.HIGHLIGHT_NEW_SETTINGS_DAYS, "7");
@@ -109,7 +116,7 @@ export function AppearanceTab() {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {THEME_VARIANTS.map((item) => (
-            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)} disabled={usingThemeFile}>
+            <Button key={item} variant={variant === item ? "primary" : "secondary"} onClick={() => void setVariant(item)} disabled={usingThemeFile || followSystem}>
               {getString(`theme_variant_${item}` as Parameters<typeof getString>[0])}
             </Button>
           ))}
@@ -118,6 +125,39 @@ export function AppearanceTab() {
 
       <div className="mt-8">
         <SettingsGroup>
+          <SettingItem title={getString("settings_theme_follow_system")} description={getString("settings_theme_follow_system_desc")}>
+            <ToggleSwitch checked={followSystem} onChange={setFollowSystem} />
+          </SettingItem>
+          {followSystem && (
+            <>
+              <SettingItem title={getString("settings_theme_light_mode")}>
+                <Select value={lightThemeId} onChange={setLightThemeId} options={themeOptions} />
+              </SettingItem>
+              <SettingItem title={getString("settings_theme_dark_mode")}>
+                <Select value={darkThemeId} onChange={setDarkThemeId} options={themeOptions} />
+              </SettingItem>
+              <SettingItem title={getString("settings_theme_dark_style")}>
+                <Select
+                  value={darkStyle}
+                  onChange={setDarkStyle}
+                  options={[
+                    { value: "dark", label: getString("theme_variant_dark") },
+                    { value: "amoled", label: getString("theme_variant_amoled") },
+                  ]}
+                />
+              </SettingItem>
+            </>
+          )}
+          <SettingItem title={getString("settings_app_font")} description={getString("settings_app_font_desc")}>
+            <Select
+              value={appFont}
+              onChange={setAppFont}
+              options={[
+                { value: "inter", label: "Inter" },
+                { value: "system", label: getString("settings_app_font_system") },
+              ]}
+            />
+          </SettingItem>
           <SettingItem title={getString("settings_expressive_sliders")} description={getString("settings_expressive_sliders_desc")}>
             <ToggleSwitch checked={expressiveSliders} onChange={setExpressiveSliders} />
           </SettingItem>

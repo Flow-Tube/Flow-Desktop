@@ -42,6 +42,11 @@ const rows = (category: SettingsCategory, entries: Omit<SettingEntry, "category"
 /** Every option in Settings, in the order the tabs show them. `settingsIndex.test.ts` checks it covers them all. */
 export const SETTINGS_INDEX: SettingEntry[] = [
   ...rows("appearance", [
+    { title: "settings_theme_follow_system", summary: "settings_theme_follow_system_desc", keywords: ["dark", "light", "auto"] },
+    { title: "settings_theme_light_mode" },
+    { title: "settings_theme_dark_mode" },
+    { title: "settings_theme_dark_style", keywords: ["amoled", "black"] },
+    { title: "settings_app_font", summary: "settings_app_font_desc" },
     { title: "settings_highlight_new", summary: "settings_highlight_new_desc" },
     { title: "settings_highlight_new_days" },
     { title: "settings_expressive_sliders", summary: "settings_expressive_sliders_desc" },

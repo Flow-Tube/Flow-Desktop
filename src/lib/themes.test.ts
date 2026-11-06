@@ -5,6 +5,7 @@ import {
   createCustomTheme,
   parseCustomThemes,
   resolveTheme,
+  resolveThemeChoice,
   themeCssVariables,
   scopeVariables,
 } from "./themes";
@@ -83,5 +84,26 @@ describe("themes", () => {
     expect(dark["--color-surface-container-high"]).toBe(theme.variants.dark.surfaceContainerHigh);
     expect(dark["--color-surface-container-high-val"]).toBe(theme.variants.dark.surfaceContainerHigh);
     expect(scopeVariables(theme, "amoled")["--color-background"]).toBe(theme.variants.amoled.background);
+  });
+});
+
+describe("resolveThemeChoice", () => {
+  const settings = {
+    themeId: "ocean",
+    variant: "amoled" as const,
+    followSystem: true,
+    systemDark: true,
+    lightThemeId: "sand",
+    darkThemeId: "night",
+    darkStyle: "amoled" as const,
+  };
+
+  it("uses the picked theme when not following the system", () => {
+    expect(resolveThemeChoice({ ...settings, followSystem: false })).toEqual({ themeId: "ocean", variant: "amoled" });
+  });
+
+  it("follows the system's mode with the theme picked for it", () => {
+    expect(resolveThemeChoice(settings)).toEqual({ themeId: "night", variant: "amoled" });
+    expect(resolveThemeChoice({ ...settings, systemDark: false })).toEqual({ themeId: "sand", variant: "light" });
   });
 });

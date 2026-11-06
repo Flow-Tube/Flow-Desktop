@@ -275,6 +275,7 @@ export function Watch() {
             }
             chapters={videoDetails?.chapters || []}
             autoChapters={videoDetails?.autoChapters ?? false}
+            commentsAvailable={commentsEnabled && !offlineRecord}
             videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl || undefined}
           />
 

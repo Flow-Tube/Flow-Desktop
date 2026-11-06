@@ -99,6 +99,8 @@ PLAYER
 - Audio Track Language in Settings now works. Videos with several audio tracks start in your language, and fall back to the original when it isn't offered. The choice also syncs with your phone.
 - Autoplay is now two switches, as on Android. Autoplay queued videos keeps a playlist or queue going, and Autoplay related videos decides whether a suggestion plays after it, so a queue can run on with no random videos.
 - An optional Autoplay delay shows an Up next card with Cancel, Restart and Play now. It is off by default, and the player's settings menu has an Autoplay switch.
+- Comments now open in the fullscreen side panel, from a new button on the fullscreen controls.
+- Comments can be sorted by Oldest and Timed. Timed lists comments by the moment in the video they point at, and Follow the video moves the list along as it plays.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.

@@ -206,9 +206,12 @@ export interface PlayerState {
   /** The watch page has a live chat or chat replay to show. */
   isLiveChatAvailable: boolean;
   setIsLiveChatAvailable: (available: boolean) => void;
+  /** The watch page shows comments, so the fullscreen panel can too. */
+  isCommentsAvailable: boolean;
+  setIsCommentsAvailable: (available: boolean) => void;
 }
 
-export type FullscreenPanel = "chapters" | "queue" | "chat";
+export type FullscreenPanel = "chapters" | "queue" | "chat" | "comments";
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentVideo: null,
@@ -245,6 +248,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isQueuePanelOpen: false,
   fullscreenPanel: null,
   isLiveChatAvailable: false,
+  isCommentsAvailable: false,
 
   setCurrentVideo: (video) => {
     const isNew = get().currentVideo?.id !== video?.id;
@@ -755,6 +759,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     ...(fullscreenPanel === "queue" ? { isQueuePanelOpen: true, isChaptersPanelOpen: false } : {}),
   }),
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
+  setIsCommentsAvailable: (isCommentsAvailable) => set({ isCommentsAvailable }),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {
     profileStorage.setItem("flow_subtitle_style", JSON.stringify(style));

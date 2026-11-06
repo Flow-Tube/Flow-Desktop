@@ -6,6 +6,7 @@ import {
   ListVideo,
   Maximize2,
   MessageSquareText,
+  MessagesSquare,
   Minimize2,
   Pause,
   PictureInPicture2,
@@ -188,6 +189,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     fullscreenPanel,
     setFullscreenPanel,
     isLiveChatAvailable,
+    isCommentsAvailable,
   } = usePlayerStore();
 
   const changeVolume = (value: number) => {
@@ -770,6 +772,18 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   className={panelButtonClass("chat")}
                 >
                   <MessageSquareText size={19} />
+                </button>
+              )}
+              {isFullscreen && isCommentsAvailable && (
+                <button
+                  type="button"
+                  title={getString("watch_comments")}
+                  aria-label={getString("watch_comments")}
+                  aria-pressed={panelOpen("comments")}
+                  onClick={() => togglePanel("comments")}
+                  className={panelButtonClass("comments")}
+                >
+                  <MessagesSquare size={19} />
                 </button>
               )}
               {sbSubmitEnabled && currentVideo && (

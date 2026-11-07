@@ -159,7 +159,7 @@ function DownloadVideoShelfRow({
     <>
       {videos.map((video, index) => (
         <div key={`${video.id}-${index}`} className="w-[280px] md:w-[320px] shrink-0">
-          <VideoCard video={video} onPlay={onPlay} />
+          <VideoCard video={video} onPlay={onPlay} hideChannelAvatar />
         </div>
       ))}
     </>

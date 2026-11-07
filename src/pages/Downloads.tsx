@@ -369,6 +369,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                       <VideoCard
                         video={entry.video}
                         onPlay={onPlay}
+                        hideChannelAvatar
                         reasonLine={entry.detail}
                         onRemoveDownload={entry.recordId != null ? () => removeWithUndo([entry.recordId!]) : undefined}
                         thumbnailOverlay={entry.progress ? <DownloadProgressOverlay progress={entry.progress} /> : undefined}

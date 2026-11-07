@@ -3,27 +3,35 @@
 
 mod sync2_common;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use flow_desktop_lib::sync2::engine::{EngineError, Session};
-use flow_desktop_lib::sync2::envelope::{ObjectType, open_object, parse_object};
+use flow_desktop_lib::sync2::envelope::{
+    Header, ObjectType, open_object, parse_object, seal_object,
+};
 use flow_desktop_lib::sync2::epoch::{open_chain, purpose_key};
+use flow_desktop_lib::sync2::kdf::sha256;
 use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::DeviceMeta;
 use flow_desktop_lib::sync2::live_seal::LiveKeys;
 use flow_desktop_lib::sync2::membership::{remove_devices, rename_device};
-use flow_desktop_lib::sync2::paths::log_path;
+use flow_desktop_lib::sync2::paths::{log_path, parse_log_path};
 use flow_desktop_lib::sync2::profile_names::set;
+use flow_desktop_lib::sync2::read_budget::OBJECTS;
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret};
 use flow_desktop_lib::sync2::recovery_flow::{preview_restore, replace_recovery_key, restore};
 use flow_desktop_lib::sync2::recovery_notice::recovery_notice;
 use flow_desktop_lib::sync2::restore_removal::take_replaced_words;
-use flow_desktop_lib::sync2::roster::{Op, Role, replay_roster};
+use flow_desktop_lib::sync2::roster::{Cut, Op, Role, replay_roster};
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, load_group, save_group};
+use flow_desktop_lib::sync2::server::StoreError;
+use flow_desktop_lib::sync2::state::{
+    GroupRecord, add_roster_entries, load_group, restore_read, save_group,
+};
 use flow_desktop_lib::sync2::webdav::WebDavLogin;
 use flow_desktop_lib::sync2::wrap::unwrap_epoch_key;
 use sqlx::SqlitePool;
+use sqlx::sqlite::SqlitePoolOptions;
 use sync2_common::{
     Group, LINK, MemoryStore, device_pool, empty_pool, exported, group, head, watch,
 };
@@ -38,17 +46,23 @@ fn meta(name: &str) -> DeviceMeta {
     }
 }
 
-/// A device just restored with only `kept` chosen, under `link`, as the setup code leaves it.
-async fn restored_keeping(g: &Group, kept: &[String], link: &str) -> (MemberSecrets, SqlitePool) {
+/// A device just restored in `pool` with only `kept` chosen, under `link`, as the setup code leaves
+/// it.
+async fn restored_in(pool: &SqlitePool, g: &Group, kept: &[String], link: &str) -> MemberSecrets {
     let device = member_secrets(random_bytes(), random_bytes());
     let restored = restore(&&g.store, &&g.store, &g.recovery, &device, &meta("New"))
         .await
         .unwrap();
-    let pool = empty_pool().await;
-    add_roster_entries(&pool, &restored.entries).await.unwrap();
+    add_roster_entries(pool, &restored.entries).await.unwrap();
     let record = GroupRecord::new(hex::encode(g.group), "memory".into(), None, link.to_owned())
         .restored_keeping(kept);
-    save_group(&pool, &record).await.unwrap();
+    save_group(pool, &record).await.unwrap();
+    device
+}
+
+async fn restored_keeping(g: &Group, kept: &[String], link: &str) -> (MemberSecrets, SqlitePool) {
+    let pool = empty_pool().await;
+    let device = restored_in(&pool, g, kept, link).await;
     (device, pool)
 }
 
@@ -75,6 +89,89 @@ fn objects_of(store: &MemoryStore, device: &MemberSecrets) -> Vec<String> {
         .filter(|path| path.contains(&did))
         .cloned()
         .collect()
+}
+
+/// `device` writes at least `count` batches to its log.
+async fn wrote(g: &Group, device: &MemberSecrets, count: usize) {
+    let pool = device_pool(g).await;
+    let mut session = Session::open(&pool, &g.store, device).await.unwrap();
+    let name = hex::encode(device.did);
+    for n in 0..count {
+        watch(&pool, &format!("{}{n:07}", &name[..4])).await;
+        session
+            .push(&pool, exported(&pool, &name).await)
+            .await
+            .unwrap();
+    }
+}
+
+/// Where `device`'s log truly ends, as a removal would name it.
+fn end_of(store: &MemoryStore, device: &MemberSecrets) -> Cut {
+    let did = hex::encode(device.did);
+    let memory = store.0.lock().unwrap();
+    let (seq, bytes) = memory
+        .objects
+        .iter()
+        .filter_map(|(path, (_, bytes))| {
+            parse_log_path(path)
+                .filter(|(sender, _)| *sender == did)
+                .map(|(_, seq)| (seq, bytes))
+        })
+        .max_by_key(|(seq, _)| *seq)
+        .unwrap();
+    Cut {
+        seq,
+        hash: hex::encode(sha256(bytes)),
+    }
+}
+
+/// Makes every read of `store` stop after one object, on its own limit.
+fn one_object_per_read(store: &MemoryStore) {
+    let mut memory = store.0.lock().unwrap();
+    memory.page = Some(1);
+    memory.padding = OBJECTS;
+}
+
+/// How many objects the logs hold.
+fn log_objects(store: &MemoryStore) -> usize {
+    let memory = store.0.lock().unwrap();
+    memory
+        .objects
+        .keys()
+        .filter(|path| parse_log_path(path).is_some())
+        .count()
+}
+
+fn cuts(store: &MemoryStore) -> BTreeMap<String, Cut> {
+    let memory = store.0.lock().unwrap();
+    memory
+        .roster
+        .last()
+        .unwrap()
+        .cut
+        .clone()
+        .unwrap_or_default()
+}
+
+/// Opens `count` sessions, none of which may finish the restore or write to the store.
+async fn stays_pending(g: &Group, device: &MemberSecrets, pool: &SqlitePool, count: usize) {
+    let before = stored(&g.store);
+    for _ in 0..count {
+        assert!(matches!(
+            Session::open(pool, &g.store, device).await,
+            Err(EngineError::RestorePending)
+        ));
+        assert_eq!(stored(&g.store), before);
+        assert!(g.store.0.lock().unwrap().deletes.is_empty());
+        assert!(
+            load_group(pool)
+                .await
+                .unwrap()
+                .unwrap()
+                .restore_kept
+                .is_some()
+        );
+    }
 }
 
 /// How much the store holds of each kind.
@@ -484,4 +581,214 @@ async fn a_device_on_an_older_roster_can_open_only_keys_that_seal_nothing() {
         let guess = purpose_key(&second, &g.group, last, ObjectType::Changes.purpose());
         assert!(open_object(&object, &guess).is_err());
     }
+}
+
+#[tokio::test]
+async fn a_read_cut_short_removes_only_once_it_reaches_the_end() {
+    let g = group().await;
+    wrote(&g, &g.a, 3).await;
+    wrote(&g, &g.b, 2).await;
+    one_object_per_read(&g.store);
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+
+    stays_pending(&g, &device, &pool, log_objects(&g.store)).await;
+    Session::open(&pool, &g.store, &device).await.unwrap();
+
+    assert_eq!(devices(&g.store), BTreeSet::from([hex::encode(device.did)]));
+    assert_eq!(
+        cuts(&g.store),
+        BTreeMap::from([
+            (hex::encode(g.a.did), end_of(&g.store, &g.a)),
+            (hex::encode(g.b.did), end_of(&g.store, &g.b)),
+        ])
+    );
+    assert!(end_of(&g.store, &g.a).seq >= 3);
+    assert_eq!(load_group(&pool).await.unwrap().unwrap().restore_kept, None);
+    assert!(restore_read(&pool).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn a_read_cut_short_resumes_after_a_restart() {
+    let folder = std::env::temp_dir().join(format!("flow-{}", hex::encode(random_bytes::<8>())));
+    std::fs::create_dir_all(&folder).unwrap();
+    let url = format!("sqlite:{}?mode=rwc", folder.join("flow.db").display());
+    let reopen = || async {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    };
+    let g = group().await;
+    wrote(&g, &g.a, 3).await;
+    one_object_per_read(&g.store);
+    let mut pool = reopen().await;
+    let device = restored_in(&pool, &g, &[], "").await;
+
+    for _ in 0..log_objects(&g.store) {
+        stays_pending(&g, &device, &pool, 1).await;
+        pool.close().await;
+        pool = reopen().await;
+    }
+    Session::open(&pool, &g.store, &device).await.unwrap();
+
+    assert_eq!(
+        cuts(&g.store)[&hex::encode(g.a.did)],
+        end_of(&g.store, &g.a)
+    );
+    pool.close().await;
+    std::fs::remove_dir_all(&folder).unwrap();
+}
+
+#[tokio::test]
+async fn a_missing_object_ends_only_its_own_log() {
+    let g = group().await;
+    wrote(&g, &g.a, 3).await;
+    wrote(&g, &g.b, 2).await;
+    g.store.take(&log_path(&hex::encode(g.a.did), 2));
+    g.store.0.lock().unwrap().page = Some(1);
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+
+    Session::open(&pool, &g.store, &device).await.unwrap();
+
+    assert_eq!(devices(&g.store), BTreeSet::from([hex::encode(device.did)]));
+    let cuts = cuts(&g.store);
+    assert_eq!(cuts[&hex::encode(g.a.did)].seq, 1);
+    assert_eq!(cuts[&hex::encode(g.b.did)], end_of(&g.store, &g.b));
+}
+
+#[tokio::test]
+async fn a_missing_object_becomes_a_cut_only_once_the_read_reaches_the_end() {
+    let g = group().await;
+    wrote(&g, &g.a, 3).await;
+    wrote(&g, &g.b, 2).await;
+    g.store.take(&log_path(&hex::encode(g.a.did), 2));
+    one_object_per_read(&g.store);
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+
+    stays_pending(&g, &device, &pool, log_objects(&g.store)).await;
+    Session::open(&pool, &g.store, &device).await.unwrap();
+
+    let cuts = cuts(&g.store);
+    assert_eq!(cuts[&hex::encode(g.a.did)].seq, 1);
+    assert_eq!(cuts[&hex::encode(g.b.did)], end_of(&g.store, &g.b));
+}
+
+#[tokio::test]
+async fn a_cursor_that_never_ends_ends_each_sync_and_finishes_nothing() {
+    let g = group().await;
+    wrote(&g, &g.a, 1).await;
+    g.store.0.lock().unwrap().endless = true;
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+
+    stays_pending(&g, &device, &pool, 1).await;
+    let first = restore_read(&pool).await.unwrap().unwrap().cursor;
+    stays_pending(&g, &device, &pool, 1).await;
+    assert!(restore_read(&pool).await.unwrap().unwrap().cursor > first);
+}
+
+#[tokio::test]
+async fn the_first_read_after_a_read_cut_short_takes_everything_once() {
+    let g = group().await;
+    wrote(&g, &g.a, 3).await;
+    one_object_per_read(&g.store);
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+    let objects = log_objects(&g.store);
+    stays_pending(&g, &device, &pool, objects).await;
+    {
+        let mut memory = g.store.0.lock().unwrap();
+        memory.page = None;
+        memory.padding = 0;
+    }
+
+    let mut session = Session::open(&pool, &g.store, &device).await.unwrap();
+
+    assert!(session.adopt_link(&pool, "own").await.unwrap());
+    let a = hex::encode(g.a.did);
+    let pulled = session.pull(&pool).await.unwrap();
+    assert_eq!(pulled.batches[&a].len(), objects);
+    session.finish(&pool, pulled).await.unwrap();
+    let again = session.pull(&pool).await.unwrap();
+    assert!(again.batches.is_empty());
+}
+
+#[tokio::test]
+async fn a_log_that_may_start_later_holds_a_read_too_long_to_list() {
+    let g = group().await;
+    wrote(&g, &g.a, 2).await;
+    g.store.take(&log_path(&hex::encode(g.a.did), 1));
+    one_object_per_read(&g.store);
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+    let before = stored(&g.store);
+
+    for _ in 0..3 {
+        assert!(matches!(
+            Session::open(&pool, &g.store, &device).await,
+            Err(EngineError::Store(StoreError::TooLong))
+        ));
+    }
+
+    assert_eq!(stored(&g.store), before);
+    assert!(
+        load_group(&pool)
+            .await
+            .unwrap()
+            .unwrap()
+            .restore_kept
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn a_read_cut_short_goes_on_checking_the_chain_it_stopped_in() {
+    let g = group().await;
+    wrote(&g, &g.a, 3).await;
+    one_object_per_read(&g.store);
+    let (device, pool) = restored_keeping(&g, &[], "").await;
+    stays_pending(&g, &device, &pool, 1).await;
+
+    let path = log_path(&hex::encode(g.a.did), 2);
+    let genuine = g.store.take(&path);
+    let header = parse_object(&genuine, &g.group).unwrap().header;
+    let forged = Header {
+        prev: [9; 32],
+        ..header
+    };
+    g.store
+        .put(&path, seal_object(&forged, &[0; 32], b"", &g.a.sig_seed));
+    stays_pending(&g, &device, &pool, log_objects(&g.store) - 1).await;
+    Session::open(&pool, &g.store, &device).await.unwrap();
+
+    assert_eq!(cuts(&g.store)[&hex::encode(g.a.did)].seq, 1);
+}
+
+#[tokio::test]
+async fn a_read_cut_short_reads_a_removed_senders_log_up_to_its_removal() {
+    let g = group().await;
+    wrote(&g, &g.b, 2).await;
+    let pool_a = device_pool(&g).await;
+    let mut a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    let pulled = a.pull(&pool_a).await.unwrap();
+    a.finish(&pool_a, pulled).await.unwrap();
+    let a = Session::open(&pool_a, &g.store, &g.a).await.unwrap();
+    let b = hex::encode(g.b.did);
+    remove_devices(&pool_a, &a, &g.a, std::slice::from_ref(&b))
+        .await
+        .unwrap();
+    let cut = cuts(&g.store)[&b].clone();
+    assert_eq!(cut, end_of(&g.store, &g.b));
+    one_object_per_read(&g.store);
+    let (device, pool) = restored_keeping(&g, &[], LINK).await;
+
+    stays_pending(&g, &device, &pool, log_objects(&g.store)).await;
+    let place = restore_read(&pool).await.unwrap().unwrap();
+    assert_eq!(place.positions[&b].seq, cut.seq);
+
+    Session::open(&pool, &g.store, &device).await.unwrap();
+    assert_eq!(
+        cuts(&g.store)[&hex::encode(g.a.did)],
+        end_of(&g.store, &g.a)
+    );
 }

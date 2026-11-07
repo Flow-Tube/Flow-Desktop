@@ -7,10 +7,11 @@ use std::sync::Mutex;
 use sqlx::SqlitePool;
 
 use super::actions::set_recovery_saved;
-use super::engine::{EngineError, Result, Session};
+use super::engine::{EngineError, Pulled, Result, Session};
 use super::membership::remove_at;
 use super::roster::Role;
 use super::snapshot::snapshot_soon;
+use super::state::{RestoreRead, restore_read, save_restore_read, streams};
 use super::store::Store;
 
 /// Words rule 8 made during this step, which has no screen of its own, until the page asks.
@@ -23,8 +24,9 @@ pub fn take_replaced_words() -> Option<String> {
 
 impl<S: Store> Session<'_, S> {
     /// Removes the devices not on the restore's list, ending their logs where this device could
-    /// read them, which only an unsaved read can say: its saved positions are still empty. It runs
-    /// again on the next open until none is left, so a stop anywhere resumes.
+    /// read them, which only an unsaved read can say: its saved positions are still empty. A read
+    /// that hits this device's limits keeps its place and removes nobody yet. It runs again on the
+    /// next open until none is left, so a stop anywhere resumes.
     pub(super) async fn finish_restore(&mut self, pool: &SqlitePool) -> Result<()> {
         let Some(kept) = self.record().restore_kept() else {
             return Ok(());
@@ -32,7 +34,11 @@ impl<S: Store> Session<'_, S> {
         let removed = self.not_kept(&kept);
         if !removed.is_empty() {
             self.store().store_answers().await?;
-            let read = self.read_new(pool, None).await?;
+            let read = self.read_every_log(pool).await?;
+            if read.stalled {
+                save_restore_read(pool, Some(&read.place())).await?;
+                return Err(EngineError::RestorePending);
+            }
             let replaced = remove_at(self, self.device(), &removed, read.positions()).await?;
             // Before the re-read, which can fail: these words open nothing else, and can't be asked for again.
             if let Some(words) = replaced {
@@ -48,6 +54,18 @@ impl<S: Store> Session<'_, S> {
             snapshot_soon(pool).await?;
         }
         self.restore_finished(pool).await
+    }
+
+    async fn read_every_log(&mut self, pool: &SqlitePool) -> Result<Pulled> {
+        let place = match restore_read(pool).await? {
+            Some(place) => place,
+            None => RestoreRead {
+                positions: streams(pool).await?,
+                cursor: self.record().cursor,
+                from_first: false,
+            },
+        };
+        self.read_from(pool, Pulled::to_the_end(place), None).await
     }
 
     fn not_kept(&self, kept: &BTreeSet<String>) -> Vec<String> {

@@ -30,8 +30,9 @@ use super::roster::{
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, StoreKind, add_roster_entries, floors, load_group, replace_roster,
-    roster_entries, roster_pins, save_floors, save_group, save_streams, streams,
+    Floors, GroupRecord, RestoreRead, StoreKind, add_roster_entries, floors, load_group,
+    replace_roster, roster_entries, roster_pins, save_floors, save_group, save_restore_read,
+    save_streams, streams,
 };
 use super::store::Store;
 use super::store_login::{decode_login, encode_login, note_login, note_login_sent, note_removal};
@@ -163,7 +164,12 @@ pub struct Pulled {
     /// Batches and snapshot manifests read. Acks aren't acknowledged, so two idle devices don't
     /// answer each other's acks forever.
     consumed: usize,
-    stalled: bool,
+    /// The read stopped early. One that goes [`Pulled::to_the_end`] stops only on its budget.
+    pub(super) stalled: bool,
+    /// Goes past a log that stops at a missing object, whose end is then that object.
+    to_the_end: bool,
+    /// See [`RestoreRead::from_first`].
+    from_first: bool,
     /// The links named by the batches and snapshot manifests read, in reading order; `None` is
     /// the `profiles` collection.
     links: Vec<Option<String>>,
@@ -177,6 +183,26 @@ impl Pulled {
     /// How far each sender's log was read.
     pub(super) fn positions(&self) -> &BTreeMap<String, StreamPosition> {
         &self.positions
+    }
+
+    /// A read that finds where every log ends, going on from `place`.
+    pub(super) fn to_the_end(place: RestoreRead) -> Self {
+        Self {
+            positions: place.positions,
+            cursor: place.cursor,
+            from_first: place.from_first,
+            to_the_end: true,
+            ..Self::default()
+        }
+    }
+
+    /// Where a later read goes on from this one.
+    pub(super) fn place(&self) -> RestoreRead {
+        RestoreRead {
+            positions: self.positions.clone(),
+            cursor: self.cursor,
+            from_first: self.from_first,
+        }
     }
 
     /// Takes the records of a snapshot this device starts from, as a batch of its writer's.
@@ -509,6 +535,7 @@ impl<'a, S: Store> Session<'a, S> {
     pub(super) async fn restore_finished(&mut self, pool: &SqlitePool) -> Result<()> {
         self.record.restore_kept = None;
         save_group(pool, &self.record).await?;
+        save_restore_read(pool, None).await?;
         Ok(())
     }
 
@@ -779,21 +806,37 @@ impl<'a, S: Store> Session<'a, S> {
         pool: &SqlitePool,
         reading: Option<&Reading>,
     ) -> Result<Pulled> {
-        let me = hex::encode(self.device.did);
-        let mut pulled = Pulled {
+        let start = Pulled {
             positions: streams(pool).await?,
             cursor: self.record.cursor,
             ..Pulled::default()
         };
+        self.read_from(pool, start, reading).await
+    }
+
+    /// Goes on reading from where `pulled` got.
+    pub(super) async fn read_from(
+        &mut self,
+        pool: &SqlitePool,
+        mut pulled: Pulled,
+        reading: Option<&Reading>,
+    ) -> Result<Pulled> {
+        let me = hex::encode(self.device.did);
         let links = reading.map(|r| r.links().map(str::to_owned).collect::<BTreeSet<_>>());
-        if pulled.positions.is_empty()
-            && pulled.cursor == 0
-            && let Some(start) = self.bootstrap(links.as_ref()).await?
-        {
-            for snapshot in start.snapshots {
-                pulled.start_from(&me, snapshot, reading);
+        if pulled.positions.is_empty() && pulled.cursor == 0 {
+            let start = match self.bootstrap(links.as_ref()).await {
+                Err(EngineError::Store(StoreError::TooLong)) if pulled.to_the_end => {
+                    pulled.from_first = true;
+                    None
+                }
+                start => start?,
+            };
+            if let Some(start) = start {
+                for snapshot in start.snapshots {
+                    pulled.start_from(&me, snapshot, reading);
+                }
+                pulled.positions = start.positions;
             }
-            pulled.positions = start.positions;
         }
         let mut floors = floors(pool).await?;
         floors.extend(pulled.floors.clone());
@@ -843,9 +886,17 @@ impl<'a, S: Store> Session<'a, S> {
                 }
             }
             // A missing object means the store hasn't caught up: read this page again next time.
-            if !waiting.is_empty() {
+            if !waiting.is_empty() && !pulled.to_the_end {
                 pulled.stalled = true;
                 return Ok(pulled);
+            }
+            // With no snapshot to start from, a log with nothing read may only start later.
+            if pulled.from_first
+                && waiting
+                    .iter()
+                    .any(|(did, _, _)| !pulled.positions.contains_key(did))
+            {
+                return Err(StoreError::TooLong.into());
             }
             let advanced = next > cursor
                 || pulled

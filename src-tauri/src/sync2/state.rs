@@ -229,6 +229,39 @@ pub async fn save_streams(
     Ok(())
 }
 
+/// How far a restore's read got. It stays apart from the saved streams, so the first read after
+/// the restore still takes every log from its start.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct RestoreRead {
+    pub positions: BTreeMap<String, StreamPosition>,
+    pub cursor: i64,
+    /// The store's list was too long to choose snapshots from, so logs are read from their start.
+    pub from_first: bool,
+}
+
+/// Where a restore's read goes on. A place that can't be read starts the read over.
+pub async fn restore_read(pool: &SqlitePool) -> Result<Option<RestoreRead>, SyncError> {
+    let saved: Option<Option<String>> =
+        sqlx::query_scalar("SELECT restore_read FROM sync2_group WHERE id = 1")
+            .fetch_optional(pool)
+            .await?;
+    Ok(saved
+        .flatten()
+        .and_then(|json| serde_json::from_str(&json).ok()))
+}
+
+pub async fn save_restore_read(
+    pool: &SqlitePool,
+    read: Option<&RestoreRead>,
+) -> Result<(), SyncError> {
+    let json = read.map(serde_json::to_string).transpose()?;
+    sqlx::query("UPDATE sync2_group SET restore_read = ? WHERE id = 1")
+        .bind(json)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Forgets the group on this device, for a device that was removed from it.
 pub async fn forget_group(pool: &SqlitePool) -> Result<(), SyncError> {
     let mut tx = pool.begin().await?;

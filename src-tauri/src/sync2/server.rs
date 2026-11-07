@@ -51,6 +51,8 @@ pub enum StoreError {
     Local(#[source] sqlx::Error),
     #[error("the server sent an invalid response")]
     Malformed,
+    #[error("the list of what the store holds is too long to read at once")]
+    TooLong,
     #[error(transparent)]
     Protocol(#[from] super::Error),
 }

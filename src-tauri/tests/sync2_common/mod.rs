@@ -39,6 +39,12 @@ pub struct Memory {
     pub deletes: Vec<String>,
     /// Roster appends fail while set, as they do when a store stops answering.
     pub refuse_appends: bool,
+    /// Objects per answer to `changes`, when set.
+    pub page: Option<usize>,
+    /// Paths that aren't log objects, added to every answer to `changes`.
+    pub padding: usize,
+    /// `changes` always answers, always with a later cursor.
+    pub endless: bool,
     cursor: u64,
 }
 
@@ -147,6 +153,13 @@ impl Store for &MemoryStore {
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
         let memory = self.0.lock().unwrap();
+        let pad = |n: u64| ChangedObject {
+            path: format!("pad/{n}"),
+            size: 0,
+        };
+        if memory.endless {
+            return Ok((vec![pad(cursor)], cursor + 1));
+        }
         let mut changes: Vec<(u64, &String, &Vec<u8>)> = memory
             .objects
             .iter()
@@ -154,14 +167,18 @@ impl Store for &MemoryStore {
             .map(|(p, (c, b))| (*c, p, b))
             .collect();
         changes.sort();
+        changes.truncate(memory.page.unwrap_or(usize::MAX));
         let next = changes.last().map_or(cursor, |(c, _, _)| *c);
-        let objects = changes
+        let mut objects: Vec<ChangedObject> = changes
             .into_iter()
             .map(|(_, path, bytes)| ChangedObject {
                 path: path.clone(),
                 size: bytes.len() as u64,
             })
             .collect();
+        if !objects.is_empty() {
+            objects.extend((0..memory.padding as u64).map(pad));
+        }
         Ok((objects, next))
     }
 }

@@ -256,7 +256,7 @@ impl Store for WebDavStore {
                 let held = self.shard(&did, shard).await?;
                 // A partial list could pick a snapshot that doesn't cover the logs left out.
                 if !budget.take(held.len()) {
-                    return Err(StoreError::Malformed);
+                    return Err(StoreError::TooLong);
                 }
                 objects.extend(held.into_iter().map(|seq| changed(&did, seq)));
             }

@@ -161,7 +161,7 @@ LIBRARY
 - A YouTube playlist now says when unavailable videos are hidden from it.
 - Select many videos in a playlist to add them to the queue, add them to another playlist, download them, or remove them with Undo.
 - Save any playlist or music collection as a file from its menu, and import one with Import from file on the Playlists or Albums page. The files are the same ones Flow for Android saves and opens. A music playlist imports into your Albums.
-- Likes has Play, Shuffle and a sort, and you can select many to queue, download or remove them with Undo. Download all and Save as file work on what the page shows. With songs and videos both on show, Play and Save as file take the videos.
+- Likes has a sort, and you can select many to queue, download or remove them with Undo. Download all and Save as file work on what the page shows. With songs and videos both on show, Play and Save as file take the videos.
 - History has a Shorts tab, Newest and Oldest first, and a year to narrow it to. A removed video can be brought back with Undo, and Delete Shorts from history clears only the Shorts.
 - Hide any Library section in Settings > Content & UI.
 - A new Remove watched videos switch takes videos out of Watch Later once you finish them, and opening Watch Later clears any you watched elsewhere, with Undo.

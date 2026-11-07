@@ -37,7 +37,7 @@ export function sortLikedItems(items: LikedItem[], order: PlaylistSortOrder, now
 
 /**
  * Songs and videos play in different players and teach different engines, so a list can't be
- * queued or saved as one. With both on show, Play and Save take the videos.
+ * queued or saved as one. With both on show, Save takes the videos.
  */
 export function likedActionKind(items: LikedItem[]): LikedItemKind | null {
   if (items.some((item) => item.kind === "video")) return "video";

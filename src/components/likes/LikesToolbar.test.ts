@@ -71,18 +71,11 @@ describe("LikesToolbar", () => {
   const byLabel = (label: string) => host.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement;
   const byText = (label: string) => [...host.querySelectorAll("button")].find((button) => button.textContent === label)!;
 
-  it("plays the videos when both are on show, never queueing songs in the video player", () => {
+  it("has no Play or Shuffle", () => {
     render({});
-    act(() => byText("Play").click());
-    expect(setQueue.mock.calls[0]?.[0]).toEqual([video.kind === "video" && video.video]);
-    expect(playQueue).not.toHaveBeenCalled();
-  });
-
-  it("plays a music-only view in the music player", () => {
-    render({ items: [song] });
-    act(() => byText("Play").click());
-    expect(playQueue).toHaveBeenCalledTimes(1);
-    expect(setQueue).not.toHaveBeenCalled();
+    const labels = [...host.querySelectorAll("button")].map((button) => button.textContent);
+    expect(labels).not.toContain("Play");
+    expect(labels).not.toContain("Shuffle");
   });
 
   it("asks before Download all, and takes both kinds", async () => {

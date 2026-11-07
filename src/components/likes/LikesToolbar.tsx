@@ -1,27 +1,22 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Download, ListChecks, ListMusic, ListPlus, Play, Save, Shuffle, Trash2 } from "lucide-react";
+import { Download, ListChecks, ListMusic, ListPlus, Save, Trash2 } from "lucide-react";
 import { confirmAction } from "../../lib/dialogs";
 import { downloadManyWithToast } from "../../lib/downloadMany";
 import { getPlural, getString } from "../../lib/i18n/index";
 import {
   LIKES_SORT_ORDERS,
-  likedActionKind,
   likedDownloadTargets,
   likedPlaylistFile,
   likedSongs,
   likedVideos,
 } from "../../lib/likedItems";
-import { fisherYates } from "../../lib/musicShuffle";
 import { playlistSortLabel, type PlaylistSortOrder } from "../../lib/playlistSort";
 import { savePlaylistFileWithToast } from "../../lib/playlistTransfer";
 import { useLikesStore, type LikedItem } from "../../store/useLikesStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
-import { usePlayerStore } from "../../store/usePlayerStore";
 import { useUiStore } from "../../store/useUiStore";
 import { AddAllToPlaylistDialog } from "../playlist/AddAllToPlaylistDialog";
 import { addVideosToQueueWithToast } from "../playlist/PlaylistSelectionActions";
-import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
 import { Select } from "../ui/Select";
 import { SelectionBar } from "../ui/SelectionBar";
@@ -50,30 +45,12 @@ export function LikesToolbar({
   onToggleAll,
   onDoneSelecting,
 }: LikesToolbarProps) {
-  const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
   const showToast = useUiStore((state) => state.showToast);
   const removeMany = useLikesStore((state) => state.removeMany);
   const restore = useLikesStore((state) => state.restore);
-  const setVideoQueue = usePlayerStore((state) => state.setQueue);
-  const playSongs = useMusicPlayerStore((state) => state.playQueue);
   const addSongToQueue = useMusicPlayerStore((state) => state.addToQueue);
   const empty = items.length === 0;
-
-  const play = (shuffle: boolean) => {
-    const kind = likedActionKind(items);
-    if (kind === "music") {
-      const songs = likedSongs(items);
-      void playSongs(shuffle ? fisherYates(songs) : songs, 0, getString("likes_title"));
-    } else if (kind === "video") {
-      const videos = likedVideos(items);
-      const queue = shuffle ? fisherYates(videos) : videos;
-      const first = queue[0];
-      if (!first) return;
-      setVideoQueue(queue, 0, null, shuffle ? videos : null);
-      navigate(`/watch/${first.id}`);
-    }
-  };
 
   const downloadAll = async () => {
     const targets = likedDownloadTargets(items);
@@ -173,14 +150,6 @@ export function LikesToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 md:ms-auto">
-      <Button type="button" size="sm" disabled={empty} onClick={() => play(false)}>
-        <Play size={16} fill="currentColor" />
-        {getString("music_play")}
-      </Button>
-      <Button type="button" variant="tonal" size="sm" disabled={empty} onClick={() => play(true)}>
-        <Shuffle size={16} />
-        {getString("music_shuffle")}
-      </Button>
       <Select
         value={sortOrder}
         onChange={(value) => onSortChange(value as PlaylistSortOrder)}

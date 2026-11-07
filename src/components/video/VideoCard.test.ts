@@ -158,4 +158,32 @@ describe("VideoCard title", () => {
 
     expect(host.textContent).toContain(ORIGINAL);
   });
+
+  it("marks titles and channel labels with dir=\"auto\" and logical start alignment across variants", async () => {
+    setOriginalTitles(false);
+    for (const variant of ["default", "compact", "list"] as const) {
+      act(() =>
+        root.render(
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(VideoCard, {
+              video: { id: freshId(), title: LISTED, channelName: "RTVE" } as VideoSummary,
+              variant,
+              onPlay: vi.fn(),
+            }),
+          ),
+        ),
+      );
+      await flush();
+
+      const heading = host.querySelector("h3");
+      expect(heading?.getAttribute("dir")).toBe("auto");
+      expect(heading?.className).toContain("text-start");
+
+      const channelButton = host.querySelector("button[dir='auto']");
+      expect(channelButton).not.toBeNull();
+      expect(channelButton?.className).toContain("text-start");
+    }
+  });
 });

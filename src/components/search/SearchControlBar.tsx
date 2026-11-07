@@ -3,6 +3,8 @@ import { Chip } from '../ui/Chip';
 import { FilterSelect } from '../ui/FilterSelect';
 import { getString } from '../../lib/i18n/index';
 import { isCategoryOffered } from '../../lib/searchResults';
+import { SETTINGS } from '../../lib/settings/schema';
+import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import type { StringKey } from '../../lib/i18n/index';
 import type {
   AdvancedFilters,
@@ -21,6 +23,8 @@ interface SearchControlBarProps {
   /** The music filters offered for this query; categories it leaves out are hidden. */
   offeredMusicFilters: string[] | null;
 }
+
+const MUSIC_ONLY_CATEGORIES = new Set<SearchCategory>(['songs', 'albums', 'podcasts', 'episodes']);
 
 const CATEGORY_KEYS: { key: SearchCategory; labelKey: StringKey }[] = [
   { key: 'all', labelKey: 'search_cat_all' },
@@ -43,8 +47,13 @@ export function SearchControlBar({
   onFiltersChange,
   offeredMusicFilters,
 }: SearchControlBarProps) {
+  const showMusicNav = useAppSettingsStore((s) => s.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
+  const showShortsNav = useAppSettingsStore((s) => s.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
+
   const categories = CATEGORY_KEYS.filter(
-    (c) => c.key === filterType || isCategoryOffered(c.key, offeredMusicFilters),
+    (c) =>
+      (showMusicNav || !MUSIC_ONLY_CATEGORIES.has(c.key)) &&
+      (c.key === filterType || isCategoryOffered(c.key, offeredMusicFilters)),
   ).map((c) => ({ key: c.key, label: getString(c.labelKey) }));
   const labels = categories.map((c) => c.label);
   const activeLabel = categories.find((c) => c.key === filterType)?.label ?? labels[0];
@@ -57,7 +66,7 @@ export function SearchControlBar({
   const typeOptions: { value: AdvancedFilters['contentType']; label: string }[] = [
     { value: 'any', label: getString('search_type_any') },
     { value: 'video', label: getString('search_type_video') },
-    { value: 'shorts', label: getString('search_type_shorts') },
+    ...(showShortsNav ? [{ value: 'shorts' as const, label: getString('search_type_shorts') }] : []),
     { value: 'movie', label: getString('search_type_movie') },
   ];
   const uploadOptions: { value: AdvancedFilters['uploadDate']; label: string }[] = [

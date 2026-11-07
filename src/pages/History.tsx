@@ -8,8 +8,10 @@ import { MusicHistoryGroup } from "../components/history/MusicHistoryGroup";
 import { Button } from "../components/ui/Button";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
+import { SETTINGS } from "../lib/settings/schema";
 import { useHistory, groupHistoryByDate } from "../lib/useHistory";
 import { useDebounce } from "../lib/useDebounce";
+import { useAppSettingsStore } from "../store/useAppSettingsStore";
 
 type HistoryFilter = "all" | "videos" | "music";
 
@@ -18,6 +20,7 @@ interface HistoryProps {
 }
 
 export const History: React.FC<HistoryProps> = ({ onPlay }) => {
+  const showMusicNav = useAppSettingsStore((s) => s.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== "false");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<HistoryFilter>("all");
@@ -56,17 +59,19 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
     () => [
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
-      { key: "music" as const, label: getString("history_filter_music") },
+      ...(showMusicNav ? [{ key: "music" as const, label: getString("history_filter_music") }] : []),
     ],
-    [],
+    [showMusicNav],
   );
-  const activeLabel = filters.find((f) => f.key === filter)?.label ?? filters[0]?.label ?? "";
+  const activeFilter: HistoryFilter = !showMusicNav && filter === "music" ? "all" : filter;
+  const activeLabel = filters.find((f) => f.key === activeFilter)?.label ?? filters[0]?.label ?? "";
 
   const visibleGroups = useMemo(() => {
     const query = debouncedQuery.trim().toLowerCase();
     const filtered = history.filter((record) => {
-      if (filter === "music" && !record.isMusic) return false;
-      if (filter === "videos" && record.isMusic) return false;
+      if (!showMusicNav && record.isMusic) return false;
+      if (activeFilter === "music" && !record.isMusic) return false;
+      if (activeFilter === "videos" && record.isMusic) return false;
       if (query) {
         const haystack = `${record.title ?? ""} ${record.channelName ?? ""}`.toLowerCase();
         if (!haystack.includes(query)) return false;
@@ -74,7 +79,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
       return true;
     });
     return groupHistoryByDate(filtered);
-  }, [history, filter, debouncedQuery]);
+  }, [history, activeFilter, showMusicNav, debouncedQuery]);
 
   const handleClearAll = async () => {
     try {

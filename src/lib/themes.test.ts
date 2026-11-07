@@ -115,4 +115,14 @@ describe("resolveThemeChoice", () => {
     expect(resolveThemeChoice(settings)).toEqual({ themeId: "night", variant: "amoled" });
     expect(resolveThemeChoice({ ...settings, systemDark: false })).toEqual({ themeId: "sand", variant: "light" });
   });
+
+  it("darkens the pale danger reds on light themes only", () => {
+    const theme = BUILTIN_THEMES[0]!;
+    const light = themeCssVariables(theme.variants.light, "light");
+    expect(light["--color-chrome-red-400"]).toBe(light["--color-chrome-red-300"]);
+    expect(light["--color-chrome-red-400"]).toContain("50.5%");
+    // Set rather than left out: the previous theme's value stays on the page otherwise.
+    expect(themeCssVariables(theme.variants.dark, "dark")["--color-chrome-red-400"]).toContain("70.4%");
+    expect(themeCssVariables(theme.variants.amoled, "amoled")["--color-chrome-red-400"]).toContain("70.4%");
+  });
 });

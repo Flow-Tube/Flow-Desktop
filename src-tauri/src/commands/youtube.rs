@@ -1296,6 +1296,17 @@ pub async fn stream_subscription_rss_feed(
     Ok(())
 }
 
+/// YouTube answers a rate-limited caption request with an HTML page, which must not pass for a
+/// caption file: it would parse to no lines at all and the track would just stay blank.
+fn caption_status(status: reqwest::StatusCode) -> Result<(), crate::errors::AppError> {
+    if status.is_success() {
+        return Ok(());
+    }
+    Err(crate::errors::AppError::Extractor(format!(
+        "Caption request refused: {status}"
+    )))
+}
+
 #[tauri::command]
 pub async fn fetch_subtitles(
     url: String,
@@ -1342,6 +1353,7 @@ pub async fn fetch_subtitles(
                                 ))
                             })?;
 
+                        caption_status(res.status())?;
                         let text = res.text().await.map_err(|e| {
                             crate::errors::AppError::Extractor(format!(
                                 "Read error fetching subtitles: {}",
@@ -1398,6 +1410,7 @@ pub async fn fetch_subtitles(
         .send()
         .await
         .map_err(|e| crate::errors::AppError::Extractor(format!("Network error: {}", e)))?;
+    caption_status(res.status())?;
 
     let text = res
         .text()
@@ -1409,4 +1422,17 @@ pub async fn fetch_subtitles(
         text.len()
     );
     Ok(text)
+}
+
+#[cfg(test)]
+mod caption_status_tests {
+    use super::caption_status;
+    use reqwest::StatusCode;
+
+    #[test]
+    fn a_rate_limited_answer_is_a_failure_not_a_caption_file() {
+        assert!(caption_status(StatusCode::OK).is_ok());
+        assert!(caption_status(StatusCode::TOO_MANY_REQUESTS).is_err());
+        assert!(caption_status(StatusCode::FORBIDDEN).is_err());
+    }
 }

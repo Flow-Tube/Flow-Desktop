@@ -150,6 +150,21 @@ impl Round {
     }
 }
 
+fn start_round(rounds: &mut JoinSet<()>, app: &AppHandle, local: &Local, port: u16, round: Round) {
+    if round.is_empty() {
+        return;
+    }
+    let (app, local) = (app.clone(), local.clone());
+    rounds.spawn(async move {
+        let dialer = Dialer {
+            app: &app,
+            local: &local,
+            port,
+        };
+        dialer.meet_round(round).await;
+    });
+}
+
 /// Members found over mDNS under one of `tags` and due, every few minutes.
 fn due_found(found: &mut BTreeMap<String, Found>, tags: &[String; 3]) -> Vec<(Vec<String>, u16)> {
     let now = now_ms();
@@ -176,8 +191,8 @@ fn due_kept(
         .into_iter()
         .filter(|(did, _)| {
             let due = members.contains(did)
-                && !seen.get(did).is_some_and(|at| *at >= since)
-                && !tried.get(did).is_some_and(|at| now - at < DIAL_EVERY_MS);
+                && seen.get(did).is_none_or(|at| *at < since)
+                && tried.get(did).is_none_or(|at| now - at >= DIAL_EVERY_MS);
             if due {
                 tried.insert(did.clone(), now);
             }
@@ -440,17 +455,7 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
                 kept: due_kept(app, &meeting.members, &mut tried, since),
                 since,
             };
-            if !round.is_empty() {
-                let (app, local) = (app.clone(), local.clone());
-                rounds.spawn(async move {
-                    let dialer = Dialer {
-                        app: &app,
-                        local: &local,
-                        port,
-                    };
-                    dialer.meet_round(round).await;
-                });
-            }
+            start_round(&mut rounds, app, &local, port, round);
         }
         save_addresses(app, &local.pool, &mut saved).await;
         follow_nearby(app, &mut near).await;

@@ -214,12 +214,9 @@ pub async fn serve(
 ) {
     let hellos = Arc::new(Semaphore::new(HELLOS_AT_ONCE));
     loop {
-        let stream = match listener.accept().await {
-            Ok((stream, _)) => stream,
-            Err(_) => {
-                tokio::time::sleep(ACCEPT_AGAIN).await;
-                continue;
-            }
+        let Ok((stream, _)) = listener.accept().await else {
+            tokio::time::sleep(ACCEPT_AGAIN).await;
+            continue;
         };
         let Ok(hello) = Arc::clone(&hellos).try_acquire_owned() else {
             continue;

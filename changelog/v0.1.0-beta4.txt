@@ -96,6 +96,7 @@ MUSIC
 - Lyrics for songs with several artists are matched against every credited artist, and LrcLib, SimpMusic and KuGou no longer return lyrics for a different song or a much longer upload.
 - The lyrics timing you set is kept for each song, through Refresh, another source or an edit.
 - Line-synced lyrics show the dots during long instrumental breaks, including solos the lyrics leave unmarked, and the lyrics wait on the next line instead of jumping back to the top.
+- The glow on long held notes in word-synced lyrics rises and fades smoothly instead of in visible steps.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

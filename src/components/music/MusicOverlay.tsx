@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
 import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
@@ -29,6 +29,7 @@ import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
 import { PlayerTransport } from "./player/PlayerTransport";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useFullPlayerColors } from "../../lib/usePlayerColors";
+import { coverSurfaceVariables } from "../../lib/playerColors";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import {
@@ -136,10 +137,18 @@ export function MusicOverlay() {
   useMusicPlayerKeyboard(open, onEscape);
 
   const fullBleedLyrics = isLyrics && (!wide || lyricsExpanded);
-  const lyricsBackground = useLyricsBackground();
-  const lyricsCover = useLyricsCover(accentSrc, open && fullBleedLyrics && lyricsBackground !== "player");
   const sideTab: SidePaneTab = isLyrics ? "lyrics" : "queue";
   const showPane = wide && paneVisible;
+  const lyricsBackground = useLyricsBackground();
+  // The cover's colours are only worked out while lyrics drawn on them are on screen.
+  const coverBehindLyrics = lyricsBackground !== "player" && isLyrics && (fullBleedLyrics || showPane);
+  const lyricsCover = useLyricsCover(accentSrc, open && coverBehindLyrics);
+  const lyricsOnCover = lyricsBackground !== "player" ? lyricsCover : null;
+  const [paneCoverColors] = useBoolPref(SETTINGS.MUSIC_SIDE_PANE_COVER_COLORS);
+  const paneSurface = useMemo(
+    () => (paneCoverColors ? (coverSurfaceVariables(playerColors.colors) as CSSProperties) : undefined),
+    [paneCoverColors, playerColors.colors],
+  );
   // Immersive's cover sits beside the side pane, and moves behind the song once the pane is hidden.
   const artworkPlacement = !wide ? "top" : showPane && !fullBleedLyrics ? "start" : "center";
 
@@ -181,7 +190,7 @@ export function MusicOverlay() {
         track={currentTrack}
         variant={variant}
         accent={playerColors.colors.roles.primary}
-        backdrop={variant === "full" && lyricsCover ? lyricsCover.backdrop : playerColors.colors.roles.surface}
+        backdrop={lyricsOnCover ? lyricsOnCover.backdrop : playerColors.colors.roles.surface}
         active
         className="h-full w-full"
       />
@@ -227,7 +236,7 @@ export function MusicOverlay() {
           </p>
 
           <div className="relative flex items-center gap-1 justify-self-end">
-            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} fullScreen={fullBleedLyrics} />}
+            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
             {wide && lyricsExpanded && (
               <HapticButton
                 onClick={() => setLyricsExpanded(false)}
@@ -312,7 +321,7 @@ export function MusicOverlay() {
             {lyricsView("full", "absolute inset-0 z-10")}
             <div
               // Over the cover's colours, the controls' scrim fades from the cover's own backdrop.
-              style={lyricsCover && lyricsBackground !== "player" ? ({ "--player-ground": rgbCss(lyricsCover.backdrop) } as CSSProperties) : undefined}
+              style={lyricsOnCover ? ({ "--player-ground": rgbCss(lyricsOnCover.backdrop) } as CSSProperties) : undefined}
               className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
               <div className="w-full max-w-2xl">
                 <MusicScrubber size="lg" showTimes countdown expressive />
@@ -351,6 +360,12 @@ export function MusicOverlay() {
                       onTabChange={(tab) => setViewState(tab === "lyrics" ? "lyrics" : "queue")}
                       onExpandLyrics={() => setLyricsExpanded(true)}
                       onHide={hidePane}
+                      surfaceStyle={paneSurface}
+                      background={
+                        sideTab === "lyrics" && lyricsBackground !== "player" ? (
+                          <LyricsCoverBackground cover={lyricsCover} moving={lyricsBackground === "moving"} />
+                        ) : null
+                      }
                     >
                       {sideTab === "lyrics" ? lyricsView("pane", "absolute inset-0") : <MusicQueuePane />}
                     </PlayerSidePane>
@@ -366,7 +381,8 @@ export function MusicOverlay() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 48 }}
                     transition={LAYOUT_SPRING}
-                    className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4"
+                    style={paneSurface}
+                    className="flex min-h-0 w-1/2 flex-col rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 transition-colors duration-500 ease-out"
                   >
                     <MusicQueuePane />
                   </motion.div>

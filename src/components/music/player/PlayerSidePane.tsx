@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Maximize2, PanelRightClose } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
@@ -11,6 +11,10 @@ interface PlayerSidePaneProps {
   onTabChange: (tab: SidePaneTab) => void;
   onExpandLyrics: () => void;
   onHide: () => void;
+  /** The cover's surface colours, or undefined for the theme's. */
+  surfaceStyle?: CSSProperties;
+  /** Drawn behind everything in the pane, such as the lyrics' cover background. */
+  background?: ReactNode;
   children: ReactNode;
 }
 
@@ -22,14 +26,18 @@ const ICON_BTN =
  * The wide player's side pane, after Android's `PlayerSidePane`: Up next or
  * the lyrics beside the song, with a way to give the lyrics the whole player or put the pane away.
  */
-export function PlayerSidePane({ tab, onTabChange, onExpandLyrics, onHide, children }: PlayerSidePaneProps) {
+export function PlayerSidePane({ tab, onTabChange, onExpandLyrics, onHide, surfaceStyle, background, children }: PlayerSidePaneProps) {
   const tabs: { id: SidePaneTab; label: string }[] = [
     { id: "queue", label: getString("music_up_next") },
     { id: "lyrics", label: getString("music_lyrics") },
   ];
   return (
-    <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
-      <div className="flex items-center justify-between gap-2 px-4 pt-4">
+    <aside
+      style={surfaceStyle}
+      className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low transition-colors duration-500 ease-out"
+    >
+      {background}
+      <div className="relative flex items-center justify-between gap-2 px-4 pt-4">
         <div role="tablist" className="flex gap-1 rounded-full bg-surface-container p-1">
           {tabs.map(({ id, label }) => (
             <button

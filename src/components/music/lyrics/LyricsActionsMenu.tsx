@@ -119,8 +119,7 @@ const seconds = (ms: number): string => `${ms > 0 ? "+" : ""}${(ms / 1000).toFix
  * Port of Android's LyricsActionsSheet as a menu: refresh, choose the source, edit, copy and save
  * the lyrics; alignment, translation and romanization; and the sync offset controls.
  */
-/** `fullScreen`: the lyrics fill the player, the only place their background shows. */
-export function LyricsActionsMenu({ track, className, fullScreen }: { track: SongItem | null; className: string; fullScreen: boolean }) {
+export function LyricsActionsMenu({ track, className }: { track: SongItem | null; className: string }) {
   const [open, setOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [editText, setEditText] = useState<string | null>(null);
@@ -222,14 +221,12 @@ export function LyricsActionsMenu({ track, className, fullScreen }: { track: Son
 
             <Separator />
             <ChoiceRow label={getString("lyrics_alignment")} value={isAlign(align) ? align : "center"} choices={alignChoices()} onChange={setAlign} />
-            {fullScreen && (
-              <ChoiceRow<LyricsBackground>
-                label={getString("lyrics_background")}
-                value={background}
-                choices={lyricsBackgroundOptions()}
-                onChange={setBackground}
-              />
-            )}
+            <ChoiceRow<LyricsBackground>
+              label={getString("lyrics_background")}
+              value={background}
+              choices={lyricsBackgroundOptions()}
+              onChange={setBackground}
+            />
 
             <Separator />
             <SwitchRow

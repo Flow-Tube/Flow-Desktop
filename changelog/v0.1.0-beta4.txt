@@ -29,6 +29,7 @@ SYNC
 - On the local network, a device list entry from another device that can't be read is skipped, and the rest of the list still syncs.
 - Linked devices: a device name that can't be read is left out instead of hiding the device list or stopping a rename. The latest readable name is shown.
 - A snapshot, acknowledgement or LAN request that names a log position too large to read exactly is now refused as invalid.
+- Linked devices accept only device keys and signatures that every Flow app reads the same way, so devices can't disagree about who is in a group.
 - A damaged file in a WebDAV folder's roster no longer stops every device from syncing. It is skipped and the rest of the roster is read.
 - Sync no longer hangs on a store that keeps answering with the same page. It stops reading and tries again at the next sync.
 - Sync stops reading an answer larger than it can be, from a Flow server, a WebDAV folder, the live channel or a device on your network, so a broken or hostile store can't use up memory.

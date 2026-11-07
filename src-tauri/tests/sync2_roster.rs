@@ -112,6 +112,20 @@ fn invalid_entries_are_rejected_for_the_named_reason() {
 }
 
 #[test]
+fn replaying_a_stored_chain_refuses_a_key_with_a_small_order_part() {
+    let v = vectors();
+    let negatives = v["negatives"].as_array().unwrap();
+    let n = negatives
+        .iter()
+        .find(|n| n["name"] == "mixed-order-key")
+        .unwrap();
+    let mut chain = entries(&v);
+    chain.truncate(1);
+    chain.push(parse_entry(&n["entry"]).unwrap());
+    assert_eq!(replay_roster(&chain).unwrap_err().code(), "roster-key");
+}
+
+#[test]
 fn a_genesis_must_match_its_group_id() {
     for n in vectors()["geneses"].as_array().unwrap() {
         let entry = parse_entry(&n["entry"]).unwrap();

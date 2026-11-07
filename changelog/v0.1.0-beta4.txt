@@ -99,6 +99,7 @@ MUSIC
 - The glow on long held notes in word-synced lyrics rises and fades smoothly instead of in visible steps.
 - Fit lyrics to music videos, in Settings > Music, uses SponsorBlock to move lyrics past a music video's intro, skits and other parts with no music. It is off by default, and only a short part of a hash of the video id is sent.
 - Full-screen lyrics can show on Colorful or Moving backgrounds made from the song's cover, from the lyrics menu or Settings > Music. Moving isn't offered on Linux.
+- The lyrics menu is shorter and tidier: actions sit in one row of buttons, alignment and background are button groups, and each switch takes one line, with the Romanization options under Romanization. The full explanations stay in Settings > Music.
 - Lyrics in media controls, in Settings > Music, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 
 PLAYER

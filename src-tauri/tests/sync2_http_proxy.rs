@@ -2,6 +2,8 @@
 //! security). This test runs alone in its process because it sets the proxy environment reqwest
 //! reads.
 
+use std::time::Duration;
+
 use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -47,9 +49,9 @@ async fn plain_http_to_a_private_address_skips_a_system_proxy() {
         !through_proxy.is_finished(),
         "the request went through the proxy"
     );
+    let line = tokio::time::timeout(Duration::from_secs(5), reached_store).await;
     assert_eq!(
-        reached_store.await.unwrap(),
-        "GET /flow-sync/x HTTP/1.1",
-        "the store didn't get the request"
+        line.expect("the store didn't get the request").unwrap(),
+        "GET /flow-sync/x HTTP/1.1"
     );
 }

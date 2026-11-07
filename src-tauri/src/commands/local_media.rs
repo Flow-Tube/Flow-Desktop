@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
+use base64::Engine;
 use serde::Serialize;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager, State};
@@ -13,7 +14,7 @@ use uuid::Uuid;
 use crate::db::{device, local_media as db};
 use crate::errors::{AppError, AppResult, ErrorResponse};
 use crate::local_media::bounds::LibraryBounds;
-use crate::local_media::covers::cached_cover;
+use crate::local_media::covers::{cached_cover, store_frame};
 use crate::local_media::lyrics::{LocalLyrics, read_lyrics};
 use crate::local_media::scan::{ScanStatus, millis, resolved_folders};
 use crate::local_media::scanner::LocalMediaScanner;
@@ -62,6 +63,8 @@ impl Default for LocalCoverLimit {
 }
 
 const PICKED_TOKEN_OFFSET: usize = 1000;
+/// Far above a 640 px JPEG, so only something that isn't one is turned away.
+const MAX_FRAME_BASE64_BYTES: usize = 8 * 1024 * 1024;
 
 /// What the rows say is reachable: inside a chosen folder that exists, outside the excluded ones.
 fn visible_files(files: Vec<LocalMediaFile>, bounds: &LibraryBounds) -> Vec<LocalMediaFile> {
@@ -374,6 +377,26 @@ fn caption_track(
     }
 }
 
+fn covers_dir(app: &AppHandle) -> Result<PathBuf, AppError> {
+    app.path()
+        .app_cache_dir()
+        .map(|dir| dir.join("local_covers"))
+        .map_err(|error| AppError::Internal(error.to_string()))
+}
+
+fn cover_link(streaming_manager: &StreamingManager, id: &str, cover: &Path) -> String {
+    let token = session_token(id, "cover");
+    streaming_manager.register_local_session(
+        token.clone(),
+        cover.to_string_lossy().into_owned(),
+        "image/jpeg".to_string(),
+    );
+    format!(
+        "http://127.0.0.1:{}/stream/{token}",
+        streaming_manager.get_image_port()
+    )
+}
+
 /// A loopback link to the file's cover on the image port, or `None` when it has none.
 #[tauri::command]
 pub async fn local_media_cover(
@@ -392,11 +415,7 @@ pub async fn local_media_cover(
     let Ok(path) = served_path(&bounds, &file.path).await else {
         return Ok(None);
     };
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| AppError::Internal(error.to_string()))?
-        .join("local_covers");
+    let cache_dir = covers_dir(&app)?;
     let _permit = limit
         .0
         .acquire()
@@ -406,18 +425,38 @@ pub async fn local_media_cover(
         tokio::task::spawn_blocking(move || cached_cover(&cache_dir, &file, &path, &bounds))
             .await
             .map_err(|error| AppError::Internal(error.to_string()))?;
-    Ok(cover.map(|cover| {
-        let token = session_token(&id, "cover");
-        streaming_manager.register_local_session(
-            token.clone(),
-            cover.to_string_lossy().into_owned(),
-            "image/jpeg".to_string(),
-        );
-        format!(
-            "http://127.0.0.1:{}/stream/{token}",
-            streaming_manager.get_image_port()
-        )
-    }))
+    Ok(cover.map(|cover| cover_link(&streaming_manager, &id, &cover)))
+}
+
+/// Keeps a frame the webview took from a video with no picture of its own, as its cover, and
+/// returns the link to it. Only ever writes into the cover cache, under a name made from the
+/// library's own row, and only what decodes as an image.
+#[tauri::command]
+pub async fn local_media_save_frame(
+    id: String,
+    frame_base64: String,
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+    streaming_manager: State<'_, StreamingManager>,
+) -> Result<Option<String>, ErrorResponse> {
+    validate_local_media_id(&id)?;
+    if frame_base64.len() > MAX_FRAME_BASE64_BYTES {
+        return Err(AppError::Validation("The frame is too large".into()).into());
+    }
+    let Some(file) = db::file(device::pool(&pool), &id).await? else {
+        return Ok(None);
+    };
+    if file.kind != MediaKind::Video.as_str() {
+        return Ok(None);
+    }
+    let frame = base64::engine::general_purpose::STANDARD
+        .decode(frame_base64.as_bytes())
+        .map_err(|_| AppError::Validation("The frame is not valid".into()))?;
+    let cache_dir = covers_dir(&app)?;
+    let cover = tokio::task::spawn_blocking(move || store_frame(&cache_dir, &file, &frame))
+        .await
+        .map_err(|error| AppError::Internal(error.to_string()))?;
+    Ok(cover.map(|cover| cover_link(&streaming_manager, &id, &cover)))
 }
 
 /// Asks the person for a subtitle file for a video and keeps it for next time. The path comes

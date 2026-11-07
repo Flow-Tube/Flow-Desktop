@@ -32,7 +32,7 @@ function useLocalFileMenu(file: LocalMediaFile): { actions: ReturnType<typeof lo
 /** A video file on the app's video card. */
 export function LocalFileCard({ file, plays, nowMs, onPlay }: LocalFileItemProps) {
   const frame = useRef<HTMLDivElement>(null);
-  const cover = useLocalCover(file.id, frame);
+  const cover = useLocalCover(file.id, frame, true);
   const menu = useLocalFileMenu(file);
   const percent = progressFraction(file, plays) * 100;
   const video = useMemo(

@@ -119,6 +119,30 @@ fn shrink(bytes: &[u8]) -> Option<Vec<u8>> {
     Some(out.into_inner())
 }
 
+/// Where the file's cover is kept, and where the note goes that it has none. Named after the
+/// file's size and date, so a changed file is looked at again.
+fn cover_paths(cache_dir: &Path, file: &LocalMediaFile) -> (PathBuf, PathBuf) {
+    let name = format!("{}_{}_{}", file.id, file.modified_ms, file.size_bytes);
+    (
+        cache_dir.join(format!("{name}.jpg")),
+        cache_dir.join(format!("{name}{MISSING_SUFFIX}")),
+    )
+}
+
+/// Keeps a frame taken from a video with no picture of its own as its cover. A cover already
+/// there stays. `None` when `frame` isn't an image or can't be written. Blocking.
+pub fn store_frame(cache_dir: &Path, file: &LocalMediaFile, frame: &[u8]) -> Option<PathBuf> {
+    let (cached, missing) = cover_paths(cache_dir, file);
+    if cached.is_file() {
+        return Some(cached);
+    }
+    let cover = shrink(frame)?;
+    std::fs::create_dir_all(cache_dir).ok()?;
+    std::fs::write(&cached, cover).ok()?;
+    let _ = std::fs::remove_file(missing);
+    Some(cached)
+}
+
 /// Where the file's cover is cached, reading it the first time. Blocking.
 pub fn cached_cover(
     cache_dir: &Path,
@@ -126,9 +150,7 @@ pub fn cached_cover(
     media: &Path,
     bounds: &LibraryBounds,
 ) -> Option<PathBuf> {
-    let name = format!("{}_{}_{}", file.id, file.modified_ms, file.size_bytes);
-    let cached = cache_dir.join(format!("{name}.jpg"));
-    let missing = cache_dir.join(format!("{name}{MISSING_SUFFIX}"));
+    let (cached, missing) = cover_paths(cache_dir, file);
     if cached.is_file() {
         return Some(cached);
     }
@@ -164,6 +186,25 @@ mod tests {
             .write_to(&mut out, ImageFormat::Png)
             .unwrap();
         out.into_inner()
+    }
+
+    #[test]
+    fn a_stored_frame_becomes_the_cover_of_a_video_without_one() {
+        let dir = std::env::temp_dir().join(format!("flow-frames-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = file_row("b", MediaKind::Video);
+        let (_, missing) = cover_paths(&dir, &file);
+        std::fs::write(&missing, []).unwrap();
+        assert!(store_frame(&dir, &file, b"not a picture").is_none());
+        assert!(missing.is_file());
+
+        let stored = store_frame(&dir, &file, &png()).unwrap();
+        assert!(stored.is_file());
+        assert!(!missing.exists());
+
+        let again = store_frame(&dir, &file, &png()).unwrap();
+        assert_eq!(again, stored);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -100,6 +100,11 @@ export function getLocalStream(id: string): Promise<LocalStreamInfo> {
   return invokeBackend<LocalStreamInfo>("get_local_stream", { id });
 }
 
+/** Keeps a frame taken from the video as its cover and returns the link to it. */
+export function saveLocalFrame(id: string, frameBase64: string): Promise<string | null> {
+  return invokeBackend<string | null>("local_media_save_frame", { id, frameBase64 });
+}
+
 /** A loopback link to the file's cover, or null when it has none. */
 export function getLocalCover(id: string): Promise<string | null> {
   return invokeBackend<string | null>("local_media_cover", { id });

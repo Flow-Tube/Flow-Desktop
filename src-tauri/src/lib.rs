@@ -756,6 +756,7 @@ pub fn run() {
             commands::local_media::local_media_report_playback,
             commands::local_media::get_local_stream,
             commands::local_media::local_media_cover,
+            commands::local_media::local_media_save_frame,
             commands::local_media::local_media_pick_subtitle,
             commands::local_media::local_media_trash,
             delete_downloads,

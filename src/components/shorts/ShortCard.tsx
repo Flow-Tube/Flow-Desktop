@@ -23,6 +23,7 @@ import {
   removeShortFromLibrary,
   saveShortToLibrary,
 } from "../../lib/savedShortsLibrary";
+import { dontRecommendLabel } from "../../lib/dontRecommendLabel";
 import { getString } from "../../lib/i18n/index";
 import { youtubeShortsUrl } from "../../lib/youtubeUrl";
 import { copyText } from "../../lib/clipboard";
@@ -272,14 +273,16 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
               label: getString("shorts_menu_not_interested"),
               icon: <Ban size={16} />,
               group: "feed",
+              danger: true,
               onSelect: notInterested,
             },
             ...(short.channelId
               ? [{
                 id: "block-channel",
-                label: getString("shorts_menu_dont_recommend_channel"),
+                label: dontRecommendLabel(short.channelName),
                 icon: <EyeOff size={16} />,
                 group: "feed" as const,
+                danger: true,
                 onSelect: dontRecommendChannel,
               }]
               : []),

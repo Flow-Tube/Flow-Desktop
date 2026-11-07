@@ -202,6 +202,17 @@ describe("VideoCard on other libraries", () => {
     expect(host.querySelector(".aspect-video [data-testid=overlay]")?.textContent).toBe("42%");
   });
 
+  it("marks Not interested and Don't recommend as dangerous and names the channel", () => {
+    render({ video: { id: freshId(), title: "A video", channelName: "Some Channel", channelId: "UCsome" } });
+    act(() => {
+      host.querySelector(".video-card")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 1, clientY: 1 }));
+    });
+    const row = (label: string) =>
+      [...document.body.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === label);
+    expect(row("Not interested")?.className).toContain("text-chrome-red-400");
+    expect(row("Don't recommend Some Channel")?.className).toContain("text-chrome-red-400");
+  });
+
   it("uses the menu it is given in place of its own", () => {
     const onSelect = vi.fn();
     render({

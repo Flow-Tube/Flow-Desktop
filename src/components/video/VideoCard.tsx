@@ -10,6 +10,7 @@ import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useImageFallback } from '../../lib/useImageFallback';
 import { deArrowThumbnail } from '../../lib/api/foss';
+import { dontRecommendLabel } from '../../lib/dontRecommendLabel';
 import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
 import { useOriginalTitle } from '../../lib/useOriginalTitle';
 import { getVideoDetails } from '../../lib/api/youtube';
@@ -573,14 +574,16 @@ function VideoCardComponent({
       label: getString("menu_not_interested"),
       icon: <Ban size={16} />,
       group: "feed",
+      danger: true,
       onSelect: () => notInterested(video).catch(feedActionFailed),
     },
     ...(video.channelId
       ? [{
         id: "block-channel",
-        label: getString("menu_dont_show_channel"),
+        label: dontRecommendLabel(video.channelName),
         icon: <EyeOff size={16} />,
         group: "feed" as const,
+        danger: true,
         onSelect: () => blockChannelAction(video).catch(feedActionFailed),
       }]
       : []),

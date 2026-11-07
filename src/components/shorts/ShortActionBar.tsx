@@ -26,6 +26,7 @@ import {
   removeShortFromLibrary,
   saveShortToLibrary,
 } from "../../lib/savedShortsLibrary";
+import { dontRecommendLabel } from "../../lib/dontRecommendLabel";
 import { getString } from "../../lib/i18n/index";
 import { formatCount, isMusicVideo } from "../../lib/utils";
 import { youtubeShortsUrl } from "../../lib/youtubeUrl";
@@ -280,10 +281,10 @@ export function ShortActionBar({
               </MenuItem>
               <MenuItem icon={Download} onClick={downloadShort}>{getString("shorts_menu_download")}</MenuItem>
               <MenuItem icon={ThumbsUp} onClick={moreLikeThis}>{getString("shorts_menu_more_like_this")}</MenuItem>
-              <MenuItem icon={Ban} onClick={notInterested}>{getString("shorts_menu_not_interested")}</MenuItem>
+              <MenuItem icon={Ban} danger onClick={notInterested}>{getString("shorts_menu_not_interested")}</MenuItem>
               {short.channelId && (
-                <MenuItem icon={EyeOff} onClick={dontRecommendChannel}>
-                  {getString("shorts_menu_dont_recommend_channel")}
+                <MenuItem icon={EyeOff} danger onClick={dontRecommendChannel}>
+                  {dontRecommendLabel(short.channelName)}
                 </MenuItem>
               )}
               <MenuItem icon={Copy} onClick={copyLink}>{getString("shorts_menu_copy_link")}</MenuItem>
@@ -343,10 +344,13 @@ function MoreMenu({ children }: { children: ReactNode }) {
 
 function MenuItem({
   icon: Icon,
+  danger = false,
   onClick,
   children,
 }: {
   icon: LucideIcon;
+  /** Removes or hides something. */
+  danger?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -354,10 +358,12 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
+      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-container-highest ${
+        danger ? "text-chrome-red-400" : "text-chrome-neutral-200"
+      }`}
     >
-      <Icon className="h-4 w-4 shrink-0 text-chrome-neutral-400" />
-      {children}
+      <Icon className={`h-4 w-4 shrink-0 ${danger ? "" : "text-chrome-neutral-400"}`} />
+      <span className="min-w-0 truncate">{children}</span>
     </button>
   );
 }

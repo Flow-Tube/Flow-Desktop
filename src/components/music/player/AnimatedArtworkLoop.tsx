@@ -10,7 +10,19 @@ import type { SongItem } from "../../../types/music";
  * An album's motion artwork looping over its cover. Muted and with a player of its own, so it never
  * touches the song; it fades in on its first frame and holds still while the window is hidden.
  */
-export function AnimatedArtworkLoop({ track }: { track: SongItem }) {
+/**
+ * `objectPosition` picks which part of the loop shows when it is cropped, as Immersive does for its
+ * cover. While not `running`, such as behind full-screen lyrics, it holds its frame.
+ */
+export function AnimatedArtworkLoop({
+  track,
+  objectPosition = "object-center",
+  running = true,
+}: {
+  track: SongItem;
+  objectPosition?: string;
+  running?: boolean;
+}) {
   const { loopUrl, onFailed } = useAnimatedArtwork(track);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
@@ -45,9 +57,9 @@ export function AnimatedArtworkLoop({ track }: { track: SongItem }) {
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !loopUrl) return;
-    if (visible) void video.play().catch(() => undefined);
+    if (visible && running) void video.play().catch(() => undefined);
     else video.pause();
-  }, [loopUrl, visible]);
+  }, [loopUrl, visible, running]);
 
   if (!loopUrl) return null;
 
@@ -62,7 +74,7 @@ export function AnimatedArtworkLoop({ track }: { track: SongItem }) {
       aria-hidden="true"
       onPlaying={() => setHasFrame(true)}
       onError={onFailed}
-      className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${hasFrame ? "opacity-100" : "opacity-0"}`}
+      className={`absolute inset-0 h-full w-full object-cover ${objectPosition} transition-opacity duration-300 ease-out ${hasFrame ? "opacity-100" : "opacity-0"}`}
     />
   );
 }

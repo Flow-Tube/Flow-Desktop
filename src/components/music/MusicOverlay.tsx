@@ -215,7 +215,13 @@ export function MusicOverlay() {
         style={{ opacity: innerOpacity, scale: innerScale, transformOrigin: "50% 100%" }}
         className="relative flex min-h-0 flex-1 flex-col"
       >
-        <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkPlacement={artworkPlacement} />
+        <AmbientBackdrop
+          imageSrc={accentSrc}
+          style={playerColors.style}
+          artworkPlacement={artworkPlacement}
+          track={playerColors.style === "immersive" ? currentTrack : null}
+          loopRunning={!fullBleedLyrics}
+        />
 
         {/* TOP BAR */}
         <div className="absolute top-0 z-40 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">

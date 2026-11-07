@@ -16,11 +16,13 @@ import {
 } from '../../../lib/lyrics/registry';
 import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
 import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
+import { lyricsBackgroundOptions } from '../../../lib/lyrics/useLyricsCover';
 
 export function MusicLyricsSettings() {
   const [providerOrder, setProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
   const [enabledRaw, setEnabledRaw] = usePreference(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, '{}');
   const [align, setAlign] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
+  const [background, setBackground] = usePreference(SETTINGS.LYRICS_BACKGROUND);
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
@@ -45,6 +47,9 @@ export function MusicLyricsSettings() {
           { value: 'center', label: getString('lyrics_align_center') },
           { value: 'right', label: getString('lyrics_align_right') },
         ]} />
+      </SettingItem>
+      <SettingItem title={getString('lyrics_background')} description={getString('lyrics_background_summary')}>
+        <Select value={IS_LINUX_RUNTIME && background === 'moving' ? 'colorful' : background} onChange={setBackground} options={lyricsBackgroundOptions()} />
       </SettingItem>
       <SettingItem title={getString('lyrics_show_translation')} description={getString('lyrics_show_translation_summary')}>
         <ToggleSwitch checked={showTranslation} onChange={setShowTranslation} />

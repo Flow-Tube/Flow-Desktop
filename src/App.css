@@ -557,6 +557,46 @@
   content-visibility: hidden;
 }
 
+/* The Moving lyrics background: two copies of the cover's colours, each on its own path. */
+@keyframes lyrics-drift-x {
+  0%,
+  100% {
+    transform: translateX(-42%);
+  }
+  50% {
+    transform: translateX(42%);
+  }
+}
+
+@keyframes lyrics-drift-y {
+  0%,
+  100% {
+    transform: translateY(42%);
+  }
+  50% {
+    transform: translateY(-42%);
+  }
+}
+
+.lyrics-drift-x,
+.lyrics-drift-y {
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.lyrics-drift-x {
+  animation-name: lyrics-drift-x;
+}
+
+.lyrics-drift-y {
+  animation-name: lyrics-drift-y;
+}
+
+.lyrics-drift-paused .lyrics-drift-x,
+.lyrics-drift-paused .lyrics-drift-y {
+  animation-play-state: paused;
+}
+
 @keyframes music-wave {
   0%,
   100% {
@@ -574,6 +614,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .music-wave-bar {
+    animation: none;
+  }
+
+  .lyrics-drift-x,
+  .lyrics-drift-y {
     animation: none;
   }
 

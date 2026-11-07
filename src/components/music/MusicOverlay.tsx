@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useTransform } from "framer-motion";
 import { ChevronDown, ListMusic, Mic2, Minimize2, SlidersHorizontal, Volume2, VolumeX } from "lucide-react";
 
@@ -18,6 +18,8 @@ import { MusicScrubber } from "./MusicScrubber";
 import { MusicQueuePane } from "./MusicQueuePane";
 import { LyricsActionsMenu, MusicLyrics } from "./MusicLyrics";
 import { AmbientBackdrop } from "./AmbientBackdrop";
+import { LyricsCoverBackground } from "./lyrics/LyricsCoverBackground";
+import { useLyricsBackground, useLyricsCover } from "../../lib/lyrics/useLyricsCover";
 import { EqPanel } from "./EqPanel";
 import { useEqActive } from "../../lib/audio/eq/useEqualizer";
 import { VolumePopover } from "./VolumePopover";
@@ -39,6 +41,8 @@ import {
   sheetOpacity,
   sheetProgress,
 } from "../../lib/musicSheet";
+
+const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
 
 const TOP_BTN =
   "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
@@ -132,6 +136,8 @@ export function MusicOverlay() {
   useMusicPlayerKeyboard(open, onEscape);
 
   const fullBleedLyrics = isLyrics && (!wide || lyricsExpanded);
+  const lyricsBackground = useLyricsBackground();
+  const lyricsCover = useLyricsCover(accentSrc, open && fullBleedLyrics && lyricsBackground !== "player");
   const sideTab: SidePaneTab = isLyrics ? "lyrics" : "queue";
   const showPane = wide && paneVisible;
   // Immersive's cover sits beside the side pane, and moves behind the song once the pane is hidden.
@@ -175,7 +181,7 @@ export function MusicOverlay() {
         track={currentTrack}
         variant={variant}
         accent={playerColors.colors.roles.primary}
-        backdrop={playerColors.colors.roles.surface}
+        backdrop={variant === "full" && lyricsCover ? lyricsCover.backdrop : playerColors.colors.roles.surface}
         active
         className="h-full w-full"
       />
@@ -203,7 +209,7 @@ export function MusicOverlay() {
         <AmbientBackdrop imageSrc={accentSrc} style={playerColors.style} artworkPlacement={artworkPlacement} />
 
         {/* TOP BAR */}
-        <div className="absolute top-0 z-20 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
+        <div className="absolute top-0 z-40 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
           <HapticButton
             onClick={closeOverlay}
             aria-label={getString("music_collapse")}
@@ -221,7 +227,7 @@ export function MusicOverlay() {
           </p>
 
           <div className="relative flex items-center gap-1 justify-self-end">
-            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
+            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} fullScreen={fullBleedLyrics} />}
             {wide && lyricsExpanded && (
               <HapticButton
                 onClick={() => setLyricsExpanded(false)}
@@ -302,8 +308,12 @@ export function MusicOverlay() {
         {/* MAIN */}
         {fullBleedLyrics ? (
           <>
+            {lyricsBackground !== "player" && <LyricsCoverBackground cover={lyricsCover} moving={lyricsBackground === "moving"} />}
             {lyricsView("full", "absolute inset-0 z-10")}
-            <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
+            <div
+              // Over the cover's colours, the controls' scrim fades from the cover's own backdrop.
+              style={lyricsCover && lyricsBackground !== "player" ? ({ "--player-ground": rgbCss(lyricsCover.backdrop) } as CSSProperties) : undefined}
+              className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-4 bg-linear-to-t from-[color-mix(in_srgb,var(--player-ground)_90%,transparent)] via-[color-mix(in_srgb,var(--player-ground)_50%,transparent)] to-transparent px-6 pb-10 pt-24">
               <div className="w-full max-w-2xl">
                 <MusicScrubber size="lg" showTimes countdown expressive />
               </div>

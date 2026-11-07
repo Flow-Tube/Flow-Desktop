@@ -17,6 +17,7 @@ import {
   SearchCheck,
   Timer,
   Type,
+  Wallpaper,
 } from "lucide-react";
 
 import type { SongItem } from "../../../types/music";
@@ -30,6 +31,8 @@ import { getString } from "../../../lib/i18n/index";
 import { isLocalMediaId } from "../../../lib/localMediaId";
 import { lyricsSourceLabel } from "../../../lib/lyrics/offline";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
+import { SegmentedControl } from "../../ui/SegmentedControl";
+import { lyricsBackgroundOptions, useLyricsBackground, type LyricsBackground } from "../../../lib/lyrics/useLyricsCover";
 import { LyricsSourcesDialog } from "./LyricsSourcesDialog";
 import { LyricsEditDialog } from "./LyricsEditDialog";
 
@@ -73,7 +76,8 @@ const seconds = (ms: number): string => `${ms > 0 ? "+" : ""}${(ms / 1000).toFix
  * Port of Android's LyricsActionsSheet as a menu: refresh, choose the source, edit, copy and save
  * the lyrics; alignment, translation and romanization; and the sync offset controls.
  */
-export function LyricsActionsMenu({ track, className }: { track: SongItem | null; className: string }) {
+/** `fullScreen`: the lyrics fill the player, the only place their background shows. */
+export function LyricsActionsMenu({ track, className, fullScreen }: { track: SongItem | null; className: string; fullScreen: boolean }) {
   const [open, setOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [editText, setEditText] = useState<string | null>(null);
@@ -91,6 +95,8 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [romanizationOnly, setRomanizationOnly] = useBoolPref(SETTINGS.LYRICS_ROMANIZATION_ONLY);
   const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
+  const background = useLyricsBackground();
+  const [, setBackground] = usePreference(SETTINGS.LYRICS_BACKGROUND);
   const { copy, save } = useLyricsActions(track);
 
   useEffect(() => {
@@ -136,7 +142,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
             animate={{ opacity: 1, scale: 1, transition: MENU_ENTER_TRANSITION }}
             exit={{ opacity: 0, scale: 0.98, transition: MENU_EXIT_TRANSITION }}
             style={{ transformOrigin: "top right" }}
-            className="absolute right-0 top-full z-30 mt-2 w-80 rounded-2xl border border-chrome-neutral-800 bg-surface-container p-2"
+            className="absolute right-0 top-full z-30 mt-2 max-h-[calc(100dvh-var(--app-titlebar-height)-7rem)] w-80 overflow-y-auto overscroll-contain rounded-2xl border border-chrome-neutral-800 bg-surface-container p-2"
           >
             {/* A library file's own lyrics are all it gets, so there is nothing to look up. */}
             {!isLocalMediaId(useLyricsStore.getState().videoId) && (
@@ -190,6 +196,20 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
                 );
               })}
             </div>
+            {fullScreen && (
+              <div className="flex flex-col gap-2 px-3 py-2.5">
+                <span className="flex items-center gap-3">
+                  <Wallpaper className="h-5 w-5 shrink-0 text-chrome-neutral-400" />
+                  <span className="text-sm font-medium text-chrome-neutral-100">{getString("lyrics_background")}</span>
+                </span>
+                <SegmentedControl<LyricsBackground>
+                  value={background}
+                  options={lyricsBackgroundOptions()}
+                  onChange={setBackground}
+                  label={getString("lyrics_background")}
+                />
+              </div>
+            )}
             <SwitchRow
               icon={<Languages className="h-5 w-5" />}
               title={getString("lyrics_show_translation")}

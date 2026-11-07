@@ -122,6 +122,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_crossfade_skip", summary: "settings_crossfade_skip_desc" },
     { title: "settings_crossfade_curve", keywords: ["fade"] },
     { title: "lyrics_alignment" },
+    { title: "lyrics_background", keywords: ["colorful", "moving", "cover", "wallpaper"] },
     { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
     { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
     { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },

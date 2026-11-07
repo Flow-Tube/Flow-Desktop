@@ -24,6 +24,7 @@ export function MusicLyricsSettings() {
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
+  const [romanizationOnly, setRomanizationOnly] = useBoolPref(SETTINGS.LYRICS_ROMANIZATION_ONLY);
   const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const cache = useLyricsCache();
@@ -50,6 +51,11 @@ export function MusicLyricsSettings() {
       <SettingItem title={getString('lyrics_show_romanization')} description={getString('lyrics_show_romanization_summary')}>
         <ToggleSwitch checked={showRomanization} onChange={setShowRomanization} />
       </SettingItem>
+      {showRomanization && (
+        <SettingItem title={getString('lyrics_romanization_only')} description={getString('lyrics_romanization_only_summary')}>
+          <ToggleSwitch checked={romanizationOnly} onChange={setRomanizationOnly} />
+        </SettingItem>
+      )}
       {showRomanization && (
         <SettingItem title={getString('lyrics_auto_romanize')} description={getString('lyrics_auto_romanize_summary')}>
           <ToggleSwitch checked={autoRomanize} onChange={setAutoRomanize} />

@@ -125,6 +125,7 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
     { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
     { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },
+    { title: "lyrics_romanization_only", summary: "lyrics_romanization_only_summary", keywords: ["transliterate", "latin"] },
     { title: "lyrics_keep_screen_on", summary: "lyrics_keep_screen_on_summary", keywords: ["awake", "sleep", "display"] },
     { title: "lyrics_blur_other_lines", summary: "lyrics_blur_other_lines_summary" },
     { title: "settings_lyrics_providers" },

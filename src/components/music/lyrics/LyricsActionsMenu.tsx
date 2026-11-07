@@ -88,6 +88,7 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
+  const [romanizationOnly, setRomanizationOnly] = useBoolPref(SETTINGS.LYRICS_ROMANIZATION_ONLY);
   const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const { copy, save } = useLyricsActions(track);
@@ -203,6 +204,15 @@ export function LyricsActionsMenu({ track, className }: { track: SongItem | null
               checked={showRomanization}
               onChange={setShowRomanization}
             />
+            {showRomanization && (
+              <SwitchRow
+                icon={<Type className="h-5 w-5" />}
+                title={getString("lyrics_romanization_only")}
+                supporting={getString("lyrics_romanization_only_summary")}
+                checked={romanizationOnly}
+                onChange={setRomanizationOnly}
+              />
+            )}
             {showRomanization && (
               <SwitchRow
                 icon={<Type className="h-5 w-5" />}

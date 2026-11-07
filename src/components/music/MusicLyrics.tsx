@@ -61,6 +61,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
   const [showTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
   const [autoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
+  const [romanizationOnly] = useBoolPref(SETTINGS.LYRICS_ROMANIZATION_ONLY);
   const [blurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const [keepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   useKeepScreenOn(keepScreenOn && active && isPlaying);
@@ -89,6 +90,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
         showTranslation={showTranslation}
         showRomanization={showRomanization}
         autoRomanize={autoRomanize}
+        romanizationOnly={romanizationOnly}
         blurOtherLines={blurOtherLines}
         syncOffsetMs={syncOffsetMs}
         active={active}

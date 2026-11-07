@@ -95,7 +95,7 @@ async fn a_signed_name_that_can_not_be_read_is_left_out() {
         .unwrap();
     let not_json = |seq| seal_device_meta(&g.epoch_key, &g.group, 0, seq, &g.a.did, b"name");
     for sealed in [
-        "not base64url!".to_owned(),
+        "A".to_owned(),
         URL_SAFE_NO_PAD.encode([0; 100]),
         URL_SAFE_NO_PAD.encode(not_json(head(&g.store).seq + 1).unwrap()),
     ] {

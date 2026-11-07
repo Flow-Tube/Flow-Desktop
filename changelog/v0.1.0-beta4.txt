@@ -35,6 +35,7 @@ SYNC
 - A damaged or forged object from one device no longer fails the whole sync. Reading that device's changes pauses there, and the other devices' changes still arrive.
 - The same holds when a new device starts from a snapshot or a profile starts syncing: a damaged or forged object no longer fails the sync, and the profile is caught up once it can be read.
 - A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
+- Linked devices accept a synced object's data only in the one form every Flow app writes, so two devices can't read different data from the same object.
 - A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
 - Joining a group over the local network now refuses a malformed welcome from the other device.
 - Linked devices: Replace recovery words gives your group a new recovery key from any linked device. The old words stop working, and your devices move to a new encryption key.

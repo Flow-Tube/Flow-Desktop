@@ -45,6 +45,7 @@ SYNC
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC
+- Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Instrumental songs no longer show KuGou's notice as their lyrics.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
@@ -61,6 +62,7 @@ PLAYER
 - Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
 - Live streams start and play again.
+- Live chat and chat replay can now be closed from the header cross button or toggled directly from the player controls in any view mode.
 - You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
 - A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
 - Drag the mini player anywhere in the window. It stays where you put it, including after a restart, and keeps its place when the window is resized.

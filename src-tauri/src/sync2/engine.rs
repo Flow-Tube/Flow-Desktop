@@ -93,6 +93,10 @@ pub enum EngineError {
 }
 
 impl EngineError {
+    pub fn refused_write(&self) -> bool {
+        matches!(self, Self::Store(error) if error.refused_write())
+    }
+
     /// A stable name the interface turns into a translated message.
     pub fn kind(&self) -> &'static str {
         match self {

@@ -410,3 +410,115 @@ async fn a_damaged_object_held_from_before_gives_way_to_the_good_one() {
 async fn held_object(pool: &SqlitePool, path: &str) -> Option<Vec<u8>> {
     HeldStore::new(pool.clone()).get_object(path).await.unwrap()
 }
+
+/// A server that refuses one path, as it does an object it holds different bytes for.
+struct RefusingPath<'a> {
+    store: &'a MemoryStore,
+    path: Mutex<Option<String>>,
+}
+
+impl Store for &RefusingPath<'_> {
+    async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
+        self.store.roster_after(after).await
+    }
+
+    async fn append_roster(
+        &self,
+        head: &str,
+        entry: &Entry,
+        wraps: &BTreeMap<String, String>,
+        chain: Option<&str>,
+    ) -> Result<Appended> {
+        self.store.append_roster(head, entry, wraps, chain).await
+    }
+
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        self.store.key(epoch, kc, name).await
+    }
+
+    async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+        if self.path.lock().unwrap().as_deref() == Some(path) {
+            return Err(StoreError::Refused {
+                status: 409,
+                code: "conflict".into(),
+            });
+        }
+        self.store.put_object(path, bytes).await
+    }
+
+    async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        self.store.get_object(path).await
+    }
+
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        self.store.delete_object(path).await
+    }
+
+    async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
+        self.store.changes(cursor).await
+    }
+}
+
+#[tokio::test]
+async fn a_refused_object_waits_in_order_and_reads_go_on() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    watch(&pool_b, "bbbbbbbbbbb").await;
+    let mut b = Session::open(&pool_b, &g.store, &g.b).await.unwrap();
+    b.push(&pool_b, exported(&pool_b, "app-b").await)
+        .await
+        .unwrap();
+
+    let me = hex::encode(g.a.did);
+    let (first, second) = (log_path(&me, 1), log_path(&me, 2));
+    let server = RefusingPath {
+        store: &g.store,
+        path: Mutex::new(Some(first.clone())),
+    };
+    let store = HybridStore::new(&server, pool_a.clone(), me).await.unwrap();
+    let mut a = Session::open(&pool_a, store, &g.a).await.unwrap();
+
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    let pulled = a.pull(&pool_a).await.unwrap();
+    for (sender, batches) in &pulled.batches {
+        apply_batches(&pool_a, "app-a", sender, batches, now_ms())
+            .await
+            .unwrap();
+    }
+    a.finish(&pool_a, pulled).await.unwrap();
+    assert_eq!(watched(&pool_a).await, ["aaaaaaaaaaa", "bbbbbbbbbbb"]);
+
+    assert!(matches!(
+        a.store().upload_pending().await,
+        Err(StoreError::Refused { status: 409, .. })
+    ));
+    let waiting = pending(&pool_a).await;
+    assert!(waiting >= 2, "the ack waits behind the batch");
+    let objects = |path: &str| g.store.0.lock().unwrap().objects.contains_key(path);
+    assert!(!objects(&first));
+    assert!(!objects(&second), "nothing goes ahead of what was refused");
+
+    *server.path.lock().unwrap() = None;
+    a.store().upload_pending().await.unwrap();
+    assert_eq!(pending(&pool_a).await, 0);
+    assert!(objects(&first) && objects(&second));
+
+    let pulled = b.pull(&pool_b).await.unwrap();
+    assert!(pulled.batches.contains_key(&hex::encode(g.a.did)));
+}
+
+#[test]
+fn a_refused_sign_in_or_a_lost_group_is_not_a_refused_write() {
+    let refused = |status, code: &str| StoreError::Refused {
+        status,
+        code: code.into(),
+    };
+    assert!(refused(409, "conflict").refused_write());
+    assert!(refused(507, "quota").refused_write());
+    assert!(!refused(401, "unauthorized").refused_write());
+    assert!(!refused(503, "unclaimed").refused_write());
+    assert!(!StoreError::SignInRefused.refused_write());
+}

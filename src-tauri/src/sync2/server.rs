@@ -55,6 +55,14 @@ pub enum StoreError {
     Protocol(#[from] super::Error),
 }
 
+impl StoreError {
+    /// The store answered and turned a write down. A refused sign-in or a store that lost the
+    /// group isn't this: those end the run.
+    pub fn refused_write(&self) -> bool {
+        matches!(self, Self::Refused { status, code } if *status != 401 && code != "unclaimed")
+    }
+}
+
 pub type Result<T> = std::result::Result<T, StoreError>;
 
 /// Whether an append landed, or lost to another device's append at the same head.

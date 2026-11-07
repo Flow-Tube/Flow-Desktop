@@ -86,3 +86,4 @@ FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.
+- Turning off Music or Shorts in Settings > Content now hides their links, library shelves, search results, filters and settings section across the app.

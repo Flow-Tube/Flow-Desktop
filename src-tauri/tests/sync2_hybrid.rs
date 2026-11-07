@@ -10,17 +10,23 @@ use std::sync::{Arc, Mutex};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use flow_desktop_lib::sync2::batches::apply_batches;
-use flow_desktop_lib::sync2::engine::{Session, now_ms};
+use flow_desktop_lib::sync2::engine::{EngineError, Session, now_ms};
 use flow_desktop_lib::sync2::held::HeldStore;
 use flow_desktop_lib::sync2::hybrid::HybridStore;
-use flow_desktop_lib::sync2::keys::MemberSecrets;
+use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::lan_sync::{meet, serve};
+use flow_desktop_lib::sync2::linking::DeviceMeta;
 use flow_desktop_lib::sync2::paths::{kc_name, log_path};
+use flow_desktop_lib::sync2::recovery_flow::restore;
 use flow_desktop_lib::sync2::roster::Entry;
+use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result, StoreError};
+use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, load_group, save_group};
 use flow_desktop_lib::sync2::store::Store;
 use sqlx::SqlitePool;
-use sync2_common::{MemoryStore, device_pool, exported, group, head, watch, watched};
+use sync2_common::{
+    LINK, MemoryStore, device_pool, empty_pool, exported, group, head, watch, watched,
+};
 use tokio::net::TcpListener;
 
 /// The server's answer to every request: none while it works, else a 503 with this code.
@@ -409,4 +415,53 @@ async fn a_damaged_object_held_from_before_gives_way_to_the_good_one() {
 
 async fn held_object(pool: &SqlitePool, path: &str) -> Option<Vec<u8>> {
     HeldStore::new(pool.clone()).get_object(path).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_restore_does_not_remove_devices_while_the_server_is_down() {
+    let g = group().await;
+    let device = member_secrets(random_bytes(), random_bytes());
+    let meta = DeviceMeta {
+        app: "app-new".into(),
+        name: "New".into(),
+        platform: "linux".into(),
+    };
+    let restored = restore(&&g.store, &&g.store, &g.recovery, &device, &meta)
+        .await
+        .unwrap();
+    let pool = empty_pool().await;
+    add_roster_entries(&pool, &restored.entries).await.unwrap();
+    let record = GroupRecord::new(hex::encode(g.group), "memory".into(), None, LINK.into())
+        .restored_keeping(&[]);
+    save_group(&pool, &record).await.unwrap();
+    let epoch = head(&g.store).epoch;
+    let outage: Outage = Arc::default();
+
+    // One try with the server up holds this device's wrap, so only the check below can stop it.
+    g.store.0.lock().unwrap().refuse_appends = true;
+    let store = hybrid(&g.store, &outage, &pool, &device).await;
+    assert!(Session::open(&pool, store, &device).await.is_err());
+    g.store.0.lock().unwrap().refuse_appends = false;
+
+    *outage.lock().unwrap() = Some("unavailable");
+    let store = hybrid(&g.store, &outage, &pool, &device).await;
+    assert!(matches!(
+        Session::open(&pool, store, &device).await,
+        Err(EngineError::Store(StoreError::Refused { status: 503, .. }))
+    ));
+    assert_eq!(head(&g.store).epoch, epoch);
+    assert!(
+        load_group(&pool)
+            .await
+            .unwrap()
+            .unwrap()
+            .restore_kept
+            .is_some()
+    );
+
+    *outage.lock().unwrap() = None;
+    let store = hybrid(&g.store, &outage, &pool, &device).await;
+    Session::open(&pool, store, &device).await.unwrap();
+    assert_eq!(head(&g.store).epoch, epoch + 1);
+    assert_eq!(load_group(&pool).await.unwrap().unwrap().restore_kept, None);
 }

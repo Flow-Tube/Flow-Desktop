@@ -60,6 +60,8 @@ pub enum EngineError {
     Removed,
     #[error("the recovery key has to be replaced before anything is written")]
     RecoveryDue,
+    #[error("a restore hasn't removed the devices the user didn't keep yet")]
+    RestorePending,
     #[error("the roster that leaves this device out replaces entries it had applied")]
     RemovalUnconfirmed,
     #[error("two sides of the roster removed each other")]
@@ -118,6 +120,7 @@ impl EngineError {
             Self::NotLinked => "linkedNotLinked",
             Self::Removed => "linkedRemoved",
             Self::RecoveryDue => "linkedRecoveryDue",
+            Self::RestorePending => "linkedRestorePending",
             Self::RemovalUnconfirmed => "linkedRemovalUnconfirmed",
             Self::Contested => "linkedContested",
             Self::RosterRolledBack => "linkedRolledBack",
@@ -171,6 +174,11 @@ pub struct Pulled {
 }
 
 impl Pulled {
+    /// How far each sender's log was read.
+    pub(super) fn positions(&self) -> &BTreeMap<String, StreamPosition> {
+        &self.positions
+    }
+
     /// Takes the records of a snapshot this device starts from, as a batch of its writer's.
     fn start_from(&mut self, me: &str, snapshot: Snapshot, reading: Option<&Reading>) {
         self.links.push(snapshot.manifest.link.clone());
@@ -338,11 +346,13 @@ pub fn verify_logged<'b>(
 }
 
 impl<'a, S: Store> Session<'a, S> {
-    /// Brings the roster up to date, unwraps the current epoch key, and starts the next epoch
-    /// when a device left.
+    /// Brings the roster up to date, unwraps the current epoch key, starts the next epoch when a
+    /// device left, and finishes a restore, so a session that opens seals only for devices the
+    /// user kept.
     pub async fn open(pool: &SqlitePool, store: S, device: &'a MemberSecrets) -> Result<Self> {
         let mut session = Self::open_as_peer(pool, store, device).await?;
         session.rotate_if_due(pool).await?;
+        session.finish_restore(pool).await?;
         Ok(session)
     }
 
@@ -483,6 +493,22 @@ impl<'a, S: Store> Session<'a, S> {
         for epoch in self.entries.iter().filter_map(|e| e.epoch.as_ref()) {
             self.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
         }
+        Ok(())
+    }
+
+    /// The one check before sealing anything with a key: refuses while a restore's keys are still
+    /// wrapped to devices the user didn't keep.
+    pub(super) fn may_seal(&self) -> Result<()> {
+        if self.record.restore_kept.is_some() {
+            return Err(EngineError::RestorePending);
+        }
+        Ok(())
+    }
+
+    /// The restore is finished, so this device may seal again.
+    pub(super) async fn restore_finished(&mut self, pool: &SqlitePool) -> Result<()> {
+        self.record.restore_kept = None;
+        save_group(pool, &self.record).await?;
         Ok(())
     }
 
@@ -628,6 +654,7 @@ impl<'a, S: Store> Session<'a, S> {
         object_type: ObjectType,
         content: &[u8],
     ) -> Result<()> {
+        self.may_seal()?;
         if self.state.recovery_due {
             return Err(EngineError::RecoveryDue);
         }
@@ -747,7 +774,11 @@ impl<'a, S: Store> Session<'a, S> {
     }
 
     /// The batches `reading` asks for, or every batch when it is `None`.
-    async fn read_new(&mut self, pool: &SqlitePool, reading: Option<&Reading>) -> Result<Pulled> {
+    pub(super) async fn read_new(
+        &mut self,
+        pool: &SqlitePool,
+        reading: Option<&Reading>,
+    ) -> Result<Pulled> {
         let me = hex::encode(self.device.did);
         let mut pulled = Pulled {
             positions: streams(pool).await?,

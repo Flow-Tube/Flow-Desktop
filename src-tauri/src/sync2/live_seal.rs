@@ -36,10 +36,11 @@ pub struct Received {
 }
 
 impl LiveKeys {
-    pub fn of<S: Store>(session: &Session<'_, S>) -> Self {
+    pub fn of<S: Store>(session: &Session<'_, S>) -> Result<Self> {
+        session.may_seal()?;
         let me = hex::encode(session.device().did);
         let state = session.roster();
-        Self {
+        Ok(Self {
             group: *session.group(),
             epoch: state.epoch,
             live_key: purpose_key(
@@ -55,7 +56,7 @@ impl LiveKeys {
                 .filter(|(did, member)| member.role == Role::Device && **did != me)
                 .map(|(did, member)| (did.clone(), member.sig))
                 .collect(),
-        }
+        })
     }
 
     pub fn me(&self) -> String {

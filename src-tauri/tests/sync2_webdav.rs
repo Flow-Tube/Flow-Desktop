@@ -4,7 +4,7 @@
 
 mod sync2_common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -362,21 +362,30 @@ async fn a_group_in_a_folder_is_restored_with_its_recovery_words() {
     let pool_c = empty_pool().await;
     let store_c = store_for(&url, &c.did).await;
     let meta = named("C");
-    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta).await;
+    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta, &[]).await;
     assert!(matches!(wrong, Err(EngineError::WrongWords)));
-    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta)
+    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta, &[])
         .await
         .unwrap();
     assert_ne!(next, words);
 
     let record = load_group(&pool_c).await.unwrap().unwrap();
     assert_eq!(record.kind, StoreKind::WebDav);
+    assert_eq!(record.restore_kept(), Some(BTreeSet::new()));
     let session = Session::open(&pool_c, store_for(&url, &c.did).await, &c)
         .await
         .unwrap();
     assert!(session.roster().members.contains_key(&hex::encode(c.did)));
+    assert!(
+        !session.roster().members.contains_key(&hex::encode(a.did)),
+        "a device not kept is signed out over WebDAV too"
+    );
+    assert_eq!(
+        load_group(&pool_c).await.unwrap().unwrap().restore_kept,
+        None
+    );
     let other = empty_pool().await;
-    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta).await;
+    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta, &[]).await;
     assert!(matches!(used, Err(EngineError::RecoveryUsed)));
 }
 

@@ -477,7 +477,7 @@ async fn a_live_message_crosses_a_lan_session_and_opens_on_the_other_side() {
             let session = Session::open(&pool, HeldStore::new(pool.clone()), device)
                 .await
                 .unwrap();
-            LiveKeys::of(&session)
+            LiveKeys::of(&session).unwrap()
         }
     };
     let (keys_a, keys_b) = (keys(&pool_a, &g.a).await, keys(&pool_b, &g.b).await);

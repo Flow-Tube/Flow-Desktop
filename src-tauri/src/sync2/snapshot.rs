@@ -178,6 +178,7 @@ impl<S: Store> Session<'_, S> {
         link: Option<String>,
         collections: Vec<(&str, &[u8])>,
     ) -> Result<()> {
+        self.may_seal()?;
         let group = *self.group();
         let epoch = self.roster().epoch;
         let did = self.device().did;

@@ -31,6 +31,9 @@ pub struct GroupRecord {
     pub own_seq: i64,
     pub own_prev: String,
     pub cursor: i64,
+    /// Set by a restore until the devices the user didn't keep are removed: a JSON list of those
+    /// kept. Nothing may be sealed meanwhile (spec/protocol.md, Recovery).
+    pub restore_kept: Option<String>,
 }
 
 impl GroupRecord {
@@ -50,7 +53,25 @@ impl GroupRecord {
             own_seq: 0,
             own_prev: hex::encode([0; 32]),
             cursor: 0,
+            restore_kept: None,
         }
+    }
+
+    /// The same group, restored with only `kept` chosen to stay.
+    #[must_use]
+    pub fn restored_keeping(self, kept: &[String]) -> Self {
+        Self {
+            restore_kept: Some(serde_json::Value::from(kept).to_string()),
+            ..self
+        }
+    }
+
+    /// The devices kept by a restore that hasn't removed the others yet. A list that can't be read
+    /// keeps nobody, since a removed device can be linked again.
+    #[must_use]
+    pub fn restore_kept(&self) -> Option<BTreeSet<String>> {
+        let kept = self.restore_kept.as_deref()?;
+        Some(serde_json::from_str(kept).unwrap_or_default())
     }
 
     /// A LAN group this device has just joined or created.
@@ -70,19 +91,20 @@ impl GroupRecord {
 }
 
 pub async fn load_group(pool: &SqlitePool) -> Result<Option<GroupRecord>, SyncError> {
-    Ok(sqlx::query_as("SELECT group_id, kind, store_url, instance, link, own_seq, own_prev, cursor FROM sync2_group WHERE id = 1")
+    Ok(sqlx::query_as("SELECT group_id, kind, store_url, instance, link, own_seq, own_prev, cursor, restore_kept FROM sync2_group WHERE id = 1")
         .fetch_optional(pool)
         .await?)
 }
 
 pub async fn save_group(pool: &SqlitePool, record: &GroupRecord) -> Result<(), SyncError> {
     sqlx::query(
-        "INSERT INTO sync2_group (id, group_id, kind, store_url, instance, link, own_seq, own_prev, cursor)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO sync2_group (id, group_id, kind, store_url, instance, link, own_seq, own_prev, cursor, restore_kept)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET group_id = excluded.group_id, kind = excluded.kind,
              store_url = excluded.store_url,
              instance = excluded.instance, link = excluded.link, own_seq = excluded.own_seq,
-             own_prev = excluded.own_prev, cursor = excluded.cursor",
+             own_prev = excluded.own_prev, cursor = excluded.cursor,
+             restore_kept = excluded.restore_kept",
     )
     .bind(&record.group_id)
     .bind(record.kind)
@@ -92,6 +114,7 @@ pub async fn save_group(pool: &SqlitePool, record: &GroupRecord) -> Result<(), S
     .bind(record.own_seq)
     .bind(&record.own_prev)
     .bind(record.cursor)
+    .bind(&record.restore_kept)
     .execute(pool)
     .await?;
     Ok(())

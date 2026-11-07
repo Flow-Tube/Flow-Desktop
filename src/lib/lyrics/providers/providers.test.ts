@@ -5,6 +5,8 @@ import { pickSearchHit } from "./lrclib";
 import { matchKuGou, normalizeKuGouLrc } from "./kugou";
 import { matchAppleSongs, parseItunesSearch } from "./paxsenix";
 import { isUncachedMiss } from "./betterLyrics";
+import { parseNetEaseLyric } from "./netease";
+import { pickAmllItem } from "./amll";
 import { lrcOffsetMs, parseOfflineLyrics } from "../offline";
 import { isInstrumentalNotice, parseLyrics } from "../lyricsUtils";
 
@@ -140,5 +142,33 @@ describe("offline lyrics", () => {
       [0, "Hello"],
       [0, "World"],
     ]);
+  });
+});
+
+describe("NetEase", () => {
+  const six = Array.from({ length: 6 }, (_, i) => `[00:${String(10 + i)}.00]Line ${i}`).join("\n");
+
+  it("reads its odd stamps and drops the credit lines", () => {
+    const entries = parseNetEaseLyric(`[00:00.00-1] 作词 : Someone\n[00:01.00] 作曲 : Other\n[00:02.00-1]Real\n${six}`);
+    expect(entries.map((entry) => entry.text)).toEqual(["Real", ...Array.from({ length: 6 }, (_, i) => `Line ${i}`)]);
+    expect(entries[0]!.time).toBe(2000);
+  });
+
+  it("takes a song holding little more than its credits as no lyric", () => {
+    expect(parseNetEaseLyric("[00:00.00] 作词 : Someone\n[00:01.00] written by : Other\n[00:02.00]Only line")).toEqual([]);
+  });
+});
+
+describe("AMLL", () => {
+  const request = { title: "Other Name", artist: "Band", durationSec: 200 };
+
+  it("matches a song under any of its names", () => {
+    const item = { id: 7, musicNames: ["First Name", "Other Name"], artistNames: ["Band"] };
+    expect(pickAmllItem([item], request)?.id).toBe(7);
+  });
+
+  it("leaves another song alone", () => {
+    const item = { id: 8, musicNames: ["Something Else"], artistNames: ["Someone"] };
+    expect(pickAmllItem([item], request)).toBeNull();
   });
 });

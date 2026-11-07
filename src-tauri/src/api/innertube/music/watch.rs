@@ -17,7 +17,7 @@ use crate::api::innertube::InnertubeClient;
 use crate::errors::AppResult;
 use crate::models::music::{SongItem, YTItem};
 use crate::models::music_pages::{
-    MusicLyrics, QueuePage, RelatedPage, RelatedShelf, RelatedShelfType,
+    MusicLyrics, QueuePage, RelatedPage, RelatedShelf, RelatedShelfType, TimedLyricLine,
 };
 
 impl InnertubeClient {
@@ -139,6 +139,29 @@ impl InnertubeClient {
         let Some(browse) = queue.lyrics_browse_id else {
             return Ok(None);
         };
+        // Timed lines are a bonus: when that request fails, the plain lyrics below still stand.
+        let mut timed_payload = json!({ "browseId": browse });
+        if let Some(params) = queue.lyrics_params.as_deref() {
+            timed_payload["params"] = json!(params);
+        }
+        if let Ok(res) = self
+            .post_music("browse", &clients::ANDROID_MUSIC, &mut timed_payload, None)
+            .await
+        {
+            let (timed_lines, source) = timed_lyric_lines(&res);
+            if !timed_lines.is_empty() {
+                let text = timed_lines
+                    .iter()
+                    .map(|line| line.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return Ok(Some(MusicLyrics {
+                    text,
+                    source,
+                    timed_lines,
+                }));
+            }
+        }
         let res = self
             .music_browse(Some(&browse), queue.lyrics_params.as_deref(), None)
             .await?;
@@ -159,8 +182,42 @@ impl InnertubeClient {
                     runs_text(&lyrics_shelf["footer"]).filter(|footer| !footer.trim().is_empty());
             }
         }
-        Ok((!text.is_empty()).then_some(MusicLyrics { text, source }))
+        Ok((!text.is_empty()).then_some(MusicLyrics {
+            text,
+            source,
+            timed_lines: Vec::new(),
+        }))
     }
+}
+
+/// The timed lines of an `ANDROID_MUSIC` lyrics browse, with their credit. Cues without a start
+/// time are dropped, so a music video row, which sends its lines with no times at all, reads as
+/// empty. So does a `♪` row, which only marks the gap between lines.
+fn timed_lyric_lines(res: &Value) -> (Vec<TimedLyricLine>, Option<String>) {
+    let data = &res["contents"]["elementRenderer"]["newElement"]["type"]["componentType"]["model"]
+        ["timedLyricsModel"]["lyricsData"];
+    let lines = data["timedLyricsData"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|line| {
+            let text = line["lyricLine"].as_str().unwrap_or_default().trim();
+            let start_ms = line["cueRange"]["startTimeMilliseconds"]
+                .as_str()?
+                .parse()
+                .ok()?;
+            let only_marks = text.chars().all(|c| c == '♪' || c.is_whitespace());
+            (!only_marks).then(|| TimedLyricLine {
+                start_ms,
+                text: text.to_string(),
+            })
+        })
+        .collect();
+    let source = data["sourceMessage"]
+        .as_str()
+        .filter(|source| !source.trim().is_empty())
+        .map(str::to_string);
+    (lines, source)
 }
 
 /// The transcript request's protobuf: field 1, the video id, base64 encoded.
@@ -350,6 +407,42 @@ fn parse_panel_video(r: &Value) -> Option<SongItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lyrics_browse(lines: Value) -> Value {
+        json!({ "contents": { "elementRenderer": { "newElement": { "type": { "componentType": { "model": {
+            "timedLyricsModel": { "lyricsData": { "timedLyricsData": lines, "sourceMessage": "Source: Musixmatch" } }
+        } } } } } } })
+    }
+
+    #[test]
+    fn timed_lyrics_keep_timed_lines_with_their_credit() {
+        let (lines, source) = timed_lyric_lines(&lyrics_browse(json!([
+            { "lyricLine": "First", "cueRange": { "startTimeMilliseconds": "1200" } },
+            { "lyricLine": " ♪ ", "cueRange": { "startTimeMilliseconds": "4000" } },
+            { "lyricLine": "Second", "cueRange": { "startTimeMilliseconds": "5000" } },
+        ])));
+        assert_eq!(
+            lines,
+            vec![
+                TimedLyricLine {
+                    start_ms: 1200,
+                    text: "First".into()
+                },
+                TimedLyricLine {
+                    start_ms: 5000,
+                    text: "Second".into()
+                },
+            ]
+        );
+        assert_eq!(source.as_deref(), Some("Source: Musixmatch"));
+    }
+
+    #[test]
+    fn a_music_video_row_without_times_reads_as_no_timed_lyrics() {
+        let (lines, _) = timed_lyric_lines(&lyrics_browse(json!([{ "lyricLine": "Untimed" }])));
+        assert!(lines.is_empty());
+        assert!(timed_lyric_lines(&json!({})).0.is_empty());
+    }
 
     #[test]
     fn panel_video_album_from_menu() {

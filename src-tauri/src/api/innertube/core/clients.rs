@@ -294,6 +294,17 @@ pub const ANDROID: YouTubeClient = YouTubeClient {
     remote_signed: false,
 };
 
+/// YouTube Music's Android client, the one that gets timed lyrics. Metadata only, never streams.
+pub const ANDROID_MUSIC: YouTubeClient = YouTubeClient {
+    name: "ANDROID_MUSIC",
+    version: "7.21.50",
+    client_id: "21",
+    user_agent: "com.google.android.apps.youtube.music/7.21.50 (Linux; U; Android 14) gzip",
+    device_make: None,
+    device_model: None,
+    ..ANDROID
+};
+
 pub const ANDROID_CREATOR: YouTubeClient = YouTubeClient {
     name: "ANDROID_CREATOR",
     version: "25.03.101",

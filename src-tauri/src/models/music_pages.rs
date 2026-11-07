@@ -198,13 +198,24 @@ pub struct MoodGenrePage {
     pub sections: Vec<MoodGenreSection>,
 }
 
-/// A song's plain lyrics and the credit the site shows under them.
+/// One line of YouTube Music's timed lyrics.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimedLyricLine {
+    pub start_ms: u64,
+    pub text: String,
+}
+
+/// A song's lyrics and the credit the site shows under them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicLyrics {
     pub text: String,
     /// "Source: Musixmatch", shown for attribution.
     pub source: Option<String>,
+    /// Empty for a music video row, whose lyrics have no times.
+    #[serde(default)]
+    pub timed_lines: Vec<TimedLyricLine>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

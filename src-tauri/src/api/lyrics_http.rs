@@ -16,8 +16,8 @@ pub const LYRICS_HTTP_TIMEOUT: Duration = Duration::from_secs(8);
 pub const LYRICS_HTTP_MAX_BODY: usize = 8 * 1024 * 1024;
 
 /// Hosts of the lyrics providers: `BetterLyrics`, lrc.red, `LyricsPlus`, `SimpMusic`, `KuGou`,
-/// `Paxsenix` (with the Apple Music catalogue and iTunes search it looks songs up in), `LrcLib`
-/// and Unison. The animated artwork service sits beside `BetterLyrics` and is asked the same way.
+/// `Paxsenix` (with the Apple Music catalogue and iTunes search it looks songs up in), `LrcLib`,
+/// Unison, `NetEase` and AMLL. The animated artwork service sits beside `BetterLyrics` and is asked the same way.
 const LYRICS_HOSTS: &[&str] = &[
     "lyrics-api.boidu.dev",
     "lrc.red",
@@ -31,6 +31,8 @@ const LYRICS_HOSTS: &[&str] = &[
     "itunes.apple.com",
     "lrclib.net",
     "unison.boidu.dev",
+    "music.163.com",
+    "api.amll.dev",
     "artwork.boidu.dev",
 ];
 
@@ -116,6 +118,13 @@ mod tests {
 
     fn allowed(raw: &str) -> bool {
         parse_lyrics_url(raw).is_ok()
+    }
+
+    #[test]
+    fn allows_the_netease_and_amll_hosts() {
+        assert!(allowed("https://music.163.com/api/song/lyric?id=1&lv=-1"));
+        assert!(allowed("https://api.amll.dev/v1/lyrics/search?musicName=a"));
+        assert!(!allowed("http://music.163.com/api/song/lyric"));
     }
 
     #[test]

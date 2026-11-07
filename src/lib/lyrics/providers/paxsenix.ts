@@ -2,7 +2,7 @@ import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
 import { lyricsHttpGet, lyricsGetText, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
 import { parseLyrics } from "../lyricsUtils";
-import { ranked } from "../matching";
+import { cleanArtist, ranked } from "../matching";
 import { UA_CHROME } from "./common";
 
 const APPLE_BASE = "https://beta.music.apple.com";
@@ -169,7 +169,8 @@ export function matchAppleSongs(songs: AppleSong[], title: string, artist: strin
 
 export const paxsenixProvider: LyricsProvider = {
   name: "Paxsenix",
-  async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
+  async getLyrics(_id, title, fullArtist, durationSec, album): Promise<LyricsEntry[]> {
+    const artist = cleanArtist(fullArtist);
     const terms = [`${title} ${artist}`.trim(), title];
     if (album) terms.push(`${title} ${artist} ${album}`.trim());
     let songs: AppleSong[] = [];

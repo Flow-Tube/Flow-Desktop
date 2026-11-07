@@ -1,6 +1,6 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { enc, lyricsGetJsonOrMiss } from "../http";
-import { best, type MatchSong } from "../matching";
+import { best, cleanArtist, type MatchSong } from "../matching";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
 
 const BASE_URL = "https://api.amll.dev/v1/lyrics";
@@ -33,7 +33,7 @@ export const amllProvider: LyricsProvider = {
   async getLyrics(_id, title, artist, durationSec): Promise<LyricsEntry[]> {
     if (!title.trim() || !artist.trim()) return [];
     const found = await lyricsGetJsonOrMiss<{ data?: { items?: AmllItem[] } }>(
-      `${BASE_URL}/search?musicName=${enc(title)}&artistName=${enc(artist)}`,
+      `${BASE_URL}/search?musicName=${enc(title)}&artistName=${enc(cleanArtist(artist))}`,
       HEADERS,
     );
     const item = pickAmllItem(found?.data?.items ?? [], { title, artist, durationSec });

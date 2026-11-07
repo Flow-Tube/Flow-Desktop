@@ -1,7 +1,7 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { lyricsHttpGet, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
-import { best, type MatchSong } from "../matching";
+import { best, cleanArtist, type MatchSong } from "../matching";
 import { flowUserAgent } from "./common";
 
 const SEARCH_URL = "https://lrc.red/api/v1";
@@ -60,13 +60,14 @@ export const lrcRedProvider: LyricsProvider = {
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
     const request: MatchSong = { title, artist, durationSec };
     const shaped: Array<[string, string]> = [["track", title]];
-    if (artist.trim()) shaped.push(["artist", artist]);
+    const searchArtist = cleanArtist(artist);
+    if (searchArtist) shaped.push(["artist", searchArtist]);
     if (album?.trim()) shaped.push(["album", album]);
     if (durationSec > 0) shaped.push(["duration", String(durationSec)]);
 
     const hit =
       pickLrcRedHit(await search(shaped), request) ??
-      pickLrcRedHit(await search([["q", artist.trim() ? `${artist} - ${title}` : title]]), request);
+      pickLrcRedHit(await search([["q", searchArtist ? `${searchArtist} - ${title}` : title]]), request);
     if (!hit?.lyricsUrl) return [];
     const document = await get(hit.lyricsUrl);
     return document ? parseTTMLToLyricsEntries(document) : [];

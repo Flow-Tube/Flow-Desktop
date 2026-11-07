@@ -2,7 +2,7 @@ import type { LyricsEntry, LyricsProvider, LyricsResult } from "./types";
 import type { SongItem } from "../../types/music";
 import { getEnabledProviders, getOrderedProviders, parseProviderEnabledStates } from "./registry";
 import { filterCreditLines, isInstrumentalNotice, normalizeEntries, stripWordTimings } from "./lyricsUtils";
-import { cleanArtist, cleanTitle } from "./matching";
+import { cleanTitle } from "./matching";
 import { entriesAreSynced, hasWordSync, hasReasonableTimestamps } from "./sync";
 import * as cache from "./cache";
 import { getOfflineLyrics, OFFLINE_LYRICS_PROVIDER } from "./offline";
@@ -228,7 +228,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   if (!savedCopy && remembersNoLyrics(videoId)) return offlineFallback();
 
   const title = cleanTitle(request.title);
-  const artist = cleanArtist(request.artist);
+  const artist = request.artist.trim();
   const now = Date.now();
   const providers = new Map(
     enabledProviders()
@@ -276,7 +276,7 @@ export async function getAllLyrics(
   signal: AbortSignal,
 ): Promise<void> {
   const title = cleanTitle(request.title);
-  const artist = cleanArtist(request.artist);
+  const artist = request.artist.trim();
   for (const provider of enabledProviders()) {
     if (signal.aborted) return;
     try {

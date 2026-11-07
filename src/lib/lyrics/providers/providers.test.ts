@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { convertLyricsPlus } from "./lyricsPlus";
 import { pickSearchHit } from "./lrclib";
-import { matchKuGou, normalizeKuGouLrc } from "./kugou";
+import { bestLyric, matchingRows, normalizeKuGouLrc } from "./kugou";
+import { closestRow } from "./simpMusic";
 import { matchAppleSongs, parseItunesSearch } from "./paxsenix";
 import { isUncachedMiss } from "./betterLyrics";
 import { parseNetEaseLyric } from "./netease";
@@ -63,21 +64,47 @@ describe("LrcLib", () => {
     expect(pickSearchHit(hits, "Song", "Band", 200)).toBe(hits[2]);
     expect(pickSearchHit(hits.slice(0, 1), "Song", "Band", 200)).toBeNull();
   });
+
+  it("accepts any credited artist and drops hits far from the song's length", () => {
+    const hits = [
+      { trackName: "Song", artistName: "Arijit Singh, Shilpa Rao", duration: 260, syncedLyrics: "[00:01.00]x" },
+      { trackName: "Song", artistName: "Arijit Singh, Shilpa Rao", duration: 205, syncedLyrics: "[00:01.00]y" },
+    ];
+    expect(pickSearchHit(hits, "Song", "Vishal & Shekhar, Arijit Singh, Shilpa Rao", 200)).toBe(hits[1]);
+  });
+});
+
+describe("SimpMusic", () => {
+  it("never uses a row far from the song's length, and lets votes break ties", () => {
+    const rows = [
+      { syncedLyrics: "far", durationSeconds: 260, vote: 9 },
+      { syncedLyrics: "low", durationSeconds: 201, vote: 1 },
+      { syncedLyrics: "high", duration: 201, vote: 5 },
+    ];
+    expect(closestRow(rows, 200)?.syncedLyrics).toBe("high");
+    expect(closestRow(rows.slice(0, 1), 200)).toBeNull();
+    expect(closestRow(rows, 0)?.syncedLyrics).toBe("far");
+  });
 });
 
 describe("KuGou", () => {
-  it("matches named songs and falls back to the duration when names are missing", () => {
+  it("keeps only song rows naming the song, close in length", () => {
     const request = { title: "晴天", artist: "周杰伦", durationSec: 269 };
-    const named = [
-      { title: "晴天 (Live)", artist: "周杰伦", durationSec: 270 },
-      { title: "晴天", artist: "周杰伦", durationSec: 269 },
+    const rows = [
+      { songname: "晴天 (Live)", singername: "周杰伦", duration: 270, hash: "a" },
+      { songname: "晴天", singername: "周杰伦", duration: 269, hash: "b" },
+      { songname: "晴天", singername: "周杰伦", duration: 300, hash: "c" },
+      { songname: "", singername: "", duration: 269, hash: "d" },
     ];
-    expect(matchKuGou(named, request, (s) => s)).toEqual([named[1]]);
-    const unnamed = [
-      { title: "", artist: "", durationSec: 100 },
-      { title: "", artist: "", durationSec: 272 },
-    ];
-    expect(matchKuGou(unnamed, request, (s) => s)).toEqual([unnamed[1]]);
+    expect(matchingRows(rows, request).map((row) => row.hash)).toEqual(["b"]);
+  });
+
+  it("checks each lyric on its own names, reading milliseconds and seconds alike", () => {
+    const request = { title: "Song", artist: "Band", durationSec: 200 };
+    const other = { id: 1, accesskey: "k", song: "Other", singer: "Band", duration: 200_000 };
+    const same = { id: 2, accesskey: "k", song: "Song", singer: "Band", duration: 201 };
+    expect(bestLyric([other, same], request)).toBe(same);
+    expect(bestLyric([other], request)).toBeNull();
   });
 
   it("drops untimed lines and the credit block at the head", () => {

@@ -3,6 +3,7 @@ import { lyricsHttpGet, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
 import { parseLyrics } from "../lyricsUtils";
 import { flowUserAgent } from "./common";
+import { cleanArtist } from "../matching";
 
 const LYRICS_URL = "https://unison.boidu.dev/lyrics";
 
@@ -30,7 +31,7 @@ export const unisonProvider: LyricsProvider = {
   name: "Unison",
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
     if (!title.trim() || !artist.trim()) return [];
-    let url = `${LYRICS_URL}?song=${enc(title)}&artist=${enc(artist)}`;
+    let url = `${LYRICS_URL}?song=${enc(title)}&artist=${enc(cleanArtist(artist))}`;
     if (album?.trim()) url += `&album=${enc(album)}`;
     if (durationSec > 0) url += `&duration=${durationSec}`;
     const res = await lyricsHttpGet(url, { "User-Agent": await flowUserAgent(), Accept: "application/json" });

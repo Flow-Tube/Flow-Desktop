@@ -1,7 +1,7 @@
 import type { LyricsEntry, LyricsProvider } from "../types";
 import { enc, lyricsGetJson } from "../http";
 import { parseLyrics } from "../lyricsUtils";
-import { ranked } from "../matching";
+import { cleanArtist, ranked } from "../matching";
 
 const SEARCH_URL = "https://music.163.com/api/cloudsearch/pc";
 const LYRIC_URL = "https://music.163.com/api/song/lyric";
@@ -41,7 +41,7 @@ export function parseNetEaseLyric(lrc: string): LyricsEntry[] {
 export const neteaseProvider: LyricsProvider = {
   name: "NetEase",
   async getLyrics(_id, title, artist, durationSec): Promise<LyricsEntry[]> {
-    const query = `${title} ${artist}`.trim();
+    const query = `${title} ${cleanArtist(artist)}`.trim();
     const found = await lyricsGetJson<{ result?: { songs?: NetEaseSong[] } }>(
       `${SEARCH_URL}?s=${enc(query)}&type=1&limit=${SEARCH_RESULTS}`,
       HEADERS,

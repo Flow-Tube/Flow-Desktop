@@ -42,6 +42,7 @@ SYNC
 - On the local network, an object as large as a sync object can be is now passed between devices whole, instead of being refused for its size.
 - Linked devices check for devices asking to join every 5 seconds only while the Sync page is on screen, and the check no longer reads the whole device list from the server.
 - A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
+- Linked devices only ever touch files inside the group's own WebDAV folder.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC

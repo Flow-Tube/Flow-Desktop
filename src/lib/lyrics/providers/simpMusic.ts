@@ -1,5 +1,5 @@
 import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
-import { lyricsGetJson } from "../http";
+import { lyricsGetJsonOrMiss } from "../http";
 import { parseLyrics } from "../lyricsUtils";
 import { detectMs } from "./common";
 
@@ -53,11 +53,11 @@ export const simpMusicProvider: LyricsProvider = {
   name: "SimpMusic",
   async getLyrics(id, _title, _artist, durationSec): Promise<LyricsEntry[]> {
     if (!id) return [];
-    const res = await lyricsGetJson<SimpResponse>(`${BASE}${id}`, {
+    const res = await lyricsGetJsonOrMiss<SimpResponse>(`${BASE}${id}`, {
       "User-Agent": "SimpMusicLyrics/1.0",
       Accept: "application/json",
     });
-    if (res.type !== "success" || !res.data?.length) return [];
+    if (res?.type !== "success" || !res.data?.length) return [];
 
     let best = res.data[0]!;
     if (durationSec > 0) {

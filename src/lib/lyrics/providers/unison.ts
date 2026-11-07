@@ -34,6 +34,8 @@ export const unisonProvider: LyricsProvider = {
     if (album?.trim()) url += `&album=${enc(album)}`;
     if (durationSec > 0) url += `&duration=${durationSec}`;
     const res = await lyricsHttpGet(url, { "User-Agent": await flowUserAgent(), Accept: "application/json" });
-    return res.status >= 200 && res.status < 300 ? parseUnison(res.body) : [];
+    if (res.status === 404) return [];
+    if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+    return parseUnison(res.body);
   },
 };

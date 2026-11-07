@@ -47,7 +47,8 @@ interface LyricsStore extends LyricsView {
   showSyncControls: boolean;
   candidates: LyricsCandidate[];
   isBrowsing: boolean;
-  load: (request: LyricsRequest) => void;
+  /** `onSettled` runs once this song's lookup has ended, unless another took its place. */
+  load: (request: LyricsRequest, onSettled?: () => void) => void;
   refresh: () => void;
   clear: () => void;
   adjustSyncOffset: (deltaMs: number) => void;
@@ -98,7 +99,7 @@ function offlineView(lyrics: OfflineLyrics, current: { syncOffsetMs: number; fil
 }
 
 export const useLyricsStore = create<LyricsStore>((set, get) => {
-  const run = (request: LyricsRequest) => {
+  const run = (request: LyricsRequest, onSettled?: () => void) => {
     lookup?.abort();
     browse?.abort();
     const controller = new AbortController();
@@ -113,6 +114,7 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
         ...SESSION_RESET,
         ...(offline ? offlineView(offline, SESSION_RESET) : EMPTY_LYRICS),
       });
+      onSettled?.();
       return;
     }
     const choice = getLyricsSourceChoice(request.videoId);
@@ -128,27 +130,40 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     // The user chose the copy saved with the download: no lookup at all.
     if (showSaved && choice === "downloaded") {
       lookup = null;
+      onSettled?.();
       return;
     }
 
-    getLyrics(request, controller.signal).then(
+    const present = (result: LyricsResult | null) => {
+      const shown = get();
+      if (result && result.entries === shown.entries) {
+        if (shown.loading) set({ loading: false });
+        return;
+      }
+      // Lyrics saved with a download stay unless the providers found something better.
+      if (shown.providerName === OFFLINE_PROVIDER && lyricsQuality(result?.entries ?? []) <= lyricsQuality(shown.entries)) {
+        return;
+      }
+      // The file's offset belonged to the saved lyrics, not to the ones replacing them.
+      const offset = shown.syncOffsetMs === shown.fileOffsetMs ? { syncOffsetMs: 0, fileOffsetMs: 0 } : { fileOffsetMs: 0 };
+      set({ ...(result ? viewOf(result) : EMPTY_LYRICS), ...(shown.providerName === OFFLINE_PROVIDER ? offset : {}) });
+    };
+
+    getLyrics(request, controller.signal, (answer) => {
+      if (lookup === controller) present(answer);
+    }).then(
       (result) => {
         if (lookup !== controller) return;
         lookup = null;
-        const shown = get();
-        // Lyrics saved with a download stay unless the providers found something better.
-        if (shown.providerName === OFFLINE_PROVIDER && lyricsQuality(result?.entries ?? []) <= lyricsQuality(shown.entries)) {
-          return;
-        }
-        // The file's offset belonged to the saved lyrics, not to the ones replacing them.
-        const offset = shown.syncOffsetMs === shown.fileOffsetMs ? { syncOffsetMs: 0, fileOffsetMs: 0 } : { fileOffsetMs: 0 };
-        set({ ...(result ? viewOf(result) : EMPTY_LYRICS), ...(shown.providerName === OFFLINE_PROVIDER ? offset : {}) });
+        present(result);
+        onSettled?.();
       },
       (error: unknown) => {
         if (lookup !== controller || isAbortError(error)) return;
         lookup = null;
         const saved = getOfflineLyrics(request.videoId);
         set((s) => (s.providerName === OFFLINE_PROVIDER ? {} : saved ? offlineView(saved, s) : { ...EMPTY_LYRICS }));
+        onSettled?.();
       },
     );
   };

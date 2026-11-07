@@ -39,7 +39,9 @@ export function pickLrcRedHit(hits: LrcRedHit[], request: MatchSong): LrcRedHit 
 
 async function get(url: string): Promise<string | null> {
   const res = await lyricsHttpGet(url, { "User-Agent": await flowUserAgent() });
-  return res.status >= 200 && res.status < 300 && res.body.trim() ? res.body : null;
+  if (res.status === 404) return null;
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+  return res.body.trim() ? res.body : null;
 }
 
 async function search(params: Array<[string, string]>): Promise<LrcRedHit[]> {

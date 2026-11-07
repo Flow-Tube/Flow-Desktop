@@ -25,7 +25,8 @@ function toEntries(rec: LrcRecord | null): LyricsEntry[] {
 
 async function getJson<T>(url: string): Promise<T | null> {
   const res = await lyricsHttpGet(url, HEADERS);
-  if (res.status < 200 || res.status >= 300) return null;
+  if (res.status === 404) return null;
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
   try {
     return JSON.parse(res.body) as T;
   } catch {

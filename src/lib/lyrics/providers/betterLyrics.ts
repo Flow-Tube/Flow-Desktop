@@ -21,7 +21,7 @@ export const betterLyricsProvider: LyricsProvider = {
     if (durationSec > 0) url += `&d=${durationSec}`;
 
     const res = await lyricsHttpGet(url, { "User-Agent": UA_CHROME, Accept: "application/json" });
-    if (isUncachedMiss(res.status, res.body)) return [];
+    if (res.status === 404 || isUncachedMiss(res.status, res.body)) return [];
     if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
 
     let ttml = "";

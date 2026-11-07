@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LyricsResult } from "../lib/lyrics/types";
 
-let answer: () => Promise<LyricsResult | null> = async () => null;
+let answer: (onAnswer?: (result: LyricsResult) => void) => Promise<LyricsResult | null> = async () => null;
 
 vi.mock("../lib/lyrics/lyricsHelper", () => ({
-  getLyrics: () => answer(),
+  getLyrics: (_request: unknown, _signal: unknown, onAnswer?: (result: LyricsResult) => void) => answer(onAnswer),
   forceRefresh: () => {},
   getAllLyrics: async () => {},
   applyManualLyrics: () => {},
@@ -25,6 +25,33 @@ beforeEach(() => {
 });
 
 describe("lyrics store", () => {
+  it("shows an answer as soon as the run has one, before the run ends", async () => {
+    const first = { entries: [{ time: 1000, text: "Line" }, { time: 5000, text: "Next" }], provider: "Lines" };
+    let end: (result: LyricsResult) => void = () => {};
+    answer = (onAnswer) => {
+      onAnswer?.(first);
+      return new Promise((resolve) => (end = resolve));
+    };
+    useLyricsStore.getState().load(request());
+    expect(useLyricsStore.getState()).toMatchObject({ providerName: "Lines", loading: false });
+    end(first);
+    await flush();
+    expect(useLyricsStore.getState().entries).toBe(first.entries);
+  });
+
+  it("reports the lookup's end, unless another song took its place", async () => {
+    const settled: string[] = [];
+    let end: (result: null) => void = () => {};
+    answer = () => new Promise((resolve) => (end = resolve));
+    useLyricsStore.getState().load(request(), () => settled.push("left"));
+    const stale = end;
+    useLyricsStore.getState().load(request(), () => settled.push("current"));
+    stale(null);
+    end(null);
+    await flush();
+    expect(settled).toEqual(["current"]);
+  });
+
   it("shows saved lyrics at once, without a spinner", () => {
     const req = request();
     seedOfflineLyrics(req.videoId, timed);

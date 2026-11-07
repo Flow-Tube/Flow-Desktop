@@ -97,18 +97,25 @@ describe("lyrics store", () => {
 });
 
 describe("lyrics session", () => {
-  it("clamps the sync offset to half a minute either way and resets it for the next song", () => {
+  it("clamps the sync offset to half a minute either way and keeps it for that song only", () => {
     answer = () => new Promise(() => {});
-    useLyricsStore.getState().load(request());
+    const first = request();
+    useLyricsStore.getState().load(first);
     for (let i = 0; i < 80; i++) useLyricsStore.getState().adjustSyncOffset(500);
     expect(useLyricsStore.getState().syncOffsetMs).toBe(30_000);
     useLyricsStore.getState().adjustSyncOffset(-100);
     expect(useLyricsStore.getState().syncOffsetMs).toBe(29_900);
     useLyricsStore.getState().load(request());
     expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+    useLyricsStore.getState().load(first);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(29_900);
+    useLyricsStore.getState().resetSyncOffset();
+    useLyricsStore.getState().load(request());
+    useLyricsStore.getState().load(first);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
   });
 
-  it("shows a chosen source at once and starts its timing from zero, while an edit keeps it", () => {
+  it("keeps the song's timing through a chosen source and an edit", () => {
     answer = () => new Promise(() => {});
     useLyricsStore.getState().load(request());
     useLyricsStore.getState().adjustSyncOffset(500);
@@ -117,7 +124,7 @@ describe("lyrics session", () => {
     expect(useLyricsStore.getState().isSynced).toBe(true);
     useLyricsStore.getState().applyCandidate({ providerName: "LrcLib", entries: [{ time: 0, text: "Plain" }], synced: false });
     expect(useLyricsStore.getState().providerName).toBe("LrcLib");
-    expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(500);
     expect(useLyricsStore.getState().plain).toBe("Plain");
   });
 });
@@ -139,6 +146,17 @@ describe("saved lyrics timing", () => {
     await flush();
     expect(useLyricsStore.getState().providerName).toBe("BetterLyrics");
     expect(useLyricsStore.getState().syncOffsetMs).toBe(0);
+  });
+
+  it("lets a saved nudge win over the file's offset", () => {
+    answer = () => new Promise(() => {});
+    const req = request();
+    useLyricsStore.getState().load(req);
+    useLyricsStore.getState().adjustSyncOffset(200);
+    useLyricsStore.getState().load(request());
+    seedOfflineLyrics(req.videoId, `[offset:+350]\n${timed}`);
+    useLyricsStore.getState().load(req);
+    expect(useLyricsStore.getState().syncOffsetMs).toBe(200);
   });
 });
 

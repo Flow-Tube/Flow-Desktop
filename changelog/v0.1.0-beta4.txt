@@ -94,6 +94,7 @@ MUSIC
 - Songs with no lyrics are remembered for a week instead of asking every source on each play, and lyrics you pick or edit by hand stay until you press Refresh.
 - Romanization only, in the lyrics menu and Settings > Music, replaces the original script with Latin letters.
 - Lyrics for songs with several artists are matched against every credited artist, and LrcLib, SimpMusic and KuGou no longer return lyrics for a different song or a much longer upload.
+- The lyrics timing you set is kept for each song, through Refresh, another source or an edit.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

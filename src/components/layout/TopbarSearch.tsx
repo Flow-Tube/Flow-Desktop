@@ -22,6 +22,7 @@ export function TopbarSearch() {
   const navigate = useNavigate();
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const region = useAppSettingsStore((s) => s.values[SETTINGS.TRENDING_REGION]);
+  const showMusicNav = useAppSettingsStore((s) => s.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
   const history = useSearchHistoryStore((s) => s.entries);
   const recordSearch = useSearchHistoryStore((s) => s.record);
   const removeSearch = useSearchHistoryStore((s) => s.remove);
@@ -31,15 +32,15 @@ export function TopbarSearch() {
 
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeKey, setActiveKey] = useState(null as string | null);
   const [resolving, setResolving] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { suggestions, musicItems } = useSearchSuggestions(text, region);
+  const { suggestions, musicItems } = useSearchSuggestions(text, region, showMusicNav);
   const columns = useMemo(
-    () => buildSuggestionColumns({ query: text, history, suggestions, musicItems, isHiddenSong }),
-    [text, history, suggestions, musicItems, isHiddenSong],
+    () => buildSuggestionColumns({ query: text, history, suggestions, musicItems: showMusicNav ? musicItems : [], isHiddenSong }),
+    [text, history, suggestions, musicItems, showMusicNav, isHiddenSong],
   );
   const rows = useMemo(() => [...columns.main, ...columns.side], [columns]);
   const panelVisible = open && rows.length > 0;

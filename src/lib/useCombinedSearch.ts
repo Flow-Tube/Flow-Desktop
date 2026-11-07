@@ -20,6 +20,8 @@ import {
 } from './searchResults';
 import type { PlaylistSummary, SearchFeature } from '../types/video';
 import { learnFromSearch } from './api/recommendation';
+import { SETTINGS } from './settings/schema';
+import { useAppSettingsStore } from '../store/useAppSettingsStore';
 
 export type { CombinedSearchResults, TopResult } from './searchResults';
 
@@ -155,6 +157,9 @@ export function useCombinedSearch(
   const [exactQuery, setExactQuery] = useState<string | null>(null);
   const exact = exactQuery !== null && exactQuery === debouncedQuery;
 
+  const showMusicNav = useAppSettingsStore((s) => s.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
+  const showShortsNav = useAppSettingsStore((s) => s.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
+
   const seqRef = useRef(0);
   const ytTokenRef = useRef<string | null>(null);
   const musicContRef = useRef<string | null>(null);
@@ -163,6 +168,8 @@ export function useCombinedSearch(
   const sortRef = useRef(sortBy);
   const filtersRef = useRef(filters);
   const exactRef = useRef(exact);
+  const showMusicRef = useRef(showMusicNav);
+  const showShortsRef = useRef(showShortsNav);
   const hasNextRef = useRef(false);
   const learnedQueryRef = useRef<string | null>(null);
   const fetchingRef = useRef(false);
@@ -171,6 +178,8 @@ export function useCombinedSearch(
   sortRef.current = sortBy;
   filtersRef.current = filters;
   exactRef.current = exact;
+  showMusicRef.current = showMusicNav;
+  showShortsRef.current = showShortsNav;
 
   const setNext = useCallback((v: boolean) => {
     hasNextRef.current = v;
@@ -181,6 +190,8 @@ export function useCombinedSearch(
     async (mode: FetchMode) => {
       const q = queryRef.current;
       const category = filterRef.current;
+      const musicEnabled = showMusicRef.current;
+      const shortsEnabled = showShortsRef.current;
 
       if (!q) {
         setResults(emptyResults());
@@ -214,7 +225,7 @@ export function useCombinedSearch(
         if (category === 'all') {
           const [ytRes, musicRes] = await Promise.allSettled([
             searchVideos({ query: q, exact: exactRef.current }),
-            getMusicSearchSummary(q),
+            musicEnabled ? getMusicSearchSummary(q) : Promise.resolve({ summaries: [], filters: [] }),
           ]);
           if (!alive()) return;
 
@@ -232,6 +243,7 @@ export function useCombinedSearch(
             dedupeTopFromBuckets({
               ...emptyResults(),
               ...(yt ?? {}),
+              shorts: shortsEnabled ? (yt?.shorts ?? []) : [],
               topResult: pickTopResult(summaries, channels, bucket.artists),
               videos: (yt?.videos ?? []).filter((v) => !v.isLive),
               live: (yt?.videos ?? []).filter((v) => v.isLive),
@@ -240,7 +252,7 @@ export function useCombinedSearch(
             }),
           );
 
-          if (ytRes.status === 'rejected' && musicRes.status === 'rejected') {
+          if (ytRes.status === 'rejected' && (!musicEnabled || musicRes.status === 'rejected')) {
             setError(getBackendErrorMessage(ytRes.reason));
           }
           return;
@@ -271,12 +283,12 @@ export function useCombinedSearch(
               return {
                 ...prev,
                 [key]: dedupe([...prev[key], ...page.videos], (v) => v.id),
-                shorts: dedupe([...prev.shorts, ...page.shorts], (v) => v.id),
+                shorts: shortsEnabled ? dedupe([...prev.shorts, ...page.shorts], (v) => v.id) : [],
               };
             }
             return isLive
               ? { ...emptyResults(), live: page.videos, correction: page.correction }
-              : { ...emptyResults(), ...page };
+              : { ...emptyResults(), ...page, shorts: shortsEnabled ? page.shorts : [] };
           });
           return;
         }
@@ -300,7 +312,7 @@ export function useCombinedSearch(
         if (category === 'artists' || category === 'playlists') {
           // Federated: YouTube Music's artists or playlists, and YouTube's channels or playlists.
           const [musicR, ytR] = await Promise.allSettled([
-            searchMusicTyped(q, categoryToMusicFilter(category)),
+            musicEnabled ? searchMusicTyped(q, categoryToMusicFilter(category)) : Promise.resolve({ sections: [], continuation: null, filters: [] }),
             searchVideos({ query: q, contentType: category === 'artists' ? 'channel' : 'playlist' }),
           ]);
           if (!alive()) return;
@@ -321,8 +333,8 @@ export function useCombinedSearch(
             ),
           );
 
-          if (musicR.status === 'rejected' && ytR.status === 'rejected') {
-            setError(getBackendErrorMessage(musicR.reason));
+          if ((!musicEnabled || musicR.status === 'rejected') && ytR.status === 'rejected') {
+            setError(getBackendErrorMessage(ytR.reason));
           }
           return;
         }
@@ -358,6 +370,8 @@ export function useCombinedSearch(
     filters.contentType,
     filters.features,
     exact,
+    showMusicNav,
+    showShortsNav,
     execute,
   ]);
 

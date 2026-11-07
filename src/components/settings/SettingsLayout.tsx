@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { getString } from '../../lib/i18n/index';
+import { SETTINGS } from '../../lib/settings/schema';
 import { usePageEnterMotion } from '../../lib/usePageEnterMotion';
+import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 
 export type SettingsCategory =
   | 'appearance'
@@ -54,24 +56,28 @@ interface SettingsLayoutProps {
 }
 
 export function SettingsLayout({ children }: SettingsLayoutProps) {
+  const showMusicNav = useAppSettingsStore((s) => s.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
+  const visibleCategories = showMusicNav ? categories : categories.filter((cat) => cat.id !== 'music');
+
   // Other screens can open a section directly, such as the subscribe menu opening Content.
   const requested = (useLocation().state as { settingsCategory?: SettingsCategory } | null)?.settingsCategory;
   const [activeTab, setActiveTab] = useState<SettingsCategory>(
-    requested && categories.some((cat) => cat.id === requested) ? requested : 'appearance',
+    requested && visibleCategories.some((cat) => cat.id === requested) ? requested : 'appearance',
   );
+  const currentTab: SettingsCategory = !showMusicNav && activeTab === 'music' ? 'appearance' : activeTab;
   const paneRef = useRef<HTMLDivElement>(null);
-  usePageEnterMotion(paneRef, activeTab, true);
+  usePageEnterMotion(paneRef, currentTab, true);
 
   return (
     <div className="mx-auto w-full h-[calc(100vh-64px)] flex">
       <nav className="w-56 shrink-0 border-r border-chrome-neutral-800 overflow-y-auto py-6 px-3 flex flex-col gap-1">
         <h2 className="text-lg font-bold text-chrome-neutral-100 px-3 mb-4">{getString('settings_title')}</h2>
-        {categories.map((cat) => (
+        {visibleCategories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setActiveTab(cat.id)}
             className={`px-4 py-2.5 rounded-full flex items-center gap-3 text-sm font-medium transition-colors cursor-pointer ${
-              activeTab === cat.id
+              currentTab === cat.id
                 ? 'bg-surface-container-high text-[var(--color-primary)]'
                 : 'text-chrome-neutral-400 hover:bg-surface-container-low hover:text-chrome-neutral-200'
             }`}
@@ -83,7 +89,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
       </nav>
 
       <div ref={paneRef} className="flex-1 overflow-y-auto py-6 pl-10 pr-4 scrollbar-none">
-        {children(activeTab)}
+        {children(currentTab)}
       </div>
     </div>
   );

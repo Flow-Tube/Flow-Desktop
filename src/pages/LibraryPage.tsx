@@ -4,8 +4,10 @@ import { Clock, Disc3, Download, History, ListVideo, Music2, ThumbsUp } from "lu
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
+import { SETTINGS } from "../lib/settings/schema";
 import { useLibrary, type LibraryPlaylist } from "../lib/useLibrary";
 import { historyVideoToSong, type HistoryVideo } from "../lib/useHistory";
+import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import {
   albumDetailPath,
@@ -204,13 +206,25 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
     loading,
   } = useLibrary();
 
+  const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== "false");
+  const showShortsNav = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== "false");
+
+  const visibleHistory = useMemo(
+    () => (showMusicNav ? history : history.filter((item) => !item.isMusic)),
+    [history, showMusicNav],
+  );
+  const visibleLiked = useMemo(
+    () => (showMusicNav ? liked : liked.filter((item) => !item.isMusic)),
+    [liked, showMusicNav],
+  );
+
   const isEmpty = (length: number) => !loading && length === 0;
 
   const statsText = getString(
     "library_stats_summary",
     playlists.length,
-    savedAlbums.length,
-    savedShorts.length,
+    showMusicNav ? savedAlbums.length : 0,
+    showShortsNav ? savedShorts.length : 0,
   );
 
   const handleOpenAlbum = (album: StoredAlbum) => {
@@ -234,9 +248,9 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
         title={getString("library_history_label")}
         icon={History}
         viewAllTo="/history"
-        isEmpty={isEmpty(history.length)}
+        isEmpty={isEmpty(visibleHistory.length)}
       >
-        <HistoryShelfRow items={history} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        <HistoryShelfRow items={visibleHistory} onPlay={onPlay} onAddToQueue={onAddToQueue} />
       </LibraryShelf>
 
       {/* Playlists */}
@@ -250,24 +264,28 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
       </LibraryShelf>
 
       {/* Albums */}
-      <LibraryShelf
-        title={getString("albums_title")}
-        icon={Disc3}
-        viewAllTo="/albums"
-        isEmpty={isEmpty(savedAlbums.length)}
-      >
-        <AlbumShelfRow albums={savedAlbums} onOpenAlbum={handleOpenAlbum} />
-      </LibraryShelf>
+      {showMusicNav && (
+        <LibraryShelf
+          title={getString("albums_title")}
+          icon={Disc3}
+          viewAllTo="/albums"
+          isEmpty={isEmpty(savedAlbums.length)}
+        >
+          <AlbumShelfRow albums={savedAlbums} onOpenAlbum={handleOpenAlbum} />
+        </LibraryShelf>
+      )}
 
       {/* Saved Shorts */}
-      <LibraryShelf
-        title={getString("library_saved_shorts_label")}
-        icon={ShortsIcon}
-        viewAllTo="/saved-shorts"
-        isEmpty={isEmpty(savedShorts.length)}
-      >
-        <ShortsShelfRow shorts={savedShorts} />
-      </LibraryShelf>
+      {showShortsNav && (
+        <LibraryShelf
+          title={getString("library_saved_shorts_label")}
+          icon={ShortsIcon}
+          viewAllTo="/saved-shorts"
+          isEmpty={isEmpty(savedShorts.length)}
+        >
+          <ShortsShelfRow shorts={savedShorts} />
+        </LibraryShelf>
+      )}
 
       {/* Watch Later */}
       <LibraryShelf
@@ -284,9 +302,9 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
         title={getString("library_likes_label")}
         icon={ThumbsUp}
         viewAllTo="/liked"
-        isEmpty={isEmpty(liked.length)}
+        isEmpty={isEmpty(visibleLiked.length)}
       >
-        <HistoryShelfRow items={liked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        <HistoryShelfRow items={visibleLiked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
       </LibraryShelf>
 
       {/* Video downloads */}
@@ -300,14 +318,16 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
       </LibraryShelf>
 
       {/* Music downloads */}
-      <LibraryShelf
-        title={getString("library_music_downloads_label")}
-        icon={Music2}
-        viewAllTo="/downloads"
-        isEmpty={isEmpty(musicDownloads.length)}
-      >
-        <MusicDownloadShelfRow songs={musicDownloads} />
-      </LibraryShelf>
+      {showMusicNav && (
+        <LibraryShelf
+          title={getString("library_music_downloads_label")}
+          icon={Music2}
+          viewAllTo="/downloads"
+          isEmpty={isEmpty(musicDownloads.length)}
+        >
+          <MusicDownloadShelfRow songs={musicDownloads} />
+        </LibraryShelf>
+      )}
 
       {/* STEP 5 — MD3 empty states */}
     </div>

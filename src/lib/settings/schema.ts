@@ -124,6 +124,7 @@ export const SETTINGS = {
   LYRICS_SHOW_ROMANIZATION: "lyrics_show_romanization",
   LYRICS_AUTO_ROMANIZE: "lyrics_auto_romanize",
   LYRICS_ROMANIZATION_ONLY: "lyrics_romanization_only",
+  LYRICS_SPONSORBLOCK_TIMING: "lyrics_sponsorblock_timing",
   LYRICS_KEEP_SCREEN_ON: "lyrics_keep_screen_on",
   LYRICS_BLUR_OTHER_LINES: "lyrics_blur_other_lines",
 
@@ -367,6 +368,7 @@ export const SETTING_SCOPES = {
   [SETTINGS.LYRICS_SHOW_ROMANIZATION]: "profile",
   [SETTINGS.LYRICS_AUTO_ROMANIZE]: "profile",
   [SETTINGS.LYRICS_ROMANIZATION_ONLY]: "profile",
+  [SETTINGS.LYRICS_SPONSORBLOCK_TIMING]: "profile",
   [SETTINGS.LYRICS_KEEP_SCREEN_ON]: "profile",
   [SETTINGS.LYRICS_BLUR_OTHER_LINES]: "profile",
   [SETTINGS.VIDEO_TITLE_MAX_LINES]: "profile",
@@ -687,6 +689,7 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.LYRICS_SHOW_ROMANIZATION, "player", true, "wired"),
   bool(SETTINGS.LYRICS_AUTO_ROMANIZE, "player", false, "wired"),
   bool(SETTINGS.LYRICS_ROMANIZATION_ONLY, "player", false, "wired"),
+  bool(SETTINGS.LYRICS_SPONSORBLOCK_TIMING, "player", false, "wired"),
   bool(SETTINGS.LYRICS_KEEP_SCREEN_ON, "player", false, "wired"),
   bool(SETTINGS.LYRICS_BLUR_OTHER_LINES, "player", true, "wired"),
 

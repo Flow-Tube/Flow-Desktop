@@ -97,6 +97,7 @@ MUSIC
 - The lyrics timing you set is kept for each song, through Refresh, another source or an edit.
 - Line-synced lyrics show the dots during long instrumental breaks, including solos the lyrics leave unmarked, and the lyrics wait on the next line instead of jumping back to the top.
 - The glow on long held notes in word-synced lyrics rises and fades smoothly instead of in visible steps.
+- Fit lyrics to music videos, in Settings > Music, uses SponsorBlock to move lyrics past a music video's intro, skits and other parts with no music. It is off by default, and only a short part of a hash of the video id is sent.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.

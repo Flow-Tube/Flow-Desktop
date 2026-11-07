@@ -4,6 +4,8 @@ import type { SongItem } from "../../types/music";
 import type { Rgb } from "../../lib/useDominantColor";
 import type { LyricsAlign } from "../../lib/lyrics/display/presentation";
 import { useLyrics } from "../../lib/lyrics/useLyrics";
+import { useVideoFittedLyrics } from "../../lib/lyrics/videoTiming";
+import type { LyricsEntry } from "../../lib/lyrics/types";
 import { useLyricsStore } from "../../store/useLyricsStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { useBoolPref, usePreference } from "../../lib/usePreference";
@@ -19,6 +21,8 @@ export { LyricsActionsMenu } from "./lyrics/LyricsActionsMenu";
  * Android's LARGE (44) and PANE (30) lyric sizes, in CSS px: the full-bleed view reads from a
  * distance like a tablet's, the side pane is narrower than a phone.
  */
+const NO_LINES: LyricsEntry[] = [];
+
 const TEXT_SIZE = { full: 44, pane: 30 } as const;
 /** A full-width desktop window would make lines too long to read, so rows stop growing here. */
 const MAX_ROW_WIDTH = { full: 1100, pane: Number.POSITIVE_INFINITY } as const;
@@ -52,6 +56,12 @@ export interface MusicLyricsProps {
 /** The lyrics of the song playing, with their sync offset controls; the host places the actions menu. */
 export function MusicLyrics({ track, variant, accent, backdrop, active, className = "" }: MusicLyricsProps) {
   const lyrics = useLyrics(track);
+  const songDuration = useMusicPlayerStore((s) => s.duration);
+  const syncedLyrics = useVideoFittedLyrics(
+    track ? track.videoId ?? track.id : null,
+    lyrics.isSynced ? lyrics.entries : NO_LINES,
+    track?.duration || songDuration,
+  );
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
   const seek = useMusicPlayerStore((s) => s.seek);
   const syncOffsetMs = useLyricsStore((s) => s.syncOffsetMs);
@@ -79,7 +89,7 @@ export function MusicLyrics({ track, variant, accent, backdrop, active, classNam
     <div className={`relative ${className}`}>
       <LyricsPanel
         lyrics={lyrics.plain}
-        syncedLyrics={lyrics.isSynced ? lyrics.entries : []}
+        syncedLyrics={syncedLyrics}
         isLoading={lyrics.loading}
         providerName={lyrics.providerName}
         accent={lyricAccent}

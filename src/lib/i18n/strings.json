@@ -2285,6 +2285,8 @@
   "lyrics_show_romanization_summary": "Show lyrics in other scripts in Latin letters too",
   "lyrics_romanization_only": "Romanization only",
   "lyrics_romanization_only_summary": "Replace the original script with Latin letters",
+  "lyrics_sponsorblock_timing": "Fit lyrics to music videos",
+  "lyrics_sponsorblock_timing_summary": "Uses SponsorBlock to skip parts with no music",
   "lyrics_auto_romanize": "Romanize on this device",
   "lyrics_auto_romanize_summary": "When the lyrics source has no romanization. Not available for Japanese yet",
   "lyrics_keep_screen_on": "Keep screen on",

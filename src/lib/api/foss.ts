@@ -33,6 +33,19 @@ export async function getSponsorBlockSegments(
   });
 }
 
+/** A part of a music video with no song playing, in seconds. A zero video length wasn't recorded. */
+export interface NonMusicSegment {
+  startSeconds: number;
+  endSeconds: number;
+  videoDurationSeconds: number;
+}
+
+/** Looked up by a hash prefix of the id, so the server can't tell which video is playing. */
+export async function getNonMusicSegments(videoId: string, serverUrl?: string): Promise<NonMusicSegment[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<NonMusicSegment[]>("get_non_music_segments", { videoId, serverUrl });
+}
+
 export interface SubmitSponsorBlockSegmentParams {
   videoId: string;
   startTime: number;

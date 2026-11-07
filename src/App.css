@@ -182,18 +182,15 @@
   }
 }
 
-/* Custom Scrollbars */
+/* Scrollbars stay hidden everywhere; wheel, trackpad, keys and touch still scroll. */
+* {
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-chrome-zinc-800 rounded-full hover:bg-chrome-zinc-700 transition-colors;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .active-nav-item {
@@ -840,26 +837,6 @@
   .m3-slider__handle {
     transition: none;
   }
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.scrollbar-none {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
 /*

@@ -88,7 +88,7 @@ function ShortDescription({
   const comments = formatCount(commentCountText ?? short.commentCountText) || "-";
 
   return (
-    <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="grid grid-cols-2 gap-2 p-4">
         <StatPill label={getString("shorts_stat_likes")} value={likes} />
         <StatPill label={getString('shorts_dislikes')} value={dislikes} />
@@ -115,7 +115,7 @@ function StatPill({ label, value }: { label: string; value: string }) {
 function ShortComments({ videoId }: { videoId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4">
         <CommentsSection videoId={videoId} hideHeader />
       </div>
     </div>

@@ -42,7 +42,7 @@ export const ChannelTabs: React.FC<ChannelTabsProps> = ({
 }) => (
   <div className="sticky top-0 z-40 w-full border-b border-chrome-neutral-800 bg-background">
     <div className="mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="hide-scrollbar flex h-14 items-center justify-between gap-4 overflow-x-auto">
+      <div className="flex h-14 items-center justify-between gap-4 overflow-x-auto">
         <div className="flex h-full items-center space-x-8">
           {tabs.map((tab) => {
             const isActive = activeKind === tab.kind;

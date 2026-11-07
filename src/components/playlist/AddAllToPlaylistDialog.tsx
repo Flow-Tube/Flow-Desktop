@@ -99,7 +99,7 @@ export function AddAllToPlaylistDialog({
           <p className="mt-4 text-sm text-chrome-neutral-400">{getString("playlist_add_all_loading")}</p>
         ) : (
           <>
-            <div className="mt-4 max-h-72 space-y-1 overflow-y-auto hide-scrollbar">
+            <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
               {targets.map((playlist) => (
                 <PlaylistChoiceCard
                   key={playlist.id}

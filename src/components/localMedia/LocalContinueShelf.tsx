@@ -12,7 +12,7 @@ export function LocalContinueShelf({ files, plays, nowMs }: { files: LocalMediaF
   return (
     <section className="min-w-0">
       <h2 className="mb-3 text-base font-medium text-chrome-neutral-100">{getString("local_continue_watching")}</h2>
-      <div className="hide-scrollbar flex snap-x gap-4 overflow-x-auto pb-1">
+      <div className="flex snap-x gap-4 overflow-x-auto pb-1">
         {files.map((file, index) => (
           <div key={file.id} className="w-64 shrink-0 snap-start">
             <LocalFileCard file={file} plays={plays} nowMs={nowMs} onPlay={() => playLocalFiles(files, index, navigate)} />

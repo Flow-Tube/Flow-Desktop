@@ -123,7 +123,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
         ))}
       </nav>
 
-      <div ref={paneRef} className="flex-1 overflow-y-auto py-6 ps-10 pe-4 scrollbar-none">
+      <div ref={paneRef} className="flex-1 overflow-y-auto py-6 ps-10 pe-4">
         {searching ? <SettingsSearchResults results={results} onOpen={openResult} /> : children(activeTab)}
       </div>
     </div>

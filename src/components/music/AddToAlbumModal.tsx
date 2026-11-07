@@ -103,7 +103,7 @@ export function AddToAlbumModal() {
           </button>
         </div>
 
-        <div className="mt-4 max-h-72 space-y-1 overflow-y-auto hide-scrollbar">
+        <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
           {ownedAlbums.map((album) => (
             <button
               key={album.id}

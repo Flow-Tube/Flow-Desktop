@@ -77,7 +77,7 @@ export function EqPanel({
               <EqResponseGraph bands={eq.drawnBands} height={64} rangeDb={15} ariaLabel={getString("eq_graph_label")} />
             </div>
 
-            <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto hide-scrollbar">
+            <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
               {eq.hasCustom && (
                 <Chip
                   active={selectedId === null}

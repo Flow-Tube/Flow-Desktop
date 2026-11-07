@@ -52,7 +52,7 @@ export function LocalMediaFilterBar() {
           ]}
         />
       )}
-      <div className="hide-scrollbar flex items-center gap-3 overflow-x-auto">
+      <div className="flex items-center gap-3 overflow-x-auto">
         <Chip active={view === "all"} onClick={() => setView("all")}>
           {getString("local_view_all")}
         </Chip>

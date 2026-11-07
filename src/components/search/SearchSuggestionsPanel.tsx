@@ -152,7 +152,7 @@ export function SearchSuggestionsPanel({
       ref={panelRef}
       id="search-suggestions"
       role="listbox"
-      className={`animate-menu-in absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-1.5 scrollbar-none ${
+      className={`animate-menu-in absolute inset-x-0 top-[calc(100%+6px)] z-50 max-h-[70vh] overflow-y-auto overscroll-contain rounded-2xl border border-chrome-neutral-800 bg-surface-container-high p-1.5 ${
         hasSide ? "md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-1.5" : ""
       }`}
     >

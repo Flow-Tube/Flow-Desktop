@@ -173,7 +173,7 @@ export function AddTracksToAlbumModal() {
           {loading ? <Loader2 size={16} className="shrink-0 animate-spin text-chrome-neutral-500" /> : null}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto hide-scrollbar">
+        <div className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto">
           {results.length > 0 ? (
             results.map((song, index) => (
               <ResultRow

@@ -88,7 +88,7 @@ export function ChannelAboutDialog({ channel, open, onClose }: ChannelAboutDialo
           </button>
         </div>
 
-        <div className="hide-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
           {description && (
             <LinkedText
               text={description}

@@ -225,7 +225,7 @@ export function ShortsFeed() {
     <div className="relative h-full w-full bg-background" data-panel={panelState}>
       <div
         ref={containerRef}
-        className="hide-scrollbar h-full w-full snap-y snap-mandatory overflow-y-auto"
+        className="h-full w-full snap-y snap-mandatory overflow-y-auto"
       >
         {items.map((short, index) => {
           const distance = Math.abs(index - activeIndex);

@@ -89,7 +89,7 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
         </button>
       )}
 
-      <div ref={scrollRef} className={`overflow-x-auto scroll-smooth scrollbar-none ${className}`}>
+      <div ref={scrollRef} className={`overflow-x-auto scroll-smooth ${className}`}>
         {children}
       </div>
 

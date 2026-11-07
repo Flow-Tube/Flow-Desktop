@@ -61,7 +61,7 @@ export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomT
           </button>
         </header>
 
-        <div className="overflow-y-auto p-6 scrollbar-none">
+        <div className="overflow-y-auto p-6">
           <label className="block text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500" htmlFor="theme-name">{getString("theme_name")}</label>
           <input
             id="theme-name"

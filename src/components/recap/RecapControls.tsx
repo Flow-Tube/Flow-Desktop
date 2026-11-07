@@ -48,7 +48,7 @@ export function RecapControls({ months, period, source, onPeriod, onSource }: Re
         />
       </div>
       {choices.length > 0 && (
-        <div className="hide-scrollbar flex snap-x gap-2 overflow-x-auto pb-1">
+        <div className="flex snap-x gap-2 overflow-x-auto pb-1">
           {choices.map((choice) => (
             <Chip
               key={choice}

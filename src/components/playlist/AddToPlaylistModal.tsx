@@ -144,7 +144,7 @@ export function AddToPlaylistModal() {
           </button>
         </div>
 
-        <div className="mt-4 max-h-72 space-y-1 overflow-y-auto hide-scrollbar">
+        <div className="mt-4 max-h-72 space-y-1 overflow-y-auto">
           {selectablePlaylists.map((playlist) => (
             <PlaylistChoiceCard
               key={playlist.id}

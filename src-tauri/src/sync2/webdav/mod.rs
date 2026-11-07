@@ -14,13 +14,14 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 pub use self::client::{WebDav, WebDavLogin};
+use super::envelope::MAX_OBJECT_SIZE;
 use super::forks::winning_chain;
 use super::mailbox::Mailbox;
 use super::paths::{chain_path, log_path, roster_path, wrap_path};
 use super::read_budget::ReadBudget;
 use super::roster::{Entry, entry_hash, parse_entry};
 use super::sealed::random_bytes;
-use super::server::{Appended, ChangedObject, Result, StoreError};
+use super::server::{Appended, ChangedObject, Result, StoreError, one_item};
 use super::store::{Store, wraps_epoch};
 use crate::sync::canonical::to_canonical_json;
 
@@ -69,16 +70,18 @@ impl WebDavStore {
             if name.strip_suffix(".r").is_none() || held.entries.contains_key(&path) {
                 continue;
             }
-            let Some(bytes) = self.client.get(&path).await? else {
-                continue;
+            let bytes = match self.client.get(&path).await {
+                Ok(None) => continue,
+                read => one_item(read)?,
             };
-            held.bytes += bytes.len();
+            // One that can't be read counts too, or each read would fetch it again without end.
+            held.bytes += bytes.as_ref().map_or(MAX_OBJECT_SIZE, Vec::len);
             if held.entries.len() >= ROSTER_FILES || held.bytes > ROSTER_BYTES {
                 return Err(StoreError::Malformed);
             }
             // A file that isn't an entry is ignored, as a losing fork candidate would be.
-            let entry = serde_json::from_slice::<Value>(&bytes)
-                .ok()
+            let entry = bytes
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
                 .and_then(|value| parse_entry(&value).ok());
             held.entries.insert(path, entry);
         }
@@ -222,7 +225,7 @@ impl Store for WebDavStore {
     }
 
     async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
-        self.client.get(&wrap_path(epoch, kc, name)).await
+        one_item(self.client.get(&wrap_path(epoch, kc, name)).await)
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
@@ -230,7 +233,7 @@ impl Store for WebDavStore {
     }
 
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        self.client.get(path).await
+        one_item(self.client.get(path).await)
     }
 
     async fn delete_object(&self, path: &str) -> Result<bool> {

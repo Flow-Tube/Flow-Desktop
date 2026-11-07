@@ -51,11 +51,36 @@ pub enum StoreError {
     Local(#[source] sqlx::Error),
     #[error("the server sent an invalid response")]
     Malformed,
+    #[error("the answer is larger than it may be")]
+    TooLarge,
     #[error(transparent)]
     Protocol(#[from] super::Error),
 }
 
 pub type Result<T> = std::result::Result<T, StoreError>;
+
+impl StoreError {
+    /// Whether a read failed for the one item it asked for, and not because the store is out of
+    /// reach, wants a login or asks this device to slow down.
+    fn is_about_one_item(&self) -> bool {
+        match self {
+            Self::TooLarge => true,
+            Self::Refused { status, .. } => {
+                (400..500).contains(status) && !matches!(status, 401 | 407 | 408 | 429)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// What `read` found, with an item that can't be read counted as absent, so it stops only its own
+/// log (spec/store.md, Contain one bad item).
+pub fn one_item(read: Result<Option<Vec<u8>>>) -> Result<Option<Vec<u8>>> {
+    match read {
+        Err(error) if error.is_about_one_item() => Ok(None),
+        read => read,
+    }
+}
 
 /// Whether an append landed, or lost to another device's append at the same head.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -421,8 +446,10 @@ impl Store for ServerStore {
     }
     /// The server names a wrap by epoch alone: only one entry can start an epoch there.
     async fn key(&self, epoch: u32, _kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
-        self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
-            .await
+        one_item(
+            self.get_bytes(&format!("v1/keys/{epoch:08x}/{name}.k"))
+                .await,
+        )
     }
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
         let response = self
@@ -435,7 +462,7 @@ impl Store for ServerStore {
         decode_empty(response).await
     }
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        self.get_bytes(&format!("v1/objects/{path}")).await
+        one_item(self.get_bytes(&format!("v1/objects/{path}")).await)
     }
     async fn delete_object(&self, path: &str) -> Result<bool> {
         let response = self

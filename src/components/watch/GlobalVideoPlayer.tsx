@@ -136,7 +136,8 @@ export function GlobalVideoPlayer() {
     const onScroll = (event: Event) => {
       // Scrolling a menu, the sidebar or a comments panel can't move the slot.
       const scroller = event.target;
-      if (slot && scroller instanceof Element && !scroller.contains(slot)) return;
+      const currentSlot = document.querySelector<HTMLElement>("[data-flow-watch-player-slot='true']");
+      if (currentSlot && scroller instanceof Element && !scroller.contains(currentSlot)) return;
       if (scrollRaf !== null) return;
       scrollRaf = window.requestAnimationFrame(() => {
         scrollRaf = null;

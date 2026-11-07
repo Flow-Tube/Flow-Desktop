@@ -15,14 +15,20 @@ import { ProfileMenuButton } from '../profiles/ProfileMenuButton';
 /** PageWrapper returns focus here when Escape closes the drawer. */
 export const SIDEBAR_MENU_BUTTON_ID = 'sidebar-menu-button';
 
-export function Topbar() {
+export interface TopbarProps {
+  isWatchPage?: boolean;
+  isScrolled?: boolean;
+}
+
+export function Topbar({ isWatchPage = false, isScrolled = false }: TopbarProps = {}) {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const toggleWatchSidebar = useUiStore((s) => s.toggleWatchSidebar);
   const isSidebarExpanded = useUiStore((s) => s.isSidebarExpanded);
   const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
   const navigate = useNavigate();
   const location = useLocation();
-  const usesDrawer = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/settings');
+  const isWatch = isWatchPage || location.pathname.startsWith('/watch/');
+  const usesDrawer = isWatch || location.pathname.startsWith('/settings');
   const sidebarOpen = usesDrawer ? isWatchSidebarOpen : isSidebarExpanded;
   const showAppLogo = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_APP_LOGO_ICON] !== 'false');
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
@@ -34,7 +40,11 @@ export function Topbar() {
   });
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent bg-background px-3">
+    <header
+      className={`sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent px-3 transition-colors duration-200 ease-out ${
+        isWatch && !isScrolled ? 'bg-transparent' : 'bg-background'
+      }`}
+    >
       {/* Left */}
       <div className="flex min-w-0 items-center gap-2">
         <IconButton

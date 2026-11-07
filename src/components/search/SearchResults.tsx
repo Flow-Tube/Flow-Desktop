@@ -570,8 +570,8 @@ function TopResultHero({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <h2 className="line-clamp-2 text-2xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
-          {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+          <h2 dir="auto" className="line-clamp-2 text-start text-2xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
+          {subtitle && <span dir="auto" className="line-clamp-1 text-start text-sm text-chrome-neutral-400">{subtitle}</span>}
           <Button
             variant="primary"
             size="sm"

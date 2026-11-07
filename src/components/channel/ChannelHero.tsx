@@ -41,14 +41,14 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
               )}
             </div>
 
-            <div className="mt-4 select-text space-y-1 pb-2 text-center md:mt-0 md:text-left">
-              <h1 className="flex items-center justify-center gap-2 text-4xl font-bold tracking-tight text-chrome-neutral-100 md:justify-start">
+            <div className="mt-4 select-text space-y-1 pb-2 text-center md:mt-0 md:text-start">
+              <h1 dir="auto" className="flex items-center justify-center gap-2 text-4xl font-bold tracking-tight text-chrome-neutral-100 md:justify-start">
                 {channelInfo.name}
                 {channelInfo.verified && (
                   <Check size={20} className="rounded-full bg-surface-container-high p-0.5 text-chrome-neutral-400" />
                 )}
               </h1>
-              {facts.length > 0 && <p className="font-medium text-chrome-neutral-400">{facts.join(" · ")}</p>}
+              {facts.length > 0 && <p dir="auto" className="font-medium text-chrome-neutral-400 text-center md:text-start">{facts.join(" · ")}</p>}
             </div>
           </div>
 

@@ -45,7 +45,7 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
         <button onClick={() => goToChannel(channelId)} className="transition-opacity hover:opacity-80">
           <Avatar url={avatarUrl} name={channelName} className="h-10 w-10" />
         </button>
-        <button onClick={() => goToChannel(channelId)} className="min-w-0 pr-2 text-left">
+        <button onClick={() => goToChannel(channelId)} className="min-w-0 pr-2 text-start">
           <span className="block text-[15px] font-medium leading-tight text-chrome-neutral-100 transition-colors hover:text-primary">
             <ChannelLabel name={channelName} verified={badge === "verified"} artist={badge === "artist"} iconSize={14} />
           </span>
@@ -64,7 +64,7 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
           setAnchor(anchor ? null : { top: rect.bottom + 6, left: rect.left });
         }}
         aria-expanded={Boolean(anchor)}
-        className="flex min-w-0 items-center gap-3 rounded-full pr-2 text-left transition-opacity hover:opacity-90"
+        className="flex min-w-0 items-center gap-3 rounded-full pr-2 text-start transition-opacity hover:opacity-90"
       >
         <span className="flex -space-x-3">
           {collaborators.slice(0, 2).map((collaborator) => (
@@ -103,11 +103,11 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
                   setAnchor(null);
                   goToChannel(collaborator.channelId);
                 }}
-                className="flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity hover:opacity-80"
+                className="flex min-w-0 flex-1 items-center gap-3 text-start transition-opacity hover:opacity-80"
               >
                 <Avatar url={collaborator.avatarUrl} name={collaborator.name} className="h-9 w-9" />
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-chrome-neutral-100">{collaborator.name}</span>
+                  <span dir="auto" className="block truncate text-sm font-medium text-chrome-neutral-100">{collaborator.name}</span>
                   {(collaborator.handle || collaborator.subscriberCountText) && (
                     <span className="block truncate text-xs text-chrome-neutral-400">
                       {[collaborator.handle, collaborator.subscriberCountText].filter(Boolean).join(" • ")}

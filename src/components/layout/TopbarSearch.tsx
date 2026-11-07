@@ -196,6 +196,7 @@ export function TopbarSearch() {
         <input
           ref={inputRef}
           type="text"
+          dir="auto"
           placeholder={getString('search_placeholder')}
           value={text}
           role="combobox"

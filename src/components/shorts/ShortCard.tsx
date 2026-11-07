@@ -212,8 +212,9 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
         </span>
 
         <span
+          dir="auto"
           className={[
-            "line-clamp-2 font-semibold leading-tight text-chrome-neutral-100 transition-colors group-hover:text-primary",
+            "line-clamp-2 text-start font-semibold leading-tight text-chrome-neutral-100 transition-colors group-hover:text-primary",
             isShelf ? "text-xs" : "text-sm",
           ].join(" ")}
         >

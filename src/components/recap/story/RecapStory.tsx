@@ -18,6 +18,11 @@ import { StoryPageContent } from "./StoryPageContent";
 const HOLD_MS = 250;
 const PREVIOUS_ZONE = 0.3;
 const CONTROL = "hover:bg-[var(--story-raised)] focus-visible:ring-2 focus-visible:ring-primary";
+/**
+ * The clock writes `transform` on the bar as the page runs. Tailwind's `scale-x-*` sets the separate
+ * `scale` property, which multiplies with it, so a class here would hold the bar at zero for good.
+ */
+const EMPTY_BAR: CSSProperties = { transform: "scaleX(0)" };
 /** Inside the story the theme's accent and raised surface take the page's colours. */
 const PAGE_THEME = {
   "--color-primary": "var(--story-accent)",
@@ -80,7 +85,8 @@ export function RecapStory({ summary, period, onClose }: RecapStoryProps) {
   });
 
   const press = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    // A button on the page, such as saving the card, does its own thing without stepping the story.
+    if (event.button !== 0 || (event.target as Element).closest("button, a")) return;
     pressedAt.current = Date.now();
     setHeld(true);
   };
@@ -123,7 +129,7 @@ export function RecapStory({ summary, period, onClose }: RecapStoryProps) {
             >
               <span className="block h-1 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--color-on-surface)_22%,transparent)] transition-[height] duration-200 ease-out group-hover/segment:h-1.5">
                 {index < page && <span className="block h-full w-full bg-primary" />}
-                {index === page && <div ref={progressBar} className="h-full w-full origin-left scale-x-0 bg-primary rtl:origin-right" />}
+                {index === page && <div ref={progressBar} className="h-full w-full origin-left bg-primary rtl:origin-right" style={EMPTY_BAR} />}
               </span>
             </button>
           ))}

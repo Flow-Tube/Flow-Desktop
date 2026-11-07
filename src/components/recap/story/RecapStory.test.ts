@@ -138,6 +138,14 @@ describe("RecapStory", () => {
       vi.unstubAllGlobals();
     });
 
+    it("fills the current page's segment as its time passes", () => {
+      const bar = () => dialog().querySelector<HTMLElement>('[aria-current="step"] div')!;
+      // A Tailwind scale class sets `scale`, which multiplies with the `transform` the clock writes.
+      expect(bar().className).not.toMatch(/\bscale-/);
+      run(3_250);
+      expect(Number(bar().style.transform.match(/scaleX\((.+)\)/)?.[1])).toBeCloseTo(0.5, 1);
+    });
+
     it("plays through by itself, then offers to play again", () => {
       run(7_000);
       expect(dialog().textContent).toContain("Page 2 of 3");

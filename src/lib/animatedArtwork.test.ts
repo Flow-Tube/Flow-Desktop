@@ -6,8 +6,10 @@ vi.mock('./lyrics/http', () => ({
   enc: encodeURIComponent,
 }));
 vi.mock('../store/useAppSettingsStore', () => ({ getSettingValue: () => 'US' }));
+const searchMusicTyped = vi.fn();
+vi.mock('./api/music', () => ({ searchMusicTyped: (...args: unknown[]) => searchMusicTyped(...args) }));
 
-import { acceptsAnswer, artworkKey, artworkLoopFor, artworkQueries, forgetArtworkLoop } from './animatedArtwork';
+import { acceptsAnswer, artworkKey, artworkLoopFor, artworkQueries, forgetArtworkLoop, otherReleases } from './animatedArtwork';
 import type { SongItem } from '../types/music';
 
 const song = (patch: Partial<SongItem> = {}): SongItem =>
@@ -50,7 +52,9 @@ describe('artworkLoopFor', () => {
   beforeEach(() => {
     window.localStorage.clear();
     lyricsHttpGet.mockReset();
+    searchMusicTyped.mockReset();
   });
+  const service = () => lyricsHttpGet.mock.calls.filter(([url]) => String(url).startsWith('https://artwork.boidu.dev/?s='));
 
   it('tries the plain title, keeps the answer and asks once per album', async () => {
     lyricsHttpGet
@@ -64,14 +68,49 @@ describe('artworkLoopFor', () => {
     expect(lyricsHttpGet).toHaveBeenCalledTimes(2);
   });
 
+  it("asks about the song's other releases when the service lands on one with no loop", async () => {
+    const yellow = song({ title: 'Yellow', artists: [{ name: 'Coldplay', id: null }], album: { name: 'Parachutes', id: 'p' } });
+    lyricsHttpGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('https://itunes.apple.com/search')) {
+        return answer({
+          results: [
+            { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 1778462224, collectionName: 'Parachutes', trackCount: 10 },
+            { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 1122782080, collectionName: 'Parachutes', trackCount: 10 },
+            { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 1005575894, collectionName: 'Relax', collectionArtistName: 'Various Artists' },
+          ],
+        });
+      }
+      if (url.includes('id=1122782080')) return answer({ name: 'Yellow', artist: 'Coldplay', animated: 'loop' });
+      return answer({ name: 'Yellow', artist: 'Coldplay', albumId: '1778462224', animated: null });
+    });
+    await expect(artworkLoopFor(yellow, 0)).resolves.toBe('loop');
+    expect(lyricsHttpGet.mock.calls.some(([url]) => String(url).includes('id=1778462224'))).toBe(false);
+  });
+
+  it('asks a row with no album again under its song version, and reads Unknown Album as none', async () => {
+    searchMusicTyped.mockResolvedValue({
+      sections: [{ items: [{ type: 'song', title: 'Plain', artists: [{ name: 'The Weeknd', id: null }], album: { name: 'Real Album', id: 'r' }, musicVideoType: 'MUSIC_VIDEO_TYPE_ATV', duration: 201 }] }],
+    });
+    lyricsHttpGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('https://itunes.apple.com/search')) return answer({ results: [] });
+      if (url.includes('al=Real')) return answer({ name: 'Plain', artist: 'The Weeknd', animated: 'version-loop' });
+      return answer({ name: 'Plain', artist: 'The Weeknd' });
+    });
+    const video = song({ title: 'Plain', album: { name: 'Unknown Album', id: '' } });
+    await expect(artworkLoopFor(video, 0)).resolves.toBe('version-loop');
+    expect(service()[0]?.[0]).not.toContain('al=');
+  });
+
   it('remembers none for days, then asks again', async () => {
-    lyricsHttpGet.mockResolvedValue(answer({ name: 'Nope', artist: 'Nope' }));
+    lyricsHttpGet.mockImplementation(async (url: string) =>
+      url.startsWith('https://itunes.apple.com/search') ? answer({ results: [] }) : answer({ name: 'Nope', artist: 'Nope' }),
+    );
     const plain = song({ title: 'Plain' });
     await expect(artworkLoopFor(plain, 0)).resolves.toBeNull();
     await expect(artworkLoopFor(plain, 1000)).resolves.toBeNull();
-    expect(lyricsHttpGet).toHaveBeenCalledTimes(1);
+    expect(service()).toHaveLength(1);
     await artworkLoopFor(plain, 4 * 24 * 60 * 60 * 1000);
-    expect(lyricsHttpGet).toHaveBeenCalledTimes(2);
+    expect(service()).toHaveLength(2);
   });
 
   it('throws when the service fails and keeps nothing', async () => {
@@ -87,5 +126,23 @@ describe('artworkLoopFor', () => {
     forgetArtworkLoop(song());
     await artworkLoopFor(song(), 1);
     expect(lyricsHttpGet.mock.calls.length).toBeGreaterThan(1);
+  });
+});
+
+describe('otherReleases', () => {
+  it('takes only releases named like the song or its album, albums before singles, no compilations or remixes', () => {
+    const yellow = song({ title: 'Yellow', artists: [{ name: 'Coldplay', id: null }], album: { name: 'Parachutes', id: 'p' } });
+    const ids = otherReleases(
+      yellow,
+      [
+        { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 1, collectionName: 'Yellow - Single', trackCount: 3 },
+        { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 2, collectionName: 'Parachutes', trackCount: 10 },
+        { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 3, collectionName: 'Yellow (Remix)', trackCount: 2 },
+        { trackName: 'Yellow', artistName: 'Coldplay', collectionId: 4, collectionName: 'Chill Hits', collectionArtistName: 'Various Artists' },
+        { trackName: 'Fix You', artistName: 'Coldplay', collectionId: 5, collectionName: 'X&Y' },
+      ],
+      new Set(['9']),
+    );
+    expect(ids).toEqual(['2', '1']);
   });
 });

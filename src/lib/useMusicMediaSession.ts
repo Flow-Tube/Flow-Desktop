@@ -3,6 +3,8 @@ import { useEffect } from "react";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { musicAudioEngine } from "./audio/musicAudioEngine";
 import { upgradeMusicImageUrl } from "./thumbnails";
+import { mediaControlLyricLine } from "./lyrics/useMediaControlLyrics";
+import { mediaLyricArtist } from "./lyrics/sessionTimeline";
 import {
   claimMediaSession,
   refreshMediaSession,
@@ -27,9 +29,12 @@ export function useMusicMediaSession() {
         const track = store().currentTrack;
         if (!track) return null;
         const artwork = upgradeMusicImageUrl(track.thumbnail, 512);
+        const artist = track.artists.map((a) => a.name).join(", ");
+        const line = mediaControlLyricLine();
         return {
-          title: track.title,
-          artist: track.artists.map((a) => a.name).join(", "),
+          // As on Android, the line takes the title and the song's name moves to the artist line.
+          title: line ?? track.title,
+          artist: line ? mediaLyricArtist(track.title, artist) : artist,
           album: track.album?.name ?? "",
           artwork: artwork ? [{ src: artwork, sizes: "512x512", type: "image/jpeg" }] : [],
         };

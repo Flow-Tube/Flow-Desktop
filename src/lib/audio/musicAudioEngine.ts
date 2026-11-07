@@ -422,6 +422,10 @@ class MusicAudioEngine {
 
   // --- speed --------------------------------------------------------------
 
+  getSpeed(): number {
+    return this.speed;
+  }
+
   setSpeed(rate: number): void {
     this.speed = Math.max(0.5, Math.min(2, rate));
     this.applySpeed();

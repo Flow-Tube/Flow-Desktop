@@ -126,6 +126,8 @@ export const SETTINGS = {
   LYRICS_AUTO_ROMANIZE: "lyrics_auto_romanize",
   LYRICS_ROMANIZATION_ONLY: "lyrics_romanization_only",
   LYRICS_SPONSORBLOCK_TIMING: "lyrics_sponsorblock_timing",
+  LYRICS_IN_MEDIA_CONTROLS: "lyrics_in_media_controls",
+  LYRICS_IN_MEDIA_CONTROLS_DELAY_MS: "lyrics_in_media_controls_delay_ms",
   LYRICS_KEEP_SCREEN_ON: "lyrics_keep_screen_on",
   LYRICS_BLUR_OTHER_LINES: "lyrics_blur_other_lines",
 
@@ -371,6 +373,8 @@ export const SETTING_SCOPES = {
   [SETTINGS.LYRICS_AUTO_ROMANIZE]: "profile",
   [SETTINGS.LYRICS_ROMANIZATION_ONLY]: "profile",
   [SETTINGS.LYRICS_SPONSORBLOCK_TIMING]: "profile",
+  [SETTINGS.LYRICS_IN_MEDIA_CONTROLS]: "profile",
+  [SETTINGS.LYRICS_IN_MEDIA_CONTROLS_DELAY_MS]: "profile",
   [SETTINGS.LYRICS_KEEP_SCREEN_ON]: "profile",
   [SETTINGS.LYRICS_BLUR_OTHER_LINES]: "profile",
   [SETTINGS.VIDEO_TITLE_MAX_LINES]: "profile",
@@ -693,6 +697,8 @@ export const SETTING_DEFINITIONS = [
   bool(SETTINGS.LYRICS_AUTO_ROMANIZE, "player", false, "wired"),
   bool(SETTINGS.LYRICS_ROMANIZATION_ONLY, "player", false, "wired"),
   bool(SETTINGS.LYRICS_SPONSORBLOCK_TIMING, "player", false, "wired"),
+  bool(SETTINGS.LYRICS_IN_MEDIA_CONTROLS, "player", false, "wired"),
+  num(SETTINGS.LYRICS_IN_MEDIA_CONTROLS_DELAY_MS, "player", 0, "wired", -2000, 2000),
   bool(SETTINGS.LYRICS_KEEP_SCREEN_ON, "player", false, "wired"),
   bool(SETTINGS.LYRICS_BLUR_OTHER_LINES, "player", true, "wired"),
 

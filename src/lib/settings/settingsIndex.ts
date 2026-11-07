@@ -128,6 +128,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },
     { title: "lyrics_romanization_only", summary: "lyrics_romanization_only_summary", keywords: ["transliterate", "latin"] },
     { title: "lyrics_keep_screen_on", summary: "lyrics_keep_screen_on_summary", keywords: ["awake", "sleep", "display"] },
+    { title: "lyrics_in_media_controls", summary: "lyrics_in_media_controls_summary", keywords: ["lock screen", "now playing", "control center", "notification"] },
+    { title: "lyrics_in_media_controls_timing", summary: "lyrics_in_media_controls_timing_summary" },
     { title: "lyrics_sponsorblock_timing", summary: "lyrics_sponsorblock_timing_summary", keywords: ["sponsorblock", "music video", "offset"] },
     { title: "lyrics_blur_other_lines", summary: "lyrics_blur_other_lines_summary" },
     { title: "settings_lyrics_providers" },

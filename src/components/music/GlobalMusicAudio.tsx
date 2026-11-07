@@ -10,6 +10,7 @@ import { musicListens, useMusicListenHistory } from "../../lib/useMusicListenHis
 import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
 import { sleepTimerTakesEnd, tickSleepTimer, useSleepTimerDriver } from "../../lib/useSleepTimerDriver";
 import { useLyricsLookup } from "../../lib/lyrics/useLyrics";
+import { useMediaControlLyrics } from "../../lib/lyrics/useMediaControlLyrics";
 
 /**
  * Wraps a media-element handler so only the element that is playing drives the
@@ -41,6 +42,7 @@ export function GlobalMusicAudio() {
   useMusicQueuePersistence();
   useSleepTimerDriver();
   useMusicMediaSession();
+  useMediaControlLyrics();
   useLyricsLookup();
 
   const store = () => useMusicPlayerStore.getState();

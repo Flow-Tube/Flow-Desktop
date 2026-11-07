@@ -66,7 +66,7 @@ type SegmenterCtor = new (locale?: string, options?: { granularity: string }) =>
 let wordSegmenter: SegmenterLike | null = null;
 let graphemeSegmenter: SegmenterLike | null = null;
 
-function segmenter(granularity: "word" | "grapheme"): SegmenterLike | null {
+export function segmenter(granularity: "word" | "grapheme"): SegmenterLike | null {
   const Ctor = (Intl as unknown as { Segmenter?: SegmenterCtor }).Segmenter;
   if (!Ctor) return null;
   if (granularity === "word") return (wordSegmenter ??= new Ctor(undefined, { granularity }));

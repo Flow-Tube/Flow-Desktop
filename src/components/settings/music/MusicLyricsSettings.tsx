@@ -4,7 +4,7 @@ import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { Button } from '../../ui/Button';
 import { LyricsProviderList } from '../LyricsProviderList';
-import { useBoolPref, usePreference } from '../../../lib/usePreference';
+import { useBoolPref, useNumberPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { IS_LINUX_RUNTIME } from '../../../lib/platform';
@@ -17,6 +17,13 @@ import {
 import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
 import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
 import { lyricsBackgroundOptions } from '../../../lib/lyrics/useLyricsCover';
+import { MEDIA_LYRICS_DELAY } from '../../../lib/lyrics/sessionTimeline';
+import { Slider } from '../../ui/Slider';
+
+const formatDelay = (ms: number): string => {
+  const snapped = MEDIA_LYRICS_DELAY.snap(ms);
+  return `${snapped > 0 ? '+' : ''}${(snapped / 1000).toFixed(1)}s`;
+};
 
 export function MusicLyricsSettings() {
   const [providerOrder, setProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
@@ -30,6 +37,8 @@ export function MusicLyricsSettings() {
   const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
   const [videoTiming, setVideoTiming] = useBoolPref(SETTINGS.LYRICS_SPONSORBLOCK_TIMING);
+  const [inMediaControls, setInMediaControls] = useBoolPref(SETTINGS.LYRICS_IN_MEDIA_CONTROLS);
+  const [mediaDelayMs, setMediaDelayMs] = useNumberPref(SETTINGS.LYRICS_IN_MEDIA_CONTROLS_DELAY_MS);
   const cache = useLyricsCache();
 
   const providers = getOrderedProviders(providerOrder);
@@ -65,6 +74,26 @@ export function MusicLyricsSettings() {
       {showRomanization && (
         <SettingItem title={getString('lyrics_auto_romanize')} description={getString('lyrics_auto_romanize_summary')}>
           <ToggleSwitch checked={autoRomanize} onChange={setAutoRomanize} />
+        </SettingItem>
+      )}
+      <SettingItem title={getString('lyrics_in_media_controls')} description={getString('lyrics_in_media_controls_summary')}>
+        <ToggleSwitch checked={inMediaControls} onChange={setInMediaControls} />
+      </SettingItem>
+      {inMediaControls && (
+        <SettingItem title={getString('lyrics_in_media_controls_timing')} description={getString('lyrics_in_media_controls_timing_summary')}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-32 sm:w-40">
+              <Slider
+                aria-label={getString('lyrics_in_media_controls_timing')}
+                min={-MEDIA_LYRICS_DELAY.MAX_MS}
+                max={MEDIA_LYRICS_DELAY.MAX_MS}
+                step={MEDIA_LYRICS_DELAY.STEP_MS}
+                value={MEDIA_LYRICS_DELAY.snap(mediaDelayMs)}
+                onChange={(value) => setMediaDelayMs(MEDIA_LYRICS_DELAY.snap(value))}
+              />
+            </div>
+            <span className="w-12 text-end font-mono text-xs text-chrome-neutral-400">{formatDelay(mediaDelayMs)}</span>
+          </div>
         </SettingItem>
       )}
       <SettingItem title={getString('lyrics_sponsorblock_timing')} description={getString('lyrics_sponsorblock_timing_summary')}>

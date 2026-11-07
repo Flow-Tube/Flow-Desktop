@@ -2,7 +2,7 @@
 //! anywhere, plain HTTP only to a private address or a `.local` name, no redirects, and bounded
 //! responses (Untrusted input).
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 use reqwest::{Client, ClientBuilder, Response, Url, redirect};
@@ -25,6 +25,16 @@ pub async fn read_body(mut response: Response, limit: usize) -> Result<Vec<u8>> 
     Ok(body)
 }
 
+/// `is_local_ip` leaves out IPv6 link-local for QR codes, which can't carry a zone id; a store's
+/// address can reach one, and `.local` names often resolve to one.
+fn private_address(ip: IpAddr) -> bool {
+    is_local_ip(ip) || matches!(ip, IpAddr::V6(v6) if link_local(v6))
+}
+
+fn link_local(ip: Ipv6Addr) -> bool {
+    ip.segments()[0] & 0xffc0 == 0xfe80
+}
+
 pub struct Transport {
     /// A `.local` name over plain HTTP, checked and pinned so DNS can't move it afterwards.
     pinned: Option<(String, SocketAddr)>,
@@ -41,7 +51,7 @@ impl Transport {
             .host_str()
             .ok_or(StoreError::Insecure)?
             .trim_matches(['[', ']']);
-        if host.parse::<IpAddr>().is_ok_and(is_local_ip) {
+        if host.parse::<IpAddr>().is_ok_and(private_address) {
             return Ok(Self { pinned: None });
         }
         if !host.to_ascii_lowercase().ends_with(".local") {
@@ -53,7 +63,7 @@ impl Transport {
             .map_err(|_| StoreError::Insecure)?
             .collect();
         match addresses.first() {
-            Some(first) if addresses.iter().all(|a| is_local_ip(a.ip())) => Ok(Self {
+            Some(first) if addresses.iter().all(|a| private_address(a.ip())) => Ok(Self {
                 pinned: Some((host.to_owned(), *first)),
             }),
             _ => Err(StoreError::Insecure),

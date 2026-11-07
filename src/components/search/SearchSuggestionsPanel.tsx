@@ -42,14 +42,14 @@ function Picture({ src, shape }: { src: string | null; shape: keyof typeof shape
 function Completion({ text, query }: { text: string; query: string }) {
   const { typed, completion } = splitCompletion(text, query);
   return (
-    <span className="min-w-0 truncate">
+    <span dir="auto" className="min-w-0 truncate text-start">
       <span className="text-chrome-neutral-300">{typed}</span>
       <span className="font-semibold text-chrome-neutral-100">{completion}</span>
     </span>
   );
 }
 
-const rowBase = "group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-left text-sm transition-colors duration-150 ease-out";
+const rowBase = "group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start text-sm transition-colors duration-150 ease-out";
 
 export function SearchSuggestionsPanel({
   columns,
@@ -113,7 +113,7 @@ export function SearchSuggestionsPanel({
         )}
         <span className="flex min-w-0 flex-1 flex-col">
           <Completion text={row.text} query={query} />
-          {entity?.description ? <span className="truncate text-xs text-chrome-neutral-400">{entity.description}</span> : null}
+          {entity?.description ? <span dir="auto" className="truncate text-xs text-chrome-neutral-400 text-start">{entity.description}</span> : null}
         </span>
         <button
           type="button"
@@ -140,8 +140,8 @@ export function SearchSuggestionsPanel({
       <div key={row.key} {...rowProps(row)} className={`${rowBase} py-1.5 ${activeClass(row)}`}>
         <Picture src={musicItemImage(item)} shape={musicItemShape(item)} />
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-medium text-chrome-neutral-100">{item.title}</span>
-          <span className="truncate text-xs text-chrome-neutral-400">{musicItemSubtitle(item)}</span>
+          <span dir="auto" className="truncate font-medium text-chrome-neutral-100 text-start">{item.title}</span>
+          <span dir="auto" className="truncate text-xs text-chrome-neutral-400 text-start">{musicItemSubtitle(item)}</span>
         </span>
       </div>
     );

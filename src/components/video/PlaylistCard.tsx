@@ -295,10 +295,10 @@ export function PlaylistCard({
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-chrome-zinc-100 transition-colors group-hover:text-primary">
+          <h3 dir="auto" className="line-clamp-2 text-start text-sm font-semibold leading-tight text-chrome-zinc-100 transition-colors group-hover:text-primary">
             {playlist.title}
           </h3>
-          <p className="mt-1 line-clamp-1 text-xs font-medium text-chrome-zinc-400 transition-colors">
+          <p dir="auto" className="mt-1 line-clamp-1 text-start text-xs font-medium text-chrome-zinc-400 transition-colors">
             {playlist.description || getString('playlist_card_view_full')}
           </p>
         </div>

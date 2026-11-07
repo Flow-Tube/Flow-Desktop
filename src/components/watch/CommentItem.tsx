@@ -26,7 +26,7 @@ function CommentText({ comment, className }: { comment: Comment; className: stri
   if (!text) return null;
   const long = text.length > PREVIEW_LENGTH;
   return (
-    <div className={className}>
+    <div dir="auto" className={`${className} text-start`}>
       {long && !expanded ? (
         <LinkedText text={`${text.slice(0, PREVIEW_LENGTH)}...`} />
       ) : (

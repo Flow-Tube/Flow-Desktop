@@ -170,7 +170,14 @@
 
   body {
     @apply bg-background text-chrome-zinc-100 antialiased overflow-hidden select-none;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', 'Noto Sans Arabic', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Support bidirectional text isolation and native right-to-left layout for RTL languages */
+  [dir="auto"],
+  .bidi-auto {
+    unicode-bidi: plaintext;
+    text-align: start;
   }
 }
 

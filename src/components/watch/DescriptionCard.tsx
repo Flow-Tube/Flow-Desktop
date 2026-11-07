@@ -35,7 +35,7 @@ export function DescriptionCard({ currentVideo, videoData }: DescriptionCardProp
         )}
       </div>
 
-      <div className={`mt-2 select-text whitespace-pre-wrap text-chrome-neutral-300 ${expanded ? "" : "line-clamp-3"}`}>
+      <div dir="auto" className={`mt-2 select-text whitespace-pre-wrap text-start text-chrome-neutral-300 ${expanded ? "" : "line-clamp-3"}`}>
         {description ? (
           <LinkedText text={description} rich={videoData?.descriptionRich} />
         ) : (

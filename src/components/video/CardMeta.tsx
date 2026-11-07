@@ -17,8 +17,8 @@ export function ChannelLabel({
   iconSize?: number;
 }) {
   return (
-    <span className="inline-flex min-w-0 max-w-full items-center gap-1">
-      <span className="truncate">{name}</span>
+    <span dir="auto" className="inline-flex min-w-0 max-w-full items-center gap-1 text-start">
+      <span dir="auto" className="truncate">{name}</span>
       {artist ? (
         <Music2 size={iconSize} className="shrink-0 text-chrome-neutral-400" aria-label={getString("card_verified_artist")} />
       ) : (

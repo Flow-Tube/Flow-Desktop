@@ -594,17 +594,19 @@ function VideoCardComponent({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <h3
+            dir="auto"
             onClick={play}
           {...tabClickProps}
             style={titleClampStyle}
-            className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary"
+            className="cursor-pointer text-start text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary"
           >
             {displayTitle}
           </h3>
           <button
+            dir="auto"
             type="button"
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="mt-1 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+            className="mt-1 truncate text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
@@ -700,17 +702,19 @@ function VideoCardComponent({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <h3
+            dir="auto"
             onClick={play}
           {...tabClickProps}
             style={titleClampStyle}
-            className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
+            className="cursor-pointer text-start text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
           >
             {displayTitle}
           </h3>
           <button
+            dir="auto"
             type="button"
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="mt-0.5 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+            className="mt-0.5 truncate text-start text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
@@ -838,16 +842,18 @@ function VideoCardComponent({
 
         <div className="flex flex-col flex-1 min-w-0">
           <h3
+            dir="auto"
             onClick={play}
           {...tabClickProps}
             style={titleClampStyle}
-            className="text-chrome-zinc-100 text-sm font-medium leading-snug cursor-pointer hover:text-[var(--color-primary)] transition-colors"
+            className="text-chrome-zinc-100 text-sm font-medium leading-snug cursor-pointer hover:text-[var(--color-primary)] transition-colors text-start"
           >
             {displayTitle}
           </h3>
           <div
+            dir="auto"
             onClick={(e) => { void handleChannelNavigate(e); }}
-            className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors"
+            className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors text-start"
           >
             <ChannelLabel name={byline} verified={video.isVerified} />
           </div>

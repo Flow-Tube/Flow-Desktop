@@ -86,9 +86,10 @@ export function WatchMetadata({
       <div className="flex items-start gap-2">
         {canCrossfade ? (
           <h1
+            dir="auto"
             onMouseEnter={() => setShowingOriginal(true)}
             onMouseLeave={() => setShowingOriginal(false)}
-            className="grid cursor-default text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100"
+            className="grid cursor-default text-start text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100"
           >
             {/* Both titles are stacked; only the visible one may be selected, or a copy pastes both. */}
             <span
@@ -108,7 +109,7 @@ export function WatchMetadata({
             </span>
           </h1>
         ) : primaryTitle ? (
-          <h1 className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
+          <h1 dir="auto" className="select-text text-start text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
         ) : (
           // A cold open starts playback from the video id alone; the title lands
           // a moment later. A placeholder bar reads better than an empty heading.

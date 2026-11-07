@@ -106,8 +106,8 @@ export function ChannelCard({
       </div>
 
       <div className="flex w-full flex-col items-center gap-0.5">
-        <span className="line-clamp-1 font-semibold text-chrome-neutral-100">{name}</span>
-        <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle || getString('search_role_channel')}</span>
+        <span dir="auto" className="line-clamp-1 font-semibold text-chrome-neutral-100">{name}</span>
+        <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle || getString('search_role_channel')}</span>
       </div>
 
       <Button

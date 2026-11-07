@@ -145,6 +145,20 @@ struct Round {
 }
 
 impl Round {
+    fn due(
+        app: &AppHandle,
+        meeting: &Meeting,
+        found: &mut BTreeMap<String, Found>,
+        tried: &mut BTreeMap<String, i64>,
+        since: i64,
+    ) -> Self {
+        Self {
+            found: due_found(found, &meeting.tags),
+            kept: due_kept(app, &meeting.members, tried, since),
+            since,
+        }
+    }
+
     fn is_empty(&self) -> bool {
         self.found.is_empty() && self.kept.is_empty()
     }
@@ -450,11 +464,7 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
             && rounds.is_empty()
         {
             let since = (now_ms() - MEET_EVERY_MS).max(network_changed_at);
-            let round = Round {
-                found: due_found(&mut found, &meeting.tags),
-                kept: due_kept(app, &meeting.members, &mut tried, since),
-                since,
-            };
+            let round = Round::due(app, meeting, &mut found, &mut tried, since);
             start_round(&mut rounds, app, &local, port, round);
         }
         save_addresses(app, &local.pool, &mut saved).await;

@@ -7,6 +7,8 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures_util::StreamExt as _;
+use futures_util::stream;
 use mdns_sd::{DaemonEvent, Receiver, ResolvedService, ServiceDaemon, ServiceEvent, ServiceInfo};
 use tauri::AppHandle;
 use tokio::task::JoinSet;
@@ -37,6 +39,8 @@ const MEET_EVERY_MS: i64 = 5 * 60 * 1000;
 const DIAL_EVERY_MS: i64 = 60 * 1000;
 /// How long a device that leaves a LAN group spends passing its `leave` on.
 const LEAVE_WITHIN: Duration = Duration::from_secs(10);
+/// Members dialed at once in a round, so one that stays silent doesn't hold up the others.
+const DIALS_AT_ONCE: usize = 8;
 
 /// The group this device meets members of on the LAN, a LAN group or a server group: this
 /// hour's tag with the ones before and after it, and the group's other devices.
@@ -106,44 +110,80 @@ impl Dialer<'_> {
         }
     }
 
-    /// Meets every member found over mDNS under one of `tags`, every few minutes.
-    async fn meet_found(&self, found: &mut BTreeMap<String, Found>, tags: &[String; 3]) {
-        for member in found.values_mut().filter(|f| tags.contains(&f.tag)) {
-            if now_ms() - member.met_ms < MEET_EVERY_MS {
-                continue;
-            }
-            member.met_ms = now_ms();
-            for address in &member.addresses {
-                if self.meet((address, member.port), &[]).await {
-                    break;
+    /// Dials a round's members, those found over mDNS first, and then the rest not met by then.
+    async fn meet_round(&self, round: Round) {
+        stream::iter(round.found)
+            .for_each_concurrent(DIALS_AT_ONCE, |(addresses, port)| async move {
+                for address in &addresses {
+                    if self.meet((address, port), &[]).await {
+                        break;
+                    }
                 }
-            }
-        }
+            })
+            .await;
+        let (seen, since) = (&met(self.app), round.since);
+        stream::iter(round.kept)
+            .for_each_concurrent(DIALS_AT_ONCE, |(did, (address, port))| async move {
+                if seen.get(&did).is_none_or(|at| *at < since)
+                    && !self.meet((&address, port), &[]).await
+                {
+                    unreached(self.app, &did);
+                }
+            })
+            .await;
     }
+}
 
-    /// Dials the members not met since `since` at the address kept for each, at most once a
-    /// minute each: mDNS may never find them on a network that drops multicast.
-    async fn meet_kept(
-        &self,
-        members: &BTreeSet<String>,
-        tried: &mut BTreeMap<String, i64>,
-        since: i64,
-    ) {
-        let seen = met(self.app);
-        for (did, (address, port)) in addresses(self.app) {
-            let now = now_ms();
-            if !members.contains(&did)
-                || seen.get(&did).is_some_and(|at| *at >= since)
-                || tried.get(&did).is_some_and(|at| now - at < DIAL_EVERY_MS)
-            {
-                continue;
-            }
-            tried.insert(did.clone(), now);
-            if !self.meet((&address, port), &[]).await {
-                unreached(self.app, &did);
-            }
-        }
+/// The members one round dials. It runs beside the loop that advertises and browses, so a member
+/// that is slow to answer holds up neither.
+struct Round {
+    /// Addresses and port of each member found over mDNS.
+    found: Vec<(Vec<String>, u16)>,
+    /// Each member dialed at the address kept for it.
+    kept: Vec<(String, (String, u16))>,
+    since: i64,
+}
+
+impl Round {
+    fn is_empty(&self) -> bool {
+        self.found.is_empty() && self.kept.is_empty()
     }
+}
+
+/// Members found over mDNS under one of `tags` and due, every few minutes.
+fn due_found(found: &mut BTreeMap<String, Found>, tags: &[String; 3]) -> Vec<(Vec<String>, u16)> {
+    let now = now_ms();
+    found
+        .values_mut()
+        .filter(|member| tags.contains(&member.tag) && now - member.met_ms >= MEET_EVERY_MS)
+        .map(|member| {
+            member.met_ms = now;
+            (member.addresses.clone(), member.port)
+        })
+        .collect()
+}
+
+/// Members not met since `since`, at the address kept for each, at most once a minute each: mDNS
+/// may never find them on a network that drops multicast.
+fn due_kept(
+    app: &AppHandle,
+    members: &BTreeSet<String>,
+    tried: &mut BTreeMap<String, i64>,
+    since: i64,
+) -> Vec<(String, (String, u16))> {
+    let (seen, now) = (met(app), now_ms());
+    addresses(app)
+        .into_iter()
+        .filter(|(did, _)| {
+            let due = members.contains(did)
+                && !seen.get(did).is_some_and(|at| *at >= since)
+                && !tried.get(did).is_some_and(|at| now - at < DIAL_EVERY_MS);
+            if due {
+                tried.insert(did.clone(), now);
+            }
+            due
+        })
+        .collect()
 }
 
 /// Meets every member this device can reach, so they pull the `leave` that `session` just
@@ -327,11 +367,8 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
         live_sink(app),
     ));
 
-    let dialer = Dialer {
-        app,
-        local: &local,
-        port,
-    };
+    // Dropped with the run too, and at most one at a time.
+    let mut rounds = JoinSet::new();
     let instance = format!("Flow-{}", hex::encode(random_bytes::<2>()));
     let mut advertised: Option<(String, String)> = None;
     let browse = || daemon.and_then(|daemon| daemon.browse(SERVICE_TYPE).ok());
@@ -343,6 +380,8 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
     let mut timer = tokio::time::interval(CHECK_EVERY);
     loop {
         let event = tokio::select! {
+            // What it met shows on the page, and members it didn't reach may be due again.
+            Some(_) = rounds.join_next(), if !rounds.is_empty() => None,
             _ = timer.tick() => {
                 if renewed(&local.device) {
                     break;
@@ -392,10 +431,26 @@ async fn run(app: &AppHandle, daemon: Option<&ServiceDaemon>) -> Result<()> {
         {
             record(&mut found, &info);
         }
-        if let Some(meeting) = &meeting {
-            dialer.meet_found(&mut found, &meeting.tags).await;
+        if let Some(meeting) = &meeting
+            && rounds.is_empty()
+        {
             let since = (now_ms() - MEET_EVERY_MS).max(network_changed_at);
-            dialer.meet_kept(&meeting.members, &mut tried, since).await;
+            let round = Round {
+                found: due_found(&mut found, &meeting.tags),
+                kept: due_kept(app, &meeting.members, &mut tried, since),
+                since,
+            };
+            if !round.is_empty() {
+                let (app, local) = (app.clone(), local.clone());
+                rounds.spawn(async move {
+                    let dialer = Dialer {
+                        app: &app,
+                        local: &local,
+                        port,
+                    };
+                    dialer.meet_round(round).await;
+                });
+            }
         }
         save_addresses(app, &local.pool, &mut saved).await;
         follow_nearby(app, &mut near).await;

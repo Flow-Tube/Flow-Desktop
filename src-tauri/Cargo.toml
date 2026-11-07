@@ -154,6 +154,7 @@ codegen-units = 16
 
 
 [dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
 wiremock = "0.6"
 # In-process WebDAV server for the FLOW-SYNC/2 WebDAV store tests.
 dav-server = { version = "0.11", default-features = false, features = ["memfs"] }

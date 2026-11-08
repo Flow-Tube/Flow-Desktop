@@ -93,6 +93,10 @@ pub enum EngineError {
 }
 
 impl EngineError {
+    pub fn refused_write(&self) -> bool {
+        matches!(self, Self::Store(error) if error.refused_write())
+    }
+
     /// A stable name the interface turns into a translated message.
     pub fn kind(&self) -> &'static str {
         match self {
@@ -767,8 +771,11 @@ impl<'a, S: Store> Session<'a, S> {
         let mut floors = floors(pool).await?;
         floors.extend(pulled.floors.clone());
         let mut budget = ReadBudget::default();
+        let mut cursor = u64::try_from(pulled.cursor).unwrap_or(0);
+        // A sender that stopped stays stopped for this read, and the others go on. The saved cursor
+        // stays at the first page that held one back, so the next sync lists it again.
+        let mut stopped = BTreeSet::new();
         loop {
-            let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
             let read: BTreeMap<String, u64> = pulled
                 .positions
                 .iter()
@@ -786,7 +793,8 @@ impl<'a, S: Store> Session<'a, S> {
                     parse_log_path(&change.path).map(|(did, seq)| (did, seq, change.path))
                 })
                 .filter(|(did, seq, _)| {
-                    *did != me && pulled.positions.get(did).is_none_or(|p| p.seq < *seq)
+                    let at = pulled.positions.get(did).map_or(0, |p| p.seq);
+                    *did != me && at < *seq && (!stopped.contains(did) || at + 1 == *seq)
                 })
                 .partition(|(did, seq, _)| self.past_its_cut(did, *seq));
             pulled
@@ -811,11 +819,9 @@ impl<'a, S: Store> Session<'a, S> {
                     break;
                 }
             }
-            // A missing object means the store hasn't caught up: read this page again next time.
-            if !waiting.is_empty() {
-                pulled.stalled = true;
-                return Ok(pulled);
-            }
+            // A missing object means the store hasn't caught up: this page is read again next time.
+            stopped.extend(waiting.into_iter().map(|(did, _, _)| did));
+            pulled.stalled |= !stopped.is_empty();
             let advanced = next > cursor
                 || pulled
                     .positions
@@ -824,7 +830,10 @@ impl<'a, S: Store> Session<'a, S> {
             if !advanced {
                 return Ok(pulled);
             }
-            pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
+            cursor = next;
+            if stopped.is_empty() {
+                pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
+            }
             // The next sync goes on from here, and a restored device doesn't choose its link yet.
             if !budget.take(listed) {
                 pulled.stalled = true;

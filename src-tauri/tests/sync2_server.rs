@@ -92,6 +92,8 @@ async fn plain_http_is_allowed_only_to_private_addresses() {
     assert!(!insecure("http://100.101.102.103/").await);
     assert!(!insecure("http://[::ffff:10.0.0.2]:8080/").await);
     assert!(!insecure("http://[fd12::1]/").await);
+    assert!(!insecure("http://[fe80::1]/").await);
+    assert!(insecure("http://[fec0::1]/").await);
     assert!(insecure("http://203.0.113.5/").await);
     assert!(insecure("http://sync.example.org/").await);
     assert!(insecure("http://[::ffff:203.0.113.5]/").await);

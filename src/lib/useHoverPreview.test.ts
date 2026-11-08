@@ -230,14 +230,11 @@ describe("useHoverPreview", () => {
     // 30s - 3m -> 2 clusters
     expect(getPreviewClusterCount(90)).toBe(2);
     expect(getPreviewClusterCount(180)).toBe(2);
-    // 3m - 10m -> 3 clusters
+    // > 3m -> max 3 clusters (3s per part)
     expect(getPreviewClusterCount(300)).toBe(3);
     expect(getPreviewClusterCount(600)).toBe(3);
-    // 10m - 30m -> 4 clusters
-    expect(getPreviewClusterCount(1200)).toBe(4);
-    expect(getPreviewClusterCount(1800)).toBe(4);
-    // 30m+ / 1hr+ -> 5 clusters
-    expect(getPreviewClusterCount(3600)).toBe(5);
+    expect(getPreviewClusterCount(1200)).toBe(3);
+    expect(getPreviewClusterCount(3600)).toBe(3);
   });
 
   it("plays clusters in a continuous loop while hover is active", async () => {

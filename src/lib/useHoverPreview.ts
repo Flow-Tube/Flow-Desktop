@@ -9,20 +9,19 @@ import { proxiedImage } from "./imageProxy";
 import { SETTINGS } from "./settings/schema";
 
 const HOVER_INTENT_DELAY_MS = 500;
-export const FRAME_CYCLE_INTERVAL_MS = 220;
-export const FRAMES_PER_CLUSTER = 8;
+export const FRAME_CYCLE_INTERVAL_MS = 250;
+export const FRAMES_PER_CLUSTER = 12; // 12 frames * 250ms = 3.0 full seconds per video part
 const MAX_STORYBOARD_CACHE_ENTRIES = 100;
 
 /**
  * Determines the number of preview mini-clips (clusters) based on video duration.
- * Short videos have 1 continuous clip; longer videos have up to 5 clusters spread across the timeline.
+ * Limited to at most 3 key video parts (e.g. beginning, middle, later) so each part
+ * gets a full 3 seconds of sustained playback without frequent jumping.
  */
 export function getPreviewClusterCount(durationSeconds: number): number {
   if (durationSeconds <= 30) return 1;
   if (durationSeconds <= 180) return 2;
-  if (durationSeconds <= 600) return 3;
-  if (durationSeconds <= 1800) return 4;
-  return 5;
+  return 3;
 }
 
 const storyboardSpecCache = new Map<string, StoryboardLevel[]>();

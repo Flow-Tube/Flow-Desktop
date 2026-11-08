@@ -46,6 +46,7 @@ SYNC
 - Linked devices reach a Flow server or WebDAV folder on your local network directly, even when a system proxy is set.
 - Linked devices only ever touch files inside the group's own WebDAV folder.
 - One device's unreadable change no longer keeps other devices' changes from arriving, however many are waiting.
+- When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC

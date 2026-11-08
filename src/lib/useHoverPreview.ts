@@ -284,11 +284,23 @@ export function useHoverPreview({
         setProgressPercent(Math.round((1 / frames.length) * 100));
         setIsPreviewActive(true);
 
+        const startTime = typeof performance !== "undefined" ? performance.now() : Date.now();
+        const totalDurationMs = frames.length * FRAME_CYCLE_INTERVAL_MS;
+
         cycleIntervalRef.current = setInterval(() => {
           if (!isMountedRef.current) return;
-          frameIdx = (frameIdx + 1) % frames.length;
-          setCurrentFrame(frames[frameIdx] ?? null);
-          setProgressPercent(Math.round(((frameIdx + 1) / frames.length) * 100));
+          const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+          const elapsed = Math.max(0, now - startTime);
+          const currentLoopTime = elapsed % totalDurationMs;
+          const nextIdx = Math.min(
+            frames.length - 1,
+            Math.floor(currentLoopTime / FRAME_CYCLE_INTERVAL_MS)
+          );
+          if (nextIdx !== frameIdx) {
+            frameIdx = nextIdx;
+            setCurrentFrame(frames[frameIdx] ?? null);
+            setProgressPercent(Math.round(((frameIdx + 1) / frames.length) * 100));
+          }
         }, FRAME_CYCLE_INTERVAL_MS);
       } catch {
         if (isMountedRef.current) {

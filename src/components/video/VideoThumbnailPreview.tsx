@@ -184,6 +184,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
   const prevGeom = previous
     ? getTileGeometry(previous, containerSize.width, containerSize.height)
     : null;
+  const isSectionBoundary = previous !== null && current !== null && previous.url !== current.url;
 
   return (
     <div
@@ -208,7 +209,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
         </div>
       )}
 
-      {/* Front buffer: strictly isolated to 1 tile viewport */}
+      {/* Front buffer: strictly isolated to 1 tile viewport with subtle crossfade on section boundaries */}
       {current && currentGeom && (
         <div style={currentGeom.viewportStyle}>
           <img
@@ -217,7 +218,9 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
             alt=""
             tabIndex={-1}
             decoding="async"
-            className="pointer-events-none select-none max-w-none"
+            className={`pointer-events-none select-none max-w-none ${
+              isSectionBoundary ? "animate-section-crossfade" : ""
+            }`}
             style={currentGeom.imgStyle}
           />
         </div>

@@ -330,6 +330,19 @@
   animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes section-crossfade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-section-crossfade {
+  animation: section-crossfade 0.12s ease-out forwards;
+}
+
 @keyframes shimmer {
   100% {
     transform: translateX(100%);

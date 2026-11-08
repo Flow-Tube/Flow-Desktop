@@ -3,11 +3,11 @@
 
 use std::collections::BTreeMap;
 
-use sqlx::SqlitePool;
-use tauri::{AppHandle, State};
+use tauri::AppHandle;
 
 use super::linked::err;
 use crate::errors::ErrorResponse;
+use crate::sync2::actions::state_pool;
 use crate::sync2::live_hub::{self, LiveStatus};
 use crate::sync2::live_message::{LiveMessage, Now};
 use crate::sync2::live_state;
@@ -33,10 +33,8 @@ pub async fn live_status(app: AppHandle) -> LiveStatus {
 
 /// The remembered answers by device: `true` to allow always, `false` to decline.
 #[tauri::command]
-pub async fn live_consents(
-    pool: State<'_, SqlitePool>,
-) -> Result<BTreeMap<String, bool>, ErrorResponse> {
-    live_state::consents(&pool)
+pub async fn live_consents(app: AppHandle) -> Result<BTreeMap<String, bool>, ErrorResponse> {
+    live_state::consents(&state_pool(&app))
         .await
         .map_err(|e| err(&e.into()))
 }
@@ -44,11 +42,11 @@ pub async fn live_consents(
 /// Remembers whether `did` may control this device, or forgets it so it is asked again.
 #[tauri::command]
 pub async fn live_set_consent(
-    pool: State<'_, SqlitePool>,
+    app: AppHandle,
     did: String,
     allowed: Option<bool>,
 ) -> Result<(), ErrorResponse> {
-    live_state::set_consent(&pool, &did, allowed)
+    live_state::set_consent(&state_pool(&app), &did, allowed)
         .await
         .map_err(|e| err(&e.into()))
 }

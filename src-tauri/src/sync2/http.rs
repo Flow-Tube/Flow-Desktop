@@ -18,7 +18,7 @@ pub async fn read_body(mut response: Response, limit: usize) -> Result<Vec<u8>> 
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(StoreError::Network)? {
         if body.len() + chunk.len() > limit {
-            return Err(StoreError::Malformed);
+            return Err(StoreError::TooLarge);
         }
         body.extend_from_slice(&chunk);
     }

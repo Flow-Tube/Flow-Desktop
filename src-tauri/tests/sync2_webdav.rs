@@ -466,9 +466,9 @@ async fn answers_past_their_limit_are_refused() {
     let dav = webdav(&server.uri(), PASSWORD).await;
     assert!(matches!(
         dav.get("dev/x.o").await,
-        Err(StoreError::Malformed)
+        Err(StoreError::TooLarge)
     ));
-    assert!(matches!(dav.list("dev/").await, Err(StoreError::Malformed)));
+    assert!(matches!(dav.list("dev/").await, Err(StoreError::TooLarge)));
 }
 
 /// Answers each `PROPFIND` with a page from `listing`, given the path asked for, and each `GET`
@@ -557,12 +557,14 @@ fn many_roster_files(path: &str) -> String {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_roster_folder_too_large_to_hold_is_refused() {
-    let url = scripted_webdav(many_roster_files, " ".repeat(4 << 20)).await;
-    let store = store_for(&url, &random_bytes()).await;
-    assert!(matches!(
-        store.roster_after(-1).await,
-        Err(StoreError::Malformed)
-    ));
+    for size in [4 << 20, (4 << 20) + 1] {
+        let url = scripted_webdav(many_roster_files, " ".repeat(size)).await;
+        let store = store_for(&url, &random_bytes()).await;
+        assert!(matches!(
+            store.roster_after(-1).await,
+            Err(StoreError::Malformed)
+        ));
+    }
 }
 
 /// A member's snapshot can place a log at its last possible `seq`; listing past it must hold.
@@ -885,4 +887,105 @@ async fn a_leave_calls_for_no_new_login() {
         .await
         .unwrap();
     assert!(!login_due(&pool_b).await.unwrap());
+}
+
+/// One more object than `device` wrote, past the size any object may have, at the end of its log.
+async fn too_large_at_the_end(url: &str, device: &MemberSecrets, wrote: i64) {
+    let seq = u64::try_from(wrote + 1).unwrap();
+    webdav(url, PASSWORD)
+        .await
+        .put(
+            &log_path(&hex::encode(device.did), seq),
+            vec![0; (4 << 20) + 1],
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_object_past_the_size_limit_stops_only_its_own_log() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    let pool_a = device_pool(&g).await;
+    let mut a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    too_large_at_the_end(&url, &g.a, a.record().own_seq).await;
+
+    let pool_b = device_pool(&g).await;
+    let mut b = Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    let pulled = b.pull(&pool_b).await.unwrap();
+
+    let sender = hex::encode(g.a.did);
+    assert!(pulled.batches.contains_key(&sender));
+    b.finish(&pool_b, pulled).await.unwrap();
+    let read = streams(&pool_b).await.unwrap();
+    assert_eq!(read[&sender].seq, a.record().own_seq.unsigned_abs());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_roster_file_past_the_size_limit_is_ignored() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    webdav(&url, PASSWORD)
+        .await
+        .put(
+            "roster/ffffffffffffffff-ffffffffffffffff.r",
+            vec![b' '; (4 << 20) + 1],
+        )
+        .await
+        .unwrap();
+    let pool = device_pool(&g).await;
+
+    let session = Session::open(&pool, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+
+    assert_eq!(session.entries().len(), 2);
+}
+
+#[tokio::test]
+async fn only_a_refusal_of_the_one_object_stops_only_that_object() {
+    let answer = |status: u16| async move {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&server)
+            .await;
+        let store = store_for(&format!("{}/", server.uri()), &random_bytes()).await;
+        let read = store.get_object("dev/x/log/o").await;
+        let wrap = store.key(0, "kc", "name").await;
+        (read, wrap)
+    };
+    for status in [400, 403, 410, 413, 451] {
+        let (read, wrap) = answer(status).await;
+        assert!(matches!(read, Ok(None)), "{status}");
+        assert!(matches!(wrap, Ok(None)), "{status}");
+    }
+    for status in [401, 407, 408, 429, 500, 502, 503, 507] {
+        let (read, wrap) = answer(status).await;
+        assert!(read.is_err(), "{status}");
+        assert!(wrap.is_err(), "{status}");
+    }
+}
+
+#[tokio::test]
+async fn an_unreachable_folder_still_fails_the_read() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let store = store_for(&format!("http://127.0.0.1:{port}/"), &random_bytes()).await;
+
+    assert!(matches!(
+        store.get_object("dev/x/log/o").await,
+        Err(StoreError::Network(_))
+    ));
 }

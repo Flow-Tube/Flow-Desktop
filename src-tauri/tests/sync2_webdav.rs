@@ -381,6 +381,48 @@ async fn a_group_in_a_folder_is_restored_with_its_recovery_words() {
 }
 
 #[tokio::test]
+async fn a_client_reaches_only_paths_inside_its_folder() {
+    let (root, _) = webdav_server().await;
+    let account = webdav(&root.replace("flow-sync/", ""), PASSWORD).await;
+    account
+        .put("other/notes.txt", b"mine".to_vec())
+        .await
+        .unwrap();
+    let client = webdav(&root, PASSWORD).await;
+    client.put("x/inside.b", b"ours".to_vec()).await.unwrap();
+
+    for path in [
+        "../other/notes.txt",
+        "x/../../other/notes.txt",
+        "%2e%2e/other/notes.txt",
+        "..%2fother/notes.txt",
+        "/other/notes.txt",
+        "../other/notes.txt#",
+        "x/inside.b#",
+        "x/inside.b?y",
+        "x\\..\\..\\other",
+    ] {
+        assert!(
+            matches!(client.get(path).await, Err(StoreError::Malformed)),
+            "{path}"
+        );
+        assert!(
+            matches!(client.delete(path).await, Err(StoreError::Malformed)),
+            "{path}"
+        );
+        assert!(
+            matches!(client.put(path, vec![1]).await, Err(StoreError::Malformed)),
+            "{path}"
+        );
+    }
+    assert_eq!(
+        account.get("other/notes.txt").await.unwrap().unwrap(),
+        b"mine"
+    );
+    assert_eq!(client.get("x/inside.b").await.unwrap().unwrap(), b"ours");
+}
+
+#[tokio::test]
 async fn a_refused_password_stops_every_later_request() {
     let (url, requests) = webdav_server().await;
     let wrong = WebDavStore::new(webdav(&url, "wrong").await, String::new());

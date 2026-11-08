@@ -47,6 +47,7 @@ SYNC
 - Linked devices only ever touch files inside the group's own WebDAV folder.
 - One device's unreadable change no longer keeps other devices' changes from arriving, however many are waiting.
 - When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
+- On the local network, a connection that stays silent is dropped after a few seconds, and it no longer stops this computer from meeting your other devices or answering them.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC

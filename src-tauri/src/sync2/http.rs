@@ -28,12 +28,19 @@ pub async fn read_body(mut response: Response, limit: usize) -> Result<Vec<u8>> 
 pub struct Transport {
     /// A `.local` name over plain HTTP, checked and pinned so DNS can't move it afterwards.
     pinned: Option<(String, SocketAddr)>,
+    /// A proxy would move a plain request, credentials included, off the checked address.
+    direct: bool,
 }
 
 impl Transport {
     pub async fn for_url(url: &Url) -> Result<Self> {
         match url.scheme() {
-            "https" => return Ok(Self { pinned: None }),
+            "https" => {
+                return Ok(Self {
+                    pinned: None,
+                    direct: false,
+                });
+            }
             "http" => {}
             _ => return Err(StoreError::Insecure),
         }
@@ -42,7 +49,10 @@ impl Transport {
             .ok_or(StoreError::Insecure)?
             .trim_matches(['[', ']']);
         if host.parse::<IpAddr>().is_ok_and(is_local_ip) {
-            return Ok(Self { pinned: None });
+            return Ok(Self {
+                pinned: None,
+                direct: true,
+            });
         }
         if !host.to_ascii_lowercase().ends_with(".local") {
             return Err(StoreError::Insecure);
@@ -55,6 +65,7 @@ impl Transport {
         match addresses.first() {
             Some(first) if addresses.iter().all(|a| is_local_ip(a.ip())) => Ok(Self {
                 pinned: Some((host.to_owned(), *first)),
+                direct: true,
             }),
             _ => Err(StoreError::Insecure),
         }
@@ -66,6 +77,11 @@ impl Transport {
             .redirect(redirect::Policy::none())
             .user_agent(concat!("FlowDesktop/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(10));
+        let builder = if self.direct {
+            builder.no_proxy()
+        } else {
+            builder
+        };
         match &self.pinned {
             Some((host, address)) => builder.resolve(host, *address),
             None => builder,

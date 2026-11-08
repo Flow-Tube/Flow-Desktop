@@ -287,16 +287,7 @@ export function useHoverPreview({
 
         cycleIntervalRef.current = setInterval(() => {
           if (!isMountedRef.current) return;
-          frameIdx++;
-          if (frameIdx >= frames.length) {
-            // Non-repetitive: freeze on final frame
-            if (cycleIntervalRef.current) {
-              clearInterval(cycleIntervalRef.current);
-              cycleIntervalRef.current = null;
-            }
-            setProgressPercent(100);
-            return;
-          }
+          frameIdx = (frameIdx + 1) % frames.length;
           setCurrentFrame(frames[frameIdx] ?? null);
           setProgressPercent(Math.round(((frameIdx + 1) / frames.length) * 100));
         }, FRAME_CYCLE_INTERVAL_MS);

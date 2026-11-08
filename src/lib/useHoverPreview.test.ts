@@ -240,7 +240,7 @@ describe("useHoverPreview", () => {
     expect(getPreviewClusterCount(3600)).toBe(5);
   });
 
-  it("plays clusters non-repetitively and reaches 100% progress before holding", async () => {
+  it("plays clusters in a continuous loop while hover is active", async () => {
     const mockLevels: StoryboardLevel[] = [
       {
         width: 320,
@@ -269,7 +269,7 @@ describe("useHoverPreview", () => {
           createElement(TestComponent, {
             videoId: "vid_short",
             isHovered: true,
-            durationSeconds: 20, // 1 cluster = 5 frames
+            durationSeconds: 20, // 1 cluster = 8 frames
           })
         );
       });
@@ -281,7 +281,7 @@ describe("useHoverPreview", () => {
       expect(lastHookResult?.isPreviewActive).toBe(true);
       expect(lastHookResult?.progressPercent).toBe(Math.round((1 / FRAMES_PER_CLUSTER) * 100));
 
-      // Advance through remaining 4 frames
+      // Advance through remaining frames to reach 100%
       for (let i = 0; i < FRAMES_PER_CLUSTER - 1; i++) {
         act(() => {
           vi.advanceTimersByTime(FRAME_CYCLE_INTERVAL_MS);
@@ -291,12 +291,12 @@ describe("useHoverPreview", () => {
       // Reached final frame: 100% progress
       expect(lastHookResult?.progressPercent).toBe(100);
 
-      // Advance further: should NOT loop back (non-repetitive)
+      // Advance one more interval: seamlessly loops back to frame 0
       act(() => {
-        vi.advanceTimersByTime(FRAME_CYCLE_INTERVAL_MS * 2);
+        vi.advanceTimersByTime(FRAME_CYCLE_INTERVAL_MS);
       });
 
-      expect(lastHookResult?.progressPercent).toBe(100);
+      expect(lastHookResult?.progressPercent).toBe(Math.round((1 / FRAMES_PER_CLUSTER) * 100));
       expect(lastHookResult?.isPreviewActive).toBe(true);
     } finally {
       globalThis.Image = originalImage;

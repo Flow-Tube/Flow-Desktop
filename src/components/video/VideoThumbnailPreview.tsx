@@ -99,6 +99,9 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
   const [isRendered, setIsRendered] = useState(false);
   const [current, setCurrent] = useState<FrameTile | null>(null);
   const [previous, setPrevious] = useState<FrameTile | null>(null);
+  const prevProgressRef = useRef(progressPercent);
+  const isLoopReset = progressPercent < prevProgressRef.current;
+  prevProgressRef.current = progressPercent;
 
   const setContainerNode = useCallback((el: HTMLDivElement | null) => {
     containerRef.current = el;
@@ -227,7 +230,7 @@ export const VideoThumbnailPreview: React.FC<VideoThumbnailPreviewProps> = ({
             className="h-full bg-primary transition-all ease-linear"
             style={{
               width: `${Math.min(100, Math.max(0, progressPercent))}%`,
-              transitionDuration: "220ms",
+              transitionDuration: isLoopReset ? "0ms" : "220ms",
             }}
           />
         </div>

@@ -5,7 +5,7 @@ import {
   pickHoverPreviewLevel,
   getPreviewClusterCount,
   useHoverPreview,
-  FRAMES_PER_CLUSTER,
+  TOTAL_PREVIEW_FRAMES,
   FRAME_CYCLE_INTERVAL_MS,
 } from "./useHoverPreview";
 import { useHoverPreviewStore } from "../store/useHoverPreviewStore";
@@ -64,7 +64,7 @@ describe("useHoverPreview", () => {
     expect(lastHookResult?.currentFrame).toBeNull();
   });
 
-  it("does not activate before the 500ms hover intent delay", () => {
+  it("does not activate before the 400ms hover intent delay", () => {
     act(() => {
       root.render(
         createElement(TestComponent, {
@@ -75,15 +75,15 @@ describe("useHoverPreview", () => {
       );
     });
 
-    // 400ms passed: still waiting for 500ms hover intent
+    // 300ms passed: still waiting for 400ms hover intent
     act(() => {
-      vi.advanceTimersByTime(400);
+      vi.advanceTimersByTime(300);
     });
 
     expect(lastHookResult?.isPreviewActive).toBe(false);
   });
 
-  it("cancels pending hover if unhovered before 500ms", () => {
+  it("cancels pending hover if unhovered before 400ms", () => {
     const spy = vi.spyOn(youtubeApi, "getVideoStoryboard");
 
     act(() => {
@@ -97,7 +97,7 @@ describe("useHoverPreview", () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(250);
+      vi.advanceTimersByTime(200);
     });
 
     act(() => {
@@ -111,7 +111,7 @@ describe("useHoverPreview", () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(400);
     });
 
     expect(spy).not.toHaveBeenCalled();
@@ -224,25 +224,24 @@ describe("useHoverPreview", () => {
   });
 
   it("adapts preview cluster count according to video duration", () => {
-    // <= 30s -> 1 continuous clip
+    // <= 30s -> 1 continuous section (24 frames)
     expect(getPreviewClusterCount(15)).toBe(1);
     expect(getPreviewClusterCount(30)).toBe(1);
-    // 30s - 3m -> 2 clusters
+    // 30s - 3m -> 2 sections (12 frames each)
     expect(getPreviewClusterCount(90)).toBe(2);
     expect(getPreviewClusterCount(180)).toBe(2);
-    // > 3m -> max 3 clusters (3s per part)
+    // > 3m -> 3 sections (Opening: 8, Middle: 8, Later: 8 frames)
     expect(getPreviewClusterCount(300)).toBe(3);
     expect(getPreviewClusterCount(600)).toBe(3);
-    expect(getPreviewClusterCount(1200)).toBe(3);
     expect(getPreviewClusterCount(3600)).toBe(3);
   });
 
-  it("plays clusters in a continuous loop while hover is active", async () => {
+  it("distributes 24 frames @ 8 FPS across 3 sections in a continuous loop", async () => {
     const mockLevels: StoryboardLevel[] = [
       {
         width: 320,
         height: 180,
-        count: 25,
+        count: 50,
         columns: 3,
         rows: 3,
         intervalMs: 2000,
@@ -264,22 +263,22 @@ describe("useHoverPreview", () => {
       act(() => {
         root.render(
           createElement(TestComponent, {
-            videoId: "vid_short",
+            videoId: "vid_continuous",
             isHovered: true,
-            durationSeconds: 20, // 1 cluster = 8 frames
+            durationSeconds: 120, // 2-minute video -> 2 clusters * 12 = 24 frames
           })
         );
       });
 
       await act(async () => {
-        vi.advanceTimersByTime(550);
+        vi.advanceTimersByTime(450); // 400ms hover delay + buffer
       });
 
       expect(lastHookResult?.isPreviewActive).toBe(true);
-      expect(lastHookResult?.progressPercent).toBe(Math.round((1 / FRAMES_PER_CLUSTER) * 100));
+      expect(lastHookResult?.progressPercent).toBe(Math.round((1 / TOTAL_PREVIEW_FRAMES) * 100));
 
-      // Advance through remaining frames to reach 100%
-      for (let i = 0; i < FRAMES_PER_CLUSTER - 1; i++) {
+      // Advance through remaining 23 frames to reach 100%
+      for (let i = 0; i < TOTAL_PREVIEW_FRAMES - 1; i++) {
         act(() => {
           vi.advanceTimersByTime(FRAME_CYCLE_INTERVAL_MS);
         });
@@ -293,7 +292,7 @@ describe("useHoverPreview", () => {
         vi.advanceTimersByTime(FRAME_CYCLE_INTERVAL_MS);
       });
 
-      expect(lastHookResult?.progressPercent).toBe(Math.round((1 / FRAMES_PER_CLUSTER) * 100));
+      expect(lastHookResult?.progressPercent).toBe(Math.round((1 / TOTAL_PREVIEW_FRAMES) * 100));
       expect(lastHookResult?.isPreviewActive).toBe(true);
     } finally {
       globalThis.Image = originalImage;

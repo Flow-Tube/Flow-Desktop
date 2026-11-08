@@ -8,15 +8,14 @@ import { useImageProxyStore } from "../store/useImageProxyStore";
 import { proxiedImage } from "./imageProxy";
 import { SETTINGS } from "./settings/schema";
 
-const HOVER_INTENT_DELAY_MS = 500;
-export const FRAME_CYCLE_INTERVAL_MS = 250;
-export const FRAMES_PER_CLUSTER = 12; // 12 frames * 250ms = 3.0 full seconds per video part
+const HOVER_INTENT_DELAY_MS = 400;
+export const FRAME_CYCLE_INTERVAL_MS = 125; // 8 FPS (~125ms per frame)
+export const TOTAL_PREVIEW_FRAMES = 24; // 24 frames * 125ms = 3.0 seconds exact duration
 const MAX_STORYBOARD_CACHE_ENTRIES = 100;
 
 /**
- * Determines the number of preview mini-clips (clusters) based on video duration.
- * Limited to at most 3 key video parts (e.g. beginning, middle, later) so each part
- * gets a full 3 seconds of sustained playback without frequent jumping.
+ * Determines the number of preview timeline sections based on video duration.
+ * Distributes the 24 frames across up to 3 sections (Opening: 8 frames, Middle: 8 frames, Later: 8 frames).
  */
 export function getPreviewClusterCount(durationSeconds: number): number {
   if (durationSeconds <= 30) return 1;
@@ -245,14 +244,15 @@ export function useHoverPreview({
             : (level.count * level.intervalMs) / 1000;
 
         const clusterCount = getPreviewClusterCount(totalDuration);
+        const framesPerCluster = Math.floor(TOTAL_PREVIEW_FRAMES / clusterCount);
         const stepSeconds = Math.max(1, Math.min(level.intervalMs / 1000, 3));
 
         const frames: StoryboardFrame[] = [];
         for (let c = 0; c < clusterCount; c++) {
           const anchorRatio = clusterCount === 1 ? 0 : c / clusterCount + 0.05;
-          const maxAnchor = Math.max(0, totalDuration - FRAMES_PER_CLUSTER * stepSeconds);
+          const maxAnchor = Math.max(0, totalDuration - framesPerCluster * stepSeconds);
           const anchorTime = Math.min(totalDuration * anchorRatio, maxAnchor);
-          for (let f = 0; f < FRAMES_PER_CLUSTER; f++) {
+          for (let f = 0; f < framesPerCluster; f++) {
             const timestamp = Math.min(anchorTime + f * stepSeconds, totalDuration);
             const rawFrame = storyboardFrameAt(level, timestamp);
             const url = proxiedImage(rawFrame.url, proxyBase);

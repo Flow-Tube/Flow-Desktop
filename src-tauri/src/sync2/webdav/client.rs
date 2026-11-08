@@ -53,6 +53,9 @@ impl WebDav {
         if self.refused.load(Ordering::SeqCst) {
             return Err(StoreError::Unauthorized);
         }
+        if !inside_folder(path) {
+            return Err(StoreError::Malformed);
+        }
         let url = self.base.join(path).map_err(|_| StoreError::Malformed)?;
         Ok(self
             .client
@@ -91,6 +94,15 @@ impl WebDav {
         }
         Ok(())
     }
+}
+
+/// Every path this client builds is plain names under the group's folder, so a URL can't resolve
+/// anywhere else on the account.
+fn inside_folder(path: &str) -> bool {
+    let plain = path
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'/'));
+    plain && !path.starts_with('/') && !path.split('/').any(|part| part == "." || part == "..")
 }
 
 fn refused(response: &Response) -> StoreError {

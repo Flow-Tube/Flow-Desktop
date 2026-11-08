@@ -1,8 +1,8 @@
 //! A group on a store that its devices also sync over the LAN (spec/live.md, LAN groups: "Groups
 //! on a store sync the same way"). Everything read from or written to the store is also held, as
 //! a LAN group holds it, so it can be served to members on the LAN. While the store is out of
-//! reach, reads and listings come from what is held, and new objects wait to be uploaded. Roster
-//! appends still need the store, which orders them.
+//! reach, reads and listings come from what is held, and new objects wait to be uploaded, as they
+//! do while the store refuses one. Roster appends still need the store, which orders them.
 
 use std::collections::BTreeMap;
 
@@ -78,6 +78,16 @@ impl<S: Store> HybridStore<S> {
 }
 
 impl<S> HybridStore<S> {
+    /// Objects go up in the order they were written, since readers stop at a gap in a log.
+    async fn upload_later(&self, path: &str) -> Result<()> {
+        sqlx::query("INSERT OR IGNORE INTO sync2_pending (path) VALUES (?)")
+            .bind(path)
+            .execute(&self.pool)
+            .await
+            .map_err(StoreError::Local)?;
+        Ok(())
+    }
+
     async fn held_above(
         &self,
         read: &BTreeMap<String, u64>,
@@ -166,14 +176,16 @@ impl<S: Store + Sync> Store for HybridStore<S> {
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
         self.held.put_object(path, bytes.clone()).await?;
+        let waiting: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sync2_pending")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(StoreError::Local)?;
+        if waiting > 0 {
+            return self.upload_later(path).await;
+        }
         match self.store.put_object(path, bytes).await {
-            Err(error) if unreachable(&error) => {
-                sqlx::query("INSERT OR IGNORE INTO sync2_pending (path) VALUES (?)")
-                    .bind(path)
-                    .execute(&self.pool)
-                    .await
-                    .map_err(StoreError::Local)?;
-                Ok(())
+            Err(error) if unreachable(&error) || error.refused_write() => {
+                self.upload_later(path).await
             }
             other => other,
         }

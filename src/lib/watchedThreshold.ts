@@ -2,13 +2,6 @@ import type { WatchHistoryRecord } from "../types/db";
 
 export type WatchedThreshold = "PERCENT_90" | "PERCENT_95" | "PERCENT_99" | "ALMOST_FINISHED";
 
-export const WATCHED_THRESHOLDS: readonly WatchedThreshold[] = [
-  "PERCENT_90",
-  "PERCENT_95",
-  "PERCENT_99",
-  "ALMOST_FINISHED",
-];
-
 const RULES: Record<WatchedThreshold, { minShare: number; maxRemainingSeconds: number }> = {
   PERCENT_90: { minShare: 0.9, maxRemainingSeconds: Infinity },
   PERCENT_95: { minShare: 0.95, maxRemainingSeconds: Infinity },

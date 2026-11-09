@@ -93,13 +93,16 @@ export function ContentTab() {
         </SettingItem>
       </SettingsGroup>
 
-      <SettingsGroup title={getString('settings_group_content')}>
+      <SettingsGroup title={getString('settings_group_watch_page')}>
         <SettingItem title={getString('settings_comments')} description={getString('settings_comments_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)}><ToggleSwitch checked={comments} onChange={setComments} disabled={isSettingDisabledUntilWired(SETTINGS.COMMENTS_ENABLED)} /></SettingItem>
         <SettingItem title={getString('settings_notes')} description={getString('settings_notes_desc')}><ToggleSwitch checked={notes} onChange={setNotes} /></SettingItem>
         <SettingItem title={getString('settings_channel_notes')} description={getString('settings_channel_notes_desc')} disabled={!notes}><ToggleSwitch checked={channelNotes} onChange={setChannelNotes} disabled={!notes} /></SettingItem>
         <SettingItem title={getString('settings_video_notes')} description={getString('settings_video_notes_desc')} disabled={!notes}><ToggleSwitch checked={videoNotes} onChange={setVideoNotes} disabled={!notes} /></SettingItem>
         <SettingItem title={getString('settings_related_videos')} description={getString('settings_related_videos_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)}><ToggleSwitch checked={relatedVideos} onChange={setRelatedVideos} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_RELATED_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_live_chat')} description={getString('settings_live_chat_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)}><ToggleSwitch checked={liveChat} onChange={setLiveChat} disabled={isSettingDisabledUntilWired(SETTINGS.LIVE_CHAT_ENABLED)} /></SettingItem>
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('settings_group_watched_videos')}>
         <SettingItem title={getString('settings_hide_watched_home')} description={getString('settings_hide_watched_home_desc')}><ToggleSwitch checked={hideWatchedHome} onChange={(on) => setHideWatchedHome(String(on))} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched_subscriptions')} description={getString('settings_hide_watched_subscriptions_desc')}><ToggleSwitch checked={hideWatchedSubscriptions} onChange={(on) => setHideWatchedSubscriptions(String(on))} /></SettingItem>
         <SettingItem title={getString('settings_hide_watched_shorts')} description={getString('settings_hide_watched_shorts_desc')} disabled={!shortsContent}><ToggleSwitch checked={hideWatchedShorts} onChange={setHideWatchedShorts} disabled={!shortsContent} /></SettingItem>
@@ -113,6 +116,9 @@ export function ContentTab() {
         </SettingItem>
         <SettingItem title={getString('settings_hide_seen')} description={getString('settings_hide_seen_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_SEEN_VIDEOS)}><ToggleSwitch checked={hideSeen} onChange={setHideSeen} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_SEEN_VIDEOS)} /></SettingItem>
         <SettingItem title={getString('settings_remove_watched_watch_later')} description={getString('settings_remove_watched_watch_later_desc')}><ToggleSwitch checked={removeWatched} onChange={setRemoveWatched} /></SettingItem>
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('settings_group_blocked')}>
         <SettingItem title={getString('settings_blocked_mode')} description={getString('settings_blocked_mode_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.BLOCKED_CONTENT_MODE)}>
           <Select value={blockedMode} onChange={setBlockedMode} disabled={isSettingDisabledUntilWired(SETTINGS.BLOCKED_CONTENT_MODE)} options={[
             { value: 'blur', label: getString('settings_blocked_mode_blur') },
@@ -120,6 +126,9 @@ export function ContentTab() {
           ]} />
         </SettingItem>
         <BlockedKeywordsPanel />
+      </SettingsGroup>
+
+      <SettingsGroup title={getString('shorts')}>
         <SettingItem title={getString('settings_show_shorts_content')} description={getString('settings_show_shorts_content_desc')}><ToggleSwitch checked={shortsContent} onChange={setShortsContent} /></SettingItem>
         <SettingItem title={getString('settings_channel_shorts_tab')} description={getString('settings_channel_shorts_tab_desc')} disabled={shortsContent}><ToggleSwitch checked={channelShortsTab} onChange={setChannelShortsTab} disabled={shortsContent} /></SettingItem>
         <SettingItem title={getString('settings_disable_shorts_player')} description={getString('settings_disable_shorts_player_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.DISABLE_SHORTS_PLAYER)}><ToggleSwitch checked={disableShorts} onChange={setDisableShorts} disabled={isSettingDisabledUntilWired(SETTINGS.DISABLE_SHORTS_PLAYER)} /></SettingItem>

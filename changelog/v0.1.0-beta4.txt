@@ -171,7 +171,7 @@ SETTINGS
 - The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
 - Settings has a search box. It finds a setting by its name, description or a related word, the same way Flow for Android ranks them, then opens the right tab and points out the row.
 - A new switch in Appearance, Highlight new settings, puts a dot on settings added in an update and on their tab, for as long as you choose. It is off by default.
-- Settings has new pages for Keyboard Shortcuts, Lyrics, Subscriptions, History & Privacy, Digital Wellbeing and Language & Region, so Player, Music and Content & UI are shorter.
+- Settings has new pages for Keyboard Shortcuts, Lyrics, Subscriptions, History & Privacy, Digital Wellbeing and Language & Region, so Player, Music and Content & UI are shorter. Content & UI is split into Watch page, Watched videos, Blocked content and Shorts.
 - Scrollbars are hidden everywhere in the app. Every list still scrolls with the wheel, trackpad, keyboard or touch.
 - Flow can follow your computer's light or dark mode, with its own theme for each mode and a choice of dark or AMOLED, under Follow system in Appearance. It is off by default.
 - Appearance has a Font setting: Inter, or your system's font.

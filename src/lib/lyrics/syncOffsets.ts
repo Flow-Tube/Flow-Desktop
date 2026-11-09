@@ -68,9 +68,3 @@ export function clearSyncOffset(id: string): void {
   if (pending?.id === id) dropPending();
   if (read().has(id)) write(id, null);
 }
-
-/** For tests. */
-export function resetSyncOffsets(): void {
-  dropPending();
-  offsets = null;
-}

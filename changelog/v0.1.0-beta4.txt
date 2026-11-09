@@ -63,6 +63,25 @@ LIBRARY
 - Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
 - A Notes page in Library and the sidebar: search, filter by videos or channels, sort by edit time, title or your own order, and select notes to copy, delete or reorder. Each note lists its times, and Play from starts the video there.
 - Play on is now in the full music player too. Its list says when playback is moving, links to Manage linked devices, and Flow tells you when another device hands playback to this one.
+- Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.
+- Flow Recap: open it from Library or Settings > Taste to see your month, your year or all time, for videos, music or both. It shows time per day, your clock, weekdays, a calendar, top channels, videos, artists and songs, topics, what stood out, and the time SponsorBlock saved you.
+- Play your recap as a full-window story. Each page has its own colours and its figures count up. Click a segment to jump, hold to pause, Space pauses, the arrow keys step and Esc closes. It stops when Flow is in the background and ends on a card you can save as a PNG or copy, with a way to play it again.
+- Global media keys, in Settings > Keyboard Shortcuts, let your keyboard's play, next and previous keys control Flow while it is in the background. It is off by default, and Linux needs an X11 session.
+- Press ? to see every video and music key. The same list is in Settings > Keyboard Shortcuts.
+- Edit a playlist's name and description, and search inside any playlist, even one too long to show at once.
+- Add a whole playlist to one of your own, or merge two of yours, from the playlist's menu. Playlists also sort by Longest and Shortest, and the Playlists page has a Custom order you can drag.
+- A YouTube playlist now says when unavailable videos are hidden from it.
+- Select many videos in a playlist to add them to the queue, add them to another playlist, download them, or remove them with Undo.
+- Save any playlist or music collection as a file from its menu, and import one with Import from file on the Playlists or Albums page. The files are the same ones Flow for Android saves and opens. A music playlist imports into your Albums.
+- Likes has a sort, and you can select many to queue, download or remove them with Undo. Download all and Save as file work on what the page shows. With songs and videos both on show, Play and Save as file take the videos.
+- History has a Shorts tab, Newest and Oldest first, and a year to narrow it to. A removed video can be brought back with Undo, and Delete Shorts from history clears only the Shorts.
+- Hide any Library section in Settings > Content & UI.
+- A new Remove watched videos switch takes videos out of Watch Later once you finish them, and opening Watch Later clears any you watched elsewhere, with Undo.
+- Subscriptions has a Refresh button that refreshes only the group you have open. Refresh subscriptions at startup now works.
+- Manage subscriptions can be sorted by name or latest upload, and shows video channels and music artists apart.
+- Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
+- The Subscribed menu on a channel can add it to a subscription group and hide that channel's Shorts from your feed. Channel pages have a Share button.
+- Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 
 MUSIC
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
@@ -159,13 +178,6 @@ PLAYER
 - Optional frame step buttons while paused and a paid promotion label. The Save button shows Saved, Stats for nerds has more rows and Copy, and the description lists its tags and can be copied.
 - An Autoplay switch sits next to the quality on the player bar, and the Queue button only shows when there's a queue.
 
-LIBRARY
-- Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.
-- Flow Recap: open it from Library or Settings > Taste to see your month, your year or all time, for videos, music or both. It shows time per day, your clock, weekdays, a calendar, top channels, videos, artists and songs, topics, what stood out, and the time SponsorBlock saved you.
-- Play your recap as a full-window story. Each page has its own colours and its figures count up. Click a segment to jump, hold to pause, Space pauses, the arrow keys step and Esc closes. It stops when Flow is in the background and ends on a card you can save as a PNG or copy, with a way to play it again.
-- Global media keys, in Settings > Keyboard Shortcuts, let your keyboard's play, next and previous keys control Flow while it is in the background. It is off by default, and Linux needs an X11 session.
-- Press ? to see every video and music key. The same list is in Settings > Keyboard Shortcuts.
-
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
 - The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
@@ -177,17 +189,6 @@ SETTINGS
 - Appearance has a Font setting: Inter, or your system's font.
 - Pause watch history stops saving what you watch, in Settings > History & Privacy. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
 - A new setting, App language, shows Flow in any of the 33 languages Flow for Android ships, using Android's translations. Text that has no translation yet stays in English, and English stays the default. Right-to-left languages mirror the layout outside the player.
-
-LIBRARY
-- Edit a playlist's name and description, and search inside any playlist, even one too long to show at once.
-- Add a whole playlist to one of your own, or merge two of yours, from the playlist's menu. Playlists also sort by Longest and Shortest, and the Playlists page has a Custom order you can drag.
-- A YouTube playlist now says when unavailable videos are hidden from it.
-- Select many videos in a playlist to add them to the queue, add them to another playlist, download them, or remove them with Undo.
-- Save any playlist or music collection as a file from its menu, and import one with Import from file on the Playlists or Albums page. The files are the same ones Flow for Android saves and opens. A music playlist imports into your Albums.
-- Likes has a sort, and you can select many to queue, download or remove them with Undo. Download all and Save as file work on what the page shows. With songs and videos both on show, Play and Save as file take the videos.
-- History has a Shorts tab, Newest and Oldest first, and a year to narrow it to. A removed video can be brought back with Undo, and Delete Shorts from history clears only the Shorts.
-- Hide any Library section in Settings > Content & UI.
-- A new Remove watched videos switch takes videos out of Watch Later once you finish them, and opening Watch Later clears any you watched elsewhere, with Undo.
 
 DOWNLOADS
 - Sort downloads by Newest, Oldest, Largest, Title or Channel. Each video shows its size and date.
@@ -204,6 +205,8 @@ SHORTS
 - A Short that links to a full video shows a chip that opens it. Double-click a Short to like it.
 - A Short with several audio tracks offers them in its settings, and the equalizer now applies to Shorts.
 - Subscriptions shows when the feed last refreshed and how many videos it checked. The count has its own switch.
+- A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.
+- Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
 
 HOME
 - Home has three new chips. Mixes builds queues from videos you liked or finished, Live shows streams on now, and Watched brings back videos worth seeing again.
@@ -211,20 +214,9 @@ HOME
 - Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.
 - Card menus add Play next, Details and Mark as unwatched.
 
-SHORTS
-- A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.
-- Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
-
 SEARCH
 - Searching again from your history brings back the filters you used. Shorts is now its own chip, next to All.
 - New Unwatched, Watched and Recently uploaded chips, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
-
-LIBRARY
-- Subscriptions has a Refresh button that refreshes only the group you have open. Refresh subscriptions at startup now works.
-- Manage subscriptions can be sorted by name or latest upload, and shows video channels and music artists apart.
-- Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
-- The Subscribed menu on a channel can add it to a subscription group and hide that channel's Shorts from your feed. Channel pages have a Share button.
-- Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 
 NOTIFICATIONS
 - Remind me on an upcoming video or premiere puts it in your notifications when it starts. A reminder missed while Flow was closed arrives at the next launch.
@@ -251,6 +243,8 @@ LOCAL MEDIA
 - The Cache group under Network now shows the real size of artwork, lyrics and network caches, each with a limit and a Clear button. Artwork clears the next time Flow starts. The Media Cache Limit row is gone: Flow never stored streams on disk.
 
 FIXES
+- The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
+- Playlist cards show all four covers when two of the songs share a cover.
 - The onboarding topics and import steps can now be translated, and their wording is plainer.
 - Flow no longer says FlowNeuro anywhere: settings, backups, sync, import and the window title all call it your taste, as Flow for Android does.
 - Saved lyrics show where they came from in the lyrics menu and side pane, instead of an internal name like MemoryCache. Lyrics saved by an older version show no source until they are fetched again.

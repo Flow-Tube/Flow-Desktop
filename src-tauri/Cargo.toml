@@ -129,7 +129,7 @@ windows = { version = "0.62", features = [
   "Win32_System_Variant",
   "Win32_System_Diagnostics_ToolHelp",
 ] }
-windows-core = "0.62"
+windows-core = "0.100"
 
 # Single-instance: forward a second `flow://` launch to the running window
 # instead of spawning a duplicate. The "deep-link" feature makes it hand the

@@ -11,6 +11,7 @@ import { IS_LINUX_RUNTIME } from '../../../lib/platform';
 import { canKeepScreenOn } from '../../../lib/useKeepScreenOn';
 import {
   getOrderedProviders,
+  isProviderEnabled,
   parseProviderEnabledStates,
   serializeProviderEnabledStates,
 } from '../../../lib/lyrics/registry';
@@ -43,7 +44,7 @@ export function MusicLyricsSettings() {
 
   const providers = getOrderedProviders(providerOrder);
   const enabledStates = parseProviderEnabledStates(enabledRaw);
-  const enabledCount = providers.filter((provider) => enabledStates[provider.name] !== false).length;
+  const enabledCount = providers.filter((provider) => isProviderEnabled(enabledStates, provider.name)).length;
   const setProviderEnabled = (providerName: string, enabled: boolean) => {
     setEnabledRaw(serializeProviderEnabledStates({ ...enabledStates, [providerName]: enabled }));
   };
@@ -120,7 +121,7 @@ export function MusicLyricsSettings() {
       </SettingItem>
       <LyricsProviderList
         order={providers.map((provider) => provider.name)}
-        isEnabled={(name) => enabledStates[name] !== false}
+        isEnabled={(name) => isProviderEnabled(enabledStates, name)}
         onReorder={(order) => setProviderOrder(serializeProviderOrder(order))}
         onToggle={setProviderEnabled}
       />

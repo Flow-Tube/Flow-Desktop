@@ -108,7 +108,7 @@ MUSIC
 - Romanize on this device, in Settings > Lyrics and the lyrics menu, adds Latin letters under lyrics in other scripts when the source has none. Japanese isn't covered yet.
 - Song menus have Details: title, artist, album, views, likes, length and upload date. Click a line to copy it.
 - Settings > Music can hide the artwork in the full player, change the shape of the music progress bar, and make album art and cards on music pages smaller.
-- YouTube captions are now a lyrics provider, tried before YouTube's plain lyrics, so more songs get timed lines. Reorder or turn it off in Settings > Lyrics.
+- YouTube captions are a lyrics source you can turn on in Settings > Lyrics. It is off by default for now, because YouTube currently refuses these requests for every song.
 - New switches: open the full player for new songs, pause music while Flow or your computer is muted (Flow only on Linux), and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
 - The Taste tab can export, import and reset your music profile on its own, without touching your video profile.
 - Lyrics appear much faster: sources are asked side by side and the search stops after 9 seconds. Saved line-synced lyrics show at once, and word sync is looked for once a week.

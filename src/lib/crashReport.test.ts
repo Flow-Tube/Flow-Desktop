@@ -32,7 +32,7 @@ describe("crash report", () => {
 
   it("fills in the bug form", () => {
     const url = new URL(crashIssueUrl(REPORT));
-    expect(url.origin + url.pathname).toBe("https://github.com/FlowNeuro/Flow-Desktop/issues/new");
+    expect(url.origin + url.pathname).toBe("https://github.com/Flow-Tube/Flow-Desktop/issues/new");
     expect(url.searchParams.get("template")).toBe("bug_report.yml");
     expect(url.searchParams.get("title")).toBe("[Bug]: index out of bounds in src/lib.rs:1:2");
     expect(url.searchParams.get("app-version")).toBe("0.1.0-beta4");

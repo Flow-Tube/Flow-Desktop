@@ -169,8 +169,8 @@ export function AboutTab() {
       </SettingsGroup>
 
       <SettingsGroup title={getString('settings_group_contact')}>
-        <LinkRow icon={<Globe size={16} />} label={getString('settings_website')} value="flow.aedev.me" href="https://flow.aedev.me" />
-        <LinkRow icon={<GithubIcon />} label={getString('settings_github')} value="A-EDev/flow-desktop" href="https://github.com/Flow-Tube/Flow-Desktop" />
+        <LinkRow icon={<Globe size={16} />} label={getString('settings_website')} value="flow-tube.org" href="https://flow-tube.org" />
+        <LinkRow icon={<GithubIcon />} label={getString('settings_github')} value="Flow-Tube/Flow-Desktop" href="https://github.com/Flow-Tube/Flow-Desktop" />
         <LinkRow icon={<RedditIcon />} label={getString('settings_reddit')} value="r/Flow_Official" href="https://reddit.com/r/Flow_Official" />
         <LinkRow icon={<User size={16} />} label={getString('settings_creator')} value="A-EDev" href="https://github.com/A-EDev" />
       </SettingsGroup>

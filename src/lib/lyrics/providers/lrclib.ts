@@ -4,7 +4,7 @@ import { parseLyrics } from "../lyricsUtils";
 import { cleanArtist, ranked } from "../matching";
 
 const API = "https://lrclib.net/api";
-const HEADERS = { "User-Agent": "Flow Desktop (https://github.com/aedev/flow)" };
+const HEADERS = { "User-Agent": "Flow Desktop (https://github.com/Flow-Tube/Flow-Desktop)" };
 
 export interface LrcRecord {
   trackName?: string | null;

@@ -7,7 +7,7 @@ import { copyText } from "./clipboard";
 import { getString } from "./i18n/index";
 import { openExternal } from "./openExternal";
 
-export const NEW_ISSUE_URL = "https://github.com/FlowNeuro/Flow-Desktop/issues/new";
+export const NEW_ISSUE_URL = "https://github.com/Flow-Tube/Flow-Desktop/issues/new";
 export const ISSUE_TEMPLATE = "bug_report.yml";
 
 /** A browser refuses or cuts a much longer link, so the page copies the full report instead. */

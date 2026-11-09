@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Chip } from '../ui/Chip';
 
 interface CategoryChipsProps {
-  categories?: string[];
+  categories: string[];
   activeCategory?: string;
   onCategoryChange?: (category: string) => void;
   sticky?: boolean;
@@ -10,9 +10,7 @@ interface CategoryChipsProps {
 }
 
 export function CategoryChips({
-  categories = [
-    "All", "Music", "Gaming", "FlowNeuro Insights", "Live", "Podcasts", "News", "Coding", "Lo-fi"
-  ],
+  categories,
   activeCategory,
   onCategoryChange,
   sticky = true,

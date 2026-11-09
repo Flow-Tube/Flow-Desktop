@@ -36,10 +36,12 @@ function RedditIcon({ size = 16 }: { size?: number }) {
 
 function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; label: string; value: string; href?: string; onSelect?: () => void }) {
   const select = onSelect ?? (href ? () => void openExternal(href) : undefined);
+  // A row that opens something is a button, so it can be reached and opened from the keyboard.
+  const Row = select ? 'button' : 'div';
   return (
-    <div
-      onClick={select}
-      className={`flex items-center justify-between px-5 py-4 hover:bg-surface-row-hover transition-colors duration-200 ease-out group ${select ? 'cursor-pointer' : ''}`}
+    <Row
+      {...(select ? { type: 'button' as const, onClick: select } : {})}
+      className={`flex w-full items-center justify-between px-5 py-4 text-start hover:bg-surface-row-hover transition-colors duration-200 ease-out group ${select ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary' : ''}`}
     >
       <div className="flex items-center gap-3 shrink-0 pe-4">
         <span className="text-chrome-neutral-400">{icon}</span>
@@ -50,7 +52,7 @@ function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; labe
         {href && <ExternalLink size={12} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
         {onSelect && <ChevronRight size={14} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
       </div>
-    </div>
+    </Row>
   );
 }
 

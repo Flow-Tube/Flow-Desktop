@@ -217,6 +217,7 @@ export function MusicOverlay() {
           artworkPlacement={artworkPlacement}
           track={playerColors.style === "immersive" ? currentTrack : null}
           loopRunning={!fullBleedLyrics}
+          blurred={fullBleedLyrics && lyricsBackground === "player"}
         />
 
         {/* TOP BAR */}

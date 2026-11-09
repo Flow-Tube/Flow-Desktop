@@ -77,11 +77,14 @@ interface AmbientBackdropProps {
   track?: SongItem | null;
   /** False holds the animated cover on its frame, such as behind full-screen lyrics. */
   loopRunning?: boolean;
+  /** Immersive's sharp photo gives way to the blurred cover, so text drawn over it stays readable. */
+  blurred?: boolean;
 }
 
-export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkPlacement = "top", track = null, loopRunning = true }: AmbientBackdropProps) {
-  const artworkOpacity = ARTWORK_OPACITY[style];
-  const wash = washFor(style);
+export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkPlacement = "top", track = null, loopRunning = true, blurred = false }: AmbientBackdropProps) {
+  const shown: PlayerBackgroundStyle = blurred && style === "immersive" ? "blur" : style;
+  const artworkOpacity = ARTWORK_OPACITY[shown];
+  const wash = washFor(shown);
 
   return (
     <div className={`${EASE} pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[var(--player-ground)]`}>
@@ -95,7 +98,7 @@ export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkPlac
       )}
       {/* The cover crossfades to its new place as the side pane opens or closes. */}
       <AnimatePresence initial={false}>
-        {style === "immersive" && imageSrc && (
+        {shown === "immersive" && imageSrc && (
           <motion.div
             key={artworkPlacement}
             initial={{ opacity: 0 }}

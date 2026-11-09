@@ -55,6 +55,7 @@ pub mod read_budget;
 pub mod recovery;
 pub mod recovery_flow;
 pub mod recovery_notice;
+pub mod restore_removal;
 pub mod roster;
 pub mod rotation;
 pub mod sealed;

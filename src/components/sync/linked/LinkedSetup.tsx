@@ -10,6 +10,7 @@ import { TextInput } from "../../ui/TextInput";
 import { Card, Field } from "./Card";
 import { CodeEntry } from "./CodeEntry";
 import { CreateGroup } from "./CreateGroup";
+import { RestoreChoice } from "./RestoreChoice";
 import { WebdavLoginFields } from "./WebdavLoginFields";
 
 /** Joins a server group with its address and admin token instead of a code. */
@@ -74,13 +75,16 @@ function JoinGroup() {
 }
 
 function RestoreGroup() {
-  const { restore, busy } = useLinkedDevicesStore();
+  const { previewRestore, restore, restoreDevices, busy } = useLinkedDevicesStore();
   const [place, setPlace] = useState<"server" | "webdav">("server");
   const [url, setUrl] = useState("");
   const [words, setWords] = useState("");
   const [login, setLogin] = useState<WebdavLogin>({ user: "", password: "" });
   const onWebdav = place === "webdav";
   const ready = url.trim() && words.trim() && (!onWebdav || (login.user.trim() && login.password));
+  if (restoreDevices) {
+    return <RestoreChoice devices={restoreDevices} onRestore={(kept) => void restore(url, words, onWebdav ? login : undefined, kept)} />;
+  }
   return (
     <Card title={getString("linked_restore_title")} subtitle={getString("linked_restore_subtitle")} className="col-span-12">
       <SegmentedControl<"server" | "webdav">
@@ -114,9 +118,9 @@ function RestoreGroup() {
         variant="tonal"
         className="self-start"
         disabled={busy || !ready}
-        onClick={() => void restore(url, words, onWebdav ? login : undefined)}
+        onClick={() => void previewRestore(url, words, onWebdav ? login : undefined)}
       >
-        {getString("linked_restore")}
+        {getString("linked_restore_next")}
       </Button>
     </Card>
   );

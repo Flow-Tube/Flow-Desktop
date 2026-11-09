@@ -40,6 +40,7 @@ SYNC
 - A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
 - Linked devices accept a synced object's data only in the one form every Flow app writes, so two devices can't read different data from the same object.
 - A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
+- Linked devices refuse a device list entry whose sealed device name isn't in the one form every Flow app writes.
 - Joining a group over the local network now refuses a malformed welcome from the other device.
 - Linked devices: Replace recovery words gives your group a new recovery key from any linked device. The old words stop working, and your devices move to a new encryption key.
 - The Sync page now opens on Linked devices, which keep your devices in sync all the time. The one-time transfer to a nearby device moves below them, and Linked devices stay on screen while a transfer runs.

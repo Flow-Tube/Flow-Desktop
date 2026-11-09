@@ -155,6 +155,14 @@ fn b64<const N: usize>(value: &str) -> Option<[u8; N]> {
         .map(|bytes| array(&bytes))
 }
 
+/// Base64url with nothing else in it. Past that, `meta` is opaque until its device opens it.
+fn is_opaque_b64(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+}
+
 fn well_formed(entry: &Entry) -> bool {
     let dids = |list: &[String]| !list.is_empty() && list.iter().all(|d| is_hex(d, 16));
     entry.v == 2
@@ -178,10 +186,9 @@ fn well_formed(entry: &Entry) -> bool {
             .epoch
             .as_ref()
             .is_none_or(|e| b64::<32>(&e.kc).is_some() && dids(&e.to))
-        && entry
-            .meta
-            .as_ref()
-            .is_none_or(|m| m.iter().all(|(d, v)| is_hex(d, 16) && !v.is_empty()))
+        && entry.meta.as_ref().is_none_or(|m| {
+            !m.is_empty() && m.iter().all(|(d, v)| is_hex(d, 16) && is_opaque_b64(v))
+        })
         && entry
             .sigs
             .iter()
@@ -376,6 +383,10 @@ fn check_group_id(entry: &Entry) -> Result<()> {
 
 /// Applies one entry to the state before it, or says why it is not valid.
 pub fn apply_entry(state: Option<&RosterState>, entry: &Entry) -> Result<RosterState> {
+    // A LAN welcome's entries arrive without `parse_entry`, and would then fail it when read back.
+    if !well_formed(entry) {
+        return Err(Error::RosterFormat);
+    }
     check_chain(state, entry)?;
     check_shape(entry)?;
     if entry.op == Op::Genesis {

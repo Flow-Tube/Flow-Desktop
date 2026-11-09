@@ -14,6 +14,7 @@ PROFILES
 - The recommendation engine's profile is now called your taste profile.
 
 SYNC
+- Restoring with your recovery key now asks which devices you still have, and signs out the rest before it syncs anything new, so a lost device can't read what comes next.
 - Your recommendations sync with Flow for Android again. Both apps now read Chinese titles the same way, folding Traditional characters into Simplified ones.
 - When something stays on each device, the sync result now says what and why. After receiving, it lists what arrived.
 - SponsorBlock's action for each segment type now syncs with your phone. Synced SponsorBlock and DeArrow switches apply without a restart.

@@ -4,7 +4,7 @@
 
 mod sync2_common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -34,11 +34,14 @@ use flow_desktop_lib::sync2::membership::{
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, log_path, roster_path, wrap_path};
 use flow_desktop_lib::sync2::payload::encode_payload;
 use flow_desktop_lib::sync2::pipe::listen_on;
+use flow_desktop_lib::sync2::recovery_flow::restore;
 use flow_desktop_lib::sync2::roster::{Op, Role, entry_hash};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::StoreError;
 use flow_desktop_lib::sync2::setup::{create_webdav_group, restore_webdav_group};
-use flow_desktop_lib::sync2::state::{StoreKind, load_group, streams};
+use flow_desktop_lib::sync2::state::{
+    GroupRecord, StoreKind, add_roster_entries, load_group, save_group, streams,
+};
 use flow_desktop_lib::sync2::store::Store;
 use flow_desktop_lib::sync2::store_login::{login_due, login_waiting};
 use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
@@ -362,21 +365,30 @@ async fn a_group_in_a_folder_is_restored_with_its_recovery_words() {
     let pool_c = empty_pool().await;
     let store_c = store_for(&url, &c.did).await;
     let meta = named("C");
-    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta).await;
+    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta, &[]).await;
     assert!(matches!(wrong, Err(EngineError::WrongWords)));
-    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta)
+    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta, &[])
         .await
         .unwrap();
     assert_ne!(next, words);
 
     let record = load_group(&pool_c).await.unwrap().unwrap();
     assert_eq!(record.kind, StoreKind::WebDav);
+    assert_eq!(record.restore_kept(), Some(BTreeSet::new()));
     let session = Session::open(&pool_c, store_for(&url, &c.did).await, &c)
         .await
         .unwrap();
     assert!(session.roster().members.contains_key(&hex::encode(c.did)));
+    assert!(
+        !session.roster().members.contains_key(&hex::encode(a.did)),
+        "a device not kept is signed out over WebDAV too"
+    );
+    assert_eq!(
+        load_group(&pool_c).await.unwrap().unwrap().restore_kept,
+        None
+    );
     let other = empty_pool().await;
-    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta).await;
+    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta, &[]).await;
     assert!(matches!(used, Err(EngineError::RecoveryUsed)));
 }
 
@@ -928,6 +940,44 @@ async fn an_object_past_the_size_limit_stops_only_its_own_log() {
     b.finish(&pool_b, pulled).await.unwrap();
     let read = streams(&pool_b).await.unwrap();
     assert_eq!(read[&sender].seq, a.record().own_seq.unsigned_abs());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restore_ends_a_log_at_an_object_past_the_size_limit() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    let pool_a = device_pool(&g).await;
+    let mut a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    too_large_at_the_end(&url, &g.a, a.record().own_seq).await;
+
+    let device = member_secrets(random_bytes(), random_bytes());
+    let store = store_for(&url, &device.did).await;
+    let restored = restore(&store, &store, &g.recovery, &device, &named("New"))
+        .await
+        .unwrap();
+    let pool = empty_pool().await;
+    add_roster_entries(&pool, &restored.entries).await.unwrap();
+    let record = GroupRecord::on_webdav(hex::encode(g.group), url.clone(), String::new())
+        .restored_keeping(&[]);
+    save_group(&pool, &record).await.unwrap();
+    Session::open(&pool, store_for(&url, &device.did).await, &device)
+        .await
+        .unwrap();
+
+    let roster = store.roster_after(-1).await.unwrap();
+    let cut = roster.last().unwrap().cut.clone().unwrap();
+    assert_eq!(
+        cut[&hex::encode(g.a.did)].seq,
+        a.record().own_seq.unsigned_abs()
+    );
+    assert_eq!(load_group(&pool).await.unwrap().unwrap().restore_kept, None);
 }
 
 #[tokio::test(flavor = "multi_thread")]

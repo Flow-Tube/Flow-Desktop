@@ -104,6 +104,10 @@ impl<S> HybridStore<S> {
 }
 
 impl<S: Store + Sync> Store for HybridStore<S> {
+    async fn store_answers(&self) -> Result<()> {
+        self.store.roster_after(0).await.map(|_| ())
+    }
+
     async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
         match self.store.roster_after(after).await {
             Ok(entries) => {

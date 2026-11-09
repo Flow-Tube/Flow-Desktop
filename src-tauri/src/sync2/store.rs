@@ -36,6 +36,10 @@ pub trait Store {
     fn is_linear(&self) -> bool {
         true
     }
+    /// Fails while the store itself is out of reach, even if held copies could answer for it.
+    fn store_answers(&self) -> impl Future<Output = Result<()>> + Send {
+        std::future::ready(Ok(()))
+    }
     /// The entries this device chose between sides of a contested roster, for a store that picks
     /// a winner itself when it appends.
     fn use_pins(&self, _pins: &BTreeSet<String>) {}

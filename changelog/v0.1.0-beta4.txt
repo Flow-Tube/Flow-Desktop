@@ -86,22 +86,22 @@ MUSIC
 - Next and Previous keep the song playing until the next one starts, then blend the two, even when crossfade is off (a quarter-second blend).
 - Pause crossfade from the music player's menu until Flow restarts, without changing your settings.
 - Animated artwork: turn it on in Settings > Music and albums with motion artwork loop it over the cover in the full player.
-- Romanize on this device, in Settings > Music and the lyrics menu, adds Latin letters under lyrics in other scripts when the source has none. Japanese isn't covered yet.
+- Romanize on this device, in Settings > Lyrics and the lyrics menu, adds Latin letters under lyrics in other scripts when the source has none. Japanese isn't covered yet.
 - Song menus have Details: title, artist, album, views, likes, length and upload date. Click a line to copy it.
 - Settings > Music can hide the artwork in the full player, change the shape of the music progress bar, and make album art and cards on music pages smaller.
-- YouTube captions are now a lyrics provider, tried before YouTube's plain lyrics, so more songs get timed lines. Reorder or turn it off in Settings > Music.
+- YouTube captions are now a lyrics provider, tried before YouTube's plain lyrics, so more songs get timed lines. Reorder or turn it off in Settings > Lyrics.
 - New switches: open the full player for new songs, pause music while Flow or your computer is muted (Flow only on Linux), and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
 - The Taste tab can export, import and reset your music profile on its own, without touching your video profile.
 - Lyrics appear much faster: sources are asked side by side and the search stops after 9 seconds. Saved line-synced lyrics show at once, and word sync is looked for once a week.
 - Songs use YouTube Music's own timed lyrics first, and two more sources, NetEase and AMLL, help when the others have nothing. The next song's lyrics load ahead of time.
 - Songs with no lyrics are remembered for a week instead of asking every source on each play, and lyrics you pick or edit by hand stay until you press Refresh.
-- Romanization only, in the lyrics menu and Settings > Music, replaces the original script with Latin letters.
+- Romanization only, in the lyrics menu and Settings > Lyrics, replaces the original script with Latin letters.
 - Lyrics for songs with several artists are matched against every credited artist, and LrcLib, SimpMusic and KuGou no longer return lyrics for a different song or a much longer upload.
 - The lyrics timing you set is kept for each song, through Refresh, another source or an edit.
 - Line-synced lyrics show the dots during long instrumental breaks, including solos the lyrics leave unmarked, and the lyrics wait on the next line instead of jumping back to the top.
 - The glow on long held notes in word-synced lyrics rises and fades smoothly instead of in visible steps.
-- Fit lyrics to music videos, in Settings > Music, uses SponsorBlock to move lyrics past a music video's intro, skits and other parts with no music. It is off by default, and only a short part of a hash of the video id is sent.
-- Lyrics can show on Colorful or Moving backgrounds made from the song's cover, full screen and in the pane beside the song, from the lyrics menu or Settings > Music. Moving isn't offered on Linux.
+- Fit lyrics to music videos, in Settings > Lyrics, uses SponsorBlock to move lyrics past a music video's intro, skits and other parts with no music. It is off by default, and only a short part of a hash of the video id is sent.
+- Lyrics can show on Colorful or Moving backgrounds made from the song's cover, full screen and in the pane beside the song, from the lyrics menu or Settings > Lyrics. Moving isn't offered on Linux.
 - The Up next and lyrics pane in the full player now takes its colour from the song's cover. Side pane colors from the cover, in Settings > Music, turns it back to the theme's colours.
 - The buttons along the top of the full player now sit on their own tinted background as a group, so they stay visible on bright covers. A pressed button widens and squares its corners, as on Android, and switched-on buttons fill with the player's colour.
 - Full-screen lyrics over the Immersive background with the Player lyrics background now sit on a blurred cover instead of the sharp photo, so the lines stay readable.
@@ -109,7 +109,7 @@ MUSIC
 - Animated covers show for many more songs: when Apple's first answer is a release with no loop, Flow looks at the song's other releases, a music video is looked up under its song's album, and a busy service is asked again twice. Songs saved as having no animated cover are asked about again.
 - With the Immersive player background, the animated cover now plays as the background, as on Android, instead of never showing. It holds still behind full-screen lyrics.
 - Animated covers play again. Apple names a loop's video segments relative to its playlist, and through Flow's local proxy every one of them was asked for at the wrong address, so no loop ever started.
-- Lyrics in media controls, in Settings > Music, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
+- Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 
 PLAYER
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
@@ -163,18 +163,19 @@ LIBRARY
 - Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.
 - Flow Recap: open it from Library or Settings > Taste to see your month, your year or all time, for videos, music or both. It shows time per day, your clock, weekdays, a calendar, top channels, videos, artists and songs, topics, what stood out, and the time SponsorBlock saved you.
 - Play your recap as a full-window story. Each page has its own colours and its figures count up. Click a segment to jump, hold to pause, Space pauses, the arrow keys step and Esc closes. It stops when Flow is in the background and ends on a card you can save as a PNG or copy, with a way to play it again.
-- Global media keys, under Keyboard in Settings > Player, let your keyboard's play, next and previous keys control Flow while it is in the background. It is off by default, and Linux needs an X11 session.
-- Press ? to see every video and music key. The same list is in Settings > Player.
+- Global media keys, in Settings > Keyboard Shortcuts, let your keyboard's play, next and previous keys control Flow while it is in the background. It is off by default, and Linux needs an X11 session.
+- Press ? to see every video and music key. The same list is in Settings > Keyboard Shortcuts.
 
 SETTINGS
 - Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
 - The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
 - Settings has a search box. It finds a setting by its name, description or a related word, the same way Flow for Android ranks them, then opens the right tab and points out the row.
 - A new switch in Appearance, Highlight new settings, puts a dot on settings added in an update and on their tab, for as long as you choose. It is off by default.
+- Settings has new pages for Keyboard Shortcuts, Lyrics, Subscriptions, History & Privacy, Digital Wellbeing and Language & Region, so Player, Music and Content & UI are shorter.
 - Scrollbars are hidden everywhere in the app. Every list still scrolls with the wheel, trackpad, keyboard or touch.
 - Flow can follow your computer's light or dark mode, with its own theme for each mode and a choice of dark or AMOLED, under Follow system in Appearance. It is off by default.
 - Appearance has a Font setting: Inter, or your system's font.
-- Pause watch history stops saving what you watch, in Settings > Content & UI under Search and history. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
+- Pause watch history stops saving what you watch, in Settings > History & Privacy. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
 - A new setting, App language, shows Flow in any of the 33 languages Flow for Android ships, using Android's translations. Text that has no translation yet stays in English, and English stays the default. Right-to-left languages mirror the layout outside the player.
 
 LIBRARY
@@ -229,7 +230,7 @@ NOTIFICATIONS
 - Remind me on an upcoming video or premiere puts it in your notifications when it starts. A reminder missed while Flow was closed arrives at the next launch.
 - New Shorts from your subscriptions can be left out of alerts, with a Shorts switch in Settings. Several uploads since the last check now each get a notification.
 - In the notifications panel you can save a video to Watch later and undo a removal. New and Last 7 days sections join Today, Yesterday and Earlier.
-- Wellbeing, in Settings > Content: a chart of your watch and listen time over the last week, plus break and bedtime reminders. Reminders are native notifications and only arrive while Flow is running.
+- Digital Wellbeing, its own page in Settings: a chart of your watch and listen time over the last week, plus break and bedtime reminders. Reminders are native notifications and only arrive while Flow is running.
 - The tray now shows and controls videos as well as music, and has a Continue watching item for your latest unfinished video.
 - Windows Jump List and macOS Dock menu: Search, Downloads, History and Music are one click away.
 - Downloads show their progress on the taskbar or Dock icon.

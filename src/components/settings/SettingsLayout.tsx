@@ -11,6 +11,12 @@ import {
   Palette,
   Music2,
   UsersRound,
+  Keyboard,
+  MicVocal,
+  Bell,
+  ShieldCheck,
+  Hourglass,
+  Languages,
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { getString } from '../../lib/i18n/index';
@@ -37,11 +43,17 @@ const categories: CategoryDef[] = [
   { id: 'appearance', icon: <Palette size={18} /> },
   { id: 'profiles', icon: <UsersRound size={18} /> },
   { id: 'player', icon: <PlayCircle size={18} /> },
+  { id: 'keyboard', icon: <Keyboard size={18} /> },
   { id: 'music', icon: <Music2 size={18} /> },
+  { id: 'lyrics', icon: <MicVocal size={18} /> },
   { id: 'content', icon: <LayoutGrid size={18} /> },
+  { id: 'subscriptions', icon: <Bell size={18} /> },
+  { id: 'privacy', icon: <ShieldCheck size={18} /> },
+  { id: 'wellbeing', icon: <Hourglass size={18} /> },
   { id: 'taste', icon: <Heart size={18} /> },
   { id: 'quality', icon: <Gauge size={18} /> },
   { id: 'network', icon: <Wifi size={18} /> },
+  { id: 'language', icon: <Languages size={18} /> },
   { id: 'downloads', icon: <Download size={18} /> },
   { id: 'data', icon: <Database size={18} /> },
   { id: 'about', icon: <Info size={18} /> },
@@ -114,8 +126,8 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
                 : 'text-chrome-neutral-400 hover:bg-surface-container-low hover:text-chrome-neutral-200'
             }`}
           >
-            {cat.icon}
-            {getString(SETTINGS_CATEGORY_LABELS[cat.id])}
+            <span className="shrink-0">{cat.icon}</span>
+            <span className="min-w-0 truncate text-start">{getString(SETTINGS_CATEGORY_LABELS[cat.id])}</span>
             {newCategories.has(cat.id) && (
               <span role="img" aria-label={getString('settings_new_badge')} className="ms-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
             )}

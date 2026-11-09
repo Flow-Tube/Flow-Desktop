@@ -207,7 +207,7 @@ export function SubscribeButton({
                 onClick={(event) => {
                   event.stopPropagation();
                   closeMenu();
-                  navigate("/settings", { state: { settingsCategory: "content" } });
+                  navigate("/settings", { state: { settingsCategory: "subscriptions" } });
                 }}
                 className="font-medium text-chrome-neutral-200 underline underline-offset-2 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
               >

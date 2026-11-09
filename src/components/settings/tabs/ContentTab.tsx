@@ -1,5 +1,3 @@
-import { appLanguageOptions } from '../../../lib/i18n/appLanguageOptions';
-import { useAppLanguage } from '../../../lib/i18n/useAppLanguage';
 import { SettingsGroup } from '../SettingsGroup';
 import { SettingItem } from '../SettingItem';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
@@ -8,24 +6,12 @@ import { useBoolPref, usePreference, useNumberPref } from '../../../lib/usePrefe
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
-import {
-  DEEP_FLOW_DURATION_OPTIONS,
-  DEEP_FLOW_NEVER_EXPIRES_HOURS,
-  getDeepFlowDurationLabel,
-  setDeepFlowEnabled,
-} from '../../../lib/deepFlow';
-import { useAppSettingsStore } from '../../../store/useAppSettingsStore';
-import { REGION_OPTIONS } from '../../../lib/regionOptions';
-import { CONTENT_LANGUAGE_OPTIONS } from '../../../lib/contentLanguages';
 import { GRID_COLUMN_OPTIONS, GRID_COLUMNS_DEFAULT } from '../../../lib/useGridColumns';
 import { useHideWatched } from '../../../lib/useWatchedFilter';
 import { BlockedKeywordsPanel } from '../BlockedKeywordsPanel';
 import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
-import { SearchHistoryGroup } from '../SearchHistoryGroup';
-import { WellbeingSection } from '../WellbeingSection';
 
 export function ContentTab() {
-  const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
@@ -49,8 +35,6 @@ export function ContentTab() {
   const [watchedThreshold, setWatchedThreshold] = usePreference(SETTINGS.WATCHED_THRESHOLD);
   const [shortsContent, setShortsContent] = useBoolPref(SETTINGS.SHORTS_CONTENT_ENABLED, true);
   const [channelShortsTab, setChannelShortsTab] = useBoolPref(SETTINGS.CHANNEL_SHORTS_TAB_WHEN_HIDDEN, false);
-  const [subsCollaborations, setSubsCollaborations] = useBoolPref(SETTINGS.SUBSCRIPTION_COLLABORATIONS_ENABLED, true);
-  const [subsCheckedCount, setSubsCheckedCount] = useBoolPref(SETTINGS.SUBS_SHOW_CHECKED_VIDEO_COUNT, true);
   const [hideSeen, setHideSeen] = useBoolPref(SETTINGS.HIDE_SEEN_VIDEOS, false);
   const [removeWatched, setRemoveWatched] = useBoolPref(SETTINGS.REMOVE_WATCHED_FROM_WATCH_LATER, false);
   const [blockedMode, setBlockedMode] = usePreference(SETTINGS.BLOCKED_CONTENT_MODE, 'blur');
@@ -61,63 +45,10 @@ export function ContentTab() {
   const [shortsAutoScrollSeconds, setShortsAutoScrollSeconds] = useNumberPref(SETTINGS.SHORTS_AUTO_SCROLL_SECONDS, 10);
   const [musicNav, setMusicNav] = useBoolPref(SETTINGS.MUSIC_NAVIGATION_ENABLED, true);
   const [categoriesTab, setCategoriesTab] = useBoolPref(SETTINGS.CATEGORIES_NAV_TAB_ENABLED, false);
-  const [subsRefresh, setSubsRefresh] = useBoolPref(SETTINGS.SUBSCRIPTION_REFRESH_ON_STARTUP, false);
-  const [subsShowVideos, setSubsShowVideos] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS, true);
-  const [subsShowShorts, setSubsShowShorts] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_SHORTS, true);
-  const [subsShowLive, setSubsShowLive] = useBoolPref(SETTINGS.SUBSCRIPTION_SHOW_LIVE, true);
   const [homeMaxVideoAge, setHomeMaxVideoAge] = usePreference(SETTINGS.HOME_MAX_VIDEO_AGE, '0');
-  const [subsHideUnplayable, setSubsHideUnplayable] = useBoolPref(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS, false);
-  const [notificationsEnabled, setNotificationsEnabled] = useBoolPref(SETTINGS.NOTIFICATIONS_ENABLED, true);
-  const [notifShorts, setNotifShorts] = useBoolPref(SETTINGS.NOTIF_SHORTS_ENABLED, true);
-  const [notificationInterval, setNotificationInterval] = usePreference(SETTINGS.NOTIFICATION_CHECK_INTERVAL, '360');
-  const [regionPicker, setRegionPicker] = useBoolPref(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE, true);
-  const [trendingRegion, setTrendingRegion] = usePreference(SETTINGS.TRENDING_REGION, 'US');
-  const [appLanguage, setAppLanguage] = useAppLanguage();
-  const [contentLanguage, setContentLanguage] = usePreference(SETTINGS.CONTENT_LANGUAGE, '');
-  const [originalTitles, setOriginalTitles] = useBoolPref(SETTINGS.ORIGINAL_TITLES, false);
-  const [deepFlowExpireHours, setDeepFlowExpireHours] = usePreference(SETTINGS.DEEP_FLOW_EXPIRE_HOURS, '4');
-  const [deepFlowSaveHistory, setDeepFlowSaveHistory] = useBoolPref(SETTINGS.DEEP_FLOW_SAVE_HISTORY, false);
-
-  const deepFlowHours = Number(deepFlowExpireHours);
-  const deepFlowDurationLabel = getDeepFlowDurationLabel(deepFlowHours);
-  const deepFlowDescription = deepFlowActive
-    ? deepFlowHours === DEEP_FLOW_NEVER_EXPIRES_HOURS
-      ? getString('deep_flow_active_until_disabled')
-      : getString('deep_flow_learning_paused')
-    : getString('deep_flow_mode_subtitle');
 
   return (
     <div className="space-y-6 pb-8">
-      <SettingsGroup title={getString('deep_flow_mode_title')}>
-        <SettingItem title={getString('deep_flow_mode_title')} description={deepFlowDescription} disabled={isSettingDisabledUntilWired(SETTINGS.DEEP_FLOW_ACTIVE)}>
-          <ToggleSwitch
-            checked={deepFlowActive}
-            onChange={(enabled) => {
-              void setDeepFlowEnabled(enabled);
-            }}
-            disabled={isSettingDisabledUntilWired(SETTINGS.DEEP_FLOW_ACTIVE)}
-          />
-        </SettingItem>
-        <SettingItem
-          title={getString('deep_flow_expire_duration_title')}
-          description={getString('deep_flow_expire_duration_subtitle', deepFlowDurationLabel)}
-          disabled={isSettingDisabledUntilWired(SETTINGS.DEEP_FLOW_EXPIRE_HOURS)}
-        >
-          <Select
-            value={deepFlowExpireHours}
-            onChange={setDeepFlowExpireHours}
-            disabled={isSettingDisabledUntilWired(SETTINGS.DEEP_FLOW_EXPIRE_HOURS)}
-            options={DEEP_FLOW_DURATION_OPTIONS.map((hours) => ({
-              value: String(hours),
-              label: getDeepFlowDurationLabel(hours),
-            }))}
-          />
-        </SettingItem>
-        <SettingItem title={getString('deep_flow_save_history_title')} description={getString('deep_flow_save_history_subtitle')} disabled={isSettingDisabledUntilWired(SETTINGS.DEEP_FLOW_SAVE_HISTORY)}>
-          <ToggleSwitch checked={deepFlowSaveHistory} onChange={setDeepFlowSaveHistory} disabled={isSettingDisabledUntilWired(SETTINGS.DEEP_FLOW_SAVE_HISTORY)} />
-        </SettingItem>
-      </SettingsGroup>
-
       <SettingsGroup title={getString('settings_group_layout')}>
         <SettingItem
           title={getString('settings_grid_columns')}
@@ -209,8 +140,6 @@ export function ContentTab() {
         )}
       </SettingsGroup>
 
-      <SearchHistoryGroup />
-
       <LibrarySectionsGroup />
 
       <SettingsGroup title={getString('settings_group_nav_tabs')}>
@@ -220,56 +149,6 @@ export function ContentTab() {
         <SettingItem title={getString('settings_categories_tab')} description={getString('settings_categories_tab_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)}><ToggleSwitch checked={categoriesTab} onChange={setCategoriesTab} disabled={isSettingDisabledUntilWired(SETTINGS.CATEGORIES_NAV_TAB_ENABLED)} /></SettingItem>
       </SettingsGroup>
 
-      <SettingsGroup title={getString('settings_group_subscriptions')}>
-        <SettingItem title={getString('settings_refresh_startup')} description={getString('settings_refresh_startup_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_REFRESH_ON_STARTUP)}><ToggleSwitch checked={subsRefresh} onChange={setSubsRefresh} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_REFRESH_ON_STARTUP)} /></SettingItem>
-        <SettingItem title={getString('settings_show_videos')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS)}><ToggleSwitch checked={subsShowVideos} onChange={setSubsShowVideos} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_VIDEOS)} /></SettingItem>
-        <SettingItem title={getString('settings_show_shorts')} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_SHORTS)}><ToggleSwitch checked={subsShowShorts} onChange={setSubsShowShorts} disabled={!shortsContent || isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_SHORTS)} /></SettingItem>
-        <SettingItem title={getString('settings_show_live')} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_LIVE)}><ToggleSwitch checked={subsShowLive} onChange={setSubsShowLive} disabled={isSettingDisabledUntilWired(SETTINGS.SUBSCRIPTION_SHOW_LIVE)} /></SettingItem>
-        <SettingItem title={getString('settings_hide_unplayable')} description={getString('settings_hide_unplayable_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS)}><ToggleSwitch checked={subsHideUnplayable} onChange={setSubsHideUnplayable} disabled={isSettingDisabledUntilWired(SETTINGS.HIDE_UNPLAYABLE_SUBSCRIPTIONS)} /></SettingItem>
-        <SettingItem title={getString('settings_subs_collaborations')} description={getString('settings_subs_collaborations_desc')}><ToggleSwitch checked={subsCollaborations} onChange={setSubsCollaborations} /></SettingItem>
-        <SettingItem title={getString('settings_subs_checked_count')} description={getString('settings_subs_checked_count_desc')}><ToggleSwitch checked={subsCheckedCount} onChange={setSubsCheckedCount} /></SettingItem>
-      </SettingsGroup>
-
-      <SettingsGroup title={getString('settings_group_notifications')}>
-        <SettingItem title={getString('settings_notifications_enabled')} description={getString('settings_notifications_enabled_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.NOTIFICATIONS_ENABLED)}>
-          <ToggleSwitch checked={notificationsEnabled} onChange={setNotificationsEnabled} disabled={isSettingDisabledUntilWired(SETTINGS.NOTIFICATIONS_ENABLED)} />
-        </SettingItem>
-        <SettingItem title={getString('settings_notif_shorts')} description={getString('settings_notif_shorts_desc')} disabled={!notificationsEnabled || !shortsContent}><ToggleSwitch checked={notifShorts} onChange={setNotifShorts} disabled={!notificationsEnabled || !shortsContent} /></SettingItem>
-        <SettingItem title={getString('settings_notification_interval')} description={getString('settings_notification_interval_desc')} disabled={!notificationsEnabled || isSettingDisabledUntilWired(SETTINGS.NOTIFICATION_CHECK_INTERVAL)}>
-          <Select
-            value={notificationInterval}
-            onChange={setNotificationInterval}
-            disabled={!notificationsEnabled || isSettingDisabledUntilWired(SETTINGS.NOTIFICATION_CHECK_INTERVAL)}
-            options={[
-              { value: '15', label: getString('settings_notification_interval_15m') },
-              { value: '30', label: getString('settings_notification_interval_30m') },
-              { value: '60', label: getString('settings_notification_interval_1h') },
-              { value: '180', label: getString('settings_notification_interval_3h') },
-              { value: '360', label: getString('settings_notification_interval_6h') },
-              { value: '720', label: getString('settings_notification_interval_12h') },
-              { value: '1440', label: getString('settings_notification_interval_24h') },
-            ]}
-          />
-        </SettingItem>
-      </SettingsGroup>
-
-      <WellbeingSection />
-
-      <SettingsGroup title={getString('settings_group_region')}>
-        <SettingItem title={getString('settings_app_language')} description={getString('settings_app_language_desc')}>
-          <Select value={appLanguage} onChange={setAppLanguage} options={appLanguageOptions()} />
-        </SettingItem>
-        <SettingItem title={getString('settings_region_picker')} description={getString('settings_region_picker_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)}><ToggleSwitch checked={regionPicker} onChange={setRegionPicker} disabled={isSettingDisabledUntilWired(SETTINGS.SHOW_REGION_PICKER_IN_EXPLORE)} /></SettingItem>
-        <SettingItem title={getString('settings_trending_region')} description={getString('settings_trending_region_desc')} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)}><Select value={trendingRegion} onChange={setTrendingRegion} options={REGION_OPTIONS} disabled={isSettingDisabledUntilWired(SETTINGS.TRENDING_REGION)} /></SettingItem>
-        <SettingItem title={getString('settings_content_language')} description={getString('settings_content_language_desc')}>
-          <Select
-            value={contentLanguage}
-            onChange={setContentLanguage}
-            options={[{ value: '', label: getString('settings_content_language_default') }, ...CONTENT_LANGUAGE_OPTIONS]}
-          />
-        </SettingItem>
-        <SettingItem title={getString('settings_original_titles')} description={getString('settings_original_titles_desc')}><ToggleSwitch checked={originalTitles} onChange={setOriginalTitles} /></SettingItem>
-      </SettingsGroup>
     </div>
   );
 }

@@ -5,11 +5,17 @@ export type SettingsCategory =
   | "appearance"
   | "profiles"
   | "player"
+  | "keyboard"
   | "music"
+  | "lyrics"
   | "content"
+  | "subscriptions"
+  | "privacy"
+  | "wellbeing"
   | "taste"
   | "quality"
   | "network"
+  | "language"
   | "downloads"
   | "data"
   | "about";
@@ -18,11 +24,17 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategory, StringKey> = {
   appearance: "settings_appearance",
   profiles: "settings_profiles",
   player: "settings_player",
+  keyboard: "settings_keyboard_shortcuts",
   music: "settings_music",
+  lyrics: "music_lyrics",
   content: "settings_content_ui",
+  subscriptions: "settings_subscriptions_notifications",
+  privacy: "settings_history_privacy",
+  wellbeing: "settings_digital_wellbeing",
   taste: "settings_taste",
   quality: "settings_quality_codecs",
   network: "settings_network_buffer",
+  language: "settings_language_region",
   downloads: "settings_downloads",
   data: "settings_data_backup",
   about: "settings_about",
@@ -110,6 +122,8 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_button_play_on", summary: "settings_button_play_on_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_theater", summary: "settings_button_theater_desc", keywords: ["player bar", "hide"] },
     { title: "settings_button_fullscreen", summary: "settings_button_fullscreen_desc", keywords: ["player bar", "hide"] },
+  ]),
+  ...rows("keyboard", [
     { title: "settings_global_media_keys", summary: "settings_global_media_keys_desc", keywords: ["hotkey", "shortcut", "keyboard", "media"] },
   ]),
   ...rows("music", [
@@ -122,19 +136,6 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_crossfade_skip", summary: "settings_crossfade_skip_desc", keywords: ["crossfade"] },
     { title: "settings_crossfade_albums", summary: "settings_crossfade_albums_desc", keywords: ["gapless"] },
     { title: "settings_crossfade_curve", keywords: ["fade", "crossfade"] },
-    { title: "lyrics_alignment" },
-    { title: "lyrics_background", summary: "lyrics_background_summary", keywords: ["colorful", "moving", "cover", "wallpaper"] },
-    { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
-    { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
-    { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },
-    { title: "lyrics_romanization_only", summary: "lyrics_romanization_only_summary", keywords: ["transliterate", "latin"] },
-    { title: "lyrics_keep_screen_on", summary: "lyrics_keep_screen_on_summary", keywords: ["awake", "sleep", "display"] },
-    { title: "lyrics_in_media_controls", summary: "lyrics_in_media_controls_summary", keywords: ["lock screen", "now playing", "control center", "notification"] },
-    { title: "lyrics_in_media_controls_timing", summary: "lyrics_in_media_controls_timing_summary" },
-    { title: "lyrics_sponsorblock_timing", summary: "lyrics_sponsorblock_timing_summary", keywords: ["sponsorblock", "music video", "offset"] },
-    { title: "lyrics_blur_other_lines", summary: "lyrics_blur_other_lines_summary" },
-    { title: "settings_lyrics_providers" },
-    { title: "settings_lyrics_cache" },
     { title: "settings_music_player_background", summary: "settings_music_player_background_desc" },
     { title: "music_side_pane_cover_colors", summary: "music_side_pane_cover_colors_summary", keywords: ["up next", "queue", "lyrics", "panel"] },
     { title: "settings_animated_artwork", summary: "settings_animated_artwork_desc", keywords: ["motion", "video", "cover"] },
@@ -157,10 +158,22 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     ...MUSIC_HOME_SHELVES.map((shelf) => ({ title: shelf.title, keywords: ["music home", "shelf", "section"] })),
     { title: "scrobbling_import", summary: "scrobbling_import_summary", keywords: ["last.fm", "libre.fm", "listenbrainz"] },
   ]),
+  ...rows("lyrics", [
+    { title: "lyrics_alignment" },
+    { title: "lyrics_background", summary: "lyrics_background_summary", keywords: ["colorful", "moving", "cover", "wallpaper"] },
+    { title: "lyrics_show_translation", summary: "lyrics_show_translation_summary" },
+    { title: "lyrics_show_romanization", summary: "lyrics_show_romanization_summary" },
+    { title: "lyrics_auto_romanize", summary: "lyrics_auto_romanize_summary", keywords: ["transliterate", "latin"] },
+    { title: "lyrics_romanization_only", summary: "lyrics_romanization_only_summary", keywords: ["transliterate", "latin"] },
+    { title: "lyrics_keep_screen_on", summary: "lyrics_keep_screen_on_summary", keywords: ["awake", "sleep", "display"] },
+    { title: "lyrics_in_media_controls", summary: "lyrics_in_media_controls_summary", keywords: ["lock screen", "now playing", "control center", "notification"] },
+    { title: "lyrics_in_media_controls_timing", summary: "lyrics_in_media_controls_timing_summary" },
+    { title: "lyrics_sponsorblock_timing", summary: "lyrics_sponsorblock_timing_summary", keywords: ["sponsorblock", "music video", "offset"] },
+    { title: "lyrics_blur_other_lines", summary: "lyrics_blur_other_lines_summary" },
+    { title: "settings_lyrics_providers" },
+    { title: "settings_lyrics_cache" },
+  ]),
   ...rows("content", [
-    { title: "deep_flow_mode_title" },
-    { title: "deep_flow_expire_duration_title" },
-    { title: "deep_flow_save_history_title", summary: "deep_flow_save_history_subtitle" },
     { title: "settings_grid_columns" },
     { title: "settings_video_title_lines", summary: "settings_video_title_lines_desc" },
     { title: "settings_home_feed", summary: "settings_home_feed_desc" },
@@ -189,18 +202,13 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_disable_shorts_player", summary: "settings_disable_shorts_player_desc" },
     { title: "settings_shorts_playback_mode", summary: "settings_shorts_playback_mode_desc" },
     { title: "settings_shorts_auto_scroll_seconds" },
-    { title: "settings_pause_watch_history", summary: "settings_pause_watch_history_desc", keywords: ["privacy", "incognito"] },
-    { title: "settings_save_search_history", summary: "settings_save_search_history_desc", keywords: ["privacy"] },
-    { title: "settings_search_suggestions", summary: "settings_search_suggestions_desc" },
-    { title: "settings_search_history_size" },
-    { title: "settings_auto_delete_search_history", keywords: ["privacy", "retention"] },
-    { title: "settings_search_history_retention" },
-    { title: "settings_clear_search_history", summary: "settings_clear_search_history_desc" },
     { title: "settings_group_library_sections", keywords: ["library", "hide", "history", "playlists", "albums", "likes", "downloads"] },
     { title: "settings_tabs_enabled", summary: "settings_tabs_enabled_desc" },
     { title: "settings_shorts_tab" },
     { title: "settings_music_tab" },
     { title: "settings_categories_tab", summary: "settings_categories_tab_desc" },
+  ]),
+  ...rows("subscriptions", [
     { title: "settings_refresh_startup", summary: "settings_refresh_startup_desc" },
     { title: "settings_show_videos" },
     { title: "settings_show_shorts" },
@@ -211,16 +219,25 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_notifications_enabled", summary: "settings_notifications_enabled_desc" },
     { title: "settings_notif_shorts", summary: "settings_notif_shorts_desc" },
     { title: "settings_notification_interval", summary: "settings_notification_interval_desc" },
+  ]),
+  ...rows("privacy", [
+    { title: "deep_flow_mode_title" },
+    { title: "deep_flow_expire_duration_title" },
+    { title: "deep_flow_save_history_title", summary: "deep_flow_save_history_subtitle" },
+    { title: "settings_pause_watch_history", summary: "settings_pause_watch_history_desc", keywords: ["privacy", "incognito"] },
+    { title: "settings_save_search_history", summary: "settings_save_search_history_desc", keywords: ["privacy"] },
+    { title: "settings_search_suggestions", summary: "settings_search_suggestions_desc" },
+    { title: "settings_search_history_size" },
+    { title: "settings_auto_delete_search_history", keywords: ["privacy", "retention"] },
+    { title: "settings_search_history_retention" },
+    { title: "settings_clear_search_history", summary: "settings_clear_search_history_desc" },
+  ]),
+  ...rows("wellbeing", [
     { title: "bedtime_reminder_title", summary: "bedtime_reminder_subtitle", keywords: ["sleep", "wellbeing", "screen time"] },
     { title: "bedtime_start_title", summary: "bedtime_notification_note" },
     { title: "bedtime_end_title" },
     { title: "break_reminder_title", summary: "break_reminder_subtitle", keywords: ["wellbeing", "screen time", "usage"] },
     { title: "frequency_dialog_title", summary: "frequency_description" },
-    { title: "settings_region_picker", summary: "settings_region_picker_desc" },
-    { title: "settings_trending_region", summary: "settings_trending_region_desc", keywords: ["region", "location", "gl"] },
-    { title: "settings_app_language", summary: "settings_app_language_desc", keywords: ["translation", "locale"] },
-    { title: "settings_content_language", summary: "settings_content_language_desc" },
-    { title: "settings_original_titles", summary: "settings_original_titles_desc" },
   ]),
   ...rows("taste", [
     { title: "recap_title", summary: "recap_summary", keywords: ["wrapped", "stats", "statistics", "year in review", "watch time", "listening time", "most watched", "top artists"] },
@@ -260,6 +277,13 @@ export const SETTINGS_INDEX: SettingEntry[] = [
     { title: "settings_proxy_port" },
     { title: "settings_proxy_username", summary: "settings_proxy_username_desc" },
     { title: "settings_proxy_password" },
+  ]),
+  ...rows("language", [
+    { title: "settings_region_picker", summary: "settings_region_picker_desc" },
+    { title: "settings_trending_region", summary: "settings_trending_region_desc", keywords: ["region", "location", "gl"] },
+    { title: "settings_app_language", summary: "settings_app_language_desc", keywords: ["translation", "locale"] },
+    { title: "settings_content_language", summary: "settings_content_language_desc" },
+    { title: "settings_original_titles", summary: "settings_original_titles_desc" },
   ]),
   ...rows("downloads", [
     { title: "settings_download_quality", summary: "settings_download_quality_desc" },

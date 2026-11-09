@@ -3,13 +3,14 @@ use x25519_dalek::{PublicKey, StaticSecret};
 
 use super::{Error, Result};
 
-/// Rejects non-canonical encodings and small-order keys (spec/crypto.md, Ed25519 checks).
+/// Accepts only a canonical encoding of a point of order exactly L (spec/crypto.md, Ed25519
+/// checks). With such a key, `verify_strict` can only accept an `R` of order L too.
 pub fn is_valid_signing_key(public_key: &[u8]) -> bool {
     <[u8; 32]>::try_from(public_key)
         .ok()
         .filter(canonical_y)
         .and_then(|bytes| VerifyingKey::from_bytes(&bytes).ok())
-        .is_some_and(|key| !key.is_weak())
+        .is_some_and(|key| !key.is_weak() && key.to_edwards().is_torsion_free())
 }
 
 /// `VerifyingKey::from_bytes` accepts y ≥ p, so the encoding is checked directly.

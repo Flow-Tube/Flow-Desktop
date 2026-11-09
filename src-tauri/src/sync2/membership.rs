@@ -8,6 +8,7 @@ use sqlx::SqlitePool;
 
 use super::engine::{Result, Session};
 use super::entries::{Draft, build_entry, epoch_draft, member_subject};
+use super::envelope::StreamPosition;
 use super::epoch::seal_chain;
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
@@ -113,8 +114,17 @@ pub async fn remove_devices<S: Store>(
     device: &MemberSecrets,
     removed: &[String],
 ) -> Result<Option<String>> {
+    remove_at(session, device, removed, &streams(pool).await?).await
+}
+
+/// [`remove_devices`], ending each removed device's log at `positions`.
+pub(super) async fn remove_at<S: Store>(
+    session: &Session<'_, S>,
+    device: &MemberSecrets,
+    removed: &[String],
+    positions: &BTreeMap<String, StreamPosition>,
+) -> Result<Option<String>> {
     let state = session.roster();
-    let positions = streams(pool).await?;
     let cut: BTreeMap<String, Cut> = removed
         .iter()
         .filter_map(|did| {

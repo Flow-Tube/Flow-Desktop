@@ -183,7 +183,7 @@ export const useLyricsStore = create<LyricsStore>((set, get) => {
     if (!videoId || entries.length === 0) return;
     lookup?.abort();
     lookup = null;
-    applyManualLyrics(videoId, entries);
+    applyManualLyrics(videoId, entries, providerName);
     set(viewOf({ entries, provider: providerName }));
   };
 

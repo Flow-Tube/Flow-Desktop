@@ -71,12 +71,12 @@ describe("lyrics helper", () => {
 
   it("shows saved line-synced lyrics at once while it looks for word sync, at most weekly", async () => {
     const song = request();
-    disk.set(song.videoId, JSON.stringify(lineSynced));
+    disk.set(song.videoId, JSON.stringify({ provider: "LrcLib", entries: lineSynced }));
     const words = provider("Words", async () => wordSynced);
     providers.push(words);
     const shown: string[] = [];
     const result = await getLyrics(song, undefined, (answer) => shown.push(answer.provider));
-    expect(shown).toEqual(["DiskCache", "Words"]);
+    expect(shown).toEqual(["LrcLib", "Words"]);
     expect(result?.provider).toBe("Words");
 
     const quiet = request();
@@ -84,12 +84,13 @@ describe("lyrics helper", () => {
     const nothing = provider("Nothing", async () => []);
     providers.length = 0;
     providers.push(nothing);
-    expect((await getLyrics(quiet))?.provider).toBe("DiskCache");
+    // Lyrics saved before the source was kept show without one.
+    expect((await getLyrics(quiet))?.provider).toBe("");
     expect(nothing.calls).toBe(1);
     // A fresh session has nothing in memory, so only the note can spare the sources.
     const { clearMemory } = await import("./cache");
     clearMemory();
-    expect((await getLyrics(quiet))?.provider).toBe("DiskCache");
+    expect((await getLyrics(quiet))?.provider).toBe("");
     expect(nothing.calls).toBe(1);
   });
 
@@ -155,13 +156,13 @@ describe("lyrics helper", () => {
 
   it("keeps a hand pick, even when a better answer exists", async () => {
     const req = request();
-    applyManualLyrics(req.videoId, lineSynced);
+    applyManualLyrics(req.videoId, lineSynced, "LrcLib");
     const words = provider("Words", async () => wordSynced);
     providers.push(words);
     const { clearMemory } = await import("./cache");
     clearMemory();
     await new Promise((resolve) => setTimeout(resolve));
-    expect((await getLyrics(req))?.provider).toBe("DiskCache");
+    expect((await getLyrics(req))?.provider).toBe("LrcLib");
     expect(words.calls).toBe(0);
   });
 
@@ -174,7 +175,7 @@ describe("lyrics helper", () => {
     await new Promise((resolve) => setTimeout(resolve));
     const shown: string[] = [];
     const second = getLyrics(req, undefined, (answer) => shown.push(answer.provider));
-    expect(shown).toEqual(["DiskCache"]);
+    expect(shown).toEqual([""]);
     release([]);
     await Promise.all([first, second]);
   });
@@ -206,7 +207,7 @@ describe("lyrics helper", () => {
     providers.push(only);
     const req = request();
     await getLyrics(req);
-    expect((await getLyrics(req))?.provider).toBe("MemoryCache");
+    expect((await getLyrics(req))?.provider).toBe("Only");
     expect(only.calls).toBe(1);
   });
 

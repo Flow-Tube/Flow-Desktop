@@ -23,7 +23,6 @@ import { SETTINGS } from "../settings/schema";
 
 const PROVIDER_TIMEOUT_MS = 8000;
 const COOLDOWN_MS = 10 * 60 * 1000;
-const DISK_CACHE = "DiskCache";
 
 export interface LyricsCandidate {
   providerName: string;
@@ -103,8 +102,8 @@ function enabledProviders(): LyricsProvider[] {
 }
 
 function remember(videoId: string, result: LyricsResult): void {
-  cache.setMemory(videoId, result.entries);
-  cache.setDisk(videoId, result.entries);
+  cache.setMemory(videoId, result.entries, result.provider);
+  cache.setDisk(videoId, result.entries, result.provider);
   markUpgradeLookDone(videoId);
 }
 
@@ -154,8 +153,9 @@ export function getLyrics(
   return run.finally(stopListening);
 }
 
-function savedLyrics(entries: LyricsEntry[]): LyricsResult {
-  return { entries, provider: DISK_CACHE };
+/** Lyrics from the cache, under the source they came from; with none known, the source line stays hidden. */
+function savedLyrics(entries: LyricsEntry[], provider: string | null): LyricsResult {
+  return { entries, provider: provider ?? "" };
 }
 
 async function askProvider(
@@ -187,34 +187,34 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   const { videoId, durationSec } = request;
 
   const mem = cache.getMemory(videoId);
-  if (mem && mem.length > 0) {
-    const norm = normalizeEntries(mem);
-    if (!norm.some((e) => e.words?.length) || hasWordSync(norm)) return { entries: norm, provider: "MemoryCache" };
+  if (mem && mem.entries.length > 0) {
+    const norm = normalizeEntries(mem.entries);
+    if (!norm.some((e) => e.words?.length) || hasWordSync(norm)) return savedLyrics(norm, mem.provider);
   }
 
   // Saved word sync is final, and so is a hand pick. Line or plain lyrics show at once, and look for
   // an upgrade at most once a week.
   let savedCopy: LyricsAnswer | null = null;
   const disk = await cache.getDisk(videoId);
-  if (!disk || disk.length === 0) {
+  if (!disk || disk.entries.length === 0) {
     clearManual(videoId);
   } else {
-    const norm = normalizeEntries(sorted(disk));
+    const norm = normalizeEntries(sorted(disk.entries));
     if (isManual(videoId)) {
-      cache.setMemory(videoId, norm);
-      return savedLyrics(norm);
+      cache.setMemory(videoId, norm, disk.provider);
+      return savedLyrics(norm, disk.provider);
     }
     // A notice saved before KuGou's was read as no lyrics would otherwise come back as the fallback.
     if (isInstrumentalNotice(norm) || !hasReasonableTimestamps(norm, durationSec)) {
       cache.evict(videoId);
     } else if (hasWordSync(norm)) {
-      cache.setMemory(videoId, norm);
-      return savedLyrics(norm);
+      cache.setMemory(videoId, norm, disk.provider);
+      return savedLyrics(norm, disk.provider);
     } else {
       const copy = stripWordTimings(norm);
-      cache.setMemory(videoId, copy);
-      if (!upgradeIsDue(videoId)) return savedLyrics(copy);
-      savedCopy = { kind: entriesAreSynced(copy) ? "line" : "plain", entries: copy, provider: DISK_CACHE };
+      cache.setMemory(videoId, copy, disk.provider);
+      if (!upgradeIsDue(videoId)) return savedLyrics(copy, disk.provider);
+      savedCopy = { kind: entriesAreSynced(copy) ? "line" : "plain", entries: copy, provider: disk.provider ?? "" };
     }
   }
 
@@ -238,7 +238,7 @@ async function fetchLyrics(request: LyricsRequest, signal: AbortSignal): Promise
   const sources = [...providers.keys()];
   const askedEverySource = sources.length === getOrderedProviders(getSettingValue(SETTINGS.LYRICS_PROVIDER_ORDER)).length;
 
-  if (savedCopy) publishAnswer(videoId, savedLyrics(savedCopy.entries));
+  if (savedCopy) publishAnswer(videoId, { entries: savedCopy.entries, provider: savedCopy.provider });
   try {
     const result = await runLyricsSources({
       sources,
@@ -298,9 +298,9 @@ export async function getAllLyrics(
 }
 
 /** Makes chosen or edited lyrics the lyrics of record for the song: no run replaces them until Refresh. */
-export function applyManualLyrics(videoId: string, entries: LyricsEntry[]): void {
+export function applyManualLyrics(videoId: string, entries: LyricsEntry[], provider: string): void {
   if (entries.length === 0) return;
   markManual(videoId);
-  cache.setMemory(videoId, entries);
-  cache.setDisk(videoId, entries);
+  cache.setMemory(videoId, entries, provider);
+  cache.setDisk(videoId, entries, provider);
 }

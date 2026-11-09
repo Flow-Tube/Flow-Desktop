@@ -251,6 +251,8 @@ LOCAL MEDIA
 - The Cache group under Network now shows the real size of artwork, lyrics and network caches, each with a limit and a Clear button. Artwork clears the next time Flow starts. The Media Cache Limit row is gone: Flow never stored streams on disk.
 
 FIXES
+- Saved lyrics show where they came from in the lyrics menu and side pane, instead of an internal name like MemoryCache. Lyrics saved by an older version show no source until they are fetched again.
+- About links to the new website, flow-tube.org, and the Flow-Tube organisation on GitHub. Crash reports open an issue there too.
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.
 - Removing a playlist from a card now always asks first. Deleting a playlist you made no longer offers an Undo, which only brought it back empty.

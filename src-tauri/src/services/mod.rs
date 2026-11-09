@@ -17,6 +17,7 @@ pub mod shell_pages;
 pub mod shorts_engine;
 pub mod shorts_service;
 pub mod subscription_feed;
+pub mod system_output;
 pub mod taste_service;
 pub mod theme_file;
 pub mod upcoming_reminders;

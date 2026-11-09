@@ -84,7 +84,9 @@ use commands::lyrics::{
     clear_lyrics_cache, evict_cached_lyrics, get_cached_lyrics, lyrics_cache_size,
     put_cached_lyrics, save_download_lyrics,
 };
-use commands::media_keys::{global_media_keys_set, global_media_keys_supported};
+use commands::media_keys::{
+    global_media_keys_set, global_media_keys_supported, system_output_watch,
+};
 use commands::music::{
     get_cached_music_home_page, get_music_album_continuation, get_music_album_page,
     get_music_artist_items, get_music_artist_page, get_music_captions_lrc, get_music_charts_page,
@@ -576,6 +578,7 @@ pub fn run() {
             app.manage(commands::discord::DiscordPresenceOwner::default());
             app.manage(services::music_tray::MusicTray::default());
             app.manage(services::media_keys::PlaybackTarget::default());
+            app.manage(services::system_output::SystemOutputWatch::default());
             app.manage(services::shell_pages::LaunchRequest::from_args(
                 services::shell_pages::lossy_args(std::env::args_os()).iter(),
             ));
@@ -997,6 +1000,7 @@ pub fn run() {
             set_download_progress,
             global_media_keys_supported,
             global_media_keys_set,
+            system_output_watch,
             music_tray_hide,
             // --- Scrobbling ---
             scrobble_status,

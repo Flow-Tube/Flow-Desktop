@@ -87,7 +87,7 @@ MUSIC
 - Song menus have Details: title, artist, album, views, likes, length and upload date. Click a line to copy it.
 - Settings > Music can hide the artwork in the full player, change the shape of the music progress bar, and make album art and cards on music pages smaller.
 - YouTube captions are now a lyrics provider, tried before YouTube's plain lyrics, so more songs get timed lines. Reorder or turn it off in Settings > Music.
-- New switches: open the full player for new songs, pause music while muted, and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
+- New switches: open the full player for new songs, pause music while Flow or your computer is muted (Flow only on Linux), and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
 - The Taste tab can export, import and reset your music profile on its own, without touching your video profile.
 - Lyrics appear much faster: sources are asked side by side and the search stops after 9 seconds. Saved line-synced lyrics show at once, and word sync is looked for once a week.
 - Songs use YouTube Music's own timed lyrics first, and two more sources, NetEase and AMLL, help when the others have nothing. The next song's lyrics load ahead of time.

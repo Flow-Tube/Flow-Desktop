@@ -8,7 +8,7 @@ import { REFERENCE_SAMPLE_RATE } from "./eq/filterMath";
 import { graphChangesSound, graphSpec } from "./eq/graphPlan";
 import { changesSound } from "./eq/stateOps";
 import { musicAudioEngine } from "./musicAudioEngine";
-import { mutePauseAction } from "./musicMutePause";
+import { bindMutePause } from "./musicMutePause";
 
 let bound = false;
 
@@ -61,22 +61,7 @@ export function bindMusicAudioSettings(): void {
     void state._loadIndex(index);
   });
 
-  // Music this pause stopped comes back with the sound; a song paused by hand stays paused.
-  let pausedForMute = false;
-  useMusicPlayerStore.subscribe((state, previous) => {
-    if (state.isMuted === previous.isMuted && state.volume === previous.volume && state.isPlaying === previous.isPlaying) return;
-    const silent = state.isMuted || state.volume <= 0;
-    const enabled = getSettingValue(SETTINGS.MUSIC_PAUSE_WHEN_MUTED) === "true";
-    if (previous.isPlaying && !state.isPlaying && !silent) pausedForMute = false;
-    const action = mutePauseAction(silent, enabled, state.isPlaying, pausedForMute);
-    if (action === "pause") {
-      pausedForMute = true;
-      state.pause();
-    } else if (action === "resume") {
-      pausedForMute = false;
-      state.play();
-    }
-  });
+  bindMutePause();
 
   const applyEq = () => {
     const { state, bypass, preview } = useEqStore.getState();

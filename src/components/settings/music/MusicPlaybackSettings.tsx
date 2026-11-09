@@ -7,6 +7,7 @@ import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { useMusicPlayerStore } from '../../../store/useMusicPlayerStore';
+import { IS_LINUX_RUNTIME } from '../../../lib/platform';
 
 export function MusicPlaybackSettings() {
   const [audioQuality, setAudioQuality] = usePreference(SETTINGS.MUSIC_AUDIO_QUALITY, 'Auto');
@@ -55,7 +56,8 @@ export function MusicPlaybackSettings() {
       <SettingItem title={getString('settings_open_music_player_on_play')} description={getString('settings_open_music_player_on_play_desc')}>
         <ToggleSwitch checked={openPlayer} onChange={setOpenPlayer} />
       </SettingItem>
-      <SettingItem title={getString('settings_pause_when_muted')} description={getString('settings_pause_when_muted_desc')}>
+      {/* The backend can't read the system volume on Linux, so there only Flow's own mute counts. */}
+      <SettingItem title={getString('settings_pause_when_muted')} description={getString(IS_LINUX_RUNTIME ? 'settings_pause_when_muted_desc_app_only' : 'settings_pause_when_muted_desc')}>
         <ToggleSwitch checked={pauseWhenMuted} onChange={setPauseWhenMuted} />
       </SettingItem>
     </SettingsGroup>

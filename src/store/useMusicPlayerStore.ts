@@ -29,6 +29,8 @@ import { musicAudioEngine } from "../lib/audio/musicAudioEngine";
 import { migrateSavedMusicVolume } from "../lib/audio/volumeCurve";
 import { preloadTrack } from "../lib/musicPreload";
 import { upcomingIndex, type QueueRepeatMode } from "../lib/musicQueueOrder";
+import { repeatsItself, skipFadeSeconds } from "../lib/audio/crossfade";
+import { crossfadeSettings } from "../lib/audio/crossfadeSettings";
 import { restoreOriginalOrder, shuffleFrom, shuffleUpcoming } from "../lib/musicShuffle";
 import {
   appendTracks,
@@ -311,7 +313,8 @@ interface MusicPlayerState {
   // --- internal: driven by the root <audio> controller (element → store) ---
   _ensureRadio: () => Promise<void>;
   /** `autoplay: false` loads the track paused, for a recovery while the user had paused. */
-  _loadIndex: (index: number, options?: { resumeAt?: number; autoplay?: boolean }) => Promise<void>;
+  /** `skipFade` blends the song playing into this one over that many seconds, as a skip does. */
+  _loadIndex: (index: number, options?: { resumeAt?: number; autoplay?: boolean; skipFade?: number }) => Promise<void>;
   _prefetchUpcoming: () => void;
   _preloadUpcoming: () => void;
   _onPreloadError: () => void;
@@ -336,14 +339,16 @@ export function warmMusicStream(videoId: string): void {
 const viewForNewSong = () =>
   getSettingValue(SETTINGS.MUSIC_OPEN_PLAYER_ON_PLAY) === "true" ? { viewState: "full" as const } : {};
 
-function armSkipFade(s: Pick<MusicPlayerState, "isPlaying" | "progress" | "duration" | "queue">, index: number): void {
-  const target = s.queue[index];
-  if (s.isPlaying && target) musicAudioEngine.armSkipFade(videoIdOf(target), s.progress, s.duration);
-}
+/** How long the song a Next or Previous leaves fades under the one it goes to; 0 when it isn't playing. */
+const skipFade = (s: Pick<MusicPlayerState, "isPlaying" | "duration">): number =>
+  s.isPlaying
+    ? skipFadeSeconds(crossfadeSettings(), musicAudioEngine.getCurrentTime(), s.duration, musicAudioEngine.getSpeed())
+    : 0;
 
-/** A skip can only fade into a song already buffered, so the next one can't wait for this one's last seconds. */
-const fadesOnSkip = () =>
-  getSettingValue(SETTINGS.MUSIC_CROSSFADE_ENABLED) === "true" && getSettingValue(SETTINGS.MUSIC_CROSSFADE_ON_SKIP) === "true";
+/** The song to buffer ahead: the next one, or this one again when it fades into its own start. */
+function preloadIndex(s: Pick<MusicPlayerState, "queue" | "currentIndex" | "repeatMode">): number {
+  return repeatsItself(s) && crossfadeSettings().seconds > 0 ? s.currentIndex : upcomingIndex(s);
+}
 
 export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   currentTrack: null,
@@ -500,7 +505,6 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
       unplayableSkips = 0;
       void get()._ensureRadio();
       get()._prefetchUpcoming();
-      if (fadesOnSkip()) get()._preloadUpcoming();
     };
 
     // A fresh play of a long track picks up where it was left (a setting).
@@ -511,6 +515,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     }
 
     // Gapless: the standby element already holds this track, buffered.
+    if (options?.skipFade) musicAudioEngine.armCrossfade(options.skipFade);
     if (resumeAt === 0 && musicAudioEngine.activatePreloaded(videoId)) {
       const loudnessDb = musicAudioEngine.getActiveLoudness();
       set({ loudnessDb, loadingStreamId: null });
@@ -522,6 +527,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     }
     // Whatever the standby element holds is not what plays next any more.
     musicAudioEngine.clearPreload();
+    if (options?.skipFade) musicAudioEngine.holdForSkip(options.skipFade);
 
     const audioQuality = getMusicAudioQualitySetting();
     const lookup = () =>
@@ -713,12 +719,12 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
   // current one, so the change is a swap with no load in between.
   _preloadUpcoming: () => {
     const state = get();
-    const index = upcomingIndex(state);
+    const index = preloadIndex(state);
     const upcoming = index >= 0 ? state.queue[index] : null;
     if (!upcoming) return;
     void preloadTrack(upcoming, getMusicAudioQualitySetting(), (videoId) => {
       const now = get();
-      const nowTrack = now.queue[upcomingIndex(now)];
+      const nowTrack = now.queue[preloadIndex(now)];
       return !!nowTrack && videoIdOf(nowTrack) === videoId;
     });
   },
@@ -778,8 +784,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
         return;
       }
     }
-    armSkipFade(get(), nextIndex);
-    void get()._loadIndex(nextIndex);
+    void get()._loadIndex(nextIndex, { skipFade: skipFade(get()) });
   },
 
   previous: () => {
@@ -793,8 +798,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     }
     let prevIndex = currentIndex - 1;
     if (prevIndex < 0) prevIndex = repeatMode === "all" ? queue.length - 1 : 0;
-    armSkipFade(get(), prevIndex);
-    void get()._loadIndex(prevIndex);
+    void get()._loadIndex(prevIndex, { skipFade: skipFade(get()) });
   },
 
   seek: (seconds) => {
@@ -1055,7 +1059,7 @@ export const useMusicPlayerStore = create<MusicPlayerState>((set, get) => ({
     const { repeatMode, queue } = get();
     // Repeat-all over one song is a replay; reloading it would fetch it again.
     if (repeatMode === "one" || (repeatMode === "all" && queue.length === 1)) {
-      musicAudioEngine.seek(0);
+      musicAudioEngine.replay();
       void musicAudioEngine.play();
       set({ progress: 0, isPlaying: true });
       return;

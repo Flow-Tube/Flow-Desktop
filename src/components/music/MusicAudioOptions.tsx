@@ -1,3 +1,5 @@
+import { CROSSFADE_LENGTHS } from "../../lib/audio/crossfade";
+import { crossfadeLengthLabel } from "../../lib/audio/crossfadeLabels";
 import { getString } from "../../lib/i18n/index";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useBoolPref, useNumberPref } from "../../lib/usePreference";
@@ -6,6 +8,12 @@ import { Slider } from "../ui/Slider";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 
 const SPEED_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+
+/** The offered length closest to the saved one, so the slider moves through Android's steps. */
+const lengthIndex = (seconds: number): number => {
+  const distances = CROSSFADE_LENGTHS.map((length) => Math.abs(length - seconds));
+  return distances.indexOf(Math.min(...distances));
+};
 
 const formatSpeed = (rate: number) => getString("music_speed_value", Number(rate.toFixed(2)));
 
@@ -59,16 +67,16 @@ export function MusicAudioOptions() {
         {crossfade && (
           <div className="flex items-center gap-3">
             <Slider
-              min={1}
-              max={12}
+              min={0}
+              max={CROSSFADE_LENGTHS.length - 1}
               step={1}
-              value={crossfadeSeconds}
-              onChange={setCrossfadeSeconds}
-              aria-label={getString("music_crossfade")}
+              value={lengthIndex(crossfadeSeconds)}
+              onChange={(index) => setCrossfadeSeconds(CROSSFADE_LENGTHS[Math.round(index)] ?? CROSSFADE_LENGTHS[0])}
+              aria-label={getString("settings_music_crossfade_length")}
               className="flex-1"
             />
-            <span className="w-10 text-end font-mono text-xs text-chrome-neutral-400">
-              {getString("music_crossfade_seconds", crossfadeSeconds)}
+            <span className="w-14 text-end font-mono text-xs text-chrome-neutral-400">
+              {crossfadeLengthLabel(crossfadeSeconds)}
             </span>
           </div>
         )}

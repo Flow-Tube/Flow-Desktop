@@ -21,7 +21,10 @@ const song = (id: string): SongItem => ({
 const { engine, resolveMusicStream, prefetchMusicStream, getLocalStream, getLocalCover, getMusicWatchQueue } = vi.hoisted(() => ({
   engine: {
     activatePreloaded: vi.fn(() => false),
-    armSkipFade: vi.fn(),
+    armCrossfade: vi.fn(),
+    holdForSkip: vi.fn(),
+    getCurrentTime: vi.fn(() => 0),
+    getSpeed: vi.fn(() => 1),
     clearPreload: vi.fn(() => null),
     getActiveLoudness: vi.fn(() => null),
     setLoudness: vi.fn(),

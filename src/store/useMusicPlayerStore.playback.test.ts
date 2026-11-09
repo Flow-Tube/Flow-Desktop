@@ -34,6 +34,10 @@ const { engine, resolveMusicStream, getMusicWatchQueue } = vi.hoisted(() => ({
     getErrorCode: vi.fn((): number | null => null),
     wantsAac: vi.fn(() => false),
     getCurrentTime: vi.fn(() => 0),
+    getSpeed: vi.fn(() => 1),
+    armCrossfade: vi.fn(),
+    holdForSkip: vi.fn(),
+    replay: vi.fn(),
     setVolume: vi.fn(),
     setMuted: vi.fn(),
   },
@@ -123,27 +127,39 @@ describe("starting a track", () => {
 });
 
 describe("Fade when you skip", () => {
-  afterEach(() => useAppSettingsStore.setState({ values: {} }));
-
-  const preloadedOnStart = async (values: Record<string, string>) => {
-    useAppSettingsStore.setState({ values });
-    vi.mocked(preloadTrack).mockClear();
-    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 0);
-    return vi.mocked(preloadTrack).mock.calls.map(([track]) => track.id);
-  };
-
-  it("buffers the next song as soon as one starts, since a skip can come any time", async () => {
-    expect(
-      await preloadedOnStart({
-        [SETTINGS.MUSIC_CROSSFADE_ENABLED]: "true",
-        [SETTINGS.MUSIC_CROSSFADE_ON_SKIP]: "true",
-      }),
-    ).toEqual(["b"]);
+  afterEach(() => {
+    useAppSettingsStore.setState({ values: {} });
+    engine.getCurrentTime.mockReturnValue(0);
   });
 
-  it("leaves it to the last seconds otherwise", async () => {
-    expect(await preloadedOnStart({})).toEqual([]);
-    expect(await preloadedOnStart({ [SETTINGS.MUSIC_CROSSFADE_ON_SKIP]: "true" })).toEqual([]);
+  const skipAt = async (seconds: number, values: Record<string, string>) => {
+    useAppSettingsStore.setState({ values });
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 0);
+    engine.holdForSkip.mockClear();
+    engine.armCrossfade.mockClear();
+    engine.getCurrentTime.mockReturnValue(seconds);
+    useMusicPlayerStore.getState().next();
+    await vi.waitFor(() => expect(engine.load).toHaveBeenCalled());
+    return engine.holdForSkip.mock.calls.map(([length]) => length);
+  };
+
+  it("keeps the song playing while the next one loads, and fades over the chosen length", async () => {
+    const on = { [SETTINGS.MUSIC_CROSSFADE_ENABLED]: "true", [SETTINGS.MUSIC_CROSSFADE_SECONDS]: "6" };
+    expect(await skipAt(30, on)).toEqual([6]);
+    expect(engine.armCrossfade).toHaveBeenCalledWith(6);
+  });
+
+  it("blends for a moment when skips don't fade, and cuts a song barely heard", async () => {
+    expect(await skipAt(30, {})).toEqual([0.25]);
+    expect(await skipAt(30, { [SETTINGS.MUSIC_CROSSFADE_ENABLED]: "true", [SETTINGS.MUSIC_CROSSFADE_ON_SKIP]: "false" })).toEqual([0.25]);
+    expect(await skipAt(0.5, {})).toEqual([]);
+  });
+
+  it("no longer buffers the next song as soon as one starts", async () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.MUSIC_CROSSFADE_ENABLED]: "true" } });
+    vi.mocked(preloadTrack).mockClear();
+    await useMusicPlayerStore.getState().playQueue([song("a"), song("b")], 0);
+    expect(preloadTrack).not.toHaveBeenCalled();
   });
 });
 

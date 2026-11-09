@@ -81,7 +81,10 @@ MUSIC
 - If you're signed in to Last.fm, the music home gets a Discover with Last.fm shelf picked from what you have on repeat.
 - Artist pages show how often you've played an artist and whether you liked them, with your most played songs of theirs under Your history.
 - Artist pages also get a Featured on shelf and a Share button.
-- Crossfade can also blend when you skip a song, can fade between tracks of the same album, and has a choice of fade curves: Equal power, Smooth, Hold and Gentle.
+- Crossfade now matches Flow for Android: lengths from 250 ms to 12 s (3 s by default), separate switches for fading when a song ends and when you skip, keep albums gapless, and the fade curves Equal power, Smooth, Hold and Gentle.
+- A crossfade is never dropped. When the next song is not ready yet, the current one fades out on its own and the next comes in quickly. Short songs and Repeat one fade too, and the fade lasts the same time at any speed.
+- Next and Previous keep the song playing until the next one starts, then blend the two, even when crossfade is off (a quarter-second blend).
+- Pause crossfade from the music player's menu until Flow restarts, without changing your settings.
 - Animated artwork: turn it on in Settings > Music and albums with motion artwork loop it over the cover in the full player.
 - Romanize on this device, in Settings > Music and the lyrics menu, adds Latin letters under lyrics in other scripts when the source has none. Japanese isn't covered yet.
 - Song menus have Details: title, artist, album, views, likes, length and upload date. Click a line to copy it.

@@ -1,28 +1,35 @@
 const CURVE_POINTS = 32;
 const STEP_MS = 100;
 
-export type CrossfadeCurve = "equal_power" | "s_curve" | "hold" | "gentle";
-
-/** The gentle curve's shape: its two gains add up to one, so the middle of the fade dips a little. */
-const GENTLE_POWER = 1.6;
+/** Flow for Android's curves, under its names. */
+export type CrossfadeCurve = "EQUAL_POWER" | "S_CURVE" | "HOLD" | "GENTLE";
 
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
+const smoothstep = (p: number) => p * p * (3 - 2 * p);
 
-/** Equal-power curves differ only in how time passes through them, so all keep the blend's loudness. */
-function eased(t: number, shape: CrossfadeCurve): number {
-  if (shape === "s_curve") return t * t * (3 - 2 * t);
-  if (shape === "hold") return t * t;
-  return t;
+/**
+ * The outgoing song's gain `t` of the way through the fade. Equal power and Smooth are pairs;
+ * Hold and Gentle shape only the outgoing song, which leaves later or sooner over a steady
+ * incoming one.
+ */
+export function fadeOutGain(t: number, shape: CrossfadeCurve = "EQUAL_POWER"): number {
+  const p = clamp01(t);
+  switch (shape) {
+    case "S_CURVE":
+      return 1 - smoothstep(p);
+    case "HOLD":
+      return 1 - p * p * p;
+    case "GENTLE":
+      return (1 - p) * (1 - p);
+    default:
+      return Math.cos((p * Math.PI) / 2);
+  }
 }
 
-export function fadeInGain(t: number, shape: CrossfadeCurve = "equal_power"): number {
+/** The incoming song's gain `t` of the way through the fade. */
+export function fadeInGain(t: number, shape: CrossfadeCurve = "EQUAL_POWER"): number {
   const p = clamp01(t);
-  return shape === "gentle" ? 1 - (1 - p) ** GENTLE_POWER : Math.sin((eased(p, shape) * Math.PI) / 2);
-}
-
-export function fadeOutGain(t: number, shape: CrossfadeCurve = "equal_power"): number {
-  const p = clamp01(t);
-  return shape === "gentle" ? (1 - p) ** GENTLE_POWER : Math.cos((eased(p, shape) * Math.PI) / 2);
+  return shape === "S_CURVE" ? smoothstep(p) : Math.sin((p * Math.PI) / 2);
 }
 
 function curve(gain: (t: number) => number): Float32Array<ArrayBuffer> {
@@ -40,7 +47,7 @@ export function scheduleFade(
   direction: "in" | "out",
   startTime: number,
   seconds: number,
-  shape: CrossfadeCurve = "equal_power",
+  shape: CrossfadeCurve = "EQUAL_POWER",
 ): void {
   param.cancelScheduledValues(startTime);
   const gain = direction === "in" ? fadeInGain : fadeOutGain;

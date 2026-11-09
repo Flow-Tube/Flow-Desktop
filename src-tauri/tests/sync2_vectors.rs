@@ -23,7 +23,7 @@ use flow_desktop_lib::sync2::pairing::{
     pairing_aad, pairing_commit, pairing_keys, pairing_proof, pairing_slot,
 };
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, wrap_path};
-use flow_desktop_lib::sync2::payload::{decode_payload, padded_size};
+use flow_desktop_lib::sync2::payload::{decode_payload, encode_payload, padded_size};
 use flow_desktop_lib::sync2::pipe::scanner_key;
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret, recovery_words};
 use flow_desktop_lib::sync2::roster::{Entry, check_sender, replay_roster};
@@ -175,6 +175,24 @@ fn payloads() {
     for n in v["negatives"].as_array().unwrap() {
         assert_code(decode_payload(&bytes(&n["payload"])), &n["error"]);
     }
+}
+
+#[test]
+fn a_payload_this_device_wrote_decodes() {
+    for content in [Vec::new(), b"short".to_vec(), vec![7; 1 << 20]] {
+        assert_eq!(
+            decode_payload(&encode_payload(&content).unwrap()).unwrap(),
+            content
+        );
+    }
+}
+
+#[test]
+fn a_payload_stops_inflating_at_its_limit() {
+    let limit = 64 << 20;
+    let payload = |size: usize| encode_payload(&vec![0; size]).unwrap();
+    assert_eq!(decode_payload(&payload(limit)).unwrap().len(), limit);
+    assert!(decode_payload(&payload(limit + 1)).is_err());
 }
 
 #[test]

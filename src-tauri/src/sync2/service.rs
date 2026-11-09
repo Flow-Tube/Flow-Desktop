@@ -128,9 +128,11 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
         return Ok(Vec::new());
     };
     let mut session = open_session(&local, &record).await?;
-    let Some(received) = exchange(app, &local, &mut session).await? else {
+    let mut refused = None;
+    let Some(received) = exchange(app, &local, &mut session, &mut refused).await? else {
         return Ok(Vec::new());
     };
+    let uploaded = session.store().upload_pending().await;
     session.collect_garbage(&local.pool).await?;
     // A server without join requests (older than flow-sync#41) shouldn't fail the sync.
     if let Some(server) = session.store().server()
@@ -139,7 +141,19 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     {
         let _ = app.emit(EVENT_JOIN_REQUESTS, requests);
     }
-    Ok(received)
+    uploaded?;
+    refused.map_or(Ok(received), Err)
+}
+
+/// A store that refuses a write still answers reads, so the run goes on and reports it at the end.
+fn note_refused(result: Result<()>, refused: &mut Option<EngineError>) -> Result<()> {
+    match result {
+        Err(error) if error.refused_write() => {
+            *refused = Some(error);
+            Ok(())
+        }
+        other => other,
+    }
 }
 
 /// Pushes the running profile's changes, applies everyone else's to it, and keeps the batches of
@@ -148,6 +162,7 @@ async fn exchange(
     app: &AppHandle,
     local: &Local,
     session: &mut Session<'_, GroupStore>,
+    refused: &mut Option<EngineError>,
 ) -> Result<Option<Vec<Received>>> {
     let (pool, data) = (&local.pool, &local.data);
     if !session.adopt_link(pool, &local.default_profile).await? {
@@ -175,10 +190,12 @@ async fn exchange(
     } else {
         Vec::new()
     };
-    session.store().upload_pending().await?;
-    session.push(pool, exported).await?;
-    name_linked(app, pool, &local.meta.app).await?;
-    session.push_profiles(pool).await?;
+    let sent = async {
+        session.push(pool, exported).await?;
+        name_linked(app, pool, &local.meta.app).await?;
+        session.push_profiles(pool).await
+    };
+    note_refused(sent.await, refused)?;
 
     let pulled = session.pull(pool).await?;
     let groups: Vec<_> = pulled
@@ -193,7 +210,7 @@ async fn exchange(
     if let Some(login) = &pulled.login {
         save_pending_login(login).await?;
     }
-    session.finish(pool, pulled).await?;
+    note_refused(session.finish(pool, pulled).await, refused)?;
     let received = applied.received(session).await;
     if let Some(link) = &reading.active
         && snapshot_due(pool, link).await?
@@ -201,10 +218,10 @@ async fn exchange(
         && !links_to_read(pool).await?.contains(link)
     {
         let exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;
-        session.write_snapshot(pool, exported).await?;
+        note_refused(session.write_snapshot(pool, exported).await, refused)?;
     }
     if snapshot_due(pool, PROFILES_KEY).await? {
-        session.write_profiles_snapshot(pool).await?;
+        note_refused(session.write_profiles_snapshot(pool).await, refused)?;
     }
     Ok(Some(received))
 }

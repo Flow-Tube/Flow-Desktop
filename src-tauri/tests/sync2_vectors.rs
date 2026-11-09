@@ -132,6 +132,7 @@ fn ed25519_strict_verification() {
         .unwrap()
         .iter()
         .chain(v["nonCanonicalKeys"].as_array().unwrap())
+        .chain(v["mixedOrderKeys"].as_array().unwrap())
     {
         assert!(!is_valid_signing_key(&bytes(key)), "{key}");
     }

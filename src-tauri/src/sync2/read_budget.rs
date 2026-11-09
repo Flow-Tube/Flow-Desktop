@@ -3,7 +3,7 @@
 //! what a group holds, since garbage collection keeps its logs short.
 
 const REQUESTS: u32 = 4096;
-const OBJECTS: usize = 200_000;
+pub const OBJECTS: usize = 200_000;
 
 pub struct ReadBudget {
     requests: u32,

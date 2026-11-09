@@ -14,6 +14,7 @@ PROFILES
 - The recommendation engine's profile is now called your taste profile.
 
 SYNC
+- Restoring with your recovery key now asks which devices you still have, and signs out the rest before it syncs anything new, so a lost device can't read what comes next.
 - Your recommendations sync with Flow for Android again. Both apps now read Chinese titles the same way, folding Traditional characters into Simplified ones.
 - When something stays on each device, the sync result now says what and why. After receiving, it lists what arrived.
 - SponsorBlock's action for each segment type now syncs with your phone. Synced SponsorBlock and DeArrow switches apply without a restart.
@@ -29,10 +30,12 @@ SYNC
 - On the local network, a device list entry from another device that can't be read is skipped, and the rest of the list still syncs.
 - Linked devices: a device name that can't be read is left out instead of hiding the device list or stopping a rename. The latest readable name is shown.
 - A snapshot, acknowledgement or LAN request that names a log position too large to read exactly is now refused as invalid.
+- Linked devices accept only device keys and signatures that every Flow app reads the same way, so devices can't disagree about who is in a group.
 - A damaged file in a WebDAV folder's roster no longer stops every device from syncing. It is skipped and the rest of the roster is read.
 - Sync no longer hangs on a store that keeps answering with the same page. It stops reading and tries again at the next sync.
 - Sync stops reading an answer larger than it can be, from a Flow server, a WebDAV folder, the live channel or a device on your network, so a broken or hostile store can't use up memory.
 - A damaged or forged object from one device no longer fails the whole sync. Reading that device's changes pauses there, and the other devices' changes still arrive.
+- The same holds for an object or a file in a store's folder that is too large or that the store refuses: only that device's changes pause. A store that is out of reach, refuses your login or asks to slow down still fails the sync.
 - The same holds when a new device starts from a snapshot or a profile starts syncing: a damaged or forged object no longer fails the sync, and the profile is caught up once it can be read.
 - A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
 - Linked devices accept a synced object's data only in the one form every Flow app writes, so two devices can't read different data from the same object.
@@ -43,6 +46,12 @@ SYNC
 - On the local network, an object as large as a sync object can be is now passed between devices whole, instead of being refused for its size.
 - Linked devices check for devices asking to join every 5 seconds only while the Sync page is on screen, and the check no longer reads the whole device list from the server.
 - A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
+- Linked devices: allowing or declining remote control now takes effect whichever profile is open.
+- Linked devices reach a Flow server or WebDAV folder on your local network directly, even when a system proxy is set.
+- Linked devices only ever touch files inside the group's own WebDAV folder.
+- One device's unreadable change no longer keeps other devices' changes from arriving, however many are waiting.
+- When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
+- On the local network, a connection that stays silent is dropped after a few seconds, and it no longer stops this computer from meeting your other devices or answering them.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
 
 MUSIC

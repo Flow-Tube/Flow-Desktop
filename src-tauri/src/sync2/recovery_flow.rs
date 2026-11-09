@@ -9,11 +9,12 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use super::engine::{EngineError, Result, Session};
 use super::entries::{Draft, build_entry, member_subject};
-use super::epoch::check_epoch_key;
+use super::epoch::{check_epoch_key, open_chain};
 use super::keys::MemberSecrets;
 use super::linking::DeviceMeta;
 use super::membership::{append_checked, members_after, new_epoch};
 use super::meta::seal_device_meta;
+use super::names::open_sealed_name;
 use super::paths::kc_name;
 use super::recovery::{recovery_keys, recovery_words};
 use super::roster::{Entry, Op, Role, RosterState, apply_entry, replay_roster};
@@ -115,25 +116,25 @@ pub async fn replace_recovery_key<S: Store>(
     Ok(replaced.words)
 }
 
-/// `as_recovery` is the store signed in as the recovery member, `as_device` as the new device.
-pub async fn restore<S: Store>(
-    as_recovery: &S,
-    as_device: &S,
-    recovery: &MemberSecrets,
-    device: &MemberSecrets,
-    meta: &DeviceMeta,
-) -> Result<Restored> {
-    let roster = as_recovery.roster_after(-1).await?;
-    let state = replay_roster(&roster)?;
+/// What the recovery key can see of a group before anything is written.
+struct RecoveryView {
+    entries: Vec<Entry>,
+    state: RosterState,
+    group: [u8; 16],
+    current: Vec<u8>,
+}
+
+/// Reads and verifies the roster, and opens the latest key from the recovery member's wrap.
+async fn recovery_view<S: Store>(store: &S, recovery: &MemberSecrets) -> Result<RecoveryView> {
+    let entries = store.roster_after(-1).await?;
+    let state = replay_roster(&entries)?;
     let recovery_id = hex::encode(recovery.did);
     if state.members.get(&recovery_id).is_none_or(|m| m.used) {
         return Err(EngineError::RecoveryUsed);
     }
     let group: [u8; 16] = array(&hex::decode(&state.group).map_err(|_| Error::Group)?);
-    let commitment = URL_SAFE_NO_PAD
-        .decode(&state.kc)
-        .map_err(|_| Error::RosterFormat)?;
-    let wrap = as_recovery
+    let commitment = decode_kc(&state.kc)?;
+    let wrap = store
         .key(state.epoch, &kc_name(&commitment), &recovery_id)
         .await?
         .ok_or(Error::KeyCommitment)?;
@@ -145,6 +146,131 @@ pub async fn restore<S: Store>(
         &wrap,
     )?;
     check_epoch_key(&current, &group, state.epoch, &commitment)?;
+    Ok(RecoveryView {
+        entries,
+        state,
+        group,
+        current,
+    })
+}
+
+fn decode_kc(kc: &str) -> Result<Vec<u8>> {
+    URL_SAFE_NO_PAD
+        .decode(kc)
+        .map_err(|_| Error::RosterFormat.into())
+}
+
+/// A device the user is asked about before a restore. Its name is `None` when it can't be read.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct RestoreDevice {
+    pub did: String,
+    pub name: Option<String>,
+    pub platform: Option<String>,
+}
+
+/// The group's current devices, for the user to choose from. Writes nothing.
+pub async fn preview_restore<S: Store>(
+    store: &S,
+    recovery: &MemberSecrets,
+) -> Result<Vec<RestoreDevice>> {
+    let view = recovery_view(store, recovery).await?;
+    let names = names_on_roster(store, &view).await?;
+    Ok(view
+        .state
+        .members
+        .iter()
+        .filter(|(_, member)| member.role == Role::Device)
+        .map(|(did, _)| {
+            let meta = names.get(did);
+            RestoreDevice {
+                did: did.clone(),
+                name: meta.map(|m| m.name.clone()),
+                platform: meta.map(|m| m.platform.clone()),
+            }
+        })
+        .collect())
+}
+
+/// The latest readable name of each device, walking the history chain down from the latest key
+/// as far as the store gives it.
+async fn names_on_roster<S: Store>(
+    store: &S,
+    view: &RecoveryView,
+) -> Result<BTreeMap<String, DeviceMeta>> {
+    let mut sealed = Vec::new();
+    let mut state = None;
+    for entry in &view.entries {
+        let after = apply_entry(state.as_ref(), entry)?;
+        for (did, name) in entry.meta.iter().flatten() {
+            sealed.push((after.epoch, entry.seq, did, name));
+        }
+        state = Some(after);
+    }
+    let commitments: BTreeMap<u32, &str> = view
+        .entries
+        .iter()
+        .filter_map(|e| e.epoch.as_ref())
+        .map(|e| (e.n, e.kc.as_str()))
+        .collect();
+    let mut names = BTreeMap::new();
+    let (mut epoch, mut key) = (view.state.epoch, view.current.clone());
+    // Newest first, so the first name found for a device is its latest.
+    for (at, seq, did, name) in sealed.into_iter().rev() {
+        while epoch > at {
+            let Some(previous) =
+                previous_key(store, &view.group, &commitments, epoch, &key).await?
+            else {
+                return Ok(names);
+            };
+            key = previous;
+            epoch -= 1;
+        }
+        if !names.contains_key(did)
+            && let Some(meta) = open_sealed_name(&key, &view.group, (at, seq), did, name)
+        {
+            names.insert(did.clone(), meta);
+        }
+    }
+    Ok(names)
+}
+
+/// The key of `epoch - 1` from the history chain box of `epoch`, or `None` when it can't be had.
+async fn previous_key<S: Store>(
+    store: &S,
+    group: &[u8; 16],
+    commitments: &BTreeMap<u32, &str>,
+    epoch: u32,
+    key: &[u8],
+) -> Result<Option<Vec<u8>>> {
+    let (Some(kc), Some(below)) = (commitments.get(&epoch), commitments.get(&(epoch - 1))) else {
+        return Ok(None);
+    };
+    let Some(chain) = store.key(epoch, &kc_name(&decode_kc(kc)?), "chain").await? else {
+        return Ok(None);
+    };
+    let below = decode_kc(below)?;
+    Ok(open_chain(key, group, epoch, &chain)
+        .and_then(|previous| {
+            check_epoch_key(&previous, group, epoch - 1, &below).map(|()| previous)
+        })
+        .ok())
+}
+
+/// `as_recovery` is the store signed in as the recovery member, `as_device` as the new device.
+pub async fn restore<S: Store>(
+    as_recovery: &S,
+    as_device: &S,
+    recovery: &MemberSecrets,
+    device: &MemberSecrets,
+    meta: &DeviceMeta,
+) -> Result<Restored> {
+    let RecoveryView {
+        state,
+        group,
+        current,
+        ..
+    } = recovery_view(as_recovery, recovery).await?;
+    let recovery_id = hex::encode(recovery.did);
 
     let restored = new_epoch(
         &group,

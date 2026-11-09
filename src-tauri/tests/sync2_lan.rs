@@ -41,9 +41,10 @@ use flow_desktop_lib::sync2::wrap::wrap_epoch_key;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::SqlitePool;
 use sync2_common::{Group, LINK, draft, empty_pool, exported, group, head, watch};
-use tokio::net::TcpListener;
-use tokio_tungstenite::connect_async;
+use tokio::io::AsyncReadExt as _;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{accept_async, connect_async};
 
 /// A device that holds the group as pairing leaves it: the roster and the wraps, no objects.
 async fn holding(g: &Group) -> SqlitePool {
@@ -477,7 +478,7 @@ async fn a_live_message_crosses_a_lan_session_and_opens_on_the_other_side() {
             let session = Session::open(&pool, HeldStore::new(pool.clone()), device)
                 .await
                 .unwrap();
-            LiveKeys::of(&session)
+            LiveKeys::of(&session).unwrap()
         }
     };
     let (keys_a, keys_b) = (keys(&pool_a, &g.a).await, keys(&pool_b, &g.b).await);
@@ -751,4 +752,97 @@ async fn a_dial_tries_lower_epochs_and_stops_after_four_attempts() {
     let met = meet(&pool, &g.b, ("127.0.0.1", port), None, &[], no_live()).await;
     assert!(matches!(met.err(), Some(EngineError::LanUnreachable)));
     assert_eq!(attempts.await.unwrap(), [5, 4, 3, 2]);
+}
+
+/// Whether the other side has closed `stream`, once what it sent is read.
+async fn closed_within(stream: &mut TcpStream, limit: Duration) -> bool {
+    let mut bytes = [0; 1024];
+    tokio::time::timeout(limit, async {
+        while !matches!(stream.read(&mut bytes).await, Ok(0) | Err(_)) {}
+    })
+    .await
+    .is_ok()
+}
+
+#[tokio::test]
+async fn connections_that_say_nothing_are_closed_and_members_still_meet() {
+    let g = group().await;
+    let (pool_a, pool_b) = (holding(&g).await, holding(&g).await);
+    let port = listening(&pool_a, &g.a).await;
+    let mut silent = Vec::new();
+    for _ in 0..64 {
+        silent.push(TcpStream::connect(("127.0.0.1", port)).await.unwrap());
+    }
+    let last = silent.last_mut().unwrap();
+    assert!(
+        closed_within(last, Duration::from_secs(1)).await,
+        "over the limit, a connection is closed at once"
+    );
+    for stream in &mut silent {
+        assert!(closed_within(stream, Duration::from_secs(5)).await);
+    }
+    meet(&pool_b, &g.b, ("127.0.0.1", port), None, &[], no_live())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_websocket_that_says_nothing_is_closed() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let port = listening(&pool, &g.a).await;
+    let (mut socket, _) = connect_async(format!("ws://127.0.0.1:{port}/flow-sync/2"))
+        .await
+        .unwrap();
+    let ended = tokio::time::timeout(Duration::from_secs(5), async {
+        while let Some(Ok(_)) = socket.next().await {}
+    })
+    .await;
+    assert!(ended.is_ok());
+}
+
+#[tokio::test]
+async fn meeting_a_peer_that_stays_silent_after_connecting_ends() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let _socket = accept_async(stream).await.unwrap();
+        std::future::pending::<()>().await;
+    });
+    let met = tokio::time::timeout(
+        Duration::from_secs(5),
+        meet(&pool, &g.b, ("127.0.0.1", port), None, &[], no_live()),
+    )
+    .await;
+    assert!(matches!(met, Ok(Err(EngineError::TimedOut))));
+}
+
+/// Run under a low descriptor limit, as a macOS GUI app has by default:
+/// `bash -c 'ulimit -n 256; cargo test --test sync2_lan -- --ignored --exact <this test>'`.
+#[tokio::test]
+#[ignore = "needs ulimit -n 256"]
+async fn the_service_keeps_accepting_after_running_out_of_descriptors() {
+    let g = group().await;
+    let pool = holding(&g).await;
+    let port = listening(&pool, &g.a).await;
+    let mut files = Vec::new();
+    while let Ok(file) = std::fs::File::open("/dev/null") {
+        files.push(file);
+    }
+    files.truncate(files.len() - 3);
+    let mut streams = Vec::new();
+    for _ in 0..3 {
+        if let Ok(stream) = TcpStream::connect(("127.0.0.1", port)).await {
+            streams.push(stream);
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    drop(streams);
+    drop(files);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut again = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    assert!(closed_within(&mut again, Duration::from_secs(5)).await);
 }

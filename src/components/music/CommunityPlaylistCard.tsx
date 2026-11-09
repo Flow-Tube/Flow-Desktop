@@ -24,7 +24,7 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
       <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-start">
         <div className="grid h-20 w-20 shrink-0 grid-cols-2 overflow-hidden rounded-xl bg-surface-container-high">
           {covers.length === 4
-            ? covers.map((url) => <img key={url} src={toSrc(url)} alt="" loading="lazy" className="h-full w-full object-cover" />)
+            ? covers.map((url, index) => <img key={index} src={toSrc(url)} alt="" loading="lazy" className="h-full w-full object-cover" />)
             : playlist.thumbnail && (
               <img src={toSrc(playlist.thumbnail)} alt="" loading="lazy" className="col-span-2 row-span-2 h-full w-full object-cover" />
             )}

@@ -10,7 +10,7 @@ import { usePageTitleStore } from "../store/usePageTitleStore";
 // natural case for readability.
 const STATIC_TITLES: Record<string, StringKey> = {
   "/": "home",
-  "/feed": "flow_neuro",
+  "/feed": "persona_title",
   "/music": "music",
   "/explore": "explore",
   "/subscriptions": "subscriptions",

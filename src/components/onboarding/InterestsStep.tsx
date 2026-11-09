@@ -18,12 +18,12 @@ export const InterestsStep: React.FC<InterestsStepProps> = ({
       {/* Hero Header */}
       <div className="mb-12">
         <h1 className="text-5xl font-semibold text-chrome-neutral-100 tracking-tight mb-3">
-          What are you into?
+          {getString("onboarding_interests_title")}
         </h1>
         <p className="text-lg text-chrome-neutral-400">
-          Pick 3 or more topics to initialize FlowNeuro's local algorithm.{" "}
+          {getString("onboarding_interests_subtitle")}{" "}
           {remaining > 0 ? (
-            <span className="text-primary font-medium">{remaining} left.</span>
+            <span className="text-primary font-medium">{getString("onboarding_interests_left", remaining)}</span>
           ) : (
             <span className="text-chrome-emerald-400 font-medium">{getString('onboarding_ready_to_go')}</span>
           )}

@@ -169,6 +169,9 @@ export function playerCssVariables({ roles, backdrop }: PlayerColors): Record<st
     "--player-on-primary": css(roles.onPrimary),
     "--player-primary-container": css(roles.primaryContainer),
     "--player-on-primary-container": css(roles.onPrimaryContainer),
+    // The container every top-row button sits on: the surface lifted towards the control colour.
+    "--player-tonal": css(mix(roles.surface, roles.primary, 0.16)),
+    "--player-tonal-hover": css(mix(roles.surface, roles.primary, 0.26)),
     "--color-primary": css(roles.primary),
     "--color-on-primary": css(roles.onPrimary),
     "--color-on-primary-val": css(roles.onPrimary),

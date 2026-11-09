@@ -27,6 +27,7 @@ import { PlayOnButton } from "../playon/PlayOnButton";
 import { LAYOUT_SPRING, NowPlayingColumn } from "./player/NowPlayingColumn";
 import { PlayerSidePane, type SidePaneTab } from "./player/PlayerSidePane";
 import { PlayerTransport } from "./player/PlayerTransport";
+import { GROUP_BUTTON, GROUP_BUTTON_ACTIVE, GroupItem, NO_TAP_SCALE, PlayerButtonGroup } from "./player/PlayerButtonGroup";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useFullPlayerColors } from "../../lib/usePlayerColors";
 import { coverSurfaceVariables } from "../../lib/playerColors";
@@ -44,11 +45,6 @@ import {
 } from "../../lib/musicSheet";
 
 const rgbCss = ({ r, g, b }: { r: number; g: number; b: number }) => `rgb(${r} ${g} ${b})`;
-
-const TOP_BTN =
-  "grid h-10 w-10 place-items-center rounded-full text-chrome-neutral-300 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-100";
-const TOP_BTN_ACTIVE =
-  "grid h-10 w-10 place-items-center rounded-full bg-surface-container-high text-[var(--color-primary)] transition-colors duration-200 ease-out";
 
 /** From this width the song keeps its column and Up next or the lyrics sit beside it, as on Android tablets. */
 const WIDE_QUERY = "(min-width: 1100px)";
@@ -225,84 +221,103 @@ export function MusicOverlay() {
 
         {/* TOP BAR */}
         <div className="absolute top-0 z-40 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 p-6">
-          <HapticButton
-            onClick={closeOverlay}
-            aria-label={getString("music_collapse")}
-            className={`${TOP_BTN} justify-self-start`}
-          >
-            <ChevronDown className="h-6 w-6" />
-          </HapticButton>
-
-          <p className="line-clamp-1 max-w-md text-center text-sm text-chrome-neutral-400">
-            {queueSource ? (
-              <>
-                {getString("playing_from")} <span className="font-medium text-chrome-neutral-200">{queueSource}</span>
-              </>
-            ) : null}
-          </p>
-
-          <div className="relative flex items-center gap-1 justify-self-end">
-            {isLyrics && <LyricsActionsMenu track={currentTrack} className={TOP_BTN} />}
-            {wide && lyricsExpanded && (
-              <HapticButton
-                onClick={() => setLyricsExpanded(false)}
-                aria-label={getString("music_lyrics_back_to_pane")}
-                title={getString("music_lyrics_back_to_pane")}
-                className={TOP_BTN}
-              >
-                <Minimize2 className="h-5 w-5" />
+          <PlayerButtonGroup className="justify-self-start">
+            <GroupItem id="collapse">
+              <HapticButton onClick={closeOverlay} aria-label={getString("music_collapse")} whileTap={NO_TAP_SCALE} className={GROUP_BUTTON}>
+                <ChevronDown className="h-6 w-6" />
               </HapticButton>
+            </GroupItem>
+          </PlayerButtonGroup>
+
+          {queueSource ? (
+            <p className="line-clamp-1 max-w-md rounded-full bg-[var(--player-tonal)] px-4 py-2 text-center text-sm text-[color-mix(in_srgb,var(--player-ink)_72%,transparent)]">
+              {getString("playing_from")} <span className="font-medium text-[var(--player-ink)]">{queueSource}</span>
+            </p>
+          ) : (
+            <span />
+          )}
+
+          <PlayerButtonGroup className="relative justify-self-end">
+            {isLyrics && (
+              <GroupItem id="lyrics-actions">
+                <LyricsActionsMenu track={currentTrack} className={GROUP_BUTTON} />
+              </GroupItem>
+            )}
+            {wide && lyricsExpanded && (
+              <GroupItem id="back-to-pane">
+                <HapticButton
+                  onClick={() => setLyricsExpanded(false)}
+                  aria-label={getString("music_lyrics_back_to_pane")}
+                  title={getString("music_lyrics_back_to_pane")}
+                  whileTap={NO_TAP_SCALE}
+                  className={GROUP_BUTTON}
+                >
+                  <Minimize2 className="h-5 w-5" />
+                </HapticButton>
+              </GroupItem>
             )}
 
-            <HapticButton
-              onClick={onQueueButton}
-              aria-label={getString("music_queue")}
-              aria-pressed={queueShown}
-              className={queueShown ? TOP_BTN_ACTIVE : TOP_BTN}
-            >
-              <ListMusic className="h-5 w-5" />
-            </HapticButton>
+            <GroupItem id="queue">
+              <HapticButton
+                onClick={onQueueButton}
+                aria-label={getString("music_queue")}
+                aria-pressed={queueShown}
+                whileTap={NO_TAP_SCALE}
+                className={queueShown ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
+              >
+                <ListMusic className="h-5 w-5" />
+              </HapticButton>
+            </GroupItem>
 
-            <HapticButton
-              onClick={onLyricsButton}
-              aria-label={getString("music_lyrics")}
-              aria-pressed={lyricsShown}
-              className={lyricsShown ? TOP_BTN_ACTIVE : TOP_BTN}
-            >
-              <Mic2 className="h-5 w-5" />
-            </HapticButton>
+            <GroupItem id="lyrics">
+              <HapticButton
+                onClick={onLyricsButton}
+                aria-label={getString("music_lyrics")}
+                aria-pressed={lyricsShown}
+                whileTap={NO_TAP_SCALE}
+                className={lyricsShown ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
+              >
+                <Mic2 className="h-5 w-5" />
+              </HapticButton>
+            </GroupItem>
 
-            <div className="relative">
+            <GroupItem id="volume">
               <HapticButton
                 ref={volumeWheelRef}
                 onClick={() => setVolumeOpen((v) => !v)}
                 aria-label={getString("music_volume")}
                 aria-pressed={volumeOpen}
-                className={volumeOpen ? TOP_BTN_ACTIVE : TOP_BTN}
+                whileTap={NO_TAP_SCALE}
+                className={volumeOpen ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
               >
                 {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </HapticButton>
               <div className="absolute right-0 top-full mt-2">
                 <VolumePopover open={volumeOpen} />
               </div>
-            </div>
+            </GroupItem>
 
-            <PlayOnButton className={TOP_BTN} iconSize={20} />
+            <GroupItem id="play-on">
+              <PlayOnButton className={GROUP_BUTTON} iconSize={20} />
+            </GroupItem>
 
-            <HapticButton
-              onClick={() => setEqOpen((v) => !v)}
-              aria-label={getString("music_equalizer")}
-              aria-pressed={eqOpen}
-              className={eqOpen || eqEnabled ? TOP_BTN_ACTIVE : TOP_BTN}
-            >
-              <SlidersHorizontal className="h-5 w-5" />
-            </HapticButton>
+            <GroupItem id="equalizer">
+              <HapticButton
+                onClick={() => setEqOpen((v) => !v)}
+                aria-label={getString("music_equalizer")}
+                aria-pressed={eqOpen}
+                whileTap={NO_TAP_SCALE}
+                className={eqOpen || eqEnabled ? GROUP_BUTTON_ACTIVE : GROUP_BUTTON}
+              >
+                <SlidersHorizontal className="h-5 w-5" />
+              </HapticButton>
+            </GroupItem>
 
             {/* EQ opens BELOW the top bar so it stays in frame */}
             <div className="absolute right-0 top-full mt-2">
               <EqPanel open={eqOpen} onClose={() => setEqOpen(false)} placement="bottom" />
             </div>
-          </div>
+          </PlayerButtonGroup>
         </div>
 
         {/* Playback failure banner — floats below the top bar across all sub-views. */}

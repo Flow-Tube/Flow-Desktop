@@ -105,7 +105,7 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
       <motion.div layout="position" transition={LAYOUT_SPRING} className="mt-8 flex w-full max-w-2xl flex-col gap-5">
         <div ref={menu.cardRef} onContextMenu={menu.openMenuFromContext} className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1
+            <h1 dir="auto"
               title={track.title}
               className={`line-clamp-1 select-text font-bold tracking-tight text-chrome-neutral-100 ${compact ? "text-2xl" : "text-3xl lg:text-5xl"}`}
             >

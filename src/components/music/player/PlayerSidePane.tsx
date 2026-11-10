@@ -73,7 +73,7 @@ export function PlayerSidePane({ tab, onTabChange, onExpandLyrics, onHide, surfa
             title={getString("music_side_pane_hide")}
             className={ICON_BTN}
           >
-            <PanelRightClose className="h-4 w-4" />
+            <PanelRightClose className="h-4 w-4 rtl:-scale-x-100" />
           </HapticButton>
         </div>
       </div>

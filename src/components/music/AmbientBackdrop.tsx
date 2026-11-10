@@ -6,6 +6,7 @@ import type { PlayerBackgroundStyle } from "../../lib/playerColors";
 import { SoftBackdrop } from "../ui/SoftBackdrop";
 import { AnimatedArtworkLoop } from "./player/AnimatedArtworkLoop";
 import type { SongItem } from "../../types/music";
+import { isRtl } from "../../lib/direction";
 
 /** `var(--player-*)` at an alpha, for gradient stops. */
 const at = (role: "ground" | "base" | "accent", alpha: number) =>
@@ -58,10 +59,10 @@ type ImmersiveArtworkPlacement = "top" | "start" | "center";
  * blurred continuation underneath.
  */
 const IMMERSIVE_COVER: Record<ImmersiveArtworkPlacement, { className: string; objectPosition: string; mask: string }> = {
-  top: { className: "left-0 w-full", objectPosition: "object-top", mask: "linear-gradient(to bottom, black 42%, transparent 85%)" },
-  start: { className: "left-0 w-[62%]", objectPosition: "object-center", mask: "linear-gradient(to right, black 50%, transparent 100%)" },
+  top: { className: "start-0 w-full", objectPosition: "object-top", mask: "linear-gradient(to bottom, black 42%, transparent 85%)" },
+  start: { className: "start-0 w-[62%]", objectPosition: "object-center", mask: "linear-gradient(to right, black 50%, transparent 100%)" },
   center: {
-    className: "left-[19%] w-[62%]",
+    className: "start-[19%] w-[62%]",
     objectPosition: "object-center",
     mask: "radial-gradient(ellipse 50% 50% at 50% 50%, black 45%, transparent 100%)",
   },
@@ -85,6 +86,8 @@ export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkPlac
   const shown: PlayerBackgroundStyle = blurred && style === "immersive" ? "blur" : style;
   const artworkOpacity = ARTWORK_OPACITY[shown];
   const wash = washFor(shown);
+  // The start-side cover fades toward the side pane, which is on the left in a right-to-left layout.
+  const coverMask = IMMERSIVE_COVER[artworkPlacement].mask.replace("to right", isRtl() ? "to left" : "to right");
 
   return (
     <div className={`${EASE} pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[var(--player-ground)]`}>
@@ -107,8 +110,8 @@ export function AmbientBackdrop({ imageSrc, style = "blur_gradient", artworkPlac
             transition={{ duration: 0.35, ease: "easeOut" }}
             className={`absolute inset-y-0 h-full ${IMMERSIVE_COVER[artworkPlacement].className}`}
             style={{
-              maskImage: IMMERSIVE_COVER[artworkPlacement].mask,
-              WebkitMaskImage: IMMERSIVE_COVER[artworkPlacement].mask,
+              maskImage: coverMask,
+              WebkitMaskImage: coverMask,
             }}
           >
             <img

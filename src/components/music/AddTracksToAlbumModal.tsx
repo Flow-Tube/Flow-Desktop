@@ -42,8 +42,8 @@ function ResultRow({
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{song.title}</p>
-        {subtitle && <p className="line-clamp-1 text-xs text-chrome-neutral-500">{subtitle}</p>}
+        <p dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{song.title}</p>
+        {subtitle && <p dir="auto" className="line-clamp-1 text-xs text-chrome-neutral-500">{subtitle}</p>}
       </div>
 
       {added ? (
@@ -147,7 +147,7 @@ export function AddTracksToAlbumModal() {
           <div className="min-w-0">
             <h3 className="text-lg font-bold text-chrome-neutral-100">{getString("album_add_tracks")}</h3>
             {album ? (
-              <p className="mt-0.5 line-clamp-1 text-sm text-chrome-neutral-400">{album.title}</p>
+              <p dir="auto" className="mt-0.5 line-clamp-1 text-sm text-chrome-neutral-400">{album.title}</p>
             ) : null}
           </div>
           <button

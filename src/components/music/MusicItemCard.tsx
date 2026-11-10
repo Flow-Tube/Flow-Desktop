@@ -28,6 +28,7 @@ import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
 import { isLocalMediaId } from '../../lib/localMediaId';
+import { joinIsolated } from '../../lib/direction';
 
 type BaseProps = {
   className?: string;
@@ -151,7 +152,7 @@ function useSongLike(track: SongItem | null | undefined) {
 
 function albumSubtitle(item: AlbumItem): string {
   const artists = artistsText(item.artists);
-  if (artists && item.year) return `${artists} • ${item.year}`;
+  if (artists && item.year) return joinIsolated([artists, String(item.year)]);
   return artists || (item.year ? String(item.year) : '');
 }
 
@@ -366,7 +367,7 @@ function SquareCard({
               void songLike.toggle();
             }}
             className={cx(
-              'absolute left-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-chrome-black/80 text-chrome-white opacity-0 transition-all duration-200 ease-out hover:bg-chrome-black group-hover:opacity-100',
+              'absolute start-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-chrome-black/80 text-chrome-white opacity-0 transition-all duration-200 ease-out hover:bg-chrome-black group-hover:opacity-100',
               songLike.liked ? 'text-[var(--color-primary)] opacity-100' : null,
             )}
           >
@@ -374,7 +375,7 @@ function SquareCard({
           </button>
         ) : null}
         {menuKind ? (
-          <div className="absolute right-2 top-2">
+          <div className="absolute end-2 top-2">
             <button
               type="button"
               aria-label={getString('music_more_options')}
@@ -392,7 +393,7 @@ function SquareCard({
             e.stopPropagation();
             onPlay?.();
           }}
-          className="absolute bottom-2 right-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
+          className="absolute bottom-2 end-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
         >
           <Play className="h-5 w-5" fill="currentColor" />
         </button>
@@ -405,8 +406,8 @@ function SquareCard({
         show={menu.showMenu}
       />
       <div className="flex flex-col gap-0.5">
-        <span className="line-clamp-1 font-medium text-chrome-neutral-100">{title}</span>
-        {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+        <span dir="auto" className="line-clamp-1 font-medium text-chrome-neutral-100">{title}</span>
+        {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
       </div>
     </div>
   );
@@ -464,14 +465,14 @@ function VideoCard16x9({
             e.stopPropagation();
             onPlay?.();
           }}
-          className="absolute bottom-2 right-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
+          className="absolute bottom-2 end-2 grid translate-y-1 place-items-center rounded-full bg-[var(--color-primary)] p-3 text-[var(--color-on-primary)] opacity-0 transition-all duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
         >
           <Play className="h-5 w-5" fill="currentColor" />
         </button>
       </div>
       <div className="flex flex-col gap-0.5">
-        <span className="line-clamp-2 font-medium text-chrome-neutral-100">{title}</span>
-        {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+        <span dir="auto" className="line-clamp-2 font-medium text-chrome-neutral-100">{title}</span>
+        {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
       </div>
     </div>
   );
@@ -519,7 +520,7 @@ function CircleCard({
           iconSize="w-10 h-10"
         />
       </div>
-      <span className="line-clamp-2 text-center font-medium text-chrome-neutral-100">{title}</span>
+      <span dir="auto" className="line-clamp-2 text-center font-medium text-chrome-neutral-100">{title}</span>
     </div>
   );
 }
@@ -624,23 +625,23 @@ function ListRow({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className={cx('line-clamp-1 font-medium', isPlayingTrack ? 'text-chrome-neutral-50' : 'text-chrome-neutral-100')}>
+        <span dir="auto" className={cx('line-clamp-1 font-medium', isPlayingTrack ? 'text-chrome-neutral-50' : 'text-chrome-neutral-100')}>
           {title}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
           {explicit && <ExplicitBadge />}
-          {subtitle && <span className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
+          {subtitle && <span dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{subtitle}</span>}
         </span>
       </div>
 
       <div className="relative h-8 w-24 shrink-0">
-        <span className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 transition-opacity duration-200 ease-out group-hover:opacity-0">
+        <span className="absolute end-0 top-1/2 flex -translate-y-1/2 items-center gap-1.5 transition-opacity duration-200 ease-out group-hover:opacity-0">
           <TrackDownloadIndicator trackId={trackId} />
           {duration && (
             <span className="font-mono text-sm tabular-nums text-chrome-neutral-400">{duration}</span>
           )}
         </span>
-        <div className="absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
+        <div className="absolute end-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100">
           {canLike && (
             <button
               type="button"

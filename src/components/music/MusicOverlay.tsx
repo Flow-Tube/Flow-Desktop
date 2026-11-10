@@ -293,7 +293,7 @@ export function MusicOverlay() {
               >
                 {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </HapticButton>
-              <div className="absolute right-0 top-full mt-2">
+              <div className="absolute end-0 top-full mt-2">
                 <VolumePopover open={volumeOpen} />
               </div>
             </GroupItem>
@@ -315,7 +315,7 @@ export function MusicOverlay() {
             </GroupItem>
 
             {/* EQ opens BELOW the top bar so it stays in frame */}
-            <div className="absolute right-0 top-full mt-2">
+            <div className="absolute end-0 top-full mt-2">
               <EqPanel open={eqOpen} onClose={() => setEqOpen(false)} placement="bottom" />
             </div>
           </PlayerButtonGroup>

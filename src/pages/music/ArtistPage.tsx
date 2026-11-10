@@ -43,7 +43,7 @@ function SectionTitle({ title, onSeeAll }: { title: string; onSeeAll?: () => voi
           className="group flex items-center gap-0.5 text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
         >
           {getString('music_show_all')}
-          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:-scale-x-100" />
         </button>
       ) : null}
     </div>
@@ -175,10 +175,10 @@ function ArtistHeroScaffold({
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-chrome-neutral-300">
             <span>{getString('music_role_artist')}</span>
           </div>
-          <h1 className="mb-4 mt-3 line-clamp-2 text-6xl font-extrabold leading-none tracking-tighter text-chrome-white lg:text-8xl">
+          <h1 dir="auto" className="mb-4 mt-3 line-clamp-2 text-6xl font-extrabold leading-none tracking-tighter text-chrome-white lg:text-8xl">
             {title}
           </h1>
-          {subtitle ? <p className="text-lg text-chrome-neutral-400">{subtitle}</p> : null}
+          {subtitle ? <p dir="auto" className="text-lg text-chrome-neutral-400">{subtitle}</p> : null}
           {listening ? (
             <span className="mt-3 w-fit rounded-full bg-chrome-white/10 px-3 py-1 text-sm font-medium tabular-nums text-chrome-neutral-100">
               {listening}
@@ -518,7 +518,7 @@ export default function ArtistPage() {
                 />
               ) : null}
               {aboutExpandable ? (
-                <span className="absolute bottom-5 left-6 z-10 text-sm font-bold text-chrome-neutral-100 md:left-8">
+                <span className="absolute bottom-5 start-6 z-10 text-sm font-bold text-chrome-neutral-100 md:start-8">
                   {aboutExpanded
                     ? getString('music_artist_read_less')
                     : getString('music_artist_read_more')}

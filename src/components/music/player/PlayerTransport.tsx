@@ -31,8 +31,9 @@ interface TransportButtonsProps {
 export function TransportButtons({ size, playing, loading, onPrevious, onTogglePlay, onNext, nextTitle }: TransportButtonsProps) {
   const sizes = SIZES[size];
   const skipClass = `grid ${sizes.skip} place-items-center rounded-full text-chrome-neutral-100 transition-transform duration-200 ease-out hover:scale-110`;
+  // Media controls run left to right in every language, as the timeline above them does.
   return (
-    <div className={`flex items-center ${sizes.gap}`}>
+    <div dir="ltr" className={`flex items-center ${sizes.gap}`}>
       <HapticButton onClick={onPrevious} aria-label={getString("music_previous")} className={skipClass}>
         <SkipBack className={sizes.skipIcon} fill="currentColor" />
       </HapticButton>
@@ -95,7 +96,7 @@ export function PlayerTransport({ size = "lg", withModes = true }: PlayerTranspo
   if (!withModes) return center;
 
   return (
-    <div className="flex w-full items-center justify-between">
+    <div dir="ltr" className="flex w-full items-center justify-between">
       <HapticButton
         onClick={toggleShuffle}
         aria-label={getString("music_shuffle")}

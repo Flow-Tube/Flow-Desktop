@@ -84,7 +84,7 @@ export function PlayOnPopover({ onClose }: { onClose: () => void }) {
           <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{getString("play_on_manage")}</span>
           <span className="line-clamp-1 text-xs text-chrome-neutral-400">{getString("play_on_manage_summary")}</span>
         </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-chrome-neutral-500" />
+        <ChevronRight className="h-4 w-4 shrink-0 text-chrome-neutral-500 rtl:-scale-x-100" />
       </button>
     </div>
   );

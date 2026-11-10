@@ -115,7 +115,7 @@ export function GlobalMusicDock() {
               <HapticButton
                 onClick={dismiss}
                 aria-label={getString("music_dismiss")}
-                className="absolute -right-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
+                className="absolute -end-2.5 -top-2.5 z-20 grid h-6 w-6 place-items-center rounded-full border border-chrome-neutral-700 bg-surface-container-highest text-chrome-neutral-300 opacity-0 transition-opacity duration-200 ease-out hover:text-chrome-neutral-100 group-hover:opacity-100"
               >
                 <X className="h-3.5 w-3.5" />
               </HapticButton>
@@ -178,7 +178,7 @@ export function GlobalMusicDock() {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">
+                    <div dir="auto" className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">
                       {shown.title}
                     </div>
                     {away ? (
@@ -199,8 +199,8 @@ export function GlobalMusicDock() {
                 />
               </div>
 
-              {/* CENTER — transport */}
-              <div className="flex w-1/3 items-center justify-center gap-5">
+              {/* CENTER — transport, left to right in every language like the timeline */}
+              <div dir="ltr" className="flex w-1/3 items-center justify-center gap-5">
                 {!away && (
                   <HapticButton
                     onClick={toggleShuffle}
@@ -321,14 +321,14 @@ export function GlobalMusicDock() {
             </div>
 
             {/* Popovers — rendered outside the clipped pill so they aren't cut off. */}
-            <div className="absolute bottom-full right-2 mb-3">
+            <div className="absolute bottom-full end-2 mb-3">
               <EqPanel
                 open={popover === "eq"}
                 onClose={() => setPopover(null)}
                 placement="top"
               />
             </div>
-            <div className="absolute bottom-full right-2 mb-3">
+            <div className="absolute bottom-full end-2 mb-3">
               <VolumePopover open={popover === "vol"} />
             </div>
           </motion.div>

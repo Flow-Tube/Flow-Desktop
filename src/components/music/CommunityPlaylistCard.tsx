@@ -30,8 +30,8 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
             )}
         </div>
         <div className="min-w-0">
-          <p className="line-clamp-2 text-base font-medium text-chrome-neutral-100 group-hover:underline">{playlist.title}</p>
-          {byline && <p className="truncate text-sm text-chrome-neutral-400">{byline}</p>}
+          <p dir="auto" className="line-clamp-2 text-base font-medium text-chrome-neutral-100 group-hover:underline">{playlist.title}</p>
+          {byline && <p dir="auto" className="truncate text-sm text-chrome-neutral-400">{byline}</p>}
         </div>
       </button>
 
@@ -45,8 +45,13 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
           >
             <img src={track.thumbnail} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-md object-cover" />
             <span className="min-w-0 truncate text-sm text-chrome-neutral-200">
-              {track.title}
-              {track.artists[0]?.name && <span className="text-chrome-neutral-400"> · {track.artists[0].name}</span>}
+              <bdi>{track.title}</bdi>
+              {track.artists[0]?.name && (
+                <span className="text-chrome-neutral-400">
+                  {" · "}
+                  <bdi>{track.artists[0].name}</bdi>
+                </span>
+              )}
             </span>
           </button>
         ))}
@@ -67,7 +72,7 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
           className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-4 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
         >
           {getString('music_open')}
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 rtl:-scale-x-100" />
         </button>
       </div>
     </div>

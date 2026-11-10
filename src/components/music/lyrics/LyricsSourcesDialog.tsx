@@ -4,13 +4,16 @@ import type { LyricsCandidate } from "../../../lib/lyrics/lyricsHelper";
 import { getString } from "../../../lib/i18n/index";
 import { lyricsSourceLabel, OFFLINE_LYRICS_PROVIDER } from "../../../lib/lyrics/offline";
 import { LyricsDialog } from "./LyricsDialog";
+import { joinIsolated } from "../../../lib/direction";
 
 const preview = (candidate: LyricsCandidate): string =>
-  candidate.entries
-    .map((e) => e.text.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(" · ");
+  joinIsolated(
+    candidate.entries
+      .map((e) => e.text.trim())
+      .filter(Boolean)
+      .slice(0, 2),
+    " · ",
+  );
 
 /** Port of Android's LyricsSourcesSheet: every provider's result as it arrives, with a synced badge. */
 export function LyricsSourcesDialog({

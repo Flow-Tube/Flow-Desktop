@@ -68,7 +68,7 @@ export default function MusicBrowsePage() {
   };
 
   return <main className="px-6 py-8 lg:px-8">
-    <h1 className="mb-6 text-3xl font-bold tracking-tight text-chrome-neutral-100">{title}</h1>
+    <h1 dir="auto" className="mb-6 text-3xl font-bold tracking-tight text-chrome-neutral-100">{title}</h1>
     {error && <div className="mb-6 flex items-center gap-3 text-sm text-chrome-neutral-400">
       <span>{error}</span><Button variant="secondary" onClick={reload}>{getString('music_retry')}</Button>
     </div>}
@@ -79,7 +79,7 @@ export default function MusicBrowsePage() {
       {sections.map((section, index) => {
         const list = shown(section.items);
         return list.length > 0 ? <section key={`${index}:${section.title}`}>
-          <h2 className="mb-4 text-xl font-bold tracking-tight text-chrome-neutral-100">{section.title}</h2>
+          <h2 dir="auto" className="mb-4 text-xl font-bold tracking-tight text-chrome-neutral-100">{section.title}</h2>
           {renderGrid(list)}
         </section> : null;
       })}

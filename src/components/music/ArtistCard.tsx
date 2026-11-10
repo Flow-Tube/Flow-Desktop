@@ -105,7 +105,7 @@ export function ArtistCard({ artist, fill, className, onOpen, following: followi
       </div>
 
       <div className="flex w-full flex-col items-center gap-0.5">
-        <span className="line-clamp-1 font-semibold text-chrome-neutral-100">{artist.title}</span>
+        <span dir="auto" className="line-clamp-1 font-semibold text-chrome-neutral-100">{artist.title}</span>
         <span className="line-clamp-1 text-sm text-chrome-neutral-400">{getString(artist.isProfile ? 'search_role_profile' : 'search_role_artist')}</span>
       </div>
 

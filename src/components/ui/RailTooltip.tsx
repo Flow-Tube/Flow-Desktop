@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { isRtl } from "../../lib/direction";
 
 type RailTooltipProps = {
   label: string;
@@ -11,7 +12,10 @@ export function RailTooltip({ label, anchor }: RailTooltipProps) {
     <span
       role="tooltip"
       className="pointer-events-none fixed z-[110] -translate-y-1/2 whitespace-nowrap rounded-md bg-surface-container-highest px-2.5 py-1 text-xs font-medium text-chrome-neutral-100"
-      style={{ left: anchor.right + 8, top: anchor.top + anchor.height / 2 }}
+      style={{
+        ...(isRtl() ? { right: window.innerWidth - anchor.left + 8 } : { left: anchor.right + 8 }),
+        top: anchor.top + anchor.height / 2,
+      }}
     >
       {label}
     </span>,

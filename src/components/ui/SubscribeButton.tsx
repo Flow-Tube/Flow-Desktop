@@ -13,6 +13,7 @@ import { AddToGroupDialog } from "../subscriptions/AddToGroupDialog";
 import { SETTINGS } from "../../lib/settings/schema";
 import { MOTION_EASE, motionMs } from "../../lib/motion";
 import { getString } from "../../lib/i18n/index";
+import { alignToEnd } from "../../lib/direction";
 
 export interface SubscribeButtonProps {
   channelId: string;
@@ -137,7 +138,7 @@ export function SubscribeButton({
     }
     void useChannelShortsStore.getState().load();
     const rect = boxRef.current?.getBoundingClientRect();
-    if (rect) setAnchor({ top: rect.bottom + 8, right: rect.right });
+    if (rect) setAnchor({ top: rect.bottom + 8, ...alignToEnd(rect) });
   };
 
   return (

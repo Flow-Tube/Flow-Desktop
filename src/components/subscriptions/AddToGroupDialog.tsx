@@ -37,7 +37,7 @@ export function AddToGroupDialog({ channelId, channelName, onClose }: AddToGroup
   return (
     <InfoDialog title={getString("channel_add_to_group")} closeLabel={getString("close")} onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <p className="line-clamp-1 text-sm text-chrome-neutral-400">{channelName}</p>
+        <p dir="auto" className="line-clamp-1 text-sm text-chrome-neutral-400">{channelName}</p>
 
         {groups.length > 0 ? (
           <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-chrome-neutral-800 bg-surface-container-low">
@@ -51,7 +51,7 @@ export function AddToGroupDialog({ channelId, channelName, onClose }: AddToGroup
                   className="px-3 py-2 transition-colors duration-200 ease-out hover:bg-surface-container"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{group.name}</span>
+                    <span dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{group.name}</span>
                     <span className="text-xs text-chrome-neutral-400">{channelCountLabel(group.channelIds.length)}</span>
                   </span>
                 </Checkbox>

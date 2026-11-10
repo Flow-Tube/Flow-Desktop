@@ -178,7 +178,24 @@
 
   body {
     @apply bg-background text-chrome-zinc-100 antialiased overflow-hidden select-none;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    /* Inter has no Arabic letters. Naming Arabic fonts keeps Linux from falling back to whatever
+       fontconfig finds first, which can lose the dots and the joins between letters. */
+    font-family: 'Inter', system-ui, -apple-system, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
+  }
+
+  /* A title or name in another script keeps its own word order and ellipsis (dir="auto") but
+     lines up with the interface, as YouTube does, so it stays beside its thumbnail. */
+  [dir="auto"] {
+    text-align: match-parent;
+  }
+
+  /* Typed text runs in its own direction, so Arabic in an English field or English in an Arabic
+     one reads right; an empty field keeps the interface's direction for its placeholder. */
+  textarea,
+  input:not([type]),
+  input[type="text"],
+  input[type="search"] {
+    unicode-bidi: plaintext;
   }
 }
 
@@ -511,6 +528,11 @@
     visibility 0s linear var(--sidebar-motion-duration);
 }
 
+/* Right to left, the drawer sits on the right and hides past that edge. */
+[dir="rtl"] .sidebar-drawer {
+  transform: translateX(100%);
+}
+
 [data-open="true"] > .sidebar-drawer {
   transform: none;
   visibility: visible;
@@ -651,22 +673,24 @@
 }
 
 .m3-slider__track--active {
-  left: 0;
+  inset-inline-start: 0;
   width: max(0px, calc(var(--m3-fill) * (100% - 3px) - 6px));
   background-color: var(--color-primary);
 }
 
 .m3-slider__track--inactive {
-  left: calc(var(--m3-fill) * (100% - 3px) + 9px);
-  right: 0;
+  inset-inline-start: calc(var(--m3-fill) * (100% - 3px) + 9px);
+  inset-inline-end: 0;
   background-color: var(--color-surface-container-highest);
 }
 
 .m3-slider__handle {
+  --m3-handle-width: 3px;
   position: absolute;
-  left: calc(1.5px + var(--m3-fill) * (100% - 3px));
-  transform: translateX(-50%);
-  width: 3px;
+  inset-inline-start: calc(1.5px + var(--m3-fill) * (100% - 3px));
+  /* Centred on its position by a logical margin, not a transform, so it mirrors with the fill. */
+  margin-inline-start: calc(var(--m3-handle-width) / -2);
+  width: var(--m3-handle-width);
   height: 1.5rem;
   border-radius: 9999px;
   background-color: var(--color-primary);
@@ -674,7 +698,7 @@
 }
 
 .m3-slider[data-pressed="true"] .m3-slider__handle {
-  width: 2px;
+  --m3-handle-width: 2px;
 }
 
 /* The music progress bar's shapes. */
@@ -704,9 +728,9 @@
   width: calc(var(--m3-fill) * 100%);
 }
 .m3-slider[data-bar-style="slim"] .m3-slider__track--inactive {
-  left: calc(var(--m3-fill) * 100%);
+  inset-inline-start: calc(var(--m3-fill) * 100%);
   width: auto;
-  right: 0;
+  inset-inline-end: 0;
 }
 .m3-slider[data-bar-style="wavy"] .m3-slider__track--active {
   height: 0.75rem;
@@ -721,7 +745,7 @@
 /* Marks the end of travel; pointless once the handle has reached it. */
 .m3-slider__stop {
   position: absolute;
-  right: 6px;
+  inset-inline-end: 6px;
   width: 3px;
   height: 3px;
   border-radius: 9999px;
@@ -786,6 +810,7 @@
 }
 
 .m3-slider--vertical .m3-slider__handle {
+  margin-inline-start: 0;
   left: 50%;
   top: auto;
   bottom: calc(1.5px + var(--m3-fill) * (100% - 3px));
@@ -964,5 +989,5 @@
 }
 
 :root[data-app-font="system"] body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
 }

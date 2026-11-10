@@ -42,7 +42,7 @@ export default function MusicMixPage() {
   };
 
   return <main className="mx-auto max-w-[1100px] px-6 py-8 lg:px-8">
-    <h1 className="mb-5 text-3xl font-bold tracking-tight text-chrome-neutral-100">{title}</h1>
+    <h1 dir="auto" className="mb-5 text-3xl font-bold tracking-tight text-chrome-neutral-100">{title}</h1>
     {error && <div className="mb-5 flex items-center gap-3 text-sm text-chrome-neutral-400">
       <span>{error}</span><Button variant="secondary" onClick={() => void reload()}>{getString('music_retry')}</Button>
     </div>}

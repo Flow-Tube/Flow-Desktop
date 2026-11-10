@@ -7,6 +7,7 @@ import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
 import { getString } from '../../lib/i18n/index';
 import type { SearchCreator } from '../../lib/searchResults';
 import type { VideoSummary } from '../../types/video';
+import { joinIsolated } from '../../lib/direction';
 
 interface SearchCreatorCardProps {
   creator: SearchCreator;
@@ -20,7 +21,7 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
   const navigate = useNavigate();
   const avatar = useProxiedImageUrl(upgradeAvatarUrl(channel.avatarUrl));
   const open = () => navigate(`/channel/${channel.channelId}`);
-  const subtitle = [channel.handle, channel.subscriberCountText].filter(Boolean).join(' • ');
+  const subtitle = joinIsolated([channel.handle, channel.subscriberCountText]);
 
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
@@ -34,7 +35,7 @@ export function SearchCreatorCard({ creator, onPlay, onAddToQueue }: SearchCreat
             {avatar ? <img src={avatar} alt={channel.name} className="h-full w-full object-cover" loading="lazy" /> : null}
           </span>
           <span className="min-w-0">
-            <span className="line-clamp-1 text-base font-medium text-chrome-neutral-100">{channel.name}</span>
+            <span dir="auto" className="line-clamp-1 text-base font-medium text-chrome-neutral-100">{channel.name}</span>
             <span className="line-clamp-1 text-sm text-chrome-neutral-400">
               {subtitle || getString('search_role_channel')}
             </span>

@@ -21,7 +21,7 @@ export function AutoplaySwitch() {
       <span className={`relative h-3 w-8 rounded-full transition-colors duration-200 ease-out ${autoplay ? "bg-chrome-white/60" : "bg-chrome-white/25"}`}>
         <span
           className={`absolute -top-1 left-0 grid h-5 w-5 place-items-center rounded-full bg-chrome-white text-chrome-black transition-transform duration-200 ease-out ${
-            autoplay ? "translate-x-3 rtl:-translate-x-3" : "translate-x-0"
+            autoplay ? "translate-x-3" : "translate-x-0"
           }`}
         >
           {autoplay ? <Play size={11} fill="currentColor" /> : <Pause size={11} fill="currentColor" />}

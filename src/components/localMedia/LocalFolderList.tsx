@@ -25,7 +25,7 @@ export function LocalFolderList({
         >
           <Folder className="h-5 w-5 shrink-0 text-chrome-neutral-400" aria-hidden />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-chrome-neutral-100">{folder.name}</span>
+            <span dir="auto" className="block truncate text-sm font-medium text-chrome-neutral-100">{folder.name}</span>
             <span className="block truncate text-xs tabular-nums text-chrome-neutral-400">
               {getPlural(isVideos ? "local_videos_count" : "local_songs_count", folder.files.length)}
               {" · "}

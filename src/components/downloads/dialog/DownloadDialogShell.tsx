@@ -75,14 +75,14 @@ export function DialogHeader({
           <div className="grid h-full w-full place-items-center text-chrome-neutral-500">{fallbackIcon}</div>
         )}
         {badge ? (
-          <span className="absolute bottom-1.5 right-1.5 rounded-md bg-chrome-black/75 px-1.5 py-0.5 font-mono text-[10px] text-chrome-white">
+          <span className="absolute bottom-1.5 end-1.5 rounded-md bg-chrome-black/75 px-1.5 py-0.5 font-mono text-[10px] text-chrome-white">
             {badge}
           </span>
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <h2 className="line-clamp-2 text-base font-semibold leading-snug text-chrome-neutral-100">{title}</h2>
-        {subtitle ? <p className="mt-1 truncate text-sm text-chrome-neutral-400">{subtitle}</p> : null}
+        <h2 dir="auto" className="line-clamp-2 text-base font-semibold leading-snug text-chrome-neutral-100">{title}</h2>
+        {subtitle ? <p dir="auto" className="mt-1 truncate text-sm text-chrome-neutral-400">{subtitle}</p> : null}
         {meta ? <p className="mt-0.5 truncate font-mono text-xs text-chrome-neutral-500">{meta}</p> : null}
       </div>
       <button

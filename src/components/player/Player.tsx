@@ -2479,6 +2479,9 @@ export const Player: React.FC<PlayerProps> = ({
     <div
       ref={containerRef}
       id="flow-player-root"
+      // The frame and its controls run left to right in every language, as on Android: the
+      // timeline, the skip buttons and the double-tap sides all follow the video, not the text.
+      dir="ltr"
       data-fullscreen={isFullscreen || undefined}
       className={cx(
         "group/player",
@@ -2745,7 +2748,7 @@ export const Player: React.FC<PlayerProps> = ({
           <div className="flex flex-col">
             <span className="text-[10px] font-bold text-chrome-neutral-400 uppercase tracking-wider">SponsorBlock</span>
             <span className="text-xs font-semibold text-chrome-neutral-200">
-              {notifyToast.categoryName} Segment
+              {getString("player_sponsorblock_segment_notice", notifyToast.categoryName)}
             </span>
           </div>
         </div>
@@ -2759,7 +2762,7 @@ export const Player: React.FC<PlayerProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
           <span className="text-xs font-bold text-chrome-neutral-200">
-            SponsorBlock Muted ({sponsorBlockCategoryLabel(currentSBMuteSegment || "filler")})
+            {getString("player_sponsorblock_muted", sponsorBlockCategoryLabel(currentSBMuteSegment || "filler"))}
           </span>
         </div>
       )}

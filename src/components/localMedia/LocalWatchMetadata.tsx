@@ -18,11 +18,11 @@ export function LocalWatchMetadata({ currentVideo }: { currentVideo: VideoSummar
   return (
     <div className="flex items-start gap-2">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h1 className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">
+        <h1 dir="auto" className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">
           {currentVideo.title}
         </h1>
         {currentVideo.channelName && (
-          <p className="select-text text-sm text-chrome-neutral-400">{currentVideo.channelName}</p>
+          <p dir="auto" className="select-text text-sm text-chrome-neutral-400">{currentVideo.channelName}</p>
         )}
       </div>
       {file && <LocalFileMenuButton file={file} />}

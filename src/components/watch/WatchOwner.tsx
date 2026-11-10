@@ -9,6 +9,8 @@ import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { getString } from "../../lib/i18n/index";
 import { collaboratorsByline } from "../../lib/collaborators";
 import type { Collaborator } from "../../types/video";
+import { alignToStart } from "../../lib/direction";
+import { joinIsolated } from "../../lib/direction";
 
 export interface WatchOwnerProps {
   channelId: string;
@@ -61,7 +63,7 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
       <button
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
-          setAnchor(anchor ? null : { top: rect.bottom + 6, left: rect.left });
+          setAnchor(anchor ? null : { top: rect.bottom + 6, ...alignToStart(rect) });
         }}
         aria-expanded={Boolean(anchor)}
         className="flex min-w-0 items-center gap-3 rounded-full pe-2 text-start transition-opacity hover:opacity-90"
@@ -107,10 +109,10 @@ export function WatchOwner({ channelId, channelName, avatarUrl, subscriberText, 
               >
                 <Avatar url={collaborator.avatarUrl} name={collaborator.name} className="h-9 w-9" />
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium text-chrome-neutral-100">{collaborator.name}</span>
+                  <span dir="auto" className="block truncate text-sm font-medium text-chrome-neutral-100">{collaborator.name}</span>
                   {(collaborator.handle || collaborator.subscriberCountText) && (
                     <span className="block truncate text-xs text-chrome-neutral-400">
-                      {[collaborator.handle, collaborator.subscriberCountText].filter(Boolean).join(" • ")}
+                      {joinIsolated([collaborator.handle, collaborator.subscriberCountText])}
                     </span>
                   )}
                 </span>

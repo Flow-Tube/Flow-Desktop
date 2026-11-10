@@ -46,10 +46,10 @@ export function StoryBackdrop({ seed, near, far }: StoryBackdropProps) {
   const box = `0 0 ${VIEW} ${VIEW}`;
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <svg ref={near} viewBox={box} className="absolute -right-[32vmin] -top-[32vmin] h-[95vmin] w-[95vmin]">
+      <svg ref={near} viewBox={box} className="absolute -end-[32vmin] -top-[32vmin] h-[95vmin] w-[95vmin]">
         <path d={nearPath} className="fill-[var(--story-shape)]" />
       </svg>
-      <svg ref={far} viewBox={box} className="absolute -bottom-[26vmin] -left-[26vmin] h-[70vmin] w-[70vmin]">
+      <svg ref={far} viewBox={box} className="absolute -bottom-[26vmin] -start-[26vmin] h-[70vmin] w-[70vmin]">
         <path d={farPath} className="fill-[var(--story-shape)]" />
       </svg>
     </div>

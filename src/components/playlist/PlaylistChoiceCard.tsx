@@ -40,7 +40,7 @@ export function PlaylistChoiceCard({
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">
+        <span dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">
           {summary.title}
         </span>
         <span className="line-clamp-1 text-xs text-chrome-neutral-500">

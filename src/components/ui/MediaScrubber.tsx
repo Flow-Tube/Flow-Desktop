@@ -194,7 +194,7 @@ export function MediaScrubber({
       <div className={`relative ${trackH} w-full overflow-hidden ${trackShape}`}>
         <div
           ref={fillRef}
-          className={`absolute inset-y-0 left-0 bg-[var(--color-primary)] ${fillShape}`}
+          className={`absolute inset-y-0 start-0 bg-[var(--color-primary)] ${fillShape}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -209,15 +209,20 @@ export function MediaScrubber({
   );
 
   if (isEdge || !showTimes) {
-    return <div className={`flex w-full items-center ${className}`}>{bar}</div>;
+    return (
+      <div dir="ltr" className={`flex w-full items-center ${className}`}>
+        {bar}
+      </div>
+    );
   }
 
   const rightLabel = countdown
     ? `-${formatTime(Math.max(0, duration - ratio * duration))}`
     : formatTime(duration);
 
+  // A timeline runs left to right in every language, with its times on the same sides.
   return (
-    <div className={`flex w-full items-center gap-3 ${className}`}>
+    <div dir="ltr" className={`flex w-full items-center gap-3 ${className}`}>
       <span className="w-10 shrink-0 text-end font-mono text-xs tabular-nums text-chrome-neutral-400">
         {formatTime(ratio * duration)}
       </span>

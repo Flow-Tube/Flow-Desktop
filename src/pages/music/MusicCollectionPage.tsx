@@ -285,7 +285,7 @@ export default function MusicCollectionPage({ kind }: { kind: CollectionKind }) 
           >
             <Play className="h-4 w-4" fill="currentColor" />
           </button>
-          <span className="line-clamp-1 text-sm font-semibold text-chrome-neutral-100">
+          <span dir="auto" className="line-clamp-1 text-sm font-semibold text-chrome-neutral-100">
             {meta.title}
           </span>
         </div>

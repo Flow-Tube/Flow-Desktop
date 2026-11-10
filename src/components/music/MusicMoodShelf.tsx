@@ -23,7 +23,7 @@ export function MusicMoodShelf({ title, moods, onOpen, onBrowse }: MusicMoodShel
             onClick={() => onOpen(mood)}
             className="flex h-12 snap-start items-center rounded-xl border border-chrome-neutral-800 bg-surface-container-low px-4 text-start text-sm font-medium text-chrome-neutral-100 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
           >
-            <span className="truncate">{mood.title}</span>
+            <span dir="auto" className="truncate">{mood.title}</span>
           </button>
         ))}
       </ShelfScroller>

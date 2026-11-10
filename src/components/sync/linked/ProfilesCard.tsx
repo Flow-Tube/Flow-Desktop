@@ -67,7 +67,7 @@ function ProfileRow({
           photoSrc={photo}
         />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
+          <div dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
           <div className="text-xs text-chrome-neutral-400">
             {getString(link ? "linked_profile_syncs" : "linked_profile_local")}
           </div>

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
 import { AnchoredPortalMenu, type MenuAnchor } from './AnchoredPortalMenu';
+import { alignToEnd } from '../../lib/direction';
 
 export interface FilterSelectOption<T extends string> {
   value: T;
@@ -40,7 +41,7 @@ export function FilterSelect<T extends string>({
     }
     const rect = buttonRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setAnchor({ top: rect.bottom + 8, flipBottom: rect.top - 8, right: rect.right });
+    setAnchor({ top: rect.bottom + 8, flipBottom: rect.top - 8, ...alignToEnd(rect) });
   };
 
   const current = options.find((o) => o.value === value) ?? options[0];

@@ -101,7 +101,7 @@ export function MusicCollectionHeader({
             {meta.explicit && <ExplicitBadge />}
           </span>
 
-          <h1 className="line-clamp-2 text-5xl font-extrabold leading-tight tracking-tighter text-chrome-white lg:text-7xl">
+          <h1 dir="auto" className="line-clamp-2 text-5xl font-extrabold leading-tight tracking-tighter text-chrome-white lg:text-7xl">
             {meta.title}
           </h1>
 
@@ -135,7 +135,7 @@ export function MusicCollectionHeader({
           )}
 
           {meta.description ? (
-            <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-chrome-neutral-400">
+            <p dir="auto" className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-chrome-neutral-400">
               {meta.description}
             </p>
           ) : null}

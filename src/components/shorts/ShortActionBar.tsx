@@ -335,7 +335,7 @@ function MoreMenu({ children }: { children: ReactNode }) {
     <div
       ref={ref}
       style={{ transformOrigin: "bottom right" }}
-      className="animate-menu-in absolute bottom-2 right-16 z-20 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1"
+      className="animate-menu-in absolute bottom-2 end-16 z-20 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1"
     >
       {children}
     </div>

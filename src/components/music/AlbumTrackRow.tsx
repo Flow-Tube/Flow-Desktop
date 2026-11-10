@@ -275,7 +275,7 @@ export function AlbumTrackRow({
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className={`line-clamp-1 font-medium ${isCurrent ? 'text-[var(--color-primary)]' : 'text-chrome-neutral-100'}`}>
+        <span dir="auto" className={`line-clamp-1 font-medium ${isCurrent ? 'text-[var(--color-primary)]' : 'text-chrome-neutral-100'}`}>
           {track.title}
         </span>
         {((showArtist && artistLabel) || track.explicit) && (
@@ -295,7 +295,7 @@ export function AlbumTrackRow({
       <div className="relative ms-4 h-8 w-20 shrink-0">
         <span
           className={cx(
-            'absolute right-0 top-1/2 -translate-y-1/2 font-mono text-sm tabular-nums text-chrome-neutral-400 transition-opacity duration-200 ease-out',
+            'absolute end-0 top-1/2 -translate-y-1/2 font-mono text-sm tabular-nums text-chrome-neutral-400 transition-opacity duration-200 ease-out',
             selection ? null : compactActions ? 'xl:group-hover:opacity-0' : 'group-hover:opacity-0',
           )}
         >
@@ -303,7 +303,7 @@ export function AlbumTrackRow({
         </span>
         {selection ? null : <div
           className={cx(
-            'absolute right-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100',
+            'absolute end-0 top-0 flex items-center gap-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100',
             compactActions ? 'hidden xl:flex' : null,
           )}
         >

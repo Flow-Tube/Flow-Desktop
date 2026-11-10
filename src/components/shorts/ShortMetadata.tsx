@@ -56,10 +56,10 @@ export function ShortMetadata({
           )}
         </button>
 
-        <button
+        <button dir="auto"
           type="button"
           onClick={openChannel}
-          className="truncate text-left text-lg font-bold text-chrome-neutral-100 hover:text-chrome-white"
+          className="truncate text-lg font-bold text-chrome-neutral-100 hover:text-chrome-white"
         >
           {channelName}
         </button>
@@ -75,9 +75,9 @@ export function ShortMetadata({
         )}
       </div>
 
-      <button
+      <button dir="auto"
         type="button"
-        className="line-clamp-4 text-left text-base leading-relaxed text-chrome-neutral-200 transition-colors hover:text-chrome-white"
+        className="line-clamp-4 text-base leading-relaxed text-chrome-neutral-200 transition-colors hover:text-chrome-white"
         onClick={onOpenDescription}
       >
         {title}

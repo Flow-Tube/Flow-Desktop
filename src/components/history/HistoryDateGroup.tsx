@@ -6,6 +6,7 @@ import { getPlural, getString } from "../../lib/i18n/index";
 import { MusicHistoryGrid } from "./MusicHistoryGrid";
 import type { HistoryDateGroup as HistoryDateGroupData } from "../../lib/useHistory";
 import type { VideoSummary } from "../../types/video";
+import { joinIsolated } from "../../lib/direction";
 
 interface HistoryDateGroupProps {
   group: HistoryDateGroupData;
@@ -38,12 +39,10 @@ export function HistoryDateGroup({
     return `${dateLabel}-${video.id}-${watchDate}-${index}`;
   };
 
-  const countLabel = [
+  const countLabel = joinIsolated([
     plainVideos.length > 0 ? getPlural("history_videos_count", plainVideos.length) : null,
     musicVideos.length > 0 ? getPlural("history_songs_count", musicVideos.length) : null,
-  ]
-    .filter(Boolean)
-    .join(" • ");
+  ]);
 
   return (
     <section className="min-w-0">

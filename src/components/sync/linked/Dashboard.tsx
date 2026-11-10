@@ -75,7 +75,7 @@ function ProfileStateRow({ state }: { state: SyncedProfileState }) {
         photoSrc={view?.photos[profile.id]}
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
+        <div dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
         <div className="text-xs text-chrome-neutral-400">
           {state.kept > 0 ? getString("linked_dashboard_kept", state.kept) : getString("linked_dashboard_up_to_date")}
         </div>

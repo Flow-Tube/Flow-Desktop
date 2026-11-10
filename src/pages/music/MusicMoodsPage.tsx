@@ -19,7 +19,7 @@ export default function MusicMoodsPage() {
         className="h-24 animate-pulse rounded-2xl bg-surface-container-low" />)}
     </div> : <div className="flex flex-col gap-10">
       {groups.map((group, index) => <section key={`${group.title}:${index}`}>
-        {group.title && <h2 className="mb-4 text-xl font-bold text-chrome-neutral-100">{group.title}</h2>}
+        {group.title && <h2 dir="auto" className="mb-4 text-xl font-bold text-chrome-neutral-100">{group.title}</h2>}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {group.items.map((item) => <button key={`${item.browseId}:${item.params ?? ''}`} type="button"
         onClick={() => navigate(musicSeeAllRoute(item.browseId, item.params, item.title))}

@@ -54,7 +54,7 @@ export function LocalFileCard({ file, plays, nowMs, onPlay }: LocalFileItemProps
         menuActions={menu.actions}
         thumbnailOverlay={
           watchStateOf(file, plays, nowMs) === "new" ? (
-            <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-on-primary">
+            <span className="absolute start-1.5 top-1.5 z-10 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-on-primary">
               {getString("local_new_badge")}
             </span>
           ) : undefined

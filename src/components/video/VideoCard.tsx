@@ -45,6 +45,7 @@ import { collaboratorsByline } from "../../lib/collaborators";
 import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
 import { isLocalMediaId } from '../../lib/localMediaId';
+import { alignToEnd, growFromPoint } from "../../lib/direction";
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -270,14 +271,14 @@ function VideoCardComponent({
     if (isChannel) return;
     e.preventDefault();
     e.stopPropagation();
-    setMenuAnchor({ top: e.clientY, left: e.clientX });
+    setMenuAnchor({ top: e.clientY, ...growFromPoint(e.clientX) });
     setShowMenu(true);
   }, [isChannel]);
 
   const openMenuFromDots = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    setMenuAnchor({ top: rect.bottom + 4, right: rect.right });
+    setMenuAnchor({ top: rect.bottom + 4, ...alignToEnd(rect) });
     setShowMenu((prev) => !prev);
   }, []);
 
@@ -635,7 +636,7 @@ function VideoCardComponent({
             </div>
           )}
         </div>
-        <h3 className="font-bold text-center text-chrome-zinc-100 line-clamp-1 group-hover:text-primary transition-colors">
+        <h3 dir="auto" className="font-bold text-center text-chrome-zinc-100 line-clamp-1 group-hover:text-primary transition-colors">
           {video.title}
         </h3>
         <p className="text-xs text-chrome-zinc-400 mb-4">{video.publishedText || getString('search_role_channel')}</p>
@@ -687,11 +688,11 @@ function VideoCardComponent({
             <div className="h-full w-full bg-chrome-zinc-800" />
           )}
           {isLiveVideo ? (
-            <LiveBadge className="absolute bottom-1 right-1" />
+            <LiveBadge className="absolute bottom-1 end-1" />
           ) : video.isUpcoming ? (
-            <UpcomingBadge className="absolute bottom-1 right-1" />
+            <UpcomingBadge className="absolute bottom-1 end-1" />
           ) : video.durationSeconds ? (
-            <div className="absolute bottom-1 right-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[11px] font-medium leading-tight text-chrome-white">
+            <div className="absolute bottom-1 end-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[11px] font-medium leading-tight text-chrome-white">
               {formatDuration(video.durationSeconds)}
             </div>
           ) : null}
@@ -702,6 +703,7 @@ function VideoCardComponent({
             onClick={play}
           {...tabClickProps}
             style={titleClampStyle}
+            dir="auto"
             className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary"
           >
             {displayTitle}
@@ -714,9 +716,9 @@ function VideoCardComponent({
             <ChannelLabel name={byline} verified={video.isVerified} />
           </button>
           <div className="text-[13px] text-chrome-neutral-500">
-            {video.viewCountText && <span>{video.viewCountText}</span>}
+            {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
             {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-            {publishedText && <span>{publishedText}</span>}
+            {publishedText && <bdi>{publishedText}</bdi>}
           </div>
           <CardPills video={video} />
         </div>
@@ -793,11 +795,11 @@ function VideoCardComponent({
           )}
 
           {isLiveVideo ? (
-            <LiveBadge className="absolute bottom-1 right-1" />
+            <LiveBadge className="absolute bottom-1 end-1" />
           ) : video.isUpcoming ? (
-            <UpcomingBadge className="absolute bottom-1 right-1" />
+            <UpcomingBadge className="absolute bottom-1 end-1" />
           ) : video.durationSeconds ? (
-            <div className="absolute bottom-1 right-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[12px] font-medium leading-tight tracking-wide text-chrome-white">
+            <div className="absolute bottom-1 end-1 z-10 rounded bg-chrome-black/80 px-1 py-px text-[12px] font-medium leading-tight tracking-wide text-chrome-white">
               {formatDuration(video.durationSeconds)}
             </div>
           ) : null}
@@ -808,6 +810,7 @@ function VideoCardComponent({
             onClick={play}
           {...tabClickProps}
             style={titleClampStyle}
+            dir="auto"
             className="cursor-pointer text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors hover:text-[var(--color-primary)]"
           >
             {displayTitle}
@@ -826,9 +829,9 @@ function VideoCardComponent({
               </span>
             ) : (
               <>
-                {video.viewCountText && <span>{video.viewCountText}</span>}
+                {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
                 {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-                {publishedText && <span>{publishedText}</span>}
+                {publishedText && <bdi>{publishedText}</bdi>}
               </>
             )}
           </div>
@@ -884,18 +887,18 @@ function VideoCardComponent({
         )}
 
         {isLiveVideo ? (
-          <LiveBadge className={`absolute right-1 ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`} />
+          <LiveBadge className={`absolute end-1 ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`} />
         ) : video.isUpcoming ? (
-          <UpcomingBadge className="absolute bottom-1 right-1" />
+          <UpcomingBadge className="absolute bottom-1 end-1" />
         ) : video.durationSeconds ? (
-          <div className={`absolute right-1 z-10 bg-chrome-black/80 px-1 py-px rounded text-[12px] font-medium text-chrome-white leading-tight tracking-wide ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`}>
+          <div className={`absolute end-1 z-10 bg-chrome-black/80 px-1 py-px rounded text-[12px] font-medium text-chrome-white leading-tight tracking-wide ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`}>
             {formatDuration(video.durationSeconds)}
           </div>
         ) : null}
 
         {isHistoryCard || isContinueCard ? (
           <>
-            <div className="absolute bottom-0 left-0 z-10 h-[3px] w-full bg-chrome-neutral-600">
+            <div className="absolute bottom-0 start-0 z-10 h-[3px] w-full bg-chrome-neutral-600">
               <div
                 className="h-full bg-primary"
                 style={{ width: `${progressPercent}%` }}
@@ -908,7 +911,7 @@ function VideoCardComponent({
                 onClick={handleRemoveFromHistory}
                 title={getString('music_remove_from_history')}
                 aria-label={getString('music_remove_from_history')}
-                className="absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors duration-200 ease-out hover:bg-chrome-red-950/50 hover:text-chrome-red-300 group-hover:opacity-100"
+                className="absolute end-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors duration-200 ease-out hover:bg-chrome-red-950/50 hover:text-chrome-red-300 group-hover:opacity-100"
               >
                 <Trash2 size={15} />
               </button>
@@ -948,6 +951,7 @@ function VideoCardComponent({
             onClick={play}
           {...tabClickProps}
             style={titleClampStyle}
+            dir="auto"
             className="text-chrome-zinc-100 text-sm font-medium leading-snug cursor-pointer hover:text-[var(--color-primary)] transition-colors"
           >
             {displayTitle}
@@ -960,10 +964,10 @@ function VideoCardComponent({
           </div>
 
           {/* View Count + Published */}
-          <div className="text-chrome-zinc-500 text-[13px] flex items-center gap-0 mt-0">
-            {video.viewCountText && <span>{video.viewCountText}</span>}
+          <div className="text-chrome-zinc-500 text-[13px]">
+            {video.viewCountText && <bdi>{video.viewCountText}</bdi>}
             {video.viewCountText && publishedText && <span className="mx-1">•</span>}
-            {publishedText && <span>{publishedText}</span>}
+            {publishedText && <bdi>{publishedText}</bdi>}
           </div>
           {reasonLine && <p className="truncate text-[13px] text-chrome-neutral-500">{reasonLine}</p>}
           <CardPills video={video} />

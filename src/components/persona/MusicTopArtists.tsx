@@ -64,7 +64,7 @@ export function MusicTopArtists({ profile }: MusicTopArtistsProps) {
                   >
                     <td className="px-4 py-3 text-[var(--color-on-surface)]">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-medium">{artist.name}</span>
+                        <span dir="auto" className="truncate font-medium">{artist.name}</span>
                         {artist.liked && (
                           <Heart
                             className="h-3.5 w-3.5 shrink-0 text-[var(--color-primary)]"

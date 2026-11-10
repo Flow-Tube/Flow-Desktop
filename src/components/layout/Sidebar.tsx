@@ -38,7 +38,7 @@ function withSyncBadge(icon: ReactNode, syncing: boolean): ReactNode {
   return (
     <span className="relative">
       {icon}
-      <RefreshCw className="absolute -bottom-1 -right-1.5 h-3 w-3 animate-spin rounded-full bg-surface text-chrome-neutral-300" />
+      <RefreshCw className="absolute -bottom-1 -end-1.5 h-3 w-3 animate-spin rounded-full bg-surface text-chrome-neutral-300" />
     </span>
   );
 }

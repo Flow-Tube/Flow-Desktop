@@ -11,7 +11,7 @@ export function NoteShelfCard({ note, onOpen }: { note: Note; onOpen: () => void
       onClick={onOpen}
       className="flex h-44 w-[300px] shrink-0 snap-start flex-col gap-3 rounded-2xl bg-surface-row p-4 text-start transition-colors duration-200 ease-out hover:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
-      <span className="line-clamp-4 min-h-0 flex-1 whitespace-pre-line text-sm leading-relaxed text-chrome-neutral-100">{note.text}</span>
+      <span dir="auto" className="line-clamp-4 min-h-0 flex-1 whitespace-pre-line text-sm leading-relaxed text-chrome-neutral-100">{note.text}</span>
       <span className="flex items-center gap-3">
         <NoteImage note={note} className={note.kind === "Channel" ? "w-9 shrink-0" : "w-16 shrink-0"} />
         <span className="min-w-0 flex-1">

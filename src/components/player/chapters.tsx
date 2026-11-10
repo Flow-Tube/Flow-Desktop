@@ -259,13 +259,13 @@ export const Chapters: React.FC<ChaptersProps> = ({
 
         {activeTab === "transcript" && transcriptCues.length > 0 && (
           <div className="relative border-b border-chrome-white/5 px-4 py-2 shrink-0">
-            <Search size={14} className="pointer-events-none absolute left-6 top-1/2 -translate-y-1/2 text-chrome-zinc-500" />
+            <Search size={14} className="pointer-events-none absolute start-6 top-1/2 -translate-y-1/2 text-chrome-zinc-500" />
             <TextInput
               value={transcriptQuery}
               onChange={setTranscriptQuery}
               placeholder={getString("transcript_search")}
               aria-label={getString("transcript_search")}
-              className="w-full pl-8"
+              className="w-full ps-8"
             />
           </div>
         )}
@@ -316,14 +316,14 @@ export const Chapters: React.FC<ChaptersProps> = ({
                       </div>
 
                       {/* Red Time Badge */}
-                      <span className="absolute bottom-1 right-1 bg-chrome-black/85 text-[10px] font-bold text-chrome-white px-1.5 py-0.5 rounded border border-chrome-white/5 font-mono">
+                      <span className="absolute bottom-1 end-1 bg-chrome-black/85 text-[10px] font-bold text-chrome-white px-1.5 py-0.5 rounded border border-chrome-white/5 font-mono">
                         {formatTime(chapter.startSeconds)}
                       </span>
                     </div>
 
                     {/* Info & Actions */}
-                    <div className="flex-1 min-w-0 pr-1 flex flex-col justify-center">
-                      <h4
+                    <div className="flex-1 min-w-0 pe-1 flex flex-col justify-center">
+                      <h4 dir="auto"
                         className={`text-sm font-bold truncate transition-colors leading-tight ${
                           isActive ? "text-primary" : "text-chrome-zinc-100 group-hover:text-primary"
                         }`}
@@ -336,7 +336,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
                     </div>
 
                     {/* Side Actions (Loop & Share) */}
-                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 pr-1">
+                    <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 pe-1">
                       <button
                         type="button"
                         title={getString('player_loop_chapter')}
@@ -396,7 +396,7 @@ export const Chapters: React.FC<ChaptersProps> = ({
                     <span className="text-xs font-mono font-bold text-chrome-red-500 shrink-0 mt-0.5 min-w-[45px] hover:underline">
                       {formatTime(cue.start)}
                     </span>
-                    <p className={`text-sm leading-relaxed transition-colors flex-1 ${
+                    <p dir="auto" className={`text-sm leading-relaxed transition-colors flex-1 ${
                       isCueActive ? "text-primary font-bold" : "text-chrome-zinc-200 font-medium"
                     }`}>
                       {cue.text}

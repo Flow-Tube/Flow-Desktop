@@ -17,6 +17,7 @@ import { profileDisplayName } from "../../../lib/profiles/display";
 import { profileErrorMessage } from "../../../lib/profiles/profileErrors";
 import { useProfilesStore } from "../../../store/useProfilesStore";
 import { useUiStore } from "../../../store/useUiStore";
+import { alignToEnd } from "../../../lib/direction";
 
 type Editing = { profile?: Profile } | null;
 
@@ -57,7 +58,7 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
 
   const openMenu = (button: HTMLElement) => {
     const rect = button.getBoundingClientRect();
-    setMenu({ top: rect.bottom + 4, right: rect.right, flipBottom: rect.top - 4 });
+    setMenu({ top: rect.bottom + 4, ...alignToEnd(rect), flipBottom: rect.top - 4 });
   };
 
   return (
@@ -71,7 +72,7 @@ function ProfileRow({ profile, onEdit }: { profile: Profile; onEdit: (profile: P
         size="lg"
       />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
+        <div dir="auto" className="truncate text-sm font-medium text-chrome-neutral-200">{name}</div>
         {description && <div className="mt-0.5 text-xs text-chrome-neutral-400">{description}</div>}
       </div>
       {!isActive && (

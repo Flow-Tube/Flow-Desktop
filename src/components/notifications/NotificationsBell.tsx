@@ -24,6 +24,8 @@ import { useUiStore } from "../../store/useUiStore";
 import { useUpcomingReminderStore } from "../../store/useUpcomingReminderStore";
 import { useWatchLaterStore } from "../../store/useWatchLaterStore";
 import type { VideoSummary } from "../../types/video";
+import { alignToEnd } from "../../lib/direction";
+import { joinIsolated } from "../../lib/direction";
 
 function NotificationThumbnail({ src, alt }: { src: string | null; alt: string }) {
   const imageSrc = useProxiedImageUrl(src);
@@ -76,7 +78,7 @@ function NotificationItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <p
+        <p dir="auto"
           className={`line-clamp-2 text-sm text-chrome-neutral-100 ${
             notification.isRead ? "font-normal" : "font-semibold"
           }`}
@@ -84,10 +86,7 @@ function NotificationItem({
           {notification.title}
         </p>
         <p className="mt-1 line-clamp-1 text-xs text-chrome-neutral-400">
-          {notification.channelName}
-          {" • "}
-          {kindLabel ? `${kindLabel} • ` : ""}
-          {notificationTimeLabel(notification.createdAt)}
+          {joinIsolated([notification.channelName, kindLabel, notificationTimeLabel(notification.createdAt)])}
         </p>
       </div>
 
@@ -188,7 +187,7 @@ export function NotificationsBell() {
       return;
     }
     const rect = wrapRef.current?.getBoundingClientRect();
-    if (rect) setAnchor({ top: rect.bottom + 8, right: rect.right });
+    if (rect) setAnchor({ top: rect.bottom + 8, ...alignToEnd(rect) });
   }, [open, closePanel]);
 
   const handleOpen = useCallback(
@@ -240,7 +239,7 @@ export function NotificationsBell() {
           <Bell />
         </IconButton>
         {unreadCount > 0 && (
-          <span className="pointer-events-none absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[10px] font-semibold leading-none text-[var(--color-on-primary)]">
+          <span className="pointer-events-none absolute end-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-primary)] px-1 text-[10px] font-semibold leading-none text-[var(--color-on-primary)]">
             {badge}
           </span>
         )}

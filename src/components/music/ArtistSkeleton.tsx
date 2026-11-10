@@ -134,7 +134,7 @@ export function ArtistSkeleton() {
               aria-hidden="true"
               className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[var(--color-surface-container-low)] via-[var(--color-surface-container-low)]/95 to-transparent"
             />
-            <Shimmer className="absolute bottom-5 left-6 h-4 w-20 rounded bg-surface-container md:left-8" />
+            <Shimmer className="absolute bottom-5 start-6 h-4 w-20 rounded bg-surface-container md:start-8" />
           </div>
         </section>
       </main>

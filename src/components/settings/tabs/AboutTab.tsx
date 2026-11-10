@@ -50,7 +50,7 @@ function LinkRow({ icon, label, value, href, onSelect }: { icon: ReactNode; labe
       <div className="flex items-center justify-end gap-2 min-w-0 text-end">
         {value && <span className="text-sm text-chrome-neutral-400 break-all">{value}</span>}
         {href && <ExternalLink size={12} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
-        {onSelect && <ChevronRight size={14} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors" />}
+        {onSelect && <ChevronRight size={14} className="text-chrome-neutral-500 group-hover:text-chrome-neutral-300 transition-colors rtl:-scale-x-100" />}
       </div>
     </Row>
   );

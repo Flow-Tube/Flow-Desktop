@@ -160,16 +160,16 @@ export function RecapStory({ summary, period, onClose }: RecapStoryProps) {
             </div>
           </div>
           {page > 0 && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <div className="absolute start-3 top-1/2 -translate-y-1/2">
               <IconButton aria-label={getString("recap_story_previous")} className={CONTROL} onClick={() => goTo(page - 1)}>
-                <ChevronLeft className="h-5 w-5 rtl:rotate-180" />
+                <ChevronLeft className="h-5 w-5 rtl:-scale-x-100" />
               </IconButton>
             </div>
           )}
           {page < pages.length - 1 && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="absolute end-3 top-1/2 -translate-y-1/2">
               <IconButton aria-label={getString("recap_story_next")} className={CONTROL} onClick={() => goTo(page + 1)}>
-                <ChevronRight className="h-5 w-5 rtl:rotate-180" />
+                <ChevronRight className="h-5 w-5 rtl:-scale-x-100" />
               </IconButton>
             </div>
           )}

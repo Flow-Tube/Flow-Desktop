@@ -113,7 +113,7 @@ export function AddToAlbumModal() {
             >
               <AlbumRowArt album={album} />
               <span className="min-w-0 flex-1">
-                <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{album.title}</span>
+                <span dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{album.title}</span>
                 <span className="line-clamp-1 text-xs text-chrome-neutral-500">
                   {getPlural("music_song_count", album.tracks?.length ?? 0)}
                 </span>

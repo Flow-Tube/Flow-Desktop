@@ -15,7 +15,7 @@ export function ChannelPageSkeleton() {
             <div className="w-32 h-32 rounded-full bg-chrome-zinc-800 border-4 border-background shrink-0 -mt-16" />
             
             {/* Metadata Skeletons */}
-            <div className="text-center md:text-left space-y-3 mt-4 md:mt-0 pb-2">
+            <div className="text-center md:text-start space-y-3 mt-4 md:mt-0 pb-2">
               <div className="h-8 w-48 bg-chrome-zinc-800 rounded-lg mx-auto md:mx-0" />
               <div className="h-4 w-32 bg-chrome-zinc-800 rounded mx-auto md:mx-0" />
             </div>
@@ -71,8 +71,8 @@ export function PlaylistsGridSkeleton() {
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="flex flex-col gap-3">
           <div className="relative w-full aspect-video rounded-xl mt-3 bg-chrome-zinc-800 animate-pulse border border-chrome-zinc-800/50">
-            <div className="absolute -top-1.5 left-2 right-2 h-2 bg-chrome-zinc-800/60 rounded-t-xl" />
-            <div className="absolute -top-3 left-4 right-4 h-2 bg-chrome-zinc-800/40 rounded-t-xl" />
+            <div className="absolute -top-1.5 start-2 end-2 h-2 bg-chrome-zinc-800/60 rounded-t-xl" />
+            <div className="absolute -top-3 start-4 end-4 h-2 bg-chrome-zinc-800/40 rounded-t-xl" />
           </div>
           <div className="flex flex-col gap-2 mt-1">
             <div className="h-4 w-5/6 bg-chrome-zinc-800 rounded animate-pulse" />

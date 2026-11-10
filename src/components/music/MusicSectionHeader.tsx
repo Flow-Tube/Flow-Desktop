@@ -36,7 +36,7 @@ export function MusicSectionHeader({
       )}
       <div className="min-w-0 text-start">
         {strapline && <p className="truncate text-sm text-chrome-neutral-400">{strapline}</p>}
-        <h2 className="truncate text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
+        <h2 dir="auto" className="truncate text-xl font-bold tracking-tight text-chrome-neutral-100">{title}</h2>
       </div>
     </div>
   );
@@ -49,7 +49,7 @@ export function MusicSectionHeader({
         className="group mb-3 flex w-full items-center justify-between gap-3 rounded-lg px-1 py-0.5 transition-colors duration-200 ease-out hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
       >
         {heading}
-        <ChevronRight className="h-5 w-5 shrink-0 text-chrome-neutral-400 transition-transform group-hover:translate-x-0.5" />
+        <ChevronRight className="h-5 w-5 shrink-0 text-chrome-neutral-400 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:-scale-x-100" />
       </button>
     );
   }
@@ -73,7 +73,7 @@ export function MusicSectionHeader({
           className="group flex shrink-0 items-center gap-0.5 text-sm font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:text-chrome-neutral-100"
         >
           {getString('music_show_all')}
-          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 rtl:-scale-x-100" />
         </button>
       ) : null}
     </div>

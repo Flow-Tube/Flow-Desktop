@@ -33,6 +33,7 @@ import { backgroundTabClickProps, openedInBackgroundTab } from "../../lib/openTa
 import { openActions } from "../common/openActions";
 import { useOriginalTitle } from "../../lib/useOriginalTitle";
 import { useShortsPlayerDisabled } from "../../lib/useShortsContent";
+import { alignToEnd, growFromPoint } from "../../lib/direction";
 
 interface ShortCardProps {
   short: ShortVideoSummary;
@@ -106,14 +107,14 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
   const openContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    setMenuAnchor({ top: event.clientY, left: event.clientX });
+    setMenuAnchor({ top: event.clientY, ...growFromPoint(event.clientX) });
   };
 
   const openMenuFromDots = (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setMenuAnchor({ top: rect.bottom + 4, right: rect.right });
+    setMenuAnchor({ top: rect.bottom + 4, ...alignToEnd(rect) });
   };
 
   const copyLink = async () => {
@@ -186,11 +187,11 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
       ref={cardRef}
       onContextMenu={openContextMenu}
       className={[
-        "group relative flex shrink-0 flex-col gap-2 text-left",
+        "group relative flex shrink-0 flex-col gap-2 text-start",
         isShelf ? "w-[140px] sm:w-[176px]" : "w-full",
       ].join(" ")}
     >
-      <button type="button" onClick={playShort} {...backgroundTabClickProps(shortRoute)} className="flex w-full flex-col gap-2 text-left">
+      <button type="button" onClick={playShort} {...backgroundTabClickProps(shortRoute)} className="flex w-full flex-col gap-2 text-start">
         <span className="relative block aspect-[9/16] w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container">
           {short.thumbnailUrl && (
             <img
@@ -206,13 +207,13 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
             </span>
           </span>
           {short.viewCountText && (
-            <span className="absolute bottom-2 left-2 rounded bg-chrome-black/70 px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-chrome-white">
+            <span className="absolute bottom-2 start-2 rounded bg-chrome-black/70 px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-chrome-white">
               {short.viewCountText}
             </span>
           )}
         </span>
 
-        <span
+        <span dir="auto"
           className={[
             "line-clamp-2 font-semibold leading-tight text-chrome-neutral-100 transition-colors group-hover:text-primary",
             isShelf ? "text-xs" : "text-sm",
@@ -226,7 +227,7 @@ export function ShortCard({ short, queue, variant = "grid", finiteQueue = false 
         type="button"
         aria-label={getString("more_options")}
         onClick={openMenuFromDots}
-        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors hover:bg-chrome-black group-hover:opacity-100"
+        className="absolute end-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors hover:bg-chrome-black group-hover:opacity-100"
       >
         <MoreVertical className="h-4 w-4" />
       </button>

@@ -85,7 +85,7 @@ export function SubscriptionsManage({
                   onClick={() => onOpenChannel(channel.id)}
                   className="min-w-0 flex-1 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  <div className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{channel.name}</div>
+                  <div dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{channel.name}</div>
                   <div className="line-clamp-1 text-xs text-chrome-neutral-400">
                     {channel.subscriberCountText || details?.subscriberCountText || getString("subscriptions_subscribers_unavailable")}
                   </div>

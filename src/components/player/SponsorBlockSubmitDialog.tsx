@@ -10,6 +10,7 @@ import { TextInput } from "../ui/TextInput";
 import { Select } from "../ui/Select";
 import { SponsorBlockIcon } from "../ui/SponsorBlockIcon";
 import { SB_SUBMIT_CATEGORIES } from "../../lib/sponsorBlockCategories";
+import { interfaceDir } from "../../lib/direction";
 
 function formatTimestamp(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "0:00";
@@ -117,7 +118,8 @@ export function SponsorBlockSubmitDialog({
       }}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6 text-left"
+        dir={interfaceDir()}
+        className="w-full max-w-md rounded-2xl border border-chrome-neutral-800 bg-surface-container p-6 text-start"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-5 flex items-center gap-2.5">

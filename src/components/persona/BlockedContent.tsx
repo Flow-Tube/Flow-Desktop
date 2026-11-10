@@ -132,7 +132,7 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
                         <EyeOff className="h-4 w-4" />
                       </td>
                       <td className="px-0 py-3">
-                        <span className="block truncate text-[var(--color-on-surface)]">{name}</span>
+                        <span dir="auto" className="block truncate text-[var(--color-on-surface)]">{name}</span>
                         <span className="mt-0.5 block truncate font-mono text-[10px] text-[var(--color-on-surface-variant)]">
                           {id}
                         </span>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getString } from '../../lib/i18n/index';
 import { createFrameScheduler, type FrameScheduler } from '../../lib/frameScheduler';
+import { isRtl } from '../../lib/direction';
 
 const NAV_BUTTON =
   'absolute top-1/2 z-20 grid h-10 w-10 -translate-y-1/2 cursor-pointer place-items-center rounded-full border border-chrome-neutral-800 bg-surface-container-high text-chrome-neutral-300 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100 group-hover/shelfnav:opacity-100';
@@ -25,9 +26,12 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
     const element = scrollRef.current;
     if (!element) return;
     const { scrollLeft, scrollWidth, clientWidth } = element;
-    setCanScrollLeft(scrollLeft > 2);
+    const travel = scrollWidth - clientWidth;
+    // A right-to-left shelf starts at its right edge, where scrollLeft is 0, and goes negative.
+    const fromLeft = isRtl() ? scrollLeft + travel : scrollLeft;
+    setCanScrollLeft(fromLeft > 2);
     // 2px of slack so sub-pixel rounding cannot strand the right-hand arrow.
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
+    setCanScrollRight(fromLeft < travel - 2);
   }, []);
 
   /*
@@ -83,7 +87,7 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
           type="button"
           onClick={() => scrollByPage(-1)}
           aria-label={getString('shelf_scroll_left')}
-          className={`${NAV_BUTTON} left-0 -ms-2 sm:-ml-4`}
+          className={`${NAV_BUTTON} left-0 -ml-2 sm:-ml-4`}
         >
           <ChevronLeft size={20} strokeWidth={2.5} />
         </button>
@@ -98,7 +102,7 @@ export function ShelfScroller({ children, className = '' }: ShelfScrollerProps) 
           type="button"
           onClick={() => scrollByPage(1)}
           aria-label={getString('shelf_scroll_right')}
-          className={`${NAV_BUTTON} right-0 -me-2 sm:-mr-4`}
+          className={`${NAV_BUTTON} right-0 -mr-2 sm:-mr-4`}
         >
           <ChevronRight size={20} strokeWidth={2.5} />
         </button>

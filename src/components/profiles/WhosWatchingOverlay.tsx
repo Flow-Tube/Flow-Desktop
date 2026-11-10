@@ -59,7 +59,7 @@ export function WhosWatchingOverlay() {
                 photoSrc={view.photos[profile.id]}
                 size="xl"
               />
-              <span className="line-clamp-2 text-sm font-medium text-chrome-neutral-100">{name}</span>
+              <span dir="auto" className="line-clamp-2 text-sm font-medium text-chrome-neutral-100">{name}</span>
             </button>
           );
         })}

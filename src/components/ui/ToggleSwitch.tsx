@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
+import { inlineSign } from '../../lib/direction';
 
 /*
   Material 3 Expressive switch. The track is 52x32 with a 24px handle, and the
@@ -51,7 +52,7 @@ export function ToggleSwitch({ checked, onChange, disabled }: ToggleSwitchProps)
         className={`grid h-6 w-6 place-items-center rounded-full ${
           checked ? 'bg-on-primary' : 'bg-chrome-neutral-400'
         }`}
-        animate={{ x: checked ? TRAVEL : 0, scale: pressed && !disabled ? PRESSED_SCALE : 1 }}
+        animate={{ x: checked ? TRAVEL * inlineSign() : 0, scale: pressed && !disabled ? PRESSED_SCALE : 1 }}
         transition={reduceMotion ? REDUCED : SPRING}
       >
         {/* Both icons stay mounted and cross-fade, so neither can pop in late. */}

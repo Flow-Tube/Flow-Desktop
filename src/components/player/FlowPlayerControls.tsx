@@ -559,7 +559,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
           onClick={(event) => event.stopPropagation()}
         >
           {title && (!isFullscreen || showFullscreenTitle) && (
-            <div className="mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block">
+            <div dir="auto" className="mb-2 hidden max-w-[70%] truncate text-sm font-bold text-chrome-white/95 sm:block">
               {title}
             </div>
           )}

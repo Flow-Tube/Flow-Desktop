@@ -7,6 +7,7 @@ import { SETTINGS } from "../../../lib/settings/schema";
 import { useCollectionDownloadSheet, type CollectionRequest } from "../../../lib/useCollectionDownloadSheet";
 import { useAppSettingsStore } from "../../../store/useAppSettingsStore";
 import { DialogFooter, DialogFrame, DialogHeader } from "./DownloadDialogShell";
+import { joinIsolated } from "../../../lib/direction";
 
 export function CollectionDownloadDialog({ request, onClose }: { request: CollectionRequest; onClose: () => void }) {
   const state = useCollectionDownloadSheet(request);
@@ -19,16 +20,18 @@ export function CollectionDownloadDialog({ request, onClose }: { request: Collec
   const { meta } = request;
   const folderName = album && meta.author ? `${meta.author} - ${meta.title}` : meta.title;
   const count = getString(album ? "download_collection_songs" : "download_collection_videos", state.items.length);
-  const summary = [
-    count,
-    state.durationSeconds > 0 ? formatDuration(state.durationSeconds) : null,
-    album && formatBytes(state.sizes[state.quality]) ? `≈ ${formatBytes(state.sizes[state.quality])}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const subtitle = [meta.author, getString(album ? "download_album_label" : "download_playlist_label"), meta.year]
-    .filter(Boolean)
-    .join(" · ");
+  const summary = joinIsolated(
+    [
+      count,
+      state.durationSeconds > 0 ? formatDuration(state.durationSeconds) : null,
+      album && formatBytes(state.sizes[state.quality]) ? `≈ ${formatBytes(state.sizes[state.quality])}` : null,
+    ],
+    " · ",
+  );
+  const subtitle = joinIsolated(
+    [meta.author, getString(album ? "download_album_label" : "download_playlist_label"), meta.year ? String(meta.year) : null],
+    " · ",
+  );
 
   const start = () => {
     state.submit();

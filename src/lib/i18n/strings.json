@@ -3547,5 +3547,12 @@
   "playlists_sort_oldest": "Oldest",
   "playlists_sort_name": "A-Z",
   "playlists_sort_custom": "Custom order",
-  "playlists_drag_hint": "Drag playlists into the order you want."
+  "playlists_drag_hint": "Drag playlists into the order you want.",
+  "player_sponsorblock_segment_notice": "%s segment",
+  "player_sponsorblock_muted": "SponsorBlock muted (%s)",
+  "player_mini_back_seconds": "Back %ds",
+  "player_mini_forward_seconds": "Forward %ds",
+  "blocked_keyword_remove": "Remove %s",
+  "sponsorblock_category_color_customize": "Customize the %s color",
+  "download_bytes_of": "%1$s of %2$s"
 }

@@ -48,7 +48,7 @@ export function MusicBlockedArtists() {
                     <Music2 className="h-4 w-4" />
                   </td>
                   <td className="px-0 py-3 text-[var(--color-on-surface)]">
-                    <span className="block truncate">{name}</span>
+                    <span dir="auto" className="block truncate">{name}</span>
                   </td>
                   <td className="w-12 px-4 py-3 text-end">
                     <button

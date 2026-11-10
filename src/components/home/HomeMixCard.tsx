@@ -21,10 +21,10 @@ export function HomeMixCard({ mix, onPlay }: HomeMixCardProps) {
         videoCountText={getPlural("home_mix_length", mix.videos.length)}
       />
       <div className="min-w-0 px-1">
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary">
+        <h3 dir="auto" className="line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100 transition-colors group-hover:text-primary">
           {title}
         </h3>
-        <p className="mt-0.5 truncate text-[13px] text-chrome-neutral-400">{mix.seed.channelName}</p>
+        <p dir="auto" className="mt-0.5 truncate text-[13px] text-chrome-neutral-400">{mix.seed.channelName}</p>
       </div>
     </button>
   );

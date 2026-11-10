@@ -59,7 +59,7 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
           />
         )}
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{now.title}</div>
+          <div dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{now.title}</div>
           <div className="line-clamp-1 text-xs text-chrome-neutral-400">{now.by}</div>
           <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-surface-container-high px-2 py-0.5 text-xs text-chrome-neutral-300">
             <DeviceKindIcon kind={device.kind} className="h-3.5 w-3.5" />
@@ -76,7 +76,7 @@ export function NowPlayingCard({ device, nowMs }: { device: PlayOnDevice; nowMs:
           className="group relative h-1.5 w-full rounded-full bg-surface-container-highest"
         >
           <span
-            className="absolute inset-y-0 left-0 rounded-full bg-[var(--color-primary)]"
+            className="absolute inset-y-0 start-0 rounded-full bg-[var(--color-primary)]"
             style={{ width: `${fraction * 100}%` }}
           />
         </button>

@@ -125,7 +125,7 @@ export const ChannelHome: React.FC<ChannelHomeProps> = ({
                   className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold text-chrome-neutral-300 transition-colors hover:bg-surface-container-high hover:text-chrome-neutral-100"
                 >
                   {getString("explore_see_all")}
-                  <ChevronRight size={16} />
+                  <ChevronRight className="rtl:-scale-x-100" size={16} />
                 </button>
               ) : undefined
             }

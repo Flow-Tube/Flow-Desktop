@@ -21,6 +21,8 @@ import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { getString } from "../../lib/i18n/index";
 import type { PlaylistDetailsMeta } from "../../lib/usePlaylistDetails";
 import { useVideoThumbnail } from "../../lib/useVideoThumbnail";
+import { alignToEnd } from "../../lib/direction";
+import { joinIsolated } from "../../lib/direction";
 
 interface PlaylistAmbientHeaderProps {
   meta: PlaylistDetailsMeta;
@@ -111,7 +113,7 @@ export function PlaylistAmbientHeader({
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setMenuAnchor((current) =>
-      current ? null : { top: rect.bottom + 4, right: rect.right },
+      current ? null : { top: rect.bottom + 4, ...alignToEnd(rect) },
     );
   }, []);
 
@@ -177,7 +179,7 @@ export function PlaylistAmbientHeader({
           </div>
 
           <div className="min-h-0 flex-1">
-            <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">
+            <h1 dir="auto" className="text-3xl font-bold tracking-tight text-chrome-neutral-100">
               {meta.title}
             </h1>
             {ownerLabel ? (
@@ -187,11 +189,11 @@ export function PlaylistAmbientHeader({
             ) : null}
             {statsParts.length > 0 ? (
               <p className="mt-1 text-sm text-chrome-neutral-300">
-                {statsParts.join(" • ")}
+                {joinIsolated(statsParts)}
               </p>
             ) : null}
             {isOwned && meta.description ? (
-              <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-chrome-neutral-300">
+              <p dir="auto" className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-chrome-neutral-300">
                 {meta.description}
               </p>
             ) : null}

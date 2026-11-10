@@ -25,7 +25,7 @@ function ChannelRow({ id, name, avatarUrl, line }: ChannelRowProps) {
           <ChannelAvatarImage src={avatarUrl} name={name} />
         </span>
         <span className="min-w-0">
-          <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{name}</span>
+          <span dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{name}</span>
           {line && <span className="line-clamp-1 text-xs text-chrome-neutral-400">{line}</span>}
         </span>
       </Link>

@@ -58,7 +58,7 @@ export function NoteRow({ note, active, checked, onClick }: NoteRowProps) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{noteHeading(note)}</span>
-        <span className="mt-0.5 line-clamp-2 whitespace-pre-line text-sm text-chrome-neutral-400">{note.text}</span>
+        <span dir="auto" className="mt-0.5 line-clamp-2 whitespace-pre-line text-sm text-chrome-neutral-400">{note.text}</span>
         <span className="mt-0.5 block text-xs text-chrome-neutral-500">
           {getString("note_edited", formatYouTubeRelativeTime(note.updatedAt))}
         </span>

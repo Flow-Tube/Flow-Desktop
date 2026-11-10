@@ -27,13 +27,12 @@ import { SETTINGS } from '../../lib/settings/schema';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
 import { useMusicArtistHidden, useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { getString } from '../../lib/i18n/index';
+import { episodeAsSong } from '../../lib/searchResults';
 import { useGridStyle } from '../../lib/useGridColumns';
-import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistItem, SongItem, YTItem } from '../../types/music';
+import type { AlbumItem, ArtistItem, MoodAndGenreItem, MusicHomeChip, PlaylistItem, PodcastItem, SongItem, YTItem } from '../../types/music';
 
 const songsOf = (items: YTItem[]): SongItem[] =>
-  items.filter((i): i is Extract<YTItem, { type: 'song' }> => i.type === 'song');
-
-const renderable = (item: YTItem) => item.type !== 'episode' && item.type !== 'podcast';
+  items.flatMap((i) => (i.type === 'song' ? [i] : i.type === 'episode' ? [episodeAsSong(i)] : []));
 
 const NO_CHIPS: MusicHomeChip[] = [];
 
@@ -133,6 +132,7 @@ export default function MusicHome() {
   const openAlbum = (a: AlbumItem) => navigate(`/music/album/${a.browseId}`);
   const openArtist = (a: ArtistItem) => navigate(`/music/artist/${a.id}`);
   const openPlaylist = (p: PlaylistItem) => navigate(`/music/playlist/${p.id}`);
+  const openPodcast = (p: PodcastItem) => navigate(`/music/playlist/${p.id}`);
   const moodItems = moods.groups.flatMap((group) => group.items).slice(0, MOOD_TILES);
   const openMood = (mood: MoodAndGenreItem) =>
     navigate(musicSeeAllRoute(mood.browseId, mood.params, mood.title));
@@ -161,6 +161,28 @@ export default function MusicHome() {
         );
       case 'artist':
         return <MusicItemCard variant="artist" item={item} fill={fill} onOpen={() => openArtist(item)} />;
+      case 'podcast':
+        return (
+          <MusicItemCard
+            variant="podcast"
+            item={item}
+            fill={fill}
+            onPlay={() => openPodcast(item)}
+            onOpen={() => openPodcast(item)}
+          />
+        );
+      case 'episode': {
+        const asSong = episodeAsSong(item);
+        return (
+          <MusicItemCard
+            variant="episode"
+            item={item}
+            fill={fill}
+            onPlay={() => playTrack(asSong, songContext, source)}
+            onOpen={() => playTrack(asSong, songContext, source)}
+          />
+        );
+      }
       default:
         return null;
     }
@@ -182,7 +204,7 @@ export default function MusicHome() {
     }
 
     if (activeChip) {
-      const items = visible(chipFilter.items.filter(renderable));
+      const items = visible(chipFilter.items);
       const songContext = songsOf(items);
       if (chipFilter.error && items.length === 0) {
         return <div className="flex flex-col items-center gap-3 py-20 text-center">
@@ -234,7 +256,7 @@ export default function MusicHome() {
     };
 
     const renderShelf = (section: MusicFeedSection) => {
-      const items = visible(section.items.filter(renderable)).slice(0, 20);
+      const items = visible(section.items).slice(0, 20);
       if (items.length === 0) return null;
       const songContext = songsOf(items);
       if (section.id === 'speed-dial') {

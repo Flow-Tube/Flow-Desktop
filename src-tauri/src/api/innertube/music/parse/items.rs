@@ -29,6 +29,9 @@ pub fn parse_yt_item(item: &Value) -> Option<YTItem> {
     if let Some(r) = item.get("musicTwoRowItemRenderer") {
         return parse_two_row_item(r);
     }
+    if let Some(r) = item.get("musicMultiRowListItemRenderer") {
+        return parse_multi_row_list_item(r);
+    }
     None
 }
 
@@ -325,6 +328,52 @@ pub fn parse_two_row_item(r: &Value) -> Option<YTItem> {
     }
 }
 
+/// Parse a `musicMultiRowListItemRenderer` (commonly used in podcast carousels and shelves).
+#[must_use]
+pub fn parse_multi_row_list_item(r: &Value) -> Option<YTItem> {
+    let title = runs_text(&r["title"])?;
+    let show_run = r["secondTitle"]["runs"].as_array().and_then(|a| a.first());
+    let author = show_run
+        .and_then(|run| run["text"].as_str())
+        .map(|name| Artist {
+            name: name.to_string(),
+            id: None,
+        });
+
+    let page = page_type(&r["navigationEndpoint"]).or_else(|| page_type(&r["onTap"]));
+    if page.is_some_and(|pt| pt.contains("PODCAST_SHOW")) {
+        let id = browse_id(&r["navigationEndpoint"])
+            .or_else(|| browse_id(&r["onTap"]))
+            .map(|id| endpoints::podcast_playlist_id(&id).to_string())
+            .unwrap_or_default();
+        return Some(YTItem::Podcast(PodcastItem {
+            id,
+            title,
+            author,
+            episode_count_text: runs_text(&r["subtitle"]),
+            thumbnail: thumbnail_url(r),
+        }));
+    }
+
+    let id = video_id(r)
+        .or_else(|| browse_id(&r["onTap"]))
+        .or_else(|| browse_id(&r["navigationEndpoint"]))?;
+    let podcast_id = show_run
+        .and_then(|run| browse_id(&run["navigationEndpoint"]))
+        .map(|id| endpoints::podcast_playlist_id(&id).to_string());
+    let publish_date = runs_text(&r["subtitle"]);
+
+    Some(YTItem::Episode(EpisodeItem {
+        id,
+        title,
+        author,
+        podcast_id,
+        thumbnail: thumbnail_url(r).unwrap_or_default(),
+        explicit: has_explicit(r),
+        publish_date_text: publish_date,
+    }))
+}
+
 /// Parse the "top result" `musicCardShelfRenderer` card.
 #[must_use]
 pub fn parse_card_shelf(card: &Value) -> Option<YTItem> {
@@ -605,5 +654,52 @@ mod tests {
             panic!("podcast")
         };
         assert_eq!(podcast.id, "PL36GQAcc");
+    }
+
+    #[test]
+    fn a_multi_row_list_item_parses_as_podcast_episode() {
+        let r = json!({
+            "title": { "runs": [{ "text": "Living Your Best Life" }] },
+            "secondTitle": { "runs": [{
+                "text": "Huberman Lab",
+                "navigationEndpoint": linked("", "MPSPPL12345", "MUSIC_PAGE_TYPE_PODCAST_SHOW_DETAIL_PAGE")["navigationEndpoint"]
+            }] },
+            "subtitle": { "runs": [{ "text": "2d ago" }] },
+            "onTap": { "watchEndpoint": { "videoId": "ep_test_01" } },
+            "thumbnail": { "musicThumbnailRenderer": { "thumbnail": { "thumbnails": [
+                { "url": "https://example.com/ep.jpg", "width": 800, "height": 450 }
+            ] } } }
+        });
+        let Some(YTItem::Episode(episode)) =
+            parse_yt_item(&json!({ "musicMultiRowListItemRenderer": r }))
+        else {
+            panic!("multi-row episode")
+        };
+        assert_eq!(episode.id, "ep_test_01");
+        assert_eq!(episode.title, "Living Your Best Life");
+        assert_eq!(
+            episode.author.map(|a| a.name).as_deref(),
+            Some("Huberman Lab")
+        );
+        assert_eq!(episode.podcast_id.as_deref(), Some("PL12345"));
+        assert_eq!(episode.publish_date_text.as_deref(), Some("2d ago"));
+        assert_eq!(episode.thumbnail, "https://example.com/ep.jpg");
+    }
+
+    #[test]
+    fn a_multi_row_show_parses_as_podcast() {
+        let r = json!({
+            "title": { "runs": [{ "text": "Huberman Lab" }] },
+            "subtitle": { "runs": [{ "text": "Scicomm Media" }] },
+            "navigationEndpoint": linked("", "MPSPPL12345", "MUSIC_PAGE_TYPE_PODCAST_SHOW_DETAIL_PAGE")["navigationEndpoint"]
+        });
+        let Some(YTItem::Podcast(podcast)) =
+            parse_yt_item(&json!({ "musicMultiRowListItemRenderer": r }))
+        else {
+            panic!("multi-row show")
+        };
+        assert_eq!(podcast.id, "PL12345");
+        assert_eq!(podcast.title, "Huberman Lab");
+        assert_eq!(podcast.thumbnail, None);
     }
 }

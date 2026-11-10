@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, HatGlasses, PanelLeftClose, PanelLeftOpen, Settings } from 'lucide-react';
+import { usePlayerStore } from '../../store/usePlayerStore';
 import { useUiStore } from '../../store/useUiStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import Logo from '../common/Logo';
@@ -22,7 +23,11 @@ export function Topbar() {
   const isWatchSidebarOpen = useUiStore((s) => s.isWatchSidebarOpen);
   const navigate = useNavigate();
   const location = useLocation();
-  const usesDrawer = location.pathname.startsWith('/watch/') || location.pathname.startsWith('/settings');
+  const isWatchPage = location.pathname.startsWith('/watch/');
+  const usesDrawer = isWatchPage || location.pathname.startsWith('/settings');
+  // Lets the glow above the player through. Solid again the moment the video reaches the bar,
+  // with no fade, so the picture never shows behind the search box.
+  const seeThrough = usePlayerStore((s) => s.isAmbientSpreadShown && s.isPlayerBelowTopbar) && isWatchPage;
   const sidebarOpen = usesDrawer ? isWatchSidebarOpen : isSidebarExpanded;
   const showAppLogo = useAppSettingsStore((state) => state.values[SETTINGS.SHOW_APP_LOGO_ICON] !== 'false');
   const deepFlowActive = useAppSettingsStore((state) => state.values[SETTINGS.DEEP_FLOW_ACTIVE] === 'true');
@@ -34,7 +39,11 @@ export function Topbar() {
   });
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent bg-background px-3">
+    <header
+      className={`sticky top-0 z-40 flex h-14 items-center justify-between border-b border-transparent px-3 ${
+        seeThrough ? 'bg-transparent transition-colors duration-200 ease-out' : 'bg-background'
+      }`}
+    >
       {/* Left */}
       <div className="flex min-w-0 items-center gap-2">
         <IconButton

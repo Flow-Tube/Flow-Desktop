@@ -131,6 +131,7 @@ MUSIC
 - With the Immersive player background, the animated cover now plays as the background, as on Android, instead of never showing. It holds still behind full-screen lyrics.
 - Animated covers play again. Apple names a loop's video segments relative to its playlist, and through Flow's local proxy every one of them was asked for at the wrong address, so no loop ever started.
 - Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
+- The Podcasts category chip on Music Home now loads podcast shelves and episodes instead of showing an empty result.
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
@@ -140,6 +141,7 @@ PLAYER
 - While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
 - Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
+- With the ambient glow on, the glow above the video shows through the top bar instead of stopping at its edge. The bar turns solid again as soon as the video reaches it.
 - A new switch, Glow around the player, spreads those colors past the player in every view. It is off by default, and it has its own brighter look in light themes.
 - Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
@@ -211,6 +213,7 @@ SHORTS
 - A Short with several audio tracks offers them in its settings, and the equalizer now applies to Shorts.
 - Subscriptions shows when the feed last refreshed and how many videos it checked. The count has its own switch.
 - A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.
+- With Show Shorts off, the side rail no longer links to Saved Shorts, matching the Library.
 - Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
 
 HOME

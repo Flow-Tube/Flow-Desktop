@@ -54,7 +54,7 @@ export function RankRows({ items, value, portraits = false, images = true, onOpe
                 {content}
               </button>
             ) : (
-              <div className="flex items-center gap-3 p-1.5">{content}</div>
+              <div dir="auto" className="flex items-center gap-3 p-1.5">{content}</div>
             )}
           </li>
         );

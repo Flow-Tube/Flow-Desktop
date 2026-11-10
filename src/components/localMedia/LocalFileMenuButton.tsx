@@ -8,6 +8,7 @@ import { localFileMenuActions } from "../../lib/localMedia/useLocalFileMenu";
 import type { MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { MediaMenu } from "../ui/MediaMenu";
 import { LocalFileDetailsDialog } from "./LocalFileDetailsDialog";
+import { alignToEnd } from "../../lib/direction";
 
 export function LocalFileMenuButton({ file }: { file: LocalMediaFile }) {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export function LocalFileMenuButton({ file }: { file: LocalMediaFile }) {
 
   const open = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
-    if (rect) setAnchor({ top: rect.bottom + 8, flipBottom: rect.top - 8, right: rect.right });
+    if (rect) setAnchor({ top: rect.bottom + 8, flipBottom: rect.top - 8, ...alignToEnd(rect) });
   };
 
   return (

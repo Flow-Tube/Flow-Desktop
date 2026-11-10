@@ -2,6 +2,7 @@ import { Check } from "lucide-react";
 import { getPlural, getString } from "../../lib/i18n/index";
 import { useFavouriteArtistsStore } from "../../store/useFavouriteArtistsStore";
 import { useSubscriptionStore } from "../../store/useSubscriptionStore";
+import { joinIsolated } from "../../lib/direction";
 
 /** All set, with what was chosen on the way. */
 export function ReadyStep({ interestCount }: { interestCount: number }) {
@@ -22,7 +23,7 @@ export function ReadyStep({ interestCount }: { interestCount: number }) {
         {getString("onboarding_ready_title")}
       </h1>
       <p className="text-lg text-chrome-neutral-400">{getString("onboarding_ready_subtitle")}</p>
-      {facts.length > 0 && <p className="mt-4 text-sm tabular-nums text-chrome-neutral-400">{facts.join(" · ")}</p>}
+      {facts.length > 0 && <p className="mt-4 text-sm tabular-nums text-chrome-neutral-400">{joinIsolated(facts, " · ")}</p>}
     </div>
   );
 }

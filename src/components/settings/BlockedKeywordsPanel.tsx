@@ -71,7 +71,7 @@ export function BlockedKeywordsPanel() {
               {keyword}
               <button
                 type="button"
-                aria-label={`Remove ${keyword}`}
+                aria-label={getString("blocked_keyword_remove", keyword)}
                 onClick={() => removeBlockedKeyword(keyword)}
                 className="text-chrome-neutral-500 transition-colors hover:text-chrome-neutral-200"
               >

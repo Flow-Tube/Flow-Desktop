@@ -4,6 +4,7 @@ import { Check, RotateCcw } from "lucide-react";
 import { Select } from "../ui/Select";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import type { SponsorBlockAction } from "../../store/useSettingsStore";
+import { alignToStart } from "../../lib/direction";
 
 const PRESET_COLORS = [
   "#00D400", "#FFFF00", "#0000FF", "#FF0000", "#FF7700", "#FF69B4",
@@ -54,7 +55,7 @@ export function SponsorBlockCategoryRow({
 
   const togglePicker = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    setAnchor((current) => (current ? null : { top: rect.bottom + 8, left: rect.left }));
+    setAnchor((current) => (current ? null : { top: rect.bottom + 8, ...alignToStart(rect) }));
   };
 
   return (
@@ -63,7 +64,7 @@ export function SponsorBlockCategoryRow({
         <button
           type="button"
           onClick={togglePicker}
-          aria-label={`Customize ${name} color`}
+          aria-label={getString("sponsorblock_category_color_customize", name)}
           className="h-6 w-6 shrink-0 rounded-full border border-chrome-neutral-700 transition-transform duration-200 ease-out hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
           style={{ backgroundColor: color }}
         />

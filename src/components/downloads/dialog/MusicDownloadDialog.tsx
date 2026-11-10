@@ -10,6 +10,7 @@ import { useAppSettingsStore } from "../../../store/useAppSettingsStore";
 import type { SongItem } from "../../../types/music";
 import { TextInput } from "../../ui/TextInput";
 import { DialogFooter, DialogFrame, DialogHeader, SectionLabel } from "./DownloadDialogShell";
+import { joinIsolated } from "../../../lib/direction";
 
 function QualityCard({
   selected,
@@ -34,7 +35,7 @@ function QualityCard({
           : "border-chrome-neutral-800 hover:bg-surface-container-low"
       }`}
     >
-      <span className="font-medium text-chrome-neutral-100">{title}</span>
+      <span dir="auto" className="font-medium text-chrome-neutral-100">{title}</span>
       <span className="font-mono text-xs text-chrome-neutral-400">{detail}</span>
     </button>
   );
@@ -121,7 +122,7 @@ export function MusicDownloadDialog({ track, onClose }: { track: SongItem; onClo
   };
   const highDetail = `AAC · ${state.highKbps ?? 128} kbps${formatBytes(state.sizes.High) ? ` · ≈ ${formatBytes(state.sizes.High)}` : ""}`;
   const lowDetail = `AAC · 48 kbps${formatBytes(state.sizes.Low) ? ` · ≈ ${formatBytes(state.sizes.Low)}` : ""}`;
-  const credit = [track.album?.name, track.duration ? formatDuration(track.duration) : null].filter(Boolean).join(" · ");
+  const credit = joinIsolated([track.album?.name, track.duration ? formatDuration(track.duration) : null], " · ");
 
   return (
     <DialogFrame onClose={onClose}>

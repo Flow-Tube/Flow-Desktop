@@ -84,7 +84,7 @@ export function ChannelMemory({ brain, onBlockChannel }: ChannelMemoryProps) {
                   </div>
 
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[var(--color-on-surface)]">{name}</p>
+                    <p dir="auto" className="truncate text-sm font-medium text-[var(--color-on-surface)]">{name}</p>
                     <p className="mt-0.5 truncate font-mono text-[10px] text-[var(--color-on-surface-variant)]">
                       {id}
                     </p>

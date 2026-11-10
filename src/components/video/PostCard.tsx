@@ -57,7 +57,7 @@ export function PostCard({ post }: PostCardProps) {
               )}
             </div>
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-bold text-chrome-zinc-100">{post.authorName}</span>
+              <span dir="auto" className="truncate text-sm font-bold text-chrome-zinc-100">{post.authorName}</span>
               {post.publishedTimeText && (
                 <span className="shrink-0 text-xs text-chrome-zinc-500">{post.publishedTimeText}</span>
               )}

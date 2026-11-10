@@ -27,7 +27,7 @@ function LinkRow({ link }: { link: ChannelLink }) {
         <Link2 size={18} className="shrink-0 text-chrome-neutral-500" />
       )}
       <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-chrome-neutral-100">{link.title}</span>
+        <span dir="auto" className="block truncate text-sm font-medium text-chrome-neutral-100">{link.title}</span>
         <span className="block truncate text-xs text-[var(--color-primary)]">{link.url}</span>
       </span>
     </button>

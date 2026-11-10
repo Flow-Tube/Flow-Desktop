@@ -18,7 +18,7 @@ export function ChannelLabel({
 }) {
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1">
-      <span className="truncate">{name}</span>
+      <span dir="auto" className="truncate">{name}</span>
       {artist ? (
         <Music2 size={iconSize} className="shrink-0 text-chrome-neutral-400" aria-label={getString("card_verified_artist")} />
       ) : (
@@ -79,8 +79,8 @@ export function CollabAvatars({ collaborators }: { collaborators: Collaborator[]
   );
   return (
     <span className="relative block h-9 w-9">
-      {avatar(first, collaborators[0]?.name, "left-0 top-0")}
-      {avatar(second, collaborators[1]?.name, "bottom-0 right-0")}
+      {avatar(first, collaborators[0]?.name, "start-0 top-0")}
+      {avatar(second, collaborators[1]?.name, "bottom-0 end-0")}
     </span>
   );
 }

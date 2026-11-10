@@ -130,10 +130,10 @@ export default function LocalMedia() {
         {view.openFolder && (
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setOpenFolder(null)}>
-              <ChevronLeft size={16} />
+              <ChevronLeft className="rtl:-scale-x-100" size={16} />
               {getString("local_back_to_folders")}
             </Button>
-            <h2 className="truncate text-base font-medium text-chrome-neutral-100" title={view.openFolder.path}>
+            <h2 dir="auto" className="truncate text-base font-medium text-chrome-neutral-100" title={view.openFolder.path}>
               {view.openFolder.name}
             </h2>
           </div>

@@ -113,7 +113,7 @@ export function SearchSuggestionsPanel({
         )}
         <span className="flex min-w-0 flex-1 flex-col">
           <Completion text={row.text} query={query} />
-          {entity?.description ? <span className="truncate text-xs text-chrome-neutral-400">{entity.description}</span> : null}
+          {entity?.description ? <span dir="auto" className="truncate text-xs text-chrome-neutral-400">{entity.description}</span> : null}
         </span>
         <button
           type="button"
@@ -140,7 +140,7 @@ export function SearchSuggestionsPanel({
       <div key={row.key} {...rowProps(row)} className={`${rowBase} py-1.5 ${activeClass(row)}`}>
         <Picture src={musicItemImage(item)} shape={musicItemShape(item)} />
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-medium text-chrome-neutral-100">{item.title}</span>
+          <span dir="auto" className="truncate font-medium text-chrome-neutral-100">{item.title}</span>
           <span className="truncate text-xs text-chrome-neutral-400">{musicItemSubtitle(item)}</span>
         </span>
       </div>
@@ -173,7 +173,7 @@ export function SearchSuggestionsPanel({
         {columns.main.map(renderMain)}
       </div>
       {hasSide ? (
-        <div className="min-w-0 border-t border-chrome-neutral-800 pt-1.5 md:border-l md:border-t-0 md:ps-1.5 md:pt-0">
+        <div className="min-w-0 border-t border-chrome-neutral-800 pt-1.5 md:border-s md:border-t-0 md:ps-1.5 md:pt-0">
           <p className="px-3 pb-1 pt-1.5 text-xs font-medium text-chrome-neutral-400">{getString("search_music_section")}</p>
           {columns.side.map(renderSide)}
         </div>

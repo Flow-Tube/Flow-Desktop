@@ -43,7 +43,7 @@ export function NoteDetailPane({ note, onPlay, onCopy, onDelete }: NoteDetailPan
         <NoteImage note={note} className={isVideo ? "w-40 shrink-0" : "w-20 shrink-0"} />
         <div className="min-w-0 select-text">
           <h2 className="text-base font-medium text-chrome-neutral-100">{noteHeading(note)}</h2>
-          {isVideo && note.channelName && <p className="mt-0.5 text-sm text-chrome-neutral-400">{note.channelName}</p>}
+          {isVideo && note.channelName && <p dir="auto" className="mt-0.5 text-sm text-chrome-neutral-400">{note.channelName}</p>}
           {!isVideo && note.subscriberCountText && (
             <p className="mt-0.5 text-sm text-chrome-neutral-400">{note.subscriberCountText}</p>
           )}

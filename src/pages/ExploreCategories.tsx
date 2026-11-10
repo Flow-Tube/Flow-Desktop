@@ -106,9 +106,9 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
                 variant="secondary"
                 size="sm"
               >
-                <ArrowLeft />
+                <ArrowLeft className="rtl:-scale-x-100" />
               </IconButton>
-              <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{seeAll.title}</h2>
+              <h2 dir="auto" className="text-xl font-bold tracking-tight text-chrome-neutral-100">{seeAll.title}</h2>
             </div>
             <VideoGrid videos={seeAllVideos} onPlay={onPlay} onAddToQueue={onAddToQueue} />
             <div ref={sentinelRef} className="h-10" />
@@ -138,7 +138,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
             {shelves.map((shelf, index) => (
               <section key={`${shelf.title}-${index}`} className="flex flex-col">
                 <div className="mb-3 flex items-center justify-between px-1">
-                  <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{shelf.title}</h2>
+                  <h2 dir="auto" className="text-xl font-bold tracking-tight text-chrome-neutral-100">{shelf.title}</h2>
                   {shelf.more && (
                     <button
                       type="button"

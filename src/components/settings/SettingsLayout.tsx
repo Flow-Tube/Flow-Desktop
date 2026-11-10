@@ -104,7 +104,7 @@ export function SettingsLayout({ children }: SettingsLayoutProps) {
 
   return (
     <div className="mx-auto w-full h-[calc(100vh-64px)] flex">
-      <nav className="w-56 shrink-0 border-r border-chrome-neutral-800 overflow-y-auto py-6 px-3 flex flex-col gap-1">
+      <nav className="w-56 shrink-0 border-e border-chrome-neutral-800 overflow-y-auto py-6 px-3 flex flex-col gap-1">
         <h2 className="text-lg font-bold text-chrome-neutral-100 px-3 mb-4">{getString('settings_title')}</h2>
         <SearchInput
           value={query}

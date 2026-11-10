@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { getString } from "../../lib/i18n/index";
+import { joinIsolated } from "../../lib/direction";
 
 interface LearningStatsProps {
   brain: UserBrain;
@@ -100,7 +101,7 @@ export function LearningStats({ brain }: LearningStatsProps) {
             key={stat.label}
             className="relative min-h-28 rounded-2xl bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] p-4"
           >
-            <Icon className="absolute right-4 top-4 h-5 w-5 text-[var(--color-on-surface-variant)] opacity-70" />
+            <Icon className="absolute end-4 top-4 h-5 w-5 text-[var(--color-on-surface-variant)] opacity-70" />
             <div className="pe-8">
               <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                 {stat.label}
@@ -117,7 +118,7 @@ export function LearningStats({ brain }: LearningStatsProps) {
           <p className="text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
             {getString("persona_recent_queries")}
           </p>
-          <p className="line-clamp-2 text-sm text-[var(--color-on-surface)]">{recentQueries.join(" · ")}</p>
+          <p className="line-clamp-2 text-sm text-[var(--color-on-surface)]">{joinIsolated(recentQueries, " · ")}</p>
         </div>
       ) : null}
     </section>

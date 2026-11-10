@@ -132,7 +132,7 @@ export function AddToPlaylistModal() {
             <h3 className="text-lg font-bold text-chrome-neutral-100">
               {getString("playlist_add_modal_title")}
             </h3>
-            <p className="mt-0.5 line-clamp-1 text-sm text-chrome-neutral-400">{addTarget.title}</p>
+            <p dir="auto" className="mt-0.5 line-clamp-1 text-sm text-chrome-neutral-400">{addTarget.title}</p>
           </div>
           <button
             type="button"

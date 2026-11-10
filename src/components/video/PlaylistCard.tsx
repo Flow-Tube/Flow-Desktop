@@ -23,6 +23,7 @@ import { SoftBackdrop } from '../ui/SoftBackdrop';
 import { useHoverWashColor } from '../../lib/useHoverWashColor';
 import { backgroundTabClickProps, openedInBackgroundTab } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
+import { alignToEnd, growFromPoint } from '../../lib/direction';
 
 interface PlaylistCardProps {
   playlist: PlaylistSummary & {
@@ -59,7 +60,7 @@ export function StackedPlaylistThumbnail({
         <div className="flex h-full w-full items-center justify-center text-chrome-neutral-500">
           <ListVideo size={32} />
         </div>
-        <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
+        <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
           <ListVideo size={14} />
           {videoCountText}
         </div>
@@ -72,7 +73,7 @@ export function StackedPlaylistThumbnail({
     <div className="relative w-full pt-2.5">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-4 right-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
+        className="pointer-events-none absolute start-4 end-4 top-0 z-0 aspect-video overflow-hidden rounded-xl"
       >
         <SoftBackdrop src={src} detail={24} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-chrome-black/55" />
@@ -80,7 +81,7 @@ export function StackedPlaylistThumbnail({
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-2 right-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
+        className="pointer-events-none absolute start-2 end-2 top-1 z-[1] aspect-video overflow-hidden rounded-xl"
       >
         <SoftBackdrop src={src} detail={40} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-chrome-black/35" />
@@ -94,7 +95,7 @@ export function StackedPlaylistThumbnail({
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
         />
-        <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
+        <div className="absolute bottom-1.5 end-1.5 flex items-center gap-1.5 rounded bg-chrome-black/80 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-chrome-white">
           <ListVideo size={14} />
           {videoCountText}
         </div>
@@ -135,14 +136,14 @@ export function PlaylistCard({
   const handleContextMenu = useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    setMenuAnchor({ top: event.clientY, left: event.clientX });
+    setMenuAnchor({ top: event.clientY, ...growFromPoint(event.clientX) });
     setShowMenu(true);
   }, []);
 
   const openMenuFromDots = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setMenuAnchor({ top: rect.bottom + 4, right: rect.right });
+    setMenuAnchor({ top: rect.bottom + 4, ...alignToEnd(rect) });
     setShowMenu((current) => !current);
   }, []);
 
@@ -306,7 +307,7 @@ export function PlaylistCard({
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-chrome-zinc-100 transition-colors group-hover:text-primary">
+          <h3 dir="auto" className="line-clamp-2 text-sm font-semibold leading-tight text-chrome-zinc-100 transition-colors group-hover:text-primary">
             {playlist.title}
           </h3>
           <p className="mt-1 line-clamp-1 text-xs font-medium text-chrome-zinc-400 transition-colors">

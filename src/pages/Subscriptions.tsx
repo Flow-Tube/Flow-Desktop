@@ -571,7 +571,7 @@ function GroupsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-chrome-black/70 p-4">
       <div className="grid h-[86vh] w-full max-w-4xl grid-cols-1 overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <section className="flex min-h-0 flex-col border-b border-chrome-neutral-800 p-5 md:border-b-0 md:border-r">
+        <section className="flex min-h-0 flex-col border-b border-chrome-neutral-800 p-5 md:border-b-0 md:border-e">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-chrome-neutral-100">
               {getString("subscriptions_groups_manage")}
@@ -593,7 +593,7 @@ function GroupsModal({
                       className="min-w-0 flex-1 text-start"
                       onClick={() => onEdit(group)}
                     >
-                      <div className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{group.name}</div>
+                      <div dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{group.name}</div>
                       <div className="text-xs text-chrome-neutral-400">{channelCountLabel(group.channelIds.length)}</div>
                     </button>
                     <Button variant="ghost" size="sm" disabled={index === 0} onClick={() => onMove(group.name, -1)}>
@@ -665,7 +665,7 @@ function GroupsModal({
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{channel.name}</span>
+                      <span dir="auto" className="line-clamp-1 text-sm font-medium text-chrome-neutral-100">{channel.name}</span>
                       <span className="line-clamp-1 text-xs text-chrome-neutral-400">
                         {channel.subscriberCountText || getString("subscriptions_subscribers_unavailable")}
                       </span>

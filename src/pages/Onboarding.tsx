@@ -84,7 +84,7 @@ export const Onboarding: React.FC = () => {
     <div className="w-full h-full overflow-hidden flex flex-col bg-surface font-sans relative">
       {/* Absolute Top Progress Bar */}
       {progressPercentage !== null && (
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-chrome-zinc-800/50 z-50">
+        <div className="absolute top-0 start-0 end-0 h-[2px] bg-chrome-zinc-800/50 z-50">
           <div
             className="h-full bg-primary transition-all duration-500 ease-out"
             style={{ width: `${progressPercentage}%` }}
@@ -93,7 +93,7 @@ export const Onboarding: React.FC = () => {
       )}
 
       {/* Header with Logo */}
-      <div className="absolute top-0 left-0 z-40 flex items-center gap-4 p-8">
+      <div className="absolute top-0 start-0 z-40 flex items-center gap-4 p-8">
         <Logo size={40} showText={true} />
         {settingUp && (
           <span className="text-sm text-chrome-neutral-400">{getString("profiles_setting_up", profileDisplayName(settingUp))}</span>

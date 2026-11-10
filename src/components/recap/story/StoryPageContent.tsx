@@ -59,7 +59,7 @@ function FaceRow({ items }: { items: RankedItem[] }) {
       {items.map((item) => (
         <li key={item.id} className="flex w-20 flex-col items-center gap-1">
           <Portrait item={item} size="h-14 w-14" />
-          <span className="w-full truncate text-center text-xs text-on-surface">{item.name}</span>
+          <span dir="auto" className="w-full truncate text-center text-xs text-on-surface">{item.name}</span>
         </li>
       ))}
     </ul>
@@ -91,7 +91,7 @@ function RepeatArtwork({ video }: { video: RankedItem }) {
   return (
     <div className="relative w-full">
       {src && <img src={src} alt="" className="aspect-video w-full rounded-3xl object-cover" />}
-      <span className="absolute -right-2 -top-2 flex h-20 w-20 items-center justify-center rounded-full bg-primary text-2xl font-black tabular-nums text-on-primary">
+      <span className="absolute -end-2 -top-2 flex h-20 w-20 items-center justify-center rounded-full bg-primary text-2xl font-black tabular-nums text-on-primary">
         ×{video.count}
       </span>
     </div>

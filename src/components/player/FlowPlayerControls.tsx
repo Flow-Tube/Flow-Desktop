@@ -205,6 +205,8 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
     isCommentsAvailable,
     queue,
     playlistContext,
+    isLiveChatOpen,
+    setIsLiveChatOpen,
   } = usePlayerStore();
 
   const showNextPrevious = usePlayerButton("nextPrevious");
@@ -241,12 +243,18 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
   });
 
   // In fullscreen the panel buttons drive the side panel beside the video instead of the sidebar.
+  const sidebarPanelOpen: Partial<Record<FullscreenPanel, boolean>> = {
+    queue: isQueuePanelOpen,
+    chapters: isChaptersPanelOpen,
+    chat: isLiveChatOpen,
+  };
   const panelOpen = (panel: FullscreenPanel) =>
-    isFullscreen ? fullscreenPanel === panel : panel === "queue" ? isQueuePanelOpen : panel === "chapters" && isChaptersPanelOpen;
+    isFullscreen ? fullscreenPanel === panel : Boolean(sidebarPanelOpen[panel]);
   const togglePanel = (panel: FullscreenPanel) => {
     if (isFullscreen) setFullscreenPanel(fullscreenPanel === panel ? null : panel);
     else if (panel === "queue") setIsQueuePanelOpen(!isQueuePanelOpen);
     else if (panel === "chapters") setIsChaptersPanelOpen(!isChaptersPanelOpen);
+    else if (panel === "chat") setIsLiveChatOpen(!isLiveChatOpen);
   };
   const panelButtonClass = (panel: FullscreenPanel) =>
     cx("grid h-7 w-7 place-items-center rounded-full hover:bg-chrome-white/10", panelOpen(panel) && "bg-chrome-white/15 text-primary/90");
@@ -844,7 +852,7 @@ export const FlowPlayerControls: React.FC<FlowPlayerControlsProps> = ({
                   <ListVideo size={19} />
                 </button>
               )}
-              {isFullscreen && isLiveChatAvailable && showLiveChat && (
+              {isLiveChatAvailable && showLiveChat && (
                 <button
                   type="button"
                   title={getString("live_chat_title")}

@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { Suspense, lazy, useEffect } from "react";
+import { MessageSquareText } from "lucide-react";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { useFullscreenPanelHost } from "../../lib/fullscreenPanelHost";
 import { useLingeringValue } from "../../lib/useLingeringValue";
@@ -8,6 +9,7 @@ import { seekToTime } from "../../lib/playerSeek";
 import { useCaptionsWithLocal } from "../../lib/localSubtitles";
 import { Chapters } from "../player/chapters";
 import { QueuePanel } from "../player/QueuePanel";
+import { getString } from "../../lib/i18n/index";
 import { LiveChat } from "./LiveChat";
 import type { VideoChapter } from "../../types/video";
 
@@ -40,6 +42,8 @@ export function WatchSidePanels({ videoId, chat, commentsAvailable, chapters, au
   const setIsLiveChatAvailable = usePlayerStore((s) => s.setIsLiveChatAvailable);
   const setIsCommentsAvailable = usePlayerStore((s) => s.setIsCommentsAvailable);
   const captions = useCaptionsWithLocal(videoId, usePlayerStore((s) => s.captions));
+  const isLiveChatOpen = usePlayerStore((s) => s.isLiveChatOpen);
+  const setIsLiveChatOpen = usePlayerStore((s) => s.setIsLiveChatOpen);
   const host = useFullscreenPanelHost();
   const shownPanel = useLingeringValue(isFullscreen ? fullscreenPanel : null, motionMs("--motion-panel"));
 
@@ -85,7 +89,20 @@ export function WatchSidePanels({ videoId, chat, commentsAvailable, chapters, au
 
   return (
     <>
-      {chat && <LiveChat videoId={videoId} isReplay={chat.isReplay} />}
+      {chat &&
+        (isLiveChatOpen ? (
+          <LiveChat videoId={videoId} isReplay={chat.isReplay} onClose={() => setIsLiveChatOpen(false)} />
+        ) : (
+          // The player's chat button can be hidden in Settings, so a closed chat keeps a way back here.
+          <button
+            type="button"
+            onClick={() => setIsLiveChatOpen(true)}
+            className="flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-chrome-neutral-800 bg-surface-container-low px-4 py-2.5 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <MessageSquareText size={16} />
+            {getString(chat.isReplay ? "live_chat_replay_show" : "live_chat_show")}
+          </button>
+        ))}
       {isQueuePanelOpen && (
         <div className={SIDEBAR_PANEL}>
           <QueuePanel />

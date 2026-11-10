@@ -62,7 +62,6 @@ PLAYER
 - Double-clicking the sides of a video seeks without pausing it first or flashing the pause icon. A single click now pauses about a fifth of a second later, so Flow can tell the two apart.
 - Ambient mode can be turned on or off from the player gear menu, has an intensity slider in Settings, and can now be turned on under Linux, where it starts off.
 - Live streams start and play again.
-- Live chat and chat replay can now be closed from the header cross button or toggled directly from the player controls in any view mode.
 - You can seek back through a live stream and stay there. The time shows how far behind live you are, and the Live button brings you back.
 - A live stream that falls behind from buffering catches up on its own, unless you chose to seek back.
 - Drag the mini player anywhere in the window. It stays where you put it, including after a restart, and keeps its place when the window is resized.

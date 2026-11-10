@@ -34,8 +34,6 @@ export function WatchSidePanels({ videoId, chat, chapters, autoChapters, videoTh
   const setIsChaptersPanelOpen = usePlayerStore((s) => s.setIsChaptersPanelOpen);
   const isQueuePanelOpen = usePlayerStore((s) => s.isQueuePanelOpen);
   const setIsLiveChatAvailable = usePlayerStore((s) => s.setIsLiveChatAvailable);
-  const isLiveChatOpen = usePlayerStore((s) => s.isLiveChatOpen);
-  const setIsLiveChatOpen = usePlayerStore((s) => s.setIsLiveChatOpen);
   const captions = usePlayerStore((s) => s.captions);
   const host = useFullscreenPanelHost();
   const shownPanel = useLingeringValue(isFullscreen ? fullscreenPanel : null, motionMs("--motion-panel"));
@@ -71,13 +69,7 @@ export function WatchSidePanels({ videoId, chat, chapters, autoChapters, videoTh
 
   return (
     <>
-      {chat && isLiveChatOpen && (
-        <LiveChat
-          videoId={videoId}
-          isReplay={chat.isReplay}
-          onClose={() => setIsLiveChatOpen(false)}
-        />
-      )}
+      {chat && <LiveChat videoId={videoId} isReplay={chat.isReplay} />}
       {isQueuePanelOpen && (
         <div className={SIDEBAR_PANEL}>
           <QueuePanel />

@@ -445,49 +445,8 @@ describe("fullscreen side panel", () => {
   it("shows chat without touching the sidebar panels", () => {
     usePlayerStore.getState().setIsQueuePanelOpen(true);
     usePlayerStore.getState().setFullscreenPanel("chat");
-    expect(usePlayerStore.getState()).toMatchObject({ fullscreenPanel: "chat", isQueuePanelOpen: true, isLiveChatOpen: true });
+    expect(usePlayerStore.getState()).toMatchObject({ fullscreenPanel: "chat", isQueuePanelOpen: true });
     usePlayerStore.getState().setFullscreenPanel(null);
     usePlayerStore.getState().setIsQueuePanelOpen(false);
-  });
-});
-
-describe("live chat visibility", () => {
-  it("defaults to open and allows toggling", () => {
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(true);
-
-    usePlayerStore.getState().setIsLiveChatOpen(false);
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(false);
-
-    usePlayerStore.getState().setIsLiveChatOpen(true);
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(true);
-  });
-
-  it("closes fullscreen chat panel when live chat is toggled off", () => {
-    usePlayerStore.getState().setFullscreenPanel("chat");
-    expect(usePlayerStore.getState().fullscreenPanel).toBe("chat");
-
-    usePlayerStore.getState().setIsLiveChatOpen(false);
-    expect(usePlayerStore.getState().fullscreenPanel).toBeNull();
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(false);
-
-    usePlayerStore.getState().setIsLiveChatOpen(true);
-  });
-
-  it("resets isLiveChatOpen to true when a new video is loaded", () => {
-    usePlayerStore.getState().setCurrentVideo(video("v1"));
-    usePlayerStore.getState().setIsLiveChatOpen(false);
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(false);
-
-    usePlayerStore.getState().setCurrentVideo(video("v2"));
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(true);
-  });
-
-  it("resets isLiveChatOpen to true when the player is dismissed", () => {
-    usePlayerStore.getState().setCurrentVideo(video("v1"));
-    usePlayerStore.getState().setIsLiveChatOpen(false);
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(false);
-
-    usePlayerStore.getState().dismissVideoPlayer();
-    expect(usePlayerStore.getState().isLiveChatOpen).toBe(true);
   });
 });

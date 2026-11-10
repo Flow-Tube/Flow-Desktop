@@ -206,9 +206,6 @@ export interface PlayerState {
   /** The watch page has a live chat or chat replay to show. */
   isLiveChatAvailable: boolean;
   setIsLiveChatAvailable: (available: boolean) => void;
-  /** Whether the live chat or chat replay panel is open/visible. */
-  isLiveChatOpen: boolean;
-  setIsLiveChatOpen: (open: boolean) => void;
 }
 
 export type FullscreenPanel = "chapters" | "queue" | "chat";
@@ -248,7 +245,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isQueuePanelOpen: false,
   fullscreenPanel: null,
   isLiveChatAvailable: false,
-  isLiveChatOpen: true,
 
   setCurrentVideo: (video) => {
     const isNew = get().currentVideo?.id !== video?.id;
@@ -258,7 +254,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isChaptersPanelOpen: false,
       isQueuePanelOpen: false,
       fullscreenPanel: null,
-      ...(isNew ? { isLiveChatOpen: true } : {}),
       ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
@@ -648,7 +643,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     isChaptersPanelOpen: false,
     isQueuePanelOpen: false,
     fullscreenPanel: null,
-    isLiveChatOpen: true,
   }),
   
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -759,13 +753,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     fullscreenPanel,
     ...(fullscreenPanel === "chapters" ? { isChaptersPanelOpen: true, isQueuePanelOpen: false } : {}),
     ...(fullscreenPanel === "queue" ? { isQueuePanelOpen: true, isChaptersPanelOpen: false } : {}),
-    ...(fullscreenPanel === "chat" ? { isLiveChatOpen: true } : {}),
   }),
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
-  setIsLiveChatOpen: (isLiveChatOpen) => set((state) => ({
-    isLiveChatOpen,
-    ...(!isLiveChatOpen && state.fullscreenPanel === "chat" ? { fullscreenPanel: null } : {}),
-  })),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {
     profileStorage.setItem("flow_subtitle_style", JSON.stringify(style));

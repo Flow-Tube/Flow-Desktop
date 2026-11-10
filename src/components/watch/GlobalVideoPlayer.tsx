@@ -118,9 +118,19 @@ export function GlobalVideoPlayer() {
       }
     };
 
+    // The page scrolls inside PageWrapper's <main>, which starts where the top bar ends.
+    let pageTop: number | null = null;
+    const publishBelowTopbar = (below: boolean) => {
+      const player = usePlayerStore.getState();
+      if (player.isPlayerBelowTopbar !== below) player.setIsPlayerBelowTopbar(below);
+    };
+
     const sync = () => {
       const next = readSlotBounds();
       if (!next) return;
+      pageTop ??=
+        document.querySelector("[data-flow-watch-player-slot='true']")?.closest("main")?.getBoundingClientRect().top ?? null;
+      publishBelowTopbar(pageTop !== null && next.top >= pageTop - 0.5);
       const prev = lastSlotBoundsRef.current;
       lastSlotBoundsRef.current = next;
       if (!boundsEqual(prev, next)) writeFrameBounds(next, prev);
@@ -133,6 +143,7 @@ export function GlobalVideoPlayer() {
     const slot = document.querySelector<HTMLElement>("[data-flow-watch-player-slot='true']");
     let resizeRaf: number | null = null;
     const onResize = () => {
+      pageTop = null;
       if (resizeRaf !== null) return;
       resizeRaf = window.requestAnimationFrame(() => {
         resizeRaf = null;
@@ -170,6 +181,7 @@ export function GlobalVideoPlayer() {
       // Fullscreen uses insets, and the floating layout writes its own transform after this.
       if (frameRef.current) frameRef.current.style.transform = "";
       lastSlotBoundsRef.current = null;
+      publishBelowTopbar(false);
       if (resizeRaf !== null) window.cancelAnimationFrame(resizeRaf);
       window.removeEventListener("resize", onResize);
       document.removeEventListener("scroll", onScroll, { capture: true });

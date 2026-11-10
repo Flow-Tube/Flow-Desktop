@@ -77,12 +77,12 @@ describe("NowPlayingColumn multi-artist navigation", () => {
       root.render(createElement(NowPlayingColumn, { track: sampleTrack, compact: false, artworkHidden: false, onOpenEqualizer: vi.fn() }));
     });
 
-    const artistButtons = host.querySelectorAll<HTMLButtonElement>("h1 + div button");
+    const artistButtons = host.querySelectorAll<HTMLButtonElement>("h1 + span button");
     expect(artistButtons).toHaveLength(2);
     expect(artistButtons[0]?.textContent).toBe("DIVINE");
     expect(artistButtons[1]?.textContent).toBe("Jonita Gandhi");
 
-    const artistSpans = host.querySelectorAll<HTMLSpanElement>("h1 + div span");
+    const artistSpans = host.querySelectorAll<HTMLSpanElement>("h1 + span span");
     const spanTexts = Array.from(artistSpans).map((s) => s.textContent);
     expect(spanTexts).toContain("Guest Feature");
   });
@@ -95,7 +95,7 @@ describe("NowPlayingColumn multi-artist navigation", () => {
       root.render(createElement(NowPlayingColumn, { track: sampleTrack, compact: false, artworkHidden: false, onOpenEqualizer: vi.fn() }));
     });
 
-    const artistButtons = host.querySelectorAll<HTMLButtonElement>("h1 + div button");
+    const artistButtons = host.querySelectorAll<HTMLButtonElement>("h1 + span button");
     const jonitaButton = artistButtons[1];
     expect(jonitaButton?.textContent).toBe("Jonita Gandhi");
 
@@ -115,7 +115,7 @@ describe("NowPlayingColumn multi-artist navigation", () => {
       root.render(createElement(NowPlayingColumn, { track: sampleTrack, compact: false, artworkHidden: false, onOpenEqualizer: vi.fn() }));
     });
 
-    const artistButtons = host.querySelectorAll<HTMLButtonElement>("h1 + div button");
+    const artistButtons = host.querySelectorAll<HTMLButtonElement>("h1 + span button");
     const divineButton = artistButtons[0];
     expect(divineButton?.textContent).toBe("DIVINE");
 

@@ -1,10 +1,8 @@
-import { Fragment, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Heart, MoreHorizontal } from "lucide-react";
 
 import { getString } from "../../../lib/i18n/index";
-import { artistsText } from "../../../lib/musicFormat";
 import { SETTINGS } from "../../../lib/settings/schema";
 import { useBoolPref } from "../../../lib/usePreference";
 import { useElementSize } from "../../../lib/useElementSize";
@@ -14,6 +12,7 @@ import { isLocalMediaId } from "../../../lib/localMediaId";
 import { toggleSongLikeWithToast } from "../../../lib/songLikeToast";
 import type { SongItem } from "../../../types/music";
 import { HapticButton } from "../HapticButton";
+import { ArtistLinks } from "../ArtistLinks";
 import { MusicArtwork } from "../MusicArtwork";
 import { MusicCardMenu, useMusicContextMenu } from "../MusicCardMenu";
 import { MusicScrubber } from "../MusicScrubber";
@@ -48,7 +47,6 @@ interface NowPlayingColumnProps {
  * details, so it never pushes the controls out of a short window.
  */
 export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualizer }: NowPlayingColumnProps) {
-  const navigate = useNavigate();
   const columnRef = useRef<HTMLDivElement>(null);
   const { width, height } = useElementSize(columnRef);
   const artSize = Math.round(Math.max(MIN_ART, Math.min(MAX_ART, height - DETAILS_HEIGHT, width)));
@@ -110,31 +108,11 @@ export function NowPlayingColumn({ track, compact, artworkHidden, onOpenEqualize
             >
               {track.title}
             </h1>
-            <div className="mt-2 line-clamp-1 max-w-full text-start text-base text-chrome-neutral-300 lg:text-lg">
-              {track.artists && track.artists.length > 0 ? (
-                track.artists.map((artist, idx) => (
-                  <Fragment key={artist.id ?? `${artist.name}-${idx}`}>
-                    {idx > 0 && <span className="text-chrome-neutral-400">, </span>}
-                    {artist.id ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          closeOverlay();
-                          navigate(`/music/artist/${artist.id}`);
-                        }}
-                        className="transition-colors hover:text-chrome-neutral-100 hover:underline"
-                      >
-                        {artist.name}
-                      </button>
-                    ) : (
-                      <span>{artist.name}</span>
-                    )}
-                  </Fragment>
-                ))
-              ) : (
-                <span>{artistsText(track.artists)}</span>
-              )}
-            </div>
+            <ArtistLinks
+              artists={track.artists}
+              onNavigate={closeOverlay}
+              className="mt-2 line-clamp-1 max-w-full text-start text-base text-chrome-neutral-300 lg:text-lg"
+            />
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <MusicSleepTimerButton className={META_BTN} activeClassName={`${META_BTN} text-[var(--color-primary)]`} />

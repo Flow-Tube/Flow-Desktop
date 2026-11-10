@@ -1,5 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Disc3, Heart, ListPlus, MoreVertical, Music2, Play, Share2, Trash2, Volume2 } from 'lucide-react';
 
 import { getString } from '../../lib/i18n/index';
@@ -17,6 +16,7 @@ import { useLikesStore } from '../../store/useLikesStore';
 import { toggleSongLikeWithToast } from '../../lib/songLikeToast';
 import type { SongItem } from '../../types/music';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
+import { ArtistLinks } from './ArtistLinks';
 import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { useTrackBlockActions } from './useTrackBlockActions';
@@ -119,7 +119,6 @@ export function AlbumTrackRow({
   onRemove,
   selection,
 }: AlbumTrackRowProps) {
-  const navigate = useNavigate();
   const artistLabel = artistsText(track.artists);
   const duration = track.duration == null ? '' : formatTime(track.duration);
   const showEq = isCurrent && isPlaying;
@@ -284,31 +283,7 @@ export function AlbumTrackRow({
           <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-chrome-neutral-400 transition-colors duration-200 ease-out group-hover:text-chrome-neutral-300">
             {track.explicit ? <ExplicitBadge /> : null}
             {showArtist && artistLabel ? (
-              <span className="line-clamp-1">
-                {track.artists && track.artists.length > 0 ? (
-                  track.artists.map((artist, idx) => (
-                    <Fragment key={artist.id ?? `${artist.name}-${idx}`}>
-                      {idx > 0 && <span className="text-chrome-neutral-500">, </span>}
-                      {artist.id ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/music/artist/${artist.id}`);
-                          }}
-                          className="hover:text-chrome-neutral-100 hover:underline"
-                        >
-                          {artist.name}
-                        </button>
-                      ) : (
-                        <span>{artist.name}</span>
-                      )}
-                    </Fragment>
-                  ))
-                ) : (
-                  artistLabel
-                )}
-              </span>
+              <ArtistLinks artists={track.artists} plain={Boolean(selection)} className="line-clamp-1" />
             ) : null}
           </span>
         )}

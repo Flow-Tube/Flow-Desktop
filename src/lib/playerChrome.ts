@@ -25,7 +25,6 @@ export type PlayerChromeConditions = {
   isPlaying: boolean;
   settingsOpen: boolean;
   isScrubbing: boolean;
-  isPipMode: boolean;
   isLoading: boolean;
   hasError: boolean;
 };
@@ -35,11 +34,10 @@ export function canAutoHidePlayerChrome({
   isPlaying,
   settingsOpen,
   isScrubbing,
-  isPipMode,
   isLoading,
   hasError,
 }: PlayerChromeConditions): boolean {
-  return isPlaying && !settingsOpen && !isScrubbing && !isPipMode && !isLoading && !hasError;
+  return isPlaying && !settingsOpen && !isScrubbing && !isLoading && !hasError;
 }
 
 /**

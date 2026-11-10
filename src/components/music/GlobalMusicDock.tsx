@@ -34,6 +34,8 @@ import { VolumePopover } from "./VolumePopover";
 import { useArtworkSwatches } from "../../lib/useArtworkSwatches";
 import { useDockToggleColors } from "../../lib/usePlayerColors";
 import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
+import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
+import { VolumeFeedbackPill } from "../ui/VolumeFeedbackPill";
 import { upgradeMusicImageUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { dockOpacity, registerSheetDock, sheetProgress } from "../../lib/musicSheet";
@@ -59,7 +61,8 @@ export function GlobalMusicDock() {
   const repeatMode = useMusicPlayerStore((s) => s.repeatMode);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const volume = useMusicPlayerStore((s) => s.volume);
-  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>();
+  const { feedback: volumeFeedback, show: showVolumeFeedback } = useVolumeFeedback();
+  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>({ onFeedback: showVolumeFeedback });
 
   const togglePlay = useMusicPlayerStore((s) => s.togglePlay);
   const next = useMusicPlayerStore((s) => s.next);
@@ -329,7 +332,13 @@ export function GlobalMusicDock() {
               />
             </div>
             <div className="absolute bottom-full end-2 mb-3">
-              <VolumePopover open={popover === "vol"} />
+              {volumeFeedback && popover !== "vol" && (
+                <VolumeFeedbackPill feedback={volumeFeedback} tone="surface" />
+              )}
+              <VolumePopover
+                open={popover === "vol"}
+                onClose={() => setPopover((p) => (p === "vol" ? null : p))}
+              />
             </div>
           </motion.div>
         </motion.div>

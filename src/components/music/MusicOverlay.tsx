@@ -11,6 +11,8 @@ import { useMediaQuery } from "../../lib/useMediaQuery";
 import { useBoolPref } from "../../lib/usePreference";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useMusicWheelVolume } from "../../lib/useMusicWheelVolume";
+import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
+import { VolumeFeedbackPill } from "../ui/VolumeFeedbackPill";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
 import { getString } from "../../lib/i18n/index";
 import { HapticButton } from "./HapticButton";
@@ -56,7 +58,8 @@ export function MusicOverlay() {
   const volume = useMusicPlayerStore((s) => s.volume);
   const isMuted = useMusicPlayerStore((s) => s.isMuted);
   const queueSource = useMusicPlayerStore((s) => s.queueSource);
-  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>();
+  const { feedback: volumeFeedback, show: showVolumeFeedback } = useVolumeFeedback();
+  const volumeWheelRef = useMusicWheelVolume<HTMLButtonElement>({ onFeedback: showVolumeFeedback });
   const setViewState = useMusicPlayerStore((s) => s.setViewState);
   const closeOverlay = useMusicPlayerStore((s) => s.closeOverlay);
 
@@ -294,7 +297,10 @@ export function MusicOverlay() {
                 {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </HapticButton>
               <div className="absolute end-0 top-full mt-2">
-                <VolumePopover open={volumeOpen} />
+                {volumeFeedback && !volumeOpen && (
+                  <VolumeFeedbackPill feedback={volumeFeedback} tone="surface" className="absolute end-0 top-0 z-50" />
+                )}
+                <VolumePopover open={volumeOpen} onClose={() => setVolumeOpen(false)} />
               </div>
             </GroupItem>
 

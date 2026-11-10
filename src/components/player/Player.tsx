@@ -48,6 +48,7 @@ import { recordPlayerEvent } from "../../lib/playerDiagnostics";
 import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
 import { SponsorBlockTracker } from "../../lib/sponsorBlockPolicy";
 import { useManualSponsorSegment } from "../../lib/useManualSponsorSegment";
+import { useVolumeFeedback } from "../../lib/useVolumeFeedback";
 import type { SponsorBlockSegment } from "../../lib/api/foss";
 import { recapSponsorSkip } from "../../lib/recap/recapQueue";
 import { longPressRate } from "../../lib/pointerGesture";
@@ -55,7 +56,6 @@ import { isPopOutWindow } from "../../lib/api/pip";
 import {
   PlayerGestureOverlay,
   type PlayerSeekFeedback,
-  type PlayerVolumeFeedback,
 } from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
 import { isLocalCaption } from "../../lib/captionText";
@@ -350,7 +350,6 @@ export const Player: React.FC<PlayerProps> = ({
   const mediaBufferingRef = useRef(false);
   const bufferingStartedAtRef = useRef<number | null>(null);
   const seekFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const volumeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stall watchdog / source-fallback bookkeeping.
   const waitingSinceRef = useRef<number | null>(null);
   const stallCountRef = useRef(0);
@@ -506,7 +505,7 @@ export const Player: React.FC<PlayerProps> = ({
   const [hasStartedPlayback, setHasStartedPlayback] = useState(false);
   const [isSourceSwitching, setIsSourceSwitching] = useState(false);
   const [seekFeedback, setSeekFeedback] = useState<PlayerSeekFeedback | null>(null);
-  const [volumeFeedback, setVolumeFeedback] = useState<PlayerVolumeFeedback | null>(null);
+  const { feedback: volumeFeedback, show: showVolumeFeedback } = useVolumeFeedback();
   const [videoCodecUnsupported, setVideoCodecUnsupported] = useState(false);
   const [pendingQualitySwitch, setPendingQualitySwitch] = useState<PendingQualitySwitch | null>(null);
   const [dashRestartCount, setDashRestartCount] = useState(0);
@@ -599,6 +598,10 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
+  const setIsPlayerChromeShown = usePlayerStore((state) => state.setIsPlayerChromeShown);
+  useEffect(() => {
+    setIsPlayerChromeShown(shouldShowControls);
+  }, [shouldShowControls, setIsPlayerChromeShown]);
   // The pop-out holds a window of its own, with no page around the video to light.
   const showAmbient =
     ambient.enabled &&
@@ -944,9 +947,6 @@ export const Player: React.FC<PlayerProps> = ({
       if (seekFeedbackTimerRef.current) {
         clearTimeout(seekFeedbackTimerRef.current);
       }
-      if (volumeFeedbackTimerRef.current) {
-        clearTimeout(volumeFeedbackTimerRef.current);
-      }
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
       }
@@ -1091,7 +1091,6 @@ export const Player: React.FC<PlayerProps> = ({
     isPlaying,
     settingsOpen,
     isScrubbing,
-    isPipMode,
     isLoading,
     hasError: Boolean(error || errorInfo),
   });
@@ -1159,14 +1158,6 @@ export const Player: React.FC<PlayerProps> = ({
     if (seekFeedbackTimerRef.current) clearTimeout(seekFeedbackTimerRef.current);
     seekFeedbackTimerRef.current = setTimeout(() => {
       setSeekFeedback(null);
-    }, 1200);
-  }, []);
-
-  const showVolumeFeedback = useCallback((nextVolume: number, nextMuted: boolean) => {
-    setVolumeFeedback({ id: Date.now(), volume: nextVolume, muted: nextMuted });
-    if (volumeFeedbackTimerRef.current) clearTimeout(volumeFeedbackTimerRef.current);
-    volumeFeedbackTimerRef.current = setTimeout(() => {
-      setVolumeFeedback(null);
     }, 1200);
   }, []);
 

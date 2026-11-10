@@ -85,6 +85,7 @@ LIBRARY
 
 MUSIC
 - Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.
+- The volume popover in the music bar and the full player closes by itself after a few idle seconds. Scrolling over the volume button while it is closed shows the new level for a moment.
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Instrumental songs no longer show KuGou's notice as their lyrics.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
@@ -133,6 +134,7 @@ MUSIC
 
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
+- The mini player's controls, its move handle and its Expand and Close buttons fade together after a few seconds of playback, as in the full player, instead of staying up while the pointer rests on it.
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
 - Scroll over the ambient mode intensity slider in Settings to adjust it.
 - While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.

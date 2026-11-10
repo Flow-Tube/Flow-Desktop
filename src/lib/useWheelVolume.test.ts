@@ -74,4 +74,25 @@ describe("useWheelVolume", () => {
 
     expect(onVolumeChange).toHaveBeenCalledWith(0.75);
   });
+
+  it("invokes onFeedback callback when wheel adjustments change volume", () => {
+    const onVolumeChange = vi.fn();
+    const onFeedback = vi.fn();
+    act(() => root.render(createElement(Box, { volume: 0.5, muted: false, onVolumeChange, onFeedback })));
+
+    wheel(-100);
+
+    expect(onFeedback).toHaveBeenCalledWith(0.55, false);
+  });
+
+  it("invokes onFeedback callback when unmuting on scroll up", () => {
+    const onVolumeChange = vi.fn();
+    const onUnmute = vi.fn();
+    const onFeedback = vi.fn();
+    act(() => root.render(createElement(Box, { volume: 0.5, muted: true, onVolumeChange, onUnmute, onFeedback })));
+
+    wheel(-100);
+
+    expect(onFeedback).toHaveBeenCalledWith(0.5, false);
+  });
 });

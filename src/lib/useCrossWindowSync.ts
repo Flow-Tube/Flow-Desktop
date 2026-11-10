@@ -12,8 +12,8 @@ import {
   PLAYBACK_CLAIMED_EVENT,
   type DataChangedPayload,
 } from "./windowEvents";
+import { openShellRoute } from "./useShellPages";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
-import { useTabsStore } from "../store/useTabsStore";
 import type { SongItem } from "../types/music";
 
 interface MusicPlayPayload {
@@ -55,7 +55,7 @@ export function useCrossWindowSync(): void {
         listen<MusicPlayPayload>(MUSIC_PLAY_EVENT, ({ payload }) => {
           void useMusicPlayerStore.getState().playQueue(payload.queue, payload.index, payload.source);
         }),
-        listen<string>(OPEN_ROUTE_EVENT, ({ payload }) => useTabsStore.getState().push(payload)),
+        listen<string>(OPEN_ROUTE_EVENT, ({ payload }) => openShellRoute(payload)),
       );
     }
     const stopForwarding = IS_MAIN_WINDOW ? null : forwardMusicToMainWindow();

@@ -97,13 +97,13 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
             <table className="w-full border-collapse text-sm">
               <thead className="sticky top-0 bg-[var(--color-surface-container-high)]">
                 <tr className="border-b border-[var(--color-outline-variant)]">
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+                  <th className="px-4 py-3 text-start text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {getString("persona_col_topic")}
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+                  <th className="px-4 py-3 text-end text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {getString("persona_col_confidence")}
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+                  <th className="px-4 py-3 text-end text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                     {getString("persona_col_watch_loops")}
                   </th>
                 </tr>
@@ -124,10 +124,10 @@ export function InterestWeights({ brain }: InterestWeightsProps) {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-[var(--color-on-surface)]">
+                      <td className="px-4 py-3 text-end font-mono text-[var(--color-on-surface)]">
                         {confidence.toFixed(1)}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-[var(--color-on-surface)]">
+                      <td className="px-4 py-3 text-end font-mono text-[var(--color-on-surface)]">
                         {watchLoops}
                       </td>
                     </tr>

@@ -92,6 +92,8 @@ async fn plain_http_is_allowed_only_to_private_addresses() {
     assert!(!insecure("http://100.101.102.103/").await);
     assert!(!insecure("http://[::ffff:10.0.0.2]:8080/").await);
     assert!(!insecure("http://[fd12::1]/").await);
+    assert!(!insecure("http://[fe80::1]/").await);
+    assert!(insecure("http://[fec0::1]/").await);
     assert!(insecure("http://203.0.113.5/").await);
     assert!(insecure("http://sync.example.org/").await);
     assert!(insecure("http://[::ffff:203.0.113.5]/").await);
@@ -472,6 +474,41 @@ async fn a_server_reset_needs_the_admin_token_and_says_when_it_is_refused() {
     ));
 }
 
+/// A roster that always has one more entry, with a higher `seq` than was asked for.
+struct EndlessRoster;
+
+impl Respond for EndlessRoster {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let after: i64 = request
+            .url
+            .query_pairs()
+            .find(|(name, _)| name == "after")
+            .and_then(|(_, value)| value.parse().ok())
+            .unwrap();
+        ResponseTemplate::new(200).set_body_json(json!({ "entries": [{
+            "v": 2, "group": GROUP, "seq": after + 1, "prev": "00".repeat(32), "op": "rename",
+            "signer": "00".repeat(16), "meta": { "00000000000000000000000000000000": "x" }, "sigs": {}
+        }] }))
+    }
+}
+
+#[tokio::test]
+async fn a_roster_that_never_runs_out_ends_the_read() {
+    let (server, _) = server(INSTANCE).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/roster"))
+        .respond_with(EndlessRoster)
+        .mount(&server)
+        .await;
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        store.roster_view().await,
+        Err(StoreError::Malformed)
+    ));
+}
+
 #[tokio::test]
 async fn answers_past_their_limit_are_refused() {
     let (server, _) = server(INSTANCE).await;
@@ -500,9 +537,43 @@ async fn answers_past_their_limit_are_refused() {
         store.get_object("fits").await.unwrap().unwrap().len(),
         4 << 20
     );
-    assert!(matches!(
-        store.get_object("big").await,
-        Err(StoreError::Malformed)
-    ));
-    assert!(matches!(store.changes(0).await, Err(StoreError::Malformed)));
+    assert!(matches!(store.get_object("big").await, Ok(None)));
+    assert!(store.changes(0).await.is_err());
+}
+
+#[tokio::test]
+async fn only_a_refusal_of_the_one_object_stops_only_that_object() {
+    let (server, _) = server(INSTANCE).await;
+    for status in [400, 403, 410, 413, 408, 429, 500, 503, 507] {
+        for route in [
+            format!("/v1/objects/{status}"),
+            format!("/v1/keys/00000000/{status}.k"),
+        ] {
+            Mock::given(method("GET"))
+                .and(path(route))
+                .respond_with(ResponseTemplate::new(status))
+                .mount(&server)
+                .await;
+        }
+    }
+    let store = ServerStore::connect(&format!("{}/", server.uri()), member(), None, None)
+        .await
+        .unwrap();
+
+    for status in [400, 403, 410, 413] {
+        let name = status.to_string();
+        assert!(
+            matches!(store.get_object(&name).await, Ok(None)),
+            "{status}"
+        );
+        assert!(
+            matches!(store.key(0, "x", &name).await, Ok(None)),
+            "{status}"
+        );
+    }
+    for status in [408, 429, 500, 503, 507] {
+        let name = status.to_string();
+        assert!(store.get_object(&name).await.is_err(), "{status}");
+        assert!(store.key(0, "x", &name).await.is_err(), "{status}");
+    }
 }

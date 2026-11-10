@@ -15,7 +15,9 @@ use crate::api::innertube::core::clients;
 use crate::api::innertube::core::player_requests::PlayerFlights;
 use crate::api::innertube::transport::request::Host;
 use crate::errors::{AppError, AppResult};
-use crate::models::video::VideoMetadata;
+use crate::models::video::{PaidPromotionLabel, VideoMetadata};
+
+const DEFAULT_PAID_PROMOTION_MS: u64 = 10_000;
 
 // Every answer this session is kept; a failure is not, so a later ask tries again.
 const CAPACITY: usize = 1024;
@@ -123,6 +125,32 @@ impl InnertubeClient {
         })
     }
 
+    /// The label for a video that declared paid promotion, or `None` for one that didn't. The client
+    /// that plays a video gets no such field, so this is an IOS request of its own, cut down to the
+    /// two fields it reads. `None` too when `YouTube` refuses it: the label is a nicety.
+    pub async fn get_paid_promotion(
+        &self,
+        video_id: &str,
+    ) -> AppResult<Option<PaidPromotionLabel>> {
+        let mut payload = serde_json::json!({
+            "videoId": video_id,
+            "contentCheckOk": true,
+            "racyCheckOk": true,
+        });
+        let response = self
+            .post_via(
+                &self.client,
+                Host::Www,
+                "player",
+                &clients::IOS,
+                &mut payload,
+                None,
+                Some("fields=miniPlayerByline,playabilityStatus.status"),
+            )
+            .await?;
+        Ok(parse_paid_promotion(&response))
+    }
+
     /// The video's category, which the recommendation engine clusters by.
     pub async fn get_video_category(&self, video_id: &str) -> AppResult<Option<String>> {
         Ok(self
@@ -133,10 +161,63 @@ impl InnertubeClient {
     }
 }
 
+fn parse_paid_promotion(response: &Value) -> Option<PaidPromotionLabel> {
+    if response["playabilityStatus"]["status"].as_str() != Some("OK") {
+        return None;
+    }
+    let renderer = response["miniPlayerByline"]["miniPlayerBylineRenderer"].as_object()?;
+    Some(PaidPromotionLabel {
+        text: renderer
+            .get("text")
+            .and_then(|text| text["runs"][0]["text"].as_str())
+            .filter(|text| !text.trim().is_empty())
+            .map(ToOwned::to_owned),
+        duration_ms: renderer
+            .get("durationMs")
+            .and_then(Value::as_str)
+            .and_then(|ms| ms.parse().ok())
+            .filter(|ms| *ms > 0)
+            .unwrap_or(DEFAULT_PAID_PROMOTION_MS),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_paid_promotion_label_needs_a_playable_answer_with_a_byline() {
+        let label = parse_paid_promotion(&json!({
+            "playabilityStatus": { "status": "OK" },
+            "miniPlayerByline": { "miniPlayerBylineRenderer": {
+                "text": { "runs": [{ "text": "Includes paid promotion" }] },
+                "durationMs": "5000"
+            } }
+        }))
+        .unwrap();
+        assert_eq!(label.text.as_deref(), Some("Includes paid promotion"));
+        assert_eq!(label.duration_ms, 5000);
+
+        let bare = parse_paid_promotion(&json!({
+            "playabilityStatus": { "status": "OK" },
+            "miniPlayerByline": { "miniPlayerBylineRenderer": {} }
+        }))
+        .unwrap();
+        assert_eq!(bare.text, None);
+        assert_eq!(bare.duration_ms, DEFAULT_PAID_PROMOTION_MS);
+
+        assert!(
+            parse_paid_promotion(&json!({ "playabilityStatus": { "status": "OK" } })).is_none()
+        );
+        assert!(
+            parse_paid_promotion(&json!({
+                "playabilityStatus": { "status": "ERROR" },
+                "miniPlayerByline": { "miniPlayerBylineRenderer": {} }
+            }))
+            .is_none()
+        );
+    }
 
     #[test]
     fn an_mweb_answer_gives_length_views_date_and_category() {

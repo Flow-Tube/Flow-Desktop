@@ -1,4 +1,4 @@
-import { Bookmark, Check, Download, Loader2, Music2, Play, Search, Shuffle } from 'lucide-react';
+import { Bookmark, Check, Download, Loader2, Music2, Pencil, Play, Save, Search, Share2, Shuffle } from 'lucide-react';
 
 import { getString } from '../../lib/i18n/index';
 import type { CollectionMeta } from '../../lib/useMusicCollection';
@@ -20,7 +20,13 @@ interface MusicCollectionHeaderProps {
   onDownload?: () => void;
   downloadActive?: boolean;
   downloadComplete?: boolean;
+  onExport?: () => void;
+  onShare?: () => void;
+  onEdit?: () => void;
 }
+
+const ICON_BUTTON =
+  'grid h-12 w-12 place-items-center rounded-full bg-surface-container-high text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
 function Cover({ src, alt }: { src: string | null | undefined; alt: string }) {
   const imageSrc = useProxiedImageUrl(upgradeMusicImageUrl(src));
@@ -56,6 +62,9 @@ export function MusicCollectionHeader({
   onDownload,
   downloadActive,
   downloadComplete,
+  onExport,
+  onShare,
+  onEdit,
 }: MusicCollectionHeaderProps) {
   const thumbnailUrl = useProxiedImageUrl(upgradeMusicImageUrl(meta.thumbnail));
   const metaParts = [
@@ -92,7 +101,7 @@ export function MusicCollectionHeader({
             {meta.explicit && <ExplicitBadge />}
           </span>
 
-          <h1 className="line-clamp-2 text-5xl font-extrabold leading-tight tracking-tighter text-chrome-white lg:text-7xl">
+          <h1 dir="auto" className="line-clamp-2 text-5xl font-extrabold leading-tight tracking-tighter text-chrome-white lg:text-7xl">
             {meta.title}
           </h1>
 
@@ -126,7 +135,7 @@ export function MusicCollectionHeader({
           )}
 
           {meta.description ? (
-            <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-chrome-neutral-400">
+            <p dir="auto" className="mt-2 line-clamp-2 max-w-2xl text-sm leading-6 text-chrome-neutral-400">
               {meta.description}
             </p>
           ) : null}
@@ -184,9 +193,9 @@ export function MusicCollectionHeader({
             {onDownload ? (
               <button
                 type="button"
-                aria-label={getString('music_download')}
+                aria-label={getString('music_collection_download_all')}
                 title={getString(
-                  downloadComplete ? 'downloaded' : downloadActive ? 'downloads_downloading' : 'music_download',
+                  downloadComplete ? 'downloaded' : downloadActive ? 'downloads_downloading' : 'music_collection_download_all',
                 )}
                 onClick={onDownload}
                 disabled={downloadActive}
@@ -199,6 +208,42 @@ export function MusicCollectionHeader({
                 ) : (
                   <Download className="h-5 w-5" />
                 )}
+              </button>
+            ) : null}
+
+            {onExport ? (
+              <button
+                type="button"
+                aria-label={getString('playlist_export')}
+                title={getString('playlist_export')}
+                onClick={onExport}
+                className={ICON_BUTTON}
+              >
+                <Save className="h-5 w-5" />
+              </button>
+            ) : null}
+
+            {onShare ? (
+              <button
+                type="button"
+                aria-label={getString('music_share')}
+                title={getString('music_share')}
+                onClick={onShare}
+                className={ICON_BUTTON}
+              >
+                <Share2 className="h-5 w-5" />
+              </button>
+            ) : null}
+
+            {onEdit ? (
+              <button
+                type="button"
+                aria-label={getString('album_edit')}
+                title={getString('album_edit')}
+                onClick={onEdit}
+                className={ICON_BUTTON}
+              >
+                <Pencil className="h-5 w-5" />
               </button>
             ) : null}
           </div>

@@ -24,7 +24,7 @@ export function useRichTargetHandler(): (target: RichTarget) => void {
       }
       const route = routeForYoutubeUrl(parsed);
       if (route) {
-        if (parsed.kind === "video") prefetchStreamInfo(parsed.videoId);
+        if (parsed.kind === "video" || parsed.kind === "short") prefetchStreamInfo(parsed.videoId);
         navigate(route);
         return;
       }

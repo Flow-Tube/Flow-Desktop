@@ -12,7 +12,7 @@ use crate::api::innertube::core::clients::{
     ANDROID_VR_NO_AUTH, TVHTML5_SIMPLY_EMBEDDED_PLAYER, VISIONOS,
 };
 
-pub use crate::api::innertube::core::clients::WEB_REMIX;
+pub use crate::api::innertube::core::clients::{ANDROID_MUSIC, WEB_REMIX};
 
 /// Ordered fallback chain for **direct** audio stream resolution.
 ///

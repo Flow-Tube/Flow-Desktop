@@ -2,23 +2,26 @@
 //! keys and the objects it lacks from the other, and holds them to serve in turn.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use std::time::Duration;
 
 use sqlx::SqlitePool;
 use tokio::net::TcpListener;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::time::timeout;
 use tokio_tungstenite::{accept_async_with_config, connect_async_with_config};
 
-use super::engine::{EngineError, Result, Session, signing_keys, verify_logged};
+use super::engine::{EngineError, Result, Session, verify_logged};
 use super::forks::ForkResolution;
 use super::held::HeldStore;
 use super::kdf::sha256;
 use super::keys::MemberSecrets;
 use super::lan_link::{
-    Framed, Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server,
+    Framed, HELLO_WITHIN, Holder, Link, LiveSink, SESSION_PATH, hello_as_client, hello_as_server,
     lan_socket_config,
 };
 use super::paths::parse_log_path;
-use super::roster::Entry;
+use super::roster::{Entry, replay_roster};
 use super::store::{Store, wraps_epoch};
 use crate::sync::transport::{ClientStream, WsChannel, ws_url};
 
@@ -72,7 +75,9 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
         }
     }
 
-    let keys = signing_keys(&resolved.chain)?;
+    let senders = replay_roster(&resolved.chain)
+        .map(|state| state.senders)
+        .unwrap_or_default();
     let (paths, blobs) = link.list(held.held_vv().await?).await?;
     let mut taken = 0;
     for path in paths {
@@ -83,7 +88,7 @@ pub async fn pull_from(held: &HeldStore, link: &Link, group: &[u8; 16]) -> Resul
             continue;
         }
         if let Some(bytes) = link.get(&path).await?
-            && verify_logged(&bytes, group, &keys, &did, seq).is_ok()
+            && verify_logged(&bytes, group, &senders, &did, seq).is_ok()
         {
             held.put_object(&path, bytes).await?;
             taken += 1;
@@ -105,6 +110,13 @@ const CONNECT_WITHIN: Duration = Duration::from_secs(3);
 
 /// How many epochs to try a member under, one lower each time (spec/live.md, Session).
 const DIAL_ATTEMPTS: u32 = 4;
+
+/// Connections that haven't proved themselves yet, beyond which new ones are closed at once, so
+/// they can't use up this process's descriptors.
+const HELLOS_AT_ONCE: usize = 16;
+
+/// How soon to accept again after a failure such as running out of descriptors.
+const ACCEPT_AGAIN: Duration = Duration::from_millis(100);
 
 /// A session that ended: the member met, how many objects this device took from it, and where
 /// the member can be reached for the next one, when known.
@@ -200,10 +212,18 @@ pub async fn serve(
     met: impl Fn(Met) + Clone + Send + 'static,
     sink: LiveSink,
 ) {
-    while let Ok((stream, _)) = listener.accept().await {
+    let hellos = Arc::new(Semaphore::new(HELLOS_AT_ONCE));
+    loop {
+        let Ok((stream, _)) = listener.accept().await else {
+            tokio::time::sleep(ACCEPT_AGAIN).await;
+            continue;
+        };
+        let Ok(hello) = Arc::clone(&hellos).try_acquire_owned() else {
+            continue;
+        };
         let (pool, device, met, sink) = (pool.clone(), device.clone(), met.clone(), sink.clone());
         tokio::spawn(async move {
-            match answer(stream, &pool, &device, sink).await {
+            match answer(stream, hello, &pool, &device, sink).await {
                 Ok(session) => met(session),
                 Err(error) => {
                     tracing::debug!(target: "flow::sync2", kind = error.kind(), "LAN session ended");
@@ -215,18 +235,28 @@ pub async fn serve(
 
 async fn answer(
     stream: tokio::net::TcpStream,
+    hello: OwnedSemaphorePermit,
     pool: &SqlitePool,
     device: &MemberSecrets,
     sink: LiveSink,
 ) -> Result<Met> {
     let address = stream.peer_addr().ok().map(|peer| peer.ip().to_string());
-    let socket = accept_async_with_config(stream, Some(lan_socket_config()))
+    let first_message = async {
+        let socket = accept_async_with_config(stream, Some(lan_socket_config()))
+            .await
+            .map_err(|_| EngineError::LanUnreachable)?;
+        let mut socket = WsChannel::new(socket);
+        let first = socket.recv_binary().await?;
+        Ok::<_, EngineError>((socket, first))
+    };
+    let (socket, first) = timeout(HELLO_WITHIN, first_message)
         .await
-        .map_err(|_| EngineError::LanUnreachable)?;
+        .map_err(|_| EngineError::TimedOut)??;
+    // Opening a session replays the roster, so a connection that says nothing doesn't cost that.
     let held = HeldStore::new(pool.clone());
     let mut session = Session::open_for_lan(pool, held.clone(), device).await?;
-    let (framed, peer, listening) =
-        hello_as_server(WsChannel::new(socket), &mut session, device).await?;
+    let (framed, peer, listening) = hello_as_server(socket, &first, &mut session, device).await?;
+    drop(hello);
     let link = Link::spawn(framed, Holder::of(held.clone(), &session, sink));
     let taken = pull_from(&held, &link, session.group()).await?;
     Ok(Met {

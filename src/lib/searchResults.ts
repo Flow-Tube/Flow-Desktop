@@ -44,6 +44,107 @@ export interface CombinedSearchResults {
   correction: SearchCorrection | null;
 }
 
+/** What you said outright you don't want. Inferred signals don't apply, since a search is your own request. */
+export interface SearchExclusions {
+  videoIds: ReadonlySet<string>;
+  channelIds: ReadonlySet<string>;
+}
+
+const cleanChannelId = (id?: string | null) => (id ?? '').replace('channel:', '');
+
+export function withoutHidden(results: CombinedSearchResults, hidden: SearchExclusions): CombinedSearchResults {
+  if (hidden.videoIds.size === 0 && hidden.channelIds.size === 0) return results;
+  const hidesChannel = (id?: string | null) => hidden.channelIds.has(cleanChannelId(id));
+  const visible = <T extends { id: string; channelId?: string | null }>(videos: T[]) =>
+    videos.filter((video) => !hidden.videoIds.has(video.id) && !hidesChannel(video.channelId));
+  const top = results.topResult;
+  const topHidden =
+    (top?.kind === 'video' && visible([top.item]).length === 0) ||
+    (top?.kind === 'channel' && hidesChannel(top.item.channelId));
+  return {
+    ...results,
+    topResult: topHidden ? null : top,
+    videos: visible(results.videos),
+    live: visible(results.live),
+    shorts: visible(results.shorts),
+    channels: results.channels.filter((channel) => !hidesChannel(channel.channelId)),
+    shelves: results.shelves
+      .map((shelf) => ({ ...shelf, videos: visible(shelf.videos) }))
+      .filter((shelf) => shelf.videos.length > 0),
+  };
+}
+
+/**
+ * Keeps what the watch filter asks for. Channels and playlists have no watched state: they stay
+ * under Unwatched, where they are still new, and go under Watched, which is a list of videos.
+ */
+export function withWatchState(
+  results: CombinedSearchResults,
+  state: 'any' | 'unwatched' | 'watched',
+  watchedIds: ReadonlySet<string>,
+): CombinedSearchResults {
+  if (state === 'any') return results;
+  const keepWatched = state === 'watched';
+  const kept = <T extends { id: string }>(videos: T[]) => videos.filter((video) => watchedIds.has(video.id) === keepWatched);
+  return {
+    ...results,
+    videos: kept(results.videos),
+    live: kept(results.live),
+    shorts: kept(results.shorts),
+    shelves: results.shelves
+      .map((shelf) => ({ ...shelf, videos: kept(shelf.videos) }))
+      .filter((shelf) => shelf.videos.length > 0),
+    channels: keepWatched ? [] : results.channels,
+    videoPlaylists: keepWatched ? [] : results.videoPlaylists,
+  };
+}
+
+/** Results with no Shorts, under the viewer's Show Shorts switch. */
+export function withoutShorts(results: CombinedSearchResults): CombinedSearchResults {
+  const longForm = <T extends { isShort?: boolean }>(videos: T[]) => videos.filter((video) => !video.isShort);
+  return {
+    ...results,
+    shorts: [],
+    videos: longForm(results.videos),
+    live: longForm(results.live),
+    shelves: results.shelves
+      .map((shelf) => ({ ...shelf, videos: longForm(shelf.videos) }))
+      .filter((shelf) => shelf.videos.length > 0),
+  };
+}
+
+export interface SearchCreator {
+  channel: SearchChannel;
+  latest: SearchShelf;
+}
+
+/**
+ * YouTube returns a creator's "Latest from" strip as its own shelf beside the channel. The first
+ * channel with such a shelf becomes one card, and both leave their own lists.
+ */
+export function pairCreator(results: CombinedSearchResults): {
+  creator: SearchCreator | null;
+  results: CombinedSearchResults;
+} {
+  for (const channel of results.channels) {
+    const latest = results.shelves.find(
+      (shelf) => shelf.videos.length > 0 && shelf.videos.every((video) => video.channelId === channel.channelId),
+    );
+    if (!latest) continue;
+    const top = results.topResult;
+    return {
+      creator: { channel, latest },
+      results: {
+        ...results,
+        topResult: top?.kind === 'channel' && top.item.channelId === channel.channelId ? null : top,
+        channels: results.channels.filter((other) => other !== channel),
+        shelves: results.shelves.filter((other) => other !== latest),
+      },
+    };
+  }
+  return { creator: null, results };
+}
+
 export function emptyResults(): CombinedSearchResults {
   return {
     topResult: null,

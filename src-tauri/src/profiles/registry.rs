@@ -86,7 +86,7 @@ pub struct RegistryState {
     /// Set together with `active_id` by a switch; cleared when the next process starts.
     #[serde(default)]
     pub post_switch: bool,
-    /// Android TV only.
+    /// With two or more profiles, choose one when the app opens.
     #[serde(default = "yes")]
     pub ask_whos_watching: bool,
 }

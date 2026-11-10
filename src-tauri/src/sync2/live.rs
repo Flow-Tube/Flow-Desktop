@@ -20,6 +20,7 @@ use tokio_tungstenite::tungstenite::{Bytes, Message};
 use super::actions::{local, stopped};
 use super::engine::Result;
 use super::live_hub::{announce, receive, set_server_online, subscribe};
+use super::live_seal::MAX_LIVE_MESSAGE;
 use super::sealed::random_bytes;
 use super::server::{self, ServerStore, StoreError};
 use super::service::sync_after;
@@ -27,8 +28,6 @@ use super::state::{StoreKind, load_group};
 use crate::sync::error::SyncError;
 
 const PROTOCOL: &str = "flow-sync.v1";
-/// The most a live message or a notice may hold (spec/api.md, Limits).
-const MAX_MESSAGE: usize = 64 * 1024;
 const PING_EVERY: Duration = Duration::from_secs(15);
 const RECONNECT_AFTER: Duration = Duration::from_secs(20);
 /// Several devices may store at once: one sync shortly after covers them all.
@@ -77,8 +76,8 @@ impl ServerStore {
         }
         let upgraded = response.upgrade().await.map_err(StoreError::Network)?;
         let config = WebSocketConfig::default()
-            .max_message_size(Some(MAX_MESSAGE))
-            .max_frame_size(Some(MAX_MESSAGE));
+            .max_message_size(Some(MAX_LIVE_MESSAGE))
+            .max_frame_size(Some(MAX_LIVE_MESSAGE));
         Ok(WebSocketStream::from_raw_socket(upgraded, Role::Client, Some(config)).await)
     }
 }

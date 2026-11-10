@@ -1,4 +1,5 @@
 import type { HistoryDateGroup as HistoryDateGroupData } from "../../lib/useHistory";
+import { getPlural } from "../../lib/i18n/index";
 import { MusicHistoryGrid } from "./MusicHistoryGrid";
 
 interface MusicHistoryGroupProps {
@@ -14,7 +15,7 @@ export function MusicHistoryGroup({ group, onRemoveFromHistory }: MusicHistoryGr
       <div className="mb-3 px-1">
         <h2 className="text-2xl font-bold tracking-tight text-chrome-neutral-100">{dateLabel}</h2>
         <p className="mt-1 text-sm text-chrome-neutral-400">
-          {videos.length} {videos.length === 1 ? "song" : "songs"}
+          {getPlural("history_songs_count", videos.length)}
         </p>
       </div>
 

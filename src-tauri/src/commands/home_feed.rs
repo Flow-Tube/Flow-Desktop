@@ -3,8 +3,7 @@
 
 use tauri::{AppHandle, State};
 
-use crate::flow_neuro::interest_chips::InterestChip;
-use crate::services::home_feed::chips::ChipFeed;
+use crate::services::home_feed::chips::{ChipFeed, HomeChips};
 use crate::services::home_feed::{HomeFeedService, HomeSnapshot};
 
 #[tauri::command]
@@ -41,13 +40,13 @@ pub async fn home_feed_clear(app: AppHandle, home: State<'_, HomeFeedService>) -
     Ok(())
 }
 
-/// The interest chips beside "All", "New to you" and "Recently uploaded".
+/// The chips to offer: the viewer's interests, and which of the fixed ones have anything to show.
 #[tauri::command]
 pub async fn home_feed_chips(
     app: AppHandle,
     home: State<'_, HomeFeedService>,
-) -> Result<Vec<InterestChip>, ()> {
-    Ok(home.interest_chips(&app).await)
+) -> Result<HomeChips, ()> {
+    Ok(home.chips(&app).await)
 }
 
 /// One chip's videos; `refresh` fetches them again.

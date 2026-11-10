@@ -2,7 +2,8 @@ import type { Rgb } from "../../useDominantColor";
 import {
   FEATHER_EM,
   GLOW_RADIUS_PX,
-  GLOW_STEPS,
+  GLOW_LEVELS,
+  GLOW_PEAK_ALPHA,
   WORD_LIFT_PX,
   drawKaraoke,
   type KaraokeFrame,
@@ -69,14 +70,11 @@ export class KaraokeSurface {
     const feather = options.textSize * FEATHER_EM;
     const sung = rgba(options.accent, 1);
     const unsung = rgba(options.accent, options.unsungAlpha);
-    const glowColors: string[] = [];
-    const glowBlurs: number[] = [];
-    for (let step = 0; step < GLOW_STEPS; step++) {
-      const strength = (step + 1) / GLOW_STEPS;
-      glowColors.push(rgba(options.accent, 0.5 * strength));
-      // Canvas shadowBlur is twice the Gaussian sigma.
-      glowBlurs.push(2 * cssBlurOf(GLOW_RADIUS_PX * strength));
-    }
+    const glowColors = Array.from({ length: GLOW_LEVELS }, (_, level) =>
+      rgba(options.accent, (GLOW_PEAK_ALPHA * (level + 1)) / GLOW_LEVELS),
+    );
+    // Canvas shadowBlur is twice the Gaussian sigma.
+    const glowBlur = 2 * cssBlurOf(GLOW_RADIUS_PX);
     const front = (from: string, to: string): CanvasGradient | string => {
       if (!this.ctx) return from;
       const gradient = this.ctx.createLinearGradient(-feather / 2, 0, feather / 2, 0);
@@ -84,7 +82,7 @@ export class KaraokeSurface {
       gradient.addColorStop(1, to);
       return gradient;
     };
-    this.sungPaint = { sung, unsung, forward: front(sung, unsung), backward: front(unsung, sung), glowColors, glowBlurs };
+    this.sungPaint = { sung, unsung, forward: front(sung, unsung), backward: front(unsung, sung), glowColors, glowBlur };
     this.idlePaint = { ...this.sungPaint, unsung: sung };
   }
 

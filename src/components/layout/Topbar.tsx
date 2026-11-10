@@ -43,7 +43,7 @@ export function Topbar() {
           aria-expanded={sidebarOpen}
           onClick={usesDrawer ? toggleWatchSidebar : toggleSidebar}
         >
-          {sidebarOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+          {sidebarOpen ? <PanelLeftClose className="rtl:-scale-x-100" /> : <PanelLeftOpen className="rtl:-scale-x-100" />}
         </IconButton>
         {usesDrawer && tabCount > 1 && (
           <IconButton
@@ -61,7 +61,7 @@ export function Topbar() {
             <Logo size={36} showText={true} />
           </div>
         )}
-        <div className="hidden ml-1 items-center sm:flex">
+        <div className="hidden ms-1 items-center sm:flex">
           <IconButton
             title={getString('topbar_back')}
             aria-label={getString('topbar_back')}
@@ -69,7 +69,7 @@ export function Topbar() {
             disabled={!canGoBack}
             className="text-chrome-neutral-300 hover:text-chrome-neutral-100"
           >
-            <ArrowLeft />
+            <ArrowLeft className="rtl:-scale-x-100" />
           </IconButton>
           <IconButton
             title={getString('topbar_forward')}
@@ -78,7 +78,7 @@ export function Topbar() {
             disabled={!canGoForward}
             className="text-chrome-neutral-300 hover:text-chrome-neutral-100"
           >
-            <ArrowRight />
+            <ArrowRight className="rtl:-scale-x-100" />
           </IconButton>
         </div>
       </div>

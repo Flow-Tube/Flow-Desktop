@@ -1,15 +1,19 @@
 import { act, createElement, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SETTINGS } from "./settings/schema";
 import { useVideoStream } from "./useVideoStream";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useDownloadsLibraryStore } from "../store/useDownloadsLibraryStore";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { getStreamInfo } from "./api/youtube";
+import { addWatchRecord } from "./api/db";
+import { getLocalStream } from "./api/localMedia";
 import { clearStreamInfoCache } from "./streamResolution";
 
 vi.mock("./api/youtube", () => ({ getStreamInfo: vi.fn() }));
 vi.mock("./api/db", () => ({ addWatchRecord: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("./api/localMedia", () => ({ getLocalStream: vi.fn(), getLocalCover: vi.fn().mockResolvedValue(null) }));
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 afterEach(() => { vi.unstubAllGlobals(); clearStreamInfoCache(); localStorage.clear(); });
 
@@ -116,6 +120,38 @@ describe("recovering a long video", () => {
   });
 });
 
+describe("a video the queue moved to", () => {
+  it("starts from the top, and keeps its place when a quality change reloads it", async () => {
+    vi.stubGlobal("MediaSource", { isTypeSupported: () => true });
+    useDownloadsLibraryStore.setState({ loaded: true, records: [] });
+    useAppSettingsStore.setState({ values: {} });
+    usePlayerStore.setState({
+      currentVideo: { id: "next", title: "", channelName: "" },
+      queueAdvanceVideoId: "next",
+      playbackStartedVideoId: null,
+    });
+    localStorage.setItem("flow_watch_progress:next", JSON.stringify({ currentTime: 120, duration: 600 }));
+    vi.mocked(getStreamInfo).mockReset().mockResolvedValue({
+      streamId: "s", localUrl: "video", expiresAt: "", captions: [], dashManifestUrl: "manifest",
+      variants: [{ id: "v", localUrl: "video", mimeType: 'video/mp4; codecs="avc1.4d401f"', qualityLabel: "720p", isPlayable: true, isDefault: true, hasAudio: true, isVideoOnly: false, deliveryMethod: "progressive" }],
+      audioTracks: [],
+    });
+    let latest!: ReturnType<typeof useVideoStream>;
+    function Harness() { latest = useVideoStream("next"); return null; }
+    const root = createRoot(document.createElement("div"));
+    try {
+      await act(async () => root.render(createElement(Harness)));
+      expect(latest.resumeTime).toBe(0);
+      await act(async () => usePlayerStore.getState().markPlaybackStarted("next"));
+      await act(async () => useAppSettingsStore.setState({ values: { [SETTINGS.DEFAULT_QUALITY_WIFI]: "720p" } }));
+      expect(latest.resumeTime).toBe(120);
+    } finally {
+      await act(async () => root.unmount());
+      usePlayerStore.setState({ queueAdvanceVideoId: null, playbackStartedVideoId: null });
+    }
+  });
+});
+
 describe("fetching fresh links", () => {
   const info = {
     streamId: "s", localUrl: "video", expiresAt: "", captions: [], dashManifestUrl: "manifest",
@@ -178,5 +214,101 @@ describe("fetching fresh links", () => {
       vi.useRealTimers();
       await act(async () => root.unmount());
     }
+  });
+});
+
+describe("a library file in the video player", () => {
+  const LOCAL_ID = "local_0123456789abcdef";
+  const local = {
+    url: "http://127.0.0.1:1/stream/token",
+    contentType: "video/mp4",
+    title: "From the file",
+    artist: "An artist",
+    videoCodec: "",
+    audioCodec: "",
+    durationSeconds: 300,
+    positionSeconds: 40,
+    lyrics: null,
+    captions: [],
+  };
+
+  async function render(run: (latest: () => ReturnType<typeof useVideoStream>) => Promise<void> | void) {
+    useDownloadsLibraryStore.setState({ loaded: true, records: [] });
+    useAppSettingsStore.setState({ values: {} });
+    usePlayerStore.setState({ currentVideo: { id: LOCAL_ID, title: "", channelName: "" }, queue: [] });
+    let latest!: ReturnType<typeof useVideoStream>;
+    function Harness() { latest = useVideoStream(LOCAL_ID); return null; }
+    const root = createRoot(document.createElement("div"));
+    try {
+      await act(async () => root.render(createElement(Harness)));
+      await run(() => latest);
+    } finally { await act(async () => root.unmount()); }
+  }
+
+  it("plays from the file, resumes, fills in a cold open and writes no history", async () => {
+    vi.mocked(getStreamInfo).mockClear();
+    vi.mocked(addWatchRecord).mockClear();
+    vi.mocked(getLocalStream).mockResolvedValue(local);
+    await render((latest) => {
+      expect(latest().streamUrl).toBe(local.url);
+      expect(latest().sourceMode).toBe("direct");
+      expect(latest().resumeTime).toBe(40);
+      expect(usePlayerStore.getState().currentVideo?.title).toBe("From the file");
+      expect(getStreamInfo).not.toHaveBeenCalled();
+      expect(addWatchRecord).not.toHaveBeenCalled();
+    });
+  });
+
+  it("starts over when the last play reached the very end", async () => {
+    vi.mocked(getLocalStream).mockResolvedValue({ ...local, positionSeconds: 295 });
+    await render((latest) => expect(latest().resumeTime).toBe(0));
+  });
+
+  it("shows a specific error when the file is gone", async () => {
+    vi.mocked(getLocalStream).mockRejectedValue({ kind: "localFileMissing", message: "gone" });
+    await render((latest) => {
+      expect(latest().streamErrorKind).toBe("localFileMissing");
+      expect(latest().streamUrl).toBeNull();
+    });
+  });
+
+  it("turns a media element error into a specific error rather than a blank player", async () => {
+    vi.mocked(getLocalStream).mockResolvedValue(local);
+    await render(async (latest) => {
+      await act(async () => latest().onRetrySource("media-error:4"));
+      expect(latest().streamErrorKind).toBe("localFormatUnsupported");
+    });
+  });
+
+  it("offers the file's subtitles, and one picked later joins them", async () => {
+    const track = { id: "a", label: "Film.en.srt", languageCode: "en", url: "http://127.0.0.1:1/stream/a", isAutoGenerated: false };
+    vi.mocked(getLocalStream).mockResolvedValue({ ...local, captions: [track] });
+    await render(async (latest) => {
+      expect(latest().captions).toEqual([track]);
+      const picked = { ...track, id: "b", label: "mine.srt" };
+      await act(async () => usePlayerStore.getState().setCaptions([track, picked]));
+      expect(latest().captions).toEqual([track, picked]);
+    });
+  });
+
+  it("a stall on a slow drive is not an error", async () => {
+    vi.mocked(getLocalStream).mockResolvedValue(local);
+    await render(async (latest) => {
+      await act(async () => latest().onRetrySource("buffering-stall"));
+      expect(latest().streamError).toBeNull();
+    });
+  });
+
+  it("a retry reads the file again without asking YouTube", async () => {
+    vi.mocked(getStreamInfo).mockClear();
+    vi.mocked(getLocalStream).mockRejectedValueOnce({ kind: "localFileMissing", message: "gone" });
+    vi.mocked(getLocalStream).mockResolvedValue(local);
+    await render(async (latest) => {
+      expect(latest().streamErrorKind).toBe("localFileMissing");
+      await act(async () => latest().onHardRetry());
+      expect(latest().streamErrorKind).toBeNull();
+      expect(latest().streamUrl).toBe(local.url);
+      expect(getStreamInfo).not.toHaveBeenCalled();
+    });
   });
 });

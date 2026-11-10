@@ -84,6 +84,11 @@ export async function searchVideos(
   return invokeBackend<SearchVideosResponse>("search_videos", { request });
 }
 
+export async function getOriginalTitle(videoId: string): Promise<string | null> {
+  if (!(await isTauriEnv())) return null;
+  return invokeBackend<string | null>("get_original_title", { videoId });
+}
+
 export async function getVideoDetails(videoId: string): Promise<VideoDetails> {
   if (!(await isTauriEnv())) {
     console.warn("Tauri not detected. Returning mock video details.");
@@ -136,6 +141,16 @@ export async function getVideoMetadata(videoId: string): Promise<VideoMetadata> 
 }
 
 /** The video's category, from a small request of its own. */
+export interface PaidPromotionLabel {
+  text: string | null;
+  durationMs: number;
+}
+
+export async function getPaidPromotion(videoId: string): Promise<PaidPromotionLabel | null> {
+  if (!(await isTauriEnv())) return null;
+  return invokeBackend<PaidPromotionLabel | null>("get_paid_promotion", { videoId });
+}
+
 export async function getVideoCategory(videoId: string): Promise<string | null> {
   if (!(await isTauriEnv())) return null;
   return invokeBackend<string | null>("get_video_category", { videoId });
@@ -553,6 +568,12 @@ export async function getSubscriptionRssFeed(
  * channel. `onBatch` fires once per emitted batch; the promise resolves when
  * the stream completes.
  */
+/** Collaborations of the followed channels; a few more channels are looked at on each call. */
+export async function scanSubscriptionCollaborations(channelIds: string[]): Promise<VideoSummary[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<VideoSummary[]>("scan_subscription_collaborations", { channelIds });
+}
+
 export async function streamSubscriptionRssFeed(
   channelIds: string[],
   onBatch: (feed: SubscriptionRssFeed) => void,

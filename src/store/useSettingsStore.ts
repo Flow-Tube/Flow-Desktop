@@ -12,9 +12,11 @@ export type SponsorBlockCategory =
   | "music_offtopic"
   | "filler"
   | "preview"
-  | "exclusive_access";
+  | "exclusive_access"
+  | "hook"
+  | "poi_highlight";
 
-export type SponsorBlockAction = "skip" | "mute" | "notify" | "ignore";
+export type SponsorBlockAction = "skip" | "skip_once" | "skip_button" | "mute" | "notify" | "ignore" | "disabled";
 
 export type DiscordRpcMode = "off" | "music" | "videos" | "musicAndVideos";
 
@@ -34,9 +36,19 @@ export const SPONSORBLOCK_CATEGORIES = [
   "filler",
   "preview",
   "exclusive_access",
+  "hook",
+  "poi_highlight",
 ] as const satisfies readonly SponsorBlockCategory[];
 
-const SPONSORBLOCK_ACTIONS = ["skip", "mute", "notify", "ignore"] as const satisfies readonly SponsorBlockAction[];
+const SPONSORBLOCK_ACTIONS = [
+  "skip",
+  "skip_once",
+  "skip_button",
+  "mute",
+  "notify",
+  "ignore",
+  "disabled",
+] as const satisfies readonly SponsorBlockAction[];
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 const DEFAULT_SERVER_URL = "https://sponsor.ajay.app";
 
@@ -50,6 +62,8 @@ export const DEFAULT_SB_COLORS: Record<SponsorBlockCategory, string> = {
   filler: "#7300ff",
   preview: "#0080c0",
   exclusive_access: "#ff7f00",
+  hook: "#395699",
+  poi_highlight: "#ff1684",
 };
 
 export const DEFAULT_SB_ACTIONS: Record<SponsorBlockCategory, SponsorBlockAction> = {
@@ -62,6 +76,8 @@ export const DEFAULT_SB_ACTIONS: Record<SponsorBlockCategory, SponsorBlockAction
   filler: "ignore",
   preview: "ignore",
   exclusive_access: "ignore",
+  hook: "ignore",
+  poi_highlight: "ignore",
 };
 
 function isSponsorBlockCategory(value: string): value is SponsorBlockCategory {

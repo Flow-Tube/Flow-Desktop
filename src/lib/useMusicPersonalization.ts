@@ -8,7 +8,6 @@ import {
   getMusicTasteProfile,
   searchMusicTyped,
 } from './api/music';
-import i18n from './i18n';
 import { getString } from './i18n/index';
 import { buildQuickPicks } from './musicQuickPicksBuilder';
 import { dailyMixId, dailyMixRoute, expandDailyMix } from './musicMixes';
@@ -186,7 +185,7 @@ async function buildSimilarTo(
     if (performances.length >= 3) sections.push({
       id: `performances-${anchor.key}`,
       title: history.find((record) => record.videoId === anchor.seed)?.title ?? anchor.name,
-      subtitle: i18n.t('musicOtherPerformances'),
+      subtitle: getString('music_other_performances'),
       playAll: true,
       items: performances,
     });
@@ -197,7 +196,7 @@ async function buildSimilarTo(
     if (albums.length >= 3) sections.push({
       id: `artist-albums-${anchor.key}`,
       title: moreFrom?.title || anchor.name,
-      subtitle: i18n.t('musicMoreFrom'),
+      subtitle: getString('music_more_from'),
       route: moreFromId ? `/music/artist/${moreFromId}` : artistRoute,
       items: albums,
     });
@@ -386,7 +385,7 @@ async function buildDailyMixes(used: Set<string>): Promise<PersonalSection[]> {
       sections.push({
         id: dailyMixId(mix),
         title: `${mix.label} ${getString('music_mix')}`,
-        subtitle: i18n.t('musicDailyMix'),
+        subtitle: getString('music_daily_mix'),
         seedArt: cover ? { url: cover } : undefined,
         items,
         route: dailyMixRoute(mix),
@@ -405,7 +404,7 @@ async function buildTrending(
   const pool = await ranked(await trendingSongs(), 'discover');
   const items = takeUnused(pool, 16, used, avoid).map(toYTSong);
   if (items.length < MIN_SHELF_ITEMS) return null;
-  return { id: 'popular-songs', title: i18n.t('musicTrending'), items };
+  return { id: 'popular-songs', title: getString('music_trending'), items };
 }
 
 interface BuiltSections {

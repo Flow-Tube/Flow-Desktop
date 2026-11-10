@@ -17,6 +17,20 @@ export function shortSummaryToItem(short: ShortVideoSummary): ShortItem {
   };
 }
 
+export function shortItemToSummary(short: ShortItem): ShortVideoSummary {
+  return {
+    type: "short",
+    id: short.id,
+    title: short.title,
+    channelName: short.channelName,
+    channelId: short.channelId,
+    thumbnailUrl: short.thumbnailUrl,
+    channelAvatarUrl: short.channelAvatarUrl,
+    viewCountText: short.viewCountText,
+    publishedText: short.publishedText,
+  };
+}
+
 export function buildShortQueue(shorts: ShortVideoSummary[]): ShortItem[] {
   const seen = new Set<string>();
   return shorts.map(shortSummaryToItem).filter((short) => {

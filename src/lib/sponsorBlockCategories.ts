@@ -1,3 +1,4 @@
+import { getString } from "./i18n/index";
 import {
   SPONSORBLOCK_CATEGORIES,
   type SponsorBlockCategory,
@@ -57,13 +58,24 @@ export const SB_CATEGORY_META: Record<SponsorBlockCategory, SponsorBlockCategory
     short: "Exclusive",
     description: "Sponsored trips or exclusive-access segments.",
   },
+  hook: {
+    name: getString("sponsorblock_category_hook"),
+    short: getString("sponsorblock_category_hook_short"),
+    description: getString("sponsorblock_category_hook_desc"),
+  },
+  poi_highlight: {
+    name: getString("sponsorblock_category_highlight"),
+    short: getString("sponsorblock_category_highlight"),
+    description: getString("sponsorblock_category_highlight_desc"),
+  },
 };
 
 export function sponsorBlockCategoryLabel(category: string): string {
   return SB_CATEGORY_META[category as SponsorBlockCategory]?.name ?? category;
 }
 
-export const SB_SUBMIT_CATEGORIES = SPONSORBLOCK_CATEGORIES.map((category) => ({
+// A highlight is a single point, which the submit dialog cannot make.
+export const SB_SUBMIT_CATEGORIES = SPONSORBLOCK_CATEGORIES.filter((category) => category !== "poi_highlight").map((category) => ({
   value: category,
   label: SB_CATEGORY_META[category].name,
 }));

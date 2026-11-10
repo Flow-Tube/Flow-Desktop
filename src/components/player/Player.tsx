@@ -3,10 +3,11 @@ import * as dashjs from "dashjs";
 import Hls from "hls.js";
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { PlayerErrorState } from "../ui/PlayerErrorState";
+import { CurrentVideoReminderButton } from "../watch/UpcomingReminderButton";
 import type { PlayerErrorInfo } from "../../lib/playerError";
 import { getString } from "../../lib/i18n/index";
 import { SUBTITLE_FONT_SCALES, usePlayerStore } from "../../store/usePlayerStore";
-import { useSettingsStore, type SponsorBlockCategory, type SponsorBlockAction } from "../../store/useSettingsStore";
+import { useSettingsStore, type SponsorBlockCategory } from "../../store/useSettingsStore";
 import type {
   AudioTrack,
   CaptionTrack,
@@ -45,7 +46,10 @@ import { sponsorBlockCategoryLabel } from "../../lib/sponsorBlockCategories";
 import { usePersistedPlayerVolume } from "../../lib/usePersistedPlayerVolume";
 import { recordPlayerEvent } from "../../lib/playerDiagnostics";
 import { shouldPublishPlaybackTime } from "../../lib/playerProgress";
-import { segmentsToRearm } from "../../lib/sponsorBlockRearm";
+import { SponsorBlockTracker } from "../../lib/sponsorBlockPolicy";
+import { useManualSponsorSegment } from "../../lib/useManualSponsorSegment";
+import type { SponsorBlockSegment } from "../../lib/api/foss";
+import { recapSponsorSkip } from "../../lib/recap/recapQueue";
 import { longPressRate } from "../../lib/pointerGesture";
 import { isPopOutWindow } from "../../lib/api/pip";
 import {
@@ -54,10 +58,17 @@ import {
   type PlayerVolumeFeedback,
 } from "./gesture/overlay";
 import { SubtitleOverlay } from "./SubtitleOverlay";
+import { isLocalCaption } from "../../lib/captionText";
+import { useSubtitleFileDrop } from "../../lib/localSubtitles";
+import { useLocalSubtitleStore, videoSubtitleState } from "../../store/useLocalSubtitleStore";
+import { SponsorBlockSkipButton } from "./SponsorBlockSkipButton";
 import { SETTINGS } from "../../lib/settings/schema";
 import { loudnessFactor } from "../../lib/loudness";
 import { useVideoEq } from "../../lib/audio/useVideoEq";
+import { useVolumeLevel } from "../../lib/audio/volumeBoost";
+import { adaptivePlayerAspect, useReportVideoAspect } from "../../lib/adaptivePlayer";
 import { IS_LINUX_RUNTIME } from "../../lib/platform";
+import { videoPlayerKeyAction } from "../../lib/videoPlayerKeys";
 import { IS_MAIN_WINDOW } from "../../lib/appWindow";
 import { useAmbientSettings } from "../../lib/ambient/useAmbientSettings";
 import { AmbientGlow } from "./AmbientGlow";
@@ -69,6 +80,8 @@ import {
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
 import { openPopoutPlayer } from "../../lib/pipHandoff";
 import { sleepTimerTakesEnd } from "../../lib/useSleepTimerDriver";
+import { usePlaybackStartSpeed } from "../../lib/playbackStartSpeed";
+import { VIDEO_FIT_CLASS } from "../../lib/videoFit";
 import {
   formatPlaybackRate,
   normalizePlaybackRate,
@@ -126,6 +139,12 @@ type PlayerProps = {
   onRetry?: () => void;
   onCopyLogs?: () => Promise<boolean> | boolean | void;
   onOpenInBrowser?: () => void;
+  /** YouTube's category, once known, for the music at normal speed setting. */
+  category?: string | null;
+  /** Drawn over the video and the controls, such as the Up next card. */
+  overlay?: React.ReactNode;
+  /** A small label on the picture, left out of the mini player. */
+  badge?: React.ReactNode;
   onRetrySource?: (reason: string) => void;
   sourceMode?: string;
   className?: string;
@@ -298,6 +317,9 @@ export const Player: React.FC<PlayerProps> = ({
   onRetry,
   onCopyLogs,
   onOpenInBrowser,
+  category,
+  overlay,
+  badge,
   onRetrySource,
   sourceMode,
   className,
@@ -313,10 +335,8 @@ export const Player: React.FC<PlayerProps> = ({
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerInsideRef = useRef(false);
   const keyboardFocusInsideRef = useRef(false);
-  const skippedSegmentsRef = useRef<Set<string>>(new Set());
+  const sbTrackerRef = useRef(new SponsorBlockTracker());
   const undoSkippedSegmentsRef = useRef<Set<string>>(new Set());
-  const mutedSegmentsRecordedRef = useRef<Set<string>>(new Set());
-  const notifiedSegmentsRef = useRef<Set<string>>(new Set());
   const lastMediaIdentityRef = useRef<string>(src || dashManifestUrl || hlsManifestUrl || "");
   const desiredPlayingRef = useRef(false);
   const pendingResumeTimeRef = useRef(0);
@@ -356,7 +376,6 @@ export const Player: React.FC<PlayerProps> = ({
     isPlaying,
     setIsPlaying,
     volume,
-    setVolume,
     muted,
     setMuted,
     playbackRate,
@@ -366,6 +385,8 @@ export const Player: React.FC<PlayerProps> = ({
     setCurrentTime,
     setDuration,
     playNext,
+    playPrevious,
+    videoFit,
     isTheaterMode,
     setIsTheaterMode,
     sponsorBlockSegments,
@@ -393,6 +414,7 @@ export const Player: React.FC<PlayerProps> = ({
   const speedSliderEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SPEED_SLIDER_ENABLED] === "true");
   const seekIntervalSetting = useAppSettingsStore((state) => state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? "10");
   const subtitlesEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SUBTITLES_ENABLED] === "true");
+  const preferredAudioLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_AUDIO_LANGUAGE]);
   const preferredSubtitleLanguage = useAppSettingsStore((state) => state.values[SETTINGS.PREFERRED_SUBTITLE_LANGUAGE] ?? "en");
   // Silences this player while it warms up behind a handoff the other window is
   // still playing out loud; user mute and volume stay untouched.
@@ -530,6 +552,7 @@ export const Player: React.FC<PlayerProps> = ({
 
   const decodeFailures = useCodecHealthStore((state) => state.failures);
   const currentVideoId = usePlayerStore((state) => state.currentVideo?.id);
+  const subtitleOffsetMs = useLocalSubtitleStore((state) => videoSubtitleState(state.videos, currentVideoId).offsetMs);
   const supportedQualities = useMemo(() => {
     if (!isDashPlayback) return qualities;
     const decodable = qualities.filter((quality) => isVariantSupported(quality.mimeType));
@@ -567,7 +590,11 @@ export const Player: React.FC<PlayerProps> = ({
     !isHlsPlayback &&
     (hasSelectedAlternateAudio || (!!selectedQuality && !selectedQuality.hasAudio));
 
-  useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null);
+  const { level: volumeLevelNow, maxLevel, setLevel: setVolumeLevel, gain: boostGain } = useVolumeLevel();
+  useVideoEq(videoRef, audioRef, usesExternalAudio ? selectedAudioTrack?.localUrl ?? null : null, boostGain);
+  useReportVideoAspect(videoRef, currentVideoId);
+  const adaptiveEnabled = useAppSettingsStore((state) => state.values[SETTINGS.ADAPTIVE_PLAYER_SIZE_ENABLED] !== "false");
+  const videoAspect = usePlayerStore((state) => state.videoAspect);
 
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
@@ -579,6 +606,7 @@ export const Player: React.FC<PlayerProps> = ({
     !isPipMode &&
     !isFullscreen &&
     !error &&
+    videoFit === "fit" &&
     (isTheaterSurface || ambient.glow);
   const effectivePoster = hasStartedPlayback || resumeTime > 0 || isSourceSwitching ? undefined : poster || undefined;
   const logPlayerEvent = useCallback((event: string, payload: Record<string, unknown> = {}) => {
@@ -864,29 +892,32 @@ export const Player: React.FC<PlayerProps> = ({
   }, [loadSettings]);
 
   const mediaIdentity = src || dashManifestUrl || hlsManifestUrl || "";
-  const appliedInitialRateForRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!mediaIdentity || appliedInitialRateForRef.current === mediaIdentity) return;
-    appliedInitialRateForRef.current = mediaIdentity;
-    setPlaybackRate(defaultPlaybackRate);
-  }, [defaultPlaybackRate, mediaIdentity, setPlaybackRate]);
+  const [manualSegment, setManualSegment] = useManualSponsorSegment(mediaIdentity, sponsorBlockEnabled);
+  const notePickedSpeed = usePlaybackStartSpeed(mediaIdentity, defaultPlaybackRate, category);
 
   const selectPlaybackRate = useCallback((nextRate: number) => {
     const normalizedRate = normalizePlaybackRate(nextRate);
     setPlaybackRate(normalizedRate);
+    notePickedSpeed(normalizedRate);
     if (rememberPlaybackSpeed) {
       void setSettingValue(SETTINGS.PLAYBACK_SPEED, formatPlaybackRate(normalizedRate));
     }
-  }, [rememberPlaybackSpeed, setPlaybackRate]);
+  }, [notePickedSpeed, rememberPlaybackSpeed, setPlaybackRate]);
 
   const toggleLoopSetting = useCallback(() => {
     void setSettingValue(SETTINGS.VIDEO_LOOP_ENABLED, String(!videoLoopEnabled));
   }, [videoLoopEnabled]);
 
   useSubtitleSettingsSync();
+  useSubtitleFileDrop(containerRef, currentVideoId);
 
   useEffect(() => {
+    // A file added for this video is what the viewer wants, whatever the switch in Settings says.
+    const added = captions.find(isLocalCaption);
+    if (added) {
+      setSelectedCaptionId(added.id);
+      return;
+    }
     if (!subtitlesEnabled) {
       setSelectedCaptionId("off");
       return;
@@ -897,8 +928,8 @@ export const Player: React.FC<PlayerProps> = ({
   }, [captions, preferredSubtitleLanguage, subtitlesEnabled]);
 
   useEffect(() => {
-    setSelectedAudioTrackId(selectPreferredAudioTrackId(audioTracks, "original"));
-  }, [audioTracks]);
+    setSelectedAudioTrackId(selectPreferredAudioTrackId(audioTracks, preferredAudioLanguage ?? "original"));
+  }, [audioTracks, preferredAudioLanguage]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1984,10 +2015,8 @@ export const Player: React.FC<PlayerProps> = ({
     const targetTime = Math.max(0, resumeTime || 0);
 
     pendingResumeTimeRef.current = targetTime;
-    skippedSegmentsRef.current.clear();
+    sbTrackerRef.current.reset();
     undoSkippedSegmentsRef.current.clear();
-    mutedSegmentsRecordedRef.current.clear();
-    notifiedSegmentsRef.current.clear();
     lastMediaIdentityRef.current = mediaIdentity;
     // A new source gets its own failure report; a re-resolve keeps the mode.
     retrySourceFiredRef.current = false;
@@ -2147,121 +2176,100 @@ export const Player: React.FC<PlayerProps> = ({
       if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
 
-      switch (event.key.toLowerCase()) {
-        case " ":
-        case "k":
-          event.preventDefault();
+      const action = videoPlayerKeyAction(event.key, event.shiftKey);
+      if (action && action.kind !== "exit-fullscreen") event.preventDefault();
+      switch (action?.kind) {
+        case "toggle-play":
           togglePlay();
           break;
-        case "j":
+        case "next":
+          playNext(true);
+          break;
+        case "previous":
+          playPrevious();
+          break;
+        case "seek-back":
           seekBy(-seekIntervalSeconds);
           break;
-        case "l":
+        case "seek-forward":
           seekBy(seekIntervalSeconds);
           break;
-        case "arrowleft":
-          event.preventDefault();
-          seekBy(-seekIntervalSeconds);
-          break;
-        case "arrowright":
-          event.preventDefault();
-          seekBy(seekIntervalSeconds);
-          break;
-        case "arrowup": {
-          event.preventDefault();
-          const raised = Math.min(1, volume + 0.05);
-          setVolume(raised);
+        case "volume-up": {
+          const raised = Math.min(maxLevel, volumeLevelNow + 0.05);
+          setVolumeLevel(raised);
           setMuted(false);
           showVolumeFeedback(raised, false);
           break;
         }
-        case "arrowdown": {
-          event.preventDefault();
-          const lowered = Math.max(0, volume - 0.05);
-          setVolume(lowered);
+        case "volume-down": {
+          const lowered = Math.max(0, volumeLevelNow - 0.05);
+          setVolumeLevel(lowered);
           showVolumeFeedback(lowered, muted);
           break;
         }
-        case "m":
+        case "toggle-mute":
           setMuted((value) => !value);
           showVolumeFeedback(volume, !muted);
           break;
-        case "escape":
+        case "exit-fullscreen":
           if (isFullscreen && !event.defaultPrevented) {
             event.preventDefault();
             toggleFullscreen();
           }
           break;
-        case "f":
+        case "toggle-fullscreen":
           toggleFullscreen();
           break;
-        case "t":
+        case "toggle-theater":
           if (!isFullscreen) setIsTheaterMode(!isTheaterMode);
           break;
-        case "i":
+        case "toggle-pip":
           togglePictureInPicture();
           break;
-        case "c":
-          event.preventDefault();
+        case "toggle-captions":
           toggleCaptions();
           break;
-        case "+":
-        case "=":
-          event.preventDefault();
+        case "captions-larger":
           nudgeSubtitleFontSize(1);
           break;
-        case "-":
-          event.preventDefault();
+        case "captions-smaller":
           nudgeSubtitleFontSize(-1);
           break;
-        case ",":
-          event.preventDefault();
+        case "frame-back":
           stepFrame(-1);
           break;
-        case ".":
-          event.preventDefault();
+        case "frame-forward":
           stepFrame(1);
           break;
-        case "<":
-          event.preventDefault();
+        case "slower":
           stepPlaybackRate(-1);
           break;
-        case ">":
-          event.preventDefault();
+        case "faster":
           stepPlaybackRate(1);
           break;
-        case "[":
-          event.preventDefault();
+        case "previous-chapter":
           jumpChapter(-1);
           break;
-        case "]":
-          event.preventDefault();
+        case "next-chapter":
           jumpChapter(1);
           break;
-        case "home":
-          event.preventDefault();
+        case "seek-start":
           if (isLive && videoRef.current?.seekable.length) {
             seekTo(liveWindow(videoRef.current).start);
           } else {
             seekTo(0);
           }
           break;
-        case "end":
-          event.preventDefault();
+        case "seek-end":
           if (isLive && videoRef.current?.seekable.length) {
             seekTo(liveEdgePosition(liveWindow(videoRef.current), readLiveTiming(videoRef.current)));
           } else {
             seekTo(duration);
           }
           break;
-        default: {
-          const digit = Number(event.key);
-          if (event.key.length === 1 && Number.isInteger(digit) && !isLive && duration > 0) {
-            event.preventDefault();
-            seekTo((duration * digit) / 10);
-          }
+        case "seek-to-fraction":
+          if (!isLive && duration > 0) seekTo(duration * action.fraction);
           break;
-        }
       }
       revealControls();
     };
@@ -2281,9 +2289,13 @@ export const Player: React.FC<PlayerProps> = ({
     isLive,
     jumpChapter,
     nudgeSubtitleFontSize,
+    playNext,
+    playPrevious,
     setIsTheaterMode,
     setMuted,
-    setVolume,
+    setVolumeLevel,
+    maxLevel,
+    volumeLevelNow,
     showVolumeFeedback,
     stepFrame,
     stepPlaybackRate,
@@ -2370,20 +2382,22 @@ export const Player: React.FC<PlayerProps> = ({
     audio.load();
   };
 
-  const handleSkipNotifySegment = (segment: any) => {
-    if (!segment) return;
-    const video = videoRef.current;
-    if (!video) return;
-
-    const [_, end] = segment.segment;
-    seekTo(end);
-
-    setNotifyToast(prev => prev ? { ...prev, visible: false } : null);
-    if (notifyTimeoutRef.current !== null) {
-      window.clearTimeout(notifyTimeoutRef.current);
+  const showSponsorBlockNotice = (segment: SponsorBlockSegment) => {
+    setNotifyToast({ segment, categoryName: sponsorBlockCategoryLabel(segment.category), visible: true });
+    if (notifyTimeoutRef.current !== null) window.clearTimeout(notifyTimeoutRef.current);
+    notifyTimeoutRef.current = window.setTimeout(() => {
+      setNotifyToast((prev) => (prev ? { ...prev, visible: false } : null));
       notifyTimeoutRef.current = null;
-    }
+    }, 2000);
   };
+
+  const skipManualSegment = () => {
+    if (!manualSegment) return;
+    sbTrackerRef.current.dismiss(manualSegment.UUID);
+    seekTo(manualSegment.segment[1]);
+    setManualSegment(null);
+  };
+
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
@@ -2406,66 +2420,30 @@ export const Player: React.FC<PlayerProps> = ({
 
     let inMuteSegment = false;
     let muteSegmentCategoryName = "";
+    let manualSegment: SponsorBlockSegment | null = null;
 
     if (sponsorBlockEnabled) {
-      for (const { UUID } of segmentsToRearm(sponsorBlockSegments, nextTime)) {
-        skippedSegmentsRef.current.delete(UUID);
-        mutedSegmentsRecordedRef.current.delete(UUID);
-        notifiedSegmentsRef.current.delete(UUID);
+      const sb = sbTrackerRef.current.tick(nextTime, sponsorBlockSegments, sponsorBlockActions, !!video?.ended);
+      if (sb.skip) {
+        const [start, end] = sb.skip.segment;
+        seekTo(end);
+        void incrementStats(sb.skip.category as SponsorBlockCategory, Math.max(0, end - start));
+        recapSponsorSkip(usePlayerStore.getState().currentVideo ?? {}, sb.skip.category, Math.max(0, end - start) * 1000);
+        return;
       }
-
-      for (const segment of sponsorBlockSegments) {
-        const [start, end] = segment.segment;
-        const action: SponsorBlockAction = sponsorBlockActions[segment.category as SponsorBlockCategory] || "ignore";
-
-        if (action === "ignore") continue;
-
-        if (nextTime >= start && nextTime < end) {
-          if (action === "skip") {
-            if (!skippedSegmentsRef.current.has(segment.UUID)) {
-              skippedSegmentsRef.current.add(segment.UUID);
-
-              seekTo(end);
-
-              const durationSkipped = Math.max(0, end - start);
-              void incrementStats(segment.category as SponsorBlockCategory, durationSkipped);
-
-              return; 
-            }
-          } else if (action === "mute") {
-            inMuteSegment = true;
-            muteSegmentCategoryName = segment.category;
-
-            if (!mutedSegmentsRecordedRef.current.has(segment.UUID)) {
-              mutedSegmentsRecordedRef.current.add(segment.UUID);
-              const durationMuted = Math.max(0, end - start);
-              void incrementStats(segment.category as SponsorBlockCategory, durationMuted);
-            }
-          } else if (action === "notify") {
-            if (!notifiedSegmentsRef.current.has(segment.UUID)) {
-              notifiedSegmentsRef.current.add(segment.UUID);
-              
-              const catLabel = sponsorBlockCategoryLabel(segment.category);
-              setNotifyToast({
-                segment,
-                categoryName: catLabel,
-                visible: true
-              });
-
-              if (notifyTimeoutRef.current !== null) {
-                window.clearTimeout(notifyTimeoutRef.current);
-              }
-
-              notifyTimeoutRef.current = window.setTimeout(() => {
-                setNotifyToast(prev => prev ? { ...prev, visible: false } : null);
-                notifyTimeoutRef.current = null;
-              }, 2000);
-
-            }
-          }
-        }
+      if (sb.muteStarted) {
+        const [start, end] = sb.muteStarted.segment;
+        void incrementStats(sb.muteStarted.category as SponsorBlockCategory, Math.max(0, end - start));
+        recapSponsorSkip(usePlayerStore.getState().currentVideo ?? {}, sb.muteStarted.category, Math.max(0, end - start) * 1000);
       }
+      if (sb.mute) {
+        inMuteSegment = true;
+        muteSegmentCategoryName = sb.mute.category;
+      }
+      if (sb.notify) showSponsorBlockNotice(sb.notify);
+      manualSegment = sb.manual;
     }
+    setManualSegment((current) => (current?.UUID === manualSegment?.UUID ? current : manualSegment));
 
     if (inMuteSegment) {
       if (!sbMuted) {
@@ -2487,8 +2465,11 @@ export const Player: React.FC<PlayerProps> = ({
   };
 
   // The root stays unclipped so the glow can leave it; what it used to clip lives in the content wrapper.
+  const fillsTallerSlot =
+    !isPipMode && !isFullscreen && adaptivePlayerAspect(videoAspect, adaptiveEnabled, isTheaterSurface) !== null;
   const playerRootClasses = cx(
-    "relative w-full aspect-video outline-none",
+    "relative w-full outline-none",
+    fillsTallerSlot ? "h-full" : "aspect-video",
     isTheaterSurface ? "max-h-[calc(100vh-160px)] min-h-[480px] rounded-none" : "rounded-xl",
     isFullscreen && "rounded-none",
     className
@@ -2498,6 +2479,9 @@ export const Player: React.FC<PlayerProps> = ({
     <div
       ref={containerRef}
       id="flow-player-root"
+      // The frame and its controls run left to right in every language, as on Android: the
+      // timeline, the skip buttons and the double-tap sides all follow the video, not the text.
+      dir="ltr"
       data-fullscreen={isFullscreen || undefined}
       className={cx(
         "group/player",
@@ -2594,7 +2578,7 @@ export const Player: React.FC<PlayerProps> = ({
             setPlaybackDesired(false);
           }
         }}
-        className="relative z-10 h-full w-full object-contain"
+        className={cx("relative z-10 h-full w-full", VIDEO_FIT_CLASS[isPipMode ? "fit" : videoFit])}
       />
 
       {usesExternalAudio && selectedAudioTrack?.localUrl && (
@@ -2678,6 +2662,7 @@ export const Player: React.FC<PlayerProps> = ({
         selectedCaptionId={selectedCaptionId}
         currentTime={currentTime}
         shouldShowControls={shouldShowControls}
+        offsetMs={subtitleOffsetMs}
       />
 
       {(isLoading || error || errorInfo) && (
@@ -2695,6 +2680,9 @@ export const Player: React.FC<PlayerProps> = ({
               onRetry={onRetry}
               onCopyLogs={onCopyLogs}
               onOpenInBrowser={onOpenInBrowser}
+              upcomingAction={
+                errorInfo.startsAtMs != null ? <CurrentVideoReminderButton startsAtMs={errorInfo.startsAtMs} /> : undefined
+              }
             />
           ) : (
             <div className="max-w-md space-y-4">
@@ -2747,21 +2735,22 @@ export const Player: React.FC<PlayerProps> = ({
         </div>
       )}
 
+      {overlay}
+      {!isPipMode && badge}
+
+      {manualSegment && !overlay && (
+        <SponsorBlockSkipButton segment={manualSegment} compact={isPipMode} onClick={skipManualSegment} />
+      )}
+
       {/* SponsorBlock Notify Toast */}
       {notifyToast && notifyToast.visible && (
-        <div className="absolute bottom-20 right-6 z-40 bg-chrome-toast/95 border border-chrome-toast-border rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 transition-transform duration-300 animate-slide-up select-none animate-fade-in">
+        <div className="absolute bottom-32 right-3 z-40 sm:right-5 bg-chrome-toast/95 border border-chrome-toast-border rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 transition-transform duration-300 animate-slide-up select-none animate-fade-in">
           <div className="flex flex-col">
             <span className="text-[10px] font-bold text-chrome-neutral-400 uppercase tracking-wider">SponsorBlock</span>
             <span className="text-xs font-semibold text-chrome-neutral-200">
-              {notifyToast.categoryName} Segment
+              {getString("player_sponsorblock_segment_notice", notifyToast.categoryName)}
             </span>
           </div>
-          <button
-            onClick={() => handleSkipNotifySegment(notifyToast.segment)}
-            className="ml-2 px-3.5 py-1.5 rounded-full bg-primary hover:bg-chrome-red-700 active:scale-95 text-chrome-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
-          >
-            Skip
-          </button>
         </div>
       )}
 
@@ -2773,7 +2762,7 @@ export const Player: React.FC<PlayerProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
           <span className="text-xs font-bold text-chrome-neutral-200">
-            SponsorBlock Muted ({sponsorBlockCategoryLabel(currentSBMuteSegment || "filler")})
+            {getString("player_sponsorblock_muted", sponsorBlockCategoryLabel(currentSBMuteSegment || "filler"))}
           </span>
         </div>
       )}
@@ -2823,6 +2812,7 @@ export const Player: React.FC<PlayerProps> = ({
         showFullscreenTitle={showFullscreenTitle}
         seekTo={seekTo}
         togglePlay={togglePlay}
+        stepFrame={isLive ? undefined : stepFrame}
         speedOptions={configuredSpeedOptions}
         speedSliderEnabled={speedSliderEnabled}
         onSelectPlaybackRate={selectPlaybackRate}

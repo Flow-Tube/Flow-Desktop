@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import type { VideoSummary } from "../types/video";
 import { useCombinedSearch } from "../lib/useCombinedSearch";
+import { currentFilterState, useSearchFilterMemory } from "../lib/useSearchFilterMemory";
 import { SearchControlBar } from "../components/search/SearchControlBar";
 import { SearchResults } from "../components/search/SearchResults";
 
@@ -15,21 +16,23 @@ export function Search({ onPlay, onAddToQueue }: SearchProps) {
   const query = searchParams.get("q") ?? "";
 
   const search = useCombinedSearch({ query });
+  const changeFilters = useSearchFilterMemory(search, query);
+  const state = currentFilterState(search);
 
   return (
     <div className="grow overflow-y-auto">
       <div className="mx-auto w-full max-w-400 px-8 pb-20">
         <SearchControlBar
           filterType={search.filterType}
-          onFilterChange={search.setFilterType}
+          onFilterChange={(category) => changeFilters({ ...state, category })}
           sortBy={search.sortBy}
-          onSortChange={search.setSortBy}
+          onSortChange={(sortBy) => changeFilters({ ...state, sortBy })}
           filters={search.filters}
-          onFiltersChange={search.setFilters}
+          onFiltersChange={(filters) => changeFilters({ ...state, filters })}
           offeredMusicFilters={search.offeredMusicFilters}
         />
         <SearchResults
-          search={search}
+          search={{ ...search, setFilterType: (category) => changeFilters({ ...state, category }) }}
           onPlayVideo={onPlay}
           onAddToQueue={onAddToQueue}
         />

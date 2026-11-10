@@ -1,3 +1,5 @@
+import { miniPlayerWidthPx } from "../../lib/miniPlayerSize";
+import { getString } from "../../lib/i18n/index";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GripHorizontal, Maximize2, X } from "lucide-react";
 import { useMiniPlayerDrag } from "../../lib/useMiniPlayerDrag";
@@ -222,6 +224,7 @@ export function GlobalVideoPlayer() {
     return () => window.removeEventListener("flow-video-expand-request", expandFromFloating);
   }, [expandFromFloating]);
 
+  const miniPlayerSize = useAppSettingsStore((state) => state.values[SETTINGS.MINI_PLAYER_SIZE]);
   const frameStyle = useMemo(() => {
     if (isVideoFullscreen) {
       return {
@@ -238,7 +241,7 @@ export function GlobalVideoPlayer() {
         bottom: "auto",
         right: "auto",
         willChange: "transform",
-        width: "min(420px, calc(100vw - 32px))",
+        width: `min(${miniPlayerWidthPx(miniPlayerSize)}px, calc(100vw - 32px))`,
         aspectRatio: "16 / 9",
       } as const;
     }
@@ -257,7 +260,7 @@ export function GlobalVideoPlayer() {
       height: `${slotBounds.height}px`,
       willChange: "transform",
     };
-  }, [isFloating, isVideoFullscreen, slotBounds]);
+  }, [isFloating, isVideoFullscreen, miniPlayerSize, slotBounds]);
 
   const videoIdForPlayer = currentVideo?.id ?? null;
   const playerNode = useMemo(
@@ -322,6 +325,7 @@ export function GlobalVideoPlayer() {
             : "fixed z-30 rounded-xl bg-chrome-black"
         }
         style={frameStyle}
+        dir="ltr"
         {...dragBinds}
       >
         {isFloating && (
@@ -338,7 +342,7 @@ export function GlobalVideoPlayer() {
             >
               <button
                 type="button"
-                aria-label="Expand video"
+                aria-label={getString('player_expand_video')}
                 onClick={expandFromFloating}
                 className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
               >
@@ -346,7 +350,7 @@ export function GlobalVideoPlayer() {
               </button>
               <button
                 type="button"
-                aria-label="Close video"
+                aria-label={getString('player_close_video')}
                 onClick={dismissVideoPlayer}
                 className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
               >

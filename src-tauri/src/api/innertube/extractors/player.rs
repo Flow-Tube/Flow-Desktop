@@ -1004,6 +1004,19 @@ fn extract_server_abr_url(streaming_data: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+/// The uploader's tags, without repeats.
+fn keyword_tags(details: &Value) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    for keyword in details["keywords"].as_array().into_iter().flatten() {
+        if let Some(keyword) = keyword.as_str().map(str::trim).filter(|k| !k.is_empty())
+            && !tags.iter().any(|known| known == keyword)
+        {
+            tags.push(keyword.to_string());
+        }
+    }
+    tags
+}
+
 // Decode `playerConfig.mediaCommonConfig.mediaUstreamerRequestConfig
 // .videoPlaybackUstreamerConfig` (URL-safe base64) into raw protobuf bytes.
 fn extract_ustreamer_config(res: &Value) -> Vec<u8> {
@@ -1877,6 +1890,7 @@ impl InnertubeClient {
             channel_badge: owner.badge.map(ToOwned::to_owned),
             collaborators: owner.collaborators,
             hashtags: primary.hashtags,
+            tags: keyword_tags(details),
             badges: primary.badges,
             autoplay_video_id: watch_next::autoplay_video_id(next),
             has_chat_replay: watch_next::chat_seed(next).is_some_and(|(_, replay)| replay),
@@ -2858,5 +2872,17 @@ mod remote_signing {
             signed_format(&format).expect("cipher parses").parameter,
             "signature"
         );
+    }
+}
+
+#[cfg(test)]
+mod keyword_tag_tests {
+    use super::*;
+
+    #[test]
+    fn keyword_tags_keep_the_uploaders_order_without_repeats_or_blanks() {
+        let details = serde_json::json!({ "keywords": ["b", "a", "b", "  ", " c "] });
+        assert_eq!(keyword_tags(&details), ["b", "a", "c"]);
+        assert!(keyword_tags(&Value::Null).is_empty());
     }
 }

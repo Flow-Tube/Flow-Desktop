@@ -4,6 +4,7 @@ import {
   deleteProfile,
   listProfiles,
   renameProfile,
+  setAskWhosWatching,
   setProfileLook,
   setProfilePhoto,
   type CopyParts,
@@ -55,6 +56,7 @@ interface ProfilesState {
   setLook: (id: string, colorKey: string, avatar: ProfileAvatar) => Promise<void>;
   setPhoto: (id: string, path: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  setAsk: (ask: boolean) => Promise<void>;
   /** The profile a switch is heading to, while this window waits for the restart. */
   switchingTo: Profile | null;
   switchTo: (profile: Profile) => Promise<void>;
@@ -113,6 +115,18 @@ export const useProfilesStore = create<ProfilesState>((set, get) => ({
     await deleteProfile(id);
     removeProfileKeys(id);
     await get().load();
+  },
+
+  // Optimistic, rolled back if the registry write fails.
+  setAsk: async (ask) => {
+    const before = get().view;
+    if (before) set({ view: { ...before, askWhosWatching: ask } });
+    try {
+      await setAskWhosWatching(ask);
+    } catch (error) {
+      set({ view: before });
+      throw error;
+    }
   },
 
   switchingTo: null,

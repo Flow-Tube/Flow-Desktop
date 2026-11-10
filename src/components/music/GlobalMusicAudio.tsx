@@ -2,7 +2,7 @@ import { useEffect, useRef, type SyntheticEvent } from "react";
 
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
-import { bindMusicAudioSettings } from "../../lib/audio/musicAudioSettings";
+import { bindMusicAudioSettings, crossfadeTick } from "../../lib/audio/musicAudioSettings";
 import { PRELOAD_LEAD_SECONDS } from "../../lib/musicPreload";
 import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
 import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
@@ -10,6 +10,7 @@ import { musicListens, useMusicListenHistory } from "../../lib/useMusicListenHis
 import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
 import { sleepTimerTakesEnd, tickSleepTimer, useSleepTimerDriver } from "../../lib/useSleepTimerDriver";
 import { useLyricsLookup } from "../../lib/lyrics/useLyrics";
+import { useMediaControlLyrics } from "../../lib/lyrics/useMediaControlLyrics";
 
 /**
  * Wraps a media-element handler so only the element that is playing drives the
@@ -41,6 +42,7 @@ export function GlobalMusicAudio() {
   useMusicQueuePersistence();
   useSleepTimerDriver();
   useMusicMediaSession();
+  useMediaControlLyrics();
   useLyricsLookup();
 
   const store = () => useMusicPlayerStore.getState();
@@ -79,6 +81,7 @@ export function GlobalMusicAudio() {
       }
       const duration = musicAudioEngine.getDuration() || store().duration;
       if (duration > 0 && duration - el.currentTime <= PRELOAD_LEAD_SECONDS) store()._preloadUpcoming();
+      crossfadeTick(el.currentTime);
 
       /*
         The store's clock follows this event instead of a frame loop, and

@@ -10,6 +10,7 @@ use crate::sync2::engine::EngineError;
 use crate::sync2::join_requests::JoinRequest;
 use crate::sync2::link_task::{self, LinkPhase};
 use crate::sync2::profile_actions::{self, LinkedProfiles};
+use crate::sync2::recovery_flow::RestoreDevice;
 use crate::sync2::service::{self, Received};
 use crate::sync2::webdav::WebDavLogin;
 
@@ -44,15 +45,29 @@ pub async fn linked_create(
         .map_err(|e| err(&e))
 }
 
-/// Returns the new recovery words, shown once.
+/// The group's devices, for the user to choose which to keep. Writes nothing.
+#[tauri::command]
+pub async fn linked_preview_restore(
+    app: AppHandle,
+    url: String,
+    words: String,
+    login: Option<WebDavLogin>,
+) -> Result<Vec<RestoreDevice>, ErrorResponse> {
+    actions::preview_restore(&app, &url, &words, login)
+        .await
+        .map_err(|e| err(&e))
+}
+
+/// Returns the new recovery words, shown once. Devices not in `kept` are signed out next.
 #[tauri::command]
 pub async fn linked_restore(
     app: AppHandle,
     url: String,
     words: String,
     login: Option<WebDavLogin>,
+    kept: Vec<String>,
 ) -> Result<String, ErrorResponse> {
-    actions::restore(&app, &url, &words, login)
+    actions::restore(&app, &url, &words, login, &kept)
         .await
         .map_err(|e| err(&e))
 }
@@ -79,8 +94,24 @@ pub async fn linked_rename(app: AppHandle, id: String, name: String) -> Result<(
 }
 
 #[tauri::command]
-pub async fn linked_remove(app: AppHandle, id: String) -> Result<(), ErrorResponse> {
-    actions::remove(&app, &id).await.map_err(|e| err(&e))
+pub async fn linked_remove(
+    app: AppHandle,
+    id: String,
+    also: Vec<String>,
+) -> Result<Option<String>, ErrorResponse> {
+    actions::remove(&app, &id, &also).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_added_by(app: AppHandle, id: String) -> Result<Vec<String>, ErrorResponse> {
+    actions::added_by(&app, &id).await.map_err(|e| err(&e))
+}
+
+#[tauri::command]
+pub async fn linked_answer_recovery_notice(app: AppHandle) -> Result<(), ErrorResponse> {
+    actions::answer_recovery_notice(&app)
+        .await
+        .map_err(|e| err(&e))
 }
 
 #[tauri::command]

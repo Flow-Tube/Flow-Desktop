@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./api/db", () => ({ addWatchRecord: vi.fn(() => Promise.resolve()) }));
 vi.mock("./deepFlow", () => ({ shouldRecordWatchHistory: () => true }));
+vi.mock("./recap/recapQueue", () => ({ recapView: vi.fn() }));
 vi.mock("./api/shorts", () => ({
   reportShortView: vi.fn(() => Promise.resolve()),
   recordSeenShorts: vi.fn(() => Promise.resolve()),
@@ -9,6 +10,7 @@ vi.mock("./api/shorts", () => ({
 
 import { addWatchRecord } from "./api/db";
 import { recordSeenShorts, reportShortView } from "./api/shorts";
+import { recapView } from "./recap/recapQueue";
 import {
   SEEN_SHORT_DWELL_MS,
   finishShortView,
@@ -32,6 +34,7 @@ describe("shortViews", () => {
     vi.mocked(reportShortView).mockClear();
     vi.mocked(recordSeenShorts).mockClear();
     vi.mocked(addWatchRecord).mockClear();
+    vi.mocked(recapView).mockClear();
   });
   afterEach(() => {
     finishShortView();
@@ -74,6 +77,23 @@ describe("shortViews", () => {
     expect(addWatchRecord).toHaveBeenCalledTimes(1);
     expect(addWatchRecord).toHaveBeenCalledWith(
       expect.objectContaining({ videoId: "b", watchDurationSeconds: 8, totalDurationSeconds: 30, isShort: true }),
+    );
+  });
+
+  it("tells the recap a watched Short from one swiped past", () => {
+    startShortView(short("a"));
+    noteShortProgress("a", 1500, 30000);
+    startShortView(short("b"));
+    noteShortProgress("b", 8000, 30000);
+    finishShortView();
+    expect(recapView).toHaveBeenCalledTimes(2);
+    expect(recapView).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ videoId: "a", format: "SHORT", watchedMs: 1500, counted: false, skipped: true }),
+    );
+    expect(recapView).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ videoId: "b", format: "SHORT", watchedMs: 8000, counted: true, skipped: false }),
     );
   });
 

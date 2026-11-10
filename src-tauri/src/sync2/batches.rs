@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::SqlitePool;
 
-use crate::sync::apply::{ApplyReport, apply_stream_payload};
+use super::Error;
+use crate::sync::apply::{ApplyReport, apply_stream_payload, readable_record};
 use crate::sync::canonical::{Collection, to_canonical_json};
 use crate::sync::codec::sha256_hex;
 use crate::sync::error::SyncError;
@@ -56,6 +57,7 @@ fn record_key(collection: Collection, record: &Value) -> Option<String> {
         Collection::Settings => field("key"),
         Collection::Subscriptions => field("name"),
         Collection::SubscribedChannels => field("channelId"),
+        Collection::Notes => field("id"),
         Collection::FlowNeuroBrain | Collection::MusicBrain => Some(String::new()),
     }
 }
@@ -216,14 +218,14 @@ impl IncomingBatch {
     }
 }
 
-pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, SyncError> {
+pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, Error> {
     let (header, records) = content.split_at(
         content
             .iter()
             .position(|&b| b == b'\n')
             .unwrap_or(content.len()),
     );
-    let header: BatchHeader = serde_json::from_slice(header)?;
+    let header: BatchHeader = serde_json::from_slice(header).map_err(|_| Error::Payload)?;
     Ok(IncomingBatch {
         collection: collection_from_key(&header.collection),
         link: header.link,
@@ -234,8 +236,9 @@ pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, SyncError> {
 }
 
 /// Applies batches from one sender in one transaction, through the FLOW-SYNC/1 merges. Batches of
-/// collections this build doesn't know (Android's `notes`) are consumed without effect. Applied
-/// records count as known to the group, so this device doesn't send them back unchanged.
+/// collections this build doesn't know are consumed without effect, and so are records it can't
+/// read, which would otherwise fail this run and every later one. Applied records count as known
+/// to the group, so this device doesn't send them back unchanged.
 pub async fn apply_batches(
     pool: &SqlitePool,
     our_device_id: &str,
@@ -249,11 +252,19 @@ pub async fn apply_batches(
         let (Some(collection), Some(link)) = (batch.collection, batch.link.as_deref()) else {
             continue;
         };
-        let lines: Vec<&[u8]> = batch
+        let (lines, unreadable): (Vec<&[u8]>, Vec<&[u8]>) = batch
             .records
             .split(|&b| b == b'\n')
             .filter(|l| !l.is_empty())
-            .collect();
+            .partition(|l| readable_record(collection, l));
+        if !unreadable.is_empty() {
+            tracing::warn!(
+                target: "flow::sync2",
+                collection = collection.key(),
+                count = unreadable.len(),
+                "discarded records"
+            );
+        }
         for line in &lines {
             let record: Value = serde_json::from_slice(line)?;
             if let Some(key) = record_key(collection, &record) {

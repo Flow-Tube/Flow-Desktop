@@ -8,7 +8,7 @@ pub mod renderers;
 pub mod transport;
 
 fn build_http_client() -> reqwest::Client {
-    reqwest::Client::builder()
+    crate::api::app_proxy::with_app_proxy(reqwest::Client::builder())
         .tls_backend_rustls()
         .pool_idle_timeout(std::time::Duration::from_secs(120))
         .pool_max_idle_per_host(15)

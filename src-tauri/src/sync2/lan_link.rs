@@ -11,6 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use super::curve::{sign, verify};
@@ -23,7 +24,7 @@ use super::keys::MemberSecrets;
 use super::lan::{LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_transcript};
 use super::paths::parse_log_path;
 use super::payload::{decode_payload, encode_payload};
-use super::roster::{Entry, Role, parse_entry};
+use super::roster::{Entry, Role, Sender, parse_entry};
 use super::sealed::{open, random_bytes, seal};
 use super::store::Store;
 use super::{Error, array};
@@ -38,6 +39,10 @@ const MAX_FRAME: usize = MAX_OBJECT_SIZE + MAX_OBJECT_SIZE / 16;
 const NONCE_SIZE: usize = 32;
 /// Once this side has no more requests, the session closes when the peer stops sending.
 pub const IDLE: Duration = Duration::from_secs(3);
+/// How long a peer that hasn't proved itself gets for each hello message.
+pub const HELLO_WITHIN: Duration = Duration::from_secs(3);
+/// How long a member gets to answer one request, which can carry a full object.
+const ASK_WITHIN: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase")]
@@ -238,9 +243,9 @@ where
         .send_binary(hello_frame(epoch, &lan_key, 1, &hello)?)
         .await?;
 
-    let reply = socket
-        .recv_binary()
+    let reply = timeout(HELLO_WITHIN, socket.recv_binary())
         .await
+        .map_err(|_| EngineError::TimedOut)?
         .map_err(|_| EngineError::LanUnreachable)?;
     if frame_epoch(&reply)? != epoch {
         return Err(EngineError::Unexpected);
@@ -289,10 +294,11 @@ where
     Ok((framed, peer))
 }
 
-/// The advertising side: answers a hello under any epoch this device has a key for.
-/// The advertising side; returns the peer and the port it listens on, when it said.
+/// The advertising side: answers `first`, the peer's first message, under any epoch this device
+/// has a key for. Returns the peer and the port it listens on, when it said.
 pub async fn hello_as_server<S, T>(
     mut socket: WsChannel<S>,
+    first: &[u8],
     session: &mut Session<'_, T>,
     device: &MemberSecrets,
 ) -> Result<(Framed<S>, String, Option<u16>)>
@@ -300,14 +306,13 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: Store,
 {
-    let first = socket.recv_binary().await?;
-    let epoch = frame_epoch(&first)?;
+    let epoch = frame_epoch(first)?;
     if epoch > session.roster().epoch {
         return Err(EngineError::Unexpected);
     }
     let epoch_key = session.epoch_key(epoch).await?;
     let lan_key = purpose_key(&epoch_key, session.group(), epoch, Purpose::Lan);
-    let hello = open_hello(&first, &lan_key, 1)?;
+    let hello = open_hello(first, &lan_key, 1)?;
     let peer = hello["did"]
         .as_str()
         .ok_or(EngineError::Unexpected)?
@@ -334,7 +339,9 @@ where
         .send_binary(hello_frame(epoch, &lan_key, 2, &reply)?)
         .await?;
 
-    let finish = socket.recv_binary().await?;
+    let finish = timeout(HELLO_WITHIN, socket.recv_binary())
+        .await
+        .map_err(|_| EngineError::TimedOut)??;
     let finish = open_hello(&finish, &lan_key, 3)?;
     let signed = lan_transcript(
         LanRole::Client,
@@ -364,7 +371,7 @@ pub type LiveSink = Arc<dyn Fn(Vec<u8>) + Send + Sync>;
 pub struct Holder {
     pub store: HeldStore,
     pub group: [u8; 16],
-    pub signing_keys: BTreeMap<String, [u8; 32]>,
+    pub senders: BTreeMap<String, Sender>,
     pub live: LiveSink,
 }
 
@@ -373,7 +380,7 @@ impl Holder {
         Self {
             store,
             group: *session.group(),
-            signing_keys: session.signing_keys().clone(),
+            senders: session.senders().clone(),
             live,
         }
     }
@@ -413,7 +420,7 @@ impl Holder {
             },
             Request::Put { path } => {
                 let accepted = parse_log_path(&path).is_some_and(|(did, seq)| {
-                    verify_logged(bytes, &self.group, &self.signing_keys, &did, seq).is_ok()
+                    verify_logged(bytes, &self.group, &self.senders, &did, seq).is_ok()
                 });
                 if accepted {
                     self.store.put_object(&path, bytes.to_vec()).await?;
@@ -528,7 +535,10 @@ impl Link {
             .send((request, Vec::new(), reply))
             .await
             .map_err(|_| EngineError::LanUnreachable)?;
-        answer.await.map_err(|_| EngineError::LanUnreachable)?
+        timeout(ASK_WITHIN, answer)
+            .await
+            .map_err(|_| EngineError::TimedOut)?
+            .map_err(|_| EngineError::LanUnreachable)?
     }
 
     /// Sends a live envelope, which gets no answer.
@@ -613,6 +623,27 @@ mod tests {
             sender.send(br#"{"id":0,"op":"live"}"#).await.unwrap();
             (receiver.socket.recv_binary().await.unwrap(), receiver)
         })
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_request_the_peer_never_answers_ends() {
+        let (a, _silent) = duplex(1 << 16);
+        let framed = Framed {
+            socket: WsChannel::new(WebSocketStream::from_raw_socket(a, Role::Client, None).await),
+            send_key: vec![1; 32],
+            receive_key: vec![2; 32],
+            sent: 0,
+            received: 0,
+        };
+        let pool = sqlx::SqlitePool::connect_lazy("sqlite::memory:").unwrap();
+        let holder = Holder {
+            store: HeldStore::new(pool),
+            group: [0; 16],
+            senders: BTreeMap::new(),
+            live: Arc::new(|_| {}),
+        };
+        let link = Link::spawn(framed, holder);
+        assert!(matches!(link.roster(-1).await, Err(EngineError::TimedOut)));
     }
 
     #[test]

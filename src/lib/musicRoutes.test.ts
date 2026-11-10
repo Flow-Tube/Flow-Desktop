@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isMusicRoute, musicSeeAllRoute } from './musicRoutes';
+import { downloadedMusicCollectionPath, isMusicRoute, musicSeeAllRoute } from './musicRoutes';
 import type { YTItem } from '../types/music';
 
 const song: YTItem = {
@@ -34,5 +34,15 @@ describe('isMusicRoute', () => {
     expect(isMusicRoute('/music?tab=library')).toBe(true);
     expect(isMusicRoute('/musical')).toBe(false);
     expect(isMusicRoute('/watch/abc')).toBe(false);
+  });
+});
+
+describe('downloadedMusicCollectionPath', () => {
+  it('opens playlists on the playlist page and everything else as an album', () => {
+    expect(downloadedMusicCollectionPath('PLabc')).toBe('/music/playlist/PLabc');
+    expect(downloadedMusicCollectionPath('RDCLAK5')).toBe('/music/playlist/RDCLAK5');
+    expect(downloadedMusicCollectionPath('VLPLabc')).toBe('/music/playlist/VLPLabc');
+    expect(downloadedMusicCollectionPath('MPREb_x')).toBe('/music/album/MPREb_x');
+    expect(downloadedMusicCollectionPath('album-123')).toBe('/music/album/album-123');
   });
 });

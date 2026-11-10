@@ -8,7 +8,8 @@ import { entriesAreSynced } from "../../../lib/lyrics/sync";
 import { buildLines, buildMergedLyricsList } from "../../../lib/lyrics/display/model";
 import { LyricsPanelState, mainLineAt } from "../../../lib/lyrics/display/panelState";
 import { lyricsMaxScrollOffset, lyricsMinScrollOffset, lyricsRowOffsets } from "../../../lib/lyrics/display/scrollMath";
-import { lyricsPresentation, lyricsRomanizations, readableAccent, type LyricsAlign } from "../../../lib/lyrics/display/presentation";
+import { useOnDeviceRomanizations } from "../../../lib/lyrics/useOnDeviceRomanizations";
+import { lyricsPresentation, lyricsRomanizations, readableAccent, romanizedLines, type LyricsAlign } from "../../../lib/lyrics/display/presentation";
 import type { KaraokeSurface } from "../../../lib/lyrics/display/karaokeSurface";
 import { layoutRows, type RowLayout } from "../../../lib/lyrics/display/rowLayout";
 import { RowMotion } from "../../../lib/lyrics/display/rowMotion";
@@ -61,6 +62,10 @@ export interface LyricsPanelProps {
   textAlign: LyricsAlign;
   showTranslation: boolean;
   showRomanization: boolean;
+  /** Make the Latin line on this computer when the source has none. */
+  autoRomanize?: boolean;
+  /** A line's Latin version takes the place of the original instead of sitting under it. */
+  romanizationOnly?: boolean;
   blurOtherLines: boolean;
   /** Applied inside the sync loops, so a nudge takes effect mid-line. */
   syncOffsetMs: number;
@@ -74,6 +79,8 @@ export interface LyricsPanelProps {
   className?: string;
 }
 
+const NO_ROMANIZATIONS: Array<string | null> = [];
+
 /**
  * Port of Android's InlineLyricsPanel. Rows spring on their own elements and the sung line draws on
  * its canvas from one frame loop; React re-renders only when the sung line or what shows changes.
@@ -83,7 +90,7 @@ export interface LyricsPanelProps {
  */
 export function LyricsPanel(props: LyricsPanelProps) {
   const { lyrics, syncedLyrics, isLoading, providerName, accent, backdrop, baseTextSize, maxRowWidth, textAlign } = props;
-  const { showTranslation, showRomanization, blurOtherLines, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
+  const { showTranslation, showRomanization, autoRomanize = false, romanizationOnly = false, blurOtherLines, syncOffsetMs, active, isPlaying, onSeekTo, resyncBottom, className = "" } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [family, setFamily] = useState(DEFAULT_FAMILY);
@@ -94,17 +101,27 @@ export function LyricsPanel(props: LyricsPanelProps) {
   const motionEnabled = !useReducedMotion();
   const running = active && pageVisible;
 
-  const lines = useMemo(() => buildLines(lyrics, syncedLyrics), [lyrics, syncedLyrics]);
+  const sourceLines = useMemo(() => buildLines(lyrics, syncedLyrics), [lyrics, syncedLyrics]);
+  const onDeviceRomanizations = useOnDeviceRomanizations(sourceLines, showRomanization && autoRomanize);
+  const romanizations = useMemo(
+    () => lyricsRomanizations(sourceLines, showRomanization, onDeviceRomanizations),
+    [sourceLines, showRomanization, onDeviceRomanizations],
+  );
+  const lines = useMemo(
+    () => (romanizationOnly ? romanizedLines(sourceLines, romanizations) : sourceLines),
+    [romanizationOnly, sourceLines, romanizations],
+  );
+  // In place of the original, a line's Latin version isn't shown again under it.
+  const rowRomanizations = romanizationOnly ? NO_ROMANIZATIONS : romanizations;
   const items = useMemo(() => buildMergedLyricsList(lines), [lines]);
   const hasWordTimings = useMemo(() => lines.some((l) => l.words && l.words.length > 0), [lines]);
   const isSynced = useMemo(
     () => syncedLyrics.length > 0 && entriesAreSynced(syncedLyrics) && lines.some((l) => l.time >= 1 && l.time <= 999_999),
     [lines, syncedLyrics],
   );
-  const romanizations = useMemo(() => lyricsRomanizations(lines, showRomanization), [lines, showRomanization]);
   const presentation = useMemo(
-    () => lyricsPresentation(lines, accent, backdrop, baseTextSize, textAlign, showTranslation, romanizations),
-    [lines, accent, backdrop, baseTextSize, textAlign, showTranslation, romanizations],
+    () => lyricsPresentation(lines, accent, backdrop, baseTextSize, textAlign, showTranslation, rowRomanizations),
+    [lines, accent, backdrop, baseTextSize, textAlign, showTranslation, rowRomanizations],
   );
   const expressiveAccent = useMemo(() => readableAccent(accent, backdrop), [accent, backdrop]);
   const rowWidth = Math.min(size.width, maxRowWidth);

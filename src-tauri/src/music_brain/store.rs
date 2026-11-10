@@ -18,7 +18,7 @@ use crate::errors::AppResult;
 use super::backfill::backfill_if_needed;
 use super::learn::{
     MusicSignal, SESSION_GAP_MS, apply_music_dislike, apply_music_signal, block_music_artist,
-    newly_crossed, unblock_music_artist,
+    favourite_artist, newly_crossed, set_favourite_artist, unblock_music_artist,
 };
 use super::model::MusicBrain;
 
@@ -168,6 +168,18 @@ impl MusicBrainStore {
         let now = now_ms();
         let mut brain = self.write().await;
         apply_music_dislike(&mut brain, artist_key, now);
+    }
+
+    /// Picked by hand, as at setup: seeds the music taste alone, never the video engine.
+    pub async fn set_favourite_artist(&self, artist_key: &str, favourite: bool) {
+        let mut brain = self.write().await;
+        set_favourite_artist(&mut brain, artist_key, favourite);
+    }
+
+    /// Lifts an artist the listener picked. True when they were not a favourite yet.
+    pub async fn favourite_artist(&self, artist_key: &str, display: &str) -> bool {
+        let mut brain = self.write().await;
+        favourite_artist(&mut brain, artist_key, display)
     }
 
     /// Hard-block an artist ("don't recommend this artist") — a permanent denylist entry.

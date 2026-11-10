@@ -195,7 +195,7 @@ async fn raw_keys_from_older_desktop_builds_are_still_accepted() {
 }
 
 #[tokio::test]
-async fn skip_silence_from_android_is_ignored_until_the_desktop_has_it() {
+async fn skip_silence_from_android_is_ignored_because_the_desktop_has_no_such_setting() {
     let pool = memory_pool().await;
     let incoming = [entry("skip_silence", json!(true), 1_000)];
     apply_payload(&pool, OUR, PEER, &[staged(&incoming, "s1")])

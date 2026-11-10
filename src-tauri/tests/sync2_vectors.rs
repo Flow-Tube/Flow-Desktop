@@ -8,8 +8,8 @@ use flow_desktop_lib::sync::canonical::to_canonical_json;
 use flow_desktop_lib::sync2::blob::open_blob;
 use flow_desktop_lib::sync2::curve::{agreement_public_key, is_valid_signing_key, verify};
 use flow_desktop_lib::sync2::envelope::{
-    ObjectType, StreamPosition, next_in_stream, next_live_counter, open_object, parse_object,
-    verify_object,
+    ObjectType, StreamPosition, cut_chain, next_in_stream, next_live_counter, open_object,
+    parse_object, verify_object,
 };
 use flow_desktop_lib::sync2::epoch::{
     Purpose, check_epoch_key, epoch_commitment, open_chain, purpose_key,
@@ -19,10 +19,14 @@ use flow_desktop_lib::sync2::keys::member_secrets;
 use flow_desktop_lib::sync2::lan::{
     LanRole, lan_frame_aad, lan_hello_aad, lan_session_keys, lan_tag, lan_transcript,
 };
-use flow_desktop_lib::sync2::pairing::{pairing_aad, pairing_keys, pairing_slot};
+use flow_desktop_lib::sync2::pairing::{
+    pairing_aad, pairing_commit, pairing_keys, pairing_proof, pairing_slot,
+};
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, wrap_path};
-use flow_desktop_lib::sync2::payload::{decode_payload, padded_size};
+use flow_desktop_lib::sync2::payload::{decode_payload, encode_payload, padded_size};
+use flow_desktop_lib::sync2::pipe::scanner_key;
 use flow_desktop_lib::sync2::recovery::{recovery_keys, recovery_secret, recovery_words};
+use flow_desktop_lib::sync2::roster::{Entry, check_sender, replay_roster};
 use flow_desktop_lib::sync2::sealed::{open, seal_with_salt};
 use flow_desktop_lib::sync2::wrap::{unwrap_epoch_key, wrap_epoch_key_with_rng};
 use flow_desktop_lib::sync2::{Error, Result};
@@ -128,6 +132,7 @@ fn ed25519_strict_verification() {
         .unwrap()
         .iter()
         .chain(v["nonCanonicalKeys"].as_array().unwrap())
+        .chain(v["mixedOrderKeys"].as_array().unwrap())
     {
         assert!(!is_valid_signing_key(&bytes(key)), "{key}");
     }
@@ -170,6 +175,24 @@ fn payloads() {
     for n in v["negatives"].as_array().unwrap() {
         assert_code(decode_payload(&bytes(&n["payload"])), &n["error"]);
     }
+}
+
+#[test]
+fn a_payload_this_device_wrote_decodes() {
+    for content in [Vec::new(), b"short".to_vec(), vec![7; 1 << 20]] {
+        assert_eq!(
+            decode_payload(&encode_payload(&content).unwrap()).unwrap(),
+            content
+        );
+    }
+}
+
+#[test]
+fn a_payload_stops_inflating_at_its_limit() {
+    let limit = 64 << 20;
+    let payload = |size: usize| encode_payload(&vec![0; size]).unwrap();
+    assert_eq!(decode_payload(&payload(limit)).unwrap().len(), limit);
+    assert!(decode_payload(&payload(limit + 1)).is_err());
 }
 
 #[test]
@@ -326,6 +349,63 @@ fn envelopes_open_in_stream_order() {
 }
 
 #[test]
+fn who_may_write_under_which_epoch() {
+    let v = load("senders");
+    let entries: Vec<Entry> = serde_json::from_value(v["entries"].clone()).unwrap();
+    let state = replay_roster(&entries).unwrap();
+    for c in v["senders"].as_array().unwrap() {
+        let checked = check_sender(
+            &state.senders,
+            text(&c["did"]),
+            number(&c["epoch"]),
+            number(&c["seq"]),
+        );
+        match c.get("error") {
+            Some(error) => assert_eq!(checked.unwrap_err().code(), text(error), "{}", c["name"]),
+            None => assert!(checked.is_ok(), "{}", c["name"]),
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_walk_down_from_a_cut() {
+    let v = load("senders");
+    let group: [u8; 16] = array(&v["group"]);
+    for w in v["walks"].as_array().unwrap() {
+        let log: Vec<Vec<u8>> = w["log"].as_array().unwrap().iter().map(bytes).collect();
+        let stop_seq = w.get("last").map_or(0, |last| number(&last["seq"]));
+        let stop_hash: [u8; 32] = w.get("last").map_or([0; 32], |last| array(&last["hash"]));
+        let walked = cut_chain(
+            (number(&w["cut"]["seq"]), array(&w["cut"]["hash"])),
+            stop_seq,
+            Some(&stop_hash),
+            &group,
+            |seq| {
+                let object = log
+                    .get(usize::try_from(seq - 1).unwrap())
+                    .filter(|object| !object.is_empty())
+                    .cloned();
+                async move { Ok::<_, Error>(object) }
+            },
+        )
+        .await;
+        match w.get("error") {
+            Some(error) => assert_eq!(walked.unwrap_err().code(), text(error), "{}", w["name"]),
+            None => {
+                let hashes: Vec<String> = walked.unwrap().values().map(hex::encode).collect();
+                let wanted: Vec<String> = w["hashes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|hash| text(hash).to_owned())
+                    .collect();
+                assert_eq!(hashes, wanted, "{}", w["name"]);
+            }
+        }
+    }
+}
+
+#[test]
 fn snapshot_blobs() {
     let v = load("envelope");
     let b = &v["blob"];
@@ -383,6 +463,20 @@ fn pairing() {
         shower
     );
     assert_eq!(pairing_slot(&token).to_vec(), bytes(&v["slot"]));
+    assert_eq!(pairing_commit(&shower).to_vec(), bytes(&v["commit"]));
+    assert_eq!(pairing_proof(&token, &scanner).to_vec(), bytes(&v["proof"]));
+    let token_array: [u8; 16] = token.clone().try_into().unwrap();
+    assert_eq!(
+        scanner_key(&bytes(&v["scannerFirst"]), &token_array).map(Vec::from),
+        Some(scanner.clone())
+    );
+    let refused = &v["refused"];
+    assert_ne!(
+        pairing_commit(&bytes(&refused["showerPublic"])).to_vec(),
+        bytes(&v["commit"])
+    );
+    let wrong = [&scanner[..], &bytes(&refused["proof"])[..]].concat();
+    assert_eq!(scanner_key(&wrong, &token_array), None);
     let m = &v["message"];
     assert_eq!(pairing_aad(&token, 0), bytes(&m["aad"]));
     let content =

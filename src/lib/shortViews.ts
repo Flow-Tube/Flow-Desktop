@@ -1,5 +1,6 @@
 import { addWatchRecord } from "./api/db";
 import { recordSeenShorts, reportShortView } from "./api/shorts";
+import { recapView } from "./recap/recapQueue";
 import { shouldRecordWatchHistory } from "./deepFlow";
 import type { ShortItem } from "../types/shorts";
 
@@ -62,6 +63,17 @@ export function finishShortView() {
   clearTimeout(view.seenTimer);
   // Never started playing: there is nothing to learn from.
   if (view.durationMs <= 0) return;
+  recapView({
+    videoId: view.short.id,
+    title: view.short.title,
+    channelId: view.short.channelId ?? "",
+    channelName: view.short.channelName,
+    format: "SHORT",
+    watchedMs: Math.round(view.positionMs),
+    counted: view.positionMs >= HISTORY_MIN_MS,
+    skipped: view.positionMs < HISTORY_MIN_MS,
+    continued: false,
+  });
   // In history a watched Short can open related reel chains, as Flow for Android's do.
   if (view.positionMs >= HISTORY_MIN_MS && shouldRecordWatchHistory()) {
     void addWatchRecord({

@@ -7,7 +7,18 @@ import { MusicHistoryGroup } from "../components/history/MusicHistoryGroup";
 import { Button } from "../components/ui/Button";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
+import { LikesFlatList } from "../components/likes/LikesFlatList";
+import { LikesToolbar } from "../components/likes/LikesToolbar";
+import {
+  DEFAULT_LIKES_SORT,
+  likedItemKey,
+  loadLikesSortOrder,
+  saveLikesSortOrder,
+  sortLikedItems,
+} from "../lib/likedItems";
+import { useMultiSelect } from "../lib/useMultiSelect";
 import { useLikes, groupLikedItemsByDate } from "../lib/useLikes";
+import type { PlaylistSortOrder } from "../lib/playlistSort";
 
 type LikesFilter = "all" | "videos" | "music";
 
@@ -19,6 +30,7 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<LikesFilter>("all");
+  const [sortOrder, setSortOrder] = useState<PlaylistSortOrder>(loadLikesSortOrder);
   const {
     items,
     loading,
@@ -36,7 +48,7 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
   );
   const activeLabel = filters.find((f) => f.key === filter)?.label ?? filters[0]?.label ?? "";
 
-  const visibleGroups = useMemo(() => {
+  const visibleItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     const filtered = items.filter((item) => {
       if (filter === "music" && item.kind !== "music") return false;
@@ -51,8 +63,27 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
       }
       return true;
     });
-    return groupLikedItemsByDate(filtered);
-  }, [filter, items, searchQuery]);
+    return sortLikedItems(filtered, sortOrder);
+  }, [filter, items, searchQuery, sortOrder]);
+
+  const visibleKeys = useMemo(() => visibleItems.map(likedItemKey), [visibleItems]);
+  const selection = useMultiSelect(visibleKeys);
+  const selectedItems = useMemo(
+    () => visibleItems.filter((item) => selection.selectedIds.has(likedItemKey(item))),
+    [visibleItems, selection.selectedIds],
+  );
+
+  // The date groups only read right newest first, and their shelves can't pick rows.
+  const showDateGroups = sortOrder === DEFAULT_LIKES_SORT && !selection.selecting;
+  const visibleGroups = useMemo(
+    () => (showDateGroups ? groupLikedItemsByDate(visibleItems) : []),
+    [showDateGroups, visibleItems],
+  );
+
+  const handleSortChange = (next: PlaylistSortOrder) => {
+    setSortOrder(next);
+    saveLikesSortOrder(next);
+  };
 
   const handleClearAll = async () => {
     try {
@@ -106,15 +137,30 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
           </div>
         </header>
 
-        <CategoryChips
-          categories={filters.map((f) => f.label)}
-          activeCategory={activeLabel}
-          onCategoryChange={(label) =>
-            setFilter(filters.find((f) => f.label === label)?.key ?? "all")
-          }
-          sticky={false}
-          className="mt-2"
-        />
+        <div className="mt-6 mb-2 flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center">
+          <CategoryChips
+            categories={filters.map((f) => f.label)}
+            activeCategory={activeLabel}
+            onCategoryChange={(label) =>
+              setFilter(filters.find((f) => f.label === label)?.key ?? "all")
+            }
+            sticky={false}
+            className="py-0"
+          />
+          {!loading && items.length > 0 ? (
+            <LikesToolbar
+              items={visibleItems}
+              sortOrder={sortOrder}
+              onSortChange={handleSortChange}
+              selecting={selection.selecting}
+              selected={selectedItems}
+              allSelected={selection.allSelected}
+              onStartSelecting={selection.start}
+              onToggleAll={() => selection.toggleAll(visibleKeys)}
+              onDoneSelecting={selection.stop}
+            />
+          ) : null}
+        </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32">
@@ -131,12 +177,21 @@ export const Likes: React.FC<LikesProps> = ({ onPlay }) => {
               {getString("empty_likes_body")}
             </p>
           </div>
-        ) : visibleGroups.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
             <p className="text-sm font-medium text-chrome-neutral-300">
               {getString("likes_no_results")}
             </p>
           </div>
+        ) : !showDateGroups ? (
+          <LikesFlatList
+            items={visibleItems}
+            selecting={selection.selecting}
+            selectedKeys={selection.selectedIds}
+            onToggle={selection.toggle}
+            onPlay={onPlay}
+            onRemove={(item) => void handleDeleteItem(item.id, item.kind === "music")}
+          />
         ) : (
           <div className="mt-8 flex flex-col gap-10">
             {visibleGroups.map((group) =>

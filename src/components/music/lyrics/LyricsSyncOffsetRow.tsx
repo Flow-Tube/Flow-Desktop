@@ -32,7 +32,7 @@ export function LyricsSyncOffsetRow({
       type="button"
       onClick={() => onAdjust(delta)}
       aria-label={getString("lyrics_sync_step", seconds(delta))}
-      className={`${SEGMENT} ${edge === "start" ? "rounded-l-full rounded-r-md" : edge === "end" ? "rounded-l-md rounded-r-full" : "rounded-md"}`}
+      className={`${SEGMENT} ${edge === "start" ? "rounded-s-full rounded-e-md" : edge === "end" ? "rounded-s-md rounded-e-full" : "rounded-md"}`}
     >
       {seconds(delta)}
     </button>

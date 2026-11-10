@@ -23,8 +23,10 @@ import {
   markRecoverySaved,
   onLinkPhase,
   onSynced,
+  answerRecoveryNotice,
   removeDevice,
   renameDevice,
+  previewRestore,
   replaceRecovery,
   restoreGroup,
   retryKeychain,
@@ -37,6 +39,7 @@ import {
   type LinkPhase,
   type LinkedDevice,
   type LinkedStatus,
+  type RestoreDevice,
   type WebdavLogin,
 } from "../lib/api/linked";
 import { forgetAfterFailedLeave } from "../lib/linked/leaveFirst";
@@ -60,6 +63,8 @@ interface LinkedState {
   link: LinkPhase;
   /** Recovery words to show once, until the user proves they saved them. */
   words: string | null;
+  /** The devices a restore is asking about; null when it isn't asking. */
+  restoreDevices: RestoreDevice[] | null;
   /** Creating a group found the server already holds one. */
   serverTaken: boolean;
   busy: boolean;
@@ -75,8 +80,11 @@ interface LinkedState {
   finishLoginChange: () => Promise<void>;
   cancelLoginChange: () => Promise<void>;
   retryKeychain: () => Promise<void>;
-  /** Restores from a Flow server, or with `login` from a WebDAV folder. */
-  restore: (url: string, words: string, login?: WebdavLogin) => Promise<void>;
+  /** Asks which of the group's devices the user keeps, before anything is written. */
+  previewRestore: (url: string, words: string, login?: WebdavLogin) => Promise<void>;
+  cancelRestore: () => void;
+  /** Restores from a Flow server, or with `login` from a WebDAV folder, keeping only `kept`. */
+  restore: (url: string, words: string, login: WebdavLogin | undefined, kept: string[]) => Promise<void>;
   enterCode: (code: string, folder?: FolderAccess) => Promise<void>;
   askToJoin: (url: string, adminToken: string) => Promise<void>;
   loadJoinRequests: () => Promise<void>;
@@ -90,7 +98,8 @@ interface LinkedState {
   /** Replaces the recovery key and shows the new words. */
   replaceRecovery: () => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
-  remove: (id: string) => Promise<void>;
+  remove: (id: string, also?: string[]) => Promise<void>;
+  answerRecoveryNotice: () => Promise<void>;
   leave: () => Promise<void>;
   forget: () => Promise<void>;
   keepSide: (entry: string) => Promise<void>;
@@ -126,6 +135,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     joinRequests: [],
     link: { phase: "idle" },
     words: null,
+    restoreDevices: null,
     serverTaken: false,
     busy: false,
     error: null,
@@ -149,7 +159,7 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
     refresh: async () => {
       try {
         const status = await getLinkedStatus();
-        set({ status });
+        set(status.replacedWords ? { status, words: status.replacedWords } : { status });
         if (status.kind) await loadDevices();
         else set({ devices: null, devicesError: null });
       } catch (error) {
@@ -211,9 +221,16 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await get().refresh();
       }),
 
-    restore: (url, words, login) =>
+    previewRestore: (url, words, login) =>
       run(async () => {
-        set({ words: await restoreGroup(url, words, login) });
+        set({ restoreDevices: await previewRestore(url, words, login) });
+      }),
+
+    cancelRestore: () => set({ restoreDevices: null, error: null }),
+
+    restore: (url, words, login, kept) =>
+      run(async () => {
+        set({ words: await restoreGroup(url, words, login, kept), restoreDevices: null });
         await get().refresh();
       }),
 
@@ -261,10 +278,16 @@ export const useLinkedDevicesStore = create<LinkedState>((set, get) => {
         await loadDevices();
       }),
 
-    remove: (id) =>
+    remove: (id, also) =>
       run(async () => {
-        await removeDevice(id);
+        const words = await removeDevice(id, also);
+        if (words) set({ words });
         await loadDevices();
+      }),
+
+    answerRecoveryNotice: () =>
+      run(async () => {
+        await answerRecoveryNotice();
       }),
 
     leave: () =>

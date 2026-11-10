@@ -242,6 +242,20 @@ export function clearDownloads(): Promise<void> {
   return invokeBackend<void>("clear_downloads");
 }
 
+/** Lists tagged files in the download folders that the library doesn't, and returns how many. */
+export function findEarlierDownloads(videoFolder: string | null, musicFolder: string | null): Promise<number> {
+  return invokeBackend<number>("find_earlier_downloads", { videoFolder, musicFolder });
+}
+
+export interface RetagResult {
+  tagged: number;
+  skipped: number;
+}
+
+export function retagOlderDownloads(): Promise<RetagResult> {
+  return invokeBackend<RetagResult>("retag_older_downloads");
+}
+
 export interface OfflineStreamInfo {
   url: string;
   contentType: string;

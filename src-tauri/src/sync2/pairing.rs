@@ -1,6 +1,6 @@
 use super::Result;
 use super::curve::agree;
-use super::kdf::{derive, labeled_id, tag};
+use super::kdf::{derive, labeled_hash, labeled_id, tag};
 
 pub struct PairingKeys {
     /// Seals messages from the device showing the code.
@@ -8,6 +8,16 @@ pub struct PairingKeys {
     /// Seals messages from the scanner.
     pub scanner_key: Vec<u8>,
     pub sas: String,
+}
+
+/// What a code carries instead of the shower's key, so that key is fixed before the scanner's is seen.
+pub fn pairing_commit(shower_public: &[u8]) -> [u8; 32] {
+    labeled_hash("pair commit", shower_public)
+}
+
+/// Shows the shower that the scanner read the code, before the shower reveals its key.
+pub fn pairing_proof(token: &[u8], scanner_public: &[u8]) -> [u8; 16] {
+    derive(token, &[], "pair proof", scanner_public)
 }
 
 pub fn pairing_keys(

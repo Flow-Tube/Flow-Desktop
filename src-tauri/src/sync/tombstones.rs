@@ -7,10 +7,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::de::DeserializeOwned;
 
 use crate::sync::canonical::{
-    GroupMember, Hlc, Like, LikeKind, LikeState, Playlist, PlaylistItem, SubscriptionGroup,
+    GroupMember, Hlc, Like, LikeKind, LikeState, Note, Playlist, PlaylistItem, SubscriptionGroup,
     WatchHistoryRecord,
 };
 use crate::sync::changes::{self, Stamp};
+use crate::sync::mapping::like_key;
 use crate::sync::merge::playlist_merge_key;
 
 fn peer_record<T: DeserializeOwned>(stamp: &Stamp) -> Option<T> {
@@ -45,6 +46,19 @@ pub fn watch_history(
             })
         })
         .collect()
+}
+
+/// A like put back by Undo keeps its old time; a tombstone already at a peer would beat that, so
+/// a live like counts from its last edit.
+pub fn raise_live_likes(live: &mut [Like], stamps: &BTreeMap<String, Stamp>, device_id: &str) {
+    for like in live {
+        if let Some(s) = stamps.get(&like_key(like))
+            && !s.deleted
+            && s.at_ms > like.hlc.physical_ms
+        {
+            like.hlc = Hlc::new(s.at_ms, 0, device_id);
+        }
+    }
 }
 
 #[must_use]
@@ -88,6 +102,20 @@ pub fn groups(
                 deleted: true,
                 hlc: Hlc::new(s.at_ms, 0, device_id),
                 ..SubscriptionGroup::default()
+            })
+        })
+        .collect()
+}
+
+#[must_use]
+pub fn notes(stamps: &BTreeMap<String, Stamp>, live: &BTreeSet<String>) -> Vec<Note> {
+    deletions(stamps, live)
+        .map(|(key, s)| {
+            peer_record(s).unwrap_or_else(|| Note {
+                id: key.clone(),
+                updated_at: i64::try_from(s.at_ms).unwrap_or(i64::MAX),
+                deleted: true,
+                ..Note::default()
             })
         })
         .collect()

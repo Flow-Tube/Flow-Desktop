@@ -14,25 +14,37 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 pub use self::client::{WebDav, WebDavLogin};
+use super::envelope::MAX_OBJECT_SIZE;
 use super::forks::winning_chain;
 use super::mailbox::Mailbox;
 use super::paths::{chain_path, log_path, roster_path, wrap_path};
+use super::read_budget::ReadBudget;
 use super::roster::{Entry, entry_hash, parse_entry};
 use super::sealed::random_bytes;
-use super::server::{Appended, ChangedObject, Result, StoreError};
+use super::server::{Appended, ChangedObject, Result, StoreError, one_item};
 use super::store::{Store, wraps_epoch};
 use crate::sync::canonical::to_canonical_json;
 
 /// Objects per log shard (spec/store.md, Layout).
 const SHARD: u64 = 1024;
+/// Roster files a folder may hold, and their bytes in all. A roster stays far below both, and
+/// leaving a file out could change which entry wins a fork, so past them the read fails.
+const ROSTER_FILES: usize = 16_384;
+const ROSTER_BYTES: usize = 64 * 1024 * 1024;
+
+/// Roster files already read, by store name, with the entry each holds; each is written once and
+/// never changes.
+#[derive(Default)]
+struct RosterFiles {
+    entries: BTreeMap<String, Option<Entry>>,
+    bytes: usize,
+}
 
 pub struct WebDavStore {
     client: WebDav,
     /// This device's `did`: its own log is never something to read.
     me: String,
-    /// Roster files already read, by store name, with the entry each holds; each is written once
-    /// and never changes.
-    roster: Mutex<BTreeMap<String, Option<Entry>>>,
+    roster: Mutex<RosterFiles>,
     pins: StdMutex<BTreeSet<String>>,
 }
 
@@ -46,7 +58,7 @@ impl WebDavStore {
         Self {
             client,
             me,
-            roster: Mutex::new(BTreeMap::new()),
+            roster: Mutex::default(),
             pins: StdMutex::new(BTreeSet::new()),
         }
     }
@@ -55,19 +67,25 @@ impl WebDavStore {
         let mut held = self.roster.lock().await;
         for name in self.client.list("roster/").await? {
             let path = format!("roster/{name}");
-            if name.strip_suffix(".r").is_none() || held.contains_key(&path) {
+            if name.strip_suffix(".r").is_none() || held.entries.contains_key(&path) {
                 continue;
             }
-            let Some(bytes) = self.client.get(&path).await? else {
-                continue;
+            let bytes = match self.client.get(&path).await {
+                Ok(None) => continue,
+                read => one_item(read)?,
             };
+            // One that can't be read counts too, or each read would fetch it again without end.
+            held.bytes += bytes.as_ref().map_or(MAX_OBJECT_SIZE, Vec::len);
+            if held.entries.len() >= ROSTER_FILES || held.bytes > ROSTER_BYTES {
+                return Err(StoreError::Malformed);
+            }
             // A file that isn't an entry is ignored, as a losing fork candidate would be.
-            let entry = serde_json::from_slice::<Value>(&bytes)
-                .ok()
+            let entry = bytes
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
                 .and_then(|value| parse_entry(&value).ok());
-            held.insert(path, entry);
+            held.entries.insert(path, entry);
         }
-        Ok(held.values().flatten().cloned().collect())
+        Ok(held.entries.values().flatten().cloned().collect())
     }
 
     async fn chain(&self) -> Result<Vec<Entry>> {
@@ -207,7 +225,7 @@ impl Store for WebDavStore {
     }
 
     async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
-        self.client.get(&wrap_path(epoch, kc, name)).await
+        one_item(self.client.get(&wrap_path(epoch, kc, name)).await)
     }
 
     async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
@@ -215,7 +233,7 @@ impl Store for WebDavStore {
     }
 
     async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
-        self.client.get(path).await
+        one_item(self.client.get(path).await)
     }
 
     async fn delete_object(&self, path: &str) -> Result<bool> {
@@ -229,6 +247,7 @@ impl Store for WebDavStore {
             return Ok((Vec::new(), cursor));
         }
         let mut objects = Vec::new();
+        let mut budget = ReadBudget::default();
         for did in self.senders().await? {
             for shard in self.client.list(&format!("dev/{did}/log/")).await? {
                 let Some(shard) = shard
@@ -237,12 +256,12 @@ impl Store for WebDavStore {
                 else {
                     continue;
                 };
-                objects.extend(
-                    self.shard(&did, shard)
-                        .await?
-                        .into_iter()
-                        .map(|seq| changed(&did, seq)),
-                );
+                let held = self.shard(&did, shard).await?;
+                // A partial list could pick a snapshot that doesn't cover the logs left out.
+                if !budget.take(held.len()) {
+                    return Err(StoreError::TooLong);
+                }
+                objects.extend(held.into_iter().map(|seq| changed(&did, seq)));
             }
         }
         Ok((objects, 1))
@@ -255,7 +274,8 @@ impl Store for WebDavStore {
         read: &BTreeMap<String, u64>,
     ) -> Result<(Vec<ChangedObject>, u64)> {
         let mut objects = Vec::new();
-        for did in self.senders().await? {
+        let mut budget = ReadBudget::default();
+        'senders: for did in self.senders().await? {
             let Some(next) = read.get(&did).map_or(Some(1), |seq| seq.checked_add(1)) else {
                 continue;
             };
@@ -264,11 +284,16 @@ impl Store for WebDavStore {
                 let last = shard * SHARD + (SHARD - 1);
                 let held = self.shard(&did, shard).await?;
                 let full = held.contains(&last);
+                let within = budget.take(held.len());
                 objects.extend(
                     held.into_iter()
                         .filter(|seq| *seq >= next)
                         .map(|seq| changed(&did, seq)),
                 );
+                // What is listed gets read, and the next sync lists on from there.
+                if !within {
+                    break 'senders;
+                }
                 if !full || last == u64::MAX {
                     break;
                 }

@@ -36,6 +36,10 @@ pub trait Store {
     fn is_linear(&self) -> bool {
         true
     }
+    /// Fails while the store itself is out of reach, even if held copies could answer for it.
+    fn store_answers(&self) -> impl Future<Output = Result<()>> + Send {
+        std::future::ready(Ok(()))
+    }
     /// The entries this device chose between sides of a contested roster, for a store that picks
     /// a winner itself when it appends.
     fn use_pins(&self, _pins: &BTreeSet<String>) {}
@@ -55,6 +59,34 @@ pub trait Store {
     ) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
     fn put_object(&self, path: &str, bytes: Vec<u8>) -> impl Future<Output = Result<()>> + Send;
     fn get_object(&self, path: &str) -> impl Future<Output = Result<Option<Vec<u8>>>> + Send;
+    /// A wrap or chain box from [`Store::key`] that opened. A store that serves copies keeps it.
+    fn keep_key(
+        &self,
+        _epoch: u32,
+        _kc: &str,
+        _name: &str,
+        _bytes: &[u8],
+    ) -> impl Future<Output = Result<()>> + Send {
+        std::future::ready(Ok(()))
+    }
+    /// A wrap or chain box from [`Store::key`] that didn't open. A store that serves copies drops
+    /// its copy, so the next read can get a good one.
+    fn drop_key(
+        &self,
+        _epoch: u32,
+        _kc: &str,
+        _name: &str,
+    ) -> impl Future<Output = Result<()>> + Send {
+        std::future::ready(Ok(()))
+    }
+    /// An object from [`Store::get_object`] that verified.
+    fn keep_object(&self, _path: &str, _bytes: &[u8]) -> impl Future<Output = Result<()>> + Send {
+        std::future::ready(Ok(()))
+    }
+    /// An object from [`Store::get_object`] that didn't verify.
+    fn drop_object(&self, _path: &str) -> impl Future<Output = Result<()>> + Send {
+        std::future::ready(Ok(()))
+    }
     /// Deletes an object, and says whether it was still there.
     fn delete_object(&self, path: &str) -> impl Future<Output = Result<bool>> + Send;
     /// Every object that arrived after `cursor`, and the cursor to pass next time.

@@ -10,8 +10,8 @@ use sqlx::SqlitePool;
 use super::batches::{IncomingBatch, batch_content, mark_sent, outgoing_batches, parse_batch};
 use super::bootstrap::Snapshot;
 use super::envelope::{
-    Header, ObjectType, ParsedObject, StreamPosition, next_in_stream, open_object, parse_object,
-    seal_object, verify_object,
+    Header, ObjectType, ParsedObject, StreamPosition, ZERO_HASH, cut_chain, next_in_stream,
+    open_object, parse_object, seal_object, verify_object,
 };
 use super::epoch::{Purpose, check_epoch_key, open_chain, purpose_key};
 use super::forks::{Settlement, settle_roster};
@@ -22,12 +22,17 @@ use super::paths::{kc_name, log_path, parse_log_path};
 use super::payload::{decode_payload, encode_payload};
 use super::profile_links::{Reading, forget_link, link_profile};
 use super::profile_names::{self, PROFILES};
-use super::roster::{Entry, Op, Role, RosterState, entry_hash, replay_roster};
+use super::read_budget::ReadBudget;
+use super::recovery_notice::note_recovery_changes;
+use super::roster::{
+    Entry, Op, Role, RosterState, Sender, check_sender, entry_hash, replay_roster,
+};
 use super::server::StoreError;
 use super::snapshot::{Manifest, PROFILES_KEY, note_merged};
 use super::state::{
-    Floors, GroupRecord, StoreKind, add_roster_entries, floors, load_group, replace_roster,
-    roster_entries, roster_pins, save_floors, save_group, save_streams, streams,
+    Floors, GroupRecord, RestoreRead, StoreKind, add_roster_entries, floors, load_group,
+    replace_roster, roster_entries, roster_pins, save_floors, save_group, save_restore_read,
+    save_streams, streams,
 };
 use super::store::Store;
 use super::store_login::{decode_login, encode_login, note_login, note_login_sent, note_removal};
@@ -54,6 +59,10 @@ pub enum EngineError {
     NotLinked,
     #[error("this device was removed from its sync group")]
     Removed,
+    #[error("the recovery key has to be replaced before anything is written")]
+    RecoveryDue,
+    #[error("a restore hasn't removed the devices the user didn't keep yet")]
+    RestorePending,
     #[error("the roster that leaves this device out replaces entries it had applied")]
     RemovalUnconfirmed,
     #[error("two sides of the roster removed each other")]
@@ -87,6 +96,10 @@ pub enum EngineError {
 }
 
 impl EngineError {
+    pub fn refused_write(&self) -> bool {
+        matches!(self, Self::Store(error) if error.refused_write())
+    }
+
     /// A stable name the interface turns into a translated message.
     pub fn kind(&self) -> &'static str {
         match self {
@@ -111,6 +124,8 @@ impl EngineError {
             Self::Local(error) => error.kind(),
             Self::NotLinked => "linkedNotLinked",
             Self::Removed => "linkedRemoved",
+            Self::RecoveryDue => "linkedRecoveryDue",
+            Self::RestorePending => "linkedRestorePending",
             Self::RemovalUnconfirmed => "linkedRemovalUnconfirmed",
             Self::Contested => "linkedContested",
             Self::RosterRolledBack => "linkedRolledBack",
@@ -153,15 +168,47 @@ pub struct Pulled {
     /// Batches and snapshot manifests read. Acks aren't acknowledged, so two idle devices don't
     /// answer each other's acks forever.
     consumed: usize,
-    stalled: bool,
+    /// The read stopped early. One that goes [`Pulled::to_the_end`] stops only on its budget.
+    pub(super) stalled: bool,
+    /// Goes past a log that stops at a missing object, whose end is then that object.
+    to_the_end: bool,
+    /// See [`RestoreRead::from_first`].
+    from_first: bool,
     /// The links named by the batches and snapshot manifests read, in reading order; `None` is
     /// the `profiles` collection.
     links: Vec<Option<String>>,
     acks: BTreeMap<String, VersionVector>,
     manifests: Vec<Logged>,
+    /// Objects removed senders wrote after their logs ended, which [`Session::finish`] deletes.
+    past_cut: Vec<String>,
 }
 
 impl Pulled {
+    /// How far each sender's log was read.
+    pub(super) fn positions(&self) -> &BTreeMap<String, StreamPosition> {
+        &self.positions
+    }
+
+    /// A read that finds where every log ends, going on from `place`.
+    pub(super) fn to_the_end(place: RestoreRead) -> Self {
+        Self {
+            positions: place.positions,
+            cursor: place.cursor,
+            from_first: place.from_first,
+            to_the_end: true,
+            ..Self::default()
+        }
+    }
+
+    /// Where a later read goes on from this one.
+    pub(super) fn place(&self) -> RestoreRead {
+        RestoreRead {
+            positions: self.positions.clone(),
+            cursor: self.cursor,
+            from_first: self.from_first,
+        }
+    }
+
     /// Takes the records of a snapshot this device starts from, as a batch of its writer's.
     fn start_from(&mut self, me: &str, snapshot: Snapshot, reading: Option<&Reading>) {
         self.links.push(snapshot.manifest.link.clone());
@@ -190,6 +237,38 @@ impl Pulled {
                 .entry(writer)
                 .or_default()
                 .extend(snapshot.batches),
+        }
+    }
+
+    /// Moves `did`'s log to `position`, and takes what the object there carries.
+    fn read(
+        &mut self,
+        did: String,
+        position: StreamPosition,
+        content: Content,
+        reading: Option<&Reading>,
+        floors: &Floors,
+    ) {
+        let seq = position.seq;
+        self.positions.insert(did.clone(), position);
+        if !matches!(content, Content::Ack(_)) {
+            self.consumed += 1;
+        }
+        match content {
+            Content::Batch(batch) => {
+                self.links.push(batch.link.clone());
+                self.take(did, seq, batch, reading, floors);
+            }
+            Content::Snapshot(manifest) => {
+                self.links.push(manifest.link.clone());
+                self.manifests.push(Logged { did, seq, manifest });
+            }
+            Content::Ack(ack) => {
+                self.acks.insert(did, ack.vv);
+            }
+            Content::Login(login) => {
+                self.login = login.or(self.login.take());
+            }
         }
     }
 
@@ -246,13 +325,14 @@ pub struct Session<'a, S> {
     group: [u8; 16],
     state: RosterState,
     entries: Vec<Entry>,
-    signing_keys: BTreeMap<String, [u8; 32]>,
     commitments: BTreeMap<u32, Vec<u8>>,
     keys: BTreeMap<u32, Vec<u8>>,
     /// The commitments of entries that lost a fork and stand, by the epoch they start.
     standing: BTreeMap<u32, Vec<Vec<u8>>>,
     /// The keys of those entries unwrapped so far, by commitment.
     standing_keys: BTreeMap<Vec<u8>, Vec<u8>>,
+    /// The hashes found walking down from each removed sender's cut.
+    cut_walks: BTreeMap<String, BTreeMap<u64, [u8; 32]>>,
     reading: Reading,
 }
 
@@ -260,15 +340,6 @@ fn decode_b64(value: &str) -> Result<Vec<u8>> {
     URL_SAFE_NO_PAD
         .decode(value)
         .map_err(|_| Error::RosterFormat.into())
-}
-
-/// The signing key of every device the roster ever added, by `did`.
-pub fn signing_keys(entries: &[Entry]) -> Result<BTreeMap<String, [u8; 32]>> {
-    let mut keys = BTreeMap::new();
-    for subject in entries.iter().flat_map(|e| e.add.iter().flatten()) {
-        keys.insert(subject.did.clone(), array(&decode_b64(&subject.sig)?));
-    }
-    Ok(keys)
 }
 
 /// `None` when reading an object fails a protocol check: that object is discarded, which stops
@@ -291,12 +362,13 @@ pub(super) fn contained<T>(read: Result<T>) -> Result<Option<T>> {
 pub fn verify_logged<'b>(
     bytes: &'b [u8],
     group: &[u8; 16],
-    signing_keys: &BTreeMap<String, [u8; 32]>,
+    senders: &BTreeMap<String, Sender>,
     did: &str,
     seq: u64,
 ) -> std::result::Result<ParsedObject<'b>, Error> {
     let object = parse_object(bytes, group)?;
-    verify_object(&object, signing_keys.get(did).ok_or(Error::Sender)?)?;
+    let sender = check_sender(senders, did, object.header.epoch, seq)?;
+    verify_object(&object, &sender.sig)?;
     if hex::encode(object.header.sender) != did || object.header.seq != seq {
         return Err(Error::Replay);
     }
@@ -304,11 +376,13 @@ pub fn verify_logged<'b>(
 }
 
 impl<'a, S: Store> Session<'a, S> {
-    /// Brings the roster up to date, unwraps the current epoch key, and starts the next epoch
-    /// when a device left.
+    /// Brings the roster up to date, unwraps the current epoch key, starts the next epoch when a
+    /// device left, and finishes a restore, so a session that opens seals only for devices the
+    /// user kept.
     pub async fn open(pool: &SqlitePool, store: S, device: &'a MemberSecrets) -> Result<Self> {
         let mut session = Self::open_as_peer(pool, store, device).await?;
         session.rotate_if_due(pool).await?;
+        session.finish_restore(pool).await?;
         Ok(session)
     }
 
@@ -356,11 +430,11 @@ impl<'a, S: Store> Session<'a, S> {
             group,
             state: replay_roster(&entries)?,
             entries,
-            signing_keys: BTreeMap::new(),
             commitments: BTreeMap::new(),
             keys: BTreeMap::new(),
             standing: BTreeMap::new(),
             standing_keys: BTreeMap::new(),
+            cut_walks: BTreeMap::new(),
         })
     }
 
@@ -408,6 +482,7 @@ impl<'a, S: Store> Session<'a, S> {
             self.keys.clear();
             self.commitments.clear();
         }
+        note_recovery_changes(pool, &hex::encode(self.device.did), &self.entries, &chain).await?;
         if self.record.kind == StoreKind::WebDav {
             let known: BTreeSet<String> = self.entries.iter().map(entry_hash).collect();
             let removal = chain
@@ -443,12 +518,28 @@ impl<'a, S: Store> Session<'a, S> {
         self.unwrap_current().await
     }
 
-    /// Finds the signing keys and epoch commitments in the entries applied.
+    /// Finds the epoch commitments in the entries applied.
     pub(super) fn index_entries(&mut self) -> Result<()> {
-        self.signing_keys = signing_keys(&self.entries)?;
         for epoch in self.entries.iter().filter_map(|e| e.epoch.as_ref()) {
             self.commitments.insert(epoch.n, decode_b64(&epoch.kc)?);
         }
+        Ok(())
+    }
+
+    /// The one check before sealing anything with a key: refuses while a restore's keys are still
+    /// wrapped to devices the user didn't keep.
+    pub(super) fn may_seal(&self) -> Result<()> {
+        if self.record.restore_kept.is_some() {
+            return Err(EngineError::RestorePending);
+        }
+        Ok(())
+    }
+
+    /// The restore is finished, so this device may seal again.
+    pub(super) async fn restore_finished(&mut self, pool: &SqlitePool) -> Result<()> {
+        self.record.restore_kept = None;
+        save_group(pool, &self.record).await?;
+        save_restore_read(pool, None).await?;
         Ok(())
     }
 
@@ -502,14 +593,29 @@ impl<'a, S: Store> Session<'a, S> {
     /// This device's key of the entry that starts `epoch` with `commitment`.
     async fn unwrap_wrap(&self, epoch: u32, commitment: &[u8]) -> Result<Vec<u8>> {
         let did = self.device.did;
+        let (kc, name) = (kc_name(commitment), hex::encode(did));
         let wrap = self
             .store
-            .key(epoch, &kc_name(commitment), &hex::encode(did))
+            .key(epoch, &kc, &name)
             .await?
             .ok_or(Error::KeyCommitment)?;
-        let key = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)?;
-        check_epoch_key(&key, &self.group, epoch, commitment)?;
-        Ok(key)
+        let opened = unwrap_epoch_key(&self.device.kem_secret, &self.group, epoch, &did, &wrap)
+            .and_then(|key| check_epoch_key(&key, &self.group, epoch, commitment).map(|()| key));
+        self.settle_key((epoch, &kc, &name), &wrap, opened).await
+    }
+
+    /// Tells the store how a wrap or chain box it gave turned out, so it keeps only good copies.
+    async fn settle_key(
+        &self,
+        (epoch, kc, name): (u32, &str, &str),
+        bytes: &[u8],
+        opened: std::result::Result<Vec<u8>, Error>,
+    ) -> Result<Vec<u8>> {
+        match &opened {
+            Ok(_) => self.store.keep_key(epoch, kc, name, bytes).await?,
+            Err(_) => self.store.drop_key(epoch, kc, name).await?,
+        }
+        Ok(opened?)
     }
 
     /// The key of `epoch`, walking the history chain back from the newest key this device holds.
@@ -520,17 +626,22 @@ impl<'a, S: Store> Session<'a, S> {
                 return Err(Error::KeyCommitment.into());
             }
             let known_commitment = self.commitments.get(&known).ok_or(Error::KeyCommitment)?;
+            let kc = kc_name(known_commitment);
             let chain = self
                 .store
-                .key(known, &kc_name(known_commitment), "chain")
+                .key(known, &kc, "chain")
                 .await?
                 .ok_or(Error::KeyCommitment)?;
-            let previous = open_chain(key, &self.group, known, &chain)?;
             let commitment = self
                 .commitments
                 .get(&(known - 1))
                 .ok_or(Error::KeyCommitment)?;
-            check_epoch_key(&previous, &self.group, known - 1, commitment)?;
+            let opened = open_chain(key, &self.group, known, &chain).and_then(|previous| {
+                check_epoch_key(&previous, &self.group, known - 1, commitment).map(|()| previous)
+            });
+            let previous = self
+                .settle_key((known, &kc, "chain"), &chain, opened)
+                .await?;
             self.keys.insert(known - 1, previous);
         }
         Ok(self.keys[&epoch].clone())
@@ -574,6 +685,10 @@ impl<'a, S: Store> Session<'a, S> {
         object_type: ObjectType,
         content: &[u8],
     ) -> Result<()> {
+        self.may_seal()?;
+        if self.state.recovery_due {
+            return Err(EngineError::RecoveryDue);
+        }
         let seq = u64::try_from(self.record.own_seq + 1).map_err(|_| Error::Length)?;
         let epoch = self.state.epoch;
         let header = Header {
@@ -624,6 +739,9 @@ impl<'a, S: Store> Session<'a, S> {
         let Some(link) = self.reading.active.clone() else {
             return Ok(0);
         };
+        if self.state.recovery_due {
+            return Ok(0);
+        }
         let outgoing = outgoing_batches(pool, exported, &self.state.head, &link, now_ms()).await?;
         for batch in &outgoing.batches {
             self.write(pool, ObjectType::Changes, &batch.content)
@@ -638,7 +756,7 @@ impl<'a, S: Store> Session<'a, S> {
     /// Uploads the `profiles` records this device changed since it last sent them.
     pub async fn push_profiles(&mut self, pool: &SqlitePool) -> Result<()> {
         let unsent = profile_names::unsent(pool).await?;
-        if unsent.is_empty() {
+        if unsent.is_empty() || self.state.recovery_due {
             return Ok(());
         }
         let lines: Vec<Vec<u8>> = unsent.iter().map(to_canonical_json).collect();
@@ -687,27 +805,51 @@ impl<'a, S: Store> Session<'a, S> {
     }
 
     /// The batches `reading` asks for, or every batch when it is `None`.
-    async fn read_new(&mut self, pool: &SqlitePool, reading: Option<&Reading>) -> Result<Pulled> {
-        let me = hex::encode(self.device.did);
-        let mut pulled = Pulled {
+    pub(super) async fn read_new(
+        &mut self,
+        pool: &SqlitePool,
+        reading: Option<&Reading>,
+    ) -> Result<Pulled> {
+        let start = Pulled {
             positions: streams(pool).await?,
             cursor: self.record.cursor,
             ..Pulled::default()
         };
+        self.read_from(pool, start, reading).await
+    }
+
+    /// Goes on reading from where `pulled` got.
+    pub(super) async fn read_from(
+        &mut self,
+        pool: &SqlitePool,
+        mut pulled: Pulled,
+        reading: Option<&Reading>,
+    ) -> Result<Pulled> {
+        let me = hex::encode(self.device.did);
         let links = reading.map(|r| r.links().map(str::to_owned).collect::<BTreeSet<_>>());
-        if pulled.positions.is_empty()
-            && pulled.cursor == 0
-            && let Some(start) = self.bootstrap(links.as_ref()).await?
-        {
-            for snapshot in start.snapshots {
-                pulled.start_from(&me, snapshot, reading);
+        if pulled.positions.is_empty() && pulled.cursor == 0 {
+            let start = match self.bootstrap(links.as_ref()).await {
+                Err(EngineError::Store(StoreError::TooLong)) if pulled.to_the_end => {
+                    pulled.from_first = true;
+                    None
+                }
+                start => start?,
+            };
+            if let Some(start) = start {
+                for snapshot in start.snapshots {
+                    pulled.start_from(&me, snapshot, reading);
+                }
+                pulled.positions = start.positions;
             }
-            pulled.positions = start.positions;
         }
         let mut floors = floors(pool).await?;
         floors.extend(pulled.floors.clone());
+        let mut budget = ReadBudget::default();
+        let mut cursor = u64::try_from(pulled.cursor).unwrap_or(0);
+        // A sender that stopped stays stopped for this read, and the others go on. The saved cursor
+        // stays at the first page that held one back, so the next sync lists it again.
+        let mut stopped = BTreeSet::new();
         loop {
-            let cursor = u64::try_from(pulled.cursor).unwrap_or(0);
             let read: BTreeMap<String, u64> = pulled
                 .positions
                 .iter()
@@ -717,16 +859,21 @@ impl<'a, S: Store> Session<'a, S> {
             if changes.is_empty() {
                 return Ok(pulled);
             }
+            let listed = changes.len();
             // Objects of one sender may be listed out of order: retry while a pass makes progress.
-            let mut waiting: Vec<(String, u64, String)> = changes
+            let (past_cut, mut waiting): (Vec<_>, Vec<_>) = changes
                 .into_iter()
                 .filter_map(|change| {
                     parse_log_path(&change.path).map(|(did, seq)| (did, seq, change.path))
                 })
                 .filter(|(did, seq, _)| {
-                    *did != me && pulled.positions.get(did).is_none_or(|p| p.seq < *seq)
+                    let at = pulled.positions.get(did).map_or(0, |p| p.seq);
+                    *did != me && at < *seq && (!stopped.contains(did) || at + 1 == *seq)
                 })
-                .collect();
+                .partition(|(did, seq, _)| self.past_its_cut(did, *seq));
+            pulled
+                .past_cut
+                .extend(past_cut.into_iter().map(|(_, _, path)| path));
             loop {
                 let before = waiting.len();
                 let mut still = Vec::new();
@@ -736,27 +883,7 @@ impl<'a, S: Store> Session<'a, S> {
                         .await?
                     {
                         Some((position, content)) => {
-                            let seq = position.seq;
-                            pulled.positions.insert(did.clone(), position);
-                            if !matches!(content, Content::Ack(_)) {
-                                pulled.consumed += 1;
-                            }
-                            match content {
-                                Content::Batch(batch) => {
-                                    pulled.links.push(batch.link.clone());
-                                    pulled.take(did, seq, batch, reading, &floors);
-                                }
-                                Content::Snapshot(manifest) => {
-                                    pulled.links.push(manifest.link.clone());
-                                    pulled.manifests.push(Logged { did, seq, manifest });
-                                }
-                                Content::Ack(ack) => {
-                                    pulled.acks.insert(did, ack.vv);
-                                }
-                                Content::Login(login) => {
-                                    pulled.login = login.or(pulled.login.take());
-                                }
-                            }
+                            pulled.read(did, position, content, reading, &floors);
                         }
                         None => still.push((did, seq, path)),
                     }
@@ -766,11 +893,18 @@ impl<'a, S: Store> Session<'a, S> {
                     break;
                 }
             }
-            // A missing object means the store hasn't caught up: read this page again next time.
-            if !waiting.is_empty() {
-                pulled.stalled = true;
-                return Ok(pulled);
+            // With no snapshot to start from, a log with nothing read may only start later.
+            if pulled.from_first
+                && waiting
+                    .iter()
+                    .any(|(did, _, _)| !pulled.positions.contains_key(did))
+            {
+                return Err(StoreError::TooLong.into());
             }
+            // A missing object means the store hasn't caught up: this page is read again next time.
+            // A restore's read ends that log there instead, and only its budget stops it.
+            stopped.extend(waiting.into_iter().map(|(did, _, _)| did));
+            pulled.stalled |= !stopped.is_empty() && !pulled.to_the_end;
             let advanced = next > cursor
                 || pulled
                     .positions
@@ -779,7 +913,15 @@ impl<'a, S: Store> Session<'a, S> {
             if !advanced {
                 return Ok(pulled);
             }
-            pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
+            cursor = next;
+            if stopped.is_empty() || pulled.to_the_end {
+                pulled.cursor = i64::try_from(next).map_err(|_| Error::Length)?;
+            }
+            // The next sync goes on from here, and a restored device doesn't choose its link yet.
+            if !budget.take(listed) {
+                pulled.stalled = true;
+                return Ok(pulled);
+            }
         }
     }
 
@@ -797,8 +939,9 @@ impl<'a, S: Store> Session<'a, S> {
             return Ok(None);
         };
         let read = async {
-            let object = self.verified(&bytes, did, seq)?;
+            let object = self.verified_copy(&bytes, path, did, seq).await?;
             let position = next_in_stream(last, &object)?;
+            self.check_cut_chain(did, &object, last).await?;
             Ok((position, self.open_content(&object).await?))
         };
         contained(read.await)
@@ -815,14 +958,96 @@ impl<'a, S: Store> Session<'a, S> {
         Ok(verify_logged(
             bytes,
             &self.group,
-            &self.signing_keys,
+            &self.state.senders,
             did,
             seq,
         )?)
     }
 
-    pub(super) fn signing_keys(&self) -> &BTreeMap<String, [u8; 32]> {
-        &self.signing_keys
+    /// [`Session::verified`] for bytes the store gave for `path`, so it keeps only good copies.
+    pub(super) async fn verified_copy<'b>(
+        &self,
+        bytes: &'b [u8],
+        path: &str,
+        did: &str,
+        seq: u64,
+    ) -> Result<ParsedObject<'b>> {
+        let verified = self.verified(bytes, did, seq);
+        match &verified {
+            Ok(_) => self.store.keep_object(path, bytes).await?,
+            Err(_) => self.store.drop_object(path).await?,
+        }
+        verified
+    }
+
+    pub(super) fn senders(&self) -> &BTreeMap<String, Sender> {
+        &self.state.senders
+    }
+
+    /// An object a removed sender wrote after its log ended, which never gets read, so it isn't
+    /// missing either.
+    fn past_its_cut(&self, did: &str, seq: u64) -> bool {
+        self.state.senders.get(did).is_some_and(|sender| {
+            sender.until.is_some() && sender.cut.as_ref().is_none_or(|cut| seq > cut.seq)
+        })
+    }
+
+    /// Checks a removed sender's chain from where this device has read, down from the hash its
+    /// removal names, before anything of it is applied (spec/store.md, A removed sender's chain).
+    async fn check_cut_chain(
+        &mut self,
+        did: &str,
+        object: &ParsedObject<'_>,
+        last: Option<&StreamPosition>,
+    ) -> Result<()> {
+        let seq = object.header.seq;
+        if self
+            .state
+            .senders
+            .get(did)
+            .is_none_or(|s| s.until.is_none())
+        {
+            return Ok(());
+        }
+        if !self
+            .cut_walks
+            .get(did)
+            .is_some_and(|w| w.contains_key(&seq))
+        {
+            let (from, hash) = last.map_or((0, &ZERO_HASH), |l| (l.seq, &l.hash));
+            let walk = self.walk_cut(did, from, Some(hash)).await?;
+            self.cut_walks.insert(did.to_owned(), walk);
+        }
+        let wanted = self.cut_walks.get(did).and_then(|walk| walk.get(&seq));
+        if wanted == Some(&object.hash) {
+            Ok(())
+        } else {
+            Err(Error::Prev.into())
+        }
+    }
+
+    /// The hashes of a removed sender's log from its cut down to `from`.
+    pub(super) async fn walk_cut(
+        &self,
+        did: &str,
+        from: u64,
+        hash: Option<&[u8; 32]>,
+    ) -> Result<BTreeMap<u64, [u8; 32]>> {
+        let cut = self
+            .state
+            .senders
+            .get(did)
+            .and_then(|sender| sender.cut.as_ref())
+            .ok_or(Error::Sender)?;
+        let top = hex::decode(&cut.hash)
+            .ok()
+            .filter(|h| h.len() == 32)
+            .ok_or(Error::Prev)?;
+        cut_chain((cut.seq, array(&top)), from, hash, &self.group, |seq| {
+            let path = log_path(did, seq);
+            async move { Ok::<_, EngineError>(self.store.get_object(&path).await?) }
+        })
+        .await
     }
 
     /// A store login, under its own rule (spec/store.md, Store logins): only under the chain's key
@@ -889,7 +1114,12 @@ impl<'a, S: Store> Session<'a, S> {
             record_manifest(pool, logged).await?;
         }
         record_links(pool, &pulled.links).await?;
-        if pulled.consumed > 0 {
+        for path in &pulled.past_cut {
+            if self.delete_or_stop(path).await.is_none() {
+                break;
+            }
+        }
+        if pulled.consumed > 0 && !self.state.recovery_due {
             let ack = Ack {
                 vv: pulled
                     .positions

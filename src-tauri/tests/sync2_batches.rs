@@ -143,7 +143,7 @@ async fn batches_from_another_device_apply_through_the_merges() {
 async fn unknown_collections_are_consumed_without_effect() {
     let receiver = memory_pool().await;
     let content = format!(
-        "{{\"collection\":\"notes\",\"head\":\"{HEAD}\",\"link\":\"{LINK}\"}}\n{{\"id\":\"n1\"}}"
+        "{{\"collection\":\"future_thing\",\"head\":\"{HEAD}\",\"link\":\"{LINK}\"}}\n{{\"id\":\"n1\"}}"
     );
     let batch = parse_batch(content.as_bytes()).unwrap();
     assert_eq!(batch.collection, None);
@@ -151,6 +151,24 @@ async fn unknown_collections_are_consumed_without_effect() {
         .await
         .unwrap();
     assert!(report.stats.is_empty());
+}
+
+#[tokio::test]
+async fn records_that_do_not_read_are_left_out_and_the_rest_apply() {
+    let good = serde_json::json!({
+        "videoId": "aw1", "title": "From phone", "channelName": "", "channelId": "",
+        "watchedAtMs": 1_735_689_600_000_u64, "progress": 0.5, "durationSeconds": 120,
+        "isMusic": false, "isShort": false, "hlc": "1735689600000:0:a1b2c3d4", "deleted": false
+    });
+    let header = serde_json::json!({ "collection": "watch_history", "head": HEAD, "link": LINK });
+    let content = format!("{header}\nnot json\n{{\"videoId\":7}}\n{good}");
+    let incoming = [parse_batch(content.as_bytes()).unwrap()];
+
+    let receiver = memory_pool().await;
+    apply_batches(&receiver, "device-a", "phone-did", &incoming, 0)
+        .await
+        .unwrap();
+    assert_eq!(watched_ids(&receiver).await, ["aw1"]);
 }
 
 #[test]

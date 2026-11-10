@@ -36,12 +36,7 @@ fn destination(id: &str) -> Option<(&'static str, Option<&'static str>)> {
 }
 
 fn sanitize_region(region: Option<&str>) -> String {
-    let cleaned = region.unwrap_or("US").trim().to_ascii_uppercase();
-    if cleaned.len() == 2 && cleaned.chars().all(|c| c.is_ascii_alphabetic()) {
-        cleaned
-    } else {
-        "US".to_string()
-    }
+    crate::api::innertube::core::locale::normalize_country(region)
 }
 
 fn target_of(endpoint: &Value) -> Option<ExploreTarget> {

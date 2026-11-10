@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Monitor, Pencil, Smartphone, Trash2 } from "lucide-react";
 
-import type { LinkedDevice } from "../../../lib/api/linked";
+import { devicesAddedBy, type LinkedDevice } from "../../../lib/api/linked";
 import { getString } from "../../../lib/i18n/index";
 import { useConsents, type Consent } from "../../../lib/live/useConsents";
 import { formatYouTubeRelativeTime } from "../../../lib/publishedDate";
 import { useLinkedDevicesStore } from "../../../store/useLinkedDevicesStore";
 import { Button } from "../../ui/Button";
+import { Checkbox } from "../../ui/Checkbox";
 import { Select } from "../../ui/Select";
 import { TextInput } from "../../ui/TextInput";
 
@@ -25,12 +26,20 @@ interface RowProps {
   device: LinkedDevice;
   consent: Consent;
   onConsent: (consent: Consent) => void;
+  devices: LinkedDevice[];
 }
 
-function DeviceRow({ device, consent, onConsent }: RowProps) {
+function DeviceRow({ device, consent, onConsent, devices }: RowProps) {
   const { rename, remove, busy } = useLinkedDevicesStore();
   const [mode, setMode] = useState<"view" | "rename" | "remove">("view");
   const [name, setName] = useState(device.name);
+  const [added, setAdded] = useState<string[]>([]);
+  const [also, setAlso] = useState<string[]>([]);
+  const askToRemove = async () => {
+    setAlso([]);
+    setAdded(await devicesAddedBy(device.id).catch(() => []));
+    setMode("remove");
+  };
   const Icon = device.platform === "android" ? Smartphone : Monitor;
 
   if (mode === "rename") {
@@ -65,6 +74,24 @@ function DeviceRow({ device, consent, onConsent }: RowProps) {
         {mode === "remove" && (
           <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_confirm", displayName(device))}</p>
         )}
+        {mode === "remove" && added.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1">
+            <p className="text-xs text-chrome-neutral-400">{getString("linked_remove_also", displayName(device))}</p>
+            {devices
+              .filter((other) => added.includes(other.id) && !other.thisDevice)
+              .map((other) => (
+                <Checkbox
+                  key={other.id}
+                  checked={also.includes(other.id)}
+                  onChange={(checked) =>
+                    setAlso(checked ? [...also, other.id] : also.filter((id) => id !== other.id))
+                  }
+                >
+                  <span className="text-xs text-chrome-neutral-200">{displayName(other)}</span>
+                </Checkbox>
+              ))}
+          </div>
+        )}
       </div>
       {(device.thisDevice || device.nearby) && (
         <span className="rounded-full bg-surface-container-high px-2.5 py-0.5 text-xs text-chrome-neutral-300">
@@ -73,7 +100,7 @@ function DeviceRow({ device, consent, onConsent }: RowProps) {
       )}
       {mode === "remove" ? (
         <>
-          <Button size="sm" variant="destructive" disabled={busy} onClick={() => void remove(device.id)}>
+          <Button size="sm" variant="destructive" disabled={busy} onClick={() => void remove(device.id, also)}>
             {getString("linked_remove")}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setMode("view")}>
@@ -94,7 +121,7 @@ function DeviceRow({ device, consent, onConsent }: RowProps) {
             />
           )}
           {!device.thisDevice && (
-            <Button size="sm" variant="ghost" aria-label={getString("linked_remove")} onClick={() => setMode("remove")}>
+            <Button size="sm" variant="ghost" aria-label={getString("linked_remove")} onClick={() => void askToRemove()}>
               <Trash2 className="h-4 w-4" />
             </Button>
           )}
@@ -114,6 +141,7 @@ export function DeviceList({ devices }: { devices: LinkedDevice[] }) {
           device={device}
           consent={consents[device.id] ?? "ask"}
           onConsent={(consent) => setConsent(device.id, consent)}
+          devices={devices}
         />
       ))}
     </div>

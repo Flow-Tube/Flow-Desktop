@@ -24,3 +24,23 @@ export function revealLogsFolder(): Promise<void> {
 export function resetVisitorIdentity(): Promise<void> {
   return invokeBackend<void>("reset_visitor_identity");
 }
+
+export interface CrashReportFile {
+  report: string;
+  /** Not answered yet, so the next launch offers it. */
+  pending: boolean;
+}
+
+/** The report the last backend crash left, if any. */
+export function readCrashReport(): Promise<CrashReportFile | null> {
+  return invokeBackend<CrashReportFile | null>("crash_report_read");
+}
+
+/** Stops offering the report at launch; it stays on the Diagnostics page. */
+export function dismissCrashReport(): Promise<void> {
+  return invokeBackend<void>("crash_report_dismiss");
+}
+
+export function deleteCrashReport(): Promise<void> {
+  return invokeBackend<void>("crash_report_delete");
+}

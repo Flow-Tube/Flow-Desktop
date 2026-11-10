@@ -7,6 +7,7 @@ vi.mock("../lib/api/profiles", () => ({
   setProfileLook: vi.fn(),
   setProfilePhoto: vi.fn(),
   deleteProfile: vi.fn(),
+  setAskWhosWatching: vi.fn(),
 }));
 
 import * as api from "../lib/api/profiles";
@@ -14,7 +15,7 @@ import { copyParts, useProfilesStore } from "./useProfilesStore";
 
 const avatar = { kind: "initial", emoji: "", photoVersion: 0 };
 const study = { id: "study", name: "Study", colorKey: "teal", avatar, createdAt: 1, splashTone: "" };
-const view = { profiles: [study], photos: {}, defaultId: "d", activeId: "d", maxProfiles: 5 };
+const view = { profiles: [study], photos: {}, defaultId: "d", activeId: "d", maxProfiles: 5, askWhosWatching: true };
 
 beforeEach(() => {
   vi.mocked(api.listProfiles).mockResolvedValue(view);
@@ -23,6 +24,17 @@ beforeEach(() => {
 });
 
 describe("useProfilesStore", () => {
+  it("turns the launch question off at once, and back when the write fails", async () => {
+    vi.mocked(api.setAskWhosWatching).mockResolvedValueOnce(undefined);
+    await useProfilesStore.getState().setAsk(false);
+    expect(useProfilesStore.getState().view?.askWhosWatching).toBe(false);
+
+    useProfilesStore.setState({ view });
+    vi.mocked(api.setAskWhosWatching).mockRejectedValueOnce(new Error("disk"));
+    await expect(useProfilesStore.getState().setAsk(false)).rejects.toThrow("disk");
+    expect(useProfilesStore.getState().view?.askWhosWatching).toBe(true);
+  });
+
   it("copies only profile settings, and only when asked", () => {
     const parts = copyParts({ settings: true, subscriptions: false, recommendations: true });
     expect(parts.settings).toContain("theme_id");

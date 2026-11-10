@@ -10,6 +10,7 @@ import { useAppSettingsStore } from "../../../store/useAppSettingsStore";
 import type { SongItem } from "../../../types/music";
 import { TextInput } from "../../ui/TextInput";
 import { DialogFooter, DialogFrame, DialogHeader, SectionLabel } from "./DownloadDialogShell";
+import { joinIsolated } from "../../../lib/direction";
 
 function QualityCard({
   selected,
@@ -28,13 +29,13 @@ function QualityCard({
       role="radio"
       aria-checked={selected}
       onClick={onSelect}
-      className={`grid gap-0.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors duration-200 ease-out ${
+      className={`grid gap-0.5 rounded-xl border px-3 py-2.5 text-start text-sm transition-colors duration-200 ease-out ${
         selected
           ? "border-chrome-neutral-500 bg-surface-container"
           : "border-chrome-neutral-800 hover:bg-surface-container-low"
       }`}
     >
-      <span className="font-medium text-chrome-neutral-100">{title}</span>
+      <span dir="auto" className="font-medium text-chrome-neutral-100">{title}</span>
       <span className="font-mono text-xs text-chrome-neutral-400">{detail}</span>
     </button>
   );
@@ -75,7 +76,7 @@ function TagRow({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="flex min-w-0 flex-1 items-center justify-between gap-2 py-0.5 text-left transition-colors hover:text-chrome-neutral-100"
+            className="flex min-w-0 flex-1 items-center justify-between gap-2 py-0.5 text-start transition-colors hover:text-chrome-neutral-100"
           >
             <span className="truncate">{value || "—"}</span>
             <Pencil size={13} className="shrink-0 text-chrome-neutral-500" />
@@ -121,7 +122,7 @@ export function MusicDownloadDialog({ track, onClose }: { track: SongItem; onClo
   };
   const highDetail = `AAC · ${state.highKbps ?? 128} kbps${formatBytes(state.sizes.High) ? ` · ≈ ${formatBytes(state.sizes.High)}` : ""}`;
   const lowDetail = `AAC · 48 kbps${formatBytes(state.sizes.Low) ? ` · ≈ ${formatBytes(state.sizes.Low)}` : ""}`;
-  const credit = [track.album?.name, track.duration ? formatDuration(track.duration) : null].filter(Boolean).join(" · ");
+  const credit = joinIsolated([track.album?.name, track.duration ? formatDuration(track.duration) : null], " · ");
 
   return (
     <DialogFrame onClose={onClose}>

@@ -1,4 +1,6 @@
 import { musicAudioEngine } from "../../lib/audio/musicAudioEngine";
+import { SETTINGS } from "../../lib/settings/schema";
+import { usePreference } from "../../lib/usePreference";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 import { MediaScrubber } from "../ui/MediaScrubber";
 
@@ -23,6 +25,7 @@ export function MusicScrubber({
   const duration = useMusicPlayerStore((s) => s.duration);
   const seek = useMusicPlayerStore((s) => s.seek);
   const isPlaying = useMusicPlayerStore((s) => s.isPlaying);
+  const [barStyle] = usePreference(SETTINGS.MUSIC_SEEK_BAR_STYLE);
 
   return (
     <MediaScrubber
@@ -35,6 +38,7 @@ export function MusicScrubber({
       countdown={countdown}
       className={className}
       expressive={expressive}
+      barStyle={barStyle}
       // Only the full player's large bar follows the audio frame by frame; the
       // dock's edge line moves too little per second to need it.
       clock={size === "lg" ? readAudioClock : undefined}

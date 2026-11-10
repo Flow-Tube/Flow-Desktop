@@ -62,14 +62,14 @@ export function ToastHost() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed right-6 z-[100] w-[360px] max-w-[calc(100vw-3rem)] transition-[bottom] duration-200 ease-out"
+      className="pointer-events-none fixed end-6 z-[100] w-[360px] max-w-[calc(100vw-3rem)] transition-[bottom] duration-200 ease-out"
       style={{ bottom: dockVisible ? ABOVE_DOCK_PX : BOTTOM_PX }}
     >
       <AnimatePresence initial={false}>
         {toast ? (
           <motion.div
             key={toast.id}
-            className="pointer-events-auto absolute bottom-0 right-0 w-full"
+            className="pointer-events-auto absolute bottom-0 end-0 w-full"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0, transition: { duration: reduceMotion ? 0 : 0.2, ease: [0.2, 0, 0, 1] } }}
             exit={{ opacity: 0, y: 8, transition: { duration: reduceMotion ? 0 : 0.15, ease: [0.3, 0, 1, 1] } }}

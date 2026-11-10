@@ -20,7 +20,7 @@ use flow_desktop_lib::sync2::mailbox::Mailbox;
 use flow_desktop_lib::sync2::paths::kc_name;
 use flow_desktop_lib::sync2::roster::{Entry, Op, Role, RosterState, replay_roster};
 use flow_desktop_lib::sync2::sealed::random_bytes;
-use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result};
+use flow_desktop_lib::sync2::server::{Appended, ChangedObject, Result, StoreError};
 use flow_desktop_lib::sync2::state::{GroupRecord, add_roster_entries, save_group};
 use flow_desktop_lib::sync2::store::{Store, wraps_epoch};
 use flow_desktop_lib::sync2::wrap::wrap_epoch_key;
@@ -37,6 +37,14 @@ pub struct Memory {
     pub mailbox: BTreeMap<String, Vec<u8>>,
     /// Every delete request made, found or not.
     pub deletes: Vec<String>,
+    /// Roster appends fail while set, as they do when a store stops answering.
+    pub refuse_appends: bool,
+    /// Objects per answer to `changes`, when set.
+    pub page: Option<usize>,
+    /// Paths that aren't log objects, added to every answer to `changes`.
+    pub padding: usize,
+    /// `changes` always answers, always with a later cursor.
+    pub endless: bool,
     cursor: u64,
 }
 
@@ -85,6 +93,12 @@ impl Store for &MemoryStore {
         chain: Option<&str>,
     ) -> Result<Appended> {
         let mut memory = self.0.lock().unwrap();
+        if memory.refuse_appends {
+            return Err(StoreError::Refused {
+                status: 503,
+                code: "unavailable".into(),
+            });
+        }
         let current = replay_roster(&memory.roster).unwrap().head;
         if current != head {
             return Ok(Appended::Conflict { head: current });
@@ -139,6 +153,13 @@ impl Store for &MemoryStore {
 
     async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
         let memory = self.0.lock().unwrap();
+        let pad = |n: u64| ChangedObject {
+            path: format!("pad/{n}"),
+            size: 0,
+        };
+        if memory.endless {
+            return Ok((vec![pad(cursor)], cursor + 1));
+        }
         let mut changes: Vec<(u64, &String, &Vec<u8>)> = memory
             .objects
             .iter()
@@ -146,14 +167,18 @@ impl Store for &MemoryStore {
             .map(|(p, (c, b))| (*c, p, b))
             .collect();
         changes.sort();
+        changes.truncate(memory.page.unwrap_or(usize::MAX));
         let next = changes.last().map_or(cursor, |(c, _, _)| *c);
-        let objects = changes
+        let mut objects: Vec<ChangedObject> = changes
             .into_iter()
             .map(|(_, path, bytes)| ChangedObject {
                 path: path.clone(),
                 size: bytes.len() as u64,
             })
             .collect();
+        if !objects.is_empty() {
+            objects.extend((0..memory.padding as u64).map(pad));
+        }
         Ok((objects, next))
     }
 }
@@ -191,6 +216,7 @@ pub fn draft(op: Op, signer: &MemberSecrets) -> Draft {
         signer: hex::encode(signer.did),
         add: None,
         remove: None,
+        cut: None,
         epoch: None,
         meta: None,
     }
@@ -260,6 +286,23 @@ pub async fn group() -> Group {
         b,
         recovery,
     }
+}
+
+/// A member adds `device` to the group.
+pub async fn add_device(group: &Group, device: &MemberSecrets) {
+    let mut add = draft(Op::Add, &group.a);
+    add.add = Some(vec![member_subject(
+        &device.sig_public,
+        &device.kem_public,
+        Role::Device,
+    )]);
+    let state = head(&group.store);
+    let entry = build_entry(&group.group, Some(&state), add, &[&group.a, device]);
+    let outcome = (&group.store)
+        .append_roster(&state.head, &entry, &BTreeMap::new(), None)
+        .await
+        .unwrap();
+    assert_eq!(outcome, Appended::Done);
 }
 
 /// The store a member of this fixture's group names in its welcome.

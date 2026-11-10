@@ -237,6 +237,23 @@ fn now_ms() -> u64 {
     u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(0)
 }
 
+/// Channels several of the viewer's own sit next to, for Discover channels.
+#[tauri::command]
+pub async fn get_neighbour_channels(
+    recommendation_service: State<'_, RecommendationService>,
+    pool: State<'_, SqlitePool>,
+) -> Result<Vec<crate::services::home_feed::neighbours::DiscoverableChannel>, ErrorResponse> {
+    use crate::services::home_feed::{inputs, neighbours};
+    let subscriptions = inputs::subscriptions(&pool)
+        .await
+        .map_err(ErrorResponse::from)?;
+    let stored = neighbours::load(&pool).await.map_err(ErrorResponse::from)?;
+    let found = recommendation_service
+        .neighbour_channels(&subscriptions.names)
+        .await;
+    Ok(neighbours::discoverable(found, &stored))
+}
+
 /// Home stops drawing on a channel the viewer keeps watching until they watch it again.
 #[tauri::command]
 pub async fn forget_remembered_channel(

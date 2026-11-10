@@ -10,6 +10,7 @@ import { getString } from './i18n/index';
 import { artistsText } from './musicFormat';
 import { useAlbumLibraryStore, type StoredAlbum } from '../store/useAlbumLibraryStore';
 import type { AlbumItem, AlbumPage, MusicPlaylistPage, SongItem } from '../types/music';
+import { joinIsolated } from './direction';
 
 export type CollectionKind = 'album' | 'playlist';
 
@@ -65,13 +66,7 @@ function albumMeta(page: AlbumPage): CollectionMeta {
   const yearText = page.album.year ? String(page.album.year) : null;
   const trackCountText = page.songCount != null ? getString('music_songs_count', page.songCount) : null;
   const durationText = page.durationText?.trim() || null;
-  const stats = [
-    yearText,
-    trackCountText,
-    durationText,
-  ]
-    .filter((p): p is string => Boolean(p))
-    .join('  •  ');
+  const stats = joinIsolated([yearText, trackCountText, durationText], '  •  ');
   return {
     kind: 'album',
     title: page.album.title,

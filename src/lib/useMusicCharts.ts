@@ -1,5 +1,5 @@
+import { getString } from './i18n/index';
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import { getMusicChartsPage } from './api/music';
 import type { MusicShelf } from '../types/music';
@@ -9,7 +9,6 @@ import type { MusicShelf } from '../types/music';
  * the country only refetches charts. A failed request simply yields no shelves.
  */
 export function useMusicCharts(country: string): MusicShelf[] {
-  const { t } = useTranslation('common');
   const [shelves, setShelves] = useState<MusicShelf[]>([]);
 
   useEffect(() => {
@@ -17,7 +16,7 @@ export function useMusicCharts(country: string): MusicShelf[] {
     getMusicChartsPage(undefined, country)
       .then((charts) => {
         if (!active) return;
-        const label = charts.countryLabel ?? (charts.countryCode ? null : t('musicChartsGlobal'));
+        const label = charts.countryLabel ?? (charts.countryCode ? null : getString('music_charts_global'));
         setShelves(charts.sections.map((section) => ({
           title: section.title,
           subtitle: label,
@@ -31,7 +30,7 @@ export function useMusicCharts(country: string): MusicShelf[] {
         if (active) setShelves([]);
       });
     return () => { active = false; };
-  }, [country, t]);
+  }, [country]);
 
   return shelves;
 }

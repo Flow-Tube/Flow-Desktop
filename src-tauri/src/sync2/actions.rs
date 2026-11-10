@@ -15,18 +15,23 @@ use super::keys::MemberSecrets;
 use super::lan_peers::{met, nearby};
 use super::lan_runtime::spread_leave;
 use super::linking::DeviceMeta;
-use super::membership::{leave_group, remove_device, rename_device};
+use super::membership::{leave_group, remove_devices, rename_device};
 use super::names::device_names;
 use super::profile_links::{link_profile, reading};
-use super::recovery_flow::replace_recovery_key;
-use super::roster::{Role, entry_hash};
+use super::recovery_flow::{RestoreDevice, replace_recovery_key};
+use super::recovery_notice::{RecoveryNotice, forget_recovery_notice, recovery_notice};
+use super::restore_removal::take_replaced_words;
+use super::roster::{Role, devices_added_by, entry_hash, recovery_member, replay_roster};
 use super::server::{ServerStore, StoreError};
-use super::service::{LastSync, is_syncing, last_sync, sync_soon};
+use super::service::{LastSync, is_syncing, last_sync, sync_now, sync_soon};
 use super::setup::{
-    create_group, create_lan_group, create_webdav_group, restore_group, restore_webdav_group,
+    create_group, create_lan_group, create_webdav_group, preview_restore_group,
+    preview_restore_webdav_group, restore_group, restore_webdav_group,
 };
 use super::snapshot::snapshot_soon;
-use super::state::{GroupRecord, StoreKind, add_roster_pin, forget_group, load_group, roster_pins};
+use super::state::{
+    GroupRecord, StoreKind, add_roster_pin, forget_group, load_group, roster_entries, roster_pins,
+};
 use super::store::Store;
 use super::store_login::{forget_login_change, forget_login_sent, login_due, login_waiting};
 use super::webdav::{WebDavLogin, WebDavStore};
@@ -172,7 +177,7 @@ async fn started(local: &Local, words: String) -> Result<String> {
     Ok(words)
 }
 
-async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
+pub(super) async fn set_recovery_saved(pool: &SqlitePool, saved: bool) -> Result<()> {
     Ok(set_setting(pool, RECOVERY_SAVED, if saved { "1" } else { "0" }).await?)
 }
 
@@ -204,6 +209,11 @@ pub struct LinkedStatus {
     /// The keychain hasn't given this device's keys: a read waits for access, or it was refused.
     pub keychain_blocked: bool,
     pub recovery_saved: bool,
+    /// Words the end of a restore had to make, to show once.
+    pub replaced_words: Option<String>,
+    pub recovery_notice: Option<RecoveryNotice>,
+    /// The device that set the recovery key left: nothing is written until it is replaced.
+    pub recovery_due: bool,
     pub last_sync: Option<LastSync>,
     pub syncing: bool,
 }
@@ -266,6 +276,7 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
     let pool = state_pool(app);
     let saved = get_setting(&pool, RECOVERY_SAVED).await?;
     let record = load_group(&pool).await?;
+    let roster = replay_roster(&roster_entries(&pool).await?).ok();
     Ok(LinkedStatus {
         kind: record.as_ref().map(|r| r.kind),
         stopped: stopped(&pool).await?,
@@ -278,6 +289,9 @@ pub async fn status(app: &AppHandle) -> Result<LinkedStatus> {
         keychain_blocked: DEVICE_KEYS.blocked(),
         // Only a device that created or restored the group was shown words to confirm.
         recovery_saved: saved.as_deref() != Some("0"),
+        replaced_words: take_replaced_words(),
+        recovery_notice: recovery_notice(&pool).await?,
+        recovery_due: roster.is_some_and(|state| state.recovery_due),
         last_sync: last_sync(app),
         syncing: is_syncing(app),
     })
@@ -290,6 +304,8 @@ pub struct LinkedDevice {
     pub name: String,
     pub platform: String,
     pub this_device: bool,
+    /// It set the current recovery key, so its leaving stops the others writing.
+    pub set_recovery_key: bool,
     /// Met on this network in the last few minutes.
     pub nearby: bool,
     /// When the device last synced: as the server saw it, or for a LAN group when this device
@@ -312,6 +328,8 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
         met.extend(last_sync(app).map(|last| (me.clone(), last.at_ms)));
         met
     };
+    let installer = recovery_member(&session.roster().members)
+        .and_then(|(_, member)| member.installer.as_ref());
     Ok(session
         .roster()
         .members
@@ -324,6 +342,7 @@ pub async fn devices(app: &AppHandle) -> Result<Vec<LinkedDevice>> {
                 name: meta.map(|m| m.name.clone()).unwrap_or_default(),
                 platform: meta.map(|m| m.platform.clone()).unwrap_or_default(),
                 this_device: *id == me,
+                set_recovery_key: installer == Some(id),
                 nearby: nearby.contains(id),
                 last_sync_ms: last_synced.get(id).copied(),
             }
@@ -480,11 +499,32 @@ pub async fn create_on_lan(app: &AppHandle) -> Result<String> {
 
 /// Restores the group from its recovery words, on a Flow server or, with `login`, in a `WebDAV`
 /// folder, and returns the new words to show once.
+pub async fn preview_restore(
+    app: &AppHandle,
+    url: &str,
+    words: &str,
+    login: Option<WebDavLogin>,
+) -> Result<Vec<RestoreDevice>> {
+    let local = local(app).await?;
+    if load_group(&local.pool).await?.is_some() {
+        return Err(EngineError::AlreadyLinked);
+    }
+    let url = url.trim();
+    match login {
+        Some(login) => {
+            let store = WebDavStore::connect(url, login, hex::encode(local.device.did)).await?;
+            preview_restore_webdav_group(&store, words).await
+        }
+        None => preview_restore_group(url, words).await,
+    }
+}
+
 pub async fn restore(
     app: &AppHandle,
     url: &str,
     words: &str,
     login: Option<WebDavLogin>,
+    kept: &[String],
 ) -> Result<String> {
     let mut local = local(app).await?;
     start_membership(&mut local).await?;
@@ -493,9 +533,9 @@ pub async fn restore(
         Some(login) => {
             let store = WebDavStore::connect(url, login.clone(), hex::encode(device.did)).await?;
             save_login(&login).await?;
-            restore_webdav_group(pool, &store, url, words, device, meta).await?
+            restore_webdav_group(pool, &store, url, words, device, meta, kept).await?
         }
-        None => restore_group(pool, url, words, device, meta).await?,
+        None => restore_group(pool, url, words, device, meta, kept).await?,
     };
     set_recovery_saved(&local.pool, false).await?;
     sync_soon(app);
@@ -540,14 +580,36 @@ pub async fn rename(app: &AppHandle, id: &str, name: &str) -> Result<()> {
     rename_device(&session, &local.device, id, &meta).await
 }
 
-pub async fn remove(app: &AppHandle, id: &str) -> Result<()> {
+/// Removes `id` and the devices in `also`, and returns the new recovery words to show once when
+/// they had to be replaced with it.
+pub async fn remove(app: &AppHandle, id: &str, also: &[String]) -> Result<Option<String>> {
     let local = local(app).await?;
+    // The cut names what this device has read, so read what it can first (spec/protocol.md, Removal).
+    if let Err(error) = sync_now(app).await {
+        tracing::warn!(target: "flow::sync2", kind = error.kind(), "removing without a last sync");
+    }
     let record = linked(&local.pool).await?;
     let session = open_session(&local, &record).await?;
-    remove_device(&session, &local.device, id).await?;
+    let mut removed = also.to_vec();
+    removed.push(id.to_owned());
+    let words = remove_devices(&local.pool, &session, &local.device, &removed).await?;
+    if words.is_some() {
+        set_recovery_saved(&local.pool, false).await?;
+    }
     snapshot_soon(&local.pool).await?;
     sync_soon(app);
-    Ok(())
+    Ok(words)
+}
+
+/// The current devices `id` added, for the user to remove with it if they don't recognise them.
+pub async fn added_by(app: &AppHandle, id: &str) -> Result<Vec<String>> {
+    let entries = roster_entries(&state_pool(app)).await?;
+    Ok(devices_added_by(&entries, id))
+}
+
+/// The user answered the notice that the recovery key changed.
+pub async fn answer_recovery_notice(app: &AppHandle) -> Result<()> {
+    forget_recovery_notice(&state_pool(app)).await
 }
 
 /// Devices asking to join this device's server group; none for a LAN group.
@@ -629,7 +691,9 @@ pub async fn reset_local_data(pool: &SqlitePool, syncs: bool) -> Result<()> {
     if syncs && load_group(crate::db::device::pool(pool)).await?.is_some() {
         return Err(EngineError::AlreadyLinked);
     }
+    crate::recap::store::clear(pool).await?;
     crate::db::watch_history::clear_watch_history(pool).await?;
+    crate::db::local_media::clear_plays(pool).await?;
     for key in ["subscriptions", "user_playlists"] {
         set_setting(pool, key, "[]").await?;
     }

@@ -20,7 +20,7 @@ use super::keys::{MemberSecrets, member_id};
 use super::lan_peers::service_port;
 use super::mailbox::Mailbox;
 use super::meta::seal_device_meta;
-use super::pairing::{pairing_aad, pairing_keys, pairing_slot};
+use super::pairing::{pairing_aad, pairing_commit, pairing_keys, pairing_proof, pairing_slot};
 use super::paths::kc_name;
 use super::payload::{decode_payload, encode_payload};
 use super::pipe::{AnyPipe, KEY_SIZE, MailboxPipe, Pipe, dial};
@@ -103,9 +103,11 @@ struct Channel<P> {
 }
 
 impl<P: Pipe> Channel<P> {
-    /// The side that showed `offer`, once the scanner's key arrived. Returns the six digits too.
-    fn shower(pipe: P, offer: &Offer, scanner: &[u8; KEY_SIZE]) -> Result<(Self, String)> {
+    /// The side that showed `offer`, once a scanner proved it read the code: reveals this side's
+    /// key, which takes the offer, so it happens once. Returns the six digits too.
+    async fn shower(mut pipe: P, offer: Offer, scanner: &[u8; KEY_SIZE]) -> Result<(Self, String)> {
         let keys = pairing_keys(&offer.secret, scanner, &offer.token, &offer.public, scanner)?;
+        pipe.send(offer.public.to_vec()).await?;
         let channel = Self {
             pipe,
             token: offer.token,
@@ -116,13 +118,19 @@ impl<P: Pipe> Channel<P> {
         Ok((channel, keys.sas))
     }
 
-    /// The side that read `code`: sends its key first.
+    /// The side that read `code`: sends its key, then holds the shower's key to the code. A key
+    /// that doesn't match ends pairing the way different digits do.
     async fn scanner(mut pipe: P, code: &Code) -> Result<(Self, String)> {
-        let (token, shower) = (code.token()?, code.shower_key()?);
+        let (token, commitment) = (code.token()?, code.commitment()?);
         let secret = random_bytes::<KEY_SIZE>();
         let public = agreement_public_key(&secret);
+        pipe.send([&public[..], &pairing_proof(&token, &public)[..]].concat())
+            .await?;
+        let shower = pipe.receive().await?;
+        if pairing_commit(&shower) != commitment {
+            return Err(EngineError::Declined);
+        }
         let keys = pairing_keys(&secret, &shower, &token, &shower, &public)?;
-        pipe.send_key(public).await?;
         let channel = Self {
             pipe,
             token,
@@ -183,15 +191,18 @@ where
     let mut mailbox = MailboxPipe::new(session.store(), slot.clone(), true);
     let first = match offer.listening.take() {
         Some(listening) => tokio::select! {
-            key = mailbox.receive_key() => key.map(|key| (None, key)),
-            lan = listening.accept() => lan.map(|(pipe, key)| (Some(pipe), key)),
+            key = mailbox.first_message(&offer.token) => key.map(|key| (None, key)),
+            lan = listening.accept(&offer.token) => lan.map(|(pipe, key)| (Some(pipe), key)),
         },
-        None => mailbox.receive_key().await.map(|key| (None, key)),
+        None => mailbox
+            .first_message(&offer.token)
+            .await
+            .map(|key| (None, key)),
     };
     let result = match first {
         Ok((lan, key)) => {
             let pipe = lan.map_or(AnyPipe::Mailbox(mailbox), |lan| AnyPipe::Lan(Box::new(lan)));
-            match Channel::shower(pipe, &offer, &key) {
+            match Channel::shower(pipe, offer, &key).await {
                 Ok((channel, sas)) => {
                     member_side(session, channel, sas, device, store, confirm).await
                 }
@@ -264,6 +275,7 @@ where
         signer: hex::encode(device.did),
         add: Some(vec![member_subject(&sig_public, &kem_public, Role::Device)]),
         remove: None,
+        cut: None,
         epoch: None,
         meta: Some(BTreeMap::from([(
             hex::encode(did),
@@ -593,8 +605,8 @@ where
     F: Future<Output = bool>,
 {
     let listening = offer.listening.take().ok_or(EngineError::LanUnreachable)?;
-    let (pipe, key) = listening.accept().await?;
-    let (channel, sas) = Channel::shower(pipe, &offer, &key)?;
+    let (pipe, key) = listening.accept(&offer.token).await?;
+    let (channel, sas) = Channel::shower(pipe, offer, &key).await?;
     new_side(channel, sas, device, meta, confirm).await
 }
 
@@ -613,14 +625,6 @@ mod tests {
         }
 
         fn receive(&mut self) -> impl Future<Output = Result<Vec<u8>>> + Send {
-            refused()
-        }
-
-        fn send_key(&mut self, _: [u8; KEY_SIZE]) -> impl Future<Output = Result<()>> + Send {
-            refused()
-        }
-
-        fn receive_key(&mut self) -> impl Future<Output = Result<[u8; KEY_SIZE]>> + Send {
             refused()
         }
 
@@ -648,6 +652,7 @@ mod tests {
             signer: hex::encode(device.did),
             add: Some(add),
             remove: None,
+            cut: None,
             epoch: None,
             meta: None,
         };

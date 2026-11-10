@@ -13,7 +13,7 @@ use super::keys::{MemberSecrets, group_id};
 use super::linking::DeviceMeta;
 use super::meta::seal_device_meta;
 use super::recovery::{recovery_keys, recovery_secret, recovery_words};
-use super::recovery_flow::restore;
+use super::recovery_flow::{RestoreDevice, preview_restore, restore};
 use super::roster::{Entry, Op, Role, replay_roster};
 use super::sealed::random_bytes;
 use super::server::{Appended, ServerStore, StoreError};
@@ -55,6 +55,7 @@ fn genesis(device: &MemberSecrets, meta: &DeviceMeta) -> Result<Genesis> {
             member_subject(&recovery.sig_public, &recovery.kem_public, Role::Recovery),
         ]),
         remove: None,
+        cut: None,
         epoch: Some(epoch_draft(
             &epoch_key,
             &group,
@@ -180,6 +181,7 @@ pub async fn restore_group(
     words: &str,
     device: &MemberSecrets,
     meta: &DeviceMeta,
+    kept: &[String],
 ) -> Result<String> {
     let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
     let as_recovery = ServerStore::connect(store_url, recovery_keys(&secret), None, None).await?;
@@ -201,10 +203,27 @@ pub async fn restore_group(
     add_roster_entries(pool, &restored.entries).await?;
     save_group(
         pool,
-        &GroupRecord::new(group, store_url.to_owned(), instance, String::new()),
+        &GroupRecord::new(group, store_url.to_owned(), instance, String::new())
+            .restored_keeping(kept),
     )
     .await?;
     Ok(restored.words)
+}
+
+/// The devices of a group on a Flow server, for a restore to ask about.
+pub async fn preview_restore_group(store_url: &str, words: &str) -> Result<Vec<RestoreDevice>> {
+    let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
+    let store = ServerStore::connect(store_url, recovery_keys(&secret), None, None).await?;
+    preview_restore(&store, &recovery_keys(&secret)).await
+}
+
+/// The devices of a group kept in a `WebDAV` folder, for a restore to ask about.
+pub async fn preview_restore_webdav_group(
+    store: &WebDavStore,
+    words: &str,
+) -> Result<Vec<RestoreDevice>> {
+    let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
+    preview_restore(store, &recovery_keys(&secret)).await
 }
 
 /// Restores a group kept in a `WebDAV` folder from its recovery words (spec/protocol.md,
@@ -216,6 +235,7 @@ pub async fn restore_webdav_group(
     words: &str,
     device: &MemberSecrets,
     meta: &DeviceMeta,
+    kept: &[String],
 ) -> Result<String> {
     let secret = recovery_secret(words).ok_or(EngineError::WrongWords)?;
     store.probe().await?;
@@ -227,7 +247,7 @@ pub async fn restore_webdav_group(
     add_roster_entries(pool, &restored.entries).await?;
     save_group(
         pool,
-        &GroupRecord::on_webdav(group, url.to_owned(), String::new()),
+        &GroupRecord::on_webdav(group, url.to_owned(), String::new()).restored_keeping(kept),
     )
     .await?;
     Ok(restored.words)

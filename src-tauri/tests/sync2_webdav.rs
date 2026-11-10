@@ -4,7 +4,7 @@
 
 mod sync2_common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -28,15 +28,20 @@ use flow_desktop_lib::sync2::keys::{MemberSecrets, member_secrets};
 use flow_desktop_lib::sync2::linking::{
     DeviceMeta, WelcomeStore, add_device, finish_join, join, join_on_lan,
 };
-use flow_desktop_lib::sync2::membership::{leave_group, member_keys, remove_device, rename_device};
+use flow_desktop_lib::sync2::membership::{
+    leave_group, member_keys, remove_devices, rename_device,
+};
 use flow_desktop_lib::sync2::paths::{chain_path, kc_name, log_path, roster_path, wrap_path};
 use flow_desktop_lib::sync2::payload::encode_payload;
 use flow_desktop_lib::sync2::pipe::listen_on;
+use flow_desktop_lib::sync2::recovery_flow::restore;
 use flow_desktop_lib::sync2::roster::{Op, Role, entry_hash};
 use flow_desktop_lib::sync2::sealed::random_bytes;
 use flow_desktop_lib::sync2::server::StoreError;
 use flow_desktop_lib::sync2::setup::{create_webdav_group, restore_webdav_group};
-use flow_desktop_lib::sync2::state::{StoreKind, load_group, streams};
+use flow_desktop_lib::sync2::state::{
+    GroupRecord, StoreKind, add_roster_entries, load_group, save_group, streams,
+};
 use flow_desktop_lib::sync2::store::Store;
 use flow_desktop_lib::sync2::store_login::{login_due, login_waiting};
 use flow_desktop_lib::sync2::webdav::{WebDav, WebDavLogin, WebDavStore};
@@ -360,22 +365,73 @@ async fn a_group_in_a_folder_is_restored_with_its_recovery_words() {
     let pool_c = empty_pool().await;
     let store_c = store_for(&url, &c.did).await;
     let meta = named("C");
-    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta).await;
+    let wrong = restore_webdav_group(&pool_c, &store_c, &url, "not words", &c, &meta, &[]).await;
     assert!(matches!(wrong, Err(EngineError::WrongWords)));
-    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta)
+    let next = restore_webdav_group(&pool_c, &store_c, &url, &words, &c, &meta, &[])
         .await
         .unwrap();
     assert_ne!(next, words);
 
     let record = load_group(&pool_c).await.unwrap().unwrap();
     assert_eq!(record.kind, StoreKind::WebDav);
+    assert_eq!(record.restore_kept(), Some(BTreeSet::new()));
     let session = Session::open(&pool_c, store_for(&url, &c.did).await, &c)
         .await
         .unwrap();
     assert!(session.roster().members.contains_key(&hex::encode(c.did)));
+    assert!(
+        !session.roster().members.contains_key(&hex::encode(a.did)),
+        "a device not kept is signed out over WebDAV too"
+    );
+    assert_eq!(
+        load_group(&pool_c).await.unwrap().unwrap().restore_kept,
+        None
+    );
     let other = empty_pool().await;
-    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta).await;
+    let used = restore_webdav_group(&other, &store_c, &url, &words, &c, &meta, &[]).await;
     assert!(matches!(used, Err(EngineError::RecoveryUsed)));
+}
+
+#[tokio::test]
+async fn a_client_reaches_only_paths_inside_its_folder() {
+    let (root, _) = webdav_server().await;
+    let account = webdav(&root.replace("flow-sync/", ""), PASSWORD).await;
+    account
+        .put("other/notes.txt", b"mine".to_vec())
+        .await
+        .unwrap();
+    let client = webdav(&root, PASSWORD).await;
+    client.put("x/inside.b", b"ours".to_vec()).await.unwrap();
+
+    for path in [
+        "../other/notes.txt",
+        "x/../../other/notes.txt",
+        "%2e%2e/other/notes.txt",
+        "..%2fother/notes.txt",
+        "/other/notes.txt",
+        "../other/notes.txt#",
+        "x/inside.b#",
+        "x/inside.b?y",
+        "x\\..\\..\\other",
+    ] {
+        assert!(
+            matches!(client.get(path).await, Err(StoreError::Malformed)),
+            "{path}"
+        );
+        assert!(
+            matches!(client.delete(path).await, Err(StoreError::Malformed)),
+            "{path}"
+        );
+        assert!(
+            matches!(client.put(path, vec![1]).await, Err(StoreError::Malformed)),
+            "{path}"
+        );
+    }
+    assert_eq!(
+        account.get("other/notes.txt").await.unwrap().unwrap(),
+        b"mine"
+    );
+    assert_eq!(client.get("x/inside.b").await.unwrap().unwrap(), b"ours");
 }
 
 #[tokio::test]
@@ -422,9 +478,105 @@ async fn answers_past_their_limit_are_refused() {
     let dav = webdav(&server.uri(), PASSWORD).await;
     assert!(matches!(
         dav.get("dev/x.o").await,
-        Err(StoreError::Malformed)
+        Err(StoreError::TooLarge)
     ));
-    assert!(matches!(dav.list("dev/").await, Err(StoreError::Malformed)));
+    assert!(matches!(dav.list("dev/").await, Err(StoreError::TooLarge)));
+}
+
+/// Answers each `PROPFIND` with a page from `listing`, given the path asked for, and each `GET`
+/// with `body`.
+async fn scripted_webdav(listing: fn(&str) -> String, body: String) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        while let Ok((stream, _)) = listener.accept().await {
+            let body = body.clone();
+            tokio::spawn(async move {
+                let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
+                    let body = body.clone();
+                    async move {
+                        let path = request.uri().path().to_owned();
+                        let mut response = if request.method() == hyper::Method::GET {
+                            hyper::Response::new(Body::from(body))
+                        } else {
+                            let xml = format!(
+                                r#"<D:multistatus xmlns:D="DAV:">{}</D:multistatus>"#,
+                                listing(&path)
+                            );
+                            let mut response = hyper::Response::new(Body::from(xml));
+                            *response.status_mut() = hyper::StatusCode::MULTI_STATUS;
+                            response
+                        };
+                        response
+                            .headers_mut()
+                            .insert("content-type", "application/xml".parse().unwrap());
+                        Ok::<_, Infallible>(response)
+                    }
+                });
+                let _ = http1::Builder::new()
+                    .serve_connection(TokioIo::new(stream), service)
+                    .await;
+            });
+        }
+    });
+    format!("http://127.0.0.1:{port}/flow-sync/")
+}
+
+fn propfind_entry(href: &str, folder: bool) -> String {
+    let kind = if folder { "<D:collection/>" } else { "" };
+    format!(
+        "<D:response><D:href>{href}</D:href><D:propstat><D:prop><D:resourcetype>{kind}</D:resourcetype></D:prop></D:propstat></D:response>"
+    )
+}
+
+/// One sender, and every shard of its log ending in the shard's last object, so a reader looks at
+/// the next shard.
+fn always_full_shards(path: &str) -> String {
+    if path.ends_with("/dev/") {
+        return propfind_entry(&format!("{path}{}/", "ab".repeat(16)), true);
+    }
+    let shard = path
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .and_then(|s| u64::from_str_radix(s, 16).ok())
+        .unwrap_or(0);
+    (0..1000)
+        .map(|n| format!("{path}{:016x}.o", shard * 1024 + 1023 - n))
+        .map(|href| propfind_entry(&href, false))
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_listing_ends_when_every_shard_of_a_log_looks_full() {
+    let url = scripted_webdav(always_full_shards, String::new()).await;
+    let store = store_for(&url, &random_bytes()).await;
+    let (objects, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        store.new_objects(0, &BTreeMap::new()),
+    )
+    .await
+    .expect("the listing ends")
+    .unwrap();
+    assert!(!objects.is_empty(), "what was listed still gets read");
+}
+
+fn many_roster_files(path: &str) -> String {
+    (0..64)
+        .map(|n| propfind_entry(&format!("{path}{n:016x}.r"), false))
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_roster_folder_too_large_to_hold_is_refused() {
+    for size in [4 << 20, (4 << 20) + 1] {
+        let url = scripted_webdav(many_roster_files, " ".repeat(size)).await;
+        let store = store_for(&url, &random_bytes()).await;
+        assert!(matches!(
+            store.roster_after(-1).await,
+            Err(StoreError::Malformed)
+        ));
+    }
 }
 
 /// A member's snapshot can place a log at its last possible `seq`; listing past it must hold.
@@ -713,7 +865,9 @@ async fn the_notice_follows_a_removal_and_not_a_leave_and_clears_with_a_login() 
     a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
         .await
         .unwrap();
-    remove_device(&a, &g.a, &hex::encode(c.did)).await.unwrap();
+    remove_devices(&pool_a, &a, &g.a, &[hex::encode(c.did)])
+        .await
+        .unwrap();
 
     a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
         .await
@@ -745,4 +899,143 @@ async fn a_leave_calls_for_no_new_login() {
         .await
         .unwrap();
     assert!(!login_due(&pool_b).await.unwrap());
+}
+
+/// One more object than `device` wrote, past the size any object may have, at the end of its log.
+async fn too_large_at_the_end(url: &str, device: &MemberSecrets, wrote: i64) {
+    let seq = u64::try_from(wrote + 1).unwrap();
+    webdav(url, PASSWORD)
+        .await
+        .put(
+            &log_path(&hex::encode(device.did), seq),
+            vec![0; (4 << 20) + 1],
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_object_past_the_size_limit_stops_only_its_own_log() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    let pool_a = device_pool(&g).await;
+    let mut a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    too_large_at_the_end(&url, &g.a, a.record().own_seq).await;
+
+    let pool_b = device_pool(&g).await;
+    let mut b = Session::open(&pool_b, store_for(&url, &g.b.did).await, &g.b)
+        .await
+        .unwrap();
+    let pulled = b.pull(&pool_b).await.unwrap();
+
+    let sender = hex::encode(g.a.did);
+    assert!(pulled.batches.contains_key(&sender));
+    b.finish(&pool_b, pulled).await.unwrap();
+    let read = streams(&pool_b).await.unwrap();
+    assert_eq!(read[&sender].seq, a.record().own_seq.unsigned_abs());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restore_ends_a_log_at_an_object_past_the_size_limit() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    let pool_a = device_pool(&g).await;
+    let mut a = Session::open(&pool_a, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    a.push(&pool_a, exported(&pool_a, "app-a").await)
+        .await
+        .unwrap();
+    too_large_at_the_end(&url, &g.a, a.record().own_seq).await;
+
+    let device = member_secrets(random_bytes(), random_bytes());
+    let store = store_for(&url, &device.did).await;
+    let restored = restore(&store, &store, &g.recovery, &device, &named("New"))
+        .await
+        .unwrap();
+    let pool = empty_pool().await;
+    add_roster_entries(&pool, &restored.entries).await.unwrap();
+    let record = GroupRecord::on_webdav(hex::encode(g.group), url.clone(), String::new())
+        .restored_keeping(&[]);
+    save_group(&pool, &record).await.unwrap();
+    Session::open(&pool, store_for(&url, &device.did).await, &device)
+        .await
+        .unwrap();
+
+    let roster = store.roster_after(-1).await.unwrap();
+    let cut = roster.last().unwrap().cut.clone().unwrap();
+    assert_eq!(
+        cut[&hex::encode(g.a.did)].seq,
+        a.record().own_seq.unsigned_abs()
+    );
+    assert_eq!(load_group(&pool).await.unwrap().unwrap().restore_kept, None);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_roster_file_past_the_size_limit_is_ignored() {
+    let g = group().await;
+    let (url, _) = webdav_server().await;
+    onto_webdav(&g, &url).await;
+    webdav(&url, PASSWORD)
+        .await
+        .put(
+            "roster/ffffffffffffffff-ffffffffffffffff.r",
+            vec![b' '; (4 << 20) + 1],
+        )
+        .await
+        .unwrap();
+    let pool = device_pool(&g).await;
+
+    let session = Session::open(&pool, store_for(&url, &g.a.did).await, &g.a)
+        .await
+        .unwrap();
+
+    assert_eq!(session.entries().len(), 2);
+}
+
+#[tokio::test]
+async fn only_a_refusal_of_the_one_object_stops_only_that_object() {
+    let answer = |status: u16| async move {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(status))
+            .mount(&server)
+            .await;
+        let store = store_for(&format!("{}/", server.uri()), &random_bytes()).await;
+        let read = store.get_object("dev/x/log/o").await;
+        let wrap = store.key(0, "kc", "name").await;
+        (read, wrap)
+    };
+    for status in [400, 403, 410, 413, 451] {
+        let (read, wrap) = answer(status).await;
+        assert!(matches!(read, Ok(None)), "{status}");
+        assert!(matches!(wrap, Ok(None)), "{status}");
+    }
+    for status in [401, 407, 408, 429, 500, 502, 503, 507] {
+        let (read, wrap) = answer(status).await;
+        assert!(read.is_err(), "{status}");
+        assert!(wrap.is_err(), "{status}");
+    }
+}
+
+#[tokio::test]
+async fn an_unreachable_folder_still_fails_the_read() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let store = store_for(&format!("http://127.0.0.1:{port}/"), &random_bytes()).await;
+
+    assert!(matches!(
+        store.get_object("dev/x/log/o").await,
+        Err(StoreError::Network(_))
+    ));
 }

@@ -15,7 +15,6 @@ import { useUnseenFilter } from "../lib/useUnseenFilter";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { decideWatchRouteSync } from "../lib/watchRouteSync";
 import { setSetting } from "../lib/api/db";
-import { isStatsString } from "../lib/videoStats";
 import {
   WatchLayout,
   WatchMetadata,
@@ -99,28 +98,18 @@ export function Watch() {
     }
   }, [videoId, currentVideo, playQueueItem, setQueue, retryNonce, offlineRecord]);
 
-  // Fills in the stub a cold open started with, or corrects missing/invalid channel metadata.
+  // Fills in the stub a cold open started with. Details are fetched once, by the
+  // effect below, so this never costs a request of its own.
   useEffect(() => {
     if (!videoId || !videoDetails || videoDetails.id !== videoId) return;
-    if (!currentVideo || currentVideo.id !== videoId) return;
-    const titleMissing = !currentVideo.title;
-    const channelNeedsCorrection =
-      !currentVideo.channelName || isStatsString(currentVideo.channelName);
-    const channelIdMissing = !currentVideo.channelId && !!videoDetails.channelId;
-
-    if (titleMissing || channelNeedsCorrection || channelIdMissing) {
-      const patch: Partial<VideoSummary> = {};
-      if (titleMissing && videoDetails.title) patch.title = videoDetails.title;
-      if (channelNeedsCorrection && videoDetails.channelName && !isStatsString(videoDetails.channelName)) {
-        patch.channelName = videoDetails.channelName;
-      }
-      if (channelIdMissing) patch.channelId = videoDetails.channelId;
-      if (!currentVideo.thumbnailUrl && videoDetails.thumbnailUrl) patch.thumbnailUrl = videoDetails.thumbnailUrl;
-      if (!currentVideo.durationSeconds && videoDetails.durationSeconds) patch.durationSeconds = videoDetails.durationSeconds;
-      if (Object.keys(patch).length > 0) {
-        enrichCurrentVideo(videoId, patch);
-      }
-    }
+    if (!currentVideo || currentVideo.id !== videoId || currentVideo.title) return;
+    enrichCurrentVideo(videoId, {
+      title: videoDetails.title,
+      channelName: videoDetails.channelName,
+      thumbnailUrl: videoDetails.thumbnailUrl,
+      durationSeconds: videoDetails.durationSeconds,
+      channelId: videoDetails.channelId,
+    });
   }, [videoId, videoDetails, currentVideo, enrichCurrentVideo]);
 
   // Keep currentVideo.isLive authoritative from details (a list stub may lack it);

@@ -13,7 +13,7 @@ import { useDeArrowOverride } from '../../lib/useDeArrowOverride';
 import { getVideoDetails } from '../../lib/api/youtube';
 import { useSettingsStore } from '../../store/useSettingsStore';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
-import { useChannelMetadata } from '../../lib/useChannelAvatar';
+import { useChannelAvatar } from '../../lib/useChannelAvatar';
 import { isUnavailableYoutubeThumbnail, resolveYoutubeThumbnailCandidates, upgradeAvatarUrl } from '../../lib/thumbnails';
 import { IS_LINUX_RUNTIME } from '../../lib/platform';
 import { useProxiedImageUrl } from '../../lib/useProxiedImageUrl';
@@ -36,7 +36,6 @@ import { formatPublishedText, formatYouTubeRelativeTime } from '../../lib/publis
 import { ColorWash, COLOR_WASH_HOST } from '../ui/ColorWash';
 import { CardPills, ChannelLabel, CollabAvatars, UpcomingBadge } from "./CardMeta";
 import { collaboratorsByline } from "../../lib/collaborators";
-import { isStatsString } from "../../lib/videoStats";
 import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '../../lib/openTarget';
 import { openActions } from '../common/openActions';
 
@@ -170,57 +169,17 @@ function VideoCardComponent({
     useAppSettingsStore((state) => state.values[SETTINGS.VIDEO_TITLE_MAX_LINES])
   );
 
-  const isHistoryCard = variant === 'history';
-  const isContinueCard = variant === 'continue';
-  const isListVariant = variant === 'list';
-  const progressPercent = Math.min(100, Math.max(0, video.watchProgressPercent ?? 0));
-
+  // Only resolve via the hook when the feed didn't already supply an avatar —
+  // the hook falls back to a getChannelDetails() network fetch per unknown
+  // channel, which multiplied across a large feed floods the backend.
+  const hookAvatarUrl = useChannelAvatar(
+    isChannel || video.channelAvatarUrl ? null : channelId || null,
+  );
+  const resolvedAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.channelAvatarUrl || hookAvatarUrl));
   // A collaboration names every channel; it opens the first, which is the uploader.
   const collaborators = video.collaborators ?? [];
   const isCollab = collaborators.length >= 2;
-  const rawByline = isCollab ? collaboratorsByline(collaborators) : video.channelName;
-  const isBylineStats = isStatsString(rawByline);
-
-  // Effective view count text:
-  // - On Continue Watching, video.viewCountText holds the progress percentage (e.g. "59% watched")
-  // - On History, view count is not shown (the date is shown on line 3)
-  // - On normal feeds, use video.viewCountText if present, or if rawByline was mistakenly a view count, use rawByline
-  const effectiveViewCountText = useMemo(() => {
-    if (isContinueCard) {
-      return video.viewCountText || null;
-    }
-    if (isHistoryCard) {
-      return null;
-    }
-    if (video.viewCountText && video.viewCountText !== "History") {
-      return video.viewCountText;
-    }
-    if (isBylineStats && rawByline) {
-      return rawByline;
-    }
-    return null;
-  }, [isContinueCard, isHistoryCard, video.viewCountText, isBylineStats, rawByline]);
-
-  const targetId = isChannel ? cleanId : channelId;
-  const subscriptions = useSubscriptionStore((s) => s.subscriptions);
-
-  const resolvedChannelNameWithoutHook = useMemo(() => {
-    if (isCollab) return collaboratorsByline(collaborators);
-    const raw = isBylineStats ? "" : (video.channelName || "").trim();
-    if (raw && raw !== "Unknown Channel") return raw;
-    if (targetId) {
-      const sub = subscriptions.find((s) => s.id === targetId);
-      if (sub?.name && !isStatsString(sub.name) && sub.name !== "Unknown Channel") return sub.name;
-    }
-    return "";
-  }, [isCollab, collaborators, isBylineStats, video.channelName, targetId, subscriptions]);
-
-  const shouldFetchChannelMeta = !isChannel && Boolean(targetId) && (!video.channelAvatarUrl || !resolvedChannelNameWithoutHook);
-  const hookMeta = useChannelMetadata(shouldFetchChannelMeta ? targetId : null);
-
-  const resolvedChannelName = resolvedChannelNameWithoutHook || hookMeta.name || "";
-  const isVerified = video.isVerified || hookMeta.verified;
-  const resolvedAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.channelAvatarUrl || hookMeta.avatarUrl));
+  const byline = isCollab ? collaboratorsByline(collaborators) : video.channelName;
   const channelCardAvatarUrl = useProxiedImageUrl(upgradeAvatarUrl(video.thumbnailUrl));
   // Cached and de-duplicated across cards and remounts by the hook; this used to
   // be a bare `getDeArrowOverride` in an effect, one IPC per card, every mount.
@@ -293,6 +252,11 @@ function VideoCardComponent({
   const subStatus = useSubscriptionStore((s) =>
     subTargetId ? s.subscriptions.some((c) => c.id === subTargetId) : false,
   );
+  const isHistoryCard = variant === 'history';
+  const isContinueCard = variant === 'continue';
+  const isListVariant = variant === 'list';
+  const progressPercent = Math.min(100, Math.max(0, video.watchProgressPercent ?? 0));
+
   useEffect(() => {
     setDominantColor(null);
   }, [overriddenThumbnail, video.id, video.thumbnailUrl]);
@@ -304,7 +268,7 @@ function VideoCardComponent({
     if (subStatus) {
       unsubscribe(idToToggle, { learn: true });
     } else {
-      subscribe(idToToggle, isChannel ? video.title : resolvedChannelName || video.channelName, video.thumbnailUrl || undefined, { learn: true });
+      subscribe(idToToggle, isChannel ? video.title : video.channelName, video.thumbnailUrl || undefined, { learn: true });
     }
   };
 
@@ -537,7 +501,7 @@ function VideoCardComponent({
       <MediaMenu
         anchor={menuAnchor}
         onClose={() => setShowMenu(false)}
-        header={{ title: displayTitle, subtitle: resolvedChannelName || undefined, image: displayThumbnail, imageShape: "landscape" }}
+        header={{ title: displayTitle, subtitle: byline, image: displayThumbnail, imageShape: "landscape" }}
         actions={menuActions}
         note={reason ? { title: getString("home_feed_why"), body: reason } : null}
       />
@@ -635,30 +599,18 @@ function VideoCardComponent({
           >
             {displayTitle}
           </h3>
-          <div className="min-h-[18px]">
-            {resolvedChannelName ? (
-              <button
-                type="button"
-                onClick={(e) => { void handleChannelNavigate(e); }}
-                className="mt-1 truncate max-w-full text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300 block"
-              >
-                <ChannelLabel name={resolvedChannelName} verified={isVerified} />
-              </button>
-            ) : shouldFetchChannelMeta ? (
-              <div className="h-3.5 w-24 rounded bg-chrome-neutral-800 animate-pulse my-1" />
-            ) : null}
+          <button
+            type="button"
+            onClick={(e) => { void handleChannelNavigate(e); }}
+            className="mt-1 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+          >
+            <ChannelLabel name={byline} verified={video.isVerified} />
+          </button>
+          <div className="text-[13px] text-chrome-neutral-500">
+            {video.viewCountText && <span>{video.viewCountText}</span>}
+            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+            {publishedText && <span>{publishedText}</span>}
           </div>
-          {(effectiveViewCountText || publishedText) ? (
-            <div className="text-[13px] text-chrome-neutral-500">
-              {effectiveViewCountText && <span>{effectiveViewCountText}</span>}
-              {effectiveViewCountText && publishedText && !effectiveViewCountText.includes(publishedText) && (
-                <span className="mx-1">•</span>
-              )}
-              {publishedText && (!effectiveViewCountText || !effectiveViewCountText.includes(publishedText)) && (
-                <span>{publishedText}</span>
-              )}
-            </div>
-          ) : null}
           <CardPills video={video} />
         </div>
 
@@ -753,38 +705,26 @@ function VideoCardComponent({
           >
             {displayTitle}
           </h3>
-          <div className="min-h-[18px]">
-            {resolvedChannelName ? (
-              <button
-                type="button"
-                onClick={(e) => { void handleChannelNavigate(e); }}
-                className="mt-0.5 truncate max-w-full text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300 block"
-              >
-                <ChannelLabel name={resolvedChannelName} verified={isVerified} />
-              </button>
-            ) : shouldFetchChannelMeta ? (
-              <div className="h-3.5 w-24 rounded bg-chrome-neutral-800 animate-pulse my-0.5" />
-            ) : null}
+          <button
+            type="button"
+            onClick={(e) => { void handleChannelNavigate(e); }}
+            className="mt-0.5 truncate text-left text-[13px] text-chrome-neutral-400 transition-colors hover:text-chrome-neutral-300"
+          >
+            <ChannelLabel name={byline} verified={video.isVerified} />
+          </button>
+          <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
+            {showAddedDate && video.addedAtInPlaylist ? (
+              <span>
+                {getString("playlist_video_added_template", formatYouTubeRelativeTime(video.addedAtInPlaylist))}
+              </span>
+            ) : (
+              <>
+                {video.viewCountText && <span>{video.viewCountText}</span>}
+                {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+                {publishedText && <span>{publishedText}</span>}
+              </>
+            )}
           </div>
-          {(showAddedDate && video.addedAtInPlaylist) || effectiveViewCountText || publishedText ? (
-            <div className="mt-0.5 text-[13px] text-chrome-neutral-500">
-              {showAddedDate && video.addedAtInPlaylist ? (
-                <span>
-                  {getString("playlist_video_added_template", formatYouTubeRelativeTime(video.addedAtInPlaylist))}
-                </span>
-              ) : (
-                <>
-                  {effectiveViewCountText && <span>{effectiveViewCountText}</span>}
-                  {effectiveViewCountText && publishedText && !effectiveViewCountText.includes(publishedText) && (
-                    <span className="mx-1">•</span>
-                  )}
-                  {publishedText && (!effectiveViewCountText || !effectiveViewCountText.includes(publishedText)) && (
-                    <span>{publishedText}</span>
-                  )}
-                </>
-              )}
-            </div>
-          ) : null}
           <CardPills video={video} />
         </div>
 
@@ -803,7 +743,7 @@ function VideoCardComponent({
     );
   }
 
-  const channelInitials = (resolvedChannelName || video.channelName)?.substring(0, 1).toUpperCase() || '?';
+  const channelInitials = video.channelName?.substring(0, 1).toUpperCase() || '?';
 
   return (
     <div
@@ -884,7 +824,7 @@ function VideoCardComponent({
             ) : resolvedAvatarUrl ? (
               <img
                 src={resolvedAvatarUrl}
-                alt={resolvedChannelName || video.channelName}
+                alt={video.channelName}
                 className="h-full w-full object-cover"
                 loading="lazy"
               />
@@ -903,31 +843,19 @@ function VideoCardComponent({
           >
             {displayTitle}
           </h3>
-          <div className="min-h-[18px]">
-            {resolvedChannelName ? (
-              <div
-                onClick={(e) => { void handleChannelNavigate(e); }}
-                className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors"
-              >
-                <ChannelLabel name={resolvedChannelName} verified={isVerified} />
-              </div>
-            ) : shouldFetchChannelMeta ? (
-              <div className="h-3.5 w-24 rounded bg-chrome-zinc-800 animate-pulse my-0.5" />
-            ) : null}
+          <div
+            onClick={(e) => { void handleChannelNavigate(e); }}
+            className="text-chrome-zinc-400 text-[13px] mt-0.5 truncate cursor-pointer hover:text-chrome-zinc-300 transition-colors"
+          >
+            <ChannelLabel name={byline} verified={video.isVerified} />
           </div>
 
           {/* View Count + Published */}
-          {(effectiveViewCountText || publishedText) ? (
-            <div className="text-chrome-zinc-500 text-[13px] flex items-center gap-0 mt-0">
-              {effectiveViewCountText && <span>{effectiveViewCountText}</span>}
-              {effectiveViewCountText && publishedText && !effectiveViewCountText.includes(publishedText) && (
-                <span className="mx-1">•</span>
-              )}
-              {publishedText && (!effectiveViewCountText || !effectiveViewCountText.includes(publishedText)) && (
-                <span>{publishedText}</span>
-              )}
-            </div>
-          ) : null}
+          <div className="text-chrome-zinc-500 text-[13px] flex items-center gap-0 mt-0">
+            {video.viewCountText && <span>{video.viewCountText}</span>}
+            {video.viewCountText && publishedText && <span className="mx-1">•</span>}
+            {publishedText && <span>{publishedText}</span>}
+          </div>
           <CardPills video={video} />
         </div>
 

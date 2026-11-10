@@ -6,11 +6,9 @@ use serde_json::Value;
 
 use super::collaborators::collaborators_in;
 use crate::api::innertube::json::age::relative_age;
-use crate::api::innertube::json::count::{is_view_or_stream_count, parse_count};
+use crate::api::innertube::json::count::parse_count;
 use crate::api::innertube::json::duration::parse_duration;
-use crate::api::innertube::json::text::{
-    browse_id_in_runs, extract_channel_from_a11y_label, text_of,
-};
+use crate::api::innertube::json::text::{browse_id_in_runs, text_of};
 use crate::api::innertube::json::thumbnail::{
     best_video_thumbnail_url, largest_url, normalize_youtube_image_url,
 };
@@ -56,34 +54,17 @@ pub fn video_from_renderer(video: &Value) -> Option<VideoSummary> {
         channel_id_of(video).or_else(|| collaborators.first().map(|c| c.channel_id.clone()));
     let is_upcoming = is_upcoming(video);
     let (info_views, info_published) = video_info(video);
-    let mut view_count_text = text_of(&video["viewCountText"])
+    let view_count_text = text_of(&video["viewCountText"])
         .or_else(|| text_of(&video["shortViewCountText"]))
         .or(info_views);
     let badges = badge_labels(video);
-    let mut channel_name = BYLINES
-        .iter()
-        .find_map(|field| text_of(&video[*field]))
-        .unwrap_or_default();
-    if is_view_or_stream_count(&channel_name) {
-        if view_count_text.is_none() {
-            view_count_text = Some(channel_name.clone());
-        }
-        channel_name.clear();
-    }
-    if channel_name.is_empty() {
-        if let Some(label) = video["channelThumbnailSupportedRenderers"]["channelThumbnailWithLinkRenderer"]
-            ["accessibility"]["accessibilityData"]["label"]
-            .as_str()
-        {
-            if let Some(extracted) = extract_channel_from_a11y_label(label) {
-                channel_name = extracted.to_string();
-            }
-        }
-    }
     Some(
         VideoSummary {
             title: text_of(&video["title"]).unwrap_or_default(),
-            channel_name,
+            channel_name: BYLINES
+                .iter()
+                .find_map(|field| text_of(&video[*field]))
+                .unwrap_or_default(),
             channel_id,
             thumbnail_url: best_video_thumbnail_url(&id, Some(&video["thumbnail"]["thumbnails"])),
             duration_seconds: duration_of(video),

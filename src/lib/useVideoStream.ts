@@ -7,7 +7,6 @@ import { getOfflineStream } from "./api/downloads";
 import { findDownloadedRecord } from "./useDownloads";
 import { useDownloadsLibraryStore } from "../store/useDownloadsLibraryStore";
 import { addWatchRecord } from "./api/db";
-import { cleanChannelName } from "./videoStats";
 import { isMusicVideo } from "./utils";
 import { SETTINGS } from "./settings/schema";
 import { filterByPreferredCodec, selectPreferredStreamVariant } from "./settings/playerRuntime";
@@ -323,7 +322,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
               void addWatchRecord({
                 videoId: currentVideo.id,
                 title: currentVideo.title,
-                channelName: cleanChannelName(currentVideo.channelName),
+                channelName: currentVideo.channelName,
                 channelId: currentVideo.channelId ?? null,
                 watchDate: new Date().toISOString(),
                 watchDurationSeconds: 0,
@@ -401,7 +400,7 @@ export function useVideoStream(videoId: string | undefined): VideoStream {
           void addWatchRecord({
             videoId: currentVideo.id,
             title: currentVideo.title,
-            channelName: cleanChannelName(currentVideo.channelName),
+            channelName: currentVideo.channelName,
             channelId: currentVideo.channelId ?? null,
             watchDate: new Date().toISOString(),
             watchDurationSeconds: Math.floor(

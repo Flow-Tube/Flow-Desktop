@@ -12,7 +12,6 @@ import { useWatchSession } from "../../lib/useWatchSession";
 import { usePlaybackSettled } from "../../lib/usePlaybackSettled";
 import { useVideoCategory } from "../../lib/useVideoCategory";
 import { addWatchRecord } from "../../lib/api/db";
-import { cleanChannelName } from "../../lib/videoStats";
 import { isMusicVideo } from "../../lib/utils";
 import { SETTINGS } from "../../lib/settings/schema";
 import { useAppSettingsStore } from "../../store/useAppSettingsStore";
@@ -136,7 +135,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       void addWatchRecord({
         videoId: currentVideo.id,
         title: currentVideo.title,
-        channelName: cleanChannelName(currentVideo.channelName),
+        channelName: currentVideo.channelName,
         channelId: currentVideo.channelId ?? null,
         watchDate: new Date().toISOString(),
         watchDurationSeconds: Math.floor(time),
@@ -177,7 +176,7 @@ export function FlowPlayerCore({ videoId, videoDetails, onEnded }: FlowPlayerCor
       return addWatchRecord({
         videoId: video.id,
         title: video.title,
-        channelName: cleanChannelName(video.channelName),
+        channelName: video.channelName,
         channelId: video.channelId ?? null,
         watchDate: new Date().toISOString(),
         watchDurationSeconds: Math.floor(latest.time),

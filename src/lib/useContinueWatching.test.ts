@@ -25,25 +25,4 @@ describe("buildContinueWatching", () => {
     expect(buildContinueWatching([record("short", 15, 30)], new Set())).toEqual([]);
     expect(buildContinueWatching([{ ...record("long short", 60, 150), isShort: true }], new Set())).toEqual([]);
   });
-
-  it("sanitizes view counts mistakenly stored as channel name", () => {
-    const shelf = buildContinueWatching(
-      [{ ...record("video1", 100, 600), channelName: "96K views" }],
-      new Set(),
-    );
-    expect(shelf[0]?.channelName).toBe("");
-  });
-
-  it("resolves channel name from subscription store if channelId matches", async () => {
-    const { useSubscriptionStore } = await import("../store/useSubscriptionStore");
-    useSubscriptionStore.setState({
-      subscriptions: [{ id: "UC123", name: "Maddock Films", subscribedAt: 0 }],
-    });
-
-    const shelf = buildContinueWatching(
-      [{ ...record("video1", 100, 600), channelId: "UC123", channelName: "96K views" }],
-      new Set(),
-    );
-    expect(shelf[0]?.channelName).toBe("Maddock Films");
-  });
 });

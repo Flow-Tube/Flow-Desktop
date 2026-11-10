@@ -735,7 +735,6 @@ impl RecommendationService {
         #[derive(serde::Deserialize)]
         struct SubscribedChannel {
             id: String,
-            name: Option<String>,
         }
 
         let subs_json = match crate::db::settings::get_setting(&self.pool, "subscriptions").await? {
@@ -744,14 +743,8 @@ impl RecommendationService {
         };
 
         let mut channel_ids = Vec::new();
-        let mut channel_names: HashMap<String, String> = HashMap::new();
         if let Ok(channels) = serde_json::from_str::<Vec<SubscribedChannel>>(&subs_json) {
-            for c in channels {
-                channel_ids.push(c.id.clone());
-                if let Some(name) = c.name {
-                    channel_names.insert(c.id, name);
-                }
-            }
+            channel_ids = channels.into_iter().map(|c| c.id).collect();
         } else if let Ok(ids) = serde_json::from_str::<Vec<String>>(&subs_json) {
             channel_ids = ids;
         } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&subs_json) {
@@ -761,9 +754,6 @@ impl RecommendationService {
                         channel_ids.push(id.to_string());
                     } else if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
                         channel_ids.push(id.to_string());
-                        if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
-                            channel_names.insert(id.to_string(), name.to_string());
-                        }
                     }
                 }
             }
@@ -810,21 +800,7 @@ impl RecommendationService {
         for res in results {
             if let Ok(resp) = res {
                 for item in resp.items {
-                    if let crate::models::channel::ChannelItem::Video(mut video) = item {
-                        if video.channel_name.is_empty()
-                            || crate::api::innertube::json::count::is_view_or_stream_count(
-                                &video.channel_name,
-                            )
-                        {
-                            if let Some(name) = video
-                                .channel_id
-                                .as_ref()
-                                .and_then(|id| channel_names.get(id))
-                                .or_else(|| channel_names.get(&resp.channel_id))
-                            {
-                                video.channel_name = name.clone();
-                            }
-                        }
+                    if let crate::models::channel::ChannelItem::Video(video) = item {
                         if seen_ids.insert(video.id.clone()) {
                             candidates.push(video);
                         }

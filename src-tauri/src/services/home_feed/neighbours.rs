@@ -118,14 +118,7 @@ pub async fn load(pool: &SqlitePool) -> AppResult<HashMap<String, Stored>> {
         .map(|(channel, fetched, uploads, dropped)| {
             let stored = Stored {
                 fetched_at: u64::try_from(fetched).unwrap_or(0),
-                uploads: serde_json::from_str::<Vec<Card>>(&uploads)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|mut card| {
-                        card.sanitize();
-                        card
-                    })
-                    .collect(),
+                uploads: serde_json::from_str(&uploads).unwrap_or_default(),
                 dropped: dropped != 0,
             };
             (channel, stored)

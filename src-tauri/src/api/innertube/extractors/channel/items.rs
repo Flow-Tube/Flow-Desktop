@@ -5,7 +5,6 @@ use serde_json::Value;
 use super::posts::{post, post_renderer};
 use crate::api::innertube::core::utils::short_video_summary_from_item;
 use crate::api::innertube::json::continuation::continuation_token;
-use crate::api::innertube::json::count::is_view_or_stream_count;
 use crate::api::innertube::json::text::text_of;
 use crate::api::innertube::json::thumbnail::{largest_url, normalize_youtube_image_url};
 use crate::api::innertube::renderers::lockup::{lockup_item, related_to_video};
@@ -29,7 +28,7 @@ impl Owner {
         if video.channel_id.is_none() {
             video.channel_id.clone_from(&self.id);
         }
-        if video.channel_name.is_empty() || is_view_or_stream_count(&video.channel_name) {
+        if video.channel_name.is_empty() {
             video.channel_name.clone_from(&self.name);
         }
         if video.channel_avatar_url.is_none() {

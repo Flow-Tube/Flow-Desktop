@@ -84,6 +84,7 @@ LIBRARY
 - Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 
 MUSIC
+- Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.
 - The volume popover in the music bar and the full player closes by itself after a few idle seconds. Scrolling over the volume button while it is closed shows the new level for a moment.
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Instrumental songs no longer show KuGou's notice as their lyrics.
@@ -132,8 +133,10 @@ MUSIC
 - Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 
 PLAYER
+- Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
 - The mini player's controls, its move handle and its Expand and Close buttons fade together after a few seconds of playback, as in the full player, instead of staying up while the pointer rests on it.
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- Scroll over the ambient mode intensity slider in Settings to adjust it.
 - While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
 - Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
@@ -211,6 +214,7 @@ SHORTS
 - Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
 
 HOME
+- Videos from channels you follow show the channel's name again, and their view count on its own line, instead of the view count where the name belongs. Videos already saved are corrected when Flow updates.
 - Home has three new chips. Mixes builds queues from videos you liked or finished, Live shows streams on now, and Watched brings back videos worth seeing again.
 - A Subscriptions on Home switch keeps channels you follow out of Home. Clicking Home again scrolls to the top, then refreshes, and you can turn the refresh off.
 - Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.

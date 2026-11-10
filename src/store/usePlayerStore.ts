@@ -241,6 +241,9 @@ export interface PlayerState {
   /** The watch page shows comments, so the fullscreen panel can too. */
   isCommentsAvailable: boolean;
   setIsCommentsAvailable: (available: boolean) => void;
+  /** The chat beside the video is open. Each new video opens it again. */
+  isLiveChatOpen: boolean;
+  setIsLiveChatOpen: (open: boolean) => void;
 }
 
 
@@ -289,6 +292,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isLiveChatAvailable: false,
   isPlayerChromeShown: true,
   isCommentsAvailable: false,
+  isLiveChatOpen: true,
 
   setCurrentVideo: (video) => {
     const isNew = get().currentVideo?.id !== video?.id;
@@ -298,6 +302,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       isChaptersPanelOpen: false,
       isQueuePanelOpen: false,
       fullscreenPanel: null,
+      ...(isNew ? { isLiveChatOpen: true } : {}),
       ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
@@ -727,6 +732,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     isChaptersPanelOpen: false,
     isQueuePanelOpen: false,
     fullscreenPanel: null,
+    isLiveChatOpen: true,
   }),
   
   setCurrentTime: (currentTime) => set({ currentTime }),
@@ -838,10 +844,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     fullscreenPanel,
     ...(fullscreenPanel === "chapters" ? { isChaptersPanelOpen: true, isQueuePanelOpen: false } : {}),
     ...(fullscreenPanel === "queue" ? { isQueuePanelOpen: true, isChaptersPanelOpen: false } : {}),
+    ...(fullscreenPanel === "chat" ? { isLiveChatOpen: true } : {}),
   }),
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
   setIsPlayerChromeShown: (isPlayerChromeShown) => set({ isPlayerChromeShown }),
   setIsCommentsAvailable: (isCommentsAvailable) => set({ isCommentsAvailable }),
+  setIsLiveChatOpen: (isLiveChatOpen) => set((state) => ({
+    isLiveChatOpen,
+    ...(!isLiveChatOpen && state.fullscreenPanel === "chat" ? { fullscreenPanel: null } : {}),
+  })),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {
     profileStorage.setItem("flow_subtitle_style", JSON.stringify(style));

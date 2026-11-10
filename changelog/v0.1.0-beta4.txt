@@ -84,6 +84,7 @@ LIBRARY
 - Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 
 MUSIC
+- Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Instrumental songs no longer show KuGou's notice as their lyrics.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.

@@ -16,6 +16,7 @@ import { useLikesStore } from '../../store/useLikesStore';
 import { toggleSongLikeWithToast } from '../../lib/songLikeToast';
 import type { SongItem } from '../../types/music';
 import { MusicCardMenu, type MusicMenuAction, useMusicContextMenu } from './MusicCardMenu';
+import { ArtistLinks } from './ArtistLinks';
 import { ExplicitBadge } from './ExplicitBadge';
 import { PlayingWave } from './PlayingWave';
 import { useTrackBlockActions } from './useTrackBlockActions';
@@ -281,7 +282,9 @@ export function AlbumTrackRow({
         {((showArtist && artistLabel) || track.explicit) && (
           <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-chrome-neutral-400 transition-colors duration-200 ease-out group-hover:text-chrome-neutral-300">
             {track.explicit ? <ExplicitBadge /> : null}
-            {showArtist && artistLabel ? <span className="line-clamp-1">{artistLabel}</span> : null}
+            {showArtist && artistLabel ? (
+              <ArtistLinks artists={track.artists} plain={Boolean(selection)} className="line-clamp-1" />
+            ) : null}
           </span>
         )}
       </div>

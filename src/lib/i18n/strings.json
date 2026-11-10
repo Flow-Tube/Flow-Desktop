@@ -2008,6 +2008,7 @@
   "music_remove_download": "Remove download",
   "music_download_removed_toast": "Removed from downloads",
   "music_view_artist": "View artist",
+  "music_view_artist_named": "View artist: %s",
   "music_view_album": "View album",
   "music_share": "Share",
   "music_details": "Details",

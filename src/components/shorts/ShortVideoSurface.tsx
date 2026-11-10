@@ -737,7 +737,7 @@ export function ShortVideoSurface({
         onContextMenu={handleContextMenu}
       />
       {active && (
-        <div className="absolute left-4 top-4 z-30 flex gap-2">
+        <div className="absolute start-4 top-4 z-30 flex gap-2">
           <button
             type="button"
             aria-label={getString('shorts_short_settings')}
@@ -774,7 +774,7 @@ export function ShortVideoSurface({
       )}
       {settingsOpen && (
         <div
-          className="absolute left-4 top-16 z-40 w-[min(82vw,320px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover p-2 text-chrome-white"
+          className="absolute start-4 top-16 z-40 w-[min(82vw,320px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover p-2 text-chrome-white"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -782,9 +782,9 @@ export function ShortVideoSurface({
             <button
               type="button"
               onClick={() => setSettingsPane("root")}
-              className="mb-1 flex h-10 w-full items-center gap-2 rounded-md px-1 text-left text-sm font-bold hover:bg-chrome-white/10"
+              className="mb-1 flex h-10 w-full items-center gap-2 rounded-md px-1 text-start text-sm font-bold hover:bg-chrome-white/10"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft className="rtl:-scale-x-100" size={18} />
               {settingsPane === "speed"
                 ? "Playback speed"
                 : settingsPane === "quality"
@@ -838,7 +838,7 @@ export function ShortVideoSurface({
           )}
 
           {settingsPane === "audio" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               {audioTracks.map((track) => (
                 <MenuChoice
                   key={track.id}
@@ -855,7 +855,7 @@ export function ShortVideoSurface({
           )}
 
           {settingsPane === "speed" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               {speedSliderEnabled && (
                 <div className="rounded-md px-3 py-3 text-sm text-chrome-zinc-100">
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold text-chrome-zinc-300">
@@ -889,7 +889,7 @@ export function ShortVideoSurface({
           )}
 
           {settingsPane === "quality" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               <MenuChoice
                 checked={selectedQualityId === "auto"}
                 label={getString('player_menu_quality_auto')}
@@ -919,7 +919,7 @@ export function ShortVideoSurface({
           )}
 
           {settingsPane === "captions" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               <MenuChoice
                 checked={selectedCaptionId === "off"}
                 label={getString('subscription_notifications_off')}
@@ -971,7 +971,7 @@ export function ShortVideoSurface({
           className="absolute inset-0 z-20 grid place-items-center bg-chrome-black/10 text-chrome-white"
         >
           <span className="grid h-16 w-16 place-items-center rounded-full bg-chrome-black/80">
-            <Play className="ml-1 h-8 w-8" fill="currentColor" />
+            <Play className="ms-1 h-8 w-8" fill="currentColor" />
           </span>
         </button>
       )}
@@ -1059,7 +1059,7 @@ export function ShortVideoSurface({
           bitrate={selectedVariant?.bitrate}
           captionCount={captions.length}
           compact
-          className="right-4 top-16"
+          className="end-4 top-16"
         />
       )}
       <audio ref={audioRef} crossOrigin="anonymous" preload="auto" />
@@ -1082,11 +1082,11 @@ function SettingsRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
+      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-start text-sm text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
     >
       <span className="grid h-7 w-7 place-items-center text-chrome-zinc-300">{icon}</span>
       <span className="min-w-0 flex-1 font-medium">{label}</span>
-      <span className="max-w-[44%] truncate text-right text-chrome-zinc-300">{value}</span>
+      <span className="max-w-[44%] truncate text-end text-chrome-zinc-300">{value}</span>
     </button>
   );
 }
@@ -1108,9 +1108,9 @@ function MenuChoice({
       onClick={onClick}
       className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-chrome-zinc-100 hover:bg-chrome-white/10"
     >
-      <span className="min-w-0 truncate text-left">
+      <span className="min-w-0 truncate text-start">
         {label}
-        {detail && <span className="ml-1 text-xs text-chrome-zinc-400">{detail}</span>}
+        {detail && <span className="ms-1 text-xs text-chrome-zinc-400">{detail}</span>}
       </span>
       {checked && <Check size={17} />}
     </button>
@@ -1129,7 +1129,7 @@ function ContextMenuButton({
   return (
     <button
       type="button"
-      className="flex h-11 w-full items-center gap-4 rounded-lg px-3 text-left text-sm font-bold text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
+      className="flex h-11 w-full items-center gap-4 rounded-lg px-3 text-start text-sm font-bold text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
       onClick={onClick}
     >
       <span className="grid h-7 w-7 place-items-center text-chrome-zinc-300">{icon}</span>

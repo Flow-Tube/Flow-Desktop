@@ -191,7 +191,7 @@ export function ShortPlayer({
             )}
 
             {active && (
-              <div ref={volumeWheelRef} className="group/volume absolute right-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pr-3">
+              <div ref={volumeWheelRef} className="group/volume absolute end-4 top-4 z-20 flex items-center rounded-full bg-chrome-black/55 transition-colors duration-200 ease-out hover:bg-chrome-black/75 hover:pe-3">
                 <button
                   type="button"
                   aria-label={muted ? "Unmute" : "Mute"}
@@ -226,7 +226,7 @@ export function ShortPlayer({
             animate={{ width: panelOpen ? SIDE_PANEL_WIDTH : 0, opacity: 1 }}
             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
             className={`flex h-full flex-col overflow-hidden bg-surface-container-high ${
-              panelOpen ? "border-l border-chrome-neutral-800" : ""
+              panelOpen ? "border-s border-chrome-neutral-800" : ""
             }`}
           >
             {panelOpen && (

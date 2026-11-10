@@ -6,9 +6,80 @@
 //! is the template with `$L` as the level's index and `$N` as its name, plus
 //! its `sigh`; `$M` in the name numbers the sheets.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use serde_json::Value;
 
+use crate::api::innertube::InnertubeClient;
+use crate::api::innertube::core::clients;
+use crate::api::innertube::core::player_requests::PlayerFlights;
+use crate::errors::AppResult;
 use crate::models::video::StoryboardLevel;
+
+const STORYBOARD_CACHE_CAPACITY: usize = 100;
+const STORYBOARD_TTL: Duration = Duration::from_secs(3600); // 1 hour
+
+#[derive(Clone, Debug)]
+struct CachedStoryboard {
+    levels: Vec<StoryboardLevel>,
+    resolved_at: Instant,
+}
+
+fn storyboard_cache() -> &'static Mutex<HashMap<String, CachedStoryboard>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, CachedStoryboard>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn flights() -> &'static PlayerFlights<Option<Vec<StoryboardLevel>>> {
+    static FLIGHTS: OnceLock<PlayerFlights<Option<Vec<StoryboardLevel>>>> = OnceLock::new();
+    FLIGHTS.get_or_init(PlayerFlights::default)
+}
+
+fn cached_storyboard(video_id: &str) -> Option<Vec<StoryboardLevel>> {
+    let mut cache = storyboard_cache().lock().ok()?;
+    let entry = cache.get(video_id)?;
+    if entry.resolved_at.elapsed() >= STORYBOARD_TTL {
+        cache.remove(video_id);
+        return None;
+    }
+    Some(entry.levels.clone())
+}
+
+fn store_storyboard(video_id: &str, levels: Vec<StoryboardLevel>) {
+    let Ok(mut cache) = storyboard_cache().lock() else {
+        return;
+    };
+    cache.retain(|_, entry| entry.resolved_at.elapsed() < STORYBOARD_TTL);
+    if cache.len() >= STORYBOARD_CACHE_CAPACITY {
+        if let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, entry)| entry.resolved_at)
+            .map(|(key, _)| key.clone())
+        {
+            cache.remove(&oldest);
+        }
+    }
+    cache.insert(
+        video_id.to_string(),
+        CachedStoryboard {
+            levels,
+            resolved_at: Instant::now(),
+        },
+    );
+}
+
+fn extract_duration_seconds(response: &Value) -> Option<u64> {
+    response["videoDetails"]["lengthSeconds"]
+        .as_str()
+        .and_then(|value| value.parse::<u64>().ok())
+        .or_else(|| {
+            response["microformat"]["playerMicroformatRenderer"]["lengthSeconds"]
+                .as_str()
+                .and_then(|value| value.parse::<u64>().ok())
+        })
+}
 
 #[must_use]
 pub fn parse_storyboard(player: &Value, duration_seconds: Option<u64>) -> Vec<StoryboardLevel> {
@@ -61,6 +132,50 @@ fn parse_spec(spec: &str, duration_seconds: Option<u64>) -> Vec<StoryboardLevel>
         .collect()
 }
 
+impl InnertubeClient {
+    /// Fetches storyboard levels for hover preview or seek scrubbing.
+    /// Deduplicated via `PlayerFlights` and cached in-memory with a 1-hour TTL.
+    /// Unplayable videos or missing specs return an empty vector gracefully.
+    pub async fn get_video_storyboard(&self, video_id: &str) -> AppResult<Vec<StoryboardLevel>> {
+        let video_id_trimmed = video_id.trim();
+        if video_id_trimmed.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        if let Some(cached) = cached_storyboard(video_id_trimmed) {
+            return Ok(cached);
+        }
+
+        let flight = flights().for_video(video_id_trimmed);
+        let outcome = flight
+            .get_or_init(|| async {
+                let mut payload = serde_json::json!({
+                    "videoId": video_id_trimmed,
+                    "playbackContext": {
+                        "contentPlaybackContext": {
+                            "signatureTimestamp": clients::DEFAULT_SIGNATURE_TIMESTAMP,
+                        }
+                    },
+                    "contentCheckOk": true,
+                    "racyCheckOk": true,
+                });
+
+                let response = self
+                    .post_innertube("player", &clients::WEB, &mut payload)
+                    .await
+                    .ok()?;
+
+                let duration_seconds = extract_duration_seconds(&response);
+                let levels = parse_storyboard(&response, duration_seconds);
+                store_storyboard(video_id_trimmed, levels.clone());
+                Some(levels)
+            })
+            .await;
+
+        Ok(outcome.clone().unwrap_or_default())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +215,31 @@ mod tests {
         assert!(parse_storyboard(&json!({}), Some(60)).is_empty());
         assert!(parse_spec("https://x/$L|bad#level", Some(60)).is_empty());
         assert!(parse_spec("https://x/$L/$N|48#27#100#10#10#0#default#s", None).is_empty());
+    }
+
+    #[test]
+    fn storyboard_cache_stores_and_evicts_oldest() {
+        let test_levels = vec![StoryboardLevel {
+            width: 160,
+            height: 90,
+            count: 10,
+            columns: 5,
+            rows: 5,
+            interval_ms: 2000,
+            url_template: "https://example.com/sheet.jpg".to_string(),
+        }];
+
+        store_storyboard("test_vid_1", test_levels.clone());
+        let cached = cached_storyboard("test_vid_1");
+        assert!(cached.is_some());
+        assert_eq!(cached.unwrap()[0].width, 160);
+
+        // Fill past capacity to verify eviction
+        for i in 0..105 {
+            store_storyboard(&format!("fill_vid_{i}"), test_levels.clone());
+        }
+
+        let cache = storyboard_cache().lock().unwrap();
+        assert!(cache.len() <= STORYBOARD_CACHE_CAPACITY);
     }
 }

@@ -13,6 +13,7 @@ import { LibrarySectionsGroup } from '../LibrarySectionsGroup';
 
 export function ContentTab() {
   const [titleMaxLines, setTitleMaxLines] = useNumberPref(SETTINGS.VIDEO_TITLE_MAX_LINES, 1);
+  const [hoverPreviews, setHoverPreviews] = useBoolPref(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED, true);
   const [gridColumns, setGridColumns] = useNumberPref(SETTINGS.GRID_COLUMNS, GRID_COLUMNS_DEFAULT);
   const [homeFeed, setHomeFeed] = useBoolPref(SETTINGS.HOME_FEED_ENABLED, true);
   const [appLogo, setAppLogo] = useBoolPref(SETTINGS.SHOW_APP_LOGO_ICON, true);
@@ -69,6 +70,17 @@ export function ContentTab() {
           <Select value={String(titleMaxLines)} onChange={(v) => setTitleMaxLines(Number(v))} disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_TITLE_MAX_LINES)} options={[
             { value: '0', label: getString('settings_option_unlimited') }, { value: '1', label: getString('settings_option_one_line') }, { value: '2', label: getString('settings_option_two_lines') }, { value: '3', label: getString('settings_option_three_lines') },
           ]} />
+        </SettingItem>
+        <SettingItem
+          title={getString('settings_video_hover_previews')}
+          description={getString('settings_video_hover_previews_desc')}
+          disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED)}
+        >
+          <ToggleSwitch
+            checked={hoverPreviews}
+            onChange={setHoverPreviews}
+            disabled={isSettingDisabledUntilWired(SETTINGS.VIDEO_HOVER_PREVIEWS_ENABLED)}
+          />
         </SettingItem>
       </SettingsGroup>
 

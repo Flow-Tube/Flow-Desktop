@@ -46,6 +46,8 @@ import { backgroundTabClickProps, openedInBackgroundTab, routeForVideo } from '.
 import { openActions } from '../common/openActions';
 import { isLocalMediaId } from '../../lib/localMediaId';
 import { alignToEnd, growFromPoint } from "../../lib/direction";
+import { useHoverPreview } from '../../lib/useHoverPreview';
+import { VideoThumbnailPreview } from './VideoThumbnailPreview';
 
 export interface VideoCardProps {
   video: VideoSummary;
@@ -227,6 +229,19 @@ function VideoCardComponent({
     [highResThumbnail, overriddenThumbnail, video.id, video.thumbnailUrl],
   );
   const { src: displayThumbnail, onError: handleThumbnailError } = useImageFallback(thumbnailCandidates);
+
+  const preview = useHoverPreview({
+    videoId: video.id,
+    isHovered,
+    durationSeconds: video.durationSeconds,
+    targetWidth: thumbnailRef.current?.offsetWidth
+      ? thumbnailRef.current.offsetWidth * (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+      : undefined,
+    targetHeight: thumbnailRef.current?.offsetHeight
+      ? thumbnailRef.current.offsetHeight * (typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+      : undefined,
+    enabled: !isChannel && !isLiveVideo && !video.isUpcoming,
+  });
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -687,6 +702,12 @@ function VideoCardComponent({
           ) : (
             <div className="h-full w-full bg-chrome-zinc-800" />
           )}
+          <VideoThumbnailPreview
+            isActive={preview.isPreviewActive}
+            frame={preview.currentFrame}
+            level={preview.currentLevel}
+            progressPercent={preview.progressPercent}
+          />
           {isLiveVideo ? (
             <LiveBadge className="absolute bottom-1 end-1" />
           ) : video.isUpcoming ? (
@@ -793,6 +814,12 @@ function VideoCardComponent({
           ) : (
             <div className="h-full w-full bg-chrome-zinc-800" />
           )}
+          <VideoThumbnailPreview
+            isActive={preview.isPreviewActive}
+            frame={preview.currentFrame}
+            level={preview.currentLevel}
+            progressPercent={preview.progressPercent}
+          />
 
           {isLiveVideo ? (
             <LiveBadge className="absolute bottom-1 end-1" />
@@ -885,6 +912,12 @@ function VideoCardComponent({
         ) : (
           <div className="w-full h-full bg-chrome-zinc-800" />
         )}
+        <VideoThumbnailPreview
+          isActive={preview.isPreviewActive}
+          frame={preview.currentFrame}
+          level={preview.currentLevel}
+          progressPercent={preview.progressPercent}
+        />
 
         {isLiveVideo ? (
           <LiveBadge className={`absolute end-1 ${isHistoryCard || isContinueCard ? 'bottom-2' : 'bottom-1'}`} />

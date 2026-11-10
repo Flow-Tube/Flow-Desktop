@@ -16,6 +16,8 @@ export async function isTauriEnv(): Promise<boolean> {
 
   // Poll for up to 100ms for Tauri internals injection
   for (let i = 0; i < 10; i++) {
+    // The page can be gone by the next tick, such as a test environment torn down mid-poll.
+    if (typeof window === "undefined") break;
     if (
       (window as any).__TAURI_INTERNALS__ !== undefined ||
       (window as any).__TAURI__ !== undefined

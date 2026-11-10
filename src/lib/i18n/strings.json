@@ -2466,6 +2466,8 @@
   "live_chat_view_top": "Top",
   "live_chat_view_all": "All",
   "live_chat_title": "Live chat",
+  "live_chat_show": "Show chat",
+  "live_chat_replay_show": "Show chat replay",
   "live_chat_connecting": "Connecting to live chat...",
   "live_chat_empty": "Waiting for messages...",
   "live_chat_ended": "Live chat has ended.",

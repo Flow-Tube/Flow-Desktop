@@ -138,9 +138,9 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
               <nav className="mt-1 flex flex-col gap-1.5">
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
-                {showMusicNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />}
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
-                {showShortsNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />}
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
                 {notesEnabled && (
                   <SidebarItem onOpenInNewTab={openInNewTab} to="/notes" {...navIconPair('notes')} label={getString('notes_title')} onClick={closeOverlay} />

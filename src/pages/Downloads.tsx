@@ -17,8 +17,6 @@ import {
   collectionProgress,
   useDownloadCollectionsLibrary,
 } from "../lib/useCollectionDownloads";
-import { SETTINGS } from "../lib/settings/schema";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
@@ -105,7 +103,6 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   const collectionRuns = useCollectionDownloadStore((state) => state.runs);
   const active = useDownloadStore((state) => state.active);
   const playQueue = useMusicPlayerStore((state) => state.playQueue);
-  const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== "false");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<DownloadsFilter>("all");
@@ -118,14 +115,13 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     () => [
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
-      ...(showMusicNav ? [{ key: "music" as const, label: getString("history_filter_music") }] : []),
+      { key: "music" as const, label: getString("history_filter_music") },
       { key: "playlists" as const, label: getString("downloads_filter_playlists") },
-      ...(showMusicNav ? [{ key: "albums" as const, label: getString("downloads_filter_albums") }] : []),
+      { key: "albums" as const, label: getString("downloads_filter_albums") },
     ],
-    [showMusicNav],
+    [],
   );
-  const activeFilter: DownloadsFilter = !showMusicNav && (filter === "music" || filter === "albums") ? "all" : filter;
-  const activeLabel = filters.find((entry) => entry.key === activeFilter)?.label ?? filters[0]?.label ?? "";
+  const activeLabel = filters.find((entry) => entry.key === filter)?.label ?? filters[0]?.label ?? "";
 
   const query = useDebounce(searchQuery, 200).trim().toLowerCase();
 
@@ -205,16 +201,16 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     [records],
   );
 
-  const showVideos = (activeFilter === "all" || activeFilter === "videos") && videoEntries.length > 0;
-  const showMusic = showMusicNav && (activeFilter === "all" || activeFilter === "music") && musicEntries.length > 0;
-  const showPlaylists = (activeFilter === "all" || activeFilter === "playlists") && playlistEntries.length > 0;
-  const showAlbums = showMusicNav && (activeFilter === "all" || activeFilter === "albums") && albumEntries.length > 0;
+  const showVideos = (filter === "all" || filter === "videos") && videoEntries.length > 0;
+  const showMusic = (filter === "all" || filter === "music") && musicEntries.length > 0;
+  const showPlaylists = (filter === "all" || filter === "playlists") && playlistEntries.length > 0;
+  const showAlbums = (filter === "all" || filter === "albums") && albumEntries.length > 0;
   const isEmpty = standaloneRecordCount === 0 && collectionRecords.length === 0;
   const hasResults =
     videoEntries.length > 0 ||
-    (showMusicNav && musicEntries.length > 0) ||
+    musicEntries.length > 0 ||
     playlistEntries.length > 0 ||
-    (showMusicNav && albumEntries.length > 0);
+    albumEntries.length > 0;
 
   const toggleSelected = (id: number) => {
     setSelectedIds((current) => {

@@ -134,6 +134,7 @@ MUSIC
 PLAYER
 - Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- Scroll over the ambient mode intensity slider in Settings to adjust it.
 - While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
 - Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.

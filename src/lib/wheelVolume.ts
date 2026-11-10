@@ -53,3 +53,21 @@ export function wheelVolumeChange(volume: number, muted: boolean, step: -1 | 1, 
   if (step > 0) return { unmute: false };
   return volume > 0 ? { unmute: true } : { volume: volumeAfterWheel(0, step), unmute: true };
 }
+
+/**
+ * Calculates a new value after a wheel step (-1 is up/increase, 1 is down/decrease).
+ * Clamped to [min, max] and rounded to avoid floating-point drift.
+ */
+export function stepValueAfterWheel(
+  value: number,
+  step: -1 | 1,
+  stepSize: number,
+  min: number,
+  max: number,
+): number {
+  const delta = step < 0 ? stepSize : -stepSize;
+  const next = Math.min(max, Math.max(min, value + delta));
+  const precision = stepSize.toString().split(".")[1]?.length ?? 0;
+  return Number(next.toFixed(precision));
+}
+

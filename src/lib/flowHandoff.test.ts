@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFlowUrl } from "./flowHandoff";
+import { handoffToOpen, parseFlowUrl } from "./flowHandoff";
+import { SETTINGS } from "./settings/schema";
+import { useAppSettingsStore } from "../store/useAppSettingsStore";
 
 const open = (link: string) => parseFlowUrl(`flow://open?url=${encodeURIComponent(link)}`);
 const VIDEO = "dQw4w9WgXcQ";
@@ -42,6 +44,22 @@ describe("flow://open", () => {
     expect(open("https://music.youtube.com/browse/MPREb_abcdef")).toEqual({ action: "page", route: "/music/album/MPREb_abcdef" });
     expect(open("https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv")).toEqual({ action: "page", route: "/channel/UCabcdefghijklmnopqrstuv" });
     expect(open("https://music.youtube.com/channel/UCabcdefghijklmnopqrstuv")).toEqual({ action: "page", route: "/music/artist/UCabcdefghijklmnopqrstuv" });
+  });
+
+  it("opens music links on YouTube while Show Music is off", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.MUSIC_CONTENT_ENABLED]: "false" } });
+    try {
+      expect(open(`https://music.youtube.com/watch?v=${VIDEO}`)).toEqual({ action: "watch", v: VIDEO, list: undefined });
+      expect(open("https://music.youtube.com/playlist?list=PLabcdefghij")).toEqual({ action: "page", route: "/playlist/PLabcdefghij" });
+      expect(open("https://music.youtube.com/channel/UCabcdefghijklmnopqrstuv")).toEqual({ action: "page", route: "/channel/UCabcdefghijklmnopqrstuv" });
+      expect(open("https://music.youtube.com/browse/MPREb_abcdef")).toBeNull();
+      expect(handoffToOpen({ action: "music", v: VIDEO, list: "RDAMVMabc" })).toEqual({ action: "watch", v: VIDEO, list: "RDAMVMabc" });
+      expect(handoffToOpen({ action: "music-download", v: VIDEO })).toEqual({ action: "download", v: VIDEO });
+      expect(handoffToOpen({ action: "channel", url: "https://music.youtube.com/@flow", music: true })).toMatchObject({ music: false });
+    } finally {
+      useAppSettingsStore.setState({ values: {} });
+    }
+    expect(handoffToOpen({ action: "music", v: VIDEO })).toEqual({ action: "music", v: VIDEO });
   });
 
   it("has the backend resolve a handle", () => {

@@ -14,6 +14,7 @@ import { getString } from '../../lib/i18n/index';
 import { announceHomeReselected } from '../../lib/homeReselect';
 import { openInNewTab } from '../../lib/openTarget';
 import { useShortsEnabled } from '../../lib/useShortsContent';
+import { useMusicEnabled } from '../../lib/useMusicContent';
 import { SETTINGS } from '../../lib/settings/schema';
 import { useNotesEnabled } from '../../lib/useNotes';
 
@@ -61,7 +62,9 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const shortsNavEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
   const shortsEnabled = useShortsEnabled();
   const showShortsNav = shortsEnabled && shortsNavEnabled;
-  const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
+  const musicEnabled = useMusicEnabled();
+  const musicNavEnabled = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
+  const showMusicNav = musicEnabled && musicNavEnabled;
   const showCategoriesNav = useAppSettingsStore((state) => state.values[SETTINGS.CATEGORIES_NAV_TAB_ENABLED] !== 'false');
   const notesEnabled = useNotesEnabled();
 
@@ -139,7 +142,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
               <nav className="mt-1 flex flex-col gap-1.5">
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/history" {...navIconPair('history')} label={getString('library_history_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/playlists" {...navIconPair('playlists')} label={getString('library_playlists_label')} onClick={closeOverlay} />
-                <SidebarItem onOpenInNewTab={openInNewTab} to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />
+                {musicEnabled && <SidebarItem onOpenInNewTab={openInNewTab} to="/albums" {...navIconPair('albums')} label={getString('albums_title')} onClick={closeOverlay} />}
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
                 {shortsEnabled && <SidebarItem onOpenInNewTab={openInNewTab} to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />}
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />

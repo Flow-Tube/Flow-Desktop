@@ -1,4 +1,5 @@
 import { shortsPlayerDisabledNow } from "./useShortsContent";
+import { musicEnabledNow } from "./useMusicContent";
 
 export type ParsedYoutubeUrl =
   /** `playlistId` is the list a `watch?v=…&list=…` link plays the video from. */
@@ -118,7 +119,14 @@ export function parseYoutubeUrl(raw: string): ParsedYoutubeUrl | null {
 }
 
 /** The in-app route for a parsed link, or null for a handle that needs resolving first. */
+/** A channel's page, or its artist page for a YouTube Music link while Show Music is on. */
+export function channelRoute(channelId: string, music: boolean): string {
+  return music && musicEnabledNow() ? `/music/artist/${channelId}` : `/channel/${channelId}`;
+}
+
 export function routeForYoutubeUrl(parsed: ParsedYoutubeUrl): string | null {
+  // With Show Music off a music link opens its YouTube page; an album has none.
+  const music = musicEnabledNow();
   switch (parsed.kind) {
     case "video":
       return `/watch/${parsed.videoId}`;
@@ -130,13 +138,13 @@ export function routeForYoutubeUrl(parsed: ParsedYoutubeUrl): string | null {
     case "playlist":
       return `/playlist/${parsed.playlistId}`;
     case "musicPlaylist":
-      return `/music/playlist/${parsed.playlistId}`;
+      return music ? `/music/playlist/${parsed.playlistId}` : `/playlist/${parsed.playlistId}`;
     case "musicAlbum":
-      return `/music/album/${parsed.browseId}`;
+      return music ? `/music/album/${parsed.browseId}` : null;
     case "channel":
       return `/channel/${parsed.channelId}`;
     case "musicArtist":
-      return `/music/artist/${parsed.channelId}`;
+      return channelRoute(parsed.channelId, true);
     case "resolveChannel":
       return null;
   }

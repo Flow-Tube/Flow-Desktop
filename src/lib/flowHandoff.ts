@@ -1,5 +1,6 @@
 import { linkDestination } from "./linkDestination";
 import { parseYoutubeUrl } from "./youtubeUrl";
+import { musicEnabledNow } from "./useMusicContent";
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const PLAYLIST_ID = /^[A-Za-z0-9_-]{10,64}$/;
@@ -29,6 +30,25 @@ function openHandoff(link: string): Handoff | null {
     case "channel":
       return { action: "channel", url: destination.url, music: destination.music };
   }
+}
+
+/** A handoff as it plays with Show Music off: a song opens as its video, an artist as its channel. */
+export function withoutMusic(handoff: Handoff): Handoff {
+  switch (handoff.action) {
+    case "music":
+      return handoff.list ? { action: "watch", v: handoff.v, list: handoff.list } : { action: "watch", v: handoff.v };
+    case "music-download":
+      return { action: "download", v: handoff.v };
+    case "channel":
+      return { ...handoff, music: false };
+    default:
+      return handoff;
+  }
+}
+
+/** The handoff to act on now, after the Show Music switch. */
+export function handoffToOpen(handoff: Handoff): Handoff {
+  return musicEnabledNow() ? handoff : withoutMusic(handoff);
 }
 
 // Every transport delivers the same `flow://action?…` string: the deep-link plugin (app launched

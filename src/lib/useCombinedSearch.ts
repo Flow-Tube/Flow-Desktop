@@ -18,7 +18,8 @@ import {
   type CombinedSearchResults,
   type MusicBucket,
 } from './searchResults';
-import { DEFAULT_ADVANCED_FILTERS, type SearchFilterState } from './searchFilterState';
+import { DEFAULT_ADVANCED_FILTERS, MUSIC_ONLY_CATEGORIES, type SearchFilterState } from './searchFilterState';
+import { useMusicEnabled } from './useMusicContent';
 import type { PlaylistSummary, SearchFeature, ShortVideoSummary } from '../types/video';
 import { learnFromSearch } from './api/recommendation';
 
@@ -169,6 +170,9 @@ export function useCombinedSearch(
   const hasNextRef = useRef(false);
   const learnedQueryRef = useRef<string | null>(null);
   const fetchingRef = useRef(false);
+  const musicEnabled = useMusicEnabled();
+  const musicRef = useRef(musicEnabled);
+  musicRef.current = musicEnabled;
   queryRef.current = debouncedQuery;
   filterRef.current = filterType;
   sortRef.current = sortBy;
@@ -183,7 +187,8 @@ export function useCombinedSearch(
   const execute = useCallback(
     async (mode: FetchMode) => {
       const q = queryRef.current;
-      const category = filterRef.current;
+      const music = musicRef.current;
+      const category = !music && MUSIC_ONLY_CATEGORIES.has(filterRef.current) ? 'all' : filterRef.current;
 
       if (!q) {
         setResults(emptyResults());
@@ -217,7 +222,7 @@ export function useCombinedSearch(
         if (category === 'all') {
           const [ytRes, musicRes] = await Promise.allSettled([
             searchVideos({ query: q, exact: exactRef.current }),
-            getMusicSearchSummary(q),
+            music ? getMusicSearchSummary(q) : Promise.reject(new Error('Show Music is off')),
           ]);
           if (!alive()) return;
 
@@ -243,7 +248,7 @@ export function useCombinedSearch(
             }),
           );
 
-          if (ytRes.status === 'rejected' && musicRes.status === 'rejected') {
+          if (ytRes.status === 'rejected' && (!music || musicRes.status === 'rejected')) {
             setError(getBackendErrorMessage(ytRes.reason));
           }
           return;
@@ -331,7 +336,7 @@ export function useCombinedSearch(
         if (category === 'artists' || category === 'playlists') {
           // Federated: YouTube Music's artists or playlists, and YouTube's channels or playlists.
           const [musicR, ytR] = await Promise.allSettled([
-            searchMusicTyped(q, categoryToMusicFilter(category)),
+            music ? searchMusicTyped(q, categoryToMusicFilter(category)) : Promise.reject(new Error('Show Music is off')),
             searchVideos({ query: q, contentType: category === 'artists' ? 'channel' : 'playlist' }),
           ]);
           if (!alive()) return;
@@ -352,8 +357,8 @@ export function useCombinedSearch(
             ),
           );
 
-          if (musicR.status === 'rejected' && ytR.status === 'rejected') {
-            setError(getBackendErrorMessage(musicR.reason));
+          if ((!music || musicR.status === 'rejected') && ytR.status === 'rejected') {
+            setError(getBackendErrorMessage(ytR.reason));
           }
           return;
         }
@@ -389,6 +394,7 @@ export function useCombinedSearch(
     filters.contentType,
     filters.features,
     exact,
+    musicEnabled,
     execute,
   ]);
 

@@ -1,6 +1,7 @@
 import { Music2 } from "lucide-react";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { usePlayMusicCard } from "../../lib/usePlayMusicCard";
+import { useMusicEnabled } from "../../lib/useMusicContent";
 import { useRichTargetHandler } from "../../lib/useRichTargetHandler";
 import { getString } from "../../lib/i18n/index";
 import type { DescriptionExtras as Extras } from "../../types/video";
@@ -34,7 +35,9 @@ function SongCard({ song, onPlay }: { song: Extras["music"][number]; onPlay: () 
 export function DescriptionExtras({ extras }: { extras: Extras }) {
   const playSong = usePlayMusicCard();
   const openTarget = useRichTargetHandler();
-  if (extras.factoids.length === 0 && extras.music.length === 0 && extras.links.length === 0) return null;
+  // Credited songs play in the music player, which Show Music hides.
+  const songs = useMusicEnabled() ? extras.music : [];
+  if (extras.factoids.length === 0 && songs.length === 0 && extras.links.length === 0) return null;
 
   return (
     <div className="mt-4 flex flex-col gap-4 border-t border-chrome-neutral-800 pt-4">
@@ -49,13 +52,13 @@ export function DescriptionExtras({ extras }: { extras: Extras }) {
         </div>
       )}
 
-      {extras.music.length > 0 && (
+      {songs.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
             {getString("description_music")}
           </span>
           <div className="grid gap-1 sm:grid-cols-2">
-            {extras.music.map((song) => (
+            {songs.map((song) => (
               <SongCard key={`${song.title}-${song.artist ?? ""}`} song={song} onPlay={() => void playSong(song)} />
             ))}
           </div>

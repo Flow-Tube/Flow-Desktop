@@ -12,9 +12,13 @@ import { useAppSettingsStore } from "../../store/useAppSettingsStore";
 let host: HTMLDivElement;
 let root: Root;
 
-function renderSidebar(showShorts: boolean) {
+function renderSidebar(showShorts: boolean, showMusic = true) {
   useAppSettingsStore.setState({
-    values: { ...useAppSettingsStore.getState().values, [SETTINGS.SHORTS_CONTENT_ENABLED]: String(showShorts) },
+    values: {
+      ...useAppSettingsStore.getState().values,
+      [SETTINGS.SHORTS_CONTENT_ENABLED]: String(showShorts),
+      [SETTINGS.MUSIC_CONTENT_ENABLED]: String(showMusic),
+    },
   });
   act(() => {
     root.render(createElement(MemoryRouter, null, createElement(Sidebar, { mode: "overlay" })));
@@ -37,5 +41,12 @@ describe("Sidebar", () => {
   it("links to Saved Shorts only while Shorts show", () => {
     expect(renderSidebar(true)).toContain("/saved-shorts");
     expect(renderSidebar(false)).not.toContain("/saved-shorts");
+  });
+
+  it("links to Music and Albums only while Show Music is on", () => {
+    expect(renderSidebar(true, true)).toEqual(expect.arrayContaining(["/music", "/albums"]));
+    const links = renderSidebar(true, false);
+    expect(links).not.toContain("/music");
+    expect(links).not.toContain("/albums");
   });
 });

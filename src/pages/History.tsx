@@ -14,6 +14,7 @@ import { confirmAction } from "../lib/dialogs";
 import { useHistory, groupHistoryByDate } from "../lib/useHistory";
 import { effectiveHistoryFilter, filterHistory, type HistoryFilter, type HistorySort } from "../lib/historyFilter";
 import { useShortsEnabled } from "../lib/useShortsContent";
+import { useMusicEnabled } from "../lib/useMusicContent";
 import { useHistoryYears } from "../lib/useHistoryYears";
 import { useDebounce } from "../lib/useDebounce";
 import { useHistoryStore } from "../store/useHistoryStore";
@@ -28,7 +29,8 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [chosenFilter, setFilter] = useState<HistoryFilter>("all");
   const shortsEnabled = useShortsEnabled();
-  const filter = effectiveHistoryFilter(chosenFilter, shortsEnabled);
+  const musicEnabled = useMusicEnabled();
+  const filter = effectiveHistoryFilter(chosenFilter, shortsEnabled, musicEnabled);
   const [sort, setSort] = useState<HistorySort>("newest");
   const [year, setYear] = useState<number | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -72,20 +74,20 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
       ...(shortsEnabled ? [{ key: "shorts" as const, label: getString("history_filter_shorts") }] : []),
-      { key: "music" as const, label: getString("history_filter_music") },
+      ...(musicEnabled ? [{ key: "music" as const, label: getString("history_filter_music") }] : []),
     ],
-    [shortsEnabled],
+    [shortsEnabled, musicEnabled],
   );
   const activeLabel = filters.find((f) => f.key === filter)?.label ?? filters[0]?.label ?? "";
 
   const visibleGroups = useMemo(
-    () => groupHistoryByDate(filterHistory(history, { filter, year, sort, query: debouncedQuery, shortsEnabled })),
-    [history, filter, year, sort, debouncedQuery, shortsEnabled],
+    () => groupHistoryByDate(filterHistory(history, { filter, year, sort, query: debouncedQuery, shortsEnabled, musicEnabled })),
+    [history, filter, year, sort, debouncedQuery, shortsEnabled, musicEnabled],
   );
 
   // Anything but the plain newest-first list is only right over all of history. The offset moves
   // only when a page arrives, so a page that fails to load is not retried in a loop.
-  const needsWholeHistory = !shortsEnabled || filter !== "all" || year !== null || sort !== "newest" || debouncedQuery.trim() !== "";
+  const needsWholeHistory = !shortsEnabled || !musicEnabled || filter !== "all" || year !== null || sort !== "newest" || debouncedQuery.trim() !== "";
   const triedOffset = useRef<number | null>(null);
   useEffect(() => {
     if (!needsWholeHistory || !hasMore || loadingMore || triedOffset.current === offset) return;

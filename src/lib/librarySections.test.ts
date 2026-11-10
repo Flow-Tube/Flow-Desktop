@@ -22,4 +22,10 @@ describe("hiddenOnLibraryPage", () => {
     expect(hiddenOnLibraryPage(hidden, true)).toBe(hidden);
     expect([...hiddenOnLibraryPage(hidden, false)].sort()).toEqual(["LIKES", "SAVED_SHORTS"]);
   });
+
+  it("hides Albums and Music downloads while Show Music is off", () => {
+    const hidden = new Set(["LIKES"]);
+    expect(hiddenOnLibraryPage(hidden, true, true)).toBe(hidden);
+    expect([...hiddenOnLibraryPage(hidden, true, false)].sort()).toEqual(["ALBUMS", "LIKES", "MUSIC_DOWNLOADS"]);
+  });
 });

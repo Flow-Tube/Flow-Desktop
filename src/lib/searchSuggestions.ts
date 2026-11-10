@@ -2,6 +2,7 @@ import { getString } from "./i18n/index";
 import type { SearchSuggestion, SuggestionEntity } from "../types/video";
 import type { YTItem } from "../types/music";
 import type { SearchHistoryEntry } from "../store/useSearchHistoryStore";
+import { joinIsolated } from "./direction";
 
 export const HISTORY_WHEN_EMPTY = 8;
 export const HISTORY_WHEN_TYPING = 3;
@@ -131,7 +132,7 @@ export function musicItemSubtitle(item: SuggestedMusicItem): string {
       if (item.author?.name) parts.push(item.author.name);
       break;
   }
-  return parts.filter(Boolean).join(" · ");
+  return joinIsolated(parts, " · ");
 }
 
 /** How a music suggestion's picture is cropped. */

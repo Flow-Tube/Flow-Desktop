@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { getSponsorBlockSegments, type SponsorBlockSegment } from "./api/foss";
 import { downloadSponsorSegments, useDownloadedVideoRecord } from "./useDownloads";
+import { isLocalMediaId } from "./localMediaId";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useSettingsStore } from "../store/useSettingsStore";
 
@@ -17,7 +18,7 @@ export function useSponsorBlockSegments(videoId: string | null | undefined) {
     // Cleared first, so a slow or failed request can't skip this video at the
     // last video's timestamps.
     setSegments([]);
-    if (!videoId) return;
+    if (!videoId || isLocalMediaId(videoId)) return;
 
     let cancelled = false;
     void (async () => {

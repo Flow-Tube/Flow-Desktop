@@ -10,6 +10,12 @@ export type LyricsListItem =
 /** Plain lyrics get placeholder times past any song, so they never read as synced. */
 export const PLAIN_LINE_BASE_MS = 1_000_000;
 
+/** A wordless stretch shorter than this gets no instrumental break row. */
+const MIN_BREAK_MS = 4000;
+/** Between line-synced lines, a gap this long is what it takes to suspect a solo. */
+const MIN_UNMARKED_GAP_MS = 15_000;
+const SLOW_MS_PER_CHARACTER = 250;
+
 export function adaptiveLyricsTextSize(baseSize: number, textLength: number, isBackground: boolean): number {
   const foreground =
     textLength > 92
@@ -26,7 +32,7 @@ export function adaptiveLyricsTextSize(baseSize: number, textLength: number, isB
 
 export function buildLines(lyrics: string | null, syncedLyrics: LyricsEntry[]): LyricsEntry[] {
   if (syncedLyrics.length > 0 && entriesAreSynced(syncedLyrics)) {
-    return [{ time: 0, text: "" }, ...[...syncedLyrics].sort((a, b) => a.time - b.time)];
+    return [{ time: 0, text: "" }, ...withoutShortBreaks([...syncedLyrics].sort((a, b) => a.time - b.time))];
   }
   const plainSource = lyrics?.trim() ? lyrics : syncedLyrics.map((e) => e.text).join("\n");
   return plainSource
@@ -36,6 +42,29 @@ export function buildLines(lyrics: string | null, syncedLyrics: LyricsEntry[]): 
     .map((text, index) => ({ time: PLAIN_LINE_BASE_MS + index, text }));
 }
 
+/**
+ * A blank line only stays when it opens a break long enough to get a row. The list follows the
+ * active line's row, so a blank line with none would send it back to the top while it is active.
+ */
+function withoutShortBreaks(lines: LyricsEntry[]): LyricsEntry[] {
+  return lines.filter((line, index) => {
+    const next = lines[index + 1];
+    return line.text.trim() !== "" || (next !== undefined && next.time - line.time > MIN_BREAK_MS);
+  });
+}
+
+/**
+ * When `line`'s words stop, or null when nothing says they stop before `nextStart`. Line-synced
+ * lyrics give no line an end, so a line followed by a long silence is taken to last as long as a
+ * very slow singer would need: Hua Main holds a 40-character line for 14 s before a 55 s solo.
+ */
+function wordsEndBefore(line: LyricsEntry, nextStart: number): number | null {
+  if (line.words && line.words.length > 0) return line.words[line.words.length - 1]!.endTime;
+  if (!line.text.trim()) return line.time;
+  if (line.isBackground || nextStart === Number.POSITIVE_INFINITY || nextStart - line.time < MIN_UNMARKED_GAP_MS) return null;
+  return Math.min(line.time + line.text.length * SLOW_MS_PER_CHARACTER, nextStart);
+}
+
 /** An instrumental break of more than four seconds between lines gets its own indicator row. */
 export function buildMergedLyricsList(lines: LyricsEntry[]): LyricsListItem[] {
   const result: LyricsListItem[] = [];
@@ -43,9 +72,8 @@ export function buildMergedLyricsList(lines: LyricsEntry[]): LyricsListItem[] {
     if (entry.text.trim()) result.push({ kind: "line", index, entry });
     const next = lines[index + 1];
     if (!next) return;
-    const words = entry.words;
-    const currentEnd = words && words.length > 0 ? words[words.length - 1]!.endTime : !entry.text.trim() ? entry.time : null;
-    if (currentEnd !== null && currentEnd < next.time && next.time - currentEnd > 4000) {
+    const currentEnd = wordsEndBefore(entry, next.time);
+    if (currentEnd !== null && currentEnd < next.time && next.time - currentEnd > MIN_BREAK_MS) {
       result.push({ kind: "indicator", afterLineIndex: index, gapStartMs: currentEnd, gapEndMs: next.time });
     }
   });
@@ -66,17 +94,14 @@ export function findActiveLineIndices(lines: LyricsEntry[], position: number): S
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!;
     if (line.time > position) break;
-    let lineEnd = Number.POSITIVE_INFINITY;
-    if (line.words && line.words.length > 0) {
-      lineEnd = line.words[line.words.length - 1]!.endTime;
-    } else {
-      for (let j = index + 1; j < lines.length; j++) {
-        if (lines[j]!.time > line.time) {
-          lineEnd = lines[j]!.time;
-          break;
-        }
+    let nextStart = Number.POSITIVE_INFINITY;
+    for (let j = index + 1; j < lines.length; j++) {
+      if (lines[j]!.time > line.time) {
+        nextStart = lines[j]!.time;
+        break;
       }
     }
+    const lineEnd = line.text.trim() ? (wordsEndBefore(line, nextStart) ?? nextStart) : nextStart;
     if (position <= lineEnd) active.add(index);
   }
 

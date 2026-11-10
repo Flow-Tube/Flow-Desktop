@@ -30,6 +30,13 @@ impl Service {
     }
 }
 
+/// A song a service pairs with another, by name: it still has to be found on `YouTube` Music.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SimilarTrack {
+    pub artist: String,
+    pub title: String,
+}
+
 /// One counted listen, as every service needs it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScrobbleEntry {

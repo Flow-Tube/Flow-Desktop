@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
             {getString("error_boundary_subtitle")}
           </p>
           {this.state.message ? (
-            <p className="mt-4 break-words rounded-lg border border-chrome-neutral-800 bg-surface-container-high px-3 py-2 text-left text-xs text-chrome-neutral-400">
+            <p className="mt-4 break-words rounded-lg border border-chrome-neutral-800 bg-surface-container-high px-3 py-2 text-start text-xs text-chrome-neutral-400">
               {this.state.message}
             </p>
           ) : null}

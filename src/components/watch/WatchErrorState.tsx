@@ -20,7 +20,7 @@ export function WatchErrorState({ message, onRetryWithProxy, onGoBack }: WatchEr
             </Button>
           )}
           <Button variant="tonal" onClick={onGoBack}>
-            <ArrowLeft size={18} />
+            <ArrowLeft className="rtl:-scale-x-100" size={18} />
             {getString("watch_go_back")}
           </Button>
         </div>

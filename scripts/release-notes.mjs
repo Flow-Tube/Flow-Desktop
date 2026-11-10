@@ -4,47 +4,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseChangelog } from "./changelog-format.mjs";
 
 export const SUPPORT_MESSAGE =
   "Enjoying Flow? Consider supporting its development on [Open Collective](https://opencollective.com/flow-tube) or [Patreon](https://patreon.com/A_EDev) to help keep the app free, open source, ad-free, and improving!";
 
-const TITLE_LINES = new Set(["FLOW DESKTOP CHANGE LOG", "FLOW CHANGE LOG"]);
-const META_LINE = /^(VERSION|DATE|STATUS):(.*)$/i;
-const HEADING_LINE = /^[A-Z][A-Z &/,:-]+:?$/;
 // Sentence-casing a heading would otherwise print "Macos" or "Youtube".
 const PROPER_NOUNS = { macos: "macOS", linux: "Linux", android: "Android", youtube: "YouTube" };
-
-export function parseChangelog(text) {
-  const meta = {};
-  const blocks = [];
-  const lines = text.replace(/^﻿/, "").split(/\r\n|\r|\n/);
-
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) {
-      if (blocks.length > 0 && blocks.at(-1).kind !== "blank") blocks.push({ kind: "blank" });
-      continue;
-    }
-    if (TITLE_LINES.has(line)) continue;
-
-    const metaMatch = META_LINE.exec(line);
-    if (metaMatch && metaMatch[2].trim()) {
-      meta[metaMatch[1].toUpperCase()] = metaMatch[2].trim();
-      continue;
-    }
-
-    if (HEADING_LINE.test(line)) {
-      if (blocks.length > 0 && blocks.at(-1).kind !== "blank") blocks.push({ kind: "blank" });
-      blocks.push({ kind: "heading", text: line.replace(/:+$/, "") });
-      continue;
-    }
-
-    blocks.push({ kind: "text", text: raw.trimEnd() });
-  }
-
-  while (blocks.at(-1)?.kind === "blank") blocks.pop();
-  return { meta, blocks };
-}
 
 function sentenceCase(heading) {
   const lower = heading.toLowerCase();

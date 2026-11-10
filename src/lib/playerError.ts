@@ -81,6 +81,36 @@ const SPECS: Record<string, KindSpec> = {
     retryable: true,
     openable: true,
   },
+  localFileMissing: {
+    titleKey: "player_error_local_missing_title",
+    hintKey: "player_error_local_missing_hint",
+    retryable: true,
+    openable: false,
+  },
+  localFileRefused: {
+    titleKey: "player_error_local_refused_title",
+    hintKey: "player_error_local_refused_hint",
+    retryable: false,
+    openable: false,
+  },
+  localFormatUnsupported: {
+    titleKey: "player_error_local_format_title",
+    hintKey: "player_error_local_format_hint",
+    retryable: false,
+    openable: false,
+  },
+  localAudioUnsupported: {
+    titleKey: "player_error_local_audio_title",
+    hintKey: "player_error_local_audio_hint",
+    retryable: false,
+    openable: false,
+  },
+  localVideoUnsupported: {
+    titleKey: "player_error_local_video_title",
+    hintKey: "player_error_local_video_hint",
+    retryable: false,
+    openable: false,
+  },
   extractor: {
     titleKey: "player_error_extractor_title",
     hintKey: "player_error_extractor_hint",

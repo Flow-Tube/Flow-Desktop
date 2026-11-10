@@ -4,13 +4,16 @@
 //! rewritten there and the media never moves. Otherwise the file is rebuilt into a
 //! copy with every chunk offset shifted, checked, and renamed over the original.
 
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use super::RETAG_PADDING;
 use super::boxes::mp4_box;
+use super::ilst::{self, EmbeddedMetadata};
 use super::validate;
+use crate::commands::downloads::tags::TAG_NAMESPACE;
 
 const MAX_MOOV_BYTES: u64 = 64 * 1024 * 1024;
 const LYRICS: &[u8] = b"\xA9lyr";
@@ -31,6 +34,123 @@ pub fn set_mp4_lyrics(path: &Path, lyrics: &str) -> Result<(), String> {
     rewrite_moov(path, |moov| {
         replace_ilst_item(moov, LYRICS, item.as_deref())
     })
+}
+
+/// Writes `metadata` into the `ilst` of a file that has no Flow tags yet. Items it doesn't
+/// set stay; those it does replace any of the same kind.
+pub fn set_mp4_tags(path: &Path, metadata: &EmbeddedMetadata) -> Result<(), String> {
+    let block = ilst::ilst_box(metadata);
+    let mut by_kind: Vec<([u8; 4], Vec<u8>)> = Vec::new();
+    for (kind, atom) in children(&block[8..])? {
+        match by_kind.iter_mut().find(|(seen, _)| *seen == kind) {
+            Some((_, atoms)) => atoms.extend_from_slice(atom),
+            None => by_kind.push((kind, atom.to_vec())),
+        }
+    }
+    rewrite_moov(path, |moov| {
+        by_kind
+            .iter()
+            .try_fold(moov.to_vec(), |current, (kind, atoms)| {
+                replace_ilst_item(&current, kind, Some(atoms))
+            })
+    })
+}
+
+/// What a file's index says: its Flow tags by lowercased name, and its length.
+#[derive(Debug, Default, PartialEq)]
+pub struct Mp4FlowTags {
+    pub fields: HashMap<String, String>,
+    pub duration_seconds: Option<i64>,
+}
+
+/// Reads the `io.github.aedev.flow` freeform tags, without touching the media.
+pub fn read_mp4_flow_tags(path: &Path) -> Result<Mp4FlowTags, String> {
+    let io = |error: std::io::Error| format!("Could not read the file: {error}");
+    let mut file = File::open(path).map_err(io)?;
+    let boxes = top_level_boxes(&mut file)?;
+    let moov = boxes
+        .iter()
+        .find(|entry| &entry.kind == b"moov")
+        .ok_or("The file has no moov box")?;
+    if moov.len > MAX_MOOV_BYTES {
+        return Err("The file's index is too large to read".into());
+    }
+    let mut bytes = vec![0_u8; usize::try_from(moov.len).map_err(|_| "moov is too large")?];
+    file.seek(SeekFrom::Start(moov.pos)).map_err(io)?;
+    file.read_exact(&mut bytes).map_err(io)?;
+    parse_moov_tags(&bytes[8..])
+}
+
+fn parse_moov_tags(moov: &[u8]) -> Result<Mp4FlowTags, String> {
+    let mut tags = Mp4FlowTags::default();
+    for (kind, whole) in children(moov)? {
+        match &kind {
+            b"mvhd" => tags.duration_seconds = mvhd_seconds(&whole[8..]),
+            b"udta" => {
+                for (kind, meta) in children(&whole[8..])? {
+                    if &kind != b"meta" {
+                        continue;
+                    }
+                    let body = meta.get(12..).ok_or("The file has a damaged meta box")?;
+                    for (kind, block) in children(body)? {
+                        if &kind != b"ilst" {
+                            continue;
+                        }
+                        for (kind, item) in children(&block[8..])? {
+                            if &kind == b"----"
+                                && let Some((name, value)) = freeform_field(&item[8..])?
+                            {
+                                tags.fields.insert(name, value);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(tags)
+}
+
+/// A freeform atom's lowercased name and value, when it is one of Flow's.
+fn freeform_field(atom: &[u8]) -> Result<Option<(String, String)>, String> {
+    let (mut mean, mut name, mut value) = (None, None, None);
+    for (kind, whole) in children(atom)? {
+        match &kind {
+            b"mean" => mean = whole.get(12..),
+            b"name" => name = whole.get(12..),
+            b"data" => value = whole.get(16..),
+            _ => {}
+        }
+    }
+    if mean != Some(TAG_NAMESPACE.as_bytes()) {
+        return Ok(None);
+    }
+    let (Some(name), Some(value)) = (name, value) else {
+        return Ok(None);
+    };
+    Ok(Some((
+        String::from_utf8_lossy(name).to_ascii_lowercase(),
+        String::from_utf8_lossy(value).into_owned(),
+    )))
+}
+
+fn mvhd_seconds(mvhd: &[u8]) -> Option<i64> {
+    let (timescale, duration) = if *mvhd.first()? == 1 {
+        (
+            u32::from_be_bytes(mvhd.get(20..24)?.try_into().ok()?),
+            u64::from_be_bytes(mvhd.get(24..32)?.try_into().ok()?),
+        )
+    } else {
+        (
+            u32::from_be_bytes(mvhd.get(12..16)?.try_into().ok()?),
+            u64::from(u32::from_be_bytes(mvhd.get(16..20)?.try_into().ok()?)),
+        )
+    };
+    if timescale == 0 || duration == 0 {
+        return None;
+    }
+    i64::try_from(duration / u64::from(timescale)).ok()
 }
 
 fn rewrite_moov(
@@ -347,7 +467,7 @@ fn read_count(body: &[u8]) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::set_mp4_lyrics;
+    use super::{read_mp4_flow_tags, set_mp4_lyrics, set_mp4_tags};
     use crate::commands::downloads::muxer::mp4_writer::tests::{audio_track, options, samples};
     use crate::commands::downloads::muxer::mp4_writer::{Mp4Options, write_mp4};
     use crate::commands::downloads::muxer::validate::inspect_mp4_bytes;
@@ -368,6 +488,80 @@ mod tests {
         )
         .expect("writes");
         path
+    }
+
+    fn untagged_song(tag: &str) -> std::path::PathBuf {
+        let path = crate::commands::downloads::muxer::scratch_file(tag, "m4a");
+        write_mp4(
+            &path,
+            vec![audio_track(samples(200, 50, 1024, 1))],
+            &options(),
+            &AtomicBool::new(false),
+        )
+        .expect("writes");
+        path
+    }
+
+    fn metadata() -> EmbeddedMetadata {
+        EmbeddedMetadata {
+            tags: crate::commands::downloads::tags::DownloadTags {
+                video_id: "dQw4w9WgXcQ".into(),
+                title: "Song".into(),
+                channel_name: Some("Band".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tags_written_later_read_back_and_the_media_survives() {
+        let path = untagged_song("flow-retag");
+        assert!(read_mp4_flow_tags(&path).expect("reads").fields.is_empty());
+        set_mp4_tags(&path, &metadata()).expect("retags");
+
+        let read = read_mp4_flow_tags(&path).expect("reads");
+        assert_eq!(
+            read.fields.get("videoid").map(String::as_str),
+            Some("dQw4w9WgXcQ")
+        );
+        assert_eq!(read.fields.get("title").map(String::as_str), Some("Song"));
+        assert_eq!(
+            read.fields.get("channelname").map(String::as_str),
+            Some("Band")
+        );
+        assert!(first_sample_matches(&std::fs::read(&path).expect("reads")));
+    }
+
+    #[test]
+    fn tagging_twice_does_not_stack_tags() {
+        let path = untagged_song("flow-retag-twice");
+        set_mp4_tags(&path, &metadata()).expect("retags");
+        set_mp4_tags(&path, &metadata()).expect("retags");
+        let bytes = std::fs::read(&path).expect("reads");
+        let hits = bytes
+            .windows(7)
+            .filter(|window| window == b"videoId")
+            .count();
+        assert_eq!(hits, 1);
+    }
+
+    #[test]
+    fn a_tagged_file_reads_its_length() {
+        let path = tagged_song("flow-length");
+        assert!(
+            read_mp4_flow_tags(&path)
+                .expect("reads")
+                .duration_seconds
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_broken_file_is_an_error_not_a_panic() {
+        let path = crate::commands::downloads::muxer::scratch_file("flow-broken", "m4a");
+        std::fs::write(&path, b"not an mp4 at all").expect("writes");
+        assert!(read_mp4_flow_tags(&path).is_err());
     }
 
     fn contains(haystack: &[u8], needle: &[u8]) -> bool {

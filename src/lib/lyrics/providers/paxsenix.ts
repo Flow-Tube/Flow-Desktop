@@ -2,7 +2,7 @@ import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
 import { lyricsHttpGet, lyricsGetText, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
 import { parseLyrics } from "../lyricsUtils";
-import { ranked } from "../matching";
+import { cleanArtist, ranked } from "../matching";
 import { UA_CHROME } from "./common";
 
 const APPLE_BASE = "https://beta.music.apple.com";
@@ -70,7 +70,8 @@ async function searchItunes(term: string): Promise<AppleSong[]> {
     `${ITUNES_SEARCH}?term=${enc(term)}&media=music&entity=song&limit=25`,
     { Accept: "application/json" },
   );
-  return res.status >= 200 && res.status < 300 ? parseItunesSearch(res.body) : [];
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
+  return parseItunesSearch(res.body);
 }
 
 async function searchCatalogue(term: string): Promise<AppleSong[]> {
@@ -103,8 +104,13 @@ async function searchCatalogue(term: string): Promise<AppleSong[]> {
 // The public iTunes search needs no token and finds the same Apple Music ids; the token scraped
 // from Apple's web player is the fallback.
 async function search(term: string): Promise<AppleSong[]> {
-  const itunes = await searchItunes(term).catch(() => []);
-  return itunes.length > 0 ? itunes : searchCatalogue(term).catch(() => []);
+  const itunes = await searchItunes(term).catch(() => null);
+  if (itunes?.length) return itunes;
+  const catalogue = await searchCatalogue(term).catch(() => null);
+  if (catalogue) return catalogue;
+  // Both searches failing says nothing about the song; the run must not read it as a miss.
+  if (itunes === null) throw new Error("Apple Music search failed");
+  return [];
 }
 
 interface PaxLyrics {
@@ -141,7 +147,8 @@ function lyricsQuality(entries: LyricsEntry[]): number {
 
 async function fetchLyrics(appleId: string): Promise<LyricsEntry[]> {
   const res = await lyricsHttpGet(`${PAX_LYRICS}?id=${enc(appleId)}`, { "User-Agent": "Flow Desktop" });
-  if (res.status < 200 || res.status >= 300) return [];
+  if (res.status === 404) return [];
+  if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
   const data = JSON.parse(res.body) as PaxLyrics;
   if (data.ttmlContent) return parseTTMLToLyricsEntries(data.ttmlContent);
   if (data.content && data.content.length) return contentToEntries(data.content);
@@ -162,7 +169,8 @@ export function matchAppleSongs(songs: AppleSong[], title: string, artist: strin
 
 export const paxsenixProvider: LyricsProvider = {
   name: "Paxsenix",
-  async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
+  async getLyrics(_id, title, fullArtist, durationSec, album): Promise<LyricsEntry[]> {
+    const artist = cleanArtist(fullArtist);
     const terms = [`${title} ${artist}`.trim(), title];
     if (album) terms.push(`${title} ${artist} ${album}`.trim());
     let songs: AppleSong[] = [];
@@ -173,6 +181,7 @@ export const paxsenixProvider: LyricsProvider = {
 
     let best: LyricsEntry[] = [];
     let bestQuality = 0;
+    let failure: unknown = null;
     for (const song of songs) {
       try {
         const entries = await fetchLyrics(song.id);
@@ -182,10 +191,12 @@ export const paxsenixProvider: LyricsProvider = {
           bestQuality = q;
         }
         if (bestQuality === 3) break;
-      } catch {
+      } catch (error) {
         // The next candidate may still have lyrics.
+        failure = error;
       }
     }
+    if (best.length === 0 && failure) throw failure;
     return best;
   },
 };

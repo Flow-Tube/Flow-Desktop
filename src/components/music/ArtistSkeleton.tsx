@@ -14,8 +14,8 @@ function TrackRowSkeleton() {
   return (
     <div className="flex items-center rounded-lg px-4 py-2">
       <Shimmer className="h-4 w-4 shrink-0 rounded" />
-      <Shimmer className="ml-8 h-10 w-10 shrink-0 rounded" />
-      <div className="ml-3 flex min-w-0 flex-1 flex-col gap-2">
+      <Shimmer className="ms-8 h-10 w-10 shrink-0 rounded" />
+      <div className="ms-3 flex min-w-0 flex-1 flex-col gap-2">
         <Shimmer className="h-4 w-2/3 rounded" />
         <Shimmer className="h-3 w-1/3 rounded" />
       </div>
@@ -134,7 +134,7 @@ export function ArtistSkeleton() {
               aria-hidden="true"
               className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[var(--color-surface-container-low)] via-[var(--color-surface-container-low)]/95 to-transparent"
             />
-            <Shimmer className="absolute bottom-5 left-6 h-4 w-20 rounded bg-surface-container md:left-8" />
+            <Shimmer className="absolute bottom-5 start-6 h-4 w-20 rounded bg-surface-container md:start-8" />
           </div>
         </section>
       </main>

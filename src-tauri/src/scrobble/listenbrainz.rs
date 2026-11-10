@@ -105,6 +105,51 @@ pub async fn sign_in(token: &str) -> Result<Account, SignInError> {
     account_from_validation(&body, token)
 }
 
+/// The artist names in a stats reply, most listened first.
+pub fn top_artist_names(body: &Value) -> Vec<String> {
+    body.pointer("/payload/artists")
+        .and_then(Value::as_array)
+        .map(|artists| {
+            artists
+                .iter()
+                .filter_map(|artist| artist.get("artist_name").and_then(Value::as_str))
+                .filter(|name| !name.trim().is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The listener's most listened artists over the past year; empty while `ListenBrainz` has no stats yet.
+pub async fn top_artists(account: &Account, limit: usize) -> Result<Vec<String>, String> {
+    let url = reqwest::Url::parse_with_params(
+        &format!("{BASE_URL}/stats/user/{}/artists", account.user_name),
+        &[("range", "year"), ("count", limit.to_string().as_str())],
+    )
+    .map_err(|error| error.to_string())?;
+    let response = shared_client()
+        .get(url)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            authorization(&account.secret),
+        )
+        .send()
+        .await
+        .map_err(|error| error.without_url().to_string())?;
+    let status = response.status();
+    if status == StatusCode::NO_CONTENT {
+        return Ok(Vec::new());
+    }
+    if !status.is_success() {
+        return Err(format!("HTTP {status}"));
+    }
+    let body: Value = response
+        .json()
+        .await
+        .map_err(|_| format!("HTTP {status}"))?;
+    Ok(top_artist_names(&body))
+}
+
 pub async fn now_playing(entry: &ScrobbleEntry, account: &Account) -> SendOutcome {
     submit(PLAYING_NOW, std::slice::from_ref(entry), account).await
 }
@@ -147,6 +192,13 @@ mod tests {
             timestamp_sec: 1_700_000_000,
             from_youtube,
         }
+    }
+
+    #[test]
+    fn top_artists_read_the_stats_reply() {
+        let body = json!({"payload": {"artists": [{"artist_name": "A"}, {"artist_name": ""}]}});
+        assert_eq!(top_artist_names(&body), vec!["A"]);
+        assert!(top_artist_names(&json!({})).is_empty());
     }
 
     #[test]

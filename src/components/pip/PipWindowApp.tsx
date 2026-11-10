@@ -1,5 +1,6 @@
 import { Maximize2, Pin, PinOff, X } from "lucide-react";
 import { useProfileSwitchListener } from "../../lib/profiles/useProfileSwitchListener";
+import { useOtherWindowSettings } from "../../lib/useOtherWindowSettings";
 
 import { IS_MACOS_RUNTIME } from "../../lib/platform";
 import { useNativeWindowTitle } from "../../lib/useNativeWindowTitle";
@@ -7,6 +8,8 @@ import { getString } from "../../lib/i18n/index";
 import { usePipSession } from "../../lib/usePipSession";
 import { usePipWindowAspectLock } from "../../lib/usePipWindowAspectLock";
 import { useMediaSessionMetadata } from "../../lib/useMediaSessionMetadata";
+import { useMediaCommands } from "../../lib/useMediaCommands";
+import { useMusicTray } from "../../lib/useMusicTray";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { WindowResizeEdges } from "../ui/WindowResizeEdges";
 import { FlowPlayerCore } from "../watch/FlowPlayerCore";
@@ -25,6 +28,7 @@ export function PipWindowApp() {
     usePipSession();
   usePipWindowAspectLock();
   useProfileSwitchListener();
+  useOtherWindowSettings();
 
   const currentVideo = usePlayerStore((s) => s.currentVideo);
   useNativeWindowTitle(currentVideo?.title ?? getString("pip_window_title"));
@@ -32,6 +36,8 @@ export function PipWindowApp() {
   // This window holds the media element while it is open, so it also owns the
   // OS transport controls.
   useMediaSessionMetadata(isPlaying);
+  useMediaCommands();
+  useMusicTray();
 
   return (
     <div className="group relative flex h-screen w-screen items-center justify-center overflow-hidden bg-chrome-black text-chrome-zinc-100">

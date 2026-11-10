@@ -164,7 +164,8 @@ impl<'a> SeedClusters<'a> {
         words.first().cloned().unwrap_or_else(|| "misc".into())
     }
 
-    fn community(&self, title: &str) -> String {
+    #[must_use]
+    pub fn community(&self, title: &str) -> String {
         let key = self.raw_key(title);
         self.community_of
             .get(&strip_domain_tag(&key))

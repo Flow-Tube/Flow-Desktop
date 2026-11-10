@@ -268,5 +268,7 @@ export function parseLyrics(lyrics: string): LyricsEntry[] {
     );
   });
 
-  return isRichSync ? parseRichSyncLyrics(lines) : parseStandardLyrics(lines);
+  const entries = isRichSync ? parseRichSyncLyrics(lines) : parseStandardLyrics(lines);
+  // A timed blank line marks an instrumental break; lyrics made only of those are no lyrics.
+  return entries.some((entry) => entry.text.trim()) ? entries : [];
 }

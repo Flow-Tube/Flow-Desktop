@@ -58,6 +58,13 @@ describe("lyrics matching", () => {
     expect(score(request, song("Starboy", "The Weeknd & Daft Punk", 230))).toBeGreaterThanOrEqual(MIN_SCORE);
   });
 
+  it("accepts a candidate credited to any of the song's artists", () => {
+    const request = song("Song", "Vishal & Shekhar, Arijit Singh", 200);
+    expect(score(request, song("Song", "Arijit Singh", 200))).toBeGreaterThanOrEqual(MIN_SCORE);
+    expect(score(song("Song", "米津玄師、Ado", 200), song("Song", "Ado", 200))).toBeGreaterThanOrEqual(MIN_SCORE);
+    expect(score(song("Song", "Tyler, The Creator", 200), song("Song", "Tyler, The Creator", 200))).toBeGreaterThanOrEqual(MIN_SCORE);
+  });
+
   it("picks the same version, then the highest score, then preferred, then the closest duration", () => {
     const request = song("Song (Live)", "Band", 240);
     const candidates = [

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
 import { AnchoredPortalMenu, type MenuAnchor } from './AnchoredPortalMenu';
+import { alignToEnd } from '../../lib/direction';
 
 export interface SelectOption {
   value: string;
@@ -40,7 +41,7 @@ export function Select({ value, onChange, options, disabled, className = '' }: S
     setAnchor({
       top: rect.bottom + LIST_GAP,
       flipBottom: rect.top - LIST_GAP,
-      right: rect.right,
+      ...alignToEnd(rect),
       width: rect.width,
     });
   };

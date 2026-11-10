@@ -219,6 +219,9 @@ pub struct VideoDetails {
     /// The hashtags shown above the title.
     #[serde(default)]
     pub hashtags: Vec<String>,
+    /// The tags the uploader gave the video.
+    #[serde(default)]
+    pub tags: Vec<String>,
     /// Labels such as "Unlisted" or "Members only" under the title.
     #[serde(default)]
     pub badges: Vec<String>,
@@ -383,4 +386,12 @@ pub struct MusicHomeChip {
     pub browse_id: Option<String>,
     pub params: Option<String>,
     pub order_by: i32,
+}
+
+/// `YouTube`'s wording for a video that declared paid promotion, and how long it shows it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PaidPromotionLabel {
+    pub text: Option<String>,
+    pub duration_ms: u64,
 }

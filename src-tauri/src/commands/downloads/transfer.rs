@@ -29,7 +29,7 @@ const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
 fn download_client() -> &'static Client {
     static CLIENT: OnceLock<Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
-        Client::builder()
+        crate::api::app_proxy::with_app_proxy(Client::builder())
             .connect_timeout(Duration::from_secs(15))
             .read_timeout(Duration::from_secs(30))
             .no_gzip()

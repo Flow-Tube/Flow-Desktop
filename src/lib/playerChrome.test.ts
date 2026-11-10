@@ -13,7 +13,6 @@ const playing: PlayerChromeConditions = {
   isPlaying: true,
   settingsOpen: false,
   isScrubbing: false,
-  isPipMode: false,
   isLoading: false,
   hasError: false,
 };
@@ -30,7 +29,6 @@ describe("canAutoHidePlayerChrome", () => {
     expect(canHide({ isPlaying: false })).toBe(false);
     expect(canHide({ settingsOpen: true })).toBe(false);
     expect(canHide({ isScrubbing: true })).toBe(false);
-    expect(canHide({ isPipMode: true })).toBe(false);
     expect(canHide({ isLoading: true })).toBe(false);
     expect(canHide({ hasError: true })).toBe(false);
   });

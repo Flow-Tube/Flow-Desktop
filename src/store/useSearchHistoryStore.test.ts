@@ -1,16 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const deepFlow = vi.hoisted(() => ({ record: true }));
-vi.mock("../lib/deepFlow", () => ({ shouldRecordWatchHistory: () => deepFlow.record }));
+vi.mock("../lib/deepFlow", () => ({ deepFlowAllowsHistory: () => deepFlow.record }));
+vi.mock("../lib/recap/recapQueue", () => ({ recapSearch: vi.fn(), recapQueriesCleared: vi.fn() }));
 
-import { SEARCH_HISTORY_LIMIT, useSearchHistoryStore } from "./useSearchHistoryStore";
+import { recapSearch } from "../lib/recap/recapQueue";
+import { SETTINGS } from "../lib/settings/schema";
+import { DEFAULT_SEARCH_FILTER_STATE } from "../lib/searchFilterState";
+import { useAppSettingsStore } from "./useAppSettingsStore";
+import { SEARCH_HISTORY_DEFAULT_LIMIT as SEARCH_HISTORY_LIMIT, useSearchHistoryStore, visibleSearchEntries } from "./useSearchHistoryStore";
 
 const queries = () => useSearchHistoryStore.getState().entries.map((entry) => entry.query);
 
 describe("search history", () => {
   beforeEach(() => {
     deepFlow.record = true;
+    useAppSettingsStore.setState({ values: {} });
     useSearchHistoryStore.getState().clear();
+  });
+
+  it("counts a search with history off, without keeping its words", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.SEARCH_HISTORY_ENABLED]: "false" } });
+    useSearchHistoryStore.getState().record("lofi");
+    expect(recapSearch).toHaveBeenLastCalledWith(null);
+    expect(queries()).toEqual([]);
+
+    useAppSettingsStore.setState({ values: {} });
+    useSearchHistoryStore.getState().record("lofi");
+    expect(recapSearch).toHaveBeenLastCalledWith("lofi");
   });
 
   it("keeps the newest first and moves a repeated search to the top", () => {
@@ -19,6 +36,26 @@ describe("search history", () => {
     record("the weeknd");
     record("  LOFI ");
     expect(queries()).toEqual(["LOFI", "the weeknd"]);
+  });
+
+  it("keeps a search's filters, across repeats, until they go back to the default", () => {
+    const store = useSearchHistoryStore.getState();
+    const narrowed = { ...DEFAULT_SEARCH_FILTER_STATE, category: "videos" as const };
+    store.record("lofi");
+    store.rememberFilters(" LOFI", narrowed);
+    expect(useSearchHistoryStore.getState().filtersOf("lofi")).toEqual(narrowed);
+    store.record("lofi");
+    expect(useSearchHistoryStore.getState().filtersOf("lofi")).toEqual(narrowed);
+    store.rememberFilters("lofi", DEFAULT_SEARCH_FILTER_STATE);
+    expect(useSearchHistoryStore.getState().filtersOf("lofi")).toBeUndefined();
+  });
+
+  it("does not make an entry just to hold filters", () => {
+    useSearchHistoryStore.getState().rememberFilters("never searched", {
+      ...DEFAULT_SEARCH_FILTER_STATE,
+      category: "live",
+    });
+    expect(queries()).toEqual([]);
   });
 
   it("is kept across launches", () => {
@@ -46,5 +83,49 @@ describe("search history", () => {
     expect(queries()).toEqual(["b"]);
     clear();
     expect(queries()).toEqual([]);
+  });
+
+  it("saves nothing while saving searches is off", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.SEARCH_HISTORY_ENABLED]: "false" } });
+    useSearchHistoryStore.getState().record("secret");
+    expect(queries()).toEqual([]);
+  });
+
+  it("keeps saving searches while watch history alone is paused", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.PAUSE_WATCH_HISTORY]: "true" } });
+    useSearchHistoryStore.getState().record("kept");
+    expect(queries()).toEqual(["kept"]);
+  });
+
+  it("follows Max history size when recording, and forgets on trimming", () => {
+    useAppSettingsStore.setState({ values: { [SETTINGS.SEARCH_HISTORY_MAX_SIZE]: "2" } });
+    for (const query of ["a", "b", "c"]) useSearchHistoryStore.getState().record(query);
+    expect(queries()).toEqual(["c", "b"]);
+    useSearchHistoryStore.getState().trimTo(1);
+    expect(queries()).toEqual(["c"]);
+  });
+});
+
+describe("visibleSearchEntries", () => {
+  const now = Date.UTC(2026, 5, 1);
+  const day = 86_400_000;
+  const entries = [{ query: "new", at: now - day }, { query: "old", at: now - 40 * day }];
+  const shown = (values: Record<string, string>) => visibleSearchEntries(entries, values, now).map((entry) => entry.query);
+
+  it("shows everything by default", () => {
+    expect(shown({})).toEqual(["new", "old"]);
+  });
+
+  it("shows nothing while saving is off", () => {
+    expect(shown({ [SETTINGS.SEARCH_HISTORY_ENABLED]: "false" })).toEqual([]);
+  });
+
+  it("hides what's past its age only with auto-delete on", () => {
+    expect(shown({ [SETTINGS.SEARCH_HISTORY_RETENTION_DAYS]: "30" })).toEqual(["new", "old"]);
+    expect(shown({ [SETTINGS.SEARCH_HISTORY_RETENTION_DAYS]: "30", [SETTINGS.AUTO_DELETE_SEARCH_HISTORY]: "true" })).toEqual(["new"]);
+  });
+
+  it("caps at the size", () => {
+    expect(shown({ [SETTINGS.SEARCH_HISTORY_MAX_SIZE]: "1" })).toEqual(["new"]);
   });
 });

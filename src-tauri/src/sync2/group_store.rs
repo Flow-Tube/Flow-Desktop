@@ -59,6 +59,10 @@ impl Store for GroupStore {
         each!(self, store => store.is_linear())
     }
 
+    async fn store_answers(&self) -> Result<()> {
+        each!(self, store => store.store_answers().await)
+    }
+
     fn use_pins(&self, pins: &BTreeSet<String>) {
         each!(self, store => store.use_pins(pins));
     }

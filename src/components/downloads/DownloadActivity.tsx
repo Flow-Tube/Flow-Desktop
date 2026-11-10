@@ -33,6 +33,7 @@ import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import { useCollectionDownloadStore, type CollectionRun } from "../../store/useCollectionDownloadStore";
 import { useDownloadStore } from "../../store/useDownloadStore";
 import { DOWNLOAD_SURFACE_SPRING, downloadSurfaceLayoutId } from "./surface";
+import { joinIsolated } from "../../lib/direction";
 
 /** A finished card slides away after this long, unless the pointer is on it. */
 const AUTO_DISMISS_MS = 6000;
@@ -142,7 +143,7 @@ function DockArtwork({ item, size }: { item: DownloadProgress; size: "card" | "r
       {badge ? (
         <>
           {item.status !== "completed" ? <div className="absolute inset-0 bg-chrome-black/35" /> : null}
-          <span className="absolute bottom-1 right-1 grid h-5 w-5 place-items-center rounded-full bg-chrome-black/65 text-chrome-white">
+          <span className="absolute bottom-1 end-1 grid h-5 w-5 place-items-center rounded-full bg-chrome-black/65 text-chrome-white">
             {badge}
           </span>
         </>
@@ -182,7 +183,7 @@ function stageText(item: DownloadProgress): string {
     case "cancelled":
       return getString("download_cancelled");
     default:
-      return [item.artist, item.qualityLabel].filter(Boolean).join(" · ");
+      return joinIsolated([item.artist, item.qualityLabel], " · ");
   }
 }
 
@@ -193,12 +194,12 @@ function transferText(item: DownloadProgress): string | null {
   const parts = [
     fraction != null ? `${Math.round(fraction * 100)}%` : null,
     item.totalBytes
-      ? `${formatBytes(item.downloadedBytes) ?? "0 MB"} of ${formatBytes(item.totalBytes)}`
+      ? getString("download_bytes_of", formatBytes(item.downloadedBytes) ?? "0 MB", formatBytes(item.totalBytes))
       : formatBytes(item.downloadedBytes),
     formatSpeed(item.bytesPerSecond),
     formatTimeLeft(item.etaSeconds),
   ];
-  return parts.filter(Boolean).join(" · ") || null;
+  return joinIsolated(parts, " · ") || null;
 }
 
 function DockCard({
@@ -238,7 +239,7 @@ function DockCard({
     >
       <DockArtwork item={item} size="card" />
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-chrome-neutral-100">{item.title}</div>
+        <div dir="auto" className="truncate text-sm font-medium text-chrome-neutral-100">{item.title}</div>
         <div className={`mt-0.5 truncate text-xs ${failed ? "text-chrome-red-300" : "text-chrome-neutral-400"}`}>
           {stageText(item)}
         </div>
@@ -297,7 +298,7 @@ function GroupRow({ item }: { item: DownloadProgress }) {
     <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-chrome-neutral-800 px-3 py-2">
       <DockArtwork item={item} size="row" />
       <div className="min-w-0">
-        <div className="truncate text-xs text-chrome-neutral-200">{item.title}</div>
+        <div dir="auto" className="truncate text-xs text-chrome-neutral-200">{item.title}</div>
         {isRunning(item) ? (
           <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-surface-container-highest">
             <div
@@ -369,7 +370,7 @@ function GroupDockCard({
           </div>
         )}
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-chrome-neutral-100">{title}</div>
+          <div dir="auto" className="truncate text-sm font-semibold text-chrome-neutral-100">{title}</div>
           <div className="truncate font-mono text-xs text-chrome-neutral-500">{detail}</div>
         </div>
         <div className="flex items-center gap-0.5">
@@ -453,7 +454,7 @@ export function DownloadActivity() {
     const state: GroupState = run.active ? "running" : run.failed > 0 ? "failed" : "done";
     const kindLabel = getString(run.kind === "album" ? "download_album_label" : "download_playlist_label");
     const counts = getString("download_collection_run_progress", run.completed, run.total);
-    const detail = [kindLabel, counts, groupSpeed(items)].filter(Boolean).join(" · ");
+    const detail = joinIsolated([kindLabel, counts, groupSpeed(items)], " · ");
     return {
       run,
       items: state === "running" ? inFlight : [],
@@ -489,7 +490,7 @@ export function DownloadActivity() {
   };
 
   return (
-    <div className="fixed bottom-6 left-6 z-[120] flex max-h-[70vh] w-[380px] max-w-[calc(100vw-3rem)] flex-col gap-2 overflow-y-auto overflow-x-hidden">
+    <div className="fixed bottom-6 start-6 z-[120] flex max-h-[70vh] w-[380px] max-w-[calc(100vw-3rem)] flex-col gap-2 overflow-y-auto overflow-x-hidden">
       <AnimatePresence initial={false}>
         {runCards.map(({ run, items, fraction, state, detail }) => (
           <GroupDockCard
@@ -507,9 +508,7 @@ export function DownloadActivity() {
           <GroupDockCard
             key="queue"
             title={getString("download_group_title", group.length)}
-            detail={[getString("download_group_progress", groupDone, group.length), groupSpeed(group)]
-              .filter(Boolean)
-              .join(" · ")}
+            detail={joinIsolated([getString("download_group_progress", groupDone, group.length), groupSpeed(group)], " · ")}
             items={group}
             fraction={groupFraction}
             state={groupState}

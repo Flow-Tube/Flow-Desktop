@@ -7,9 +7,10 @@ import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { ScrobbleSignInDialog } from "./ScrobbleSignInDialog";
 import { ScrobbleOwnKeyDialog } from "./ScrobbleOwnKeyDialog";
 import { confirmAction } from "../../lib/dialogs";
-import { getString, type StringKey } from "../../lib/i18n/index";
+import { getPlural, getString, type StringKey } from "../../lib/i18n/index";
 import { SETTINGS } from "../../lib/settings/schema";
 import { IS_MACOS_RUNTIME } from "../../lib/platform";
+import { importTopArtists } from "../../lib/scrobbleTasteImport";
 import { useBoolPref } from "../../lib/usePreference";
 import { useScrobbleSettings } from "../../lib/useScrobbleSettings";
 import { SCROBBLE_SERVICES, type ScrobbleService, type ScrobbleServiceStatus } from "../../lib/api/scrobble";
@@ -38,6 +39,7 @@ export function ScrobblingSection() {
   const [editingKey, setEditingKey] = useState(false);
   const [sending, setSending] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [importing, setImporting] = useState<ScrobbleService | null>(null);
 
   const keychainBroken = !!status?.keychainError;
   const waiting = status?.services.reduce((sum, service) => sum + service.waiting, 0) ?? 0;
@@ -75,6 +77,20 @@ export function ScrobblingSection() {
       : { message: getString("scrobbling_send_now_waiting"), variant: "info" });
   };
 
+  const importArtists = async (service: ScrobbleService) => {
+    setImporting(service);
+    try {
+      const added = await importTopArtists(service);
+      showToast(added > 0
+        ? { message: getPlural("scrobbling_import_done", added), variant: "success" }
+        : { message: getString("scrobbling_import_none"), variant: "info" });
+    } catch {
+      showToast({ message: getString("scrobbling_import_failed"), variant: "error" });
+    } finally {
+      setImporting(null);
+    }
+  };
+
   const description = loadFailed
     ? getString("scrobbling_status_failed")
     : keychainBroken
@@ -103,6 +119,13 @@ export function ScrobblingSection() {
                   <Button size="sm" disabled={!status || !ready || keychainBroken} onClick={() => setSigningIn(service)}>{getString("scrobbling_sign_in")}</Button>
                 )}
               </SettingItem>
+              {signedIn && (
+                <SettingItem title={getString("scrobbling_import")} description={getString("scrobbling_import_summary")} disabled={keychainBroken}>
+                  <Button variant="secondary" size="sm" disabled={importing !== null || keychainBroken} onClick={() => void importArtists(service)}>
+                    {getString("scrobbling_import_action")}
+                  </Button>
+                </SettingItem>
+              )}
               {service === "LASTFM" && (
                 <SettingItem title={getString("scrobbling_own_key")} description={getString("scrobbling_own_key_summary")} disabled={!status || keychainBroken}>
                   <ToggleSwitch checked={!!status?.ownKeyEnabled} onChange={(enabled) => void toggleOwnKey(enabled)} disabled={!status || keychainBroken} />

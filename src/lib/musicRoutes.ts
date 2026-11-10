@@ -27,3 +27,8 @@ export function musicSeeAllRoute(
   const query = new URLSearchParams({ browseId, ...(params ? { params } : {}), title });
   return `/music/browse?${query}`;
 }
+
+/** Music downloads are all "album" records, but a YouTube Music playlist only opens on its own page. */
+export function downloadedMusicCollectionPath(collectionId: string): string {
+  return /^(PL|RD|VL)/.test(collectionId) ? `/music/playlist/${collectionId}` : `/music/album/${collectionId}`;
+}

@@ -61,7 +61,7 @@ export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomT
           </button>
         </header>
 
-        <div className="overflow-y-auto p-6 scrollbar-none">
+        <div className="overflow-y-auto p-6">
           <label className="block text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500" htmlFor="theme-name">{getString("theme_name")}</label>
           <input
             id="theme-name"
@@ -95,7 +95,7 @@ export function CustomThemeEditor({ theme, onCancel, onSave, onExport }: CustomT
         </div>
 
         <footer className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-4">
-          <Button variant="secondary" className="mr-auto" disabled={!draft.name.trim()} onClick={() => onExport({ ...draft, name: draft.name.trim() })}>
+          <Button variant="secondary" className="me-auto" disabled={!draft.name.trim()} onClick={() => onExport({ ...draft, name: draft.name.trim() })}>
             <Download size={16} />
             {getString("theme_export")}
           </Button>

@@ -26,6 +26,7 @@ export interface ProfilesView {
   defaultId: string;
   activeId: string;
   maxProfiles: number;
+  askWhosWatching: boolean;
 }
 
 export interface CopyParts {
@@ -51,6 +52,15 @@ export const PROFILE_NAME_MAX_LENGTH = 24;
 
 export function listProfiles(): Promise<ProfilesView> {
   return invokeBackend<ProfilesView>("profiles_list");
+}
+
+/** Whether this launch should ask who's watching; true once per process at most. */
+export function takeLaunchProfileQuestion(): Promise<boolean> {
+  return invokeBackend<boolean>("profiles_take_launch_question");
+}
+
+export function setAskWhosWatching(ask: boolean): Promise<void> {
+  return invokeBackend<void>("profiles_set_ask_whos_watching", { ask });
 }
 
 export function createProfile(request: NewProfile): Promise<Profile> {

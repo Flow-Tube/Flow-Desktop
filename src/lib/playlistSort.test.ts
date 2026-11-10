@@ -112,7 +112,26 @@ describe("availablePlaylistSortOrders", () => {
       "most_popular",
       "date_published_newest",
       "date_published_oldest",
+      "longest",
+      "shortest",
     ]);
+  });
+});
+
+describe("sort by length", () => {
+  const lengths = [
+    video("short", { durationSeconds: 30 }),
+    video("live", { durationSeconds: null }),
+    video("long", { durationSeconds: 3_000 }),
+    video("zero", { durationSeconds: 0 }),
+  ];
+
+  it("puts the longest first and rows without a length last", () => {
+    expect(ids(sortPlaylistVideos(lengths, "longest", false, NOW))).toEqual(["long", "short", "live", "zero"]);
+  });
+
+  it("puts the shortest first and rows without a length last", () => {
+    expect(ids(sortPlaylistVideos(lengths, "shortest", false, NOW))).toEqual(["short", "long", "live", "zero"]);
   });
 });
 

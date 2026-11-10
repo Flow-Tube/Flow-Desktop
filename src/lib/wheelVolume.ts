@@ -48,8 +48,8 @@ export interface WheelVolumeChange {
  * What one step does. While muted the saved level is kept: scrolling down changes nothing, and
  * scrolling up unmutes to that level.
  */
-export function wheelVolumeChange(volume: number, muted: boolean, step: -1 | 1): WheelVolumeChange {
-  if (!muted) return { volume: volumeAfterWheel(volume, step), unmute: false };
+export function wheelVolumeChange(volume: number, muted: boolean, step: -1 | 1, max = 1): WheelVolumeChange {
+  if (!muted) return { volume: Math.min(max, volumeAfterWheel(volume / max, step) * max), unmute: false };
   if (step > 0) return { unmute: false };
   return volume > 0 ? { unmute: true } : { volume: volumeAfterWheel(0, step), unmute: true };
 }

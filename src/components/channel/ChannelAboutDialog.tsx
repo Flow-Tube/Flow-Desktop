@@ -19,7 +19,7 @@ function LinkRow({ link }: { link: ChannelLink }) {
     <button
       type="button"
       onClick={() => void openExternal(link.url)}
-      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-container-high"
+      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-start transition-colors hover:bg-surface-container-high"
     >
       {icon ? (
         <img src={icon} alt="" className="h-5 w-5 shrink-0 rounded" />
@@ -27,7 +27,7 @@ function LinkRow({ link }: { link: ChannelLink }) {
         <Link2 size={18} className="shrink-0 text-chrome-neutral-500" />
       )}
       <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-chrome-neutral-100">{link.title}</span>
+        <span dir="auto" className="block truncate text-sm font-medium text-chrome-neutral-100">{link.title}</span>
         <span className="block truncate text-xs text-[var(--color-primary)]">{link.url}</span>
       </span>
     </button>
@@ -88,7 +88,7 @@ export function ChannelAboutDialog({ channel, open, onClose }: ChannelAboutDialo
           </button>
         </div>
 
-        <div className="hide-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
           {description && (
             <LinkedText
               text={description}

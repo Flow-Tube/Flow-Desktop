@@ -11,9 +11,6 @@ interface RememberedChannelsProps {
 
 /** Channels the viewer keeps watching without following, each one forgettable. */
 export function RememberedChannels({ channels, forgetting, onForget }: RememberedChannelsProps) {
-  if (channels.length === 0) {
-    return <p className="text-sm text-chrome-neutral-500">{getString("taste_remembered_empty")}</p>;
-  }
   return (
     <ul className="divide-y divide-chrome-neutral-800">
       {channels.map((channel) => (

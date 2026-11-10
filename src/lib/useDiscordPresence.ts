@@ -1,9 +1,10 @@
+import { getString } from "./i18n/index";
 import { useCallback, useEffect, useRef } from "react";
-import { useTranslation } from "react-i18next";
 
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { useSettingsStore, type DiscordRpcMode } from "../store/useSettingsStore";
+import { isLocalMediaId } from "./localMediaId";
 import { youtubeMusicWatchUrl, youtubeWatchUrl } from "./youtubeUrl";
 import {
   clearDiscordPresence,
@@ -50,7 +51,6 @@ const RECONCILE_INTERVAL_MS = 3000;
 // once; `discordMode` gates which are eligible, playing beats paused, music wins over
 // video. Pushes only on a real change — Discord animates the bar from the timestamps.
 export function useDiscordPresence(): void {
-  const { t } = useTranslation("settings");
 
   // Subscribe to identity signals for prompt reconciles; read the moving position via
   // getState() to avoid re-renders.
@@ -94,12 +94,12 @@ export function useDiscordPresence(): void {
         title: track.title,
         subtitle: track.artists.map((a) => a.name).filter(Boolean).join(", ") || undefined,
         album: track.album?.name || undefined,
-        artworkUrl: track.thumbnail || undefined,
+        artworkUrl: isLocalMediaId(trackVideoId) ? undefined : track.thumbnail || undefined,
         elapsedSeconds: elapsed,
         durationSeconds: m.duration || track.duration || undefined,
         isPaused: !m.isPlaying,
-        url: trackVideoId ? youtubeMusicWatchUrl(trackVideoId) : undefined,
-        buttonLabel: t("discord.buttonListen"),
+        url: trackVideoId && !isLocalMediaId(trackVideoId) ? youtubeMusicWatchUrl(trackVideoId) : undefined,
+        buttonLabel: getString('discord_button_listen'),
       };
     } else if (chosen === "video" && v.currentVideo) {
       const video = v.currentVideo;
@@ -123,7 +123,7 @@ export function useDiscordPresence(): void {
         durationSeconds: isLive ? undefined : video.durationSeconds ?? v.duration ?? undefined,
         isPaused: !v.isPlaying,
         url: youtubeWatchUrl(video.id),
-        buttonLabel: t("discord.buttonWatch"),
+        buttonLabel: getString('discord_button_watch'),
       };
     } else {
       return;
@@ -140,7 +140,7 @@ export function useDiscordPresence(): void {
 
     lastSent.current = { key, sentAt: now, elapsed };
     void setDiscordPresence(payload);
-  }, [t]);
+  }, []);
 
   // Reconcile promptly on any identity/pause/mode change.
   useEffect(() => {

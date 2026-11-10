@@ -15,11 +15,13 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::errors::{AppError, ErrorResponse};
 use crate::music_brain::store::MusicBrainStore;
+use crate::recap;
+use crate::recap::model::RecapBackup;
 use crate::services::profile_service::{MasterManifest, ProfileService, RestoreTarget};
 use crate::services::recommendation_service::RecommendationService;
 use crate::sync::apply;
 use crate::sync::canonical::{
-    Collection, FlowNeuroBrainSnapshot, Like, MusicBrainSnapshot, Playlist, SettingEntry,
+    Collection, FlowNeuroBrainSnapshot, Like, MusicBrainSnapshot, Note, Playlist, SettingEntry,
     SubscribedChannel, SubscriptionGroup, WatchHistoryRecord,
 };
 use crate::sync::codec;
@@ -31,6 +33,9 @@ use crate::sync::protocol::StagedCollection;
 /// Extra backup entry (not a sync collection): the frontend's flat subscribed-channel list.
 pub const SUBSCRIPTION_CHANNELS_KEY: &str = "subscription_channels";
 const SUBSCRIPTIONS_SETTING_KEY: &str = "subscriptions";
+/// Extra master-backup entry (not a sync collection): the recap ledger, in a one-item array
+/// because importers keep only arrays. As on Android, it never travels by sync.
+pub const RECAP_STATS_ENTRY: &str = "recap_stats";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,7 +63,11 @@ pub struct ImportSummary {
     pub collections: Vec<CollectionImportSummary>,
 }
 
-fn sync_err(e: SyncError) -> ErrorResponse {
+fn recap_err(e: &AppError) -> SyncError {
+    SyncError::Protocol(format!("recap ledger: {e}"))
+}
+
+pub(crate) fn sync_err(e: SyncError) -> ErrorResponse {
     ErrorResponse {
         message: e.to_string(),
         kind: "sync".to_string(),
@@ -76,6 +85,7 @@ fn scope_collections(scope: &str) -> Option<Vec<Collection>> {
             Collection::Settings,
             Collection::Subscriptions,
             Collection::SubscribedChannels,
+            Collection::Notes,
         ]),
         "MASTER" => Some(Collection::ALL.to_vec()),
         _ => None,
@@ -121,13 +131,17 @@ fn filter_parseable(collection: Collection, values: &[Value]) -> (Vec<Value>, u6
         Collection::MusicBrain => ok::<MusicBrainSnapshot>(v, |s| !s.device_id.is_empty()),
         Collection::Subscriptions => ok::<SubscriptionGroup>(v, |g| !g.name.is_empty()),
         Collection::SubscribedChannels => ok::<SubscribedChannel>(v, |c| !c.channel_id.is_empty()),
+        Collection::Notes => ok::<Note>(v, |n| !n.id.is_empty()),
     };
     let kept: Vec<Value> = values.iter().filter(|v| parses(v)).cloned().collect();
     let dropped = (values.len() - kept.len()) as u64;
     (kept, dropped)
 }
 
-async fn get_setting_value(pool: &SqlitePool, key: &str) -> Result<Option<String>, SyncError> {
+pub(crate) async fn get_setting_value(
+    pool: &SqlitePool,
+    key: &str,
+) -> Result<Option<String>, SyncError> {
     Ok(
         sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = ?")
             .bind(key)
@@ -155,7 +169,7 @@ pub async fn export_backup(pool: &SqlitePool, scope: &str) -> Result<BackupExpor
     let collections = scope_collections(scope)
         .ok_or_else(|| SyncError::Protocol(format!("unknown backup scope: {scope}")))?;
     let device_id = ledger::get_or_create_device_id(pool).await?;
-    let outgoing = export::export_collections(pool, &device_id, &collections).await?;
+    let outgoing = export::export_for_backup(pool, &device_id, &collections).await?;
 
     let mut map = serde_json::Map::new();
     for oc in outgoing {
@@ -171,6 +185,16 @@ pub async fn export_backup(pool: &SqlitePool, scope: &str) -> Result<BackupExpor
                 map.insert(SUBSCRIPTION_CHANNELS_KEY.to_string(), parsed);
             }
         }
+    }
+
+    if scope == "MASTER" {
+        let ledger = recap::store::export(pool)
+            .await
+            .map_err(|e| recap_err(&e))?;
+        map.insert(
+            RECAP_STATS_ENTRY.to_string(),
+            Value::Array(vec![serde_json::to_value(ledger)?]),
+        );
     }
 
     Ok(BackupExport {
@@ -265,7 +289,8 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
         // A unique per-import peer id keeps the sync_log idempotency guard from silently
         // skipping a deliberate re-restore (e.g. restore, clear data, restore again).
         let peer_id = format!(
-            "backup-restore-{}",
+            "{}{}",
+            apply::BACKUP_RESTORE_PEER_PREFIX,
             chrono::Utc::now().timestamp_millis().max(0)
         );
         let report = apply::apply_payload(pool, &device_id, &peer_id, &staged).await?;
@@ -297,6 +322,24 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
             .push(import_channel_list(pool, channels).await?);
     }
 
+    if let Some(Value::Array(ledgers)) = collections.get(RECAP_STATS_ENTRY) {
+        // A file with no readable ledger leaves this device's own in place.
+        if let Some(backup) = ledgers
+            .first()
+            .and_then(|value| serde_json::from_value::<RecapBackup>(value.clone()).ok())
+        {
+            let months =
+                recap::store::restore(pool, &backup, chrono::Utc::now().timestamp_millis())
+                    .await
+                    .map_err(|e| recap_err(&e))?;
+            summary.collections.push(CollectionImportSummary {
+                collection: RECAP_STATS_ENTRY.to_string(),
+                added: months,
+                ..Default::default()
+            });
+        }
+    }
+
     Ok(summary)
 }
 
@@ -304,7 +347,7 @@ pub async fn import_backup(pool: &SqlitePool, payload: &Value) -> Result<ImportS
 // export/merge sees the freshest learning, and reload them after a merge wrote the DB so
 // the next debounced flush can't clobber the merged result. An import holds the video
 // brain's saves in between, so its background save cannot land mid-merge either.
-async fn flush_brains(app: &AppHandle, hold: bool) {
+pub(crate) async fn flush_brains(app: &AppHandle, hold: bool) {
     if let Some(svc) = app.try_state::<RecommendationService>() {
         let flushed = if hold {
             svc.flush_and_hold_brain().await
@@ -348,16 +391,7 @@ pub async fn export_backup_data(
     export_backup(&pool, &scope).await.map_err(sync_err)
 }
 
-/// One profile's part of a master backup: its raw settings and its collections.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProfileBackupPart {
-    pub id: String,
-    pub settings: std::collections::HashMap<String, String>,
-    pub export: BackupExport,
-}
-
-async fn raw_settings(
+pub(crate) async fn raw_settings(
     pool: &SqlitePool,
     keys: &[String],
     with_device_keys: bool,
@@ -368,53 +402,14 @@ async fn raw_settings(
         if !with_device_keys && crate::profiles::device_keys::is_device_key(key) {
             continue;
         }
+        if crate::backup::is_never_backed_up(key) {
+            continue;
+        }
         if let Some(value) = get_setting_value(pool, key).await? {
             settings.insert(key.clone(), value);
         }
     }
     Ok(settings)
-}
-
-/// Exports any profile for the master backup: the running one through its live pool (brains
-/// flushed first), any other from its closed database.
-#[tauri::command]
-pub async fn export_profile_backup(
-    id: String,
-    setting_keys: Vec<String>,
-    app: AppHandle,
-    pool: State<'_, SqlitePool>,
-    profiles: State<'_, ProfileService>,
-) -> Result<ProfileBackupPart, ErrorResponse> {
-    let running = profiles.running_profile_id().map_err(ErrorResponse::from)?;
-    let default_id = profiles.list().map_err(ErrorResponse::from)?.default_id;
-    if id == running {
-        flush_brains(&app, false).await;
-        let settings = raw_settings(&pool, &setting_keys, id == default_id)
-            .await
-            .map_err(sync_err)?;
-        let export = export_backup(&pool, "MASTER").await.map_err(sync_err)?;
-        return Ok(ProfileBackupPart {
-            id,
-            settings,
-            export,
-        });
-    }
-    let (closed, is_default) = profiles
-        .open_closed(&id)
-        .await
-        .map_err(ErrorResponse::from)?;
-    let part = async {
-        let settings = raw_settings(&closed, &setting_keys, is_default).await?;
-        let export = export_backup(&closed, "MASTER").await?;
-        Ok::<_, SyncError>(ProfileBackupPart {
-            id: id.clone(),
-            settings,
-            export,
-        })
-    }
-    .await;
-    closed.close().await;
-    part.map_err(sync_err)
 }
 
 /// Adds a master backup's profiles to the registry; see `ProfileService::restore_master`.
@@ -493,6 +488,7 @@ mod tests {
         assert!(app_data.contains(&Collection::Likes));
         assert!(app_data.contains(&Collection::Subscriptions));
         assert!(app_data.contains(&Collection::Playlists));
+        assert!(app_data.contains(&Collection::Notes));
         assert!(!app_data.contains(&Collection::WatchHistory));
         assert_eq!(
             scope_collections("MASTER").unwrap().len(),

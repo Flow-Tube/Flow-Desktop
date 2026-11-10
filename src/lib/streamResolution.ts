@@ -1,4 +1,5 @@
 import { getStreamInfo } from "./api/youtube";
+import { isLocalMediaId } from "./localMediaId";
 import type { StreamInfo } from "../types/video";
 
 /**
@@ -128,6 +129,7 @@ function drainPrefetchQueue() {
  * paying for a second one.
  */
 export function prefetchStreamInfo(videoId: string | null | undefined) {
+  if (isLocalMediaId(videoId)) return;
   if (!videoId) return;
   if (readCache(videoId) || inFlight.has(videoId)) return;
   if (prefetchQueue.includes(videoId)) return;

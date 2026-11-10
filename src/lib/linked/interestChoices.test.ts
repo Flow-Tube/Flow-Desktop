@@ -18,6 +18,7 @@ const view: ProfilesView = {
   defaultId: "home",
   activeId: "work",
   maxProfiles: 5,
+  askWhosWatching: true,
 };
 
 describe("interestChoices", () => {

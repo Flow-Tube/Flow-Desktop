@@ -16,6 +16,9 @@ use super::roster::Role;
 use super::store::Store;
 use crate::sync::canonical::to_canonical_json;
 
+/// The most a live message or a notice may hold, on any transport (spec/store.md, Untrusted input).
+pub const MAX_LIVE_MESSAGE: usize = 64 * 1024;
+
 /// What sealing and opening live messages needs, taken from a session when it opened.
 #[derive(Clone)]
 pub struct LiveKeys {
@@ -36,10 +39,11 @@ pub struct Received {
 }
 
 impl LiveKeys {
-    pub fn of<S: Store>(session: &Session<'_, S>) -> Self {
+    pub fn of<S: Store>(session: &Session<'_, S>) -> Result<Self> {
+        session.may_seal()?;
         let me = hex::encode(session.device().did);
         let state = session.roster();
-        Self {
+        Ok(Self {
             group: *session.group(),
             epoch: state.epoch,
             live_key: purpose_key(
@@ -55,7 +59,7 @@ impl LiveKeys {
                 .filter(|(did, member)| member.role == Role::Device && **did != me)
                 .map(|(did, member)| (did.clone(), member.sig))
                 .collect(),
-        }
+        })
     }
 
     pub fn me(&self) -> String {
@@ -83,6 +87,9 @@ impl LiveKeys {
     /// Checks and opens a message from another current device. The caller still checks that its
     /// counter is above the last one accepted from that device.
     pub fn open(&self, bytes: &[u8]) -> Result<Received> {
+        if bytes.len() > MAX_LIVE_MESSAGE {
+            return Err(Error::Length.into());
+        }
         let object = parse_object(bytes, &self.group)?;
         let from = hex::encode(object.header.sender);
         let key = self.others.get(&from).ok_or(Error::Sender)?;
@@ -113,6 +120,14 @@ mod tests {
     use super::*;
     use crate::sync2::fuzz::{json, member, mutations, seq};
     use crate::sync2::live_message::{Answer, DeviceKind};
+    use crate::sync2::sealed::random_bytes;
+
+    fn random_bytes_of(len: usize) -> Vec<u8> {
+        std::iter::repeat_with(random_bytes::<32>)
+            .flatten()
+            .take(len)
+            .collect()
+    }
 
     /// Two devices of one group, each with the other's signing key.
     static PAIR: LazyLock<(LiveKeys, LiveKeys)> = LazyLock::new(|| {
@@ -150,6 +165,28 @@ mod tests {
                     reason,
                 })),
         ]
+    }
+
+    #[test]
+    fn a_live_message_over_the_limit_is_refused_on_any_transport() {
+        let (a, b) = &*PAIR;
+        let with_reason = |bytes: usize| {
+            a.seal(
+                1,
+                &LiveMessage::Result(Answer {
+                    to: b.me(),
+                    reference: 1,
+                    ok: false,
+                    reason: Some(hex::encode(random_bytes_of(bytes))),
+                }),
+            )
+            .unwrap()
+        };
+        let small = with_reason(1024);
+        assert!(b.open(&small).is_ok());
+        let large = with_reason(128 * 1024);
+        assert!(large.len() > MAX_LIVE_MESSAGE);
+        assert!(b.open(&large).is_err());
     }
 
     proptest! {

@@ -10,6 +10,10 @@
   --color-surface-container: var(--color-surface-container-val);
   --color-surface-container-high: var(--color-surface-container-high-val);
   --color-surface-container-highest: var(--color-surface-container-highest-val);
+  --color-surface-row: var(--color-surface-row-val);
+  --color-surface-row-hover: var(--color-surface-row-hover-val);
+  --color-surface-row-control: var(--color-surface-container-high);
+  --color-surface-row-control-hover: var(--color-surface-container-highest);
   --color-outline-variant: var(--color-outline-variant-val);
   --color-on-surface: var(--color-on-surface-val);
   --color-on-surface-variant: var(--color-on-surface-variant-val);
@@ -107,6 +111,8 @@
     --color-surface-container-val: #EEEEEE;
     --color-surface-container-high-val: #E8E8E8;
     --color-surface-container-highest-val: #E1E1E1;
+    --color-surface-row-val: #E8E8E8;
+    --color-surface-row-hover-val: #E1E1E1;
     --color-outline-variant-val: #D7D7D7;
     --color-on-surface-val: #111111;
     --color-on-surface-variant-val: #5F5F5F;
@@ -122,6 +128,8 @@
       --color-surface-container-val: #1D1D1D;
       --color-surface-container-high-val: #242424;
       --color-surface-container-highest-val: #303030;
+      --color-surface-row-val: #171717;
+      --color-surface-row-hover-val: #1D1D1D;
       --color-outline-variant-val: #2A2A2A;
       --color-on-surface-val: #F4F4F4;
       --color-on-surface-variant-val: #B8B8B8;
@@ -170,22 +178,36 @@
 
   body {
     @apply bg-background text-chrome-zinc-100 antialiased overflow-hidden select-none;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    /* Inter has no Arabic letters. Naming Arabic fonts keeps Linux from falling back to whatever
+       fontconfig finds first, which can lose the dots and the joins between letters. */
+    font-family: 'Inter', system-ui, -apple-system, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
+  }
+
+  /* A title or name in another script keeps its own word order and ellipsis (dir="auto") but
+     lines up with the interface, as YouTube does, so it stays beside its thumbnail. */
+  [dir="auto"] {
+    text-align: match-parent;
+  }
+
+  /* Typed text runs in its own direction, so Arabic in an English field or English in an Arabic
+     one reads right; an empty field keeps the interface's direction for its placeholder. */
+  textarea,
+  input:not([type]),
+  input[type="text"],
+  input[type="search"] {
+    unicode-bidi: plaintext;
   }
 }
 
-/* Custom Scrollbars */
+/* Scrollbars stay hidden everywhere; wheel, trackpad, keys and touch still scroll. */
+* {
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-chrome-zinc-800 rounded-full hover:bg-chrome-zinc-700 transition-colors;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .active-nav-item {
@@ -215,6 +237,67 @@
 
 .animate-pane-in {
   animation: pane-fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The recap story: a page slides in the way it was stepped, then its parts rise in turn. */
+@keyframes story-page-next {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+}
+
+@keyframes story-page-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-48px);
+  }
+}
+
+@keyframes story-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}
+
+@keyframes story-dial {
+  from {
+    opacity: 0;
+    transform: rotate(-24deg) scale(0.86);
+  }
+}
+
+.story-page-next {
+  animation: story-page-next 320ms var(--motion-ease) both;
+}
+
+.story-page-prev {
+  animation: story-page-prev 320ms var(--motion-ease) both;
+}
+
+.story-stagger > * {
+  animation: story-rise 420ms var(--motion-ease) both;
+}
+
+.story-stagger > :nth-child(2) { animation-delay: 60ms; }
+.story-stagger > :nth-child(3) { animation-delay: 120ms; }
+.story-stagger > :nth-child(4) { animation-delay: 180ms; }
+.story-stagger > :nth-child(5) { animation-delay: 240ms; }
+.story-stagger > :nth-child(n + 6) { animation-delay: 300ms; }
+
+.story-dial {
+  animation: story-dial 520ms var(--motion-ease) both;
+  animation-delay: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-page-next,
+  .story-page-prev,
+  .story-stagger > *,
+  .story-dial {
+    animation: none;
+  }
 }
 
 @keyframes slide-up {
@@ -445,6 +528,11 @@
     visibility 0s linear var(--sidebar-motion-duration);
 }
 
+/* Right to left, the drawer sits on the right and hides past that edge. */
+[dir="rtl"] .sidebar-drawer {
+  transform: translateX(100%);
+}
+
 [data-open="true"] > .sidebar-drawer {
   transform: none;
   visibility: visible;
@@ -488,6 +576,46 @@
   content-visibility: hidden;
 }
 
+/* The Moving lyrics background: two copies of the cover's colours, each on its own path. */
+@keyframes lyrics-drift-x {
+  0%,
+  100% {
+    transform: translateX(-42%);
+  }
+  50% {
+    transform: translateX(42%);
+  }
+}
+
+@keyframes lyrics-drift-y {
+  0%,
+  100% {
+    transform: translateY(42%);
+  }
+  50% {
+    transform: translateY(-42%);
+  }
+}
+
+.lyrics-drift-x,
+.lyrics-drift-y {
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.lyrics-drift-x {
+  animation-name: lyrics-drift-x;
+}
+
+.lyrics-drift-y {
+  animation-name: lyrics-drift-y;
+}
+
+.lyrics-drift-paused .lyrics-drift-x,
+.lyrics-drift-paused .lyrics-drift-y {
+  animation-play-state: paused;
+}
+
 @keyframes music-wave {
   0%,
   100% {
@@ -505,6 +633,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .music-wave-bar {
+    animation: none;
+  }
+
+  .lyrics-drift-x,
+  .lyrics-drift-y {
     animation: none;
   }
 
@@ -540,22 +673,24 @@
 }
 
 .m3-slider__track--active {
-  left: 0;
+  inset-inline-start: 0;
   width: max(0px, calc(var(--m3-fill) * (100% - 3px) - 6px));
   background-color: var(--color-primary);
 }
 
 .m3-slider__track--inactive {
-  left: calc(var(--m3-fill) * (100% - 3px) + 9px);
-  right: 0;
+  inset-inline-start: calc(var(--m3-fill) * (100% - 3px) + 9px);
+  inset-inline-end: 0;
   background-color: var(--color-surface-container-highest);
 }
 
 .m3-slider__handle {
+  --m3-handle-width: 3px;
   position: absolute;
-  left: calc(1.5px + var(--m3-fill) * (100% - 3px));
-  transform: translateX(-50%);
-  width: 3px;
+  inset-inline-start: calc(1.5px + var(--m3-fill) * (100% - 3px));
+  /* Centred on its position by a logical margin, not a transform, so it mirrors with the fill. */
+  margin-inline-start: calc(var(--m3-handle-width) / -2);
+  width: var(--m3-handle-width);
   height: 1.5rem;
   border-radius: 9999px;
   background-color: var(--color-primary);
@@ -563,13 +698,54 @@
 }
 
 .m3-slider[data-pressed="true"] .m3-slider__handle {
-  width: 2px;
+  --m3-handle-width: 2px;
+}
+
+/* The music progress bar's shapes. */
+.m3-slider[data-bar-style="thick"] {
+  height: 2.5rem;
+}
+.m3-slider[data-bar-style="thick"] .m3-slider__track {
+  height: 1.5rem;
+}
+.m3-slider[data-bar-style="thick"] .m3-slider__handle {
+  height: 2.5rem;
+}
+.m3-slider[data-bar-style="compact"] .m3-slider__track {
+  height: 0.375rem;
+}
+.m3-slider[data-bar-style="compact"] .m3-slider__handle {
+  height: 1rem;
+}
+.m3-slider[data-bar-style="slim"] .m3-slider__track {
+  height: 0.1875rem;
+}
+.m3-slider[data-bar-style="slim"] .m3-slider__handle,
+.m3-slider[data-bar-style="slim"] .m3-slider__stop {
+  display: none;
+}
+.m3-slider[data-bar-style="slim"] .m3-slider__track--active {
+  width: calc(var(--m3-fill) * 100%);
+}
+.m3-slider[data-bar-style="slim"] .m3-slider__track--inactive {
+  inset-inline-start: calc(var(--m3-fill) * 100%);
+  width: auto;
+  inset-inline-end: 0;
+}
+.m3-slider[data-bar-style="wavy"] .m3-slider__track--active {
+  height: 0.75rem;
+  border-radius: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12'%3E%3Cpath d='M0 6 Q6 0 12 6 T24 6' fill='none' stroke='black' stroke-width='3'/%3E%3C/svg%3E") repeat-x center / 24px 12px;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='12'%3E%3Cpath d='M0 6 Q6 0 12 6 T24 6' fill='none' stroke='black' stroke-width='3'/%3E%3C/svg%3E") repeat-x center / 24px 12px;
+}
+.m3-slider[data-bar-style="wavy"] .m3-slider__track--inactive {
+  height: 0.1875rem;
 }
 
 /* Marks the end of travel; pointless once the handle has reached it. */
 .m3-slider__stop {
   position: absolute;
-  right: 6px;
+  inset-inline-end: 6px;
   width: 3px;
   height: 3px;
   border-radius: 9999px;
@@ -634,6 +810,7 @@
 }
 
 .m3-slider--vertical .m3-slider__handle {
+  margin-inline-start: 0;
   left: 50%;
   top: auto;
   bottom: calc(1.5px + var(--m3-fill) * (100% - 3px));
@@ -685,26 +862,6 @@
   .m3-slider__handle {
     transition: none;
   }
-}
-
-/* Hide scrollbar for Chrome, Safari and Opera */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE, Edge and Firefox */
-.scrollbar-none {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
-}
-
-.hide-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.hide-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
 /*
@@ -823,4 +980,14 @@
   contain-intrinsic-size: auto calc(
     var(--flow-grid-track-w, calc(100vw / var(--flow-grid-columns, 4))) * 0.5625 + 4.5rem
   );
+}
+
+/* A setting opened from search, so the eye finds it on the page. */
+.setting-row-highlight {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+:root[data-app-font="system"] body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, "Noto Sans Arabic", "Noto Naskh Arabic", sans-serif;
 }

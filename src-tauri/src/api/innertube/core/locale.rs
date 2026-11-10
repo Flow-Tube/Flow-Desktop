@@ -1,13 +1,20 @@
 //! The language the site writes its text in (`hl`): titles stay as uploaded,
 //! but dates, counts, labels and auto-translated titles follow it. Player
 //! requests always use English, which every playability rule is written for.
+//!
+//! The country (`gl`) is the same idea for what the site offers: trending, search
+//! and feeds follow the one the user chose. Player requests always say `US`.
 
 use std::sync::RwLock;
 
 /// The setting naming the content language; empty means English.
 pub const CONTENT_LANGUAGE_SETTING: &str = "content_language";
 
+/// The setting naming the content country; missing or unusable means `US`.
+pub const CONTENT_COUNTRY_SETTING: &str = "trending_region";
+
 static CONTENT_LANGUAGE: RwLock<String> = RwLock::new(String::new());
+static CONTENT_COUNTRY: RwLock<String> = RwLock::new(String::new());
 
 /// The host language the site accepts for a language tag, as Flow for Android
 /// normalises it: the bare language, Brazilian and European Portuguese and the
@@ -59,6 +66,37 @@ pub fn content_language() -> String {
     }
 }
 
+/// A two-letter country code in the form the site takes, or `US` for anything else.
+#[must_use]
+pub fn normalize_country(code: Option<&str>) -> String {
+    let code = code.unwrap_or_default().trim().to_ascii_uppercase();
+    if code.len() == 2 && code.chars().all(|c| c.is_ascii_alphabetic()) {
+        code
+    } else {
+        "US".to_string()
+    }
+}
+
+/// Set the content country from the saved setting.
+pub fn set_content_country(setting: Option<&str>) {
+    *CONTENT_COUNTRY
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = normalize_country(setting);
+}
+
+#[must_use]
+pub fn content_country() -> String {
+    let country = CONTENT_COUNTRY
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    if country.is_empty() {
+        "US".to_string()
+    } else {
+        country
+    }
+}
+
 /// Whether the site's text is English, which the English-only readers assume.
 #[must_use]
 pub fn is_english() -> bool {
@@ -68,6 +106,15 @@ pub fn is_english() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn countries_are_two_letters_or_us() {
+        assert_eq!(normalize_country(Some(" de ")), "DE");
+        assert_eq!(normalize_country(Some("USA")), "US");
+        assert_eq!(normalize_country(Some("1a")), "US");
+        assert_eq!(normalize_country(Some("")), "US");
+        assert_eq!(normalize_country(None), "US");
+    }
 
     #[test]
     fn host_languages_follow_flow_for_android() {

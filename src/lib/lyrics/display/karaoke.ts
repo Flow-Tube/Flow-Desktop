@@ -7,7 +7,11 @@ import { wordLiftProgress } from "./motion";
 /** Port of Android's KaraokeLine.kt geometry and drawing, for a 2D canvas. */
 
 export const HELD_NOTE_MS = 1100;
-export const GLOW_STEPS = 8;
+/** Glow strengths prepared per colour: steps this small never show. */
+export const GLOW_LEVELS = 64;
+export const GLOW_PEAK_ALPHA = 0.5;
+// The glow is the shadow of a copy drawn this far to the left, so only the blur lands on the word.
+const GLOW_SHADOW_SHIFT_PX = 10_000;
 export const WORD_LIFT_PX = 3;
 export const GLOW_RADIUS_PX = 10;
 export const FEATHER_EM = 0.9;
@@ -173,9 +177,10 @@ export interface KaraokePaint {
   unsung: string;
   forward: CanvasGradient | string;
   backward: CanvasGradient | string;
-  /** Shadow colours and blurs for the glow's eight strengths, weakest first. */
+  /** Shadow colours for the glow's strengths, weakest first. */
   glowColors: string[];
-  glowBlurs: number[];
+  /** One blur for every strength: a changing radius is what made the glow visibly step. */
+  glowBlur: number;
 }
 
 export interface KaraokeFrame {
@@ -229,18 +234,16 @@ export function drawKaraoke(ctx: CanvasRenderingContext2D, geometry: KaraokeGeom
       : cell.inkLeft + (cell.inkRight - cell.inkLeft) * cellProgress;
     ctx.direction = row.row.rtl ? "rtl" : "ltr";
 
-    if (frame.glow && cell.glowText !== null && progress > 0 && progress < 1 && cellProgress > 0) {
-      const step = Math.min(GLOW_STEPS - 1, Math.max(0, Math.trunc(Math.sin(progress * Math.PI) * GLOW_STEPS)));
+    const glowLevel = frame.glow && cell.glowText !== null ? heldNoteGlowLevel(progress) : -1;
+    if (glowLevel >= 0) {
+      // Shadows ignore the canvas transform, so they are given in device pixels.
+      const scale = typeof ctx.getTransform === "function" ? ctx.getTransform().a : 1;
       ctx.save();
-      ctx.beginPath();
-      const left = cell.rtl ? front : cell.inkLeft - GLOW_RADIUS_PX;
-      const right = cell.rtl ? cell.inkRight + GLOW_RADIUS_PX : front;
-      ctx.rect(left, clipTop, right - left, clipHeight);
-      ctx.clip();
-      ctx.shadowColor = paint.glowColors[step]!;
-      ctx.shadowBlur = paint.glowBlurs[step]!;
+      ctx.shadowColor = paint.glowColors[glowLevel]!;
+      ctx.shadowBlur = paint.glowBlur * scale;
+      ctx.shadowOffsetX = GLOW_SHADOW_SHIFT_PX * scale;
       ctx.fillStyle = paint.sung;
-      ctx.fillText(cell.glowText, cell.inkLeft, row.baseline - wordLift);
+      ctx.fillText(cell.glowText!, cell.inkLeft - GLOW_SHADOW_SHIFT_PX, row.baseline - wordLift);
       ctx.restore();
     }
 
@@ -262,4 +265,13 @@ export function drawKaraoke(ctx: CanvasRenderingContext2D, geometry: KaraokeGeom
     }
     ctx.restore();
   }
+}
+
+/**
+ * Which prepared glow strength a held word shows at `progress` through it, or -1 for none. It rises
+ * and falls with the word on one smooth curve, in steps too small to see.
+ */
+export function heldNoteGlowLevel(progress: number): number {
+  if (!(progress > 0 && progress < 1)) return -1;
+  return Math.min(GLOW_LEVELS - 1, Math.max(0, Math.trunc(Math.sin(progress * Math.PI) * GLOW_LEVELS)));
 }

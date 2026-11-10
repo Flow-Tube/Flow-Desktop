@@ -28,9 +28,10 @@ use serde::Serialize;
 use crate::sync::canonical::{
     AffinityWire, BrainCounters, BrainFlags, BrainLwwMaps, BrainPerVideo, BrainSets, BrainVectors,
     ContentVectorWire, FlowNeuroBrainSnapshot, GCounter, GroupMember, Hlc, Like, LikeKind, Lww,
-    MusicBrainSnapshot, OrSet, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
+    MusicBrainSnapshot, Note, OrSet, Playlist, PlaylistItem, PlaylistOrigin, SettingEntry,
     SubscribedChannel, SubscriptionGroup, TrackMetaWire, WatchHistoryRecord,
 };
+use crate::sync::saved_shorts::SAVED_SHORTS_SYNC_ID;
 
 // ===========================================================================================
 // Generic primitive helpers
@@ -250,6 +251,7 @@ fn is_reconcilable(p: &Playlist) -> bool {
         && !p.is_protected
         && p.is_user_created
         && p.origin == PlaylistOrigin::Local
+        && p.sync_id != SAVED_SHORTS_SYNC_ID
         && !normalize_title(&p.title).is_empty()
 }
 
@@ -549,6 +551,46 @@ fn merge_one_channel(a: &SubscribedChannel, b: &SubscribedChannel) -> Subscribed
         hlc: Hlc::max(&a.hlc, &b.hlc),
         deleted: tombstone_wins(a.deleted, &a.hlc, b.deleted, &b.hlc),
     }
+}
+
+// ===========================================================================================
+// Notes
+// ===========================================================================================
+
+/// Merge notes by `id`, as Android's `NotesMerger`: a note is one field the user typed, so the
+/// later edit wins outright.
+#[must_use]
+pub fn merge_notes(a: Vec<Note>, b: Vec<Note>) -> Vec<Note> {
+    let mut map: BTreeMap<String, Note> = a
+        .into_iter()
+        .filter(|n| !n.id.is_empty())
+        .map(|n| (n.id.clone(), n))
+        .collect();
+    for n in b.into_iter().filter(|n| !n.id.is_empty()) {
+        match map.get_mut(&n.id) {
+            Some(e) => *e = merge_one_note(e, &n),
+            None => {
+                map.insert(n.id.clone(), n);
+            }
+        }
+    }
+    map.into_values().collect()
+}
+
+fn merge_one_note(x: &Note, y: &Note) -> Note {
+    let x_wins = if x.updated_at != y.updated_at {
+        x.updated_at > y.updated_at
+    } else if x.deleted != y.deleted {
+        // Same instant on two devices: a clear is never undone by a stale edit.
+        x.deleted
+    } else if x.text != y.text {
+        // Kotlin compares strings by UTF-16 code unit, which UTF-8 byte order doesn't match.
+        x.text.encode_utf16().gt(y.text.encode_utf16())
+    } else {
+        // Filling in what a note is about leaves its time alone, so the copy that knows wins.
+        x.title.is_some() || y.title.is_none()
+    };
+    if x_wins { x.clone() } else { y.clone() }
 }
 
 // ===========================================================================================

@@ -3,6 +3,7 @@ import type { MusicAudioQuality } from "./api/music";
 import { listedSeconds } from "./audio/listedLength";
 import { musicAudioEngine } from "./audio/musicAudioEngine";
 import { resolveMusicStream } from "./musicStreamResolution";
+import { isLocalMediaId } from "./localMediaId";
 import { findDownloadedRecord } from "./useDownloads";
 import { recordPlayerEvent } from "./playerDiagnostics";
 
@@ -30,7 +31,7 @@ export async function preloadTrack(
 ): Promise<void> {
   const videoId = track.videoId ?? track.id;
   if (preloading === videoId || musicAudioEngine.hasPreloaded(videoId)) return;
-  if (findDownloadedRecord(videoId, "audio")) return;
+  if (findDownloadedRecord(videoId, "audio") || isLocalMediaId(videoId)) return;
 
   preloading = videoId;
   recordPlayerEvent(`music preload start: ${videoId}`);

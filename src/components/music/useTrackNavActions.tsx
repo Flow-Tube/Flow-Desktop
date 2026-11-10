@@ -14,17 +14,25 @@ export function useTrackNavActions(
 
   const actions: MusicMenuAction[] = [];
 
-  const primaryArtist = track.artists?.find((a) => a.id) ?? track.artists?.[0] ?? null;
-  const artistId = primaryArtist?.id ?? null;
-  if (artistId) {
+  const seenIds = new Set<string>();
+  const artistsWithId: { name: string; id: string }[] = [];
+  for (const artist of track.artists ?? []) {
+    if (artist.id && !seenIds.has(artist.id)) {
+      seenIds.add(artist.id);
+      artistsWithId.push({ name: artist.name, id: artist.id });
+    }
+  }
+
+  const named = artistsWithId.length > 1;
+  for (const artist of artistsWithId) {
     actions.push({
-      id: 'view-artist',
-      label: getString('music_view_artist'),
+      id: named ? `view-artist-${artist.id}` : 'view-artist',
+      label: named ? getString('music_view_artist_named', artist.name) : getString('music_view_artist'),
       icon: <User size={16} />,
       group: 'go',
       onSelect: () => {
         options?.onNavigate?.();
-        navigate(`/music/artist/${artistId}`);
+        navigate(`/music/artist/${artist.id}`);
       },
     });
   }

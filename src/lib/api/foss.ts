@@ -9,6 +9,8 @@ export interface SponsorBlockSegment {
   category: string;
   segment: [number, number];
   UUID: string;
+  /** "skip", "mute", "full" or "poi". */
+  actionType?: string;
 }
 
 export async function getSponsorBlockSegments(
@@ -29,6 +31,19 @@ export async function getSponsorBlockSegments(
     videoId,
     serverUrl,
   });
+}
+
+/** A part of a music video with no song playing, in seconds. A zero video length wasn't recorded. */
+export interface NonMusicSegment {
+  startSeconds: number;
+  endSeconds: number;
+  videoDurationSeconds: number;
+}
+
+/** Looked up by a hash prefix of the id, so the server can't tell which video is playing. */
+export async function getNonMusicSegments(videoId: string, serverUrl?: string): Promise<NonMusicSegment[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<NonMusicSegment[]>("get_non_music_segments", { videoId, serverUrl });
 }
 
 export interface SubmitSponsorBlockSegmentParams {
@@ -64,6 +79,14 @@ export async function submitSponsorBlockSegment(
 export interface DeArrowOverride {
   title: string | null;
   thumbnailUrl: string | null;
+  /** The frame to show when nothing is submitted, for the "Use a video frame" switch. */
+  randomFrameUrl: string | null;
+}
+
+/** The thumbnail to show from an override: a submission, or else a frame if that's wanted. */
+export function deArrowThumbnail(override: DeArrowOverride | null, useRandomFrame: boolean): string | null {
+  if (!override) return null;
+  return override.thumbnailUrl ?? (useRandomFrame ? override.randomFrameUrl : null);
 }
 
 export async function getDeArrowOverride(videoId: string): Promise<DeArrowOverride | null> {

@@ -4,7 +4,6 @@ import type { ShortItem } from "../types/shorts";
 import type { ShortVideoSummary } from "../types/video";
 
 const SAVED_SHORTS_SETTING_KEY = "saved_shorts_library";
-const SAVED_SHORTS_CAP = 1000;
 const TITLE_REPAIR_LIMIT = 24;
 
 export const SAVED_SHORTS_LIBRARY_UPDATED_EVENT = "flow:saved-shorts-library-updated";
@@ -35,6 +34,8 @@ function normalizeShort(short: ShortVideoSummary): ShortVideoSummary | null {
     channelAvatarUrl: short.channelAvatarUrl ?? null,
     viewCountText: short.viewCountText ?? null,
     publishedText: short.publishedText ?? null,
+    addedAtInPlaylist: short.addedAtInPlaylist ?? null,
+    durationSeconds: short.durationSeconds ?? null,
   };
 }
 
@@ -101,7 +102,7 @@ export async function loadSavedShorts(
 }
 
 async function persistSavedShorts(shorts: ShortVideoSummary[]) {
-  await setSetting(SAVED_SHORTS_SETTING_KEY, JSON.stringify(shorts.slice(0, SAVED_SHORTS_CAP)));
+  await setSetting(SAVED_SHORTS_SETTING_KEY, JSON.stringify(shorts));
   notifySavedShortsUpdated();
 }
 
@@ -116,7 +117,7 @@ export async function saveShortToLibrary(short: ShortVideoSummary | ShortItem) {
 
   const shorts = await loadSavedShorts({ repairTitles: false });
   const next = [
-    summary,
+    { ...summary, addedAtInPlaylist: Date.now() },
     ...shorts.filter((savedShort) => savedShort.id !== summary.id),
   ];
   await persistSavedShorts(next);

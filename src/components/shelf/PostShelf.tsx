@@ -22,7 +22,7 @@ export const PostShelf: React.FC<PostShelfProps> = ({
       {/* Shelf Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-chrome-zinc-100 tracking-tight flex items-center gap-2">
-          <span>{title}</span>
+          <span dir="auto">{title}</span>
           <span className="text-xs text-chrome-zinc-500 font-semibold bg-chrome-zinc-900 border border-chrome-zinc-800/80 px-2 py-0.5 rounded-full">
             {posts.length}
           </span>

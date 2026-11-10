@@ -111,7 +111,7 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
           <Play className="h-5 w-5 fill-current text-chrome-white" />
         </span>
         {video.durationSeconds ? (
-          <span className="absolute bottom-1 right-1 rounded bg-chrome-black/80 px-1 py-0.5 font-mono text-[10px] text-chrome-white">
+          <span className="absolute bottom-1 end-1 rounded bg-chrome-black/80 px-1 py-0.5 font-mono text-[10px] text-chrome-white">
             {formatDuration(video.durationSeconds)}
           </span>
         ) : null}
@@ -121,7 +121,7 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
         ref={titleRef}
         type="button"
         onClick={() => onPlay(index)}
-        className="min-w-0 flex-1 text-left"
+        className="min-w-0 flex-1 text-start"
       >
         {isCurrent ? (
           <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-primary)]">
@@ -132,10 +132,10 @@ function QueueRow({ video, index, isCurrent, isManual, onPlay, onRemove }: Queue
             {getString("queue_added_label")}
           </span>
         ) : null}
-        <span className="mt-0.5 block line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100">
+        <span dir="auto" className="mt-0.5 block line-clamp-2 text-sm font-medium leading-snug text-chrome-neutral-100">
           {title}
         </span>
-        <span className="mt-1 block truncate text-xs text-chrome-neutral-500">{video.channelName}</span>
+        <span dir="auto" className="mt-1 block truncate text-xs text-chrome-neutral-500">{video.channelName}</span>
       </button>
 
       <button
@@ -280,7 +280,7 @@ export function QueuePanel() {
           type="button"
           onClick={clearUpcoming}
           disabled={upcomingCount === 0}
-          className="ml-auto rounded-full px-3 py-2 text-xs font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ms-auto rounded-full px-3 py-2 text-xs font-medium text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {getString("queue_clear_upcoming")}
         </button>

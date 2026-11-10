@@ -3,6 +3,9 @@ import { useEffect, useState, type RefObject } from "react";
 import { getString } from "../../lib/i18n/index";
 import { usePlayerStore } from "../../store/usePlayerStore";
 import { formatTime } from "../../lib/musicFormat";
+import { copyText } from "../../lib/clipboard";
+import { readMeasuredSpeedKbps } from "../../lib/dashStartQuality";
+import { useUiStore } from "../../store/useUiStore";
 
 const SAMPLE_INTERVAL_MS = 1000;
 
@@ -13,6 +16,8 @@ interface MediaSample {
   totalFrames: number | null;
   bufferedAheadSeconds: number | null;
   readyState: number;
+  viewportWidth: number;
+  viewportHeight: number;
 }
 
 interface StatsForNerdsProps {
@@ -40,6 +45,8 @@ function readSample(video: HTMLVideoElement): MediaSample {
     bufferedAheadSeconds:
       bufferedEnd === null ? null : Math.max(0, Math.round(bufferedEnd - video.currentTime)),
     readyState: video.readyState,
+    viewportWidth: video.clientWidth,
+    viewportHeight: video.clientHeight,
   };
 }
 
@@ -54,6 +61,16 @@ function codecName(mimeType?: string | null): string | null {
  * counters and buffer level only move between renders, so this samples the
  * media element on its own clock rather than riding the parent's re-renders.
  */
+export const statsAsText = (rows: Array<[string, string]>) => rows.map(([label, value]) => `${label}: ${value}`).join("\n");
+
+async function copyStats(rows: Array<[string, string]>) {
+  const copied = await copyText(statsAsText(rows));
+  useUiStore.getState().showToast({
+    variant: copied ? "success" : "error",
+    message: getString(copied ? "stats_copied" : "stats_copy_failed"),
+  });
+}
+
 export function StatsForNerds({
   videoRef,
   currentTime,
@@ -68,6 +85,7 @@ export function StatsForNerds({
 }: StatsForNerdsProps) {
   const volume = usePlayerStore((state) => state.volume);
   const muted = usePlayerStore((state) => state.muted);
+  const videoId = usePlayerStore((state) => state.currentVideo?.id);
   const [sample, setSample] = useState<MediaSample | null>(null);
 
   useEffect(() => {
@@ -111,6 +129,14 @@ export function StatsForNerds({
     muted ? getString("stats_volume_muted") : `${Math.round(volume * 100)}%`,
   ]);
   rows.push([getString("stats_ready_state"), String(sample?.readyState ?? "-")]);
+  if (videoId) rows.push([getString("stats_video_id"), videoId]);
+  rows.push([getString("stats_device"), navigator.platform || "-"]);
+  rows.push([
+    getString("stats_viewport"),
+    sample && sample.viewportWidth > 0 ? `${sample.viewportWidth}x${sample.viewportHeight}` : "-",
+  ]);
+  const speedKbps = readMeasuredSpeedKbps();
+  rows.push([getString("stats_bandwidth"), speedKbps ? `${Math.round(speedKbps)} kbps` : "-"]);
 
   if (captionCount !== undefined) {
     rows.push([getString("stats_captions"), String(captionCount)]);
@@ -122,7 +148,16 @@ export function StatsForNerds({
         compact ? "w-[min(82vw,300px)]" : "w-[min(92vw,320px)]"
       } ${className}`}
     >
-      <div className="mb-2 text-sm font-black">{getString("stats_title")}</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-black">{getString("stats_title")}</span>
+        <button
+          type="button"
+          onClick={() => void copyStats(rows)}
+          className="pointer-events-auto rounded-md px-2 py-0.5 text-xs font-semibold text-chrome-zinc-200 transition-colors duration-200 ease-out hover:bg-chrome-white/10"
+        >
+          {getString("stats_copy")}
+        </button>
+      </div>
       <div
         className={`grid gap-x-3 gap-y-1 text-chrome-zinc-300 ${
           compact ? "grid-cols-[96px_1fr]" : "grid-cols-[110px_1fr]"

@@ -9,6 +9,7 @@ pub(crate) mod cache;
 pub mod card;
 pub(crate) mod channel_memory;
 pub mod chips;
+mod chips_rewatch;
 mod filters;
 pub(crate) mod inputs;
 mod kind_checks;
@@ -81,6 +82,8 @@ struct Feed {
     max_video_age_ms: Option<u64>,
     /// Whether this feed was built leaving out videos already seen.
     hides_seen: bool,
+    /// Whether this feed was built keeping followed channels off Home.
+    subscriptions_kept_off: bool,
     subs_backlog: Vec<Card>,
     memory_quota: usize,
     related_picks: HashSet<String>,
@@ -115,8 +118,8 @@ struct Inner {
     priority_asked: Mutex<HashMap<String, u64>>,
     /// The interest chips last shown, so a chip's key finds its topics.
     chips: Mutex<Vec<crate::flow_neuro::interest_chips::InterestChip>>,
-    /// Each chip's videos with when they were fetched.
-    chip_results: Mutex<HashMap<String, (Vec<Card>, u64)>>,
+    /// Each chip's result with when it was fetched.
+    chip_results: Mutex<HashMap<String, (chips::ChipFeed, u64)>>,
 }
 
 /// The Home feed service; cheap to clone into background work.
@@ -164,12 +167,22 @@ impl HomeFeedService {
     /// shown (up to eight hours old) paints at once while a new one loads. Either leaves out what
     /// is known by now to be a Short or to never play. A changed video age limit drops what is now
     /// too old at once and builds the feed anew, and so does turning on "Hide videos you've already
-    /// seen", which also never paints the last feed: it was all seen.
+    /// seen", which also never paints the last feed: it was all seen. Turning "Subscriptions on
+    /// Home" off drops the followed channels' cards at once and builds anew too.
     pub async fn open(&self, app: &AppHandle) -> HomeSnapshot {
         let now = now_ms();
         let pool = app.state::<sqlx::SqlitePool>();
         let max_video_age_ms = inputs::max_video_age_ms(&pool).await;
         let hides_seen = inputs::hides_seen_videos(&pool).await;
+        let subscriptions_kept_off = !inputs::subscriptions_on_home(&pool).await;
+        let kept_off_home = if subscriptions_kept_off {
+            inputs::subscriptions(&pool)
+                .await
+                .map(|subscriptions| subscriptions.ids())
+                .unwrap_or_default()
+        } else {
+            HashSet::new()
+        };
         let shorts = crate::db::known_shorts::all(&pool)
             .await
             .unwrap_or_default();
@@ -180,11 +193,16 @@ impl HomeFeedService {
             max_video_age_ms.is_none_or(|max_age_ms| filters::is_within(card, now, max_age_ms))
         };
         let showable = |card: &Card| {
-            within_limit(card) && !shorts.contains(card.id()) && !unplayable.contains(card.id())
+            within_limit(card)
+                && !shorts.contains(card.id())
+                && !unplayable.contains(card.id())
+                && !kept_off_home.contains(card.channel_id())
         };
         let choices_changed = {
             let feed = self.inner.feed.lock().unwrap();
-            feed.max_video_age_ms != max_video_age_ms || feed.hides_seen != hides_seen
+            feed.max_video_age_ms != max_video_age_ms
+                || feed.hides_seen != hides_seen
+                || feed.subscriptions_kept_off != subscriptions_kept_off
         };
         if choices_changed {
             self.inner.chip_results.lock().unwrap().clear();

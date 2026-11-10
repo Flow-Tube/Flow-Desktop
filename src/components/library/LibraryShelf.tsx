@@ -48,7 +48,7 @@ export const LibraryShelf: React.FC<LibraryShelfProps> = ({
 
         <Button variant="secondary" size="sm" onClick={() => navigate(viewAllTo)} className="gap-1 px-4 text-sm">
           {getString("library_view_all")}
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 rtl:-scale-x-100" />
         </Button>
       </div>
 

@@ -27,6 +27,11 @@ pub struct DeArrowContent {
     pub titles: Vec<DeArrowTitle>,
     #[serde(default)]
     pub thumbnails: Vec<DeArrowThumbnail>,
+    /// Where in the video to take a frame from, 0 to 1, the same for every `DeArrow` user.
+    #[serde(default)]
+    pub random_time: Option<f64>,
+    #[serde(default)]
+    pub video_duration: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +39,10 @@ pub struct DeArrowContent {
 pub struct DeArrowOverride {
     pub title: Option<String>,
     pub thumbnail_url: Option<String>,
+    /// A frame to show when no thumbnail was submitted. The frontend's switch decides, so a
+    /// cached answer stays good when it changes.
+    #[serde(default)]
+    pub random_frame_url: Option<String>,
 }
 
 /// DeArrow submitters prefix a word with `>` to keep its casing when titles are
@@ -71,7 +80,9 @@ pub async fn fetch_dearrow_override_api(video_id: &str) -> AppResult<Option<DeAr
         }
     };
 
-    if !response.status().is_success() {
+    // A video nobody has submitted for answers 404, with the random frame time in its body.
+    let status = response.status();
+    if !status.is_success() && status != reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }
 
@@ -116,19 +127,65 @@ pub async fn fetch_dearrow_override_api(video_id: &str) -> AppResult<Option<DeAr
         None
     };
 
-    if best_title.is_none() && thumbnail_url.is_none() {
+    let random_frame_url = random_frame_url(&content, video_id);
+    if best_title.is_none() && thumbnail_url.is_none() && random_frame_url.is_none() {
         Ok(None)
     } else {
         Ok(Some(DeArrowOverride {
             title: best_title,
             thumbnail_url,
+            random_frame_url,
         }))
     }
+}
+
+/// The frame `DeArrow` picks for a video with no usable thumbnail submission. A winning "original"
+/// is a submission too: it keeps `YouTube`'s thumbnail, so it gets no frame.
+fn random_frame_url(content: &DeArrowContent, video_id: &str) -> Option<String> {
+    if content.thumbnails.iter().any(|t| t.votes >= 0 || t.locked) {
+        return None;
+    }
+    let random_time = content.random_time?;
+    // Live and upcoming videos have no duration here, and no frame to show yet.
+    let duration = content.video_duration.filter(|duration| *duration > 0.0)?;
+    Some(format!(
+        "https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID={}&time={}",
+        video_id,
+        random_time * duration
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn content(body: serde_json::Value) -> DeArrowContent {
+        serde_json::from_value(body).unwrap()
+    }
+
+    #[test]
+    fn a_video_with_no_submission_gets_a_frame_at_the_random_time() {
+        let answer = content(serde_json::json!({
+            "titles": [], "thumbnails": [], "randomTime": 0.25, "videoDuration": 200.0
+        }));
+        assert_eq!(
+            random_frame_url(&answer, "abc").as_deref(),
+            Some("https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=abc&time=50")
+        );
+    }
+
+    #[test]
+    fn a_submission_or_a_missing_duration_means_no_frame() {
+        let submitted = content(serde_json::json!({
+            "thumbnails": [{"timestamp": 3.0, "votes": 0, "locked": false, "original": true}],
+            "randomTime": 0.25, "videoDuration": 200.0
+        }));
+        assert_eq!(random_frame_url(&submitted, "abc"), None);
+        let live = content(serde_json::json!({ "randomTime": 0.25, "videoDuration": 0.0 }));
+        assert_eq!(random_frame_url(&live, "abc"), None);
+        let unknown = content(serde_json::json!({ "randomTime": 0.25, "videoDuration": null }));
+        assert_eq!(random_frame_url(&unknown, "abc"), None);
+    }
 
     #[test]
     fn strips_case_markers_at_word_starts() {

@@ -38,8 +38,19 @@ async fn open_name<S: Store>(
     sealed: &str,
 ) -> Option<DeviceMeta> {
     let key = session.epoch_key(epoch).await.ok()?;
+    open_sealed_name(&key, session.group(), (epoch, seq), did, sealed)
+}
+
+/// The name sealed in a roster entry at `seq` under the key of `epoch`.
+pub(super) fn open_sealed_name(
+    key: &[u8],
+    group: &[u8; 16],
+    (epoch, seq): (u32, u64),
+    did: &str,
+    sealed: &str,
+) -> Option<DeviceMeta> {
     let sealed = URL_SAFE_NO_PAD.decode(sealed).ok()?;
     let did = hex::decode(did).ok()?;
-    let content = open_device_meta(&key, session.group(), epoch, seq, &did, &sealed).ok()?;
+    let content = open_device_meta(key, group, epoch, seq, &did, &sealed).ok()?;
     serde_json::from_str(&content).ok()
 }

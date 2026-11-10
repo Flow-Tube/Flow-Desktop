@@ -1,10 +1,11 @@
-import React, { useState, useRef } from "react";
-import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal } from "lucide-react";
+import React, { useState } from "react";
+import { ArchiveRestore, Upload, Check, AlertCircle, FolderHeart, Heart, History, Tv, Loader2, Brain, Database, FileText, SlidersHorizontal, StickyNote } from "lucide-react";
 import { SettingsGroup } from "../components/settings/SettingsGroup";
 import { SettingItem } from "../components/settings/SettingItem";
 import { ToggleSwitch } from "../components/ui/ToggleSwitch";
-import { unzipSync } from "fflate";
 import { getSetting, setSetting, addWatchRecordsBulk } from "../lib/api/db";
+import { readBackupFile, type UnreadableReason } from "../lib/api/backup";
+import { pickFile } from "../lib/dialogs";
 import { useHistoryStore } from "../store/useHistoryStore";
 import { bootstrapFromHistory, bootstrapFromSubscriptions, importBrain } from "../lib/api/recommendation";
 import {
@@ -14,7 +15,7 @@ import {
 } from "../lib/flowNeuroImport";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { parseSubscriptionExport } from "../lib/api/youtube";
-import { getString } from "../lib/i18n/index";
+import { getString, type StringKey } from "../lib/i18n/index";
 import {
   extractBackupCollections,
   importBackupCollections,
@@ -22,10 +23,10 @@ import {
   type BackupCollections,
 } from "../lib/settings/backup";
 import { SETTINGS, SETTING_SCOPES, type SettingKey } from "../lib/settings/schema";
-import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
-import { LIKES_LIBRARY_UPDATED_EVENT, useLikesStore } from "../store/useLikesStore";
-import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
-import { PLAYLIST_LIBRARY_UPDATED_EVENT } from "../lib/playlistLibrary";
+import { setSettingValue } from "../store/useAppSettingsStore";
+import { refreshAfterRestore } from "../lib/backup/refreshAfterRestore";
+import { importFailureMessage, importReportSummary, runOtherAppImport } from "../lib/backup/otherAppImport";
+import { ImportSourceChooser } from "../components/import/ImportSourceChooser";
 import type { VideoSummary } from "../types/video";
 import type { WatchHistoryRecord } from "../types/db";
 import { isProfilesMaster, restoreMasterProfiles } from "../lib/settings/masterRestore";
@@ -35,32 +36,23 @@ import { useProfilesStore } from "../store/useProfilesStore";
 import { useUiStore } from "../store/useUiStore";
 import { activeProfile } from "../lib/storage/profileStorage";
 
+const UNREADABLE_MESSAGES: Record<UnreadableReason, StringKey> = {
+  too_large: "import_error_too_large",
+  no_backup: "import_error_no_backup",
+  damaged: "import_error_damaged",
+};
+
 interface ParseChannelResult { id: string; name: string; }
 interface LocalPlaylist { id: string; name: string; description?: string; tracks: VideoSummary[]; }
 
-/// A backend collection restore writes SQLite directly, so the Zustand-cached stores must
-/// reload afterwards (mirrors the sync session's `sync://refresh` handling).
-async function refreshStoresAfterRestore() {
-  await useAppSettingsStore.getState().loadSettings();
-  useLikesStore.setState({ loaded: false });
-  await useLikesStore.getState().load();
-  window.dispatchEvent(new Event(LIKES_LIBRARY_UPDATED_EVENT));
-  await useAlbumLibraryStore.getState().load();
-  window.dispatchEvent(new Event(PLAYLIST_LIBRARY_UPDATED_EVENT));
-  await useSubscriptionStore.getState().loadSubscriptions();
-  await useSubscriptionStore.getState().loadSubscriptionGroups();
-  void useHistoryStore.getState().load(true);
-}
-
 export const ImportData: React.FC = () => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [importSubs, setImportSubs] = useState(true);
   const [importPlaylists, setImportPlaylists] = useState(true);
   const [importHistory, setImportHistory] = useState(true);
   const [importNeuro, setImportNeuro] = useState(true);
   const [importSettings, setImportSettings] = useState(true);
   const [importLikes, setImportLikes] = useState(true);
+  const [importNotes, setImportNotes] = useState(true);
 
   const [importState, setImportState] = useState<"idle" | "reading" | "parsing" | "saving" | "success" | "error">("idle");
   const showToast = useUiStore((state) => state.showToast);
@@ -79,7 +71,7 @@ export const ImportData: React.FC = () => {
 
   const handleCardClick = () => {
     if (["reading", "parsing", "saving"].includes(importState)) return;
-    fileInputRef.current?.click();
+    void pickAndImport();
   };
 
   const extractChannelIdFromUrl = (url: string): string => {
@@ -139,7 +131,7 @@ export const ImportData: React.FC = () => {
 
   const parseFreeTubeWatchHistory = (text: string): WatchHistoryRecord[] => {
     return text.split("\n").filter(l => l.trim()).map(line => {
-      try { const item = JSON.parse(line); if (!item.videoId) return null; return { videoId: item.videoId, title: item.title || "FreeTube Video", channelName: item.author || "Creator", watchDate: item.timeWatched ? new Date(item.timeWatched).toISOString() : new Date().toISOString(), watchDurationSeconds: item.watchProgress ? Math.round((item.lengthSeconds || 0) * item.watchProgress) : 0, totalDurationSeconds: item.lengthSeconds || 0 }; } catch { return null; }
+      try { const item = JSON.parse(line); if (!item.videoId) return null; return { videoId: item.videoId, title: item.title || "FreeTube Video", channelName: item.author || getString('settings_creator'), watchDate: item.timeWatched ? new Date(item.timeWatched).toISOString() : new Date().toISOString(), watchDurationSeconds: item.watchProgress ? Math.round((item.lengthSeconds || 0) * item.watchProgress) : 0, totalDurationSeconds: item.lengthSeconds || 0 }; } catch { return null; }
     }).filter(Boolean) as WatchHistoryRecord[];
   };
 
@@ -161,36 +153,34 @@ export const ImportData: React.FC = () => {
     return records;
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const pickAndImport = async () => {
+    const path = await pickFile(getString("import_select_file"), [{ name: getString("import_supported_formats_title"), extensions: ["zip", "json", "db", "xml", "opml", "csv", "txt", "html"] }]);
+    if (!path) return;
     setImportState("reading"); setProgress(15); setStatusMessage(getString("import_reading")); setErrorMessage("");
     setSubsCount(0); setPlaylistsCount(0); setHistoryCount(0); setNeuroCount(0); setSettingsCount(0); setLikesCount(0);
-    const isZip = file.name.endsWith(".zip");
-    const reader = new FileReader();
-    reader.onprogress = (event) => { if (event.lengthComputable) setProgress(15 + Math.round((event.loaded / event.total) * 20)); };
-
-    reader.onload = async (event) => {
-      setImportState("parsing"); setProgress(40); setStatusMessage(getString("import_parsing"));
       try {
-        let text = "";
-        let backupData: any = null;
-        if (isZip) {
-          const ab = event.target?.result as ArrayBuffer;
-          if (!ab) throw new Error(getString("import_error_empty_archive"));
-          const dec = unzipSync(new Uint8Array(ab));
-          const jk = Object.keys(dec).filter(k => k.toLowerCase().endsWith(".json"));
-          // A profiles-era Android master also has profiles/<id>/app_data.json; the root one is Default's.
-          const atRoot = jk.filter(k => !k.includes("/"));
-          const key = atRoot.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /app[_-]?data|master[_-]?backup/i.test(k)) ?? jk.find(k => /engine[_-]?brain|neuro[_-]?brain|flow[_-]?brain/i.test(k)) ?? jk[0];
-          if (!key) throw new Error(getString("import_error_no_json_archive"));
-          text = new TextDecoder("utf-8").decode(dec[key]);
-        } else { text = event.target?.result as string; }
+        const read = await readBackupFile(path);
+        if (read.type === "unreadable") throw new Error(getString(UNREADABLE_MESSAGES[read.reason]));
+        if (read.type === "external") {
+          setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
+          const outcome = await runOtherAppImport(read.kind, [path]);
+          if (outcome.type === "failed") throw new Error(importFailureMessage(outcome.reason));
+          setSubsCount(outcome.report.subscriptions);
+          setHistoryCount(outcome.report.history);
+          setPlaylistsCount(outcome.report.playlists);
+          setLikesCount(outcome.report.likes);
+          setProgress(100); setImportState("success");
+          showToast({ message: importReportSummary(outcome.report), variant: "success" });
+          return;
+        }
+        setImportState("parsing"); setProgress(40); setStatusMessage(getString("import_parsing"));
+        const text = read.type === "text" ? read.text : "{}";
+        let backupData: any = read.type === "backup" ? read.data : null;
         if (!text?.trim()) throw new Error(getString("import_error_empty_backup"));
         const trimmed = text.trim();
         const isJson = trimmed.startsWith("{") || trimmed.startsWith("[");
         const isHtml = trimmed.toLowerCase().includes("<html") || trimmed.toLowerCase().includes("<!doctype html");
-        if (isJson) { try { backupData = JSON.parse(text); } catch { if (trimmed.includes("\n")) { backupData = { isFreeTubeHistory: true, rawText: text }; } else { throw new Error(getString("import_error_invalid_json")); } } }
+        if (isJson && !backupData) { try { backupData = JSON.parse(text); } catch { if (trimmed.includes("\n")) { backupData = { isFreeTubeHistory: true, rawText: text }; } else { throw new Error(getString("import_error_invalid_json")); } } }
 
         setImportState("saving"); setProgress(60); setStatusMessage(getString("import_writing"));
         let subbedCount = 0, playCount = 0, timelineCount = 0, importedSettingsCount = 0;
@@ -248,13 +238,15 @@ export const ImportData: React.FC = () => {
         if (backupCollections) {
           const collectionAllowed = (key: string): boolean => {
             switch (key) {
-              case "watch_history": return importHistory;
+              case "watch_history":
+              case "recap_stats": return importHistory;
               case "flow_neuro_brain":
               case "music_brain": return importNeuro;
               case "subscriptions":
               case "subscription_channels": return importSubs;
               case "playlists": return importPlaylists;
               case "likes": return importLikes;
+              case "notes": return importNotes;
               case "settings": return importSettings;
               default: return false;
             }
@@ -282,7 +274,7 @@ export const ImportData: React.FC = () => {
               setLikesCount(restoredOf("likes"));
               if (restoredOf("flow_neuro_brain") + restoredOf("music_brain") > 0) setNeuroCount(1);
               setProgress(90);
-              await refreshStoresAfterRestore();
+              await refreshAfterRestore();
             } catch (err) {
               console.error("Backend collection restore failed; falling back to legacy parsing", err);
             }
@@ -315,7 +307,7 @@ export const ImportData: React.FC = () => {
           const crossRefs = backupData.playlistVideos || []; const vids = backupData.videos || [];
           const parsed: LocalPlaylist[] = backupData.playlists.map((pl: any) => {
             const refs = crossRefs.filter((r: any) => r.playlistId === pl.id).sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
-            const tracks: VideoSummary[] = refs.map((ref: any) => ({ ref, vid: vids.find((v: any) => v.id === ref.videoId) })).filter(({ vid }: any) => vid).map(({ ref, vid }: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || "Unknown", thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track", addedAtInPlaylist: ref.addedAt > 0 ? ref.addedAt : null }));
+            const tracks: VideoSummary[] = refs.map((ref: any) => ({ ref, vid: vids.find((v: any) => v.id === ref.videoId) })).filter(({ vid }: any) => vid).map(({ ref, vid }: any) => ({ id: vid.id, title: vid.title, channelName: vid.channelName || getString('download_size_unknown'), thumbnailUrl: vid.thumbnailUrl || `https://i.ytimg.com/vi/${vid.id}/hqdefault.jpg`, durationSeconds: typeof vid.duration === "number" ? vid.duration : 0, publishedText: vid.uploadDate || "Uploaded recently", viewCountText: vid.viewCount ? `${vid.viewCount} views` : "Track", addedAtInPlaylist: ref.addedAt > 0 ? ref.addedAt : null }));
             return { id: pl.id || `imported-${Date.now()}-${Math.random()}`, name: pl.name || "Imported Playlist", description: pl.description || "Imported from backup", tracks };
           });
           const merged = [...existing];
@@ -326,7 +318,7 @@ export const ImportData: React.FC = () => {
 
         if (importHistory && !restoredViaCollections) {
           let ph: WatchHistoryRecord[] = [];
-          if (isJson && backupData) { if (backupData.isFreeTubeHistory) ph = parseFreeTubeWatchHistory(backupData.rawText); else if (backupData.viewHistory && Array.isArray(backupData.viewHistory)) ph = backupData.viewHistory.map((item: any) => ({ videoId: item.videoId, title: item.title || "Watched Video", channelName: item.channelName || "Unknown", watchDate: typeof item.timestamp === "number" ? new Date(item.timestamp).toISOString() : new Date().toISOString(), watchDurationSeconds: item.position ? Math.round(item.position / 1000) : 0, totalDurationSeconds: item.duration ? Math.round(item.duration / 1000) : 0 })); else ph = parseJsonWatchHistory(backupData); }
+          if (isJson && backupData) { if (backupData.isFreeTubeHistory) ph = parseFreeTubeWatchHistory(backupData.rawText); else if (backupData.viewHistory && Array.isArray(backupData.viewHistory)) ph = backupData.viewHistory.map((item: any) => ({ videoId: item.videoId, title: item.title || "Watched Video", channelName: item.channelName || getString('download_size_unknown'), watchDate: typeof item.timestamp === "number" ? new Date(item.timestamp).toISOString() : new Date().toISOString(), watchDurationSeconds: item.position ? Math.round(item.position / 1000) : 0, totalDurationSeconds: item.duration ? Math.round(item.duration / 1000) : 0 })); else ph = parseJsonWatchHistory(backupData); }
           else if (isHtml) ph = parseHtmlWatchHistory(text);
           if (ph.length > 0) {
             setStatusMessage(getString("import_importing_history", ph.length));
@@ -360,12 +352,12 @@ export const ImportData: React.FC = () => {
         await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVE, "false");
         await setSettingValue(SETTINGS.DEEP_FLOW_ACTIVATED_AT, "0");
 
+        if (subbedCount + playCount + timelineCount + importedSettingsCount === 0 && !restoredViaCollections && !(importNeuro && brainToImport)) {
+          throw new Error(getString("import_file_not_recognized"));
+        }
+
         setProgress(100); setImportState("success");
       } catch (err: any) { console.error("Import failure", err); setImportState("error"); setErrorMessage(err?.message || getString("import_file_not_recognized")); }
-    };
-
-    reader.onerror = () => { setImportState("error"); setErrorMessage(getString("import_error_read_file")); };
-    if (isZip) reader.readAsArrayBuffer(file); else reader.readAsText(file);
   };
 
   const toggleItems = [
@@ -374,14 +366,17 @@ export const ImportData: React.FC = () => {
     { key: "playlists", label: getString("import_playlists"), desc: getString("import_playlists_desc"), icon: <FolderHeart size={16} />, checked: importPlaylists, toggle: () => setImportPlaylists(!importPlaylists) },
     { key: "history", label: getString("import_watch_history"), desc: getString("import_watch_history_desc"), icon: <History size={16} />, checked: importHistory, toggle: () => setImportHistory(!importHistory) },
     { key: "likes", label: getString("import_likes"), desc: getString("import_likes_desc"), icon: <Heart size={16} />, checked: importLikes, toggle: () => setImportLikes(!importLikes) },
+    { key: "notes", label: getString("import_notes"), desc: getString("import_notes_desc"), icon: <StickyNote size={16} />, checked: importNotes, toggle: () => setImportNotes(!importNotes) },
     { key: "neuro", label: getString("import_neuro_profile"), desc: getString("import_neuro_profile_desc"), icon: <Brain size={16} />, checked: importNeuro, toggle: () => setImportNeuro(!importNeuro) },
   ];
 
   const formatItems = [
     { label: getString("import_format_flow"), ext: ".zip / .json" },
-    { label: getString("import_format_takeout"), ext: ".csv / .html / .json" },
-    { label: getString("import_format_newpipe"), ext: ".json" },
-    { label: getString("import_format_freetube"), ext: ".json (NDJSON)" },
+    { label: getString("import_format_takeout"), ext: ".zip / .csv / .html / .json" },
+    { label: getString("import_format_newpipe"), ext: ".zip / .db / .json" },
+    { label: getString("import_format_libretube"), ext: ".json" },
+    { label: getString("import_format_freetube"), ext: ".db / .json (NDJSON)" },
+    { label: getString("import_format_metrolist"), ext: ".zip" },
     { label: getString("import_format_opml"), ext: ".xml / .opml" },
   ];
 
@@ -391,8 +386,6 @@ export const ImportData: React.FC = () => {
         <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">{getString("import_title")}</h1>
         <p className="mt-1 text-sm text-chrome-neutral-400">{getString("import_subtitle")}</p>
       </header>
-
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".zip,.json,.xml,.opml,.csv,.txt,.html" className="hidden" />
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <div className="col-span-12 space-y-6 lg:col-span-7">
@@ -475,6 +468,8 @@ export const ImportData: React.FC = () => {
         </div>
 
         <div className="col-span-12 space-y-6 lg:col-span-5">
+          <ImportSourceChooser disabled={["reading", "parsing", "saving"].includes(importState)} />
+
           <SettingsGroup title={getString("import_supported_formats_title")}>
             {formatItems.map((format) => (
               <SettingItem key={format.label} icon={<FileText size={16} />} title={format.label}>

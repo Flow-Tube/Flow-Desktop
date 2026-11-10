@@ -35,7 +35,7 @@ export function TasteGroups({ groups, busy, onAdd, onBlock }: TasteGroupsProps) 
             {group.members.map((topic) => (
               <span
                 key={topic.key}
-                className="inline-flex items-center gap-1 rounded-full border border-chrome-neutral-700 py-1 pl-3 pr-1 text-sm text-chrome-neutral-300"
+                className="inline-flex items-center gap-1 rounded-full border border-chrome-neutral-700 py-1 ps-3 pe-1 text-sm text-chrome-neutral-300"
               >
                 {topic.label}
                 <button

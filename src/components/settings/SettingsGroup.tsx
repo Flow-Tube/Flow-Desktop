@@ -9,11 +9,11 @@ export function SettingsGroup({ title, children }: SettingsGroupProps) {
   return (
     <div className="space-y-2">
       {title && (
-        <h3 className="text-xs uppercase tracking-widest text-chrome-neutral-500 font-semibold px-1">
+        <h3 className="text-sm font-semibold text-primary px-1">
           {title}
         </h3>
       )}
-      <div className="bg-surface-container-low rounded-2xl border border-chrome-neutral-800 flex flex-col divide-y divide-chrome-neutral-800/50 [&>*:first-child]:rounded-t-[15px] [&>*:last-child]:rounded-b-[15px]">
+      <div className="flex flex-col gap-0.5 [--color-surface-container-high:var(--color-surface-row-control)] [--color-surface-container-highest:var(--color-surface-row-control-hover)] [&>*]:rounded-[4px] [&>*]:bg-surface-row [&>*:first-child]:rounded-t-2xl [&>*:last-child]:rounded-b-2xl">
         {children}
       </div>
     </div>

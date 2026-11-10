@@ -212,6 +212,7 @@ SHORTS
 - Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
 
 HOME
+- Videos from channels you follow show the channel's name again, and their view count on its own line, instead of the view count where the name belongs. Videos already saved are corrected when Flow updates.
 - Home has three new chips. Mixes builds queues from videos you liked or finished, Live shows streams on now, and Watched brings back videos worth seeing again.
 - A Subscriptions on Home switch keeps channels you follow out of Home. Clicking Home again scrolls to the top, then refreshes, and you can turn the refresh off.
 - Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.

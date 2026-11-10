@@ -430,4 +430,60 @@ mod tests {
         let stored = subscription_uploads(&pool).await.unwrap();
         assert!(stored[0].video.is_short);
     }
+
+    #[tokio::test]
+    async fn the_byline_repair_names_channel_tab_cards_after_their_channel() {
+        let pool = pool().await;
+        let with_name = |id: &str, channel: &str, name: &str| {
+            let mut card = card(id, channel, "1 day ago");
+            card.video.channel_name = name.into();
+            card.published_at_ms = 1;
+            card
+        };
+        let cards = [
+            with_name("v1", "UCa", "1.2M views"),
+            with_name("v2", "UCa", "100D Beatz"),
+            with_name("v3", "UCb", "5K views"),
+        ];
+        merge_subscription_uploads(&pool, &cards, 1).await.unwrap();
+        let memory = serde_json::to_string(&[with_name("v4", "UCc", "12K views")]).unwrap();
+        sqlx::query("INSERT INTO home_channel_memory (channel_id, name, uploads) VALUES ('UCc', '2 Minute Reviews', ?)")
+            .bind(memory)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::raw_sql(include_str!(
+            "../../../migrations/0046_channel_tab_bylines.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let stored = subscription_uploads(&pool).await.unwrap();
+        let named = |id: &str| {
+            let card = stored.iter().find(|c| c.id() == id).unwrap();
+            (
+                card.video.channel_name.clone(),
+                card.video.view_count_text.clone(),
+            )
+        };
+        assert_eq!(
+            named("v1"),
+            ("100D Beatz".into(), Some("1.2M views".into()))
+        );
+        assert_eq!(named("v2"), ("100D Beatz".into(), None));
+        // No name is known for this channel, so the card waits for a refetch.
+        assert_eq!(named("v3"), ("5K views".into(), None));
+        let (uploads,): (String,) = sqlx::query_as("SELECT uploads FROM home_channel_memory")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let uploads: Vec<Card> = serde_json::from_str(&uploads).unwrap();
+        assert_eq!(uploads[0].video.channel_name, "2 Minute Reviews");
+        assert_eq!(
+            uploads[0].video.view_count_text.as_deref(),
+            Some("12K views")
+        );
+    }
 }

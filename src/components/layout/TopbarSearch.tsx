@@ -10,10 +10,11 @@ import { SETTINGS } from '../../lib/settings/schema';
 import { prefetchStreamInfo } from '../../lib/streamResolution';
 import { useSearchSuggestions } from '../../lib/useSearchSuggestions';
 import { FOCUS_SEARCH_EVENT } from '../../lib/windowEvents';
-import { parseYoutubeUrl, routeForYoutubeUrl } from '../../lib/youtubeUrl';
+import { channelRoute, parseYoutubeUrl, routeForYoutubeUrl } from '../../lib/youtubeUrl';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
+import { useMusicEnabled } from '../../lib/useMusicContent';
 import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
 import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useUiStore } from '../../store/useUiStore';
@@ -39,7 +40,8 @@ export function TopbarSearch() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { suggestions, musicItems } = useSearchSuggestions(text, region, suggestionsEnabled);
+  const musicEnabled = useMusicEnabled();
+  const { suggestions, musicItems } = useSearchSuggestions(text, region, suggestionsEnabled, musicEnabled);
   const columns = useMemo(
     () => buildSuggestionColumns({ query: text, history, suggestions, musicItems, isHiddenSong }),
     [text, history, suggestions, musicItems, isHiddenSong],
@@ -137,7 +139,7 @@ export function TopbarSearch() {
         try {
           const channelId = await resolveChannelId(parsed.url);
           close();
-          navigate(parsed.music ? `/music/artist/${channelId}` : `/channel/${channelId}`);
+          navigate(channelRoute(channelId, parsed.music));
         } catch {
           runTextSearch(parsed.query || query);
         } finally {

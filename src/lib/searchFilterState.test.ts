@@ -32,4 +32,14 @@ describe("search filter state", () => {
     expect(availableWith(shorts, false).category).toBe("all");
     expect(availableWith(shorts, true).category).toBe("shorts");
   });
+
+  it("drops a music-only search while Show Music is off, and keeps Artists and Playlists", () => {
+    for (const category of ["songs", "albums", "podcasts", "episodes"] as const) {
+      expect(availableWith({ ...DEFAULT_SEARCH_FILTER_STATE, category }, true, false).category).toBe("all");
+    }
+    const artists = { ...DEFAULT_SEARCH_FILTER_STATE, category: "artists" as const };
+    expect(availableWith(artists, true, false)).toBe(artists);
+    const songs = { ...DEFAULT_SEARCH_FILTER_STATE, category: "songs" as const };
+    expect(availableWith(songs, true, true)).toBe(songs);
+  });
 });

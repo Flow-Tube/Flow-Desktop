@@ -16,6 +16,8 @@ pub struct LocalState {
     pub pending_handoff: Option<String>,
     /// Deleted profiles whose scrobbling keychain item couldn't be removed yet.
     pub keychain_deletes: Vec<String>,
+    /// The cache limits, and an artwork clear waiting for the next start.
+    pub cache: crate::cache_usage::CacheLocalState,
 }
 
 pub fn read(dir: &Path) -> LocalState {

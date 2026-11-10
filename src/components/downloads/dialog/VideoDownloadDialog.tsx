@@ -12,7 +12,7 @@ import {
 
 import { getString } from "../../../lib/i18n/index";
 import { pickFolder } from "../../../lib/dialogs";
-import { CODEC_CHOICES, formatBytes, formatDuration, resolutionBadge, type CodecChoice } from "../../../lib/downloadOptions";
+import { CODEC_CHOICES, displayHeight, formatBytes, formatDuration, resolutionBadge, type CodecChoice } from "../../../lib/downloadOptions";
 import { IS_MACOS_RUNTIME } from "../../../lib/platform";
 import { classifyPlayerError } from "../../../lib/playerError";
 import { SETTINGS } from "../../../lib/settings/schema";
@@ -167,7 +167,8 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
           >
             {state.rows.map((row) => {
               const selected = row.formatId === state.selectedId;
-              const badge = resolutionBadge(row.height);
+              const height = displayHeight(row);
+              const badge = resolutionBadge(height);
               return (
                 <button
                   key={row.formatId}
@@ -177,7 +178,7 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
                   tabIndex={selected ? 0 : -1}
                   onClick={() => state.setSelectedId(row.formatId)}
                   onDoubleClick={() => void start()}
-                  className={`grid w-full grid-cols-[18px_64px_minmax(0,1fr)_auto] items-center gap-3 border-t border-chrome-neutral-800 px-3 py-2.5 text-left text-sm transition-colors duration-200 ease-out first:border-t-0 ${
+                  className={`grid w-full grid-cols-[18px_64px_minmax(0,1fr)_auto] items-center gap-3 border-t border-chrome-neutral-800 px-3 py-2.5 text-start text-sm transition-colors duration-200 ease-out first:border-t-0 ${
                     selected ? "bg-surface-container" : "hover:bg-surface-container-low"
                   }`}
                 >
@@ -188,7 +189,7 @@ export function VideoDownloadDialog({ video, onClose }: { video: VideoSummary; o
                     }`}
                   />
                   <span className="font-mono font-medium text-chrome-neutral-100">
-                    {row.height ? `${row.height}p` : row.resolution}
+                    {height ? `${height}p` : row.resolution}
                   </span>
                   <span className="flex min-w-0 items-center gap-1.5 text-chrome-neutral-400">
                     {badge ? (

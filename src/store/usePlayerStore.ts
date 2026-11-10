@@ -5,6 +5,7 @@ import { moveAfterId, orderByIds } from "../lib/listOrder";
 import { fisherYates } from "../lib/musicShuffle";
 import { appendUniqueVideos } from "../lib/playlistPages";
 import { queueWith, remoteControl } from "./useRemoteControlStore";
+import { queueWithNext } from "../lib/videoQueueEdits";
 import { profileStorage } from "../lib/storage/profileStorage";
 
 import type { SponsorBlockSegment, DeArrowOverride, RydData } from "../lib/api/foss";
@@ -50,7 +51,16 @@ export interface SubtitleStyle {
   isBold: boolean;
   /** Percent of the player's height between its bottom and the captions'. */
   bottomOffset: number;
+  /** The same gap while the video is fullscreen. */
+  fullscreenBottomOffset: number;
+  /** Behind the whole caption, where the background sits behind each line. */
+  windowColor: string;
+  windowOpacity: number;
+  edgeType: SubtitleEdgeType;
+  edgeColor: string;
 }
+
+export type SubtitleEdgeType = "none" | "outline" | "drop_shadow" | "raised" | "depressed";
 
 /** YouTube's caption font size options. */
 export const SUBTITLE_FONT_SCALES = [50, 75, 100, 150, 200, 300, 400];
@@ -63,6 +73,11 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   isBold: true,
   // YouTube's: its caption box sits 2% of the player's height above the bottom.
   bottomOffset: 2,
+  fullscreenBottomOffset: 2,
+  windowColor: "#000000",
+  windowOpacity: 0,
+  edgeType: "none",
+  edgeColor: "#000000",
 };
 
 const getSavedSubtitleStyle = (): SubtitleStyle => {
@@ -101,6 +116,8 @@ export interface PlayerState {
   isShuffle: boolean;
   /** The order turning shuffle off restores; null while shuffle is off. */
   unshuffledQueue: VideoSummary[] | null;
+  /** The video playing because the queue moved to it, as opposed to one the viewer picked. */
+  queueAdvanceVideoId: string | null;
   /** Videos added with Add to queue during a playlist: they play next and are never saved to it. */
   manualQueueIds: Set<string>;
   playMode: PlayMode;
@@ -126,7 +143,14 @@ export interface PlayerState {
   playbackStartedVideoId: string | null;
 
   isTheaterMode: boolean;
+  /** How the picture fills the player, for this session as on Flow for Android. */
+  videoFit: VideoFit;
+  /** Width over height of the video playing, once its metadata has loaded. */
+  videoAspect: number | null;
+  /** WebAudio gain above full volume, from 1 to 2. `volume` itself stays from 0 to 1. */
+  volumeBoost: number;
   sponsorBlockSegments: SponsorBlockSegment[];
+  /** SponsorBlock is off for this one video. Kept in shared storage so a pop-out opened for it agrees. */
   dearrowData: DeArrowOverride | null;
   rydData: RydData | null;
   captions: CaptionTrack[];
@@ -137,6 +161,8 @@ export interface PlayerState {
   enrichCurrentVideo: (videoId: string, patch: Partial<VideoSummary>) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setVolume: (volume: number) => void;
+  setVolumeBoost: (volumeBoost: number) => void;
+  setVideoAspect: (videoAspect: number | null) => void;
   setMuted: (muted: boolean | ((previous: boolean) => boolean)) => void;
   setIsVideoFullscreenTransitioning: (transitioning: boolean) => void;
   setPlaybackRate: (playbackRate: PlaybackRate) => void;
@@ -149,6 +175,8 @@ export interface PlayerState {
   /** Replaces the queue around the video playing, which carries on; it goes first when `videos` leaves it out. */
   replaceQueue: (videos: VideoSummary[]) => void;
   addToQueue: (video: VideoSummary) => QueueAddResult;
+  /** Puts the video right after the current one, moving it there if it is already queued. */
+  playVideoNext: (video: VideoSummary) => QueueAddResult;
   removeFromQueue: (index: number) => void;
   /** Puts a removed video back at its old place, for Undo. */
   restoreQueueItem: (video: VideoSummary, index: number) => void;
@@ -186,6 +214,7 @@ export interface PlayerState {
   clearWatchPageCache: (videoId?: string) => void;
 
   setIsTheaterMode: (isTheaterMode: boolean) => void;
+  setVideoFit: (videoFit: VideoFit) => void;
   setSponsorBlockSegments: (segments: SponsorBlockSegment[]) => void;
   setDearrowData: (data: DeArrowOverride | null) => void;
   setRydData: (data: RydData | null) => void;
@@ -206,9 +235,15 @@ export interface PlayerState {
   /** The watch page has a live chat or chat replay to show. */
   isLiveChatAvailable: boolean;
   setIsLiveChatAvailable: (available: boolean) => void;
+  /** The watch page shows comments, so the fullscreen panel can too. */
+  isCommentsAvailable: boolean;
+  setIsCommentsAvailable: (available: boolean) => void;
 }
 
-export type FullscreenPanel = "chapters" | "queue" | "chat";
+
+export type VideoFit = "fit" | "fill" | "zoom";
+
+export type FullscreenPanel = "chapters" | "queue" | "chat" | "comments";
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentVideo: null,
@@ -223,6 +258,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   repeatMode: "none",
   isShuffle: false,
   unshuffledQueue: null,
+  queueAdvanceVideoId: null,
   manualQueueIds: new Set<string>(),
   playMode: "video",
   currentTime: 0,
@@ -237,6 +273,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackStartedVideoId: null,
 
   isTheaterMode: getSavedTheaterMode(),
+  videoFit: "fit",
+  videoAspect: null,
+  volumeBoost: 1,
   sponsorBlockSegments: [],
   dearrowData: null,
   rydData: null,
@@ -245,6 +284,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isQueuePanelOpen: false,
   fullscreenPanel: null,
   isLiveChatAvailable: false,
+  isCommentsAvailable: false,
 
   setCurrentVideo: (video) => {
     const isNew = get().currentVideo?.id !== video?.id;
@@ -257,7 +297,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...(isNew ? { videoPlayerMode: "watch", videoPipIntent: null, watchPageCache: null } : {}),
       ...(isNew ? { autoplayCandidates: [] } : {}),
       ...(isNew ? { currentTime: 0, duration: video?.durationSeconds ?? 0 } : {}),
-      ...(isNew ? { playbackStartedVideoId: null } : {}),
+      ...(isNew ? { playbackStartedVideoId: null, queueAdvanceVideoId: null } : {}),
     });
 
     if (video && isNew) {
@@ -284,7 +324,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setIsPlaying: (isPlaying) => set({ isPlaying }),
 
-  setVolume: (volume) => set({ volume: Math.min(1, Math.max(0, volume)) }),
+  setVolume: (volume) => {
+    const next = Math.min(1, Math.max(0, volume));
+    // A boost only exists at full volume; a later return to 100% must not jump back above it.
+    set(next < 1 ? { volume: next, volumeBoost: 1 } : { volume: next });
+  },
+  setVolumeBoost: (volumeBoost) => set({ volumeBoost }),
+  setVideoAspect: (videoAspect) => set({ videoAspect }),
 
   setMuted: (muted) =>
     set((state) => ({ muted: typeof muted === "function" ? muted(state.muted) : muted })),
@@ -340,6 +386,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       ...(isNew ? { autoplayCandidates: [] } : {}),
       currentTime: 0,
       duration: nextVideo?.durationSeconds ?? 0,
+      queueAdvanceVideoId: null,
       ...(isNew ? { playbackStartedVideoId: null } : {}),
     });
     // Every surface that opens a video funnels through here, so warming the
@@ -394,6 +441,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queue: nextQueue,
       currentIndex: currentVideo && currentIndex < 0 ? 0 : currentIndex,
       ...openQueuePanel,
+    });
+    return "added";
+  },
+
+  playVideoNext: (video) => {
+    const remote = remoteControl();
+    if (remote) {
+      remote.command("queue", { queue: queueWith(remote, [video.id], true) });
+      return "added";
+    }
+    const { queue, currentVideo, currentIndex, manualQueueIds } = get();
+    if (currentVideo?.id === video.id) return "duplicate";
+    if (queue.length === 0 && !currentVideo) {
+      get().setQueue([video], 0);
+      get().enterVideoPip("auto");
+      return "added";
+    }
+    const { queue: nextQueue, currentIndex: nextIndex } = queueWithNext(
+      queue.length === 0 && currentVideo ? [currentVideo] : queue,
+      Math.max(0, currentIndex),
+      video,
+    );
+    set({
+      queue: nextQueue,
+      currentIndex: nextIndex,
+      manualQueueIds: new Set(manualQueueIds).add(video.id),
+      isQueuePanelOpen: true,
+      isChaptersPanelOpen: false,
     });
     return "added";
   },
@@ -460,6 +535,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       currentIndex: index,
       currentVideo: item,
+      queueAdvanceVideoId: null,
       isPlaying: true,
       currentTime: 0,
       duration: item.durationSeconds ?? 0,
@@ -484,12 +560,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const nextItem = queue[nextIndex];
       if (nextItem) {
         get().playQueueItem(nextIndex);
+        set({ queueAdvanceVideoId: nextItem.id });
         return nextItem;
       }
     } else if (repeatMode === "all") {
       const firstItem = queue[0];
       if (firstItem) {
         get().playQueueItem(0);
+        set({ queueAdvanceVideoId: firstItem.id });
         return firstItem;
       }
     }
@@ -533,6 +611,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({
           currentIndex: prevIndex,
           currentVideo: prevItem,
+          queueAdvanceVideoId: prevItem.id,
           isPlaying: true,
           currentTime: 0,
           duration: prevItem.durationSeconds ?? 0,
@@ -547,6 +626,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({
           currentIndex: lastIndex,
           currentVideo: lastItem,
+          queueAdvanceVideoId: lastItem.id,
           isPlaying: true,
           currentTime: 0,
           duration: lastItem.durationSeconds ?? 0,
@@ -731,6 +811,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ watchPageCache: null });
   },
 
+  setVideoFit: (videoFit) => set({ videoFit }),
   setIsTheaterMode: (isTheaterMode) => {
     profileStorage.setItem("flow_theater_mode", String(isTheaterMode));
     set({ isTheaterMode });
@@ -755,6 +836,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     ...(fullscreenPanel === "queue" ? { isQueuePanelOpen: true, isChaptersPanelOpen: false } : {}),
   }),
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
+  setIsCommentsAvailable: (isCommentsAvailable) => set({ isCommentsAvailable }),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {
     profileStorage.setItem("flow_subtitle_style", JSON.stringify(style));

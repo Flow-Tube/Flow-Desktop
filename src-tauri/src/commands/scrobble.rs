@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::errors::ErrorResponse;
-use crate::scrobble::models::Service;
+use crate::scrobble::models::{Service, SimilarTrack};
 use crate::scrobble::rules::TrackInfo;
 use crate::scrobble::scrobbler::{ScrobbleStatus, Scrobbler};
 
@@ -86,4 +86,25 @@ pub async fn scrobble_love(
 #[tauri::command]
 pub async fn scrobble_flush(scrobbler: Scrobbling<'_>) -> Result<bool, ErrorResponse> {
     Ok(scrobbler.flush().await?)
+}
+
+/// The account's most played artists over the past year.
+#[tauri::command]
+pub async fn scrobble_top_artists(
+    service: Service,
+    limit: usize,
+    scrobbler: Scrobbling<'_>,
+) -> Result<Vec<String>, ErrorResponse> {
+    Ok(scrobbler.top_artists(service, limit).await?)
+}
+
+/// What Last.fm's listeners play alongside this song.
+#[tauri::command]
+pub async fn scrobble_similar_tracks(
+    artist: String,
+    title: String,
+    limit: usize,
+    scrobbler: Scrobbling<'_>,
+) -> Result<Vec<SimilarTrack>, ErrorResponse> {
+    Ok(scrobbler.similar_tracks(&artist, &title, limit).await?)
 }

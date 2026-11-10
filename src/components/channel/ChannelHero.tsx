@@ -1,15 +1,28 @@
 import React, { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Share2 } from "lucide-react";
+import { Button } from "../ui/Button";
 import { SubscribeButton } from "../ui/SubscribeButton";
+import { ChannelNote, ChannelNoteButton } from "../note/ChannelNote";
 import type { ChannelDetails } from "../../types/video";
 import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl, upgradeChannelBannerUrl } from "../../lib/thumbnails";
+import { shareLink } from "../../lib/clipboard";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
+import { youtubeChannelUrl } from "../../lib/youtubeUrl";
+import { useUiStore } from "../../store/useUiStore";
+import { joinIsolated } from "../../lib/direction";
 
 interface ChannelHeroProps {
   channelInfo: ChannelDetails;
   /** Opens the About panel; without it the description expands in place. */
   onOpenAbout?: () => void;
+}
+
+async function shareChannel(channel: ChannelDetails) {
+  const result = await shareLink(channel.name, youtubeChannelUrl(channel.id));
+  const { showToast } = useUiStore.getState();
+  if (result === "copied") showToast({ variant: "success", message: getString("share_link_copied") });
+  if (result === "failed") showToast({ variant: "error", message: getString("share_link_copy_failed") });
 }
 
 export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbout }) => {
@@ -41,14 +54,14 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
               )}
             </div>
 
-            <div className="mt-4 select-text space-y-1 pb-2 text-center md:mt-0 md:text-left">
-              <h1 className="flex items-center justify-center gap-2 text-4xl font-bold tracking-tight text-chrome-neutral-100 md:justify-start">
+            <div className="mt-4 select-text space-y-1 pb-2 text-center md:mt-0 md:text-start">
+              <h1 dir="auto" className="flex items-center justify-center gap-2 text-4xl font-bold tracking-tight text-chrome-neutral-100 md:justify-start">
                 {channelInfo.name}
                 {channelInfo.verified && (
                   <Check size={20} className="rounded-full bg-surface-container-high p-0.5 text-chrome-neutral-400" />
                 )}
               </h1>
-              {facts.length > 0 && <p className="font-medium text-chrome-neutral-400">{facts.join(" · ")}</p>}
+              {facts.length > 0 && <p className="font-medium text-chrome-neutral-400">{joinIsolated(facts, " · ")}</p>}
             </div>
           </div>
 
@@ -59,16 +72,23 @@ export const ChannelHero: React.FC<ChannelHeroProps> = ({ channelInfo, onOpenAbo
               avatarUrl={avatarUrl || undefined}
               size="md"
             />
+            <ChannelNoteButton channelInfo={channelInfo} />
+            <Button variant="tonal" onClick={() => void shareChannel(channelInfo)}>
+              <Share2 size={16} />
+              {getString("share")}
+            </Button>
           </div>
         </div>
+
+        <ChannelNote channelInfo={channelInfo} />
 
         {channelInfo.description && (
           <button
             type="button"
-            className="group mb-8 block max-w-3xl text-left"
+            className="group mb-8 block max-w-3xl text-start"
             onClick={() => (onOpenAbout ? onOpenAbout() : setDescExpanded((open) => !open))}
           >
-            <span
+            <span dir="auto"
               className={`block text-sm leading-relaxed text-chrome-neutral-400 transition-colors group-hover:text-chrome-neutral-300 ${
                 descExpanded ? "whitespace-pre-wrap" : "line-clamp-2"
               }`}

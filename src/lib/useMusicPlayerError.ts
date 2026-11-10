@@ -5,6 +5,7 @@ import { useUiStore } from "../store/useUiStore";
 import { classifyPlayerError, type PlayerErrorInfo } from "./playerError";
 import { copyPlayerReport } from "./playerDiagnostics";
 import { openExternalOrOfferCopy } from "./openExternal";
+import { isLocalMediaId } from "./localMediaId";
 import { youtubeMusicWatchUrl } from "./youtubeUrl";
 import { getString } from "./i18n/index";
 
@@ -37,7 +38,7 @@ export function useMusicPlayerError(): MusicPlayerErrorActions {
   );
 
   const videoId = currentTrack ? currentTrack.videoId ?? currentTrack.id : null;
-  const watchUrl = videoId ? youtubeMusicWatchUrl(videoId) : null;
+  const watchUrl = videoId && !isLocalMediaId(videoId) ? youtubeMusicWatchUrl(videoId) : null;
 
   const onRetry = useCallback(() => {
     retryCurrentTrack();

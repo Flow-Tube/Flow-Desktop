@@ -1,17 +1,18 @@
 import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
-import { lyricsGetJson } from "../http";
+import { lyricsGetJsonOrMiss } from "../http";
 import { parseLyrics } from "../lyricsUtils";
 import { detectMs } from "./common";
 
 const BASE = "https://api-lyrics.simpmusic.org/v1/";
 
-interface SimpData {
+export interface SimpData {
   richSyncLyrics?: string;
   syncedLyrics?: string;
   plainLyrics?: string;
   plainLyric?: string;
   durationSeconds?: number;
   duration?: number;
+  vote?: number;
 }
 interface SimpResponse {
   type?: string;
@@ -49,28 +50,35 @@ function parseRichSync(json: string, durationSec: number): LyricsEntry[] {
   });
 }
 
+const MAX_DURATION_GAP_SEC = 10;
+const lengthOf = (row: SimpData): number => (row.durationSeconds && row.durationSeconds > 0 ? row.durationSeconds : row.duration ?? 0);
+const byVotes = (a: SimpData, b: SimpData): number => (b.vote ?? 0) - (a.vote ?? 0);
+
+/**
+ * The video id can still list lyrics for a shorter or longer upload, whose lines would drift, so a
+ * row more than ten seconds from the song's length is never used. Votes break ties.
+ */
+export function closestRow(rows: SimpData[], durationSec: number): SimpData | null {
+  if (durationSec <= 0) return [...rows].sort(byVotes)[0] ?? null;
+  return (
+    rows
+      .filter((row) => Math.abs(lengthOf(row) - durationSec) <= MAX_DURATION_GAP_SEC)
+      .sort((a, b) => Math.abs(lengthOf(a) - durationSec) - Math.abs(lengthOf(b) - durationSec) || byVotes(a, b))[0] ?? null
+  );
+}
+
 export const simpMusicProvider: LyricsProvider = {
   name: "SimpMusic",
   async getLyrics(id, _title, _artist, durationSec): Promise<LyricsEntry[]> {
     if (!id) return [];
-    const res = await lyricsGetJson<SimpResponse>(`${BASE}${id}`, {
+    const res = await lyricsGetJsonOrMiss<SimpResponse>(`${BASE}${id}`, {
       "User-Agent": "SimpMusicLyrics/1.0",
       Accept: "application/json",
     });
-    if (res.type !== "success" || !res.data?.length) return [];
+    if (res?.type !== "success" || !res.data?.length) return [];
 
-    let best = res.data[0]!;
-    if (durationSec > 0) {
-      let bestDiff = Number.MAX_SAFE_INTEGER;
-      for (const d of res.data) {
-        const dur = d.durationSeconds ?? d.duration ?? 0;
-        const diff = Math.abs(dur - durationSec);
-        if (diff <= 10 && diff < bestDiff) {
-          bestDiff = diff;
-          best = d;
-        }
-      }
-    }
+    const best = closestRow(res.data, durationSec);
+    if (!best) return [];
 
     if (best.richSyncLyrics) {
       try {

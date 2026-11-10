@@ -248,4 +248,40 @@ describe("crossfade without WebAudio", () => {
     expect(pair[1].volume).toBe(1);
     expect(pair[0].getAttribute("src")).toBeNull();
   });
+
+  async function fadingEngine() {
+    vi.useFakeTimers();
+    vi.stubGlobal("AudioContext", undefined);
+    vi.resetModules();
+    const { musicAudioEngine: engine } = await import("./musicAudioEngine");
+    const pair = elements();
+    engine.attach(pair);
+    engine.setCrossfadeEnabled(true);
+    await engine.load("http://127.0.0.1/stream/a", null);
+    engine.preload("b", "http://127.0.0.1/stream/b", null, null);
+    Object.defineProperty(pair[1], "readyState", { value: HTMLMediaElement.HAVE_FUTURE_DATA, configurable: true });
+    Object.defineProperty(pair[0], "paused", { value: false, configurable: true });
+    engine.armCrossfade(2);
+    engine.activatePreloaded("b");
+    return { engine, pair };
+  }
+
+  it("buffers a song asked for during a fade once the fade has run its course", async () => {
+    const { engine, pair } = await fadingEngine();
+    engine.preload("c", "http://127.0.0.1/stream/c", null, null);
+    expect(engine.hasPreloaded("c")).toBe(false);
+    expect(pair[0].getAttribute("src")).toBe("http://127.0.0.1/stream/a");
+    await vi.advanceTimersByTimeAsync(2_200);
+    expect(engine.hasPreloaded("c")).toBe(true);
+    expect(pair[0].getAttribute("src")).toBe("http://127.0.0.1/stream/c");
+  });
+
+  it("forgets that song if the queue changes before the fade ends", async () => {
+    const { engine, pair } = await fadingEngine();
+    engine.preload("c", "http://127.0.0.1/stream/c", null, null);
+    engine.clearPreload();
+    await vi.advanceTimersByTimeAsync(2_200);
+    expect(engine.hasPreloaded("c")).toBe(false);
+    expect(pair[0].getAttribute("src")).toBeNull();
+  });
 });

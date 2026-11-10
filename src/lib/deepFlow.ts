@@ -77,8 +77,13 @@ export function shouldSaveHistoryInDeepFlow(): boolean {
   return getSettingValue(SETTINGS.DEEP_FLOW_SAVE_HISTORY) === "true";
 }
 
-export function shouldRecordWatchHistory(): boolean {
+/** Deep Flow keeps a session out of every history unless it was told to save them. */
+export function deepFlowAllowsHistory(): boolean {
   return !isDeepFlowCurrentlyActive() || shouldSaveHistoryInDeepFlow();
+}
+
+export function shouldRecordWatchHistory(): boolean {
+  return getSettingValue(SETTINGS.PAUSE_WATCH_HISTORY) !== "true" && deepFlowAllowsHistory();
 }
 
 function showDeepFlowToast(active: boolean, reason: DeepFlowDisableReason) {

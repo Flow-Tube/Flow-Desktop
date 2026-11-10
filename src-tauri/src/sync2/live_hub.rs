@@ -106,7 +106,7 @@ async fn keys(app: &AppHandle) -> Result<(LiveKeys, SqlitePool)> {
     let local = local(app).await?;
     let record = load_group(&pool).await?.ok_or(EngineError::NotLinked)?;
     let session = open_session(&local, &record).await?;
-    let keys = LiveKeys::of(&session);
+    let keys = LiveKeys::of(&session)?;
     *cached = Some(keys.clone());
     Ok((keys, pool))
 }

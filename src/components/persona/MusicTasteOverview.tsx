@@ -57,8 +57,8 @@ export function MusicTasteOverview({ profile }: MusicTasteOverviewProps) {
               key={`${cell.label}-${index}`}
               className="relative min-h-24 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] p-4"
             >
-              <Icon className="absolute right-3 top-3 h-4 w-4 text-[var(--color-on-surface-variant)] opacity-70" />
-              <p className="pr-6 text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
+              <Icon className="absolute end-3 top-3 h-4 w-4 text-[var(--color-on-surface-variant)] opacity-70" />
+              <p className="pe-6 text-xs font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                 {cell.label}
               </p>
               <p className="mt-4 font-mono text-2xl leading-none text-[var(--color-on-surface)]">

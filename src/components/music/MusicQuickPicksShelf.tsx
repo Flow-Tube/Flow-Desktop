@@ -20,7 +20,7 @@ export function MusicQuickPicksShelf({ title, tracks, onPlay }: MusicQuickPicksS
             key={track.videoId ?? track.id}
             variant="track-list"
             item={track}
-            className="snap-start bg-surface-container-low pr-3"
+            className="snap-start bg-surface-container-low pe-3"
             onPlay={() => onPlay(track)}
           />
         ))}

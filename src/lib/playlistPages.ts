@@ -16,16 +16,17 @@ export function appendUniqueVideos(current: VideoSummary[], next: VideoSummary[]
 }
 
 /**
- * `first` plus every later page of the playlist, starting from `pageToken`.
+ * `first` plus every later page of the playlist, starting from `pageToken`. `finished` is false
+ * when the page guard stopped the walk before the playlist ended.
  *
  * Later pages carry videos only; their title and owner are placeholders, so callers
  * keep the first page's metadata.
  */
-export async function loadRemainingPlaylistVideos(
+export async function walkRemainingPlaylistPages(
   playlistId: string,
   first: VideoSummary[],
   pageToken: string | null | undefined,
-): Promise<VideoSummary[]> {
+): Promise<{ videos: VideoSummary[]; finished: boolean }> {
   let videos = first;
   let token = pageToken;
   for (let page = 1; token && page < PLAYLIST_PAGE_GUARD; page += 1) {
@@ -33,5 +34,13 @@ export async function loadRemainingPlaylistVideos(
     videos = appendUniqueVideos(videos, details.videos ?? []);
     token = details.nextPageToken;
   }
-  return videos;
+  return { videos, finished: !token };
+}
+
+export async function loadRemainingPlaylistVideos(
+  playlistId: string,
+  first: VideoSummary[],
+  pageToken: string | null | undefined,
+): Promise<VideoSummary[]> {
+  return (await walkRemainingPlaylistPages(playlistId, first, pageToken)).videos;
 }

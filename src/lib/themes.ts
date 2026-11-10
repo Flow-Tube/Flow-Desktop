@@ -241,6 +241,27 @@ export const BUILTIN_THEMES = seeds.map(createTheme);
 
 export const DEFAULT_THEME: ThemeDefinition = BUILTIN_THEMES[0]!;
 
+export interface ThemeChoice {
+  themeId: string;
+  variant: ThemeVariant;
+}
+
+export interface ThemeSettings extends ThemeChoice {
+  followSystem: boolean;
+  systemDark: boolean;
+  lightThemeId: string;
+  darkThemeId: string;
+  darkStyle: Exclude<ThemeVariant, "light">;
+}
+
+/** The theme in force: the one picked, or with Follow system the one picked for the system's current mode. */
+export function resolveThemeChoice(settings: ThemeSettings): ThemeChoice {
+  if (!settings.followSystem) return { themeId: settings.themeId, variant: settings.variant };
+  return settings.systemDark
+    ? { themeId: settings.darkThemeId, variant: settings.darkStyle }
+    : { themeId: settings.lightThemeId, variant: "light" };
+}
+
 export function isThemeVariant(value: string): value is ThemeVariant {
   return THEME_VARIANTS.includes(value as ThemeVariant);
 }
@@ -302,7 +323,11 @@ const LIGHT_CHROME = ["onSurface", "onSurface", "onSurface", "onSurfaceVariant",
 const DARK_CHROME = ["onSurface", "onSurface", "onSurface", "onSurfaceVariant", "onSurfaceVariant", "onSurfaceVariant", "onSurfaceVariant", "outline", "outline", "surfaceContainer", "background"] as const;
 const CHROME_STEPS = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"] as const;
 
+const LIGHT_DANGER_TEXT = "oklch(50.5% 0.213 27.518)";
+
 export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): Record<string, string> {
+  // Against a white or pure black page the low container all but vanishes, so rows sit higher there.
+  const lowRow = variant === "dark";
   const variables: Record<string, string> = {
     "--color-primary": colors.primary,
     "--color-primary-val": colors.primary,
@@ -314,6 +339,10 @@ export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): R
     "--color-surface-container-val": colors.surfaceContainer,
     "--color-surface-container-high-val": colors.surfaceContainerHigh,
     "--color-surface-container-highest-val": colors.surfaceContainerHighest,
+    "--color-surface-row-val": lowRow ? colors.surfaceContainerLow : colors.surfaceContainerHigh,
+    "--color-surface-row-hover-val": lowRow ? colors.surfaceContainer : colors.surfaceContainerHighest,
+    "--color-surface-row-control": lowRow ? colors.surfaceContainerHigh : `color-mix(in srgb, ${colors.onSurface} 10%, ${colors.surfaceContainerHigh})`,
+    "--color-surface-row-control-hover": lowRow ? colors.surfaceContainerHighest : `color-mix(in srgb, ${colors.onSurface} 16%, ${colors.surfaceContainerHigh})`,
     "--color-outline-variant-val": colors.outline,
     "--color-on-surface-val": colors.onSurface,
     "--color-on-surface-variant-val": colors.onSurfaceVariant,
@@ -325,6 +354,10 @@ export function themeCssVariables(colors: ThemeColors, variant: ThemeVariant): R
     "--color-chrome-dropdown": colors.surfaceContainer,
     "--color-chrome-input-surface": colors.surfaceContainerLow,
   };
+  // These two reds are pale, for text on dark surfaces; on a light one they fall under 3:1. Set for
+  // every variant, so leaving a light theme doesn't leave its red behind on the page.
+  variables["--color-chrome-red-300"] = variant === "light" ? LIGHT_DANGER_TEXT : "oklch(80.8% 0.114 19.571)";
+  variables["--color-chrome-red-400"] = variant === "light" ? LIGHT_DANGER_TEXT : "oklch(70.4% 0.191 22.216)";
   const roles = variant === "light" ? LIGHT_CHROME : DARK_CHROME;
   CHROME_STEPS.forEach((step, index) => {
     const role = roles[index]!;

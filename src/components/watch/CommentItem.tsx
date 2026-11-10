@@ -8,6 +8,7 @@ import { getString } from "../../lib/i18n/index";
 import { upgradeAvatarUrl } from "../../lib/thumbnails";
 import { useProxiedImageUrl } from "../../lib/useProxiedImageUrl";
 import type { Comment } from "../../types/video";
+import { isRtlText } from "../../lib/direction";
 
 const PREVIEW_LENGTH = 280;
 
@@ -26,7 +27,9 @@ function CommentText({ comment, className }: { comment: Comment; className: stri
   if (!text) return null;
   const long = text.length > PREVIEW_LENGTH;
   return (
-    <div className={className}>
+    // From the text itself: dir="auto" would skip the text, which sets its own direction, and read
+    // the Read more button's language instead.
+    <div dir={isRtlText(text) ? "rtl" : "ltr"} className={className}>
       {long && !expanded ? (
         <LinkedText text={`${text.slice(0, PREVIEW_LENGTH)}...`} />
       ) : (
@@ -38,7 +41,7 @@ function CommentText({ comment, className }: { comment: Comment; className: stri
             event.stopPropagation();
             setExpanded((value) => !value);
           }}
-          className="ml-1 cursor-pointer font-semibold text-primary hover:underline focus:outline-none"
+          className="ms-1 cursor-pointer font-semibold text-primary hover:underline focus:outline-none"
         >
           {expanded ? getString("watch_read_less") : getString("watch_read_more")}
         </button>
@@ -80,7 +83,7 @@ export function CommentItem({ comment, reply = false }: { comment: Comment; repl
           >
             <ChannelLabel name={comment.author} verified={comment.isVerified} artist={comment.isArtist} iconSize={12} />
           </button>
-          <span className={`font-medium text-chrome-neutral-400 ${reply ? "text-[10px]" : "text-xs"}`}>
+          <span dir="auto" className={`font-medium text-chrome-neutral-400 ${reply ? "text-[10px]" : "text-xs"}`}>
             {comment.publishedText}
           </span>
         </div>

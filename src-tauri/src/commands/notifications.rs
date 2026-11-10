@@ -4,6 +4,7 @@ use crate::db;
 use crate::db::notifications::NotificationRecord;
 use crate::errors::ErrorResponse;
 use crate::services::notification_service;
+use crate::services::upcoming_reminders::{self, UpcomingReminder};
 
 const DEFAULT_LIMIT: i64 = 200;
 const MAX_LIMIT: i64 = 500;
@@ -43,6 +44,45 @@ pub async fn delete_notification(
     pool: State<'_, sqlx::SqlitePool>,
 ) -> Result<(), ErrorResponse> {
     db::notifications::delete_notification(&pool, id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn restore_notification(
+    notification: NotificationRecord,
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    db::notifications::restore_notification(&pool, &notification)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_upcoming_reminders(
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<Vec<UpcomingReminder>, ErrorResponse> {
+    upcoming_reminders::load(&pool)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn set_upcoming_reminder(
+    reminder: UpcomingReminder,
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    upcoming_reminders::set(&pool, reminder)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn cancel_upcoming_reminder(
+    video_id: String,
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<(), ErrorResponse> {
+    upcoming_reminders::cancel(&pool, &video_id)
         .await
         .map_err(ErrorResponse::from)
 }

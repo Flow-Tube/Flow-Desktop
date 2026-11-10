@@ -17,6 +17,7 @@ import {
 import { usePlayerStore, type PlaybackRate } from "../../../store/usePlayerStore";
 import { copyText } from "../../../lib/clipboard";
 import { getString } from "../../../lib/i18n/index";
+import { isLocalMediaId } from "../../../lib/localMediaId";
 import { youtubeWatchUrl } from "../../../lib/youtubeUrl";
 import { LONG_PRESS_MS, shouldStartDrag } from "../../../lib/pointerGesture";
 import { startWindowDrag } from "../../../lib/api/pip";
@@ -410,10 +411,13 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
         ? []
         : [{ label: getString("move_to_new_window"), icon: <AppWindow size={18} />, action: moveVideoToNewWindow }]),
     ],
-    [
-      { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },
-      { label: getString("player_menu_copy_url_at_time"), icon: <Link size={18} />, action: () => copyVideoUrl(true) },
-    ],
+    // A file on this computer has no link to copy.
+    ...(isLocalMediaId(usePlayerStore.getState().currentVideo?.id)
+      ? []
+      : [[
+          { label: getString("player_menu_copy_url"), icon: <Link size={18} />, action: () => copyVideoUrl(false) },
+          { label: getString("player_menu_copy_url_at_time"), icon: <Link size={18} />, action: () => copyVideoUrl(true) },
+        ]]),
     [
       { label: getString("player_menu_stats"), icon: <Info size={18} />, action: () => setStatsVisible((value) => !value) },
       { label: getString("player_menu_copy_debug"), icon: <Bug size={18} />, action: copyDebugInfo },
@@ -476,7 +480,7 @@ export const PlayerGestureOverlay: React.FC<PlayerGestureOverlayProps> = ({
           <div className="h-1 w-24 overflow-hidden rounded-full bg-chrome-white/25">
             <div
               className="h-full rounded-full bg-chrome-white"
-              style={{ width: `${volumeFeedback.muted ? 0 : Math.round(volumeFeedback.volume * 100)}%` }}
+              style={{ width: `${volumeFeedback.muted ? 0 : Math.min(100, Math.round(volumeFeedback.volume * 100))}%` }}
             />
           </div>
           <span className="min-w-[3ch] text-sm font-bold tabular-nums">

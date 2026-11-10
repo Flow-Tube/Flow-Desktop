@@ -106,7 +106,7 @@ impl<S: Store> Session<'_, S> {
             }
             // A partial list could pick a snapshot that doesn't cover the logs left out.
             if !budget.take(changes.len()) {
-                return Err(StoreError::Malformed.into());
+                return Err(StoreError::TooLong.into());
             }
             cursor = next;
         }

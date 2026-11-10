@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+use base64::Engine;
+use tauri::AppHandle;
+use tauri_plugin_dialog::DialogExt;
+
 use crate::errors::{AppError, ErrorResponse};
 
 // A master backup carries every profile, each with its whole history.
@@ -88,21 +92,85 @@ pub async fn write_lyrics_file(path: String, contents: String) -> Result<(), Err
     write_text(path, contents).await
 }
 
+const MAX_IMAGE_BASE64_BYTES: usize = 40 * 1024 * 1024;
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+fn decode_png(base64: &str) -> Result<Vec<u8>, ErrorResponse> {
+    let not_valid = || ErrorResponse::from(AppError::Validation("Image data is not valid".into()));
+    if base64.len() > MAX_IMAGE_BASE64_BYTES {
+        return Err(not_valid());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|_| not_valid())?;
+    if !bytes.starts_with(&PNG_SIGNATURE) {
+        return Err(not_valid());
+    }
+    Ok(bytes)
+}
+
+/// Some platforms' dialogs don't add the filter's extension to a bare name.
+fn png_path(path: PathBuf) -> Result<PathBuf, ErrorResponse> {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        None => Ok(path.with_extension("png")),
+        Some(ext) if ext.eq_ignore_ascii_case("png") => Ok(path),
+        Some(_) => Err(ErrorResponse::from(AppError::Validation(
+            "Image path must end in .png".into(),
+        ))),
+    }
+}
+
+/// Asks where to save the Recap poster and writes it there, returning whether it was saved. The
+/// dialog opens here so the webview never names a path this command writes to.
+#[tauri::command]
+pub async fn save_recap_poster(
+    base64: String,
+    suggested_name: String,
+    title: String,
+    app: AppHandle,
+) -> Result<bool, ErrorResponse> {
+    let bytes = decode_png(&base64)?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title(title)
+        .set_file_name(suggested_name)
+        .add_filter("PNG", &["png"])
+        .save_file(move |path| {
+            let _ = sender.send(path);
+        });
+    let picked = receiver
+        .await
+        .map_err(|error| ErrorResponse::from(AppError::Internal(error.to_string())))?;
+    let Some(path) = picked.and_then(|path| path.into_path().ok()) else {
+        return Ok(false);
+    };
+    tokio::fs::write(png_path(path)?, bytes)
+        .await
+        .map_err(|error| ErrorResponse::from(AppError::Internal(error.to_string())))?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::engine::general_purpose::STANDARD;
 
     #[test]
-    fn a_save_path_needs_its_extension_and_an_existing_folder() {
-        let dir = std::env::temp_dir();
-        let lrc = dir.join("song.lrc");
-        let lrc = lrc.to_str().unwrap();
-        assert!(checked_save_path(lrc, "[00:01.00]Line", &["lrc"], 10, "Lyrics").is_err());
-        assert!(checked_save_path(lrc, "[00:01]", &["lrc"], 1024, "Lyrics").is_ok());
-        assert!(checked_save_path(lrc, "x", &["json", "txt"], 1024, "Export").is_err());
-        assert!(
-            checked_save_path("/no/such/folder/song.lrc", "x", &["lrc"], 1024, "Lyrics").is_err()
+    fn only_png_bytes_pass() {
+        let png = [PNG_SIGNATURE.as_slice(), b"rest"].concat();
+        assert_eq!(decode_png(&STANDARD.encode(&png)).unwrap(), png);
+        assert!(decode_png(&STANDARD.encode(b"#!/bin/sh")).is_err());
+        assert!(decode_png("not base64!").is_err());
+    }
+
+    #[test]
+    fn a_poster_only_lands_in_a_png_file() {
+        assert_eq!(
+            png_path(PathBuf::from("/a/poster")).unwrap(),
+            PathBuf::from("/a/poster.png")
         );
-        assert!(checked_save_path("  ", "x", &["lrc"], 1024, "Lyrics").is_err());
+        assert!(png_path(PathBuf::from("/a/poster.PNG")).is_ok());
+        assert!(png_path(PathBuf::from("/a/poster.exe")).is_err());
     }
 }

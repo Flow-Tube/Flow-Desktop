@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Download as DownloadIcon, Loader2, ListChecks, Trash2 } from "lucide-react";
+import { downloadedMusicCollectionPath } from "../lib/musicRoutes";
+import { Download as DownloadIcon, Loader2, ListChecks, Search, Trash2 } from "lucide-react";
 
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
@@ -19,11 +20,24 @@ import {
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
+import { SelectableRow } from "../components/common/SelectableRow";
 import { Button } from "../components/ui/Button";
+import { Select } from "../components/ui/Select";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { useDebounce } from "../lib/useDebounce";
-import { DownloadVideoCard } from "../components/downloads/DownloadVideoCard";
+import {
+  DOWNLOAD_SORTS,
+  downloadDetail,
+  downloadSortLabel,
+  loadDownloadSort,
+  saveDownloadSort,
+  sortDownloadRecords,
+  type DownloadSort,
+} from "../lib/downloadsSort";
+import { useDownloadRecovery } from "../lib/useDownloadRecovery";
+import { DownloadProgressOverlay } from "../components/downloads/DownloadProgressOverlay";
+import { VideoCard } from "../components/video/VideoCard";
 import { DownloadCollectionCard } from "../components/downloads/DownloadCollectionCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
 import { useGridStyle } from "../lib/useGridColumns";
@@ -39,6 +53,7 @@ interface VideoEntry {
   recordId?: number;
   video: VideoSummary;
   progress?: DownloadProgress;
+  detail?: string;
 }
 
 interface MusicEntry {
@@ -78,49 +93,12 @@ function matchesQuery(query: string, title: string, author?: string | null): boo
   return `${title} ${author ?? ""}`.toLowerCase().includes(query);
 }
 
-function SelectableMusicRow({
-  selecting,
-  selected,
-  onToggle,
-  children,
-}: {
-  selecting: boolean;
-  selected: boolean;
-  onToggle?: () => void;
-  children: React.ReactNode;
-}) {
-  if (!selecting || !onToggle) return <>{children}</>;
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") onToggle();
-      }}
-      className={`relative cursor-pointer rounded-lg ring-2 transition-colors ${
-        selected ? "ring-[var(--color-primary)]" : "ring-transparent"
-      }`}
-    >
-      <div className="pointer-events-none">{children}</div>
-      <span
-        className={`absolute right-3 top-1/2 z-10 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full border transition-colors ${
-          selected
-            ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-            : "border-chrome-neutral-600 bg-surface-container text-transparent"
-        }`}
-      >
-        <Check size={14} />
-      </span>
-    </div>
-  );
-}
-
 export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   const navigate = useNavigate();
   const cardGridStyle = useGridStyle();
   const collectionGridStyle = useGridStyle({ density: "dense" });
-  const { records, loading, remove, clear } = useDownloadsLibrary();
+  const { records, loading, removeWithUndo, clear } = useDownloadsLibrary();
+  const recovery = useDownloadRecovery();
   const { records: collectionRecords, remove: removeCollections } = useDownloadCollectionsLibrary();
   const collectionRuns = useCollectionDownloadStore((state) => state.runs);
   const active = useDownloadStore((state) => state.active);
@@ -128,6 +106,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<DownloadsFilter>("all");
+  const [sort, setSort] = useState<DownloadSort>(loadDownloadSort);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -151,27 +130,30 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     [active],
   );
 
+  const sortedRecords = useMemo(() => sortDownloadRecords(records, sort), [records, sort]);
+
   const videoEntries = useMemo<VideoEntry[]>(() => {
     const fromActive = inProgress
       .filter((item) => item.mediaKind === "video")
       .map<VideoEntry>((item) => ({ key: `active-${item.id}`, video: progressToVideo(item), progress: item }));
-    const fromRecords = records
+    const fromRecords = sortedRecords
       .filter((record) => record.mediaKind === "video" && record.collectionDbId == null)
       .map<VideoEntry>((record) => ({
         key: `record-${record.id}`,
         recordId: record.id,
         video: downloadRecordToVideo(record),
+        detail: downloadDetail(record),
       }));
     return [...fromActive, ...fromRecords].filter((entry) =>
       matchesQuery(query, entry.video.title, entry.video.channelName),
     );
-  }, [inProgress, records, query]);
+  }, [inProgress, sortedRecords, query]);
 
   const musicEntries = useMemo<MusicEntry[]>(() => {
     const fromActive = inProgress
       .filter((item) => item.mediaKind !== "video")
       .map<MusicEntry>((item) => ({ key: `active-${item.id}`, song: progressToSong(item) }));
-    const fromRecords = records
+    const fromRecords = sortedRecords
       .filter((record) => record.mediaKind !== "video" && record.collectionDbId == null)
       .map<MusicEntry>((record) => ({
         key: `record-${record.id}`,
@@ -181,7 +163,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     return [...fromActive, ...fromRecords].filter((entry) =>
       matchesQuery(query, entry.song.title, entry.song.artists.map((artist) => artist.name).join(" ")),
     );
-  }, [inProgress, records, query]);
+  }, [inProgress, sortedRecords, query]);
 
   const musicSongs = useMemo(() => musicEntries.map((entry) => entry.song), [musicEntries]);
 
@@ -211,7 +193,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   );
 
   const openCollection = (kind: "playlist" | "album", collectionId: string) => {
-    navigate(kind === "album" ? `/music/album/${collectionId}` : `/playlist/${collectionId}`);
+    navigate(kind === "album" ? downloadedMusicCollectionPath(collectionId) : `/playlist/${collectionId}`);
   };
 
   const standaloneRecordCount = useMemo(
@@ -244,10 +226,10 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     setSelectedIds(new Set());
   };
 
-  const deleteSelected = async () => {
+  const deleteSelected = () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    await remove(ids);
+    removeWithUndo(ids);
     stopSelecting();
   };
 
@@ -285,7 +267,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <Button
                   type="button"
                   variant="destructive"
-                  onClick={() => void deleteSelected()}
+                  onClick={deleteSelected}
                   disabled={selectedIds.size === 0}
                 >
                   <Trash2 size={16} />
@@ -320,6 +302,18 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
           </div>
         </header>
 
+        <div className="mt-6 mb-2 flex flex-col gap-4 md:flex-row md:items-center">
+          {!loading && !isEmpty ? (
+            <Select
+              value={sort}
+              onChange={(value) => {
+                setSort(value as DownloadSort);
+                saveDownloadSort(value as DownloadSort);
+              }}
+              options={DOWNLOAD_SORTS.map((option) => ({ value: option, label: downloadSortLabel(option) }))}
+              className="w-full md:w-44"
+            />
+          ) : null}
         <CategoryChips
           categories={filters.map((entry) => entry.label)}
           activeCategory={activeLabel}
@@ -327,8 +321,9 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
             setFilter(filters.find((entry) => entry.label === label)?.key ?? "all")
           }
           sticky={false}
-          className="mt-2"
+          className="py-0"
         />
+        </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32">
@@ -340,6 +335,16 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
             <DownloadIcon className="mb-4 h-12 w-12 text-chrome-neutral-700" />
             <h3 className="font-bold text-chrome-neutral-300">{getString("downloads_empty_title")}</h3>
             <p className="mt-1 max-w-sm text-sm text-chrome-neutral-500">{getString("downloads_empty_body")}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-4"
+              disabled={recovery.running !== null}
+              onClick={() => void recovery.findEarlier()}
+            >
+              {recovery.running !== null ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+              {getString(recovery.running !== null ? "downloads_find_earlier_running" : "downloads_find_earlier")}
+            </Button>
           </div>
         ) : !hasResults ? (
           <div className="mt-8 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
@@ -352,26 +357,25 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
                   {getString("downloads_videos_section")}
                 </h2>
-                <div className="flow-grid gap-y-6" style={cardGridStyle}>
-                  {videoEntries.map((entry) => {
-                    const selectable = selecting && entry.recordId != null;
-                    return (
-                      <DownloadVideoCard
-                        key={entry.key}
+                <div className="flow-grid gap-y-8" style={cardGridStyle}>
+                  {videoEntries.map((entry) => (
+                    <SelectableRow
+                      key={entry.key}
+                      card
+                      selecting={selecting && entry.recordId != null}
+                      selected={entry.recordId != null && selectedIds.has(entry.recordId)}
+                      onToggle={entry.recordId != null ? () => toggleSelected(entry.recordId!) : undefined}
+                    >
+                      <VideoCard
                         video={entry.video}
-                        progress={entry.progress}
-                        selectable={selectable}
-                        selected={entry.recordId != null && selectedIds.has(entry.recordId)}
-                        onToggleSelect={
-                          entry.recordId != null ? () => toggleSelected(entry.recordId!) : undefined
-                        }
                         onPlay={onPlay}
-                        onDelete={
-                          entry.recordId != null ? () => void remove([entry.recordId!]) : undefined
-                        }
+                        hideChannelAvatar
+                        reasonLine={entry.detail}
+                        onRemoveDownload={entry.recordId != null ? () => removeWithUndo([entry.recordId!]) : undefined}
+                        thumbnailOverlay={entry.progress ? <DownloadProgressOverlay progress={entry.progress} /> : undefined}
                       />
-                    );
-                  })}
+                    </SelectableRow>
+                  ))}
                 </div>
               </section>
             ) : null}
@@ -383,7 +387,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 </h2>
                 <div className="grid grid-cols-1 gap-x-4 gap-y-1 md:grid-cols-2 xl:grid-cols-3">
                   {musicEntries.map((entry, index) => (
-                    <SelectableMusicRow
+                    <SelectableRow
                       key={entry.key}
                       selecting={selecting && entry.recordId != null}
                       selected={entry.recordId != null && selectedIds.has(entry.recordId)}
@@ -392,10 +396,10 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                       <MusicItemCard
                         variant="track-list"
                         item={entry.song}
-                        className="bg-surface-container-low pr-3"
+                        className="bg-surface-container-low pe-3"
                         onPlay={() => void playQueue(musicSongs, index)}
                       />
-                    </SelectableMusicRow>
+                    </SelectableRow>
                   ))}
                 </div>
               </section>
@@ -406,7 +410,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
                   {getString("downloads_playlists_section")}
                 </h2>
-                <div className="flow-grid gap-y-6" style={cardGridStyle}>
+                <div className="flow-grid gap-y-8" style={cardGridStyle}>
                   {playlistEntries.map((entry) => (
                     <DownloadCollectionCard
                       key={`collection-${entry.record.id}`}
@@ -425,7 +429,7 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
                 <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">
                   {getString("downloads_albums_section")}
                 </h2>
-                <div className="flow-grid gap-y-6" style={collectionGridStyle}>
+                <div className="flow-grid gap-y-8" style={collectionGridStyle}>
                   {albumEntries.map((entry) => (
                     <DownloadCollectionCard
                       key={`collection-${entry.record.id}`}

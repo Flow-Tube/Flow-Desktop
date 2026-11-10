@@ -11,8 +11,11 @@ import { ShortsIcon, ShortsAIcon } from '../ui/ShortsIcon';
 import { SectionHeader, SubscriptionsNav } from './SidebarSections';
 import { SidebarTabs } from './SidebarTabs';
 import { getString } from '../../lib/i18n/index';
+import { announceHomeReselected } from '../../lib/homeReselect';
 import { openInNewTab } from '../../lib/openTarget';
+import { useShortsEnabled } from '../../lib/useShortsContent';
 import { SETTINGS } from '../../lib/settings/schema';
+import { useNotesEnabled } from '../../lib/useNotes';
 
 type SidebarProps = {
   mode?: 'normal' | 'overlay';
@@ -35,7 +38,7 @@ function withSyncBadge(icon: ReactNode, syncing: boolean): ReactNode {
   return (
     <span className="relative">
       {icon}
-      <RefreshCw className="absolute -bottom-1 -right-1.5 h-3 w-3 animate-spin rounded-full bg-surface text-chrome-neutral-300" />
+      <RefreshCw className="absolute -bottom-1 -end-1.5 h-3 w-3 animate-spin rounded-full bg-surface text-chrome-neutral-300" />
     </span>
   );
 }
@@ -55,9 +58,11 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   const { subscriptions } = useSubscriptionStore();
   const location = useLocation();
   const [subsExpanded, setSubsExpanded] = useState(false);
-  const showShortsNav = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
+  const shortsNavEnabled = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== 'false');
+  const showShortsNav = useShortsEnabled() && shortsNavEnabled;
   const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== 'false');
   const showCategoriesNav = useAppSettingsStore((state) => state.values[SETTINGS.CATEGORIES_NAV_TAB_ENABLED] !== 'false');
+  const notesEnabled = useNotesEnabled();
 
   const isOverlay = mode === 'overlay';
   const expanded = isOverlay || isSidebarExpanded;
@@ -73,6 +78,10 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
   }
 
   const closeOverlay = isOverlay ? () => setWatchSidebarOpen(false) : undefined;
+  const handleHomeClick = () => {
+    closeOverlay?.();
+    if (location.pathname === '/') announceHomeReselected();
+  };
 
   return (
     <aside
@@ -86,7 +95,7 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
       {/* Always 240 px wide, so labels never rewrap while the rail opens and closes. */}
       <div className="flex min-h-0 w-60 flex-1 flex-col overflow-y-auto overflow-x-hidden py-2">
         <nav className="flex flex-col gap-1.5">
-          <SidebarItem onOpenInNewTab={openInNewTab} to="/" end {...navIconPair('home')} label={getString('home')} onClick={closeOverlay} collapsed={collapsed} />
+          <SidebarItem onOpenInNewTab={openInNewTab} to="/" end {...navIconPair('home')} label={getString('home')} onClick={handleHomeClick} collapsed={collapsed} />
           <SidebarItem onOpenInNewTab={openInNewTab} to="/feed" {...navIconPair('feed')} label={getString('sidebar_flowneuron')} onClick={closeOverlay} collapsed={collapsed} />
           {showShortsNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/shorts" {...shortsNavIconPair} label={getString('sidebar_shorts')} onClick={closeOverlay} collapsed={collapsed} />}
           {showCategoriesNav && <SidebarItem onOpenInNewTab={openInNewTab} to="/explore" {...navIconPair('explore')} label={getString('sidebar_explore')} onClick={closeOverlay} collapsed={collapsed} />}
@@ -133,7 +142,11 @@ export function Sidebar({ mode = 'normal' }: SidebarProps) {
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/watch-later" {...navIconPair('watchLater')} label={getString('library_watch_later_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/saved-shorts" {...shortsNavIconPair} label={getString('library_saved_shorts_label')} onClick={closeOverlay} />
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/liked" {...navIconPair('liked')} label={getString('library_likes_label')} onClick={closeOverlay} />
+                {notesEnabled && (
+                  <SidebarItem onOpenInNewTab={openInNewTab} to="/notes" {...navIconPair('notes')} label={getString('notes_title')} onClick={closeOverlay} />
+                )}
                 <SidebarItem onOpenInNewTab={openInNewTab} to="/downloads" {...navIconPair('downloads')} label={getString('library_downloads_label')} onClick={closeOverlay} />
+                <SidebarItem onOpenInNewTab={openInNewTab} to="/local-media" {...navIconPair('localMedia')} label={getString('library_local_media_label')} onClick={closeOverlay} />
               </nav>
             </section>
           </div>

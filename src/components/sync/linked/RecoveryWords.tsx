@@ -13,7 +13,7 @@ function WordGrid({ words }: { words: string[] }) {
     <ol className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
       {words.map((word, i) => (
         <li key={i} className="flex items-baseline gap-2 font-mono text-sm">
-          <span className="w-6 text-right text-chrome-neutral-500">{i + 1}</span>
+          <span className="w-6 text-end text-chrome-neutral-500">{i + 1}</span>
           <span className="text-chrome-neutral-100">{word}</span>
         </li>
       ))}

@@ -22,6 +22,7 @@ import { useChannelPage } from "../lib/useChannelPage";
 import { useChannelWatched } from "../lib/useChannelWatched";
 import { useInfiniteScroll } from "../lib/useInfiniteScroll";
 import { usePublishTitle } from "../lib/usePublishTitle";
+import { channelTabsFor, useChannelShortsTabKept, useShortsEnabled } from "../lib/useShortsContent";
 import type {
   ChannelFilterOption,
   ChannelItem,
@@ -115,7 +116,12 @@ export const Channel: React.FC<ChannelProps> = ({ onPlay, onAddToQueue }) => {
     setAboutOpen(false);
   }, [channelId]);
 
-  const tabs = useMemo(() => visibleTabs(details?.tabs ?? []), [details]);
+  const shortsEnabled = useShortsEnabled();
+  const keepShortsTab = useChannelShortsTabKept();
+  const tabs = useMemo(
+    () => channelTabsFor(visibleTabs(details?.tabs ?? []), shortsEnabled, keepShortsTab),
+    [details, shortsEnabled, keepShortsTab],
+  );
   const request: ChannelFeedRequest | null = activeSearch
     ? { key: `q:${activeSearch}`, query: activeSearch }
     : view.request;

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as dashjs from "dashjs";
 import {
+  AudioLines,
   Bug,
   Captions,
   Check,
@@ -13,6 +14,8 @@ import {
   PictureInPicture2,
   Play,
   Settings,
+  SlidersHorizontal,
+  ThumbsUp,
 } from "lucide-react";
 import type { PlaybackRate } from "../../store/usePlayerStore";
 import { usePlayerStore } from "../../store/usePlayerStore";
@@ -33,17 +36,26 @@ import {
   AUDIO_RESYNC_MIN_INTERVAL_MS,
 } from "../../lib/externalAudioSync";
 import { useSubtitleSettingsSync } from "../../lib/useSubtitleSettingsSync";
-import type { CaptionTrack, StreamVariant } from "../../types/video";
+import type { AudioTrack, CaptionTrack, StreamVariant } from "../../types/video";
 import { SubtitleOverlay } from "../player/SubtitleOverlay";
 import { StatsForNerds } from "../player/StatsForNerds";
 import { MediaScrubber } from "../ui/MediaScrubber";
 import { noteShortEnded, noteShortProgress } from "../../lib/shortViews";
+import { listenForShortsKeys } from "../../lib/shortsKeys";
+import { useVideoEq } from "../../lib/audio/useVideoEq";
+import { videoEqAvailable } from "../../lib/audio/mediaEqEngine";
+import { useEqActive } from "../../lib/audio/eq/useEqualizer";
+import { useEqStore } from "../../store/useEqStore";
 
 interface ShortVideoSurfaceProps {
   videoId: string;
   dashUrl: string | null;
   videoUrl: string | null;
   audioUrl: string | null;
+  audioTracks: AudioTrack[];
+  selectedAudioTrackId: string | null;
+  onSelectAudioTrack: (id: string) => void;
+  onDoubleClickLike: () => void;
   qualities: StreamVariant[];
   captions: CaptionTrack[];
   selectedQualityId: string;
@@ -58,7 +70,11 @@ interface ShortVideoSurfaceProps {
   onError?: () => void;
 }
 
-type SettingsPane = "root" | "speed" | "quality" | "captions";
+type SettingsPane = "root" | "speed" | "quality" | "captions" | "audio";
+
+// Long enough to read a double click, short enough that a single click still feels immediate.
+const DOUBLE_CLICK_WAIT_MS = 220;
+const LIKE_BURST_MS = 700;
 type ContextMenuState = { x: number; y: number };
 
 const DEFAULT_SPEED_OPTIONS: PlaybackRate[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -90,6 +106,10 @@ export function ShortVideoSurface({
   dashUrl,
   videoUrl,
   audioUrl,
+  audioTracks,
+  selectedAudioTrackId,
+  onSelectAudioTrack,
+  onDoubleClickLike,
   qualities,
   captions,
   selectedQualityId,
@@ -117,9 +137,14 @@ export function ShortVideoSurface({
   const lastAudioResyncAtRef = useRef(0);
   const mutedRef = useRef(muted);
   const volumeRef = useRef(volume);
+  const audioUrlRef = useRef(audioUrl);
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+
+  useEffect(() => {
+    audioUrlRef.current = audioUrl;
+  }, [audioUrl]);
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -157,12 +182,31 @@ export function ShortVideoSurface({
   const longPressPlaybackRate = longPressRate(longPressSpeedSetting);
   const speedOptions = parseCustomSpeedPresets(customSpeedPresets, customSpeedsEnabled);
   const selectedCaption = captions.find((caption) => caption.id === selectedCaptionId) ?? null;
+  const selectedAudioTrack =
+    audioTracks.find((track) => track.id === selectedAudioTrackId) ??
+    audioTracks.find((track) => track.isDefault) ??
+    audioTracks[0] ??
+    null;
   const selectedVariant = qualities.find((quality) => quality.id === selectedQualityId) ?? null;
   const selectedQualityLabel =
     selectedQualityId === "auto" ? "Auto" : selectedVariant?.qualityLabel || selectedQualityId;
 
   const useDirect = !!videoUrl;
   const hasSeparateAudio = useDirect && !!audioUrl && audioUrl !== videoUrl;
+  useVideoEq(videoRef, audioRef, hasSeparateAudio ? audioUrl : null, 1);
+  const eqActive = useEqActive();
+  const eqEditorHosted = useEqStore((s) => s.editorHosted);
+  const openEqEditor = useEqStore((s) => s.setEditorOpen);
+  const [likeBurst, setLikeBurst] = useState(false);
+  const singleClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const likeBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (singleClickTimerRef.current) clearTimeout(singleClickTimerRef.current);
+      if (likeBurstTimerRef.current) clearTimeout(likeBurstTimerRef.current);
+    },
+    [],
+  );
   const shouldLoop = playbackMode === "loop";
 
   useEffect(() => {
@@ -267,8 +311,8 @@ export function ShortVideoSurface({
       video.muted = hasSeparateAudio ? true : mutedRef.current;
       video.volume = volumeRef.current;
 
-      if (audio && hasSeparateAudio && audioUrl) {
-        audio.src = audioUrl;
+      if (audio && hasSeparateAudio && audioUrlRef.current) {
+        audio.src = audioUrlRef.current;
         audio.loop = shouldLoop;
         audio.muted = mutedRef.current;
         audio.volume = volumeRef.current;
@@ -407,7 +451,21 @@ export function ShortVideoSurface({
     }
 
     return teardown;
-  }, [active, audioUrl, dashUrl, hasSeparateAudio, onRequestAdvance, playbackMode, shouldLoop, useDirect, videoId, videoUrl]);
+  }, [active, dashUrl, hasSeparateAudio, onRequestAdvance, playbackMode, shouldLoop, useDirect, videoId, videoUrl]);
+
+  // Another audio language is only another audio file: the picture, its position and a pause all stay.
+  useEffect(() => {
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    if (!active || !video || !audio || !hasSeparateAudio || !audioUrl) return;
+    if (audio.getAttribute("src") === audioUrl) return;
+    lastAudioResyncAtRef.current = performance.now();
+    audio.src = audioUrl;
+    audio.playbackRate = playbackRate;
+    audio.preservesPitch = true;
+    audio.currentTime = video.currentTime;
+    if (!video.paused && !userPausedRef.current) void audio.play().catch(() => {});
+  }, [active, audioUrl, hasSeparateAudio, playbackRate]);
 
   useEffect(() => {
     if (!active || playbackMode !== "auto_interval" || autoAdvanceFiredRef.current) return;
@@ -536,10 +594,23 @@ export function ShortVideoSurface({
         setContextMenu(null);
         return;
       }
-      togglePlayback();
+      if (singleClickTimerRef.current) clearTimeout(singleClickTimerRef.current);
+      singleClickTimerRef.current = setTimeout(() => {
+        singleClickTimerRef.current = null;
+        togglePlayback();
+      }, DOUBLE_CLICK_WAIT_MS);
     },
     [contextMenu, togglePlayback],
   );
+
+  const handleSurfaceDoubleClick = useCallback(() => {
+    if (singleClickTimerRef.current) clearTimeout(singleClickTimerRef.current);
+    singleClickTimerRef.current = null;
+    onDoubleClickLike();
+    setLikeBurst(true);
+    if (likeBurstTimerRef.current) clearTimeout(likeBurstTimerRef.current);
+    likeBurstTimerRef.current = setTimeout(() => setLikeBurst(false), LIKE_BURST_MS);
+  }, [onDoubleClickLike]);
 
   const handleContextMenu = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -604,6 +675,28 @@ export function ShortVideoSurface({
     [duration, hasSeparateAudio],
   );
 
+  const seekIntervalSeconds = useAppSettingsStore((state) => Number(state.values[SETTINGS.DOUBLE_TAP_SEEK_SECONDS] ?? 10));
+  useEffect(() => {
+    if (!active) return;
+    return listenForShortsKeys((action) => {
+      const video = videoRef.current;
+      if (action.type === "toggle") {
+        togglePlayback();
+        return true;
+      }
+      if (!video) return false;
+      if (action.type === "seek") {
+        seekTo(video.currentTime + action.direction * (Number.isFinite(seekIntervalSeconds) ? seekIntervalSeconds : 10));
+        return true;
+      }
+      if (action.type === "jump") {
+        seekTo((duration * action.tenths) / 10);
+        return true;
+      }
+      return false;
+    });
+  }, [active, duration, seekIntervalSeconds, seekTo, togglePlayback]);
+
   useEffect(() => {
     if (!active) return;
     const handleExternalSeek = (event: Event) => {
@@ -618,6 +711,7 @@ export function ShortVideoSurface({
     <div className="relative h-full w-full">
       <video
         ref={videoRef}
+        crossOrigin="anonymous"
         poster={poster}
         className={`h-full w-full bg-chrome-black ${fit === "cover" ? "object-cover" : "object-contain"}`}
         playsInline
@@ -639,13 +733,14 @@ export function ShortVideoSurface({
         onPointerCancel={restorePlaybackRate}
         onPointerLeave={restorePlaybackRate}
         onClick={handleSurfaceClick}
+        onDoubleClick={handleSurfaceDoubleClick}
         onContextMenu={handleContextMenu}
       />
       {active && (
-        <div className="absolute left-4 top-4 z-30 flex gap-2">
+        <div className="absolute start-4 top-4 z-30 flex gap-2">
           <button
             type="button"
-            aria-label="Short settings"
+            aria-label={getString('shorts_short_settings')}
             onClick={(event) => {
               event.stopPropagation();
               setSettingsOpen((value) => !value);
@@ -661,7 +756,7 @@ export function ShortVideoSurface({
           {captions.length > 0 && (
             <button
               type="button"
-              aria-label="Short captions"
+              aria-label={getString('shorts_short_captions')}
               onClick={(event) => {
                 event.stopPropagation();
                 setSettingsOpen(true);
@@ -679,7 +774,7 @@ export function ShortVideoSurface({
       )}
       {settingsOpen && (
         <div
-          className="absolute left-4 top-16 z-40 w-[min(82vw,320px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover p-2 text-chrome-white"
+          className="absolute start-4 top-16 z-40 w-[min(82vw,320px)] overflow-hidden rounded-xl border border-chrome-white/10 bg-chrome-popover p-2 text-chrome-white"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -687,13 +782,15 @@ export function ShortVideoSurface({
             <button
               type="button"
               onClick={() => setSettingsPane("root")}
-              className="mb-1 flex h-10 w-full items-center gap-2 rounded-md px-1 text-left text-sm font-bold hover:bg-chrome-white/10"
+              className="mb-1 flex h-10 w-full items-center gap-2 rounded-md px-1 text-start text-sm font-bold hover:bg-chrome-white/10"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft className="rtl:-scale-x-100" size={18} />
               {settingsPane === "speed"
                 ? "Playback speed"
                 : settingsPane === "quality"
                 ? "Quality"
+                : settingsPane === "audio"
+                ? getString("player_menu_audio")
                 : "Subtitles/CC"}
             </button>
           )}
@@ -702,35 +799,71 @@ export function ShortVideoSurface({
             <div className="space-y-1">
               <SettingsRow
                 icon={<Gauge size={18} />}
-                label="Playback speed"
+                label={getString('player_menu_speed')}
                 value={playbackRate === 1 ? "Normal" : `${playbackRate}x`}
                 onClick={() => setSettingsPane("speed")}
               />
               <SettingsRow
                 icon={<Monitor size={18} />}
-                label="Quality"
+                label={getString('player_menu_quality')}
                 value={selectedQualityLabel}
                 onClick={() => setSettingsPane("quality")}
               />
               <SettingsRow
                 icon={<Captions size={18} />}
-                label="Subtitles/CC"
+                label={getString('player_menu_subtitles')}
                 value={selectedCaption ? selectedCaption.label : "Off"}
                 onClick={() => setSettingsPane("captions")}
               />
+              {audioTracks.length > 1 && hasSeparateAudio && (
+                <SettingsRow
+                  icon={<AudioLines size={18} />}
+                  label={getString("player_menu_audio")}
+                  value={selectedAudioTrack?.label ?? getString("player_menu_audio_original")}
+                  onClick={() => setSettingsPane("audio")}
+                />
+              )}
+              {eqEditorHosted && (
+                <SettingsRow
+                  icon={<SlidersHorizontal size={18} />}
+                  label={getString("music_equalizer")}
+                  value={getString(!videoEqAvailable() ? "eq_state_unavailable" : eqActive ? "eq_state_on" : "eq_state_off")}
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    openEqEditor(true);
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {settingsPane === "audio" && (
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
+              {audioTracks.map((track) => (
+                <MenuChoice
+                  key={track.id}
+                  checked={selectedAudioTrack?.id === track.id}
+                  label={track.label}
+                  detail={track.languageCode ?? undefined}
+                  onClick={() => {
+                    onSelectAudioTrack(track.id);
+                    setSettingsPane("root");
+                  }}
+                />
+              ))}
             </div>
           )}
 
           {settingsPane === "speed" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               {speedSliderEnabled && (
                 <div className="rounded-md px-3 py-3 text-sm text-chrome-zinc-100">
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold text-chrome-zinc-300">
-                    <span>Speed</span>
+                    <span>{getString('player_menu_speed_label')}</span>
                     <span className="font-mono text-primary">{playbackRate}x</span>
                   </div>
                   <input
-                    aria-label="Playback speed"
+                    aria-label={getString('player_menu_speed')}
                     type="range"
                     min={0.25}
                     max={4}
@@ -756,10 +889,10 @@ export function ShortVideoSurface({
           )}
 
           {settingsPane === "quality" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               <MenuChoice
                 checked={selectedQualityId === "auto"}
-                label="Auto"
+                label={getString('player_menu_quality_auto')}
                 onClick={() => {
                   onSelectQuality("auto");
                   setSettingsPane("root");
@@ -786,10 +919,10 @@ export function ShortVideoSurface({
           )}
 
           {settingsPane === "captions" && (
-            <div className="max-h-64 space-y-1 overflow-y-auto pr-1 select-scrollbar-hidden">
+            <div className="max-h-64 space-y-1 overflow-y-auto pe-1 select-scrollbar-hidden">
               <MenuChoice
                 checked={selectedCaptionId === "off"}
-                label="Off"
+                label={getString('subscription_notifications_off')}
                 onClick={() => {
                   setSelectedCaptionId("off");
                   setSettingsPane("root");
@@ -818,6 +951,13 @@ export function ShortVideoSurface({
         shouldShowControls={settingsOpen}
         uprightVideo={fit === "cover"}
       />
+      {likeBurst && (
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center">
+          <span className="grid h-20 w-20 animate-ping place-items-center rounded-full bg-chrome-black/60 text-chrome-white [animation-iteration-count:1]">
+            <ThumbsUp className="h-10 w-10" fill="currentColor" />
+          </span>
+        </div>
+      )}
       {isBoosting && (
         <div className="pointer-events-none absolute left-1/2 top-8 z-30 -translate-x-1/2 rounded-full bg-chrome-black/80 px-5 py-2 text-sm font-bold text-chrome-white">
           {longPressPlaybackRate}x
@@ -826,12 +966,12 @@ export function ShortVideoSurface({
       {userPaused && (
         <button
           type="button"
-          aria-label="Play"
+          aria-label={getString('download_play')}
           onClick={togglePlayback}
           className="absolute inset-0 z-20 grid place-items-center bg-chrome-black/10 text-chrome-white"
         >
           <span className="grid h-16 w-16 place-items-center rounded-full bg-chrome-black/80">
-            <Play className="ml-1 h-8 w-8" fill="currentColor" />
+            <Play className="ms-1 h-8 w-8" fill="currentColor" />
           </span>
         </button>
       )}
@@ -842,7 +982,7 @@ export function ShortVideoSurface({
             duration={duration}
             onSeek={seekTo}
             variant="edge"
-            ariaLabel="Seek Short"
+            ariaLabel={getString('shorts_seek_short')}
           />
         </div>
       )}
@@ -863,7 +1003,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<PictureInPicture2 size={20} />}
-            label="Miniplayer"
+            label={getString('player_menu_miniplayer')}
             onClick={() => {
               togglePictureInPicture();
               setContextMenu(null);
@@ -871,7 +1011,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Link size={20} />}
-            label="Copy video URL"
+            label={getString('player_menu_copy_url')}
             onClick={() => {
               void copyText(getCurrentUrl(false)).then((copied) => showCopied(getString(copied ? "player_video_url_copied" : "player_url_copy_failed")));
               setContextMenu(null);
@@ -879,7 +1019,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Link size={20} />}
-            label="Copy video URL at current time"
+            label={getString('player_menu_copy_url_at_time')}
             onClick={() => {
               void copyText(getCurrentUrl(true)).then((copied) => showCopied(getString(copied ? "player_timed_url_copied" : "player_url_copy_failed")));
               setContextMenu(null);
@@ -887,7 +1027,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Bug size={20} />}
-            label="Copy debug info"
+            label={getString('player_menu_copy_debug')}
             onClick={() => {
               void copyDebugInfo();
               setContextMenu(null);
@@ -895,7 +1035,7 @@ export function ShortVideoSurface({
           />
           <ContextMenuButton
             icon={<Info size={20} />}
-            label="Stats for nerds"
+            label={getString('player_menu_stats')}
             onClick={() => {
               setStatsVisible((value) => !value);
               setContextMenu(null);
@@ -919,10 +1059,10 @@ export function ShortVideoSurface({
           bitrate={selectedVariant?.bitrate}
           captionCount={captions.length}
           compact
-          className="right-4 top-16"
+          className="end-4 top-16"
         />
       )}
-      <audio ref={audioRef} preload="auto" />
+      <audio ref={audioRef} crossOrigin="anonymous" preload="auto" />
     </div>
   );
 }
@@ -942,11 +1082,11 @@ function SettingsRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
+      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-start text-sm text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
     >
       <span className="grid h-7 w-7 place-items-center text-chrome-zinc-300">{icon}</span>
       <span className="min-w-0 flex-1 font-medium">{label}</span>
-      <span className="max-w-[44%] truncate text-right text-chrome-zinc-300">{value}</span>
+      <span className="max-w-[44%] truncate text-end text-chrome-zinc-300">{value}</span>
     </button>
   );
 }
@@ -968,9 +1108,9 @@ function MenuChoice({
       onClick={onClick}
       className="flex min-h-10 w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-chrome-zinc-100 hover:bg-chrome-white/10"
     >
-      <span className="min-w-0 truncate text-left">
+      <span className="min-w-0 truncate text-start">
         {label}
-        {detail && <span className="ml-1 text-xs text-chrome-zinc-400">{detail}</span>}
+        {detail && <span className="ms-1 text-xs text-chrome-zinc-400">{detail}</span>}
       </span>
       {checked && <Check size={17} />}
     </button>
@@ -989,7 +1129,7 @@ function ContextMenuButton({
   return (
     <button
       type="button"
-      className="flex h-11 w-full items-center gap-4 rounded-lg px-3 text-left text-sm font-bold text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
+      className="flex h-11 w-full items-center gap-4 rounded-lg px-3 text-start text-sm font-bold text-chrome-zinc-100 transition-colors hover:bg-chrome-white/10"
       onClick={onClick}
     >
       <span className="grid h-7 w-7 place-items-center text-chrome-zinc-300">{icon}</span>

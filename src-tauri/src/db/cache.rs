@@ -97,7 +97,7 @@ pub async fn get_cached_dearrow(
     video_id: &str,
 ) -> AppResult<Option<crate::api::dearrow::DeArrowOverride>> {
     let row = sqlx::query(
-        "SELECT title, thumbnail_url
+        "SELECT title, thumbnail_url, random_frame_url
          FROM dearrow_cache
          WHERE video_id = ? AND datetime(cached_at) >= datetime('now', '-7 days')
          LIMIT 1",
@@ -110,9 +110,11 @@ pub async fn get_cached_dearrow(
     if let Some(r) = row {
         let title: Option<String> = sqlx::Row::get(&r, 0);
         let thumbnail_url: Option<String> = sqlx::Row::get(&r, 1);
+        let random_frame_url: Option<String> = sqlx::Row::get(&r, 2);
         Ok(Some(crate::api::dearrow::DeArrowOverride {
             title,
             thumbnail_url,
+            random_frame_url,
         }))
     } else {
         Ok(None)
@@ -125,16 +127,18 @@ pub async fn cache_dearrow(
     override_data: &crate::api::dearrow::DeArrowOverride,
 ) -> AppResult<()> {
     sqlx::query(
-        "INSERT INTO dearrow_cache (video_id, title, thumbnail_url, cached_at)
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        "INSERT INTO dearrow_cache (video_id, title, thumbnail_url, random_frame_url, cached_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(video_id) DO UPDATE SET
             title = excluded.title,
             thumbnail_url = excluded.thumbnail_url,
+            random_frame_url = excluded.random_frame_url,
             cached_at = CURRENT_TIMESTAMP",
     )
     .bind(video_id)
     .bind(&override_data.title)
     .bind(&override_data.thumbnail_url)
+    .bind(&override_data.random_frame_url)
     .execute(pool)
     .await
     .map_err(AppError::from)?;

@@ -1,5 +1,9 @@
+import { shortsPlayerDisabledNow } from "./useShortsContent";
+
 export type ParsedYoutubeUrl =
-  | { kind: "video"; videoId: string }
+  /** `playlistId` is the list a `watch?v=…&list=…` link plays the video from. */
+  | { kind: "video"; videoId: string; music: boolean; playlistId: string | null }
+  | { kind: "short"; videoId: string }
   | { kind: "playlist"; playlistId: string }
   | { kind: "musicPlaylist"; playlistId: string }
   | { kind: "musicAlbum"; browseId: string }
@@ -9,18 +13,35 @@ export type ParsedYoutubeUrl =
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const ID_CHARS = /^[A-Za-z0-9_-]+$/;
+const MAX_URL_CHARS = 2048;
 
-function isYoutubeHost(host: string): { yt: boolean; music: boolean; short: boolean } {
-  const h = host.toLowerCase().replace(/^www\./, "");
-  if (h === "youtu.be") return { yt: true, music: false, short: true };
-  const music = h === "music.youtube.com";
-  const yt = music || h === "youtube.com" || h === "m.youtube.com" || h === "gaming.youtube.com";
-  return { yt, music, short: false };
+const YOUTUBE_DOMAINS = ["youtube.com", "youtube-nocookie.com"];
+const FRONT_END_DOMAINS = ["piped.video", "yewtu.be"];
+const MUSIC_HOSTS = new Set(["music.youtube.com", "m.music.youtube.com"]);
+/** Album playlists are music wherever they are linked from. */
+const ALBUM_PLAYLIST_PREFIX = "OLAK5uy_";
+
+const isOrIsUnder = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
+
+function isYoutubeHost(host: string): { yt: boolean; music: boolean; short: boolean; frontEnd: boolean } {
+  const h = host.toLowerCase();
+  if (isOrIsUnder(h, "youtu.be")) return { yt: true, music: false, short: true, frontEnd: false };
+  const music = MUSIC_HOSTS.has(h);
+  const frontEnd = FRONT_END_DOMAINS.some((domain) => isOrIsUnder(h, domain));
+  return { yt: frontEnd || YOUTUBE_DOMAINS.some((domain) => isOrIsUnder(h, domain)), music, short: false, frontEnd };
 }
+
+const safeDecode = (text: string): string | null => {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return null;
+  }
+};
 
 export function parseYoutubeUrl(raw: string): ParsedYoutubeUrl | null {
   const text = raw.trim();
-  if (!text || /\s/.test(text)) return null;
+  if (!text || text.length > MAX_URL_CHARS || /\s/.test(text)) return null;
 
   let url: URL;
   try {
@@ -29,7 +50,7 @@ export function parseYoutubeUrl(raw: string): ParsedYoutubeUrl | null {
     return null;
   }
 
-  const { yt, music, short } = isYoutubeHost(url.hostname);
+  const { yt, music, short, frontEnd } = isYoutubeHost(url.hostname);
   if (!yt) return null;
 
   const params = url.searchParams;
@@ -38,23 +59,28 @@ export function parseYoutubeUrl(raw: string): ParsedYoutubeUrl | null {
 
   if (short) {
     const id = path.slice(1).split("/")[0] ?? "";
-    return VIDEO_ID.test(id) ? { kind: "video", videoId: id } : null;
+    return VIDEO_ID.test(id) ? { kind: "video", videoId: id, music: false, playlistId: null } : null;
   }
 
-  // watch?v=VIDEOID (a bare video/song wins over any &list=; a video-in-playlist plays the video)
-  const v = params.get("v");
-  if (v && VIDEO_ID.test(v)) return { kind: "video", videoId: v };
+  // /shorts/ID opens the Shorts player.
+  const shortId = path.match(/^\/shorts\/([A-Za-z0-9_-]{11})/)?.[1];
+  if (shortId) return { kind: "short", videoId: shortId };
 
-  // Path-based video forms: /shorts/ID, /embed/ID, /v/ID, /live/ID
-  const pathVideoId = path.match(/^\/(?:shorts|embed|v|live|e)\/([A-Za-z0-9_-]{11})/)?.[1];
-  if (pathVideoId) return { kind: "video", videoId: pathVideoId };
+  // watch?v=VIDEOID, with the list it plays from if the link names one
+  const list = params.get("list");
+  const listId = list && ID_CHARS.test(list) ? list : null;
+  const v = params.get("v");
+  if (v && VIDEO_ID.test(v)) return { kind: "video", videoId: v, music, playlistId: listId };
+
+  // Path-based video forms: /embed/ID, /v/ID, /live/ID
+  const pathVideoId = path.match(/^\/(?:embed|v|live|e)\/([A-Za-z0-9_-]{11})/)?.[1];
+  if (pathVideoId) return { kind: "video", videoId: pathVideoId, music, playlistId: null };
 
   // playlist?list=ID  (or any URL that carries a list= but no watchable v=)
-  const list = params.get("list");
-  if (list && ID_CHARS.test(list)) {
-    return music
-      ? { kind: "musicPlaylist", playlistId: list }
-      : { kind: "playlist", playlistId: list };
+  if (listId) {
+    return music || listId.startsWith(ALBUM_PLAYLIST_PREFIX)
+      ? { kind: "musicPlaylist", playlistId: listId }
+      : { kind: "playlist", playlistId: listId };
   }
 
   // /channel/UC...
@@ -78,14 +104,14 @@ export function parseYoutubeUrl(raw: string): ParsedYoutubeUrl | null {
   }
 
   // Handle / custom / user URLs (need backend resolution to a UC id):
-  //   /@handle, /c/Name, /user/Name, /Name (legacy vanity)
+  //   /@handle, /c/Name, /user/Name, /Name (legacy vanity, on YouTube itself only)
   if (
     /^\/@[^/]+/.test(path) ||
     /^\/(?:c|user)\/[^/]+/.test(path) ||
-    (/^\/[^/]+$/.test(path) && !isReservedPath(path))
+    (!frontEnd && /^\/[^/]+$/.test(path) && !isReservedPath(path))
   ) {
-    const query = decodeURIComponent(path.split("/").filter(Boolean).pop() ?? "");
-    return { kind: "resolveChannel", url: fullUrl, music, query };
+    const query = safeDecode(path.split("/").filter(Boolean).pop() ?? "");
+    return query === null ? null : { kind: "resolveChannel", url: fullUrl, music, query };
   }
 
   return null;
@@ -96,6 +122,11 @@ export function routeForYoutubeUrl(parsed: ParsedYoutubeUrl): string | null {
   switch (parsed.kind) {
     case "video":
       return `/watch/${parsed.videoId}`;
+    case "short":
+      // The same switch Shorts cards follow.
+      return shortsPlayerDisabledNow()
+        ? `/watch/${parsed.videoId}`
+        : `/shorts/${parsed.videoId}`;
     case "playlist":
       return `/playlist/${parsed.playlistId}`;
     case "musicPlaylist":
@@ -115,11 +146,17 @@ export function routeForYoutubeUrl(parsed: ParsedYoutubeUrl): string | null {
 const RESERVED = new Set([
   "watch", "playlist", "shorts", "embed", "live", "results", "feed", "gaming",
   "premium", "account", "reporthistory", "upload", "channel", "browse", "hashtag",
-  "post", "clip", "movies", "music", "signin", "logout",
+  "post", "clip", "movies", "music", "signin", "logout", "about", "ads", "attribution_link",
+  "creators", "howyoutubeworks", "iframe_api", "jobs", "kids", "live_chat", "new", "oembed",
+  "redirect", "s", "sitemap.xml", "robots.txt", "favicon.ico", "studio", "t", "trending",
 ]);
 
 function isReservedPath(path: string): boolean {
   return RESERVED.has(path.slice(1).toLowerCase());
+}
+
+export function youtubeChannelUrl(channelId: string): string {
+  return `https://www.youtube.com/channel/${channelId}`;
 }
 
 export function youtubeWatchUrl(videoId: string, positionSeconds?: number): string {
@@ -137,6 +174,14 @@ export function youtubeMusicWatchUrl(videoId: string): string {
 
 export function youtubeMusicAlbumUrl(browseId: string): string {
   return `https://music.youtube.com/browse/${browseId}`;
+}
+
+export function youtubeMusicArtistUrl(channelId: string): string {
+  return `https://music.youtube.com/channel/${channelId}`;
+}
+
+export function youtubeMusicPlaylistUrl(playlistId: string): string {
+  return `https://music.youtube.com/playlist?list=${playlistId.replace(/^VL/, "")}`;
 }
 
 export function youtubePlaylistUrl(playlistId: string): string {

@@ -3,8 +3,9 @@ import { useCallback, useRef } from "react";
 import { newWheelGesture, wheelStep, wheelVolumeChange } from "./wheelVolume";
 
 export interface UseWheelVolumeOptions {
-  /** From 0 to 1. */
+  /** From 0 to `max`, which is 1 unless the volume can go past 100%. */
   volume: number;
+  max?: number;
   muted: boolean;
   onVolumeChange: (volume: number) => void;
   onUnmute?: () => void;
@@ -26,8 +27,8 @@ export function useWheelVolume<T extends HTMLElement = HTMLDivElement>(options: 
       event.stopPropagation();
       const step = wheelStep(gesture, event.deltaY, event.deltaMode, event.timeStamp);
       if (step === 0) return;
-      const { volume, muted, onVolumeChange, onUnmute } = latest.current;
-      const change = wheelVolumeChange(volume, muted, step);
+      const { volume, muted, max, onVolumeChange, onUnmute } = latest.current;
+      const change = wheelVolumeChange(volume, muted, step, max);
       if (change.unmute) onUnmute?.();
       if (change.volume !== undefined) onVolumeChange(change.volume);
     };

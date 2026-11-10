@@ -41,6 +41,12 @@ export async function addWatchRecord(
   return invokeBackend<void>("add_watch_record", { record });
 }
 
+/** Puts back a removed row, as newer than the removal that other devices may already hold. */
+export async function restoreWatchRecord(record: WatchHistoryRecord): Promise<void> {
+  if (!(await isTauriEnv())) return addWatchRecord(record);
+  return invokeBackend<void>("restore_watch_record", { record });
+}
+
 export async function addWatchRecordsBulk(
   records: WatchHistoryRecord[],
 ): Promise<void> {
@@ -63,6 +69,30 @@ export async function deleteWatchRecord(videoId: string): Promise<void> {
     return;
   }
   return invokeBackend<void>("delete_watch_record", { videoId });
+}
+
+/** The rows for these videos that exist. */
+export async function getWatchRecords(videoIds: string[]): Promise<WatchHistoryRecord[]> {
+  if (!(await isTauriEnv())) {
+    const ids = new Set(videoIds);
+    return (await getWatchHistory(10000, 0)).filter((record) => ids.has(record.videoId));
+  }
+  return invokeBackend<WatchHistoryRecord[]>("get_watch_records", { videoIds });
+}
+
+/** The years anything was watched in, newest first. */
+export async function getWatchHistoryYears(): Promise<number[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<number[]>("get_watch_history_years");
+}
+
+export async function deleteShortWatchRecords(): Promise<void> {
+  if (!(await isTauriEnv())) {
+    const kept = (await getWatchHistory(10000, 0)).filter((record) => !record.isShort);
+    profileStorage.setItem("mock_watch_history", JSON.stringify(kept));
+    return;
+  }
+  return invokeBackend<void>("delete_short_watch_records");
 }
 
 export async function clearWatchHistory(): Promise<void> {

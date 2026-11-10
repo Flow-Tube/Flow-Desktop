@@ -9,11 +9,13 @@ import { buildSuggestionColumns, type SuggestionRow } from '../../lib/searchSugg
 import { SETTINGS } from '../../lib/settings/schema';
 import { prefetchStreamInfo } from '../../lib/streamResolution';
 import { useSearchSuggestions } from '../../lib/useSearchSuggestions';
+import { FOCUS_SEARCH_EVENT } from '../../lib/windowEvents';
 import { parseYoutubeUrl, routeForYoutubeUrl } from '../../lib/youtubeUrl';
 import { useAppSettingsStore } from '../../store/useAppSettingsStore';
 import { useMusicHiddenFilter } from '../../store/useMusicActionsStore';
 import { useMusicPlayerStore } from '../../store/useMusicPlayerStore';
-import { useSearchHistoryStore } from '../../store/useSearchHistoryStore';
+import { useSearchHistoryStore, useVisibleSearchHistory } from '../../store/useSearchHistoryStore';
+import type { SearchFilterState } from '../../lib/searchFilterState';
 import { useUiStore } from '../../store/useUiStore';
 
 const SHORTCUT_LABEL = IS_MACOS_RUNTIME ? '⌘K' : 'Ctrl K';
@@ -22,7 +24,8 @@ export function TopbarSearch() {
   const navigate = useNavigate();
   const setSearchQuery = useUiStore((s) => s.setSearchQuery);
   const region = useAppSettingsStore((s) => s.values[SETTINGS.TRENDING_REGION]);
-  const history = useSearchHistoryStore((s) => s.entries);
+  const history = useVisibleSearchHistory();
+  const suggestionsEnabled = useAppSettingsStore((s) => s.values[SETTINGS.SEARCH_SUGGESTIONS_ENABLED] !== 'false');
   const recordSearch = useSearchHistoryStore((s) => s.record);
   const removeSearch = useSearchHistoryStore((s) => s.remove);
   const clearHistory = useSearchHistoryStore((s) => s.clear);
@@ -36,7 +39,7 @@ export function TopbarSearch() {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { suggestions, musicItems } = useSearchSuggestions(text, region);
+  const { suggestions, musicItems } = useSearchSuggestions(text, region, suggestionsEnabled);
   const columns = useMemo(
     () => buildSuggestionColumns({ query: text, history, suggestions, musicItems, isHiddenSong }),
     [text, history, suggestions, musicItems, isHiddenSong],
@@ -51,17 +54,22 @@ export function TopbarSearch() {
     const onOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) setOpen(false);
     };
+    const focusSearch = () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      setOpen(true);
+    };
     const onShortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-        setOpen(true);
+        focusSearch();
       }
     };
     document.addEventListener('mousedown', onOutside);
     window.addEventListener('keydown', onShortcut);
+    window.addEventListener(FOCUS_SEARCH_EVENT, focusSearch);
     return () => {
+      window.removeEventListener(FOCUS_SEARCH_EVENT, focusSearch);
       document.removeEventListener('mousedown', onOutside);
       window.removeEventListener('keydown', onShortcut);
     };
@@ -73,16 +81,16 @@ export function TopbarSearch() {
     inputRef.current?.blur();
   };
 
-  const runTextSearch = (query: string) => {
+  const runTextSearch = (query: string, searchFilters?: SearchFilterState) => {
     recordSearch(query);
     setText(query);
     setSearchQuery(query);
     close();
-    navigate(`/search?q=${encodeURIComponent(query)}`);
+    navigate(`/search?q=${encodeURIComponent(query)}`, searchFilters ? { state: { searchFilters } } : undefined);
   };
 
   const pick = (row: SuggestionRow) => {
-    if (row.kind === 'history') return runTextSearch(row.query);
+    if (row.kind === 'history') return runTextSearch(row.query, useSearchHistoryStore.getState().filtersOf(row.query));
     if (row.kind === 'query') return runTextSearch(row.text);
     recordSearch(text);
     close();
@@ -118,7 +126,7 @@ export function TopbarSearch() {
     if (parsed) {
       const route = routeForYoutubeUrl(parsed);
       if (route) {
-        if (parsed.kind === 'video') prefetchStreamInfo(parsed.videoId);
+        if (parsed.kind === 'video' || parsed.kind === 'short') prefetchStreamInfo(parsed.videoId);
         close();
         navigate(route);
         return;
@@ -178,7 +186,7 @@ export function TopbarSearch() {
       <form
         onSubmit={submit}
         role="search"
-        className={`flex h-10 w-full items-center gap-2 rounded-full border pl-1.5 pr-2 transition-colors duration-200 ease-out ${
+        className={`flex h-10 w-full items-center gap-2 rounded-full border ps-1.5 pe-2 transition-colors duration-200 ease-out ${
           panelVisible
             ? 'border-chrome-neutral-700 bg-surface-container'
             : 'border-chrome-neutral-800 bg-surface-container-low hover:border-chrome-neutral-700 focus-within:border-chrome-neutral-700 focus-within:bg-surface-container'

@@ -6,7 +6,7 @@ vi.mock("./api/youtube", () => ({
   getPlaylistDetails: (id: string, token?: string | null) => getPlaylistDetails(id, token),
 }));
 
-import { PLAYLIST_PAGE_GUARD, appendUniqueVideos, loadRemainingPlaylistVideos } from "./playlistPages";
+import { PLAYLIST_PAGE_GUARD, appendUniqueVideos, loadRemainingPlaylistVideos, walkRemainingPlaylistPages } from "./playlistPages";
 
 const video = (id: string): VideoSummary => ({ id, title: id, channelName: "", isLive: false });
 
@@ -32,6 +32,13 @@ describe("playlist pages", () => {
     getPlaylistDetails.mockImplementation(async () => ({ videos: [], nextPageToken: "again" }));
     await loadRemainingPlaylistVideos("PL1", [], "T2");
     expect(getPlaylistDetails).toHaveBeenCalledTimes(PLAYLIST_PAGE_GUARD - 1);
+  });
+
+  it("says whether the walk reached the end", async () => {
+    getPlaylistDetails.mockImplementation(async () => ({ videos: [], nextPageToken: "again" }));
+    expect((await walkRemainingPlaylistPages("PL1", [], "T2")).finished).toBe(false);
+    getPlaylistDetails.mockImplementation(async () => ({ videos: [], nextPageToken: null }));
+    expect((await walkRemainingPlaylistPages("PL1", [], "T2")).finished).toBe(true);
   });
 
   it("makes no request without a token", async () => {

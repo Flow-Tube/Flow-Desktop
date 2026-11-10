@@ -25,3 +25,13 @@ export function clearLyricsCache(): Promise<void> {
 export function saveDownloadLyrics(videoId: string, lrc: string): Promise<boolean> {
   return invokeBackend<boolean>("save_download_lyrics", { videoId, lrc });
 }
+
+/** A Latin line per lyric line, made on this computer; none for Japanese lyrics. */
+export function romanizeLyrics(lines: string[]): Promise<Array<string | null>> {
+  return invokeBackend<Array<string | null>>("romanize_lyrics", { lines });
+}
+
+/** A song's YouTube captions as `.lrc` text, or null when it has none. */
+export function getMusicCaptionsLrc(videoId: string): Promise<string | null> {
+  return invokeBackend<string | null>("get_music_captions_lrc", { videoId });
+}

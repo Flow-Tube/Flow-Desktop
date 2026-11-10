@@ -30,6 +30,7 @@ mod metadata;
 mod muxer;
 mod naming;
 mod progress;
+mod recovery;
 mod sidecars;
 mod source;
 mod subtitles;
@@ -1130,6 +1131,43 @@ pub async fn delete_download_collections(
         .await
         .map_err(ErrorResponse::from)?;
     crate::db::download_collections::delete_collections(&pool, &ids)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+fn download_folders(
+    app: &AppHandle,
+    video_folder: Option<&str>,
+    music_folder: Option<&str>,
+) -> Result<Vec<PathBuf>, ErrorResponse> {
+    let video = naming::resolve_destination_directory(app, DownloadMediaKind::Video, video_folder)?;
+    let music = naming::resolve_destination_directory(app, DownloadMediaKind::Music, music_folder)?;
+    Ok(if video == music {
+        vec![video]
+    } else {
+        vec![video, music]
+    })
+}
+
+/// Lists the tagged files in the download folders that the library doesn't, and returns how many.
+#[tauri::command]
+pub async fn find_earlier_downloads(
+    video_folder: Option<String>,
+    music_folder: Option<String>,
+    app: AppHandle,
+    pool: State<'_, SqlitePool>,
+) -> Result<usize, ErrorResponse> {
+    let folders = download_folders(&app, video_folder.as_deref(), music_folder.as_deref())?;
+    recovery::find_earlier_downloads(&pool, folders)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn retag_older_downloads(
+    pool: State<'_, SqlitePool>,
+) -> Result<recovery::RetagResult, ErrorResponse> {
+    recovery::retag_older_downloads(&pool)
         .await
         .map_err(ErrorResponse::from)
 }

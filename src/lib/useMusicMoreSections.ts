@@ -1,5 +1,5 @@
+import { getString } from './i18n/index';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import { getMusicMoodGenre, getMusicTasteProfile, searchMusicTyped } from './api/music';
 import { pickForSession } from './musicFeedComposer';
@@ -57,7 +57,6 @@ export function chooseGenres<T extends { title: string }>(genres: T[], count: nu
  * YouTube's genre pages. Each loads on its own; a failed source only removes its shelf.
  */
 export function useMusicMoreSections(chips: MusicHomeChip[], moodGroups: MoodAndGenreGroup[]): PersonalSection[] {
-  const { t } = useTranslation('common');
   const [sections, setSections] = useState<PersonalSection[]>([]);
   const requestRef = useRef(0);
   // Callers rebuild these arrays on every render, so choices are keyed by content.
@@ -88,8 +87,8 @@ export function useMusicMoreSections(chips: MusicHomeChip[], moodGroups: MoodAnd
       void getMusicMoodGenre(vibeChip.browseId, vibeChip.params ?? undefined)
         .then((page) => publish({
           id: 'vibes',
-          title: t('musicVibes', { vibe: vibeChip.title }),
-          subtitle: t('musicCommunityPlaylists'),
+          title: getString('music_vibes', vibeChip.title),
+          subtitle: getString('music_community_playlists'),
           items: playlistsOf(page.items).slice(0, LANE_SIZE).map((item) => ({ type: 'playlist' as const, ...item })),
         }))
         .catch(() => undefined);
@@ -116,14 +115,14 @@ export function useMusicMoreSections(chips: MusicHomeChip[], moodGroups: MoodAnd
       }
       publish({
         id: 'mixed-for-you',
-        title: t('musicMixedForYou'),
+        title: getString('music_mixed_for_you'),
         items: mixed.slice(0, LANE_SIZE).map((item) => ({ type: 'playlist' as const, ...item })),
       });
     })();
 
     void trendingSongs().then((songs) => publish({
       id: 'popular-artists',
-      title: t('musicPopularArtists'),
+      title: getString('music_popular_artists'),
       items: popularArtistsFrom(songs, LANE_SIZE).map((artist) => ({ type: 'artist' as const, ...artist })),
     }));
 
@@ -133,7 +132,7 @@ export function useMusicMoreSections(chips: MusicHomeChip[], moodGroups: MoodAnd
           const pool = await ranked(audioMusicOnly(songsOf(page.items)), 'discover');
           publish({
             id: `genre-${genre.browseId}:${genre.params ?? ''}`,
-            title: t('musicGenreMix', { genre: genre.title }),
+            title: getString('music_genre_mix', genre.title),
             items: pool.slice(0, GENRE_MIX_SIZE).map((song): YTItem => ({ type: 'song', ...song })),
           }, 4);
         })
@@ -141,7 +140,7 @@ export function useMusicMoreSections(chips: MusicHomeChip[], moodGroups: MoodAnd
     }
 
     return () => { requestRef.current += 1; };
-  }, [vibeChip, genres, t]);
+  }, [vibeChip, genres]);
 
   return sections;
 }

@@ -50,6 +50,9 @@ export interface CommentsSectionProps {
   hideHeader?: boolean;
   postId?: string | null;
   postCommentParams?: string | null;
+  /** Fills a side panel: the header stays and the list scrolls. */
+  fill?: boolean;
+  onClose?: () => void;
 }
 
 export interface LiveChatProps {

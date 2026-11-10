@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Chip } from '../ui/Chip';
 
 interface CategoryChipsProps {
-  categories?: string[];
+  categories: string[];
   activeCategory?: string;
   onCategoryChange?: (category: string) => void;
   sticky?: boolean;
@@ -10,9 +10,7 @@ interface CategoryChipsProps {
 }
 
 export function CategoryChips({
-  categories = [
-    "All", "Music", "Gaming", "FlowNeuro Insights", "Live", "Podcasts", "News", "Coding", "Lo-fi"
-  ],
+  categories,
   activeCategory,
   onCategoryChange,
   sticky = true,
@@ -28,7 +26,7 @@ export function CategoryChips({
 
   return (
     <div 
-      className={`${sticky ? 'sticky top-0 z-30 border-b border-chrome-neutral-800 bg-background px-4' : ''} flex items-center gap-3 overflow-x-auto py-3 hide-scrollbar ${className}`}
+      className={`${sticky ? 'sticky top-0 z-30 border-b border-chrome-neutral-800 bg-background px-4' : ''} flex items-center gap-3 overflow-x-auto py-3 ${className}`}
     >
       <div className="flex gap-3">
         {categories.map((cat) => (

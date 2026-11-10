@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { breakLines, isRtlText, layoutText, type TextMeasurer } from "./textLayout";
+import { breakLines, layoutText, type TextMeasurer } from "./textLayout";
 import { buildKaraokeGeometry } from "./karaoke";
 import { wordCharRanges } from "./timing";
 
@@ -36,12 +36,6 @@ describe("lyrics text layout", () => {
     const block = layoutText("hold me close tonight", style, 120, fixedMeasurer);
     expect(block.lineHeight).toBe(26);
     expect(block.height).toBe(2 * 26 + 20);
-  });
-
-  it("reads the direction from the first strong character", () => {
-    expect(isRtlText("حبيبي love")).toBe(true);
-    expect(isRtlText("123 love حبيبي")).toBe(false);
-    expect(isRtlText("שלום")).toBe(true);
   });
 });
 

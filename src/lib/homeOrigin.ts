@@ -21,3 +21,8 @@ export function homeOriginLabel(origin: HomeOrigin): string {
     }
   }
 }
+
+/** The line on the card itself: only a channel the viewer keeps watching says so up front. */
+export function homeReasonLine(origin: HomeOrigin | undefined): string | undefined {
+  return origin?.kind === "channelMemory" ? getString("home_reason_channel_memory") : undefined;
+}

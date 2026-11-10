@@ -175,7 +175,7 @@ pub fn open_object(object: &ParsedObject<'_>, purpose_key: &[u8]) -> Result<Vec<
     open(purpose_key, object.header_bytes, object.sealed)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StreamPosition {
     pub seq: u64,
     pub hash: [u8; 32],

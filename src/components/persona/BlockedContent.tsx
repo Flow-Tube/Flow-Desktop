@@ -60,7 +60,7 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 text-right">
+        <div className="grid grid-cols-2 gap-3 text-end">
           <div>
             <p className="font-mono text-xl text-[var(--color-on-surface)]">{blockedTopics.length}</p>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
@@ -96,7 +96,7 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
                     <td className="px-0 py-3 text-[var(--color-on-surface)]">
                       <span className="block truncate capitalize">{topic}</span>
                     </td>
-                    <td className="w-12 px-4 py-3 text-right">
+                    <td className="w-12 px-4 py-3 text-end">
                       {onUnblockTopic && <button
                         onClick={() => onUnblockTopic(topic)}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-on-surface-variant)] transition-colors hover:bg-chrome-red-950/30 hover:text-chrome-red-400"
@@ -132,12 +132,12 @@ export function BlockedContent({ brain, onUnblockTopic, onUnblockChannel }: Bloc
                         <EyeOff className="h-4 w-4" />
                       </td>
                       <td className="px-0 py-3">
-                        <span className="block truncate text-[var(--color-on-surface)]">{name}</span>
+                        <span dir="auto" className="block truncate text-[var(--color-on-surface)]">{name}</span>
                         <span className="mt-0.5 block truncate font-mono text-[10px] text-[var(--color-on-surface-variant)]">
                           {id}
                         </span>
                       </td>
-                      <td className="w-12 px-4 py-3 text-right">
+                      <td className="w-12 px-4 py-3 text-end">
                         {onUnblockChannel && <button
                           onClick={() => onUnblockChannel(id)}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--color-on-surface-variant)] transition-colors hover:bg-chrome-red-950/30 hover:text-chrome-red-400"

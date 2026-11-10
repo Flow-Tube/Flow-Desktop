@@ -234,6 +234,9 @@ export interface PlayerState {
   setFullscreenPanel: (panel: FullscreenPanel | null) => void;
   /** The watch page has a live chat or chat replay to show. */
   isLiveChatAvailable: boolean;
+  /** The player's controls are showing; the mini player's own buttons fade with them. */
+  isPlayerChromeShown: boolean;
+  setIsPlayerChromeShown: (shown: boolean) => void;
   setIsLiveChatAvailable: (available: boolean) => void;
   /** The watch page shows comments, so the fullscreen panel can too. */
   isCommentsAvailable: boolean;
@@ -284,6 +287,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isQueuePanelOpen: false,
   fullscreenPanel: null,
   isLiveChatAvailable: false,
+  isPlayerChromeShown: true,
   isCommentsAvailable: false,
 
   setCurrentVideo: (video) => {
@@ -836,6 +840,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     ...(fullscreenPanel === "queue" ? { isQueuePanelOpen: true, isChaptersPanelOpen: false } : {}),
   }),
   setIsLiveChatAvailable: (isLiveChatAvailable) => set({ isLiveChatAvailable }),
+  setIsPlayerChromeShown: (isPlayerChromeShown) => set({ isPlayerChromeShown }),
   setIsCommentsAvailable: (isCommentsAvailable) => set({ isCommentsAvailable }),
   subtitleStyle: getSavedSubtitleStyle(),
   setSubtitleStyle: (style) => {

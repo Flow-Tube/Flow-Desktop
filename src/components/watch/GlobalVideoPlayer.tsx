@@ -64,6 +64,15 @@ export function GlobalVideoPlayer() {
   const previousVideoIdRef = useRef(currentVideo?.id ?? null);
 
   const isFloating = videoPlayerMode === "pip";
+  // The grip and buttons fade with the player's own controls, on the same idle rule. The buttons
+  // sit outside the player, so resting on them counts as leaving it; they hold themselves up then.
+  const playerChromeShown = usePlayerStore((s) => s.isPlayerChromeShown);
+  const [overButtons, setOverButtons] = useState(false);
+  const chromeShown = playerChromeShown || overButtons;
+  // Expand and Close remove the buttons under the pointer, so no pointerleave ever arrives.
+  useEffect(() => {
+    if (!isFloating) setOverButtons(false);
+  }, [isFloating]);
   // Fullscreen keeps the "pip" mode, and its frame fills the window with insets.
   const { isDragging, dragBinds } = useMiniPlayerDrag({
     frameRef,
@@ -331,20 +340,22 @@ export function GlobalVideoPlayer() {
         {isFloating && (
           <>
             <div
-              className="pointer-events-none absolute left-2 top-2 z-40 flex items-center justify-center rounded-full bg-chrome-black/80 px-2 py-1 text-chrome-white/60 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+              className={`pointer-events-none absolute left-2 top-2 z-40 flex items-center justify-center rounded-full bg-chrome-black/80 px-2 py-1 text-chrome-white/60 transition-opacity duration-200 ease-out ${chromeShown ? "opacity-100" : "opacity-0"}`}
               aria-hidden="true"
             >
               <GripHorizontal size={14} />
             </div>
             <div
               data-drag-ignore="true"
-              className="absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100"
+              onPointerEnter={() => setOverButtons(true)}
+              onPointerLeave={() => setOverButtons(false)}
+              className={`absolute right-2 top-2 z-40 flex items-center gap-1 rounded-full bg-chrome-black/80 p-1 transition-opacity duration-200 ease-out focus-within:pointer-events-auto focus-within:opacity-100 ${chromeShown ? "opacity-100" : "pointer-events-none opacity-0"}`}
             >
               <button
                 type="button"
                 aria-label={getString('player_expand_video')}
                 onClick={expandFromFloating}
-                className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
+                className="grid h-7 w-7 place-items-center rounded-full text-chrome-white transition-colors duration-200 ease-out hover:bg-chrome-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <Maximize2 size={16} />
               </button>
@@ -352,7 +363,7 @@ export function GlobalVideoPlayer() {
                 type="button"
                 aria-label={getString('player_close_video')}
                 onClick={dismissVideoPlayer}
-                className="grid h-7 w-7 place-items-center rounded-full text-chrome-white hover:bg-chrome-white/15"
+                className="grid h-7 w-7 place-items-center rounded-full text-chrome-white transition-colors duration-200 ease-out hover:bg-chrome-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <X size={16} />
               </button>

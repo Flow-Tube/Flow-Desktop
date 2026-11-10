@@ -598,6 +598,10 @@ export const Player: React.FC<PlayerProps> = ({
   const isPipMode = videoPlayerMode === "pip";
   const isTheaterSurface = isTheaterMode && !isPipMode;
   const shouldShowControls = controlsVisible || !isPlaying || settingsOpen || isScrubbing;
+  const setIsPlayerChromeShown = usePlayerStore((state) => state.setIsPlayerChromeShown);
+  useEffect(() => {
+    setIsPlayerChromeShown(shouldShowControls);
+  }, [shouldShowControls, setIsPlayerChromeShown]);
   // The pop-out holds a window of its own, with no page around the video to light.
   const showAmbient =
     ambient.enabled &&
@@ -1087,7 +1091,6 @@ export const Player: React.FC<PlayerProps> = ({
     isPlaying,
     settingsOpen,
     isScrubbing,
-    isPipMode,
     isLoading,
     hasError: Boolean(error || errorInfo),
   });

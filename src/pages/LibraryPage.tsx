@@ -5,6 +5,7 @@ import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
 import { hiddenOnLibraryPage, useHiddenLibrarySections } from "../lib/librarySections";
+import { useMusicEnabled, withMusic } from "../lib/useMusicContent";
 import { useShortsEnabled, videosWithShorts } from "../lib/useShortsContent";
 import { useLibrary, type LibraryPlaylist } from "../lib/useLibrary";
 import { historyVideoToSong, type HistoryVideo } from "../lib/useHistory";
@@ -166,6 +167,17 @@ function DownloadVideoShelfRow({
   );
 }
 
+function libraryStats(playlists: number, albums: number, shorts: number, shortsEnabled: boolean, musicEnabled: boolean) {
+  if (musicEnabled) {
+    return shortsEnabled
+      ? getString("library_stats_summary", playlists, albums, shorts)
+      : getString("library_stats_summary_no_shorts", playlists, albums);
+  }
+  return shortsEnabled
+    ? getString("library_stats_summary_no_albums", playlists, shorts)
+    : getString("library_stats_summary_playlists_only", playlists);
+}
+
 function MusicDownloadShelfRow({ songs }: { songs: SongItem[] }) {
   const playQueue = useMusicPlayerStore((s) => s.playQueue);
   return (
@@ -210,14 +222,14 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
   } = useLibrary();
 
   const shortsEnabled = useShortsEnabled();
-  const hidden = hiddenOnLibraryPage(useHiddenLibrarySections(), shortsEnabled);
+  const musicEnabled = useMusicEnabled();
+  const hidden = hiddenOnLibraryPage(useHiddenLibrarySections(), shortsEnabled, musicEnabled);
 
   const isEmpty = (length: number) => !loading && length === 0;
 
-  const statsText = shortsEnabled
-    ? getString("library_stats_summary", playlists.length, savedAlbums.length, savedShorts.length)
-    : getString("library_stats_summary_no_shorts", playlists.length, savedAlbums.length);
-  const historyShown = videosWithShorts(history, shortsEnabled);
+  const statsText = libraryStats(playlists.length, savedAlbums.length, savedShorts.length, shortsEnabled, musicEnabled);
+  const historyShown = withMusic(videosWithShorts(history, shortsEnabled), musicEnabled);
+  const likedShown = withMusic(liked, musicEnabled);
 
   const handleOpenAlbum = (album: StoredAlbum) => {
     navigate(albumDetailPath(album));
@@ -301,9 +313,9 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           title={getString("library_likes_label")}
           icon={ThumbsUp}
           viewAllTo="/liked"
-          isEmpty={isEmpty(liked.length)}
+          isEmpty={isEmpty(likedShown.length)}
         >
-          <HistoryShelfRow items={liked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+          <HistoryShelfRow items={likedShown} onPlay={onPlay} onAddToQueue={onAddToQueue} />
         </LibraryShelf>
       )}
 

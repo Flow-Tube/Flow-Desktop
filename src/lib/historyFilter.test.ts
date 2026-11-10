@@ -28,6 +28,13 @@ describe("filterHistory", () => {
     expect(effectiveHistoryFilter("music", false)).toBe("music");
   });
 
+  it("shows no songs while Show Music is off, and the Music tab falls back to All", () => {
+    expect(ids({ musicEnabled: false })).not.toContain("song");
+    expect(ids({ musicEnabled: false, filter: "music" })).toEqual([]);
+    expect(effectiveHistoryFilter("music", true, false)).toBe("all");
+    expect(effectiveHistoryFilter("music", true, true)).toBe("music");
+  });
+
   it("keeps Shorts out of Videos and in their own tab", () => {
     expect(ids({ filter: "videos" })).toEqual(["video"]);
     expect(ids({ filter: "shorts" })).toEqual(["short"]);

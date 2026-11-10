@@ -20,6 +20,7 @@ import {
 import { useDownloadStore } from "../store/useDownloadStore";
 import { useCollectionDownloadStore } from "../store/useCollectionDownloadStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
+import { useMusicEnabled } from "../lib/useMusicContent";
 import { SelectableRow } from "../components/common/SelectableRow";
 import { Button } from "../components/ui/Button";
 import { Select } from "../components/ui/Select";
@@ -105,7 +106,9 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   const playQueue = useMusicPlayerStore((state) => state.playQueue);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<DownloadsFilter>("all");
+  const [chosenFilter, setFilter] = useState<DownloadsFilter>("all");
+  const musicEnabled = useMusicEnabled();
+  const filter: DownloadsFilter = !musicEnabled && (chosenFilter === "music" || chosenFilter === "albums") ? "all" : chosenFilter;
   const [sort, setSort] = useState<DownloadSort>(loadDownloadSort);
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -115,11 +118,11 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
     () => [
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
-      { key: "music" as const, label: getString("history_filter_music") },
+      ...(musicEnabled ? [{ key: "music" as const, label: getString("history_filter_music") }] : []),
       { key: "playlists" as const, label: getString("downloads_filter_playlists") },
-      { key: "albums" as const, label: getString("downloads_filter_albums") },
+      ...(musicEnabled ? [{ key: "albums" as const, label: getString("downloads_filter_albums") }] : []),
     ],
-    [],
+    [musicEnabled],
   );
   const activeLabel = filters.find((entry) => entry.key === filter)?.label ?? filters[0]?.label ?? "";
 
@@ -202,15 +205,15 @@ export const Downloads: React.FC<DownloadsProps> = ({ onPlay }) => {
   );
 
   const showVideos = (filter === "all" || filter === "videos") && videoEntries.length > 0;
-  const showMusic = (filter === "all" || filter === "music") && musicEntries.length > 0;
+  const showMusic = musicEnabled && (filter === "all" || filter === "music") && musicEntries.length > 0;
   const showPlaylists = (filter === "all" || filter === "playlists") && playlistEntries.length > 0;
-  const showAlbums = (filter === "all" || filter === "albums") && albumEntries.length > 0;
+  const showAlbums = musicEnabled && (filter === "all" || filter === "albums") && albumEntries.length > 0;
   const isEmpty = standaloneRecordCount === 0 && collectionRecords.length === 0;
   const hasResults =
     videoEntries.length > 0 ||
-    musicEntries.length > 0 ||
+    (musicEnabled && musicEntries.length > 0) ||
     playlistEntries.length > 0 ||
-    albumEntries.length > 0;
+    (musicEnabled && albumEntries.length > 0);
 
   const toggleSelected = (id: number) => {
     setSelectedIds((current) => {

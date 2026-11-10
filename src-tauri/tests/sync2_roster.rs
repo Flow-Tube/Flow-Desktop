@@ -112,6 +112,39 @@ fn invalid_entries_are_rejected_for_the_named_reason() {
 }
 
 #[test]
+fn an_entry_that_skipped_the_parser_is_refused_for_its_meta_too() {
+    let v = vectors();
+    let entries = entries(&v);
+    let named = |name: &&Value| name["name"].as_str().unwrap().contains("meta");
+    let negatives = v["negatives"].as_array().unwrap().iter().filter(named);
+    let mut seen = 0;
+    for n in negatives {
+        let Ok(entry) = serde_json::from_value::<Entry>(n["entry"].clone()) else {
+            continue;
+        };
+        let state = base(&entries, &n["base"]);
+        let error = apply_entry(Some(&state), &entry).unwrap_err();
+        assert_eq!(error.code(), n["error"].as_str().unwrap(), "{}", n["name"]);
+        seen += 1;
+    }
+    assert!(seen >= 6);
+}
+
+#[test]
+fn replaying_a_stored_chain_refuses_a_key_with_a_small_order_part() {
+    let v = vectors();
+    let negatives = v["negatives"].as_array().unwrap();
+    let n = negatives
+        .iter()
+        .find(|n| n["name"] == "mixed-order-key")
+        .unwrap();
+    let mut chain = entries(&v);
+    chain.truncate(1);
+    chain.push(parse_entry(&n["entry"]).unwrap());
+    assert_eq!(replay_roster(&chain).unwrap_err().code(), "roster-key");
+}
+
+#[test]
 fn a_genesis_must_match_its_group_id() {
     for n in vectors()["geneses"].as_array().unwrap() {
         let entry = parse_entry(&n["entry"]).unwrap();
@@ -164,7 +197,12 @@ fn a_removal_replaces_a_recovery_key_set_by_a_device_that_is_gone() {
             Some(count) => base(&entries, count),
             None => replay_roster(&entries).unwrap(),
         };
-        let steps: Vec<Entry> = serde_json::from_value(case["steps"].clone()).unwrap();
+        let steps: Vec<Entry> = case["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|step| parse_entry(step).unwrap())
+            .collect();
         let (last, before) = steps.split_last().unwrap();
         for step in before {
             state = apply_entry(Some(&state), step).unwrap();

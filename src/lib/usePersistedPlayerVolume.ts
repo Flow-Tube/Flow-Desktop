@@ -15,6 +15,7 @@ export function usePersistedPlayerVolume(): void {
   const settingsLoaded = useAppSettingsStore((state) => state.loaded);
   const volume = usePlayerStore((state) => state.volume);
   const muted = usePlayerStore((state) => state.muted);
+  const volumeBoost = usePlayerStore((state) => state.volumeBoost);
   const hydratedRef = useRef(false);
 
   useEffect(() => {
@@ -23,6 +24,8 @@ export function usePersistedPlayerVolume(): void {
     const storedVolume = Number(getSettingValue(SETTINGS.PLAYER_VOLUME));
     const store = usePlayerStore.getState();
     if (Number.isFinite(storedVolume)) store.setVolume(storedVolume);
+    const storedBoost = Number(getSettingValue(SETTINGS.PLAYER_VOLUME_BOOST));
+    if (Number.isFinite(storedBoost)) store.setVolumeBoost(storedBoost);
     store.setMuted(getSettingValue(SETTINGS.PLAYER_MUTED) === "true");
   }, [settingsLoaded]);
 
@@ -30,8 +33,9 @@ export function usePersistedPlayerVolume(): void {
     if (!hydratedRef.current) return;
     const timer = setTimeout(() => {
       void setSettingValue(SETTINGS.PLAYER_VOLUME, String(volume));
+      void setSettingValue(SETTINGS.PLAYER_VOLUME_BOOST, String(volumeBoost));
       void setSettingValue(SETTINGS.PLAYER_MUTED, String(muted));
     }, PERSIST_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [muted, volume]);
+  }, [muted, volume, volumeBoost]);
 }

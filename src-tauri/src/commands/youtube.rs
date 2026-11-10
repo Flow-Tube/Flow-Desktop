@@ -12,7 +12,8 @@ use crate::models::explore::{ExploreGrid, ExplorePage, ExploreTarget};
 use crate::models::playlist::PlaylistDetailsResponse;
 use crate::models::search::{SearchSuggestion, SearchVideosRequest, SearchVideosResponse};
 use crate::models::video::{
-    RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata, VideoSummary,
+    PaidPromotionLabel, RelatedPage, StreamInfo, StreamVariant, VideoDetails, VideoMetadata,
+    VideoSummary,
 };
 use crate::security::validation::{
     validate_browse_id, validate_channel_id, validate_page_token, validate_search_query,
@@ -385,6 +386,18 @@ pub async fn get_video_category(
     validate_video_id(&video_id).map_err(ErrorResponse::from)?;
     youtube_service
         .get_video_category(&video_id)
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+#[tauri::command]
+pub async fn get_paid_promotion(
+    video_id: String,
+    youtube_service: State<'_, YoutubeService>,
+) -> Result<Option<PaidPromotionLabel>, ErrorResponse> {
+    validate_video_id(&video_id).map_err(ErrorResponse::from)?;
+    youtube_service
+        .get_paid_promotion(&video_id)
         .await
         .map_err(ErrorResponse::from)
 }
@@ -840,7 +853,7 @@ pub(crate) async fn fetch_sponsorblock_segments(
 
     let base_url = normalize_sponsorblock_server_url(server_url)?;
     let url = format!(
-        "{base_url}/api/skipSegments?videoID={video_id}&categories=[\"sponsor\",\"intro\",\"outro\",\"selfpromo\",\"interaction\",\"filler\",\"music_offtopic\",\"preview\",\"exclusive_access\"]"
+        "{base_url}/api/skipSegments?videoID={video_id}&categories=[\"sponsor\",\"intro\",\"outro\",\"selfpromo\",\"interaction\",\"filler\",\"music_offtopic\",\"preview\",\"exclusive_access\",\"hook\",\"poi_highlight\"]&actionTypes=[\"skip\",\"mute\",\"full\",\"poi\"]"
     );
 
     let res = crate::api::http::shared_client()
@@ -865,6 +878,118 @@ pub(crate) async fn fetch_sponsorblock_segments(
     res.json::<serde_json::Value>()
         .await
         .map_err(|e| crate::errors::AppError::Extractor(format!("JSON parse error: {e}")))
+}
+
+/// A part of a music video marked as having no song playing, in seconds. A
+/// `video_duration_seconds` of zero means the voter's video length wasn't recorded.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NonMusicSegment {
+    pub start_seconds: f64,
+    pub end_seconds: f64,
+    pub video_duration_seconds: f64,
+}
+
+#[derive(serde::Deserialize)]
+struct HashedVideo {
+    #[serde(rename = "videoID")]
+    video_id: String,
+    #[serde(default)]
+    segments: Vec<HashedSegment>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HashedSegment {
+    #[serde(default)]
+    category: String,
+    #[serde(default)]
+    action_type: String,
+    #[serde(default)]
+    segment: Vec<f64>,
+    #[serde(default)]
+    video_duration: f64,
+}
+
+const NON_MUSIC_CATEGORY: &str = "music_offtopic";
+const NON_MUSIC_HASH_PREFIX_CHARS: usize = 4;
+const NON_MUSIC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
+/// The parts of a music video marked as non-music, for fitting its lyrics. This
+/// runs for each song played rather than for videos someone chose to use
+/// SponsorBlock on, so only a short prefix of the id's hash is sent and the
+/// server can't tell which video is playing. No segments comes back as a 404.
+#[tauri::command]
+pub async fn get_non_music_segments(
+    video_id: String,
+    server_url: Option<String>,
+) -> Result<Vec<NonMusicSegment>, ErrorResponse> {
+    fetch_non_music_segments(&video_id, server_url.as_deref())
+        .await
+        .map_err(ErrorResponse::from)
+}
+
+async fn fetch_non_music_segments(
+    video_id: &str,
+    server_url: Option<&str>,
+) -> crate::errors::AppResult<Vec<NonMusicSegment>> {
+    validate_video_id(video_id)?;
+    let base_url = normalize_sponsorblock_server_url(server_url)?;
+    let res = crate::api::http::shared_client()
+        .get(non_music_segments_url(&base_url, video_id))
+        .header(reqwest::header::USER_AGENT, SPONSORBLOCK_USER_AGENT)
+        .timeout(NON_MUSIC_TIMEOUT)
+        .send()
+        .await
+        .map_err(|e| crate::errors::AppError::Extractor(format!("Network error: {e}")))?;
+    let status = res.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    if !status.is_success() {
+        return Err(crate::errors::AppError::Extractor(format!(
+            "SponsorBlock server returned status {status}"
+        )));
+    }
+    let body = res
+        .text()
+        .await
+        .map_err(|e| crate::errors::AppError::Extractor(format!("Network error: {e}")))?;
+    parse_hashed_segments(&body, video_id)
+}
+
+fn non_music_segments_url(base_url: &str, video_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = hex::encode(Sha256::digest(video_id.as_bytes()));
+    format!(
+        "{base_url}/api/skipSegments/{}?categories=[\"{NON_MUSIC_CATEGORY}\"]&actionTypes=[\"skip\"]",
+        &hash[..NON_MUSIC_HASH_PREFIX_CHARS]
+    )
+}
+
+/// The segments of `video_id` among the videos sharing its hash prefix.
+fn parse_hashed_segments(
+    json: &str,
+    video_id: &str,
+) -> crate::errors::AppResult<Vec<NonMusicSegment>> {
+    let videos: Vec<HashedVideo> = serde_json::from_str(json)
+        .map_err(|e| crate::errors::AppError::Extractor(format!("JSON parse error: {e}")))?;
+    Ok(videos
+        .into_iter()
+        .find(|video| video.video_id == video_id)
+        .map(|video| video.segments)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|s| s.category == NON_MUSIC_CATEGORY && s.action_type == "skip")
+        .filter_map(|s| match s.segment.as_slice() {
+            [start, end] => Some(NonMusicSegment {
+                start_seconds: *start,
+                end_seconds: *end,
+                video_duration_seconds: s.video_duration,
+            }),
+            _ => None,
+        })
+        .collect())
 }
 
 fn normalize_sponsorblock_server_url(server_url: Option<&str>) -> crate::errors::AppResult<String> {
@@ -897,7 +1022,7 @@ fn normalize_sponsorblock_server_url(server_url: Option<&str>) -> crate::errors:
 const SPONSORBLOCK_USER_AGENT: &str = "FlowDesktop/1.0";
 const SPONSORBLOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
-const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 9] = [
+const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 10] = [
     "sponsor",
     "intro",
     "outro",
@@ -907,6 +1032,7 @@ const SPONSORBLOCK_SUBMIT_CATEGORIES: [&str; 9] = [
     "filler",
     "preview",
     "exclusive_access",
+    "hook",
 ];
 
 #[tauri::command]
@@ -1024,6 +1150,7 @@ pub async fn get_dearrow_override(
         }
         Ok(None) => {
             let empty_override = crate::api::dearrow::DeArrowOverride {
+                random_frame_url: None,
                 title: None,
                 thumbnail_url: None,
             };
@@ -1184,6 +1311,21 @@ pub async fn get_unplayable_video_ids(
     Ok(ids.into_iter().collect())
 }
 
+/// Collaborations of the followed channels: a few more are looked at, and all known are returned.
+#[tauri::command]
+pub async fn scan_subscription_collaborations(
+    channel_ids: Vec<String>,
+    youtube_service: State<'_, YoutubeService>,
+    pool: State<'_, sqlx::SqlitePool>,
+) -> Result<Vec<VideoSummary>, ErrorResponse> {
+    let unique_channel_ids = dedupe_channel_ids(channel_ids)?;
+    let now_ms = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(0);
+    Ok(
+        subscription_feed::collabs::scan(&youtube_service, &pool, &unique_channel_ids, now_ms)
+            .await,
+    )
+}
+
 #[tauri::command]
 pub async fn get_subscription_rss_feed(
     channel_ids: Vec<String>,
@@ -1266,6 +1408,17 @@ pub async fn stream_subscription_rss_feed(
     Ok(())
 }
 
+/// YouTube answers a rate-limited caption request with an HTML page, which must not pass for a
+/// caption file: it would parse to no lines at all and the track would just stay blank.
+fn caption_status(status: reqwest::StatusCode) -> Result<(), crate::errors::AppError> {
+    if status.is_success() {
+        return Ok(());
+    }
+    Err(crate::errors::AppError::Extractor(format!(
+        "Caption request refused: {status}"
+    )))
+}
+
 #[tauri::command]
 pub async fn fetch_subtitles(
     url: String,
@@ -1312,6 +1465,7 @@ pub async fn fetch_subtitles(
                                 ))
                             })?;
 
+                        caption_status(res.status())?;
                         let text = res.text().await.map_err(|e| {
                             crate::errors::AppError::Extractor(format!(
                                 "Read error fetching subtitles: {}",
@@ -1368,6 +1522,7 @@ pub async fn fetch_subtitles(
         .send()
         .await
         .map_err(|e| crate::errors::AppError::Extractor(format!("Network error: {}", e)))?;
+    caption_status(res.status())?;
 
     let text = res
         .text()
@@ -1379,4 +1534,57 @@ pub async fn fetch_subtitles(
         text.len()
     );
     Ok(text)
+}
+
+#[cfg(test)]
+mod caption_status_tests {
+    use super::caption_status;
+    use reqwest::StatusCode;
+
+    #[test]
+    fn a_rate_limited_answer_is_a_failure_not_a_caption_file() {
+        assert!(caption_status(StatusCode::OK).is_ok());
+        assert!(caption_status(StatusCode::TOO_MANY_REQUESTS).is_err());
+        assert!(caption_status(StatusCode::FORBIDDEN).is_err());
+    }
+}
+
+#[cfg(test)]
+mod non_music_segment_tests {
+    use super::{NonMusicSegment, non_music_segments_url, parse_hashed_segments};
+
+    #[test]
+    fn the_lookup_names_only_a_hash_prefix_of_the_video() {
+        let url = non_music_segments_url("https://sponsor.ajay.app", "dQw4w9WgXcQ");
+        assert!(!url.contains("dQw4w9WgXcQ"));
+        let prefix = url
+            .strip_prefix("https://sponsor.ajay.app/api/skipSegments/")
+            .and_then(|rest| rest.split('?').next())
+            .unwrap();
+        assert_eq!(prefix.len(), 4);
+        assert!(url.contains("music_offtopic"));
+    }
+
+    #[test]
+    fn only_the_playing_videos_skippable_non_music_parts_are_kept() {
+        let json = r#"[
+            {"videoID":"other","segments":[{"category":"music_offtopic","actionType":"skip","segment":[1,2],"videoDuration":10}]},
+            {"videoID":"wanted","segments":[
+                {"category":"music_offtopic","actionType":"skip","segment":[0,30.5],"videoDuration":240},
+                {"category":"sponsor","actionType":"skip","segment":[40,50],"videoDuration":240},
+                {"category":"music_offtopic","actionType":"mute","segment":[60,70],"videoDuration":240},
+                {"category":"music_offtopic","actionType":"skip","segment":[80]}
+            ]}
+        ]"#;
+        assert_eq!(
+            parse_hashed_segments(json, "wanted").unwrap(),
+            vec![NonMusicSegment {
+                start_seconds: 0.0,
+                end_seconds: 30.5,
+                video_duration_seconds: 240.0
+            }]
+        );
+        assert!(parse_hashed_segments(json, "missing").unwrap().is_empty());
+        assert!(parse_hashed_segments("not json", "wanted").is_err());
+    }
 }

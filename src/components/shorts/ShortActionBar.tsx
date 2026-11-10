@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   Ban,
@@ -15,17 +15,20 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useVideoReactions } from "../../lib/useVideoReactions";
+import { logInteraction } from "../../lib/api/recommendation";
 import { useExitGhost } from "../../lib/useExitGhost";
 import { useUiStore } from "../../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
+import { useDownloadStore } from "../../store/useDownloadStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import {
   isShortSaved,
   removeShortFromLibrary,
   saveShortToLibrary,
 } from "../../lib/savedShortsLibrary";
+import { dontRecommendLabel } from "../../lib/dontRecommendLabel";
 import { getString } from "../../lib/i18n/index";
-import { formatCount } from "../../lib/utils";
+import { formatCount, isMusicVideo } from "../../lib/utils";
 import { youtubeShortsUrl } from "../../lib/youtubeUrl";
 import { copyText, shareLink } from "../../lib/clipboard";
 import type { ShortItem, ShortsPanelState } from "../../types/shorts";
@@ -40,6 +43,9 @@ interface ShortActionBarProps {
   commentCountText?: string | null;
   onRequestPanel: (panel: ShortsPanelState) => void;
   onRequestAdvance?: () => void;
+  onMoreLikeThis: () => void;
+  /** Filled with what a double click on the video does: like it, never take a like back. */
+  likeFromSurfaceRef: MutableRefObject<() => void>;
 }
 
 export function ShortActionBar({
@@ -49,6 +55,8 @@ export function ShortActionBar({
   commentCountText,
   onRequestPanel,
   onRequestAdvance,
+  onMoreLikeThis,
+  likeFromSurfaceRef,
 }: ShortActionBarProps) {
   const showToast = useUiStore((s) => s.showToast);
   const notInterestedAction = useFeedActionsStore((s) => s.notInterested);
@@ -57,11 +65,11 @@ export function ShortActionBar({
   const [savedToLibrary, setSavedToLibrary] = useState(false);
   const likeCountText = rydData
     ? formatCount(rydData.likes)
-    : formatCount(short.likeCountText ?? details?.likeCountText) || "Like";
+    : formatCount(short.likeCountText ?? details?.likeCountText) || getString('like');
   const dislikeCountText = rydData ? formatCount(rydData.dislikes) : "Dislike";
-  const resolvedCommentCountText = formatCount(commentCountText ?? short.commentCountText) || "Comments";
+  const resolvedCommentCountText = formatCount(commentCountText ?? short.commentCountText) || getString('settings_comments');
   const originalTitle = useOriginalTitle(short.id);
-  const resolvedTitle = originalTitle || details?.title?.trim() || short.title || "Short";
+  const resolvedTitle = originalTitle || details?.title?.trim() || short.title || getString('shorts_short');
   const resolvedChannelName = details?.channelName?.trim() || short.channelName;
   const resolvedChannelId = details?.channelId ?? short.channelId ?? null;
   const resolvedThumbnailUrl = details?.thumbnailUrl ?? short.thumbnailUrl;
@@ -113,6 +121,11 @@ export function ShortActionBar({
     ],
   );
   const { state, like, dislike } = useVideoReactions(video, { channelId: short.channelId ?? null });
+  useEffect(() => {
+    likeFromSurfaceRef.current = () => {
+      if (state !== "liked") like();
+    };
+  });
 
   useEffect(() => {
     let active = true;
@@ -143,6 +156,27 @@ export function ShortActionBar({
       variant: result === "copied" ? "success" : "error",
       message: getString(result === "copied" ? "shorts_link_copied" : "share_link_copy_failed"),
     });
+  };
+
+  const moreLikeThis = () => {
+    setMenuOpen(false);
+    // Music played in the Shorts player never teaches the video engine.
+    if (!isMusicVideo(video)) {
+      void logInteraction(
+        video.id,
+        video.title,
+        video.channelName,
+        resolvedChannelId ?? "",
+        null,
+        video.durationSeconds ?? null,
+        false,
+        true,
+        "LIKED",
+        1,
+      ).catch((error) => console.warn("Failed to log more like this", error));
+    }
+    onMoreLikeThis();
+    showToast({ variant: "success", message: getString("shorts_showing_more_like_this") });
   };
 
   const notInterested = () => {
@@ -198,33 +232,33 @@ export function ShortActionBar({
 
   const downloadShort = () => {
     setMenuOpen(false);
-    showToast({ variant: "info", message: getString("shorts_download_coming_soon") });
+    useDownloadStore.getState().openVideo(video);
   };
 
   return (
     <motion.div layout className="mb-4 flex w-[260px] flex-col items-start gap-5 lg:w-[280px]">
       <ActionButton
-        ariaLabel="Like"
+        ariaLabel={getString('like')}
         active={state === "liked"}
         countText={likeCountText}
         onClick={like}
         icon={<ThumbsUp className="h-6 w-6" fill={state === "liked" ? "currentColor" : "none"} />}
       />
       <ActionButton
-        ariaLabel="Dislike"
+        ariaLabel={getString('watch_dislike')}
         active={state === "disliked"}
         countText={dislikeCountText}
         onClick={dislike}
         icon={<ThumbsDown className="h-6 w-6" fill={state === "disliked" ? "currentColor" : "none"} />}
       />
       <ActionButton
-        ariaLabel="Comments"
+        ariaLabel={getString('settings_comments')}
         countText={resolvedCommentCountText}
         onClick={() => onRequestPanel("comments")}
         icon={<MessageCircle className="h-6 w-6" />}
       />
       <ActionButton
-        ariaLabel="Share"
+        ariaLabel={getString('share')}
         countText="Share"
         onClick={shareShort}
         icon={<Share2 className="h-6 w-6" />}
@@ -232,7 +266,7 @@ export function ShortActionBar({
 
       <div className="relative">
         <ActionButton
-          ariaLabel="More options"
+          ariaLabel={getString('more_options')}
           active={menuOpen}
           countText="More"
           onClick={() => setMenuOpen((open) => !open)}
@@ -246,10 +280,11 @@ export function ShortActionBar({
                 {getString(savedToLibrary ? "shorts_menu_remove_from_library" : "shorts_menu_save_to_library")}
               </MenuItem>
               <MenuItem icon={Download} onClick={downloadShort}>{getString("shorts_menu_download")}</MenuItem>
-              <MenuItem icon={Ban} onClick={notInterested}>{getString("shorts_menu_not_interested")}</MenuItem>
+              <MenuItem icon={ThumbsUp} onClick={moreLikeThis}>{getString("shorts_menu_more_like_this")}</MenuItem>
+              <MenuItem icon={Ban} danger onClick={notInterested}>{getString("shorts_menu_not_interested")}</MenuItem>
               {short.channelId && (
-                <MenuItem icon={EyeOff} onClick={dontRecommendChannel}>
-                  {getString("shorts_menu_dont_recommend_channel")}
+                <MenuItem icon={EyeOff} danger onClick={dontRecommendChannel}>
+                  {dontRecommendLabel(short.channelName)}
                 </MenuItem>
               )}
               <MenuItem icon={Copy} onClick={copyLink}>{getString("shorts_menu_copy_link")}</MenuItem>
@@ -300,7 +335,7 @@ function MoreMenu({ children }: { children: ReactNode }) {
     <div
       ref={ref}
       style={{ transformOrigin: "bottom right" }}
-      className="animate-menu-in absolute bottom-2 right-16 z-20 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1"
+      className="animate-menu-in absolute bottom-2 end-16 z-20 w-64 overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container-high py-1"
     >
       {children}
     </div>
@@ -309,10 +344,13 @@ function MoreMenu({ children }: { children: ReactNode }) {
 
 function MenuItem({
   icon: Icon,
+  danger = false,
   onClick,
   children,
 }: {
   icon: LucideIcon;
+  /** Removes or hides something. */
+  danger?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -320,10 +358,12 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-chrome-neutral-200 transition-colors hover:bg-surface-container-highest"
+      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-container-highest ${
+        danger ? "text-chrome-red-400" : "text-chrome-neutral-200"
+      }`}
     >
-      <Icon className="h-4 w-4 shrink-0 text-chrome-neutral-400" />
-      {children}
+      <Icon className={`h-4 w-4 shrink-0 ${danger ? "" : "text-chrome-neutral-400"}`} />
+      <span className="min-w-0 truncate">{children}</span>
     </button>
   );
 }

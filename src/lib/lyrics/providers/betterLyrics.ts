@@ -2,6 +2,7 @@ import type { LyricsEntry, LyricsProvider } from "../types";
 import { lyricsHttpGet, enc } from "../http";
 import { parseTTMLToLyricsEntries } from "../ttmlParser";
 import { UA_CHROME } from "./common";
+import { cleanArtist } from "../matching";
 
 const BASE = "https://lyrics-api.boidu.dev";
 
@@ -16,12 +17,12 @@ export function isUncachedMiss(status: number, body: string): boolean {
 export const betterLyricsProvider: LyricsProvider = {
   name: "BetterLyrics",
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
-    let url = `${BASE}/getLyrics?s=${enc(title)}&a=${enc(artist)}`;
+    let url = `${BASE}/getLyrics?s=${enc(title)}&a=${enc(cleanArtist(artist))}`;
     if (album) url += `&al=${enc(album)}`;
     if (durationSec > 0) url += `&d=${durationSec}`;
 
     const res = await lyricsHttpGet(url, { "User-Agent": UA_CHROME, Accept: "application/json" });
-    if (isUncachedMiss(res.status, res.body)) return [];
+    if (res.status === 404 || isUncachedMiss(res.status, res.body)) return [];
     if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
 
     let ttml = "";

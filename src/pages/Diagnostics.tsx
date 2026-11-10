@@ -8,9 +8,9 @@ import { openExternal } from "../lib/openExternal";
 import { confirmAction, pickSaveFile } from "../lib/dialogs";
 import { getString } from "../lib/i18n/index";
 import { copyText } from "../lib/clipboard";
+import { ISSUE_TEMPLATE, NEW_ISSUE_URL } from "../lib/crashReport";
 import { useUiStore } from "../store/useUiStore";
-
-const GITHUB_ISSUES_URL = "https://github.com/FlowNeuro/Flow-Desktop/issues/new?template=bug_report.yml";
+import { CrashReportSection } from "../components/diagnostics/CrashReportSection";
 
 export const Diagnostics: React.FC = () => {
   const showToast = useUiStore((state) => state.showToast);
@@ -35,7 +35,7 @@ export const Diagnostics: React.FC = () => {
   const handleReport = async () => {
     // Copy first so the user only has to paste into the issue body.
     const copied = await copyLogs();
-    await openExternal(GITHUB_ISSUES_URL);
+    await openExternal(`${NEW_ISSUE_URL}?template=${ISSUE_TEMPLATE}`);
     showToast({
       message: getString(copied ? "diagnostics_report_copied" : "diagnostics_report_opened"),
       variant: "success",
@@ -144,6 +144,8 @@ export const Diagnostics: React.FC = () => {
           {getString("diagnostics_clear")}
         </Button>
       </div>
+
+      <CrashReportSection />
 
       <div className="max-w-2xl space-y-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
         <h3 className="text-xs font-semibold uppercase tracking-widest text-chrome-neutral-500">

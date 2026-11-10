@@ -34,7 +34,7 @@ const PACKAGING_BRACKET =
 const PACKAGING_SUFFIX = /\s*[-|]\s*(?:official\s*)?(?:music\s*)?(?:video|audio|visuali[sz]er|lyrics?\s*video|lyrics?)\s*$/i;
 const BRACKETED = /[([](.*?)[)\]]/g;
 const DASH_SUFFIX = /\s+[-–—]\s+([^-–—([]+)$/;
-const ARTIST_SPLIT = /\s*(?:,|&|\/|\bx\b|\band\b|\bvs\.?|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/i;
+const ARTIST_SPLIT = /\s*(?:,|、|&|\/|\bx\b|\band\b|\bvs\.?|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/i;
 const PRIMARY_ARTIST_SPLIT = /\s+(?:feat\.?|ft\.?|featuring|&|,|vs\.?)\s+/i;
 const TOPIC_SUFFIX = /\s*-\s*Topic/gi;
 const APOSTROPHES = /['’`]/g;
@@ -158,13 +158,14 @@ function titleScore(candidate: string, request: string): number {
 }
 
 function artistMatches(candidate: string, request: string): boolean {
-  const wanted = normalize(cleanArtist(request));
-  if (!wanted || !candidate.trim()) return false;
-  const credited = [candidate, ...candidate.split(ARTIST_SPLIT)];
-  return credited
-    .map(normalize)
-    .filter(Boolean)
-    .some((name) => name === wanted || similar(name, wanted, 0.6));
+  const wanted = credits(request.replace(TOPIC_SUFFIX, ""));
+  const credited = credits(candidate);
+  return wanted.some((name) => credited.some((other) => other === name || similar(other, name, 0.6)));
+}
+
+/** The whole name comes too: a comma can be part of one, as in "Tyler, The Creator". */
+function credits(artist: string): string[] {
+  return [artist, ...artist.split(ARTIST_SPLIT)].map(normalize).filter(Boolean);
 }
 
 /** The title without its brackets and trailing "- ..." part, once versions are known to agree. */

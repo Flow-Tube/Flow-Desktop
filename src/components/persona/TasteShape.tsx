@@ -189,7 +189,7 @@ export function TasteShape({ brain }: TasteShapeProps) {
                 />
               </div>
             </div>
-            <div className="w-16 text-right">
+            <div className="w-16 text-end">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-on-surface-variant)]">
                 {getString("persona_context")}
               </p>

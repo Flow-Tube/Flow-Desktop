@@ -42,6 +42,7 @@ const SYNC_ERROR_KEYS: Record<string, StringKey> = {
   linkedTimedOut: "linked_error_timed_out",
   linkedWrongWords: "linked_error_wrong_words",
   linkedRecoveryUsed: "linked_error_recovery_used",
+  linkedRestorePending: "linked_error_restore_pending",
   linkedAlreadyLinked: "linked_error_already_linked",
   linkedLanUnreachable: "linked_error_lan_unreachable",
   linkedOtherFolder: "linked_error_other_folder",

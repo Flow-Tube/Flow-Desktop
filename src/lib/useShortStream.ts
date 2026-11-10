@@ -3,7 +3,7 @@ import { invalidateStreamInfo, prefetchStreamInfo, resolveStreamInfo } from "./s
 import { codecRank } from "./codecPreference";
 import { SETTINGS } from "./settings/schema";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
-import type { CaptionTrack, StreamInfo, StreamVariant } from "../types/video";
+import type { AudioTrack, CaptionTrack, StreamInfo, StreamVariant } from "../types/video";
 
 export const RESOLVE_TIMEOUT_MS = 12_000;
 const TARGET_SHORT_HEIGHT = 720;
@@ -154,9 +154,20 @@ export function pickAdaptiveVideoUrlLegacy(info: StreamInfo): string | null {
   return variants[0]?.localUrl ?? null;
 }
 
-export function pickAudioUrl(info: StreamInfo): string | null {
-  const tracks = (info.audioTracks || [])
-    .filter((track) => track.available && !!track.localUrl && canPlayMime(track.mimeType))
+const playableAudioTracks = (info: StreamInfo): AudioTrack[] =>
+  (info.audioTracks || []).filter((track) => track.available && !!track.localUrl && canPlayMime(track.mimeType));
+
+/** One entry per language: a track comes in several bitrates, and the menu offers the language. */
+export function shortAudioChoices(info: StreamInfo): AudioTrack[] {
+  const byLabel = new Map<string, AudioTrack>();
+  for (const track of sortedAudioTracks(playableAudioTracks(info))) {
+    if (!byLabel.has(track.label)) byLabel.set(track.label, track);
+  }
+  return [...byLabel.values()];
+}
+
+function sortedAudioTracks(tracks: AudioTrack[]): AudioTrack[] {
+  return [...tracks]
     .sort((a, b) => {
       const defaultRank = Number(b.isDefault) - Number(a.isDefault);
       if (defaultRank !== 0) return defaultRank;
@@ -164,12 +175,21 @@ export function pickAudioUrl(info: StreamInfo): string | null {
       if (mp4Rank !== 0) return mp4Rank;
       return (b.bitrate ?? 0) - (a.bitrate ?? 0);
     });
-  return tracks[0]?.localUrl ?? null;
 }
 
-export function selectShortPlaybackSource(info: StreamInfo, qualityIdOrLabel = "720p"): ShortPlaybackSource {
+export function pickAudioUrl(info: StreamInfo, audioTrackId?: string | null): string | null {
+  const tracks = sortedAudioTracks(playableAudioTracks(info));
+  const chosen = audioTrackId ? tracks.find((track) => track.id === audioTrackId) : undefined;
+  return (chosen ?? tracks[0])?.localUrl ?? null;
+}
+
+export function selectShortPlaybackSource(
+  info: StreamInfo,
+  qualityIdOrLabel = "720p",
+  audioTrackId?: string | null,
+): ShortPlaybackSource {
   const adaptiveVideo = pickAdaptiveVideoVariant(info, qualityIdOrLabel);
-  const audioUrl = pickAudioUrl(info);
+  const audioUrl = pickAudioUrl(info, audioTrackId);
   if (adaptiveVideo) {
     return {
       dashUrl: info.dashManifestUrl ?? null,
@@ -226,12 +246,18 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
   const [unavailable, setUnavailable] = useState(false);
   const retryTokenRef = useRef(retryToken);
   const streamInfoRef = useRef<StreamInfo | null>(null);
+  const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
+  const [selectedAudioTrackId, setSelectedAudioTrackId] = useState<string | null>(null);
+  const qualityRef = useRef<string>("720p");
+  const selectedAudioRef = useRef<string | null>(null);
 
-  const applyStreamInfo = useCallback((info: StreamInfo, qualityIdOrLabel: string) => {
+  const applyStreamInfo = useCallback((info: StreamInfo, qualityIdOrLabel: string, audioTrackId?: string | null) => {
     streamInfoRef.current = info;
+    qualityRef.current = qualityIdOrLabel;
     setVariants(visibleShortQualities(info.variants || []));
     setCaptions(info.captions || []);
-    const source = selectShortPlaybackSource(info, qualityIdOrLabel);
+    setAudioTracks(shortAudioChoices(info));
+    const source = selectShortPlaybackSource(info, qualityIdOrLabel, audioTrackId);
     setDashUrl(source.dashUrl);
     setVideoUrl(source.videoUrl);
     setAudioUrl(source.audioUrl);
@@ -246,7 +272,15 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
     if (!info) return;
     const nextQuality = variant === "auto" ? "Auto" : variant.id;
     setSelectedQualityId(variant === "auto" ? "auto" : variant.id);
-    applyStreamInfo(info, nextQuality);
+    applyStreamInfo(info, nextQuality, selectedAudioRef.current);
+  }, [applyStreamInfo]);
+
+  const selectAudioTrack = useCallback((id: string) => {
+    const info = streamInfoRef.current;
+    if (!info) return;
+    selectedAudioRef.current = id;
+    setSelectedAudioTrackId(id);
+    applyStreamInfo(info, qualityRef.current, id);
   }, [applyStreamInfo]);
 
   useEffect(() => {
@@ -258,6 +292,7 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
       setAudioUrl(null);
       setVariants([]);
       setCaptions([]);
+      setAudioTracks([]);
       streamInfoRef.current = null;
       invalidateStreamInfo(videoId);
     }
@@ -271,7 +306,7 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
     fetchShortStreamInfo(videoId)
       .then((info) => {
         if (cancelled) return;
-        applyStreamInfo(info, preferredQualityId);
+        applyStreamInfo(info, preferredQualityId, selectedAudioRef.current);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -291,6 +326,9 @@ export function useShortStream(videoId: string, shouldLoad: boolean, retryToken 
     dashUrl,
     videoUrl,
     audioUrl,
+    audioTracks,
+    selectedAudioTrackId,
+    selectAudioTrack,
     variants,
     captions,
     selectedQualityId,

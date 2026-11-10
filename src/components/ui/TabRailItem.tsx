@@ -63,13 +63,13 @@ export function TabRailItem({
         onMouseLeave={collapsed ? () => setTooltipAnchor(null) : undefined}
         onFocus={collapsed ? (event) => setTooltipAnchor(event.currentTarget.getBoundingClientRect()) : undefined}
         onBlur={collapsed ? () => setTooltipAnchor(null) : undefined}
-        className="flex h-full min-w-0 flex-1 items-center rounded-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        className="flex h-full min-w-0 flex-1 items-center rounded-full text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
       >
         <span className="relative grid w-14 shrink-0 place-items-center">
           {icon}
           {playing && (
             <span
-              className="absolute -bottom-1 right-3 grid h-4 w-4 place-items-center rounded-full bg-background text-[var(--color-primary)]"
+              className="absolute -bottom-1 end-3 grid h-4 w-4 place-items-center rounded-full bg-background text-[var(--color-primary)]"
               aria-label={playingLabel}
               role="img"
             >
@@ -77,7 +77,7 @@ export function TabRailItem({
             </span>
           )}
         </span>
-        <span className="sidebar-label min-w-0 flex-1 truncate pr-10">{label}</span>
+        <span className="sidebar-label min-w-0 flex-1 truncate pe-10">{label}</span>
       </button>
       {!collapsed && (
         <button
@@ -85,7 +85,7 @@ export function TabRailItem({
           aria-label={closeLabel}
           title={closeLabel}
           onClick={onClose}
-          className="absolute right-1.5 grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-400 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] group-hover:opacity-100"
+          className="absolute end-1.5 grid h-7 w-7 place-items-center rounded-full text-chrome-neutral-400 opacity-0 transition-colors duration-200 ease-out hover:bg-surface-container-highest hover:text-chrome-neutral-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] group-hover:opacity-100"
         >
           <X className="h-4 w-4" />
         </button>

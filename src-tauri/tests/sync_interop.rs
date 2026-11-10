@@ -30,6 +30,8 @@ use flow_desktop_lib::sync::transport;
 
 const WH_NDJSON: &str = "{\"videoId\":\"a\"}\n{\"videoId\":\"b\"}";
 const LIKES_NDJSON: &str = "{\"id\":\"a\",\"state\":\"liked\"}";
+const NOTES_NDJSON: &str =
+    "{\"id\":\"video:a\",\"targetId\":\"a\",\"kind\":\"Video\",\"text\":\"x\",\"updatedAt\":1}";
 const TEST_DEADLINE: Duration = Duration::from_secs(20);
 
 /// One end of a session driven frame by frame, the way the Android client does it.
@@ -116,7 +118,7 @@ fn caps(collections: &[Collection]) -> CapabilitiesFrame {
     }
 }
 
-/// Android advertises `notes` and a newer brain schema; the desktop must not choke on either.
+/// Android advertises a newer brain schema; the desktop must not choke on it.
 fn android_caps() -> Value {
     json!({"collections": {
         "watch_history": {"schema": 1, "produce": true, "consume": true},
@@ -156,7 +158,7 @@ async fn loopback() -> (TcpListener, u16) {
 
 /// An Android phone shows its "send" code and the desktop scans it to receive. The phone hosts, so
 /// it reads SELECTION before sending its own (the old desktop also read first: both waited
-/// forever), offers `notes`, and streams in its own order rather than sorted.
+/// forever), and streams in its own order rather than sorted.
 #[tokio::test]
 async fn desktop_receiver_completes_against_an_android_host_sender() {
     let master = generate_master_secret();
@@ -193,13 +195,18 @@ async fn desktop_receiver_completes_against_an_android_host_sender() {
                 FrameType::Manifest,
                 json!({"collections": {
                     "watch_history": manifest_entry(WH_NDJSON),
+                    "notes": manifest_entry(NOTES_NDJSON),
                     "likes": manifest_entry(LIKES_NDJSON)
                 }}),
             )
             .await;
         assert_eq!(phone.expect(FrameType::Consent).await["accepted"], true);
         // Insertion order, not sorted: watch_history before likes.
-        for (name, ndjson) in [("watch_history", WH_NDJSON), ("likes", LIKES_NDJSON)] {
+        for (name, ndjson) in [
+            ("watch_history", WH_NDJSON),
+            ("notes", NOTES_NDJSON),
+            ("likes", LIKES_NDJSON),
+        ] {
             phone.send_chunk(name, ndjson).await;
             assert_eq!(phone.expect(FrameType::ChunkAck).await["collection"], name);
             phone
@@ -219,7 +226,7 @@ async fn desktop_receiver_completes_against_an_android_host_sender() {
             ch,
             SessionCipher::new(&master, sid, Role::Client),
             hello("desktop"),
-            caps(&[WatchHistory, Likes]),
+            caps(&[WatchHistory, Likes, Collection::Notes]),
             |_, _| async { true },
             stage_only,
         ),
@@ -247,14 +254,21 @@ async fn desktop_receiver_completes_against_an_android_host_sender() {
         .find(|c| c.collection == Likes)
         .unwrap();
     assert_eq!(lk.ndjson, LIKES_NDJSON.as_bytes());
+    let notes = received
+        .applied
+        .iter()
+        .find(|c| c.collection == Collection::Notes)
+        .unwrap();
+    assert_eq!(notes.ndjson, NOTES_NDJSON.as_bytes());
 
     let result = phone.await.unwrap();
     assert_eq!(result["collections"]["watch_history"]["added"], 2);
     assert_eq!(result["collections"]["likes"]["added"], 1);
+    assert_eq!(result["collections"]["notes"]["added"], 1);
 }
 
 /// An Android phone shows its "receive" code and the desktop scans it to send. The phone's
-/// SELECTION accept list names `notes`, which the desktop doesn't know.
+/// SELECTION accept list names `notes`, which this desktop has nothing queued for here.
 #[tokio::test]
 async fn desktop_sender_completes_against_an_android_receiver_that_accepts_notes() {
     let master = generate_master_secret();
@@ -518,4 +532,109 @@ async fn a_chunk_outside_the_manifest_is_refused() {
     .await;
     assert!(matches!(outcome, Err(SyncError::Protocol(_))));
     assert_eq!(phone.await.unwrap()["code"], "protocol_error");
+}
+
+/// The collections a desktop sending watch history and notes lists for a phone with these
+/// capabilities.
+async fn offered_to_phone(phone_caps: Value, accept: Value) -> Vec<String> {
+    let master = generate_master_secret();
+    let sid = generate_session_id();
+    let (listener, port) = loopback().await;
+    let desktop_master = master.clone();
+    let desktop = tokio::spawn(async move {
+        let ch = transport::accept(&listener).await.unwrap();
+        run_sender(
+            ch,
+            SessionCipher::new(&desktop_master, sid, Role::Host),
+            hello("desktop"),
+            caps(&[WatchHistory, Collection::Notes]),
+            vec![
+                OutgoingCollection {
+                    collection: WatchHistory,
+                    ndjson: WH_NDJSON.as_bytes().to_vec(),
+                },
+                OutgoingCollection {
+                    collection: Collection::Notes,
+                    ndjson: br#"{"id":"video:a","text":"x","updatedAt":1}"#.to_vec(),
+                },
+            ],
+            vec![WatchHistory, Collection::Notes],
+            true,
+            || async {},
+        )
+        .await
+    });
+    let (ws, _) = connect_async(format!("ws://127.0.0.1:{port}/flow-sync"))
+        .await
+        .unwrap();
+    let mut phone = ScriptedPeer {
+        ws,
+        cipher: SessionCipher::new(&master, sid, Role::Client),
+        send_seq: 0,
+        recv_seq: 0,
+    };
+    phone
+        .send_json(FrameType::Hello, android_hello("phone"))
+        .await;
+    phone.expect(FrameType::HelloAck).await;
+    phone.send_json(FrameType::Capabilities, phone_caps).await;
+    phone.expect(FrameType::Capabilities).await;
+    phone
+        .send_json(FrameType::Selection, json!({"send": [], "accept": accept}))
+        .await;
+    phone.expect(FrameType::Selection).await;
+    let manifest = phone.expect(FrameType::Manifest).await;
+    phone
+        .send_json(FrameType::Consent, json!({"accepted": true}))
+        .await;
+    let names: Vec<String> = manifest["collections"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    for name in &names {
+        let (ft, _) = phone.recv().await;
+        assert_eq!(ft, FrameType::Chunk);
+        phone
+            .send_json(FrameType::ChunkAck, json!({"collection": name, "seq": 0}))
+            .await;
+        phone.expect(FrameType::Complete).await;
+    }
+    phone
+        .send_json(FrameType::ApplyResult, json!({"collections": {}}))
+        .await;
+    let outcome = tokio::time::timeout(TEST_DEADLINE, desktop)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(matches!(outcome, HostOutcome::Completed(_)));
+    names
+}
+
+#[tokio::test]
+async fn notes_go_to_a_phone_that_takes_them() {
+    let names = offered_to_phone(android_caps(), json!(["watch_history", "notes"])).await;
+    assert_eq!(names, ["notes", "watch_history"]);
+}
+
+/// An app from before notes lists no such collection and still completes its sync.
+#[tokio::test]
+async fn notes_stay_home_from_a_phone_that_lacks_them() {
+    let older = json!({"collections": {
+        "watch_history": {"schema": 1, "produce": true, "consume": true}
+    }});
+    let names = offered_to_phone(older, json!(["watch_history"])).await;
+    assert_eq!(names, ["watch_history"]);
+}
+
+#[tokio::test]
+async fn notes_stay_home_from_a_phone_that_only_produces_them() {
+    let caps = json!({"collections": {
+        "watch_history": {"schema": 1, "produce": true, "consume": true},
+        "notes": {"schema": 1, "produce": true, "consume": false}
+    }});
+    let names = offered_to_phone(caps, json!(["watch_history"])).await;
+    assert_eq!(names, ["watch_history"]);
 }

@@ -30,12 +30,16 @@ export function parseCustomSpeedPresets(rawValue: string, enabled: boolean): Pla
   return unique.sort((left, right) => left - right);
 }
 
+export const NO_PREFERRED_LANGUAGE = "none";
+
 export function selectPreferredCaptionId(
   captions: CaptionTrack[],
   preferredLanguage: string,
 ): string | null {
   const normalizedLanguage = preferredLanguage.trim().toLowerCase();
   if (!normalizedLanguage || captions.length === 0) return null;
+  // Android's value for No preference, so the choice survives a sync.
+  if (normalizedLanguage === NO_PREFERRED_LANGUAGE) return captions.find((caption) => !caption.isTranslation)?.id ?? null;
 
   const normalizedTrackLanguage = (caption: CaptionTrack) => caption.languageCode.trim().toLowerCase();
   const exactManual = captions.find(

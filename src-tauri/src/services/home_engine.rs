@@ -10,7 +10,7 @@ use crate::flow_neuro::co_watch::RelatedChannel;
 use crate::flow_neuro::discovery::exploration_queries;
 use crate::flow_neuro::features::pick_keys;
 use crate::flow_neuro::interest_chips::{InterestChip, chips, groups, stable};
-use crate::flow_neuro::rank::{about, clusters_of, share_by_interest};
+use crate::flow_neuro::rank::{about, clusters_of, share_by_interest, taste_affinity};
 use crate::flow_neuro::scoring::CHANNEL_SUPPRESSION_DAYS;
 use crate::flow_neuro::scoring::classify_persona;
 use crate::flow_neuro::specificity::specificity;
@@ -277,6 +277,36 @@ impl RecommendationService {
         }
         self.with_rank_context(&HashSet::new(), 0.0, None, |ctx| about(ctx, videos, topics))
             .await
+    }
+
+    /// How close each video reads to the viewer's taste.
+    pub async fn taste_affinity(&self, videos: &[VideoSummary]) -> HashMap<String, f64> {
+        if videos.is_empty() {
+            return HashMap::new();
+        }
+        self.with_rank_context(&HashSet::new(), 0.0, None, |ctx| {
+            taste_affinity(ctx, videos)
+        })
+        .await
+    }
+
+    /// The interest each video's title belongs to, so a list can hold one video per interest.
+    pub async fn interest_keys(&self, videos: &[VideoSummary]) -> HashMap<String, String> {
+        if videos.is_empty() {
+            return HashMap::new();
+        }
+        self.with_rank_context(&HashSet::new(), 0.0, None, |ctx| {
+            let interests: HashMap<String, f64> =
+                ctx.brain.interests().map(|(k, v)| (k.clone(), v)).collect();
+            let spec = ctx.brain.key_spec();
+            let clusters = clusters_of(ctx);
+            let seed_clusters = SeedClusters::new(&spec, &interests, &clusters);
+            videos
+                .iter()
+                .map(|video| (video.id.clone(), seed_clusters.community(&video.title)))
+                .collect()
+        })
+        .await
     }
 
     /// Searches for the topics next to the viewer's interests, strongest first.

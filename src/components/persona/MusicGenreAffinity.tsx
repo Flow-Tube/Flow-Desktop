@@ -52,7 +52,7 @@ export function MusicGenreAffinity({ profile }: MusicGenreAffinityProps) {
                   style={{ opacity: 0.95 - index * 0.1 }}
                 />
                 <span className="truncate text-[var(--color-on-surface)]">{g.genre}</span>
-                <span className="ml-auto font-mono text-[var(--color-on-surface-variant)]">
+                <span className="ms-auto font-mono text-[var(--color-on-surface-variant)]">
                   {formatPercent(g.weight)}
                 </span>
               </div>

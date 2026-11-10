@@ -83,18 +83,36 @@ export interface InterestChip {
   parts: InterestChip[];
 }
 
+/** A mix: the seed video, then what plays well after it. Played as a queue. */
+export interface HomeMix {
+  seed: VideoSummary;
+  videos: VideoSummary[];
+}
+
 export interface ChipFeed {
   cards: HomeCard[];
+  mixes: HomeMix[];
   failed: boolean;
 }
 
-export async function getHomeChips(): Promise<InterestChip[]> {
-  if (!(await isTauriEnv())) return [];
-  return invokeBackend<InterestChip[]>("home_feed_chips");
+/** The chips to offer: the viewer's interests, and which fixed ones have something to show. */
+export interface HomeChips {
+  interests: InterestChip[];
+  hasMixes: boolean;
+  hasWatched: boolean;
+  /** Chips whose latest result was empty, left out until it expires. */
+  empty: string[];
 }
 
-/** A chip's own videos: `interest:<key>`, `new` or `recent`. */
+export const NO_HOME_CHIPS: HomeChips = { interests: [], hasMixes: false, hasWatched: false, empty: [] };
+
+export async function getHomeChips(): Promise<HomeChips> {
+  if (!(await isTauriEnv())) return NO_HOME_CHIPS;
+  return invokeBackend<HomeChips>("home_feed_chips");
+}
+
+/** A chip's own content: `interest:<key>`, `new`, `recent`, `mixes`, `live` or `watched`. */
 export async function getHomeChipFeed(key: string, refresh: boolean): Promise<ChipFeed> {
-  if (!(await isTauriEnv())) return { cards: [], failed: false };
+  if (!(await isTauriEnv())) return { cards: [], mixes: [], failed: false };
   return invokeBackend<ChipFeed>("home_chip_feed", { key, refresh });
 }

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { AppWindow, Copy, Plus, Search, X, XCircle } from 'lucide-react';
 import { useTabsStore, type ParkedVideo, type TabTitle } from '../../store/useTabsStore';
 import { usePlayerStore } from '../../store/usePlayerStore';
@@ -17,6 +16,7 @@ import { TabRailItem } from '../ui/TabRailItem';
 import { SidebarNavIcon } from '../ui/SidebarNavIcon';
 import { ShortsIcon } from '../ui/ShortsIcon';
 import { AnchoredPortalMenu, type MenuAnchor } from '../ui/AnchoredPortalMenu';
+import { growFromPoint } from '../../lib/direction';
 
 function TabImage({ src, round }: { src: string | undefined; round: boolean }) {
   const proxied = useProxiedImageUrl(src);
@@ -40,7 +40,6 @@ function TabIconView({ icon }: { icon: TabIcon }) {
 
 /** The name a tab shows: what its page published, or the best guess from its address. */
 function useTabLabel(tab: TabHistory, title: TabTitle | undefined, parked: ParkedVideo | undefined): string {
-  const { t } = useTranslation();
   const entry = currentEntry(tab);
   const watchId = watchVideoIdFromPath(entry.pathname);
   const playerTitle = usePlayerStore((s) => (watchId && s.currentVideo?.id === watchId ? s.currentVideo.title : null));
@@ -55,7 +54,7 @@ function useTabLabel(tab: TabHistory, title: TabTitle | undefined, parked: Parke
     if (query) return query;
   }
   const section = sectionTitleKey(entry.pathname);
-  return section ? t(section) : getString('tabs_untitled');
+  return section ? getString(section) : getString('tabs_untitled');
 }
 
 function TabRow({ tab, collapsed, onNavigate, onOpenMenu }: {
@@ -84,7 +83,7 @@ function TabRow({ tab, collapsed, onNavigate, onOpenMenu }: {
         onNavigate?.();
       }}
       onClose={() => closeTabWithPlayback(tab.id)}
-      onOpenMenu={(point) => onOpenMenu(tab.id, { top: point.y, left: point.x })}
+      onOpenMenu={(point) => onOpenMenu(tab.id, { top: point.y, ...growFromPoint(point.x) })}
     />
   );
 }
@@ -94,7 +93,7 @@ function TabMenuRow({ icon, label, onSelect }: { icon: React.ReactNode; label: s
     <button
       type="button"
       onClick={onSelect}
-      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm text-chrome-zinc-300 transition-colors duration-200 ease-out hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100"
+      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-start text-sm text-chrome-zinc-300 transition-colors duration-200 ease-out hover:bg-chrome-zinc-800 hover:text-chrome-zinc-100"
     >
       <span className="grid h-4 w-4 shrink-0 place-items-center text-chrome-neutral-400">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -121,7 +120,7 @@ export function SidebarTabs({ collapsed, onNavigate }: { collapsed: boolean; onN
     <section aria-label={getString('tabs_section')}>
       <hr className="mx-4 my-3 border-chrome-neutral-800/50" />
       {!collapsed && (
-        <div className="flex items-center justify-between py-1 pl-5 pr-3">
+        <div className="flex items-center justify-between py-1 ps-5 pe-3">
           <span className="text-base font-semibold text-chrome-neutral-100">{getString('tabs_section')}</span>
           <button
             type="button"

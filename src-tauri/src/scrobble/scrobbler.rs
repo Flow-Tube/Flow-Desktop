@@ -15,7 +15,7 @@ use super::audioscrobbler::{self, Client, Keys};
 use super::credentials::{self, Credentials, OwnKey};
 use super::index::{self, Index};
 use super::listenbrainz;
-use super::models::{Account, ScrobbleEntry, SendOutcome, Service};
+use super::models::{Account, ScrobbleEntry, SendOutcome, Service, SimilarTrack};
 use super::queue::{self, Table};
 use super::rules::{self, TrackInfo};
 use crate::errors::{AppError, AppResult};
@@ -198,6 +198,64 @@ impl Scrobbler {
             own_key_hint: own_key.hint,
             keychain_error,
         })
+    }
+
+    /// The build's key needs no keychain; only the listener's own key does.
+    async fn read_keys(&self) -> AppResult<Keys> {
+        let own_key_enabled = self.index().await?.own_key.enabled;
+        let keys = if own_key_enabled {
+            Self::last_fm_keys(&self.credentials().await?.own_key)
+        } else {
+            Self::last_fm_keys(&OwnKey::default())
+        };
+        keys.ok_or_else(|| AppError::ScrobbleKeyMissing("Last.fm".into()))
+    }
+
+    /// The account's most played artists over the past year, most played first.
+    pub async fn top_artists(&self, service: Service, limit: usize) -> AppResult<Vec<String>> {
+        let index = self.index().await?;
+        let user_name = index
+            .user_name(service)
+            .ok_or_else(|| AppError::ScrobbleSignInRejected("Not signed in".into()))?;
+        let names = match service {
+            Service::LastFm => {
+                let keys = self.read_keys().await?;
+                Client::new(audioscrobbler::LASTFM_URL)
+                    .top_artists(user_name, &keys, limit)
+                    .await
+            }
+            Service::LibreFm => {
+                Client::new(audioscrobbler::LIBREFM_URL)
+                    .top_artists(user_name, &Keys::libre_fm(), limit)
+                    .await
+            }
+            Service::ListenBrainz => {
+                let credentials = self.credentials().await?;
+                let account = credentials
+                    .accounts
+                    .get(&service)
+                    .ok_or_else(|| AppError::ScrobbleSignInRejected("Not signed in".into()))?;
+                listenbrainz::top_artists(account, limit).await
+            }
+        };
+        names.map_err(AppError::Network)
+    }
+
+    /// What Last.fm's listeners play alongside this song. Empty unless signed in to Last.fm.
+    pub async fn similar_tracks(
+        &self,
+        artist: &str,
+        title: &str,
+        limit: usize,
+    ) -> AppResult<Vec<SimilarTrack>> {
+        if self.index().await?.user_name(Service::LastFm).is_none() {
+            return Ok(Vec::new());
+        }
+        let keys = self.read_keys().await?;
+        Client::new(audioscrobbler::LASTFM_URL)
+            .similar_tracks(artist, title, &keys, limit)
+            .await
+            .map_err(AppError::Network)
     }
 
     /// Signs in with a user name and password (Last.fm, Libre.fm) or a user token (`ListenBrainz`).

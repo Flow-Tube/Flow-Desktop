@@ -1,3 +1,5 @@
+import { DIGIT_KEYS, type KeyBinding } from "./keyMap";
+
 /**
  * The full player's keyboard map. Flow Android's `MediaKeyboardShortcuts` was
  * written from this set ("the keys Flow Desktop and YouTube use"), so both apps
@@ -17,6 +19,9 @@ export type MusicPlayerKeyAction =
 
 export const VOLUME_STEP = 0.05;
 
+/** The action is built in two steps because the seek length is a setting, not part of the table. */
+type MusicKeyBinding = KeyBinding<(seekSeconds: number) => MusicPlayerKeyAction | null>;
+
 interface KeyLike {
   key: string;
   shiftKey: boolean;
@@ -25,40 +30,40 @@ interface KeyLike {
   metaKey: boolean;
 }
 
+export const MUSIC_KEY_BINDINGS: readonly MusicKeyBinding[] = [
+  { keys: [" ", "k"], label: "keyboard_shortcut_play_pause", action: () => () => ({ kind: "toggle-play" }) },
+  {
+    keys: ["arrowleft", "j"],
+    label: "keyboard_shortcut_seek_back",
+    action: () => (seekSeconds) => ({ kind: "seek-by", seconds: -seekSeconds }),
+  },
+  {
+    keys: ["arrowright", "l"],
+    label: "keyboard_shortcut_seek_forward",
+    action: () => (seekSeconds) => ({ kind: "seek-by", seconds: seekSeconds }),
+  },
+  { keys: ["arrowup"], label: "keyboard_shortcut_volume_up", action: () => () => ({ kind: "volume-by", delta: VOLUME_STEP }) },
+  { keys: ["arrowdown"], label: "keyboard_shortcut_volume_down", action: () => () => ({ kind: "volume-by", delta: -VOLUME_STEP }) },
+  { keys: ["m"], label: "keyboard_shortcut_mute", action: () => () => ({ kind: "toggle-mute" }) },
+  { keys: ["n"], shift: true, label: "keyboard_shortcut_next", action: () => () => ({ kind: "next" }) },
+  { keys: ["p"], shift: true, label: "keyboard_shortcut_previous", action: () => () => ({ kind: "previous" }) },
+  { keys: ["s"], label: "keyboard_shortcut_shuffle", action: () => () => ({ kind: "toggle-shuffle" }) },
+  { keys: ["r"], label: "keyboard_shortcut_repeat", action: () => () => ({ kind: "cycle-repeat" }) },
+  { keys: ["q"], label: "keyboard_shortcut_queue", action: () => () => ({ kind: "toggle-queue" }) },
+  {
+    keys: DIGIT_KEYS,
+    label: "keyboard_shortcut_seek_percent",
+    action: (key) => () => ({ kind: "seek-to-fraction", fraction: Number(key) / 10 }),
+  },
+  // Escape is layered behind open menus, so useMusicPlayerKeyboard handles it on its own.
+  { keys: ["escape"], label: "keyboard_shortcut_close_player", action: () => () => null },
+];
+
 export function musicPlayerKeyAction(event: KeyLike, seekSeconds: number): MusicPlayerKeyAction | null {
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-  if (event.shiftKey) {
-    if (key === "n") return { kind: "next" };
-    if (key === "p") return { kind: "previous" };
-    return null;
-  }
-  switch (key) {
-    case " ":
-    case "k":
-      return { kind: "toggle-play" };
-    case "j":
-    case "ArrowLeft":
-      return { kind: "seek-by", seconds: -seekSeconds };
-    case "l":
-    case "ArrowRight":
-      return { kind: "seek-by", seconds: seekSeconds };
-    case "ArrowUp":
-      return { kind: "volume-by", delta: VOLUME_STEP };
-    case "ArrowDown":
-      return { kind: "volume-by", delta: -VOLUME_STEP };
-    case "m":
-      return { kind: "toggle-mute" };
-    case "s":
-      return { kind: "toggle-shuffle" };
-    case "r":
-      return { kind: "cycle-repeat" };
-    case "q":
-      return { kind: "toggle-queue" };
-    default:
-      if (/^[0-9]$/.test(key)) return { kind: "seek-to-fraction", fraction: Number(key) / 10 };
-      return null;
-  }
+  const key = event.key.toLowerCase();
+  const binding = MUSIC_KEY_BINDINGS.find((entry) => entry.keys.includes(key) && !!entry.shift === event.shiftKey);
+  return binding ? binding.action(key)(seekSeconds) : null;
 }
 
 /** Typing in a field, or a focused control that owns the key itself, keeps the key. */

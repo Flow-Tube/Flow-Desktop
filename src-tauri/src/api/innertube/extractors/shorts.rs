@@ -139,6 +139,12 @@ fn apply_reel_overlay(item: &mut ShortItem, answer: &Value) {
     let channel_bar = metadata
         .iter()
         .find_map(|entry| entry.get("reelChannelBarViewModel"));
+    if item.linked_video_id.is_none()
+        && let Some((id, title)) = linked_video(metadata)
+    {
+        item.linked_video_id = Some(id);
+        item.linked_video_title = title;
+    }
     if let Some(title) = metadata
         .iter()
         .find_map(|entry| entry["shortsVideoTitleViewModel"]["text"]["content"].as_str())
@@ -284,7 +290,30 @@ fn parse_reel_entry(video_id: &str, endpoint: &Value) -> ShortItem {
         comment_count_text,
         published_text: reel_text(&header["timestampText"]),
         sequence_params: endpoint["sequenceParams"].as_str().map(ToOwned::to_owned),
+        linked_video_id: None,
+        linked_video_title: None,
     }
+}
+
+/// The full video a reel links to, with its title. The same carousel also holds the sound pivot and
+/// links to other reels, which open through a `reelWatchEndpoint` instead of a `watchEndpoint`.
+fn linked_video(metadata: &[Value]) -> Option<(String, Option<String>)> {
+    metadata
+        .iter()
+        .find_map(|entry| entry["reelCarouselViewModel"]["buttonViewModels"].as_array())?
+        .iter()
+        .find_map(|entry| {
+            let button =
+                &entry["reelCarouselButtonViewModel"]["buttonViewModel"]["buttonViewModel"];
+            let id = button["onTap"]["innertubeCommand"]["watchEndpoint"]["videoId"].as_str()?;
+            let title = button["titleFormatted"]["content"]
+                .as_str()
+                .or_else(|| button["accessibilityText"].as_str())
+                .map(str::trim)
+                .filter(|title| !title.is_empty())
+                .map(ToOwned::to_owned);
+            Some((id.to_string(), title))
+        })
 }
 
 /// Resolve the pagination token, preferring the explicit continuation fields and
@@ -395,6 +424,32 @@ mod tests {
         assert_eq!(feed.items.len(), 1);
         assert_eq!(feed.items[0].id, "vid00000002");
         assert_eq!(feed.continuation.as_deref(), Some("NEXT"));
+    }
+
+    #[test]
+    fn the_item_watch_overlay_reads_the_linked_video_and_skips_other_reels() {
+        let mut item = parse_reel_entry("vid00000004", &Value::Null);
+        let button = |command: Value, title: &str| {
+            json!({ "reelCarouselButtonViewModel": { "buttonViewModel": { "buttonViewModel": {
+                "onTap": { "innertubeCommand": command },
+                "titleFormatted": { "content": title }
+            } } } })
+        };
+        let answer = json!({ "overlay": { "reelPlayerOverlayRenderer": { "playerOverlay": {
+            "reelPlayerOverlayViewModel": { "metapanel": { "reelMetapanelViewModel": { "metadataItems": [
+                { "reelCarouselViewModel": { "buttonViewModels": [
+                    button(json!({ "reelWatchEndpoint": { "videoId": "otherreel00" } }), "Another short"),
+                    button(json!({ "watchEndpoint": { "videoId": "fullvideo00" } }), " The full video "),
+                ] } }
+            ] } } }
+        } } } });
+        apply_reel_overlay(&mut item, &answer);
+        assert_eq!(item.linked_video_id.as_deref(), Some("fullvideo00"));
+        assert_eq!(item.linked_video_title.as_deref(), Some("The full video"));
+
+        let mut none = parse_reel_entry("vid00000005", &Value::Null);
+        apply_reel_overlay(&mut none, &json!({}));
+        assert_eq!(none.linked_video_id, None);
     }
 
     #[test]

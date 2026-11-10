@@ -1,5 +1,6 @@
 import type { Cmd } from "../api/live";
 import { getMusicQueue } from "../api/music";
+import { isLocalMediaId } from "../localMediaId";
 import { seekToTime } from "../playerSeek";
 import { prefetchStreamInfo } from "../streamResolution";
 import { useMusicPlayerStore, warmMusicStream } from "../../store/useMusicPlayerStore";
@@ -13,6 +14,8 @@ export function playing(): Playing | null {
   const video = usePlayerStore.getState();
   if (music.currentTrack && (music.isPlaying || !video.isPlaying)) {
     const track = music.currentTrack;
+    // A file on this computer can't play anywhere else, and its name stays here.
+    if (isLocalMediaId(track.videoId ?? track.id)) return null;
     return {
       video: track.videoId ?? track.id,
       title: track.title,
@@ -26,7 +29,7 @@ export function playing(): Playing | null {
       index: music.currentIndex,
     };
   }
-  if (!video.currentVideo) return null;
+  if (!video.currentVideo || isLocalMediaId(video.currentVideo.id)) return null;
   return {
     video: video.currentVideo.id,
     title: video.currentVideo.title,

@@ -1,6 +1,6 @@
+import { getString, type StringKey } from "./i18n/index";
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { usePlayerStore } from "../store/usePlayerStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import { usePageTitleStore } from "../store/usePageTitleStore";
@@ -8,36 +8,38 @@ import { usePageTitleStore } from "../store/usePageTitleStore";
 // Static section labels keyed by exact pathname. Rendered as spaced-out uppercase
 // "section" chrome; dynamic content titles (video/song/channel/search/…) render in
 // natural case for readability.
-const STATIC_TITLES: Record<string, string> = {
+const STATIC_TITLES: Record<string, StringKey> = {
   "/": "home",
-  "/feed": "flowNeuro",
+  "/feed": "persona_title",
   "/music": "music",
   "/explore": "explore",
   "/subscriptions": "subscriptions",
   "/playlists": "playlists",
-  "/watch-later": "watchLater",
+  "/watch-later": "watch_later",
   "/library": "library",
   "/albums": "albums",
-  "/saved-shorts": "savedShorts",
+  "/recap": "recap_title",
+  "/saved-shorts": "saved_shorts",
+  "/notes": "notes_title",
   "/history": "history",
   "/downloads": "downloads",
+  "/local-media": "library_local_media_label",
   "/liked": "liked",
   "/settings": "settings",
-  "/settings/import": "importData",
+  "/settings/import": "import_data",
   "/sync": "sync",
   "/support": "support",
   "/sponsorblock": "extensions",
 };
 
 /** The translation key of a section page's label, such as Home or History; null for content pages. */
-export function sectionTitleKey(pathname: string): string | null {
+export function sectionTitleKey(pathname: string): StringKey | null {
   return STATIC_TITLES[pathname] ?? (pathname.startsWith("/shorts") ? "shorts" : null);
 }
 
 type ResolvedTitle = { text: string; section: boolean };
 
 export function useResolvedWindowTitle(): ResolvedTitle {
-  const { t } = useTranslation();
   const location = useLocation();
   const pathname = location.pathname;
   const search = location.search;
@@ -67,7 +69,7 @@ export function useResolvedWindowTitle(): ResolvedTitle {
     // Search page → the query.
     if (pathname === "/search") {
       const q = new URLSearchParams(search).get("q")?.trim();
-      return q ? { text: q, section: false } : { text: t("search"), section: true };
+      return q ? { text: q, section: false } : { text: getString('search'), section: true };
     }
 
     // Channel / artist / album / playlist titles are published by their pages.
@@ -75,10 +77,10 @@ export function useResolvedWindowTitle(): ResolvedTitle {
 
     // Static section labels.
     const label = sectionTitleKey(pathname);
-    if (label) return { text: t(label), section: true };
+    if (label) return { text: getString(label), section: true };
 
     // Dynamic routes before their page has published a title yet — stay blank.
     return { text: "", section: false };
-  }, [t, pathname, search, musicOverlayOpen, trackTitle, currentVideoId, currentVideoTitle, override]);
+  }, [pathname, search, musicOverlayOpen, trackTitle, currentVideoId, currentVideoTitle, override]);
 }
 

@@ -21,7 +21,7 @@ pub const DEFAULT_FETCH_CONCURRENCY: usize = 8;
 pub fn shared_client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
+        super::app_proxy::with_app_proxy(reqwest::Client::builder())
             .tls_backend_rustls()
             .user_agent(BROWSER_USER_AGENT)
             .pool_idle_timeout(Duration::from_secs(90))

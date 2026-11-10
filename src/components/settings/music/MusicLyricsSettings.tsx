@@ -4,30 +4,47 @@ import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { Select } from '../../ui/Select';
 import { Button } from '../../ui/Button';
 import { LyricsProviderList } from '../LyricsProviderList';
-import { useBoolPref, usePreference } from '../../../lib/usePreference';
+import { useBoolPref, useNumberPref, usePreference } from '../../../lib/usePreference';
 import { getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { IS_LINUX_RUNTIME } from '../../../lib/platform';
+import { canKeepScreenOn } from '../../../lib/useKeepScreenOn';
 import {
   getOrderedProviders,
+  isProviderEnabled,
   parseProviderEnabledStates,
   serializeProviderEnabledStates,
 } from '../../../lib/lyrics/registry';
 import { serializeProviderOrder } from '../../../lib/lyrics/providerOrder';
 import { formatCacheSize, useLyricsCache } from '../../../lib/lyrics/useLyricsCache';
+import { lyricsBackgroundOptions } from '../../../lib/lyrics/useLyricsCover';
+import { MEDIA_LYRICS_DELAY } from '../../../lib/lyrics/sessionTimeline';
+import { Slider } from '../../ui/Slider';
+
+const formatDelay = (ms: number): string => {
+  const snapped = MEDIA_LYRICS_DELAY.snap(ms);
+  return `${snapped > 0 ? '+' : ''}${(snapped / 1000).toFixed(1)}s`;
+};
 
 export function MusicLyricsSettings() {
   const [providerOrder, setProviderOrder] = usePreference(SETTINGS.LYRICS_PROVIDER_ORDER, '');
   const [enabledRaw, setEnabledRaw] = usePreference(SETTINGS.LYRICS_PROVIDER_ENABLED_STATES, '{}');
   const [align, setAlign] = usePreference(SETTINGS.LYRICS_TEXT_ALIGN);
+  const [background, setBackground] = usePreference(SETTINGS.LYRICS_BACKGROUND);
   const [showTranslation, setShowTranslation] = useBoolPref(SETTINGS.LYRICS_SHOW_TRANSLATION);
   const [showRomanization, setShowRomanization] = useBoolPref(SETTINGS.LYRICS_SHOW_ROMANIZATION);
+  const [autoRomanize, setAutoRomanize] = useBoolPref(SETTINGS.LYRICS_AUTO_ROMANIZE);
+  const [romanizationOnly, setRomanizationOnly] = useBoolPref(SETTINGS.LYRICS_ROMANIZATION_ONLY);
+  const [keepScreenOn, setKeepScreenOn] = useBoolPref(SETTINGS.LYRICS_KEEP_SCREEN_ON);
   const [blurOtherLines, setBlurOtherLines] = useBoolPref(SETTINGS.LYRICS_BLUR_OTHER_LINES);
+  const [videoTiming, setVideoTiming] = useBoolPref(SETTINGS.LYRICS_SPONSORBLOCK_TIMING);
+  const [inMediaControls, setInMediaControls] = useBoolPref(SETTINGS.LYRICS_IN_MEDIA_CONTROLS);
+  const [mediaDelayMs, setMediaDelayMs] = useNumberPref(SETTINGS.LYRICS_IN_MEDIA_CONTROLS_DELAY_MS);
   const cache = useLyricsCache();
 
   const providers = getOrderedProviders(providerOrder);
   const enabledStates = parseProviderEnabledStates(enabledRaw);
-  const enabledCount = providers.filter((provider) => enabledStates[provider.name] !== false).length;
+  const enabledCount = providers.filter((provider) => isProviderEnabled(enabledStates, provider.name)).length;
   const setProviderEnabled = (providerName: string, enabled: boolean) => {
     setEnabledRaw(serializeProviderEnabledStates({ ...enabledStates, [providerName]: enabled }));
   };
@@ -41,12 +58,53 @@ export function MusicLyricsSettings() {
           { value: 'right', label: getString('lyrics_align_right') },
         ]} />
       </SettingItem>
+      <SettingItem title={getString('lyrics_background')} description={getString('lyrics_background_summary')}>
+        <Select value={IS_LINUX_RUNTIME && background === 'moving' ? 'colorful' : background} onChange={setBackground} options={lyricsBackgroundOptions()} />
+      </SettingItem>
       <SettingItem title={getString('lyrics_show_translation')} description={getString('lyrics_show_translation_summary')}>
         <ToggleSwitch checked={showTranslation} onChange={setShowTranslation} />
       </SettingItem>
       <SettingItem title={getString('lyrics_show_romanization')} description={getString('lyrics_show_romanization_summary')}>
         <ToggleSwitch checked={showRomanization} onChange={setShowRomanization} />
       </SettingItem>
+      {showRomanization && (
+        <SettingItem title={getString('lyrics_romanization_only')} description={getString('lyrics_romanization_only_summary')}>
+          <ToggleSwitch checked={romanizationOnly} onChange={setRomanizationOnly} />
+        </SettingItem>
+      )}
+      {showRomanization && (
+        <SettingItem title={getString('lyrics_auto_romanize')} description={getString('lyrics_auto_romanize_summary')}>
+          <ToggleSwitch checked={autoRomanize} onChange={setAutoRomanize} />
+        </SettingItem>
+      )}
+      <SettingItem title={getString('lyrics_in_media_controls')} description={getString('lyrics_in_media_controls_summary')}>
+        <ToggleSwitch checked={inMediaControls} onChange={setInMediaControls} />
+      </SettingItem>
+      {inMediaControls && (
+        <SettingItem title={getString('lyrics_in_media_controls_timing')} description={getString('lyrics_in_media_controls_timing_summary')}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-32 sm:w-40">
+              <Slider
+                aria-label={getString('lyrics_in_media_controls_timing')}
+                min={-MEDIA_LYRICS_DELAY.MAX_MS}
+                max={MEDIA_LYRICS_DELAY.MAX_MS}
+                step={MEDIA_LYRICS_DELAY.STEP_MS}
+                value={MEDIA_LYRICS_DELAY.snap(mediaDelayMs)}
+                onChange={(value) => setMediaDelayMs(MEDIA_LYRICS_DELAY.snap(value))}
+              />
+            </div>
+            <span className="w-12 text-end font-mono text-xs text-chrome-neutral-400">{formatDelay(mediaDelayMs)}</span>
+          </div>
+        </SettingItem>
+      )}
+      <SettingItem title={getString('lyrics_sponsorblock_timing')} description={getString('lyrics_sponsorblock_timing_summary')}>
+        <ToggleSwitch checked={videoTiming} onChange={setVideoTiming} />
+      </SettingItem>
+      {canKeepScreenOn() && (
+        <SettingItem title={getString('lyrics_keep_screen_on')} description={getString('lyrics_keep_screen_on_summary')}>
+          <ToggleSwitch checked={keepScreenOn} onChange={setKeepScreenOn} />
+        </SettingItem>
+      )}
       {/* Linux never draws this blur, because the engine would do it on the CPU. */}
       {!IS_LINUX_RUNTIME && (
         <SettingItem title={getString('lyrics_blur_other_lines')} description={getString('lyrics_blur_other_lines_summary')}>
@@ -63,7 +121,7 @@ export function MusicLyricsSettings() {
       </SettingItem>
       <LyricsProviderList
         order={providers.map((provider) => provider.name)}
-        isEnabled={(name) => enabledStates[name] !== false}
+        isEnabled={(name) => isProviderEnabled(enabledStates, name)}
         onReorder={(order) => setProviderOrder(serializeProviderOrder(order))}
         onToggle={setProviderEnabled}
       />

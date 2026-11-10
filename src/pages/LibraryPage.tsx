@@ -1,13 +1,13 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Clock, Disc3, Download, History, ListVideo, Music2, ThumbsUp } from "lucide-react";
+import { Clock, Disc3, Download, FolderOpen, History, ListVideo, Music2, ThumbsUp } from "lucide-react";
 import type { VideoSummary } from "../types/video";
 import type { SongItem } from "../types/music";
 import { getString } from "../lib/i18n/index";
-import { SETTINGS } from "../lib/settings/schema";
+import { hiddenOnLibraryPage, useHiddenLibrarySections } from "../lib/librarySections";
+import { useShortsEnabled, videosWithShorts } from "../lib/useShortsContent";
 import { useLibrary, type LibraryPlaylist } from "../lib/useLibrary";
 import { historyVideoToSong, type HistoryVideo } from "../lib/useHistory";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import { useMusicPlayerStore } from "../store/useMusicPlayerStore";
 import {
   albumDetailPath,
@@ -15,11 +15,13 @@ import {
   type StoredAlbum,
 } from "../store/useAlbumLibraryStore";
 import { LibraryShelf } from "../components/library/LibraryShelf";
+import { RecapEntryCard } from "../components/recap/RecapEntryCard";
+import { Button } from "../components/ui/Button";
 import { VideoCard } from "../components/video/VideoCard";
 import { PlaylistCard } from "../components/video/PlaylistCard";
 import { MusicItemCard } from "../components/music/MusicItemCard";
-import { DownloadVideoCard } from "../components/downloads/DownloadVideoCard";
 import { ShortCard } from "../components/shorts/ShortCard";
+import { NotesShelf } from "../components/note/NotesShelf";
 import { ShortsIcon } from "../components/ui/ShortsIcon";
 import type { ShortVideoSummary } from "../types/video";
 
@@ -157,7 +159,7 @@ function DownloadVideoShelfRow({
     <>
       {videos.map((video, index) => (
         <div key={`${video.id}-${index}`} className="w-[280px] md:w-[320px] shrink-0">
-          <DownloadVideoCard video={video} onPlay={onPlay} />
+          <VideoCard video={video} onPlay={onPlay} hideChannelAvatar />
         </div>
       ))}
     </>
@@ -182,6 +184,7 @@ function ShortsShelfRow({ shorts }: { shorts: ShortVideoSummary[] }) {
     <>
       {shorts.map((short) => (
         <ShortCard
+          finiteQueue
           key={short.id}
           short={short}
           queue={shorts}
@@ -206,26 +209,15 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
     loading,
   } = useLibrary();
 
-  const showMusicNav = useAppSettingsStore((state) => state.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== "false");
-  const showShortsNav = useAppSettingsStore((state) => state.values[SETTINGS.SHORTS_NAVIGATION_ENABLED] !== "false");
-
-  const visibleHistory = useMemo(
-    () => (showMusicNav ? history : history.filter((item) => !item.isMusic)),
-    [history, showMusicNav],
-  );
-  const visibleLiked = useMemo(
-    () => (showMusicNav ? liked : liked.filter((item) => !item.isMusic)),
-    [liked, showMusicNav],
-  );
+  const shortsEnabled = useShortsEnabled();
+  const hidden = hiddenOnLibraryPage(useHiddenLibrarySections(), shortsEnabled);
 
   const isEmpty = (length: number) => !loading && length === 0;
 
-  const statsText = getString(
-    "library_stats_summary",
-    playlists.length,
-    showMusicNav ? savedAlbums.length : 0,
-    showShortsNav ? savedShorts.length : 0,
-  );
+  const statsText = shortsEnabled
+    ? getString("library_stats_summary", playlists.length, savedAlbums.length, savedShorts.length)
+    : getString("library_stats_summary_no_shorts", playlists.length, savedAlbums.length);
+  const historyShown = videosWithShorts(history, shortsEnabled);
 
   const handleOpenAlbum = (album: StoredAlbum) => {
     navigate(albumDetailPath(album));
@@ -241,30 +233,37 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           </h1>
           <p className="mt-2 text-sm text-chrome-neutral-400">{statsText}</p>
         </div>
+        <Button type="button" variant="tonal" className="ms-auto shrink-0" onClick={() => navigate("/local-media")}>
+          <FolderOpen size={16} />
+          {getString("library_local_media_label")}
+        </Button>
       </header>
 
-      {/* History */}
-      <LibraryShelf
-        title={getString("library_history_label")}
-        icon={History}
-        viewAllTo="/history"
-        isEmpty={isEmpty(visibleHistory.length)}
-      >
-        <HistoryShelfRow items={visibleHistory} onPlay={onPlay} onAddToQueue={onAddToQueue} />
-      </LibraryShelf>
+      <RecapEntryCard />
 
-      {/* Playlists */}
-      <LibraryShelf
-        title={getString("library_playlists_label")}
-        icon={ListVideo}
-        viewAllTo="/playlists"
-        isEmpty={isEmpty(playlists.length)}
-      >
-        <PlaylistShelfRow playlists={playlists} />
-      </LibraryShelf>
+      {!hidden.has("HISTORY") && (
+        <LibraryShelf
+          title={getString("library_history_label")}
+          icon={History}
+          viewAllTo="/history"
+          isEmpty={isEmpty(historyShown.length)}
+        >
+          <HistoryShelfRow items={historyShown} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </LibraryShelf>
+      )}
 
-      {/* Albums */}
-      {showMusicNav && (
+      {!hidden.has("PLAYLISTS") && (
+        <LibraryShelf
+          title={getString("library_playlists_label")}
+          icon={ListVideo}
+          viewAllTo="/playlists"
+          isEmpty={isEmpty(playlists.length)}
+        >
+          <PlaylistShelfRow playlists={playlists} />
+        </LibraryShelf>
+      )}
+
+      {!hidden.has("ALBUMS") && (
         <LibraryShelf
           title={getString("albums_title")}
           icon={Disc3}
@@ -275,8 +274,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
         </LibraryShelf>
       )}
 
-      {/* Saved Shorts */}
-      {showShortsNav && (
+      {!hidden.has("SAVED_SHORTS") && (
         <LibraryShelf
           title={getString("library_saved_shorts_label")}
           icon={ShortsIcon}
@@ -287,38 +285,42 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
         </LibraryShelf>
       )}
 
-      {/* Watch Later */}
-      <LibraryShelf
-        title={getString("library_watch_later_label")}
-        icon={Clock}
-        viewAllTo="/watch-later"
-        isEmpty={isEmpty(watchLater.length)}
-      >
-        <VideoShelfRow videos={watchLater} onPlay={onPlay} onAddToQueue={onAddToQueue} />
-      </LibraryShelf>
+      {!hidden.has("WATCH_LATER") && (
+        <LibraryShelf
+          title={getString("library_watch_later_label")}
+          icon={Clock}
+          viewAllTo="/watch-later"
+          isEmpty={isEmpty(watchLater.length)}
+        >
+          <VideoShelfRow videos={watchLater} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </LibraryShelf>
+      )}
 
-      {/* Likes */}
-      <LibraryShelf
-        title={getString("library_likes_label")}
-        icon={ThumbsUp}
-        viewAllTo="/liked"
-        isEmpty={isEmpty(visibleLiked.length)}
-      >
-        <HistoryShelfRow items={visibleLiked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
-      </LibraryShelf>
+      {!hidden.has("LIKES") && (
+        <LibraryShelf
+          title={getString("library_likes_label")}
+          icon={ThumbsUp}
+          viewAllTo="/liked"
+          isEmpty={isEmpty(liked.length)}
+        >
+          <HistoryShelfRow items={liked} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+        </LibraryShelf>
+      )}
 
-      {/* Video downloads */}
-      <LibraryShelf
-        title={getString("library_video_downloads_label")}
-        icon={Download}
-        viewAllTo="/downloads"
-        isEmpty={isEmpty(videoDownloads.length)}
-      >
-        <DownloadVideoShelfRow videos={videoDownloads} onPlay={onPlay} />
-      </LibraryShelf>
+      {!hidden.has("NOTES") && <NotesShelf />}
 
-      {/* Music downloads */}
-      {showMusicNav && (
+      {!hidden.has("VIDEO_DOWNLOADS") && (
+        <LibraryShelf
+          title={getString("library_video_downloads_label")}
+          icon={Download}
+          viewAllTo="/downloads"
+          isEmpty={isEmpty(videoDownloads.length)}
+        >
+          <DownloadVideoShelfRow videos={videoDownloads} onPlay={onPlay} />
+        </LibraryShelf>
+      )}
+
+      {!hidden.has("MUSIC_DOWNLOADS") && (
         <LibraryShelf
           title={getString("library_music_downloads_label")}
           icon={Music2}
@@ -328,8 +330,6 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ onPlay, onAddToQueue }
           <MusicDownloadShelfRow songs={musicDownloads} />
         </LibraryShelf>
       )}
-
-      {/* STEP 5 — MD3 empty states */}
     </div>
   );
 };

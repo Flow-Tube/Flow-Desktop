@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { usePlayerStore } from "../store/usePlayerStore";
+import { isLocalMediaId } from "../lib/localMediaId";
+import { LocalWatchMetadata } from "../components/localMedia/LocalWatchMetadata";
 import { useFeedHiddenFilter } from "../store/useFeedActionsStore";
 import { useSubscriptionStore } from "../store/useSubscriptionStore";
 import { useSettingsStore } from "../store/useSettingsStore";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
+import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
 import { getPlaylistDetails } from "../lib/api/youtube";
 import { getReturnYouTubeDislike, getDeArrowOverride } from "../lib/api/foss";
 import { useDownloadedVideoRecord, downloadRecordToVideo } from "../lib/useDownloads";
@@ -14,7 +16,7 @@ import { useRelatedLane } from "../lib/useRelatedLane";
 import { useUnseenFilter } from "../lib/useUnseenFilter";
 import { autoplayCandidates, relatedItemToVideoSummary } from "../lib/relatedLane";
 import { decideWatchRouteSync } from "../lib/watchRouteSync";
-import { setSetting } from "../lib/api/db";
+import { WatchNote } from "../components/note/WatchNote";
 import {
   WatchLayout,
   WatchMetadata,
@@ -26,6 +28,7 @@ import {
 import { WatchPlayerSlot } from "../components/watch/WatchPlayerSlot";
 import { WatchSidePanels } from "../components/watch/WatchSidePanels";
 import type { RelatedContentItem, VideoSummary } from "../types/video";
+import { configuredProxyUrl } from "../lib/settings/appProxy";
 import { SETTINGS } from "../lib/settings/schema";
 
 const CommentsSection = lazy(() => import("../components/watch/CommentsSection"));
@@ -58,10 +61,11 @@ export function Watch() {
 
   const offlineRecord = useDownloadedVideoRecord(videoId);
   const playbackSettled = usePlaybackSettled(videoId);
-  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord, retryNonce, offlineRecord);
+  const isLocalFile = isLocalMediaId(videoId);
+  const videoDetails = useWatchVideoDetails(videoId, playbackSettled && !offlineRecord && !isLocalFile, retryNonce, offlineRecord);
   const relatedLane = useRelatedLane(
     videoId,
-    relatedVideosEnabled && !offlineRecord,
+    relatedVideosEnabled && !offlineRecord && !isLocalFile,
     playbackSettled,
     retryNonce,
   );
@@ -124,7 +128,7 @@ export function Watch() {
   // Page furniture, not playback: it waits until playback has actually started
   // rather than compete with the first media buffer.
   useEffect(() => {
-    if (!videoId || !playbackSettled || offlineRecord) return;
+    if (!videoId || !playbackSettled || offlineRecord || isLocalFile) return;
     let cancelled = false;
 
     const loadReactionMetadata = async () => {
@@ -147,7 +151,7 @@ export function Watch() {
     return () => {
       cancelled = true;
     };
-  }, [videoId, playbackSettled, retryNonce, setDearrowData, setRydData, loadSettings, offlineRecord]);
+  }, [videoId, playbackSettled, retryNonce, setDearrowData, setRydData, loadSettings, offlineRecord, isLocalFile]);
 
   const isHidden = useFeedHiddenFilter();
   const relatedVideoIds = useMemo(
@@ -216,15 +220,25 @@ export function Watch() {
     [navigate, setQueue],
   );
 
+  const canRetryWithProxy = useAppSettingsStore(
+    (state) => state.values[SETTINGS.PROXY_ENABLED] !== "true" && configuredProxyUrl(state.values) !== null,
+  );
   const retryWithProxy = useCallback(() => {
-    void setSetting("proxy_enabled", "true").catch(() => {});
-    setPageError(null);
-    setRetryNonce((n) => n + 1);
+    void setSettingValue(SETTINGS.PROXY_ENABLED, "true").finally(() => {
+      setPageError(null);
+      setRetryNonce((n) => n + 1);
+    });
   }, []);
 
   if (!currentVideo) {
     if (pageError) {
-      return <WatchErrorState message={pageError} onRetryWithProxy={retryWithProxy} onGoBack={() => navigate(-1)} />;
+      return (
+        <WatchErrorState
+          message={pageError}
+          onRetryWithProxy={canRetryWithProxy ? retryWithProxy : undefined}
+          onGoBack={() => navigate(-1)}
+        />
+      );
     }
     return <WatchPageSkeleton />;
   }
@@ -235,15 +249,26 @@ export function Watch() {
     <WatchLayout
       player={<WatchPlayerSlot />}
       metadata={
-        <WatchMetadata
-          currentVideo={currentVideo}
-          videoData={videoDetails}
-          dearrowData={dearrowData}
-          rydData={rydData}
-        />
+        isLocalFile ? (
+          <LocalWatchMetadata currentVideo={currentVideo} />
+        ) : (
+          <WatchMetadata
+            currentVideo={currentVideo}
+            videoData={videoDetails}
+            dearrowData={dearrowData}
+            rydData={rydData}
+          />
+        )
       }
-      description={<DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />}
-      comments={commentsEnabled && !offlineRecord && playbackSettled ? (
+      description={
+        isLocalFile ? null : (
+          <>
+            <WatchNote video={currentVideo} videoData={videoDetails} />
+            <DescriptionCard currentVideo={currentVideo} videoData={videoDetails} />
+          </>
+        )
+      }
+      comments={commentsEnabled && !offlineRecord && !isLocalFile && playbackSettled ? (
         <Suspense fallback={<div className="h-32" />}>
           <CommentsSection videoId={videoId} />
         </Suspense>
@@ -259,10 +284,11 @@ export function Watch() {
             }
             chapters={videoDetails?.chapters || []}
             autoChapters={videoDetails?.autoChapters ?? false}
+            commentsAvailable={commentsEnabled && !offlineRecord}
             videoThumbnail={dearrowData?.thumbnailUrl || currentVideo?.thumbnailUrl || videoDetails?.thumbnailUrl || undefined}
           />
 
-          {relatedVideosEnabled && (
+          {relatedVideosEnabled && !isLocalFile && (
             <RelatedVideos
               items={visibleRelated}
               loading={relatedLane.loading || unseen.waiting}

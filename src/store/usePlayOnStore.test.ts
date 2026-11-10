@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { LinkedDevice } from "../lib/api/linked";
 import type { LiveRequest, LiveStatus, Now } from "../lib/api/live";
+import type { PlayOnDevice } from "../lib/live/devices";
 
 vi.mock("../lib/api/linked", () => ({ getLinkedDevices: vi.fn(async () => []) }));
 const api = vi.hoisted(() => ({
@@ -47,7 +49,7 @@ beforeEach(async () => {
   });
   api.getLiveStatus.mockResolvedValue({ available: true, devices: {}, online: [] });
   api.sendLive.mockResolvedValue(9);
-  usePlayOnStore.setState({ status: null, reported: null, overrides: {}, controlling: null, linked: [], asking: [] });
+  usePlayOnStore.setState({ status: null, reported: null, overrides: {}, controlling: null, movingTo: null, linked: [], asking: [] });
   await usePlayOnStore.getState().init(() => undefined);
 });
 
@@ -58,6 +60,22 @@ describe("usePlayOnStore", () => {
     await flush();
     expect(players.startSession).toHaveBeenCalledOnce();
     expect(api.sendLive).toHaveBeenCalledWith({ type: "result", to: "aa", ref: 4, ok: true });
+  });
+
+  it("says which device handed playback over", async () => {
+    players.startSession.mockResolvedValue(undefined);
+    usePlayOnStore.setState({ linked: [{ id: "aa", name: "Pixel" } as LinkedDevice] });
+    deliver(PLAY);
+    await flush();
+    expect(showToast).toHaveBeenCalledWith({ message: "Playing from Pixel" });
+  });
+
+  it("says nothing when the session handed over couldn't start", async () => {
+    players.startSession.mockRejectedValue(new Error("gone"));
+    deliver(PLAY);
+    await flush();
+    expect(showToast).not.toHaveBeenCalled();
+    expect(api.sendLive).toHaveBeenCalledWith({ type: "result", to: "aa", ref: 4, ok: false, reason: "unavailable" });
   });
 
   it("answers a command it can't apply with a reason", async () => {
@@ -114,6 +132,22 @@ describe("usePlayOnStore", () => {
     deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: true } });
     await usePlayOnStore.getState().transferTo("bb");
     expect(players.pauseHere).toHaveBeenCalledOnce();
+  });
+
+  it("marks the device playback is moving to, one move at a time", async () => {
+    players.playing.mockReturnValue(PLAYING);
+    const target = { did: "bb", thisDevice: false, now: null } as unknown as PlayOnDevice;
+    const moving = usePlayOnStore.getState().pick(target);
+    await flush();
+    expect(usePlayOnStore.getState().movingTo).toBe("bb");
+
+    api.sendLive.mockClear();
+    await usePlayOnStore.getState().pick({ ...target, did: "cc" });
+    expect(api.sendLive).not.toHaveBeenCalled();
+
+    deliver({ from: "bb", seq: 1, ask: false, message: { type: "result", to: "me", ref: 9, ok: false, reason: "declined" } });
+    await expect(moving).rejects.toThrow("declined");
+    expect(usePlayOnStore.getState().movingTo).toBeNull();
   });
 
   describe("picking a device", () => {

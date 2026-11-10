@@ -20,7 +20,7 @@ pub fn collection_from_key(name: &str) -> Option<Collection> {
 }
 
 /// Decode a list of collection names, dropping any this build doesn't know. A newer peer adds
-/// collections (Android's `notes`); failing the whole frame on one unknown name ended the session.
+/// collections; failing the whole frame on one unknown name ended the session.
 fn known_collections<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Collection>, D::Error> {
     let names = Vec::<String>::deserialize(d)?;
     Ok(names

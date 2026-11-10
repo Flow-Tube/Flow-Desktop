@@ -8,8 +8,7 @@ import { useTheme } from "../../lib/useTheme";
 import { useThemeFile } from "../../lib/useThemeFile";
 import { useUiStore } from "../../store/useUiStore";
 
-const STATUS_LABEL: Record<Exclude<ThemeFileStatus, "loaded">, StringKey> = {
-  missing: "theme_file_status_missing",
+const STATUS_LABEL: Record<Exclude<ThemeFileStatus, "loaded" | "missing">, StringKey> = {
   tooLarge: "theme_file_status_too_large",
   notText: "theme_file_status_not_text",
   unreadable: "theme_file_status_unreadable",
@@ -23,7 +22,7 @@ export function ThemeFileSection() {
   const active = themeId === THEME_FILE_ID;
 
   const status = file?.status;
-  const statusLabel = !status
+  const statusLabel = !status || status === "missing"
     ? null
     : status === "loaded"
       ? getString(active ? "theme_file_in_use" : "theme_file_status_ready")

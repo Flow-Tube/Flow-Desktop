@@ -41,6 +41,37 @@ export async function deleteNotification(id: number): Promise<void> {
   return invokeBackend<void>("delete_notification", { id });
 }
 
+/** Puts a removed notification back, for Undo. */
+export async function restoreNotification(notification: NotificationRecord): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  return invokeBackend<void>("restore_notification", { notification });
+}
+
+/** "Remind me" on an upcoming video; lands in the inbox when the video starts. */
+export interface UpcomingReminder {
+  videoId: string;
+  releaseTimeMs: number;
+  title: string;
+  channelName: string;
+  channelId: string | null;
+  thumbnailUrl: string | null;
+}
+
+export async function getUpcomingReminders(): Promise<UpcomingReminder[]> {
+  if (!(await isTauriEnv())) return [];
+  return invokeBackend<UpcomingReminder[]>("get_upcoming_reminders");
+}
+
+export async function setUpcomingReminder(reminder: UpcomingReminder): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  return invokeBackend<void>("set_upcoming_reminder", { reminder });
+}
+
+export async function cancelUpcomingReminder(videoId: string): Promise<void> {
+  if (!(await isTauriEnv())) return;
+  return invokeBackend<void>("cancel_upcoming_reminder", { videoId });
+}
+
 export async function clearNotifications(): Promise<void> {
   if (!(await isTauriEnv())) return;
   return invokeBackend<void>("clear_notifications");

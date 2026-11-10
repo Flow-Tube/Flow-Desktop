@@ -59,3 +59,25 @@ async fn a_reset_leaves_the_group_and_announces_no_deletions() {
         "no history and no tombstones to send"
     );
 }
+
+#[tokio::test]
+async fn a_reset_empties_the_recap_ledger() {
+    let g = group().await;
+    let pool = device_pool(&g).await;
+    for statement in [
+        "INSERT INTO recap_state (id, started_at) VALUES (1, 1)",
+        "INSERT INTO recap_known (source, key) VALUES ('video', 'UC1')",
+        "INSERT INTO recap_months (source, month, record) VALUES ('video', '2026-01', '{}')",
+    ] {
+        sqlx::query(statement).execute(&pool).await.unwrap();
+    }
+    reset_local_data(&pool, false).await.unwrap();
+    for table in ["recap_state", "recap_known", "recap_months"] {
+        let left: i64 =
+            sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(left, 0, "{table}");
+    }
+}

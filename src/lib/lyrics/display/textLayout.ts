@@ -4,6 +4,8 @@
  * `Intl.Segmenter` words (after spaces and hyphens, and between CJK characters).
  */
 
+import { isRtlText } from "../../direction";
+
 export interface TextMeasurer {
   width(text: string, font: string): number;
   /** The font's ascent and descent in px, which set a row's natural height. */
@@ -39,17 +41,6 @@ export interface TextBlock {
 export const fontOf = (style: TextStyleSpec): string =>
   `${style.italic ? "italic " : ""}${style.weight} ${style.size}px ${style.family}`;
 
-const RTL_CHAR = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
-const STRONG_CHAR = /[\p{L}]/u;
-
-/** The direction of the first strong character, as the Unicode bidi algorithm picks a paragraph's. */
-export function isRtlText(text: string): boolean {
-  for (const char of text) {
-    if (STRONG_CHAR.test(char)) return RTL_CHAR.test(char);
-  }
-  return false;
-}
-
 const isCjkChar = (char: string): boolean => /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/.test(char);
 
 interface Piece {
@@ -66,7 +57,7 @@ type SegmenterCtor = new (locale?: string, options?: { granularity: string }) =>
 let wordSegmenter: SegmenterLike | null = null;
 let graphemeSegmenter: SegmenterLike | null = null;
 
-function segmenter(granularity: "word" | "grapheme"): SegmenterLike | null {
+export function segmenter(granularity: "word" | "grapheme"): SegmenterLike | null {
   const Ctor = (Intl as unknown as { Segmenter?: SegmenterCtor }).Segmenter;
   if (!Ctor) return null;
   if (granularity === "word") return (wordSegmenter ??= new Ctor(undefined, { granularity }));

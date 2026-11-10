@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LyricsEntry } from "../types";
-import { duetSides, lyricsPresentation, lyricsRomanizations, nextMainLineTimes } from "./presentation";
+import { duetSides, lyricsPresentation, lyricsRomanizations, nextMainLineTimes, romanizedLines, romanizedWordTimings } from "./presentation";
 import { contrastRatio, ensureContrastOn, tone, withTone } from "../../color/tone";
 
 describe("lyrics presentation", () => {
@@ -42,6 +42,8 @@ describe("lyrics presentation", () => {
     const lines: LyricsEntry[] = [{ time: 0, text: "사랑해", romanization: "saranghae" }, { time: 1000, text: "hello" }];
     expect(lyricsRomanizations(lines, true)).toEqual(["saranghae", null]);
     expect(lyricsRomanizations(lines, false)).toEqual([null, null]);
+    expect(lyricsRomanizations(lines, true, ["made here", "other"])).toEqual(["saranghae", "other"]);
+    expect(lyricsRomanizations(lines, false, ["made here", "other"])).toEqual([null, null]);
   });
 
   it("gives the second singer a readable colour of the backdrop's hue, and centres sung-together lines", () => {
@@ -74,5 +76,24 @@ describe("colour tone", () => {
     const surface = { r: 20, g: 20, b: 30 };
     const lifted = ensureContrastOn({ r: 40, g: 40, b: 80 }, surface, 4.5);
     expect(contrastRatio(lifted, surface)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("Romanization only", () => {
+  const word = (text: string, startTime: number) => ({ text, startTime, endTime: startTime + 100 });
+
+  it("carries word timings over when the words line up", () => {
+    expect(romanizedWordTimings("sa rang", [word("사", 0), word("랑", 100)])).toEqual([word("sa", 0), word("rang", 100)]);
+  });
+
+  it("drops word timings when they don't", () => {
+    expect(romanizedWordTimings("ni hao", [word("你", 0), word("好", 100), word("吗", 200)])).toBeNull();
+  });
+
+  it("replaces only the lines that have a Latin version", () => {
+    const lines: LyricsEntry[] = [{ time: 1, text: "사랑해", words: [word("사랑해", 1)] }, { time: 2, text: "Hello" }];
+    const shown = romanizedLines(lines, ["saranghae", null]);
+    expect(shown[0]).toMatchObject({ text: "saranghae", words: [word("saranghae", 1)] });
+    expect(shown[1]).toBe(lines[1]);
   });
 });

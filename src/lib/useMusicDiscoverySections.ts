@@ -1,5 +1,5 @@
+import { getString, type StringKey } from './i18n/index';
 import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import { getMusicHistory } from './api/db';
 import {
@@ -38,11 +38,11 @@ const LIMITS: Record<string, [number, number]> = {
   'deep-cuts': [3, 12],
   'artists-for-you': [3, 10],
 };
-const ROTATION_TITLES: Record<MusicDaySlot, string> = {
-  morning: 'musicRotationMorning',
-  afternoon: 'musicRotationAfternoon',
-  evening: 'musicRotationEvening',
-  night: 'musicRotationNight',
+const ROTATION_TITLES: Record<MusicDaySlot, StringKey> = {
+  morning: 'music_rotation_morning',
+  afternoon: 'music_rotation_afternoon',
+  evening: 'music_rotation_evening',
+  night: 'music_rotation_night',
 };
 const RELEASE_ANCHORS = 3;
 const RELEASES_PER_KIND = 2;
@@ -65,7 +65,6 @@ function uniqueAudio(songs: SongItem[], exclude: Set<string> = new Set()): SongI
  * as its source answers, and any failed source only removes its shelf.
  */
 export function useMusicDiscoverySections(): PersonalSection[] {
-  const { t } = useTranslation('common');
   const [sections, setSections] = useState<PersonalSection[]>([]);
   const requestRef = useRef(0);
 
@@ -81,17 +80,17 @@ export function useMusicDiscoverySections(): PersonalSection[] {
       setSections((previous) => [...previous.filter((item) => item.id !== section.id), bounded]
         .sort((a, b) => SECTION_ORDER.indexOf(a.id) - SECTION_ORDER.indexOf(b.id)));
     };
-    const songSection = (id: string, key: string, songs: SongItem[]): PersonalSection => ({
-      id, title: t(key), items: songs.map((song): YTItem => ({ type: 'song', ...song })),
+    const songSection = (id: string, key: StringKey, songs: SongItem[]): PersonalSection => ({
+      id, title: getString(key), items: songs.map((song): YTItem => ({ type: 'song', ...song })),
     });
 
     void getMusicTimeRotation(20)
       .then(({ slot, songs }) => publish(songSection(
-        'rotation', slot ? ROTATION_TITLES[slot] : 'musicRotation', uniqueAudio(songs),
+        'rotation', slot ? ROTATION_TITLES[slot] : 'music_rotation', uniqueAudio(songs),
       )))
       .catch(() => undefined);
     void getMusicRediscover(16)
-      .then((songs) => publish(songSection('rediscover', 'musicRediscover', uniqueAudio(songs))))
+      .then((songs) => publish(songSection('rediscover', 'music_rediscover', uniqueAudio(songs))))
       .catch(() => undefined);
 
     void (async () => {
@@ -110,11 +109,11 @@ export function useMusicDiscoverySections(): PersonalSection[] {
       const byId = new Map(queue.items.map((song) => [songIdOf(song), song]));
       const listened = history.map((item) => byId.get(item.videoId)).filter((song): song is SongItem => !!song);
       const listenAgain = uniqueAudio(listened).slice(0, LISTEN_AGAIN_SIZE);
-      publish(songSection('listen-again', 'musicListenAgain', listenAgain));
+      publish(songSection('listen-again', 'music_listen_again', listenAgain));
       // Speed Dial is the ranked long tail beyond what Listen Again already shows.
       const speedPool = uniqueAudio([...listened, ...favorites], new Set(listenAgain.map(songIdOf)));
       const speedDial = await ranked(speedPool, 'quick_picks');
-      publish(songSection('speed-dial', 'musicSpeedDial', speedDial.slice(0, SPEED_DIAL_SIZE)));
+      publish(songSection('speed-dial', 'music_speed_dial', speedDial.slice(0, SPEED_DIAL_SIZE)));
     })();
 
     void (async () => {
@@ -132,7 +131,7 @@ export function useMusicDiscoverySections(): PersonalSection[] {
         .filter((artist) => !known.has(artist.id))
         .map((artist) => [artist.id, artist])).values()].slice(0, 16);
       publish({
-        id: 'artists-for-you', title: t('musicArtistsForYou'),
+        id: 'artists-for-you', title: getString('music_artists_for_you'),
         items: artists.map((artist) => ({ type: 'artist' as const, ...artist })),
       });
 
@@ -142,7 +141,7 @@ export function useMusicDiscoverySections(): PersonalSection[] {
       const releases = roundRobinReleases(pages.map((page) => page
         ? [...page.albums.slice(0, RELEASES_PER_KIND), ...page.singles.slice(0, RELEASES_PER_KIND)]
         : []), RELEASE_SHELF_SIZE);
-      publish({ id: 'favorite-artist-albums', title: t('musicFavoriteArtistAlbums'),
+      publish({ id: 'favorite-artist-albums', title: getString('music_favorite_artist_albums'),
         items: releases.map((album) => ({ type: 'album' as const, ...album })) });
 
       // Opening two of those albums records their tracks in the content graph, which is
@@ -151,11 +150,11 @@ export function useMusicDiscoverySections(): PersonalSection[] {
         .map((album) => getMusicAlbumPage(album.browseId, { preferCached: true }).catch(() => null)));
       if (!live()) return;
       const deepCuts = await getMusicDeepCuts(16).catch(() => []);
-      publish(songSection('deep-cuts', 'musicDeepCuts', await ranked(uniqueAudio(deepCuts), 'discover')));
+      publish(songSection('deep-cuts', 'music_deep_cuts', await ranked(uniqueAudio(deepCuts), 'discover')));
     })();
 
     return () => { requestRef.current += 1; };
-  }, [t]);
+  }, []);
 
   return sections;
 }

@@ -20,6 +20,7 @@ use super::error_log;
 use super::group_store::GroupStore;
 use super::kept::{applied as applied_kept, keep, kept, kept_count};
 use super::live_hub::forget_keys;
+use super::missed_notes::{notes_caught_up, notes_missed};
 use super::names::device_names;
 use super::profile_actions::name_linked;
 use super::profile_links::reading;
@@ -128,9 +129,11 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
         return Ok(Vec::new());
     };
     let mut session = open_session(&local, &record).await?;
-    let Some(received) = exchange(app, &local, &mut session).await? else {
+    let mut refused = None;
+    let Some(received) = exchange(app, &local, &mut session, &mut refused).await? else {
         return Ok(Vec::new());
     };
+    let uploaded = session.store().upload_pending().await;
     session.collect_garbage(&local.pool).await?;
     // A server without join requests (older than flow-sync#41) shouldn't fail the sync.
     if let Some(server) = session.store().server()
@@ -139,7 +142,19 @@ async fn run(app: &AppHandle) -> Result<Vec<Received>> {
     {
         let _ = app.emit(EVENT_JOIN_REQUESTS, requests);
     }
-    Ok(received)
+    uploaded?;
+    refused.map_or(Ok(received), Err)
+}
+
+/// A store that refuses a write still answers reads, so the run goes on and reports it at the end.
+fn note_refused(result: Result<()>, refused: &mut Option<EngineError>) -> Result<()> {
+    match result {
+        Err(error) if error.refused_write() => {
+            *refused = Some(error);
+            Ok(())
+        }
+        other => other,
+    }
 }
 
 /// Pushes the running profile's changes, applies everyone else's to it, and keeps the batches of
@@ -148,6 +163,7 @@ async fn exchange(
     app: &AppHandle,
     local: &Local,
     session: &mut Session<'_, GroupStore>,
+    refused: &mut Option<EngineError>,
 ) -> Result<Option<Vec<Received>>> {
     let (pool, data) = (&local.pool, &local.data);
     if !session.adopt_link(pool, &local.default_profile).await? {
@@ -166,6 +182,7 @@ async fn exchange(
         apply_kept(app, local, link, &mut applied).await?;
     }
     read_joined_links(app, local, session, &mut applied).await?;
+    read_missed_notes(app, local, session, &mut applied).await?;
 
     let exported = if reading.active.is_some() {
         flush_brains(app).await;
@@ -175,10 +192,12 @@ async fn exchange(
     } else {
         Vec::new()
     };
-    session.store().upload_pending().await?;
-    session.push(pool, exported).await?;
-    name_linked(app, pool, &local.meta.app).await?;
-    session.push_profiles(pool).await?;
+    let sent = async {
+        session.push(pool, exported).await?;
+        name_linked(app, pool, &local.meta.app).await?;
+        session.push_profiles(pool).await
+    };
+    note_refused(sent.await, refused)?;
 
     let pulled = session.pull(pool).await?;
     let groups: Vec<_> = pulled
@@ -193,7 +212,7 @@ async fn exchange(
     if let Some(login) = &pulled.login {
         save_pending_login(login).await?;
     }
-    session.finish(pool, pulled).await?;
+    note_refused(session.finish(pool, pulled).await, refused)?;
     let received = applied.received(session).await;
     if let Some(link) = &reading.active
         && snapshot_due(pool, link).await?
@@ -201,10 +220,10 @@ async fn exchange(
         && !links_to_read(pool).await?.contains(link)
     {
         let exported = export_collections(data, &local.meta.app, &Collection::ALL).await?;
-        session.write_snapshot(pool, exported).await?;
+        note_refused(session.write_snapshot(pool, exported).await, refused)?;
     }
     if snapshot_due(pool, PROFILES_KEY).await? {
-        session.write_profiles_snapshot(pool).await?;
+        note_refused(session.write_profiles_snapshot(pool).await, refused)?;
     }
     Ok(Some(received))
 }
@@ -289,6 +308,35 @@ async fn read_joined_links(
         save_floors(pool, &read.floors).await?;
         link_read(pool, &link).await?;
     }
+    Ok(())
+}
+
+/// Once after updating from a build that dropped notes: reads them again, for every profile that
+/// syncs, before this run's export and snapshot.
+async fn read_missed_notes(
+    app: &AppHandle,
+    local: &Local,
+    session: &mut Session<'_, GroupStore>,
+    applied: &mut Applied,
+) -> Result<()> {
+    let pool = &local.pool;
+    if !notes_missed(pool).await? {
+        return Ok(());
+    }
+    let links: Vec<String> = session.reading().links().map(str::to_owned).collect();
+    for link in links {
+        let read = session.missed_notes(pool, &link).await?;
+        if session.reading().active.as_deref() == Some(link.as_str()) {
+            let groups: Vec<_> = read
+                .iter()
+                .map(|k| (k.sender.as_str(), std::slice::from_ref(&k.batch)))
+                .collect();
+            apply(app, local, &groups, applied).await?;
+        } else {
+            keep(pool, &read).await?;
+        }
+    }
+    notes_caught_up(pool).await?;
     Ok(())
 }
 

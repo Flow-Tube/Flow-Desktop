@@ -13,7 +13,7 @@ export interface RichTextProps {
 /** Text with its links and custom emoji. Line breaks in the text are kept. */
 export function RichText({ value, onActivate, imageSrc, className }: RichTextProps) {
   return (
-    <span className={`whitespace-pre-wrap break-words ${className ?? ""}`}>
+    <span dir="auto" className={`whitespace-pre-wrap break-words ${className ?? ""}`}>
       {richSegments(value).map((segment, index) => {
         if (segment.emoji) {
           return (
@@ -36,7 +36,7 @@ export function RichText({ value, onActivate, imageSrc, className }: RichTextPro
                 event.stopPropagation();
                 onActivate(target);
               }}
-              className="inline cursor-pointer break-all text-left font-medium text-primary hover:underline"
+              className="inline cursor-pointer break-all text-start font-medium text-primary hover:underline"
             >
               {segment.text}
             </button>

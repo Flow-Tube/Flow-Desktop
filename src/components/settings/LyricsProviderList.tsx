@@ -1,3 +1,4 @@
+import { lyricsSourceLabel } from '../../lib/lyrics/offline';
 import {
   DndContext,
   closestCenter,
@@ -49,7 +50,7 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex items-center gap-2 px-3 py-3 transition-colors duration-200 ease-out ${
-        isDragging ? 'relative z-10 bg-surface-container-high' : 'hover:bg-surface-container'
+        isDragging ? 'relative z-10 bg-surface-container-high' : 'hover:bg-surface-row-hover'
       }`}
     >
       <button
@@ -63,7 +64,7 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
         <GripVertical className="h-4 w-4" />
       </button>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-chrome-neutral-200">{`${index + 1}. ${name}`}</div>
+        <div className="text-sm font-medium text-chrome-neutral-200">{`${index + 1}. ${lyricsSourceLabel(name)}`}</div>
         <div className="mt-0.5 text-xs text-chrome-neutral-400">
           {getString(enabled ? 'settings_lyrics_provider_enabled' : 'settings_lyrics_provider_disabled')}
         </div>
@@ -86,7 +87,7 @@ function ProviderRow({ name, index, count, enabled, onMove, onToggle }: RowProps
       >
         <ChevronDown className="h-4 w-4" />
       </button>
-      <div className="ml-2 shrink-0">
+      <div className="ms-2 shrink-0">
         <ToggleSwitch checked={enabled} onChange={(next) => onToggle(name, next)} />
       </div>
     </div>
@@ -113,7 +114,7 @@ export function LyricsProviderList({ order, isEnabled, onReorder, onToggle }: Ly
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={order} strategy={verticalListSortingStrategy}>
-        <div role="list" aria-label={getString('settings_lyrics_providers')} className="flex flex-col divide-y divide-chrome-neutral-800/50">
+        <div role="list" aria-label={getString('settings_lyrics_providers')} className="flex flex-col divide-y-2 divide-[var(--color-background)]">
           {order.map((name, index) => (
             <div role="listitem" key={name}>
               <ProviderRow

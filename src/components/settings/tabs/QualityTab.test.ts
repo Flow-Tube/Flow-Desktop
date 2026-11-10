@@ -8,7 +8,6 @@ import { QualityTab } from "./QualityTab";
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ i18n: { resolvedLanguage: "en" } }) }));
 
 const preferences = vi.hoisted(() => ({ codec: "H.264" }));
 vi.mock("../../../lib/usePreference", () => ({

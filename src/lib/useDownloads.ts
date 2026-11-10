@@ -111,10 +111,10 @@ export function useDownloadsLibrary() {
   useEnsureLibraryLoaded();
   const records = useDownloadsLibraryStore((state) => state.records);
   const loading = useDownloadsLibraryStore((state) => state.loading);
-  const remove = useDownloadsLibraryStore((state) => state.remove);
+  const removeWithUndo = useDownloadsLibraryStore((state) => state.removeWithUndo);
   const clear = useDownloadsLibraryStore((state) => state.clear);
   const reload = useDownloadsLibraryStore((state) => state.load);
-  return { records, loading, remove, clear, reload };
+  return { records, loading, removeWithUndo, clear, reload };
 }
 
 export function useIsDownloaded(videoId: string | null | undefined): boolean {

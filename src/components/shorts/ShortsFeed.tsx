@@ -1,7 +1,9 @@
+import { getString } from "../../lib/i18n/index";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { useShortsFeed } from "../../lib/useShortsFeed";
+import { useShortsFeed, type ShortsQueueEnd } from "../../lib/useShortsFeed";
+import { listenForShortsKeys } from "../../lib/shortsKeys";
 import { prefetchShortStreams } from "../../lib/useShortStream";
 import { IMPRESSION_DWELL_MS, noteImpression } from "../../lib/feedImpressions";
 import { finishShortView, startShortView } from "../../lib/shortViews";
@@ -21,7 +23,7 @@ export function ShortsFeed() {
   const routeState = location.state as {
     initialShort?: ShortItem;
     initialQueue?: ShortItem[];
-    queueOnly?: boolean;
+    queueEnd?: ShortsQueueEnd;
   } | null;
   const initialShort = useMemo(() => {
     const candidate = routeState?.initialShort;
@@ -34,12 +36,11 @@ export function ShortsFeed() {
     if (!candidate.some((short) => short.id === videoId)) return null;
     return candidate;
   }, [routeState, videoId]);
-  const queueOnly = Boolean(routeState?.queueOnly && initialQueue);
-  const { items, loading, error, loadMore } = useShortsFeed(
+  const { items, loading, error, loadMore, moreLikeThis } = useShortsFeed(
     videoId,
     initialShort,
     initialQueue,
-    queueOnly,
+    initialQueue ? routeState?.queueEnd : undefined,
   );
   const [activeIndex, setActiveIndex] = useState(0);
   const [panelState, setPanelState] = useState<ShortsPanelState>("none");
@@ -54,16 +55,21 @@ export function ShortsFeed() {
   const slideRefs = useRef<(HTMLElement | null)[]>([]);
   const syncedRouteVideoIdRef = useRef<string | null>(null);
 
+  // The first gesture of any kind lifts the muted start, so that same key press isn't also a toggle.
+  const muteLiftedByRef = useRef<Event | null>(null);
   useEffect(() => {
-    const unmute = () => setMuted(false);
-    const opts = { once: true } as const;
+    const unmute = (event: Event) => {
+      muteLiftedByRef.current = event;
+      setMuted(false);
+    };
+    const opts = { once: true, capture: true } as const;
     window.addEventListener("pointerdown", unmute, opts);
     window.addEventListener("keydown", unmute, opts);
     window.addEventListener("wheel", unmute, opts);
     return () => {
-      window.removeEventListener("pointerdown", unmute);
-      window.removeEventListener("keydown", unmute);
-      window.removeEventListener("wheel", unmute);
+      window.removeEventListener("pointerdown", unmute, opts);
+      window.removeEventListener("keydown", unmute, opts);
+      window.removeEventListener("wheel", unmute, opts);
     };
   }, []);
 
@@ -171,6 +177,21 @@ export function ShortsFeed() {
     scrollToIndex(current + 1);
   }, [loadMore, scrollToIndex]);
 
+  useEffect(
+    () =>
+      listenForShortsKeys((action, event) => {
+        if (action.type === "mute") {
+          if (muteLiftedByRef.current !== event) setMuted((value) => !value);
+          return true;
+        }
+        if (action.type !== "page") return false;
+        if (action.offset > 0) advanceToNext();
+        else scrollToIndex(feedStateRef.current.activeIndex - 1);
+        return true;
+      }),
+    [advanceToNext, scrollToIndex],
+  );
+
   useEffect(() => {
     const active = items[activeIndex];
     if (!active || !unavailableIds.has(active.id)) return;
@@ -204,7 +225,7 @@ export function ShortsFeed() {
     <div className="relative h-full w-full bg-background" data-panel={panelState}>
       <div
         ref={containerRef}
-        className="hide-scrollbar h-full w-full snap-y snap-mandatory overflow-y-auto"
+        className="h-full w-full snap-y snap-mandatory overflow-y-auto"
       >
         {items.map((short, index) => {
           const distance = Math.abs(index - activeIndex);
@@ -234,6 +255,7 @@ export function ShortsFeed() {
                     setMuted(value === 0);
                   }}
                   onRequestAdvance={advanceToNext}
+                  onMoreLikeThis={() => void moreLikeThis(short)}
                   onUnavailable={() => markUnavailable(short.id)}
                 />
               )}
@@ -242,16 +264,16 @@ export function ShortsFeed() {
         })}
       </div>
 
-      <div className="absolute right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-3">
+      <div className="absolute end-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-3">
         <NavButton
-          ariaLabel="Previous Short"
+          ariaLabel={getString('shorts_previous_short')}
           disabled={activeIndex <= 0}
           onClick={() => scrollToIndex(activeIndex - 1)}
         >
           <ChevronUp className="h-5 w-5" />
         </NavButton>
         <NavButton
-          ariaLabel="Next Short"
+          ariaLabel={getString('shorts_next_short')}
           disabled={activeIndex >= items.length - 1}
           onClick={() => scrollToIndex(activeIndex + 1)}
         >

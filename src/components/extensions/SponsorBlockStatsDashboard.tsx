@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import { useMemo } from "react";
 import {
   Bar,
@@ -104,8 +105,8 @@ function ChartCard({
           children
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-            <p className="text-sm font-medium text-chrome-neutral-300">No skips recorded yet</p>
-            <p className="text-xs text-chrome-neutral-500">Segments you skip will show up here.</p>
+            <p className="text-sm font-medium text-chrome-neutral-300">{getString('sponsorblock_no_skips_recorded_yet')}</p>
+            <p className="text-xs text-chrome-neutral-500">{getString('sponsorblock_segments_you_skip_will_show_up_here')}</p>
           </div>
         )}
       </div>
@@ -143,13 +144,13 @@ export function SponsorBlockStatsDashboard({
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <StatTile icon={<Clock size={16} />} value={savedMinutes} label="Minutes saved" />
-      <StatTile icon={<Scissors size={16} />} value={segmentsSkipped} label="Segments skipped" />
-      <StatTile icon={<span className="font-mono text-sm font-bold">#</span>} value={activeCategories} label="Categories active" />
-      <StatTile icon={<span className="text-sm">★</span>} value={topCategory} label="Most skipped" />
+      <StatTile icon={<Clock size={16} />} value={savedMinutes} label={getString('sponsorblock_minutes_saved')} />
+      <StatTile icon={<Scissors size={16} />} value={segmentsSkipped} label={getString('sponsorblock_segments_skipped')} />
+      <StatTile icon={<span className="font-mono text-sm font-bold">#</span>} value={activeCategories} label={getString('sponsorblock_categories_active')} />
+      <StatTile icon={<span className="text-sm">★</span>} value={topCategory} label={getString('sponsorblock_most_skipped')} />
 
       <div className="col-span-2 lg:col-span-3">
-        <ChartCard title="Time saved by category" hasData={barData.length > 0}>
+        <ChartCard title={getString('sponsorblock_time_saved_by_category')} hasData={barData.length > 0}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={barData}
@@ -185,7 +186,7 @@ export function SponsorBlockStatsDashboard({
       </div>
 
       <div className="col-span-2 lg:col-span-1">
-        <ChartCard title="Segment share" hasData={pieData.length > 0}>
+        <ChartCard title={getString('sponsorblock_segment_share')} hasData={pieData.length > 0}>
           <div className="flex h-full flex-col">
             <div className="relative min-h-0 flex-1">
               <ResponsiveContainer width="100%" height="100%">

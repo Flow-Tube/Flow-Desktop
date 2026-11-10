@@ -1,8 +1,8 @@
-import type { LyricsEntry } from "../types";
+import type { LyricsEntry, WordTimestamp } from "../types";
 import type { Rgb } from "../../useDominantColor";
 import { ensureContrastOn, withTone } from "../../color/tone";
 
-/** Port of Android's LyricsPresentation.kt (romanization from the source only). */
+/** Port of Android's LyricsPresentation.kt. */
 
 export type LyricsAlign = "left" | "center" | "right";
 
@@ -51,9 +51,35 @@ export function nextMainLineTimes(lines: LyricsEntry[]): Array<number | null> {
   return result;
 }
 
-/** The Latin-script line under each lyric, when the source gives one and it is wanted. */
-export function lyricsRomanizations(lines: LyricsEntry[], showRomanization: boolean): Array<string | null> {
-  return lines.map((line) => (showRomanization && line.romanization?.trim() ? line.romanization : null));
+/** The Latin-script line under each lyric when it is wanted: the source's own, else one made on this computer. */
+export function lyricsRomanizations(
+  lines: LyricsEntry[],
+  showRomanization: boolean,
+  onDevice: ReadonlyArray<string | null> = [],
+): Array<string | null> {
+  return lines.map((line, index) => {
+    if (!showRomanization) return null;
+    return line.romanization?.trim() ? line.romanization : onDevice[index] ?? null;
+  });
+}
+
+/**
+ * The source's word timings carried onto `romanized`, when it splits into as many words as they do.
+ * Null otherwise: a Chinese line is timed per character but romanizes into fewer words.
+ */
+export function romanizedWordTimings(romanized: string, words: WordTimestamp[]): WordTimestamp[] | null {
+  const tokens = romanized.split(/\s+/).filter(Boolean);
+  if (tokens.length !== words.length) return null;
+  return words.map((word, index) => ({ ...word, text: tokens[index]! }));
+}
+
+/** The lines with their Latin version in place of the original, where they have one. */
+export function romanizedLines(lines: LyricsEntry[], romanizations: ReadonlyArray<string | null>): LyricsEntry[] {
+  return lines.map((line, index) => {
+    const romanized = romanizations[index];
+    if (!romanized) return line;
+    return { ...line, text: romanized, words: line.words?.length ? romanizedWordTimings(romanized, line.words) : line.words };
+  });
 }
 
 /** How one lyric line is dressed: its size, spacing, colour and alignment. */

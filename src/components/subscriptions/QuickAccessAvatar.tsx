@@ -54,12 +54,12 @@ export function QuickAccessAvatar({
         {hasNewVideos ? (
           <span
             aria-hidden="true"
-            className="absolute right-0 top-0 h-3 w-3 rounded-full bg-[var(--color-primary)] ring-2 ring-background"
+            className="absolute end-0 top-0 h-3 w-3 rounded-full bg-[var(--color-primary)] ring-2 ring-background"
           />
         ) : null}
       </span>
 
-      <span
+      <span dir="auto"
         className={`line-clamp-1 w-full text-center text-xs font-medium transition-colors ${
           active
             ? 'text-chrome-neutral-100'

@@ -59,6 +59,7 @@ pub fn parse_tab(page: &Value, channel_id: &str) -> ChannelTabResponse {
     let owner = items::Owner {
         id: Some(header.id.clone()),
         name: header.name,
+        avatar_url: header.avatar_url,
     };
     let mut response = ChannelTabResponse {
         channel_id: owner.id.clone().unwrap_or_default(),

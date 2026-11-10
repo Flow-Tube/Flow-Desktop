@@ -1,3 +1,4 @@
+import { getPlural, getString } from '../../lib/i18n/index';
 import React, { useState, useRef } from "react";
 import { unzipSync } from "fflate";
 import { parseSubscriptionExport } from "../../lib/api/youtube";
@@ -161,12 +162,12 @@ export const ImportStep: React.FC = () => {
         if (isZip) {
           const arrayBuffer = event.target?.result as ArrayBuffer;
           if (!arrayBuffer) {
-            throw new Error("Could not read the ZIP file content.");
+            throw new Error(getString("onboarding_import_zip_unreadable"));
           }
           const decompressed = unzipSync(new Uint8Array(arrayBuffer));
           const jsonKey = Object.keys(decompressed).find(k => k.endsWith(".json"));
           if (!jsonKey) {
-            throw new Error("Could not find any database configuration JSON file inside the backup ZIP.");
+            throw new Error(getString("onboarding_import_zip_no_data"));
           }
           const bytes = decompressed[jsonKey];
           text = new TextDecoder("utf-8").decode(bytes);
@@ -176,7 +177,7 @@ export const ImportStep: React.FC = () => {
 
         if (!text) {
           setImportState("error");
-          setErrorMessage("The chosen file is empty or unreadable.");
+          setErrorMessage(getString("onboarding_import_file_empty"));
           return;
         }
 
@@ -192,7 +193,7 @@ export const ImportStep: React.FC = () => {
 
         if (!channels || channels.length === 0) {
           setImportState("error");
-          setErrorMessage("No valid channels were found in this file format.");
+          setErrorMessage(getString("onboarding_import_no_channels"));
           return;
         }
 
@@ -221,13 +222,13 @@ export const ImportStep: React.FC = () => {
       } catch (err: any) {
         console.error("Failed to parse and import subscriptions:", err);
         setImportState("error");
-        setErrorMessage(err?.message || "An error occurred while parsing the subscription backup.");
+        setErrorMessage(err?.message || getString("onboarding_import_failed"));
       }
     };
 
     reader.onerror = () => {
       setImportState("error");
-      setErrorMessage("Could not read the chosen file.");
+      setErrorMessage(getString("onboarding_import_file_unreadable"));
     };
 
     if (isZip) {
@@ -242,10 +243,10 @@ export const ImportStep: React.FC = () => {
       {/* Hero Header */}
       <div className="mb-12">
         <h1 className="text-5xl font-semibold text-chrome-neutral-100 tracking-tight mb-3">
-          Import your data
+          {getString("onboarding_import_title")}
         </h1>
         <p className="text-lg text-chrome-neutral-400 max-w-2xl">
-          Optionally populate your feed instantly by uploading your existing subscriptions from YouTube, NewPipe, or standard OPML backups.
+          {getString("onboarding_import_subtitle")}
         </p>
       </div>
 
@@ -278,9 +279,9 @@ export const ImportStep: React.FC = () => {
               </svg>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg font-bold text-chrome-zinc-200">Click to browse files</h4>
+              <h4 className="text-lg font-bold text-chrome-zinc-200">{getString('onboarding_click_to_browse_files')}</h4>
               <p className="text-sm text-chrome-zinc-500 max-w-md mx-auto leading-relaxed">
-                Upload backup .zip, backup .json, Google Takeout CSV/XML, or standard OPML backups.
+                {getString("onboarding_import_formats_hint")}
               </p>
             </div>
           </div>
@@ -290,11 +291,13 @@ export const ImportStep: React.FC = () => {
           <div className="w-full max-w-md space-y-6 px-4 select-none">
             <div className="flex justify-between items-center text-sm font-bold uppercase tracking-wider text-chrome-zinc-400">
               <span>
-                {importState === "reading"
-                  ? "Reading payload..."
-                  : importState === "parsing"
-                  ? "Calibrating extraction..."
-                  : "Synchronizing channels..."}
+                {getString(
+                  importState === "reading"
+                    ? "onboarding_import_reading"
+                    : importState === "parsing"
+                    ? "onboarding_import_parsing"
+                    : "onboarding_import_subscribing",
+                )}
               </span>
               <span className="text-primary">{progress}%</span>
             </div>
@@ -315,9 +318,9 @@ export const ImportStep: React.FC = () => {
               </svg>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg font-bold text-chrome-emerald-400">Import successful</h4>
+              <h4 className="text-lg font-bold text-chrome-emerald-400">{getString('onboarding_import_successful')}</h4>
               <p className="text-sm text-chrome-zinc-400 max-w-md mx-auto leading-relaxed">
-                Natively registered {importedCount} creators to your subscriptions. Click to import another payload.
+                {getPlural("onboarding_import_done", importedCount)}
               </p>
             </div>
           </div>
@@ -331,9 +334,9 @@ export const ImportStep: React.FC = () => {
               </svg>
             </div>
             <div className="space-y-2">
-              <h4 className="text-lg font-bold text-chrome-red-400">Extraction error</h4>
+              <h4 className="text-lg font-bold text-chrome-red-400">{getString('onboarding_extraction_error')}</h4>
               <p className="text-sm text-chrome-zinc-400 max-w-md mx-auto leading-relaxed">
-                {errorMessage || "The backup layout could not be recognized."} Click to retry with another file.
+                {errorMessage || getString("onboarding_import_unrecognized")} {getString("onboarding_import_retry")}
               </p>
             </div>
           </div>
@@ -341,12 +344,12 @@ export const ImportStep: React.FC = () => {
       </div>
 
       <div className="bg-chrome-zinc-950/40 border border-chrome-zinc-800/80 rounded-2xl p-6 flex flex-col space-y-4 select-none">
-        <h4 className="text-xs font-bold uppercase tracking-widest text-chrome-zinc-500">Supported formats</h4>
-        <ul className="text-sm text-chrome-zinc-400 space-y-2 list-disc pl-5 leading-normal">
-          <li><strong>Google Takeout:</strong> CSV export containing subscriptions list.</li>
-          <li><strong>Flow Mobile & Desktop:</strong> Upload exported Master Backups (.zip containing app_data.json) or raw database exports.</li>
-          <li><strong>NewPipe & LibreTube:</strong> Standard exported JSON backups.</li>
-          <li><strong>Standard OPML / XML:</strong> Feed schemas exported from FreeTube, RSS readers, or other players.</li>
+        <h4 className="text-xs font-bold uppercase tracking-widest text-chrome-zinc-500">{getString('import_supported_formats_title')}</h4>
+        <ul className="text-sm text-chrome-zinc-400 space-y-2 list-disc ps-5 leading-normal">
+          <li><strong>Google Takeout:</strong> {getString("onboarding_import_format_takeout")}</li>
+          <li><strong>Flow:</strong> {getString("onboarding_import_format_flow")}</li>
+          <li><strong>NewPipe & LibreTube:</strong> {getString('onboarding_standard_exported_json_backups')}</li>
+          <li><strong>OPML / XML:</strong> {getString("onboarding_import_format_opml")}</li>
         </ul>
       </div>
     </div>

@@ -7,7 +7,8 @@ import { IconButton } from '../components/ui/IconButton';
 import { Select } from '../components/ui/Select';
 import { VideoGrid } from '../components/video/VideoGrid';
 import { getString } from '../lib/i18n/index';
-import { EXPLORE_DESTINATIONS, useExplore } from '../lib/useExplore';
+import { EXPLORE_DESTINATIONS, shelvesWithShorts, useExplore } from '../lib/useExplore';
+import { useShortsEnabled, videosWithShorts } from '../lib/useShortsContent';
 import { useInfiniteScroll } from '../lib/useInfiniteScroll';
 import { REGION_OPTIONS } from '../lib/regionOptions';
 import type { VideoSummary } from '../types/video';
@@ -23,6 +24,9 @@ const SHELF_PREVIEW = 8;
 export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCategoriesProps) {
   const explore = useExplore();
   const { page, loading, error, seeAll, region } = explore;
+  const shortsEnabled = useShortsEnabled();
+  const shelves = useMemo(() => shelvesWithShorts(page?.shelves ?? [], shortsEnabled), [page, shortsEnabled]);
+  const seeAllVideos = useMemo(() => videosWithShorts(seeAll?.videos ?? [], shortsEnabled), [seeAll?.videos, shortsEnabled]);
 
   const sentinelRef = useInfiniteScroll({
     hasNextPage: Boolean(seeAll?.continuation),
@@ -102,11 +106,11 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
                 variant="secondary"
                 size="sm"
               >
-                <ArrowLeft />
+                <ArrowLeft className="rtl:-scale-x-100" />
               </IconButton>
-              <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{seeAll.title}</h2>
+              <h2 dir="auto" className="text-xl font-bold tracking-tight text-chrome-neutral-100">{seeAll.title}</h2>
             </div>
-            <VideoGrid videos={seeAll.videos} onPlay={onPlay} onAddToQueue={onAddToQueue} />
+            <VideoGrid videos={seeAllVideos} onPlay={onPlay} onAddToQueue={onAddToQueue} />
             <div ref={sentinelRef} className="h-10" />
             {seeAll.loading && (
               <div className="flex justify-center py-6 text-chrome-neutral-500">
@@ -120,7 +124,9 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
           <div className="flex min-h-[360px] flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
             <div>
               <h2 className="text-base font-medium text-chrome-neutral-200">{getString(error)}</h2>
-              <p className="mt-1 text-sm text-chrome-neutral-400">{getString('explore_error_subtitle')}</p>
+              {error !== 'explore_rate_limited' && (
+                <p className="mt-1 text-sm text-chrome-neutral-400">{getString('explore_error_subtitle')}</p>
+              )}
             </div>
             <Button type="button" onClick={explore.refresh}>
               <RotateCcw className="h-4 w-4" />
@@ -129,10 +135,10 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
           </div>
         ) : (
           <div className="flex flex-col gap-10 pb-12">
-            {page?.shelves.map((shelf, index) => (
+            {shelves.map((shelf, index) => (
               <section key={`${shelf.title}-${index}`} className="flex flex-col">
                 <div className="mb-3 flex items-center justify-between px-1">
-                  <h2 className="text-xl font-bold tracking-tight text-chrome-neutral-100">{shelf.title}</h2>
+                  <h2 dir="auto" className="text-xl font-bold tracking-tight text-chrome-neutral-100">{shelf.title}</h2>
                   {shelf.more && (
                     <button
                       type="button"
@@ -144,7 +150,7 @@ export default function ExploreCategories({ onPlay, onAddToQueue }: ExploreCateg
                   )}
                 </div>
                 <VideoGrid
-                  videos={page.shelves.length === 1 ? shelf.videos : shelf.videos.slice(0, SHELF_PREVIEW)}
+                  videos={shelves.length === 1 ? shelf.videos : shelf.videos.slice(0, SHELF_PREVIEW)}
                   onPlay={onPlay}
                   onAddToQueue={onAddToQueue}
                 />

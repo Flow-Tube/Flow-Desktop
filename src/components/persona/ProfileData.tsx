@@ -120,7 +120,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
       <div className="mt-5 flex flex-col gap-3">
         <button
           onClick={handleExport}
-          className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-3 text-left text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)]"
+          className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-3 text-start text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)]"
         >
           <Download className="h-4 w-4 text-[var(--color-on-surface-variant)]" />
           <span className="flex min-w-0 flex-col">
@@ -132,7 +132,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isImporting}
-          className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-3 text-left text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)] disabled:opacity-50"
+          className="flex items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] px-4 py-3 text-start text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)] disabled:opacity-50"
         >
           {isImporting ? (
             <Loader2 className="h-4 w-4 animate-spin text-[var(--color-on-surface-variant)]" />
@@ -148,7 +148,7 @@ export function ProfileData({ brain, onImport, onReset }: ProfileDataProps) {
 
         <button
           onClick={() => setShowConfirmReset(true)}
-          className="flex items-center gap-3 rounded-xl border border-chrome-red-900/50 bg-chrome-red-950/30 px-4 py-3 text-left text-chrome-red-400 transition-colors hover:bg-chrome-red-950/40"
+          className="flex items-center gap-3 rounded-xl border border-chrome-red-900/50 bg-chrome-red-950/30 px-4 py-3 text-start text-chrome-red-400 transition-colors hover:bg-chrome-red-950/40"
         >
           <RotateCcw className="h-4 w-4" />
           <span className="flex min-w-0 flex-col">

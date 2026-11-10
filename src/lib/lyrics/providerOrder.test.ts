@@ -20,6 +20,15 @@ describe("lyrics provider order", () => {
     expect(resolved.filter((name) => saved.includes(name))).toEqual(saved);
   });
 
+  it("asks YouTube Music first by default, and adds NetEase and AMLL after Unison to a saved order", () => {
+    expect(DEFAULT_PROVIDER_ORDER[0]).toBe("YouTube");
+    const saved = ["LyricsPlus", "BetterLyrics", "LrcRed", "SimpMusic", "KuGou", "Paxsenix", "LrcLib", "Unison", "YouTubeSubtitle", "YouTube"];
+    const resolved = resolveProviderOrder(saved.join(","));
+    expect(resolved.indexOf("NetEase")).toBe(resolved.indexOf("Unison") + 1);
+    expect(resolved.indexOf("AMLL")).toBe(resolved.indexOf("NetEase") + 1);
+    expect(resolved.filter((name) => saved.includes(name))).toEqual(saved);
+  });
+
   it("puts lrc.red right after BetterLyrics in an order saved before it existed", () => {
     const saved = ["LyricsPlus", "BetterLyrics", "KuGou", "SimpMusic", "Paxsenix", "LrcLib", "YouTube"];
     const resolved = resolveProviderOrder(saved.join(","));
@@ -39,8 +48,10 @@ describe("lyrics provider order", () => {
     expect([...resolved].sort()).toEqual([...DEFAULT_PROVIDER_ORDER].sort());
   });
 
-  it("drops the removed YouTubeSubtitle stub from an old saved order", () => {
-    expect(resolveProviderOrder("YouTubeSubtitle,YouTube")).not.toContain("YouTubeSubtitle");
+  it("adds YouTube captions right before YouTube for a saved order that never had them", () => {
+    const resolved = resolveProviderOrder("YouTube,KuGou");
+    expect(resolved.indexOf("YouTubeSubtitle")).toBeGreaterThanOrEqual(0);
+    expect(new Set(resolved).size).toBe(resolved.length);
   });
 
   it("serializes known names once", () => {

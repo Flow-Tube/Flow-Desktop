@@ -78,7 +78,7 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
         style={{ backgroundColor: background || "rgba(245, 158, 11, 0.15)" }}
       >
         <div className={`flex items-center justify-between gap-2 text-xs font-bold ${darkText ? "text-chrome-black" : "text-chrome-white"}`}>
-          <span className="truncate">{message.author}</span>
+          <span dir="auto" className="truncate">{message.author}</span>
           {message.superChatAmount && <span className="shrink-0">{message.superChatAmount}</span>}
         </div>
         {message.message && (
@@ -92,9 +92,9 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
 
   if (message.messageType === "membership") {
     return (
-      <div className="rounded-lg border-l-2 border-chrome-emerald-500/50 bg-chrome-emerald-500/10 px-3 py-2">
+      <div className="rounded-lg border-s-2 border-chrome-emerald-500/50 bg-chrome-emerald-500/10 px-3 py-2">
         <div className="flex items-center gap-1.5 text-xs font-bold text-chrome-emerald-400">
-          <span className="truncate">{message.author}</span>
+          <span dir="auto" className="truncate">{message.author}</span>
           <AuthorBadges message={message} />
         </div>
         {message.message && (
@@ -118,8 +118,8 @@ function ChatRow({ message }: { message: LiveChatMessage }) {
         <div className="mt-0.5 h-6 w-6 shrink-0 rounded-full bg-surface-container-high" />
       )}
       <p className="min-w-0 break-words text-sm leading-snug text-chrome-neutral-200">
-        <span
-          className={`mr-1.5 inline-flex items-center gap-1 align-middle text-xs font-semibold ${authorNameClass(message)}`}
+        <span dir="auto"
+          className={`me-1.5 inline-flex items-center gap-1 align-middle text-xs font-semibold ${authorNameClass(message)}`}
         >
           {message.author}
           <AuthorBadges message={message} />
@@ -230,7 +230,7 @@ function ChatPanel({
         <h3 className="text-base font-medium text-chrome-neutral-200">
           {getString(isReplay ? "live_chat_replay_title" : "live_chat_title")}
         </h3>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ms-auto flex items-center gap-2">
           {canSwitchView && <ViewToggle view={view} onViewChange={onViewChange} />}
           {ended ? (
             <button
@@ -263,7 +263,7 @@ function ChatPanel({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <div ref={listRef} className="hide-scrollbar h-full select-text space-y-2.5 overflow-y-auto px-3 py-3">
+        <div ref={listRef} className="h-full select-text space-y-2.5 overflow-y-auto px-3 py-3">
           {loading && messages.length === 0 ? (
             <div className="flex items-center gap-2 px-1 py-2 text-sm text-chrome-neutral-500">
               <Loader2 size={16} className="animate-spin" />

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import type { SongItem } from "../../types/music";
 import { lyricsRequestFor } from "./lyricsHelper";
+import { fetchLyricsAhead, stopFetchingAhead } from "./lyricsAhead";
 import { EMPTY_LYRICS, useLyricsStore, type LyricsView } from "../../store/useLyricsStore";
 import { useMusicPlayerStore } from "../../store/useMusicPlayerStore";
 
@@ -24,7 +25,12 @@ export function useLyricsLookup(): void {
       waiting = null;
       if (timer) clearTimeout(timer);
       timer = null;
-      useLyricsStore.getState().load(lyricsRequestFor(track, durationSec));
+      const videoId = videoIdOf(track);
+      useLyricsStore.getState().load(lyricsRequestFor(track, durationSec), () => {
+        fetchLyricsAhead(videoId);
+      });
+      // After the load, so a skip to the song being fetched ahead joins that run instead of ending it.
+      stopFetchingAhead();
     };
 
     const follow = (state: ReturnType<typeof useMusicPlayerStore.getState>) => {

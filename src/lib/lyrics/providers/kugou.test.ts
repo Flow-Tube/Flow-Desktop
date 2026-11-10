@@ -18,7 +18,7 @@ vi.mock("../http", () => ({
       return { content: btoa(String.fromCharCode(...bytes)) };
     }
     const hash = new URL(url).searchParams.get("hash");
-    if (hash) return { candidates: [{ id: Number(hash), accesskey: "key" }] };
+    if (hash) return { candidates: [{ id: Number(hash), accesskey: "key", song: "Song", singer: "Band", duration: 200_000 }] };
     return { candidates: answers.keyword };
   },
 }));
@@ -42,7 +42,7 @@ describe("KuGou lookup", () => {
   });
 
   it("stops at the instrumental notice, so a vocal version of the song can't answer for it", async () => {
-    answers.songs = [hit(1, 200), hit(2, 180)];
+    answers.songs = [hit(1, 200), hit(2, 196)];
     expect(await lookup()).toEqual([]);
     expect(requests.downloads).toEqual([1]);
   });
@@ -54,7 +54,7 @@ describe("KuGou lookup", () => {
 
   it("still tries the next match when one has no lyrics at all", async () => {
     answers.lrc.delete(1);
-    answers.songs = [hit(1, 200), hit(2, 180)];
+    answers.songs = [hit(1, 200), hit(2, 196)];
     expect(await lookup()).toHaveLength(2);
     expect(requests.downloads).toEqual([1, 2]);
   });

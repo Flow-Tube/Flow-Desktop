@@ -7,6 +7,7 @@ import { Select } from "../components/ui/Select";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
 import { MusicItemCard } from "../components/music/MusicItemCard";
+import { OpenPlaylistFileButton } from "../components/playlist/OpenPlaylistFileButton";
 import { useGridStyle } from "../lib/useGridColumns";
 import {
   albumDetailPath,
@@ -99,6 +100,7 @@ export const AlbumsLibrary: React.FC = () => {
               placeholder={getString("albums_library_search")}
               containerClassName="w-full sm:w-72"
             />
+            <OpenPlaylistFileButton />
             <Button onClick={() => setShowCreateModal(true)} className="shrink-0">
               <Plus size={16} />
               {getString("albums_create")}

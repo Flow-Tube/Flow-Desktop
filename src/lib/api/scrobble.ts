@@ -71,6 +71,21 @@ export function flushScrobbles(): Promise<boolean> {
   return invokeBackend<boolean>("scrobble_flush");
 }
 
+/** The account's most played artists over the past year, most played first. */
+export function getScrobbleTopArtists(service: ScrobbleService, limit: number): Promise<string[]> {
+  return invokeBackend<string[]>("scrobble_top_artists", { service, limit });
+}
+
+export interface SimilarTrack {
+  artist: string;
+  title: string;
+}
+
+/** What Last.fm's listeners play alongside a song; empty unless signed in to Last.fm. */
+export function getScrobbleSimilarTracks(artist: string, title: string, limit: number): Promise<SimilarTrack[]> {
+  return invokeBackend<SimilarTrack[]>("scrobble_similar_tracks", { artist, title, limit });
+}
+
 // Player reports are fire-and-forget: a failed report must never disturb playback.
 async function report(command: string, args: Record<string, unknown>): Promise<void> {
   if (!(await isTauriEnv())) return;

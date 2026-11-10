@@ -7,23 +7,30 @@ import { profileStorage } from "../storage/profileStorage";
  * `lyrics/<videoId>.json` in app data, which outlives a restart without filling browser storage.
  */
 const MEMORY_SIZE = 32;
-const memory = new Map<string, LyricsEntry[]>();
+
+/** A song's lyrics and the source they came from; null for lyrics saved before the source was kept. */
+export interface CachedLyrics {
+  entries: LyricsEntry[];
+  provider: string | null;
+}
+
+const memory = new Map<string, CachedLyrics>();
 
 /** Where lyrics were kept before they moved to app data. */
 const LEGACY_PREFIX = "flow_lyrics_";
 
-export function getMemory(id: string): LyricsEntry[] | null {
-  const entries = memory.get(id);
-  if (!entries) return null;
+export function getMemory(id: string): CachedLyrics | null {
+  const cached = memory.get(id);
+  if (!cached) return null;
   // Re-inserting keeps the map in least recently used order.
   memory.delete(id);
-  memory.set(id, entries);
-  return entries;
+  memory.set(id, cached);
+  return cached;
 }
 
-export function setMemory(id: string, entries: LyricsEntry[]): void {
+export function setMemory(id: string, entries: LyricsEntry[], provider: string | null): void {
   memory.delete(id);
-  memory.set(id, entries);
+  memory.set(id, { entries, provider });
   while (memory.size > MEMORY_SIZE) {
     const oldest = memory.keys().next().value;
     if (oldest === undefined) break;
@@ -31,11 +38,17 @@ export function setMemory(id: string, entries: LyricsEntry[]): void {
   }
 }
 
-function parseEntries(raw: string | null): LyricsEntry[] | null {
+/** Reads a saved song: `{ provider, entries }`, or the bare list of entries earlier versions saved. */
+function parseCached(raw: string | null): CachedLyrics | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? (parsed as LyricsEntry[]) : null;
+    if (Array.isArray(parsed)) return { entries: parsed as LyricsEntry[], provider: null };
+    if (parsed && typeof parsed === "object" && Array.isArray((parsed as CachedLyrics).entries)) {
+      const { entries, provider } = parsed as CachedLyrics;
+      return { entries, provider: typeof provider === "string" ? provider : null };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -55,7 +68,7 @@ export function migrateLegacyCache(): Promise<void> {
     for (const key of keys) {
       try {
         const raw = profileStorage.getItem(key);
-        if (raw && parseEntries(raw)) await putCachedLyrics(key.slice(LEGACY_PREFIX.length), raw);
+        if (raw && parseCached(raw)) await putCachedLyrics(key.slice(LEGACY_PREFIX.length), raw);
       } catch {
         // An entry that cannot move is dropped with the rest.
       }
@@ -69,17 +82,17 @@ export function migrateLegacyCache(): Promise<void> {
   return migration;
 }
 
-export async function getDisk(id: string): Promise<LyricsEntry[] | null> {
+export async function getDisk(id: string): Promise<CachedLyrics | null> {
   await migrateLegacyCache();
   try {
-    return parseEntries(await getCachedLyrics(id));
+    return parseCached(await getCachedLyrics(id));
   } catch {
     return null;
   }
 }
 
-export function setDisk(id: string, entries: LyricsEntry[]): void {
-  void putCachedLyrics(id, JSON.stringify(entries)).catch(() => {});
+export function setDisk(id: string, entries: LyricsEntry[], provider: string | null): void {
+  void putCachedLyrics(id, JSON.stringify({ provider, entries } satisfies CachedLyrics)).catch(() => {});
 }
 
 export function evict(id: string): void {

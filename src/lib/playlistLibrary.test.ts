@@ -20,11 +20,15 @@ import {
   WATCH_LATER_PLAYLIST_ID,
   addVideoToStoredPlaylist,
   addVideoToWatchLater,
+  addVideosToStoredPlaylist,
   getStoredPlaylistById,
   moveStoredPlaylistTrack,
   removeVideoFromStoredPlaylist,
+  removeVideosFromStoredPlaylist,
   restoreStoredPlaylistTrack,
+  restoreStoredPlaylistTracks,
   savePlaylistToLibrary,
+  updateStoredPlaylistDetails,
   updateStoredPlaylistTracks,
 } from "./playlistLibrary";
 
@@ -199,5 +203,88 @@ describe("add times", () => {
     getPlaylistDetails.mockResolvedValue({ title: "Saved", videos: [video("kept"), video("fresh")] });
     await savePlaylistToLibrary({ type: "playlist", id: SAVED_ID, title: "Saved" });
     expect(await addedAt(SAVED_ID)).toEqual({ kept: 1_000, fresh: NOW });
+  });
+});
+
+describe("addVideosToStoredPlaylist", () => {
+  beforeEach(() => {
+    seed([
+      { id: OWNED_ID, name: "Mine", tracks: [video("old")], createdAt: "2024-01-01T00:00:00.000Z", source: "Owned" },
+      { id: SAVED_ID, name: "Saved", tracks: [], createdAt: "2024-01-01T00:00:00.000Z", source: "Saved" },
+      { id: WATCH_LATER_PLAYLIST_ID, name: "Watch Later", tracks: [video("wl")], createdAt: "2024-01-01T00:00:00.000Z", source: "Owned" },
+    ]);
+  });
+
+  const trackIds = async (id: string) => (await getStoredPlaylistById(id))?.tracks.map((track) => track.id);
+
+  it("adds what the playlist lacks, once each, in order", async () => {
+    const result = await addVideosToStoredPlaylist(OWNED_ID, [video("old"), video("x"), video("y"), video("x")]);
+    expect(result?.added).toBe(2);
+    expect(await trackIds(OWNED_ID)).toEqual(["old", "x", "y"]);
+    expect((await getStoredPlaylistById(OWNED_ID))?.videoCount).toBe(3);
+  });
+
+  it("keeps Watch Later newest first", async () => {
+    await addVideosToStoredPlaylist(WATCH_LATER_PLAYLIST_ID, [video("x"), video("y")]);
+    expect(await trackIds(WATCH_LATER_PLAYLIST_ID)).toEqual(["y", "x", "wl"]);
+  });
+
+  it("reports nothing added without writing when all are there", async () => {
+    setSetting.mockClear();
+    expect((await addVideosToStoredPlaylist(OWNED_ID, [video("old")]))?.added).toBe(0);
+    expect(setSetting).not.toHaveBeenCalled();
+  });
+
+  it("refuses a saved playlist", async () => {
+    expect(await addVideosToStoredPlaylist(SAVED_ID, [video("x")])).toBeNull();
+  });
+});
+
+describe("updateStoredPlaylistDetails", () => {
+  beforeEach(() => {
+    seed([
+      { id: OWNED_ID, name: "Mine", tracks: [], createdAt: "2024-01-01T00:00:00.000Z", source: "Owned" },
+      { id: "titled", name: "Old", sourceTitle: "Old", tracks: [], createdAt: "2024-01-01T00:00:00.000Z", source: "Owned" },
+      { id: SAVED_ID, name: "Saved", tracks: [], createdAt: "2024-01-01T00:00:00.000Z", source: "Saved" },
+    ]);
+  });
+
+  it("renames and describes an owned playlist", async () => {
+    await updateStoredPlaylistDetails(OWNED_ID, "  New name ", " Notes ");
+    const stored = await getStoredPlaylistById(OWNED_ID);
+    expect(stored?.name).toBe("New name");
+    expect(stored?.description).toBe("Notes");
+  });
+
+  it("wins over a captured source title", async () => {
+    await updateStoredPlaylistDetails("titled", "New", "");
+    expect((await getStoredPlaylistById("titled"))?.name).toBe("New");
+  });
+
+  it("leaves saved and built-in playlists alone", async () => {
+    expect(await updateStoredPlaylistDetails(SAVED_ID, "New", "")).toBeNull();
+    expect(await updateStoredPlaylistDetails(WATCH_LATER_PLAYLIST_ID, "New", "")).toBeNull();
+  });
+});
+
+describe("removing several tracks", () => {
+  const trackIds = async () => (await getStoredPlaylistById(WATCH_LATER_PLAYLIST_ID))?.tracks.map((track) => track.id);
+
+  beforeEach(() => {
+    seed([{ id: WATCH_LATER_PLAYLIST_ID, name: "Watch Later", tracks: [video("a"), video("b"), video("c"), video("d")], source: "Owned" }]);
+  });
+
+  it("removes them in one write", async () => {
+    setSetting.mockClear();
+    const removed = await removeVideosFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, new Set(["b", "c"]));
+    expect(removed.map((entry) => entry.track.id)).toEqual(["b", "c"]);
+    expect(await trackIds()).toEqual(["a", "d"]);
+    expect(setSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts them back where they were, even neighbours and the first", async () => {
+    const removed = await removeVideosFromStoredPlaylist(WATCH_LATER_PLAYLIST_ID, new Set(["a", "b", "c"]));
+    await restoreStoredPlaylistTracks(WATCH_LATER_PLAYLIST_ID, removed);
+    expect(await trackIds()).toEqual(["a", "b", "c", "d"]);
   });
 });

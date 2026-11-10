@@ -12,11 +12,10 @@ import {
 } from "lucide-react";
 import type { MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { MediaMenu } from "../ui/MediaMenu";
-import { useAppSettingsStore } from "../../store/useAppSettingsStore";
+import { useDownloadStore } from "../../store/useDownloadStore";
 import { useFeedActionsStore } from "../../store/useFeedActionsStore";
 import { useUiStore } from "../../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "../../lib/saveToast";
-import { SETTINGS } from "../../lib/settings/schema";
 import { buildShortQueue, shortSummaryToItem } from "../../lib/shortsQueue";
 import { prefetchStreamInfo } from "../../lib/streamResolution";
 import {
@@ -24,6 +23,7 @@ import {
   removeShortFromLibrary,
   saveShortToLibrary,
 } from "../../lib/savedShortsLibrary";
+import { dontRecommendLabel } from "../../lib/dontRecommendLabel";
 import { getString } from "../../lib/i18n/index";
 import { youtubeShortsUrl } from "../../lib/youtubeUrl";
 import { copyText } from "../../lib/clipboard";
@@ -32,14 +32,18 @@ import type { ShortVideoSummary, VideoSummary } from "../../types/video";
 import { backgroundTabClickProps, openedInBackgroundTab } from "../../lib/openTarget";
 import { openActions } from "../common/openActions";
 import { useOriginalTitle } from "../../lib/useOriginalTitle";
+import { useShortsPlayerDisabled } from "../../lib/useShortsContent";
+import { alignToEnd, growFromPoint } from "../../lib/direction";
 
 interface ShortCardProps {
   short: ShortVideoSummary;
   queue: ShortVideoSummary[];
   variant?: "shelf" | "grid";
+  /** The player stops at the end of `queue` instead of continuing into the feed: Saved Shorts. */
+  finiteQueue?: boolean;
 }
 
-export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
+export function ShortCard({ short, queue, variant = "grid", finiteQueue = false }: ShortCardProps) {
   const navigate = useNavigate();
   const toSrc = useProxyImageSrc();
   const showToast = useUiStore((s) => s.showToast);
@@ -47,12 +51,10 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
   const blockChannelAction = useFeedActionsStore((s) => s.blockChannel);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [savedToLibrary, setSavedToLibrary] = useState(false);
-  const disableShortsPlayer = useAppSettingsStore(
-    (state) => state.values[SETTINGS.DISABLE_SHORTS_PLAYER] === "true",
-  );
+  const disableShortsPlayer = useShortsPlayerDisabled();
   const cardRef = useRef<HTMLDivElement>(null);
   const originalTitle = useOriginalTitle(short.id, cardRef);
-  const title = originalTitle || short.title?.trim() || "Short";
+  const title = originalTitle || short.title?.trim() || getString('shorts_short');
   const video = useMemo<VideoSummary>(
     () => ({
       id: short.id,
@@ -97,7 +99,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
       state: {
         initialShort: shortSummaryToItem(short),
         initialQueue: buildShortQueue(queue),
-        queueOnly: true,
+        queueEnd: finiteQueue ? "stop" : "feed",
       },
     });
   };
@@ -105,14 +107,14 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
   const openContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    setMenuAnchor({ top: event.clientY, left: event.clientX });
+    setMenuAnchor({ top: event.clientY, ...growFromPoint(event.clientX) });
   };
 
   const openMenuFromDots = (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setMenuAnchor({ top: rect.bottom + 4, right: rect.right });
+    setMenuAnchor({ top: rect.bottom + 4, ...alignToEnd(rect) });
   };
 
   const copyLink = async () => {
@@ -175,7 +177,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
 
   const downloadShort = () => {
     setMenuAnchor(null);
-    showToast({ variant: "info", message: getString("shorts_download_coming_soon") });
+    useDownloadStore.getState().openVideo(video);
   };
 
   const isShelf = variant === "shelf";
@@ -185,11 +187,11 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
       ref={cardRef}
       onContextMenu={openContextMenu}
       className={[
-        "group relative flex shrink-0 flex-col gap-2 text-left",
+        "group relative flex shrink-0 flex-col gap-2 text-start",
         isShelf ? "w-[140px] sm:w-[176px]" : "w-full",
       ].join(" ")}
     >
-      <button type="button" onClick={playShort} {...backgroundTabClickProps(shortRoute)} className="flex w-full flex-col gap-2 text-left">
+      <button type="button" onClick={playShort} {...backgroundTabClickProps(shortRoute)} className="flex w-full flex-col gap-2 text-start">
         <span className="relative block aspect-[9/16] w-full overflow-hidden rounded-xl border border-chrome-neutral-800 bg-surface-container">
           {short.thumbnailUrl && (
             <img
@@ -205,13 +207,13 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
             </span>
           </span>
           {short.viewCountText && (
-            <span className="absolute bottom-2 left-2 rounded bg-chrome-black/70 px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-chrome-white">
+            <span className="absolute bottom-2 start-2 rounded bg-chrome-black/70 px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-chrome-white">
               {short.viewCountText}
             </span>
           )}
         </span>
 
-        <span
+        <span dir="auto"
           className={[
             "line-clamp-2 font-semibold leading-tight text-chrome-neutral-100 transition-colors group-hover:text-primary",
             isShelf ? "text-xs" : "text-sm",
@@ -225,7 +227,7 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
         type="button"
         aria-label={getString("more_options")}
         onClick={openMenuFromDots}
-        className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors hover:bg-chrome-black group-hover:opacity-100"
+        className="absolute end-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full border border-chrome-white/15 bg-chrome-black/80 text-chrome-white opacity-0 transition-colors hover:bg-chrome-black group-hover:opacity-100"
       >
         <MoreVertical className="h-4 w-4" />
       </button>
@@ -272,14 +274,16 @@ export function ShortCard({ short, queue, variant = "grid" }: ShortCardProps) {
               label: getString("shorts_menu_not_interested"),
               icon: <Ban size={16} />,
               group: "feed",
+              danger: true,
               onSelect: notInterested,
             },
             ...(short.channelId
               ? [{
                 id: "block-channel",
-                label: getString("shorts_menu_dont_recommend_channel"),
+                label: dontRecommendLabel(short.channelName),
                 icon: <EyeOff size={16} />,
                 group: "feed" as const,
+                danger: true,
                 onSelect: dontRecommendChannel,
               }]
               : []),

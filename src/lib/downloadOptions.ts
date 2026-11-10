@@ -41,9 +41,15 @@ export function qualityRows(
   return [...byHeight.values()].sort((left, right) => (right.height ?? 0) - (left.height ?? 0));
 }
 
+/** The resolution a format is known by: a portrait 1080x1920 Short is 1080p, not 1920p. */
+export function displayHeight(format: Pick<DownloadableFormat, "width" | "height">): number | null {
+  if (format.width && format.height) return Math.min(format.width, format.height);
+  return format.height;
+}
+
 /** The tallest row at or below the preferred height, else the smallest one. */
 export function defaultRow(rows: DownloadableFormat[], preferredHeight: number): DownloadableFormat | null {
-  return rows.find((row) => (row.height ?? 0) <= preferredHeight) ?? rows[rows.length - 1] ?? null;
+  return rows.find((row) => (displayHeight(row) ?? 0) <= preferredHeight) ?? rows[rows.length - 1] ?? null;
 }
 
 export function resolutionBadge(height: number | null): string | null {

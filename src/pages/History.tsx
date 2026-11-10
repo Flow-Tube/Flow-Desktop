@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clock, Loader2, Trash2 } from "lucide-react";
 import { VList, type VListHandle } from "virtua";
 import type { VideoSummary } from "../types/video";
@@ -6,34 +6,46 @@ import { getString } from "../lib/i18n/index";
 import { HistoryDateGroup } from "../components/history/HistoryDateGroup";
 import { MusicHistoryGroup } from "../components/history/MusicHistoryGroup";
 import { Button } from "../components/ui/Button";
+import { ShortsIcon } from "../components/ui/ShortsIcon";
 import { SearchInput } from "../components/ui/SearchInput";
 import { CategoryChips } from "../components/layout/CategoryChips";
-import { SETTINGS } from "../lib/settings/schema";
+import { Select } from "../components/ui/Select";
+import { confirmAction } from "../lib/dialogs";
 import { useHistory, groupHistoryByDate } from "../lib/useHistory";
+import { effectiveHistoryFilter, filterHistory, type HistoryFilter, type HistorySort } from "../lib/historyFilter";
+import { useShortsEnabled } from "../lib/useShortsContent";
+import { useHistoryYears } from "../lib/useHistoryYears";
 import { useDebounce } from "../lib/useDebounce";
-import { useAppSettingsStore } from "../store/useAppSettingsStore";
-
-type HistoryFilter = "all" | "videos" | "music";
+import { useHistoryStore } from "../store/useHistoryStore";
+import { useUiStore } from "../store/useUiStore";
 
 interface HistoryProps {
   onPlay: (video: VideoSummary) => void;
 }
 
 export const History: React.FC<HistoryProps> = ({ onPlay }) => {
-  const showMusicNav = useAppSettingsStore((s) => s.values[SETTINGS.MUSIC_NAVIGATION_ENABLED] !== "false");
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<HistoryFilter>("all");
+  const [chosenFilter, setFilter] = useState<HistoryFilter>("all");
+  const shortsEnabled = useShortsEnabled();
+  const filter = effectiveHistoryFilter(chosenFilter, shortsEnabled);
+  const [sort, setSort] = useState<HistorySort>("newest");
+  const [year, setYear] = useState<number | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const {
     history,
     loading,
     loadingMore,
     hasMore,
+    offset,
     loadMore,
     removeHistoryItem,
+    restoreHistoryItem,
+    removeShorts,
     clearHistory,
   } = useHistory();
+  const showToast = useUiStore((state) => state.showToast);
+  const years = useHistoryYears(history);
 
   const debouncedQuery = useDebounce(searchQuery, 200);
 
@@ -59,27 +71,27 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
     () => [
       { key: "all" as const, label: getString("history_filter_all") },
       { key: "videos" as const, label: getString("history_filter_videos") },
-      ...(showMusicNav ? [{ key: "music" as const, label: getString("history_filter_music") }] : []),
+      ...(shortsEnabled ? [{ key: "shorts" as const, label: getString("history_filter_shorts") }] : []),
+      { key: "music" as const, label: getString("history_filter_music") },
     ],
-    [showMusicNav],
+    [shortsEnabled],
   );
-  const activeFilter: HistoryFilter = !showMusicNav && filter === "music" ? "all" : filter;
-  const activeLabel = filters.find((f) => f.key === activeFilter)?.label ?? filters[0]?.label ?? "";
+  const activeLabel = filters.find((f) => f.key === filter)?.label ?? filters[0]?.label ?? "";
 
-  const visibleGroups = useMemo(() => {
-    const query = debouncedQuery.trim().toLowerCase();
-    const filtered = history.filter((record) => {
-      if (!showMusicNav && record.isMusic) return false;
-      if (activeFilter === "music" && !record.isMusic) return false;
-      if (activeFilter === "videos" && record.isMusic) return false;
-      if (query) {
-        const haystack = `${record.title ?? ""} ${record.channelName ?? ""}`.toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      return true;
-    });
-    return groupHistoryByDate(filtered);
-  }, [history, activeFilter, showMusicNav, debouncedQuery]);
+  const visibleGroups = useMemo(
+    () => groupHistoryByDate(filterHistory(history, { filter, year, sort, query: debouncedQuery, shortsEnabled })),
+    [history, filter, year, sort, debouncedQuery, shortsEnabled],
+  );
+
+  // Anything but the plain newest-first list is only right over all of history. The offset moves
+  // only when a page arrives, so a page that fails to load is not retried in a loop.
+  const needsWholeHistory = !shortsEnabled || filter !== "all" || year !== null || sort !== "newest" || debouncedQuery.trim() !== "";
+  const triedOffset = useRef<number | null>(null);
+  useEffect(() => {
+    if (!needsWholeHistory || !hasMore || loadingMore || triedOffset.current === offset) return;
+    triedOffset.current = offset;
+    void loadMore();
+  }, [needsWholeHistory, hasMore, loadingMore, offset, loadMore]);
 
   const handleClearAll = async () => {
     try {
@@ -91,10 +103,42 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
   };
 
   const handleDeleteItem = async (videoId: string) => {
+    const record = useHistoryStore.getState().records.find((item) => item.videoId === videoId);
     try {
       await removeHistoryItem(videoId);
     } catch (e) {
       console.error("Failed to delete watch history record", e);
+      showToast({ variant: "error", message: getString("history_remove_failed") });
+      return;
+    }
+    if (!record) return;
+    showToast({
+      message: getString("removed_from_history"),
+      actions: [{
+        label: getString("undo"),
+        onSelect: () => {
+          void restoreHistoryItem(record).catch((e) => {
+            console.error("Failed to restore watch history record", e);
+            showToast({ variant: "error", message: getString("toast_action_failed") });
+          });
+        },
+      }],
+    });
+  };
+
+  const handleDeleteShorts = async () => {
+    const confirmed = await confirmAction({
+      title: getString("history_delete_shorts_title"),
+      message: getString("history_delete_shorts_body"),
+      confirmLabel: getString("clear"),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await removeShorts();
+    } catch (e) {
+      console.error("Failed to delete Shorts from history", e);
+      showToast({ variant: "error", message: getString("history_delete_shorts_failed") });
     }
   };
 
@@ -148,6 +192,17 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
 
             <Button
               type="button"
+              variant="secondary"
+              onClick={() => void handleDeleteShorts()}
+              disabled={loading || history.length === 0}
+              className="shrink-0"
+            >
+              <ShortsIcon className="h-4 w-4" />
+              {getString("history_delete_shorts")}
+            </Button>
+
+            <Button
+              type="button"
               variant="destructive"
               onClick={() => setShowClearConfirm(true)}
               disabled={loading || history.length === 0}
@@ -159,6 +214,25 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
           </div>
         </header>
 
+        <div className="mt-6 mb-2 flex flex-col gap-4 md:flex-row md:items-center">
+          <Select
+            value={sort}
+            onChange={(value) => setSort(value as HistorySort)}
+            options={[
+              { value: "newest", label: getString("history_sort_newest") },
+              { value: "oldest", label: getString("history_sort_oldest") },
+            ]}
+            className="w-full md:w-44"
+          />
+          <Select
+            value={year === null ? "" : String(year)}
+            onChange={(value) => setYear(value ? Number(value) : null)}
+            options={[
+              { value: "", label: getString("history_filter_all_years") },
+              ...years.map((option) => ({ value: String(option), label: String(option) })),
+            ]}
+            className="w-full md:w-36"
+          />
         <CategoryChips
           categories={filters.map((f) => f.label)}
           activeCategory={activeLabel}
@@ -166,8 +240,9 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
             setFilter(filters.find((f) => f.label === label)?.key ?? "all")
           }
           sticky={false}
-          className="mt-2"
+          className="py-0"
         />
+        </div>
       </div>
 
       {loading ? (
@@ -191,7 +266,7 @@ export const History: React.FC<HistoryProps> = ({ onPlay }) => {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="mx-auto mt-8 w-full rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-8 text-center">
             <p className="text-sm font-medium text-chrome-neutral-300">
-              No history results match your search.
+              {hasMore ? getString("history_loading") : getString("history_no_results")}
             </p>
           </div>
         </div>

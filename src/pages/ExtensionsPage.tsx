@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Check, Copy, Info, RotateCcw } from "lucide-react";
 import {
   DEFAULT_SB_COLORS,
@@ -21,6 +20,7 @@ import { copyText } from "../lib/clipboard";
 import { confirmAction } from "../lib/dialogs";
 import { getString } from "../lib/i18n/index";
 import { isSettingDisabledUntilWired } from "../lib/settings/values";
+import { useBoolPref } from "../lib/usePreference";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -31,6 +31,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export const ExtensionsPage: React.FC = () => {
+  const [dearrowRandomFrame, setDearrowRandomFrame] = useBoolPref(SETTINGS.DEARROW_RANDOM_FRAME);
   const {
     loadSettings,
     sponsorBlockEnabled,
@@ -57,8 +58,6 @@ export const ExtensionsPage: React.FC = () => {
     sbUserId,
     setSbUserId,
   } = useSettingsStore();
-
-  const { t } = useTranslation("settings");
   const submissionsDisabled = isSettingDisabledUntilWired(SETTINGS.SB_SUBMIT_ENABLED);
   const { stats: categoryStats } = useSponsorBlockCategoryStats(segmentsSkipped);
 
@@ -80,8 +79,8 @@ export const ExtensionsPage: React.FC = () => {
 
   const handleResetStats = async () => {
     const confirmed = await confirmAction({
-      title: t("extensions.resetStatsTitle"),
-      message: t("extensions.resetStatsBody"),
+      title: getString('extensions_reset_stats_title'),
+      message: getString('extensions_reset_stats_body'),
       icon: RotateCcw,
       confirmLabel: getString("reset"),
       destructive: true,
@@ -108,16 +107,16 @@ export const ExtensionsPage: React.FC = () => {
     <div className="mx-auto w-full max-w-[1600px] px-6 py-8 pb-20 md:px-8">
       <header className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-chrome-neutral-100">
-          {t("extensions.title")}
+          {getString('extensions_title')}
         </h1>
         <p className="mt-1 text-sm text-chrome-neutral-400">
-          {t("extensions.description")}
+          {getString('extensions_description')}
         </p>
       </header>
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
         <section className="col-span-12">
-          <SectionLabel>{t("extensions.impact")}</SectionLabel>
+          <SectionLabel>{getString('extensions_impact')}</SectionLabel>
           <SponsorBlockStatsDashboard
             savedMinutes={savedMinutes}
             segmentsSkipped={segmentsSkipped}
@@ -128,45 +127,53 @@ export const ExtensionsPage: React.FC = () => {
         </section>
 
         <section className="col-span-12 lg:col-span-6">
-          <SettingsGroup title={t("extensions.integrations")}>
+          <SettingsGroup title={getString('extensions_integrations')}>
             <SettingItem
-              title={t("extensions.sponsorBlock")}
-              description={t("extensions.sponsorBlockDescription")}
+              title={getString('extensions_sponsor_block')}
+              description={getString('extensions_sponsor_block_description')}
             >
               <ToggleSwitch checked={sponsorBlockEnabled} onChange={setSponsorBlockEnabled} />
             </SettingItem>
             <SettingItem
-              title={t("extensions.deArrow")}
-              description={t("extensions.deArrowDescription")}
+              title={getString('extensions_de_arrow')}
+              description={getString('extensions_de_arrow_description')}
             >
               <ToggleSwitch checked={dearrowEnabled} onChange={setDeArrowEnabled} />
             </SettingItem>
             {dearrowEnabled && (
               <SettingItem
-                title={t("extensions.deArrowBadge")}
-                description={t("extensions.deArrowBadgeDescription")}
+                title={getString('extensions_de_arrow_random_frame')}
+                description={getString('extensions_de_arrow_random_frame_description')}
+              >
+                <ToggleSwitch checked={dearrowRandomFrame} onChange={setDearrowRandomFrame} />
+              </SettingItem>
+            )}
+            {dearrowEnabled && (
+              <SettingItem
+                title={getString('extensions_de_arrow_badge')}
+                description={getString('extensions_de_arrow_badge_description')}
               >
                 <ToggleSwitch checked={dearrowBadgeEnabled} onChange={setDeArrowBadgeEnabled} />
               </SettingItem>
             )}
             <SettingItem
-              title={t("extensions.returnDislike")}
-              description={t("extensions.returnDislikeDescription")}
+              title={getString('extensions_return_dislike')}
+              description={getString('extensions_return_dislike_description')}
             >
               <ToggleSwitch checked={rytdEnabled} onChange={setRytdEnabled} />
             </SettingItem>
             <SettingItem
-              title={t("discord.title")}
-              description={t("discord.description")}
+              title={getString('discord_title')}
+              description={getString('discord_description')}
             >
               <Select
                 value={discordMode}
                 onChange={(value) => void setDiscordMode(value as typeof discordMode)}
                 options={[
-                  { value: "off", label: t("discord.modeOff") },
-                  { value: "music", label: t("discord.modeMusic") },
-                  { value: "videos", label: t("discord.modeVideos") },
-                  { value: "musicAndVideos", label: t("discord.modeMusicAndVideos") },
+                  { value: "off", label: getString('discord_mode_off') },
+                  { value: "music", label: getString('discord_mode_music') },
+                  { value: "videos", label: getString('discord_mode_videos') },
+                  { value: "musicAndVideos", label: getString('discord_mode_music_and_videos') },
                 ]}
               />
             </SettingItem>
@@ -174,13 +181,13 @@ export const ExtensionsPage: React.FC = () => {
         </section>
 
         <section className="col-span-12 lg:col-span-6">
-          <SectionLabel>{t("extensions.serverSection")}</SectionLabel>
+          <SectionLabel>{getString('extensions_server_section')}</SectionLabel>
           <div className="overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-low">
             <div className="space-y-2 px-5 py-4">
               <div>
-                <div className="text-sm font-medium text-chrome-neutral-200">{t("extensions.apiServer")}</div>
+                <div className="text-sm font-medium text-chrome-neutral-200">{getString('extensions_api_server')}</div>
                 <p className="mt-0.5 text-xs text-chrome-neutral-400">
-                  {t("extensions.apiServerDescription")}
+                  {getString('extensions_api_server_description')}
                 </p>
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -193,15 +200,15 @@ export const ExtensionsPage: React.FC = () => {
                   inputMode="url"
                 />
                 <Button variant="secondary" onClick={() => setServerUrl(localServerUrl)}>
-                  {t("extensions.save")}
+                  {getString('extensions_save')}
                 </Button>
               </div>
             </div>
 
             <div className="border-t border-chrome-neutral-800/50">
               <SettingItem
-                title={t("extensions.submitSegments")}
-                description={t("extensions.submitSegmentsDescription")}
+                title={getString('extensions_submit_segments')}
+                description={getString('extensions_submit_segments_description')}
                 disabled={submissionsDisabled}
               >
                 <ToggleSwitch
@@ -215,13 +222,13 @@ export const ExtensionsPage: React.FC = () => {
             {sbSubmitEnabled && !submissionsDisabled && (
               <div className="space-y-3 border-t border-chrome-neutral-800/50 px-5 py-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-chrome-neutral-200">{t("extensions.submissionId")}</div>
+                  <div className="text-sm font-medium text-chrome-neutral-200">{getString('extensions_submission_id')}</div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={handleCopyUserId}
                       disabled={!localUserId}
-                      title={t("extensions.copyId")}
+                      title={getString('extensions_copy_id')}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-full text-chrome-neutral-400 transition-colors duration-200 ease-out hover:bg-surface-container-high hover:text-chrome-neutral-200 disabled:opacity-50"
                     >
                       {copied ? (
@@ -231,7 +238,7 @@ export const ExtensionsPage: React.FC = () => {
                       )}
                     </button>
                     <Button variant="ghost" size="sm" onClick={handleGenerateUserId}>
-                      {t("extensions.generateId")}
+                      {getString('extensions_generate_id')}
                     </Button>
                   </div>
                 </div>
@@ -239,13 +246,13 @@ export const ExtensionsPage: React.FC = () => {
                   value={localUserId}
                   onChange={(value) => setLocalUserId(value.trim())}
                   onBlur={() => setSbUserId(localUserId)}
-                  placeholder={t("extensions.submissionIdPlaceholder")}
+                  placeholder={getString('extensions_submission_id_placeholder')}
                   className="w-full font-mono text-xs"
                 />
                 <div className="flex items-start gap-2 rounded-lg border border-chrome-neutral-800 bg-surface-container p-3">
                   <Info size={14} className="mt-0.5 shrink-0 text-chrome-neutral-400" />
                   <p className="text-xs leading-relaxed text-chrome-neutral-400">
-                    {t("extensions.submissionIdNote")}
+                    {getString('extensions_submission_id_note')}
                   </p>
                 </div>
               </div>
@@ -255,12 +262,13 @@ export const ExtensionsPage: React.FC = () => {
 
         {sponsorBlockEnabled && (
           <section className="col-span-12">
-            <SettingsGroup title={t("extensions.segmentCategories")}>
+            <SettingsGroup title={getString('extensions_segment_categories')}>
               {SPONSORBLOCK_CATEGORIES.map((category) => (
                 <SponsorBlockCategoryRow
                   key={category}
                   name={SB_CATEGORY_META[category].name}
                   description={SB_CATEGORY_META[category].description}
+                  isHighlight={category === "poi_highlight"}
                   color={sponsorBlockColors[category] ?? DEFAULT_SB_COLORS[category]}
                   action={sponsorBlockActions[category] ?? "skip"}
                   defaultColor={DEFAULT_SB_COLORS[category]}

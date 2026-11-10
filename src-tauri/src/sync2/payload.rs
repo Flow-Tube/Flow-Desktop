@@ -1,13 +1,15 @@
 use std::io::Read;
 
 use flate2::Compression;
-use flate2::read::GzDecoder;
+use flate2::bufread::GzDecoder;
 use flate2::read::GzEncoder;
 
 use super::{Error, Result};
 
 const MIN_SIZE: usize = 256;
 const MAX_INFLATED: u64 = 64 * 1024 * 1024;
+/// `ID1`, `ID2`, `CM` 8 and `FLG` 0 (spec/crypto.md, Payload).
+const GZIP_START: [u8; 4] = [0x1f, 0x8b, 0x08, 0x00];
 
 /// PADMÉ with a 256-byte floor.
 pub fn padded_size(n: usize) -> usize {
@@ -38,12 +40,20 @@ pub fn decode_payload(payload: &[u8]) -> Result<Vec<u8>> {
     if length > rest.len() || rest[length..].iter().any(|&b| b != 0) {
         return Err(Error::Payload);
     }
+    let body = &rest[..length];
+    if !body.starts_with(&GZIP_START) {
+        return Err(Error::Payload);
+    }
+    // The buffered reader of `read::GzDecoder` would hide what is left after the member.
+    let mut decoder = GzDecoder::new(body);
     let mut content = Vec::new();
-    GzDecoder::new(&rest[..length])
+    decoder
+        .by_ref()
         .take(MAX_INFLATED + 1)
         .read_to_end(&mut content)
         .map_err(|_| Error::Payload)?;
-    if content.len() as u64 > MAX_INFLATED {
+    // A read that stopped at the limit left the trailer, so this refuses that too.
+    if !decoder.into_inner().is_empty() {
         return Err(Error::Payload);
     }
     Ok(content)

@@ -31,6 +31,8 @@ export interface LinkedStatus {
   /** The keychain hasn't given this device's keys: it waits for access, or access was refused. */
   keychainBlocked: boolean;
   recoverySaved: boolean;
+  /** Words the end of a restore had to make, to show once. */
+  replacedWords?: string | null;
   /** The recovery key changed from another device, until the user answers. */
   recoveryNotice: RecoveryNotice | null;
   /** The device that set the recovery key left: nothing is written until it is replaced. */
@@ -160,9 +162,20 @@ export const finishLoginChange = () => invokeBackend<void>("linked_finish_login_
 
 export const cancelLoginChange = () => invokeBackend<void>("linked_cancel_login_change");
 
-/** Resolves to the new recovery words, shown once. */
-export const restoreGroup = (url: string, words: string, login?: WebdavLogin) =>
-  invokeBackend<string>("linked_restore", { url, words, login: login ?? null });
+/** A device a restore asks about. `name` is null when it can't be read. */
+export interface RestoreDevice {
+  did: string;
+  name: string | null;
+  platform: string | null;
+}
+
+/** The group's devices, for the user to choose which to keep. Writes nothing. */
+export const previewRestore = (url: string, words: string, login?: WebdavLogin) =>
+  invokeBackend<RestoreDevice[]>("linked_preview_restore", { url, words, login: login ?? null });
+
+/** Resolves to the new recovery words, shown once. Devices not in `kept` are signed out next. */
+export const restoreGroup = (url: string, words: string, login: WebdavLogin | undefined, kept: string[]) =>
+  invokeBackend<string>("linked_restore", { url, words, login: login ?? null, kept });
 
 export const markRecoverySaved = () => invokeBackend<void>("linked_recovery_saved");
 /** Resolves to the new recovery words, shown once; the old ones stop working. */

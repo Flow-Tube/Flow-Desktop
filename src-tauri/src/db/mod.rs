@@ -9,10 +9,12 @@ pub mod download_jobs;
 pub mod downloads;
 pub mod known_shorts;
 pub mod library;
+pub mod local_media;
 pub mod music_content;
 pub mod music_home;
 pub mod music_queue;
 pub mod neuro_stores;
+pub mod notes;
 pub mod notifications;
 pub mod recommendations;
 pub mod seen_videos;
@@ -39,6 +41,10 @@ pub async fn initialize_database(dir: PathBuf) -> AppResult<SqlitePool> {
     // Bound the recommendation event log so it cannot grow without limit across sessions.
     if let Err(error) = recommendations::prune_recommendation_events(&pool, 2000).await {
         tracing::warn!(%error, "Failed to prune recommendation events");
+    }
+
+    if let Err(error) = crate::sync::saved_shorts::adopt_synced_playlist(&pool).await {
+        tracing::warn!(%error, "Failed to move synced Saved Shorts into the library");
     }
 
     Ok(pool)

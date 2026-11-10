@@ -12,7 +12,7 @@ import type { SongItem } from "../types/music";
 
 const song = (videoId: string): SongItem => ({
   id: videoId, title: "Song", artists: [], album: null, duration: null, musicVideoType: null,
-  thumbnail: null, explicit: false, videoId, playlistId: null, params: null,
+  thumbnail: "", explicit: false, videoId, playlistId: null, params: null,
 });
 
 let host: HTMLDivElement;

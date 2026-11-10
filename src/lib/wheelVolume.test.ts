@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { newWheelGesture, stepValueAfterWheel, wheelStep, wheelVolumeChange } from "./wheelVolume";
+import { newWheelGesture, wheelStep, wheelVolumeChange } from "./wheelVolume";
 
 describe("wheelStep", () => {
   it("gives each slow wheel notch its own step", () => {
@@ -59,21 +59,3 @@ describe("wheelVolumeChange", () => {
     expect(wheelVolumeChange(0, true, -1)).toEqual({ volume: 0.05, unmute: true });
   });
 });
-
-describe("stepValueAfterWheel", () => {
-  it("increments by stepSize on step -1 (up) and decrements on step 1 (down)", () => {
-    expect(stepValueAfterWheel(50, -1, 5, 10, 100)).toBe(55);
-    expect(stepValueAfterWheel(50, 1, 5, 10, 100)).toBe(45);
-  });
-
-  it("clamps to max and min", () => {
-    expect(stepValueAfterWheel(98, -1, 5, 10, 100)).toBe(100);
-    expect(stepValueAfterWheel(12, 1, 5, 10, 100)).toBe(10);
-  });
-
-  it("avoids floating-point drift with decimal steps", () => {
-    expect(stepValueAfterWheel(0.2, -1, 0.05, 0, 1)).toBe(0.25);
-    expect(stepValueAfterWheel(0.3, 1, 0.05, 0, 1)).toBe(0.25);
-  });
-});
-

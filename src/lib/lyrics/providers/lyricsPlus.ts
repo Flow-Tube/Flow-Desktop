@@ -1,5 +1,6 @@
 import type { LyricsEntry, LyricsProvider, WordTimestamp } from "../types";
-import { lyricsGetJson, enc } from "../http";
+import { lyricsGetJsonOrMiss, enc } from "../http";
+import { cleanArtist } from "../matching";
 
 // The other public mirrors (atomix.one, prjktla.my.id, lyricsplus-seven.vercel.app) were all down
 // on Android's 2026-10-19 probe: no connection, 502 and DEPLOYMENT_DISABLED.
@@ -77,13 +78,13 @@ export const lyricsPlusProvider: LyricsProvider = {
   name: "LyricsPlus",
   async getLyrics(_id, title, artist, durationSec, album): Promise<LyricsEntry[]> {
     if (!title.trim() || !artist.trim()) return [];
-    let url = `${SERVER}/v2/lyrics/get?title=${enc(title)}&artist=${enc(artist)}`;
+    let url = `${SERVER}/v2/lyrics/get?title=${enc(title)}&artist=${enc(cleanArtist(artist))}`;
     if (durationSec > 0) url += `&duration=${durationSec}`;
     if (album) url += `&album=${enc(album)}`;
-    const response = await lyricsGetJson<LpResponse>(url, {
+    const response = await lyricsGetJsonOrMiss<LpResponse>(url, {
       "User-Agent": USER_AGENT,
       Accept: "application/json,text/plain,*/*",
     });
-    return convertLyricsPlus(response);
+    return response ? convertLyricsPlus(response) : [];
   },
 };

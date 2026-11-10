@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
+import { Ban } from "lucide-react";
 import type { UserBrain } from "../../lib/api/recommendation";
 import { getChannelDetails } from "../../lib/api/youtube";
 import { getString } from "../../lib/i18n/index";
 
 interface ChannelMemoryProps {
   brain: UserBrain;
+  /** Left out while viewing another profile, which is read-only. */
+  onBlockChannel?: (channelId: string, channelName: string) => void;
 }
 
 function channelInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || "C";
 }
 
-export function ChannelMemory({ brain }: ChannelMemoryProps) {
+export function ChannelMemory({ brain, onBlockChannel }: ChannelMemoryProps) {
   const [channelNames, setChannelNames] = useState<Record<string, string>>({});
 
+  const blocked = new Set(brain.blocked_channels ?? []);
   const sortedChannels = Object.entries(brain.channel_scores || {})
+    .filter(([id]) => !blocked.has(id))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
@@ -73,13 +78,13 @@ export function ChannelMemory({ brain }: ChannelMemoryProps) {
               const scorePct = Math.round(score * 100);
 
               return (
-                <div key={id} className="grid grid-cols-[auto_1fr_auto] items-center gap-4 py-3">
+                <div key={id} className={`grid items-center gap-4 py-3 ${onBlockChannel ? "grid-cols-[auto_1fr_auto_auto]" : "grid-cols-[auto_1fr_auto]"}`}>
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-container-high)] text-sm font-semibold text-[var(--color-on-surface)]">
                     {channelInitial(name)}
                   </div>
 
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[var(--color-on-surface)]">{name}</p>
+                    <p dir="auto" className="truncate text-sm font-medium text-[var(--color-on-surface)]">{name}</p>
                     <p className="mt-0.5 truncate font-mono text-[10px] text-[var(--color-on-surface-variant)]">
                       {id}
                     </p>
@@ -93,11 +98,23 @@ export function ChannelMemory({ brain }: ChannelMemoryProps) {
                           style={{ width: `${scorePct}%` }}
                         />
                       </div>
-                      <span className="w-9 text-right font-mono text-xs text-[var(--color-on-surface)]">
+                      <span className="w-9 text-end font-mono text-xs text-[var(--color-on-surface)]">
                         {scorePct}%
                       </span>
                     </div>
                   </div>
+
+                  {onBlockChannel ? (
+                    <button
+                      type="button"
+                      onClick={() => onBlockChannel(id, name)}
+                      aria-label={getString("persona_channel_block", name)}
+                      title={getString("persona_channel_block", name)}
+                      className="grid h-8 w-8 place-items-center rounded-full text-[var(--color-on-surface-variant)] transition-colors duration-200 ease-out hover:bg-[var(--color-surface-container-high)] hover:text-[var(--color-on-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <Ban className="h-4 w-4" />
+                    </button>
+                  ) : null}
                 </div>
               );
             })}

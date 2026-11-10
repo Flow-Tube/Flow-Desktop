@@ -8,6 +8,7 @@ import { useLikesStore } from "../store/useLikesStore";
 import { useUiStore } from "../store/useUiStore";
 import { showSaveFailedToast, showSaveToast } from "./saveToast";
 import type { VideoSummary } from "../types/video";
+import { recapAction, recapDislike, recapDislikeRemoved } from "./recap/recapQueue";
 
 export type ReactionState = "none" | "liked" | "disliked";
 
@@ -65,6 +66,7 @@ export function useVideoReactions(video: VideoSummary | null, videoMeta: Reactio
     });
     // Music played in the video player never teaches the video engine.
     if (next !== "liked" || isMusicVideo(video)) return;
+    recapAction("LIKE");
     void logInteraction(
       video.id,
       video.title,
@@ -84,13 +86,17 @@ export function useVideoReactions(video: VideoSummary | null, videoMeta: Reactio
     const previous = state;
     const next: ReactionState = state === "disliked" ? "none" : "disliked";
     setState(next);
-    if (next !== "disliked") return;
+    if (next !== "disliked") {
+      recapDislikeRemoved(video.id);
+      return;
+    }
     if (likedInLibrary) {
       void toggleVideoLike({ ...video, channelId }).catch((err) => (
         console.warn("Failed to remove disliked video from likes", err)
       ));
     }
     if (isMusicVideo(video)) return;
+    recapDislike(video);
     void logInteraction(
       video.id,
       video.title,

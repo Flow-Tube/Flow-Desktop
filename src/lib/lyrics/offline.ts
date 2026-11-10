@@ -3,6 +3,8 @@ import { parseLyrics } from "./lyricsUtils";
 import { getString } from "../i18n/index";
 
 export interface OfflineLyrics {
+  /** Who the lyrics are shown under. */
+  provider: string;
   entries: LyricsEntry[];
   /** The file's `[offset:]` tag in ms; positive shows the lines sooner, as the sync offset does. */
   offsetMs: number;
@@ -11,9 +13,24 @@ export interface OfflineLyrics {
 /** The provider name lyrics saved with a download are shown under. */
 export const OFFLINE_LYRICS_PROVIDER = "Downloaded";
 
+/** The provider names a library file's own lyrics are shown under. */
+export const LOCAL_FILE_LYRICS_PROVIDER = "LocalFile";
+export const LOCAL_EMBEDDED_LYRICS_PROVIDER = "LocalEmbedded";
+
 /** A provider name as the lyrics UI shows it. */
 export function lyricsSourceLabel(providerName: string): string {
-  return providerName === OFFLINE_LYRICS_PROVIDER ? getString("lyrics_source_downloaded") : providerName;
+  switch (providerName) {
+    case OFFLINE_LYRICS_PROVIDER:
+      return getString("lyrics_source_downloaded");
+    case LOCAL_FILE_LYRICS_PROVIDER:
+      return getString("lyrics_source_local_file");
+    case LOCAL_EMBEDDED_LYRICS_PROVIDER:
+      return getString("lyrics_source_embedded");
+    case "YouTubeSubtitle":
+      return getString("lyrics_provider_youtube_captions");
+    default:
+      return providerName;
+  }
 }
 
 const offline = new Map<string, OfflineLyrics>();
@@ -47,11 +64,11 @@ export function parseOfflineLyrics(text: string): LyricsEntry[] {
  * would permanently lock a downloaded track to its saved copy even when a better version is
  * available online. They are shown at once and replaced only by a better provider result.
  */
-export function seedOfflineLyrics(videoId: string, text: string): void {
+export function seedOfflineLyrics(videoId: string, text: string, provider = OFFLINE_LYRICS_PROVIDER): void {
   if (!videoId || offline.has(videoId)) return;
   const entries = parseOfflineLyrics(text);
   if (entries.length === 0) return;
-  const lyrics = { entries, offsetMs: lrcOffsetMs(text) };
+  const lyrics = { provider, entries, offsetMs: lrcOffsetMs(text) };
   offline.set(videoId, lyrics);
   for (const listener of listeners) listener(videoId, lyrics);
 }

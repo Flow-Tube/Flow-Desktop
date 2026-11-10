@@ -169,6 +169,9 @@ export function playerCssVariables({ roles, backdrop }: PlayerColors): Record<st
     "--player-on-primary": css(roles.onPrimary),
     "--player-primary-container": css(roles.primaryContainer),
     "--player-on-primary-container": css(roles.onPrimaryContainer),
+    // The container every top-row button sits on: the surface lifted towards the control colour.
+    "--player-tonal": css(mix(roles.surface, roles.primary, 0.16)),
+    "--player-tonal-hover": css(mix(roles.surface, roles.primary, 0.26)),
     "--color-primary": css(roles.primary),
     "--color-on-primary": css(roles.onPrimary),
     "--color-on-primary-val": css(roles.onPrimary),
@@ -197,3 +200,21 @@ export function toggleColorsOn(
   }
   return { color: css(foreground), backgroundColor: css(foreground, 0.16) };
 }
+
+/**
+ * The surface variables for a panel inside the player drawn in the cover's colour: its surface and
+ * the containers on it are the player's surface lifted towards its ink, so rows, tabs and hovers
+ * keep their steps on the cover's colour instead of the theme's greys.
+ */
+export function coverSurfaceVariables({ roles }: PlayerColors): Record<string, string> {
+  const step = (amount: number) => css(mix(roles.surface, roles.ink, amount));
+  return {
+    "--color-surface-container-low": css(roles.surface),
+    "--color-surface-container": step(0.06),
+    "--color-surface-container-high": step(0.1),
+    "--color-surface-container-highest": step(0.15),
+    "--color-surface-row": step(0.06),
+    "--color-surface-row-hover": step(0.1),
+  };
+}
+

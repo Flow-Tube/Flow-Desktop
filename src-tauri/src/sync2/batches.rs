@@ -57,6 +57,7 @@ fn record_key(collection: Collection, record: &Value) -> Option<String> {
         Collection::Settings => field("key"),
         Collection::Subscriptions => field("name"),
         Collection::SubscribedChannels => field("channelId"),
+        Collection::Notes => field("id"),
         Collection::FlowNeuroBrain | Collection::MusicBrain => Some(String::new()),
     }
 }
@@ -235,9 +236,9 @@ pub fn parse_batch(content: &[u8]) -> Result<IncomingBatch, Error> {
 }
 
 /// Applies batches from one sender in one transaction, through the FLOW-SYNC/1 merges. Batches of
-/// collections this build doesn't know (Android's `notes`) are consumed without effect, and so are
-/// records it can't read, which would otherwise fail this run and every later one. Applied records
-/// count as known to the group, so this device doesn't send them back unchanged.
+/// collections this build doesn't know are consumed without effect, and so are records it can't
+/// read, which would otherwise fail this run and every later one. Applied records count as known
+/// to the group, so this device doesn't send them back unchanged.
 pub async fn apply_batches(
     pool: &SqlitePool,
     our_device_id: &str,

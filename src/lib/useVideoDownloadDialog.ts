@@ -18,6 +18,7 @@ import {
 } from "./downloadActions";
 import {
   defaultRow,
+  displayHeight,
   preferredCodec,
   qualityRows,
   resolutionBadge,
@@ -25,6 +26,7 @@ import {
 } from "./downloadOptions";
 import { IS_MACOS_RUNTIME } from "./platform";
 import { noteVideoSaved } from "./videoSaved";
+import { recapVideoAction } from "./recap/recapQueue";
 import { useAppSettingsStore } from "../store/useAppSettingsStore";
 import type { SongItem } from "../types/music";
 import type { VideoSummary } from "../types/video";
@@ -35,7 +37,8 @@ export type VideoDownloadMode = "video" | "audio";
 /** A short description of a format for the dock: "1080p · VP9 · 60 fps". */
 export function describeFormat(format: DownloadableFormat): string {
   const fps = format.fps && format.fps > 30 ? ` · ${format.fps} fps` : "";
-  return `${format.height ? `${format.height}p` : format.resolution} · ${format.videoCodec}${fps}`;
+  const height = displayHeight(format);
+  return `${height ? `${height}p` : format.resolution} · ${format.videoCodec}${fps}`;
 }
 
 export { resolutionBadge };
@@ -170,6 +173,7 @@ export function useVideoDownloadDialog(video: VideoSummary | null) {
         );
       }
       noteVideoSaved(video);
+      recapVideoAction(video, "DOWNLOAD");
       return started;
     } catch (reason) {
       setError(reason);

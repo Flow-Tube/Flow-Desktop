@@ -126,6 +126,21 @@ export function pauseAllMediaSessionClients(): void {
   }
 }
 
+export type MediaCommand = "toggle" | "next" | "previous";
+
+/**
+ * Runs a global key or tray click on whichever player owns the OS controls here.
+ * False when nothing here is loaded.
+ */
+export function runMediaCommand(command: MediaCommand): boolean {
+  const client = owner ? clients.get(owner) : undefined;
+  if (!client) return false;
+  const action: MediaSessionAction =
+    command === "next" ? "nexttrack" : command === "previous" ? "previoustrack" : client.isPlaying() ? "pause" : "play";
+  client.actions[action]?.({ action });
+  return true;
+}
+
 /**
  * Publishes the owner's state again after a pause, a track change or new
  * metadata. Handlers are re-registered too, since a WebView can drop them.

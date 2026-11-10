@@ -86,3 +86,11 @@ fn canonical_json_matches_the_golden_vector() {
     let out = String::from_utf8(to_canonical_json(input)).unwrap();
     assert_eq!(out, s(&f, "expected"), "canonical JSON key-ordering drift");
 }
+
+/// Android's `SyncSerialization.encodeNotes`: every field present, nulls included, keys sorted.
+#[test]
+fn a_note_matches_android_s_canonical_bytes() {
+    let line = r#"{"channelAvatarUrl":null,"channelHandle":null,"channelId":"UCx","channelName":"A channel","deleted":false,"durationSeconds":754,"id":"video:abc123def45","kind":"Video","subscriberCountText":null,"targetId":"abc123def45","text":"12:34 the good part","thumbnailUrl":null,"title":"A video","updatedAt":1700000000000}"#;
+    let note: flow_desktop_lib::sync::canonical::Note = serde_json::from_str(line).unwrap();
+    assert_eq!(String::from_utf8(to_canonical_json(&note)).unwrap(), line);
+}

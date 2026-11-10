@@ -21,7 +21,7 @@ export function MusicHistoryGrid({ videos, onRemoveFromHistory }: MusicHistoryGr
           key={`${video.id}-${index}`}
           variant="track-list"
           item={historyVideoToSong(video)}
-          className="bg-surface-container-low pr-3"
+          className="bg-surface-container-low pe-3"
           onPlay={() => void playQueue(songs, index)}
           appendActions={[
             {

@@ -58,6 +58,8 @@ export function Slider({
   return (
     <div
       className={`m3-slider ${vertical ? 'm3-slider--vertical' : ''} ${className}`}
+      // A vertical slider has no reading direction; its geometry is drawn left to right.
+      dir={vertical ? 'ltr' : undefined}
       data-pressed={pressed && !disabled}
       data-disabled={Boolean(disabled)}
       style={{ '--m3-fill': fill } as CSSProperties}

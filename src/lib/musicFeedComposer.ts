@@ -28,8 +28,20 @@ const SESSION_SEED = Math.floor(Math.random() * 2 ** 32);
 
 /** Always first, in this order, when they have content. */
 const HEAD_GROUPS = [
-  'listen-again', 'on-repeat', 'rotation', 'speed-dial', 'rediscover', 'deep-cuts', 'artists-for-you',
+  'your-playlists', 'your-subscriptions', 'listen-again', 'on-repeat', 'rotation', 'speed-dial', 'rediscover', 'deep-cuts', 'artists-for-you',
 ];
+
+/** After the shuffled groups: this one loads as you scroll down, so it mustn't push anything above you. */
+const TAIL_GROUPS = ['lastfm-discover'];
+
+/** YouTube's shelves that have a switch of their own, by the English title Android reads them by too. */
+const TITLED_SHELVES: Array<[RegExp, string]> = [
+  [/music videos for you/i, 'music-videos-for-you'],
+  [/live performances/i, 'live-performances'],
+  [/music videos/i, 'music-videos'],
+];
+
+const titledShelfId = (title: string) => TITLED_SHELVES.find(([pattern]) => pattern.test(title))?.[1];
 
 /** Three lead groups picked by how much the user has listened; the rest are shuffled. */
 const LEAD_GROUPS: Record<string, string[]> = {
@@ -55,15 +67,16 @@ const isAnchor = (section: MusicShelf) =>
 
 function remoteSection(section: MusicShelf): MusicFeedSection {
   const first = section.items[0];
+  const titled = titledShelfId(section.title);
   return {
-    id: `remote:${section.source ?? section.browseId ?? section.title}:${first ? itemKey(first) : ''}`,
+    id: titled ?? `remote:${section.source ?? section.browseId ?? section.title}:${first ? itemKey(first) : ''}`,
     title: section.title,
     subtitle: section.subtitle ?? undefined,
     items: section.items,
     browseId: section.browseId,
     params: section.params,
     source: section.source,
-    origin: isAnchor(section) ? 'anchor' : 'remote',
+    origin: isAnchor(section) || titled ? 'anchor' : 'remote',
   };
 }
 
@@ -123,10 +136,11 @@ function orderEntries(entries: MusicFeedEntry[], maturity: string, seed: number)
     lead === 'similar'
       ? [...groups.keys()].filter((key) => key.startsWith('similar:')).flatMap(take)
       : take(lead));
+  const tail = TAIL_GROUPS.flatMap(take);
   const rest = [...groups.entries()]
     .sort(([a], [b]) => sessionRank(seed, a) - sessionRank(seed, b))
     .flatMap(([, group]) => group);
-  return [...head, ...leads, ...rest, ...generic];
+  return [...head, ...leads, ...rest, ...tail, ...generic];
 }
 
 /**
@@ -151,12 +165,14 @@ export function composeMusicFeed(
 
   const seen = new Set(quickPicks.map((song) => itemKey({ type: 'song', ...song })));
   const output: MusicFeedEntry[] = [];
+  const hasVideosForYou = entries.some((entry) => entry.kind === 'section' && entry.section.id === 'music-videos-for-you');
   for (const entry of orderEntries(entries, maturity, options.sessionSeed ?? SESSION_SEED)) {
     if (entry.kind !== 'section') {
       output.push(entry);
       continue;
     }
     const { section } = entry;
+    if (section.id === 'music-videos' && hasVideosForYou) continue;
     // The personal block is the user's own music: those shelves may repeat each other
     // (as on Android) and never take songs away from the discovery shelves below.
     if (HEAD_GROUPS.includes(feedGroupOf(entry))) {

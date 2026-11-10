@@ -30,6 +30,23 @@ export async function pickFile(
   return null;
 }
 
+/** Several files at once, for an import that comes in parts. */
+export async function pickFiles(
+  title: string,
+  filters?: { name: string; extensions: string[] }[],
+): Promise<string[]> {
+  if (await isTauriEnv()) {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({ title, multiple: true, directory: false, filters });
+      return selected ?? [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 export async function pickSaveFile(
   title: string,
   defaultName: string,

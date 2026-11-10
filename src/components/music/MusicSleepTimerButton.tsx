@@ -8,6 +8,7 @@ import { useSleepTimerStore } from "../../store/useSleepTimerStore";
 import { AnchoredPortalMenu, type MenuAnchor } from "../ui/AnchoredPortalMenu";
 import { SleepTimerPanel } from "../sleep/SleepTimerPanel";
 import { HapticButton } from "./HapticButton";
+import { alignToEnd } from "../../lib/direction";
 
 interface MusicSleepTimerButtonProps {
   className: string;
@@ -27,7 +28,7 @@ export function MusicSleepTimerButton({ className, activeClassName }: MusicSleep
       <HapticButton
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect();
-          setAnchor({ top: rect.bottom + 6, right: rect.right });
+          setAnchor({ top: rect.bottom + 6, ...alignToEnd(rect) });
         }}
         aria-label={getString("sleep_timer")}
         aria-pressed={active}

@@ -17,6 +17,8 @@ interface MediaScrubberProps {
   className?: string;
   /** Opt in to the Material 3 Expressive look; ignored when the user turns it off. */
   expressive?: boolean;
+  /** Which shape the Expressive look takes. */
+  barStyle?: string;
   /**
    * The media's own clock. While `playing`, the bar follows it every frame
    * instead of waiting for `progress`, which only changes about once a second.
@@ -36,6 +38,7 @@ export function MediaScrubber({
   ariaLabel = getString("music_seek"),
   className = "",
   expressive = false,
+  barStyle = "default",
   clock,
   playing = false,
 }: MediaScrubberProps) {
@@ -175,6 +178,7 @@ export function MediaScrubber({
       {...sliderProps}
       className="m3-slider flex-1 cursor-pointer outline-none"
       data-pressed={dragging}
+      data-bar-style={barStyle}
       style={{ "--m3-fill": ratio } as CSSProperties}
     >
       <span className="m3-slider__track m3-slider__track--active" />
@@ -190,7 +194,7 @@ export function MediaScrubber({
       <div className={`relative ${trackH} w-full overflow-hidden ${trackShape}`}>
         <div
           ref={fillRef}
-          className={`absolute inset-y-0 left-0 bg-[var(--color-primary)] ${fillShape}`}
+          className={`absolute inset-y-0 start-0 bg-[var(--color-primary)] ${fillShape}`}
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -205,16 +209,21 @@ export function MediaScrubber({
   );
 
   if (isEdge || !showTimes) {
-    return <div className={`flex w-full items-center ${className}`}>{bar}</div>;
+    return (
+      <div dir="ltr" className={`flex w-full items-center ${className}`}>
+        {bar}
+      </div>
+    );
   }
 
   const rightLabel = countdown
     ? `-${formatTime(Math.max(0, duration - ratio * duration))}`
     : formatTime(duration);
 
+  // A timeline runs left to right in every language, with its times on the same sides.
   return (
-    <div className={`flex w-full items-center gap-3 ${className}`}>
-      <span className="w-10 shrink-0 text-right font-mono text-xs tabular-nums text-chrome-neutral-400">
+    <div dir="ltr" className={`flex w-full items-center gap-3 ${className}`}>
+      <span className="w-10 shrink-0 text-end font-mono text-xs tabular-nums text-chrome-neutral-400">
         {formatTime(ratio * duration)}
       </span>
       {bar}

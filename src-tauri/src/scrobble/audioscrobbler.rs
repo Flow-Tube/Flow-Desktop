@@ -8,7 +8,7 @@ use md5::{Digest, Md5};
 use serde_json::Value;
 
 use super::SignInError;
-use super::models::{Account, LoveEntry, ScrobbleEntry, SendOutcome};
+use super::models::{Account, LoveEntry, ScrobbleEntry, SendOutcome, SimilarTrack};
 use crate::api::http::shared_client;
 
 pub const MAX_BATCH: usize = 50;
@@ -153,6 +153,41 @@ pub fn love_params(love: &LoveEntry, session_key: &str) -> Params {
     ])
 }
 
+/// The artist names in a `user.getTopArtists` reply, most played first.
+pub fn top_artist_names(body: &Value) -> Vec<String> {
+    body.pointer("/topartists/artist")
+        .and_then(Value::as_array)
+        .map(|artists| {
+            artists
+                .iter()
+                .filter_map(|artist| artist.get("name").and_then(Value::as_str))
+                .filter(|name| !name.trim().is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The songs in a `track.getSimilar` reply, closest first.
+pub fn similar_track_pairs(body: &Value) -> Vec<SimilarTrack> {
+    body.pointer("/similartracks/track")
+        .and_then(Value::as_array)
+        .map(|tracks| {
+            tracks
+                .iter()
+                .filter_map(|track| {
+                    let title = track.get("name").and_then(Value::as_str)?;
+                    let artist = track.pointer("/artist/name").and_then(Value::as_str)?;
+                    (!title.trim().is_empty() && !artist.trim().is_empty()).then(|| SimilarTrack {
+                        artist: artist.to_string(),
+                        title: title.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn error_code(body: &Value) -> Option<i64> {
     body.get("error").and_then(Value::as_i64)
 }
@@ -218,6 +253,72 @@ impl Client {
         }
     }
 
+    /// The listener's most played artists over the past year, most played first.
+    pub async fn top_artists(
+        &self,
+        user_name: &str,
+        keys: &Keys,
+        limit: usize,
+    ) -> Result<Vec<String>, String> {
+        let limit = limit.to_string();
+        let body = self
+            .get(
+                &[
+                    ("method", "user.getTopArtists"),
+                    ("user", user_name),
+                    ("period", "12month"),
+                    ("limit", &limit),
+                ],
+                keys,
+            )
+            .await?;
+        Ok(top_artist_names(&body))
+    }
+
+    /// Songs listeners play alongside this one, closest first.
+    pub async fn similar_tracks(
+        &self,
+        artist: &str,
+        title: &str,
+        keys: &Keys,
+        limit: usize,
+    ) -> Result<Vec<SimilarTrack>, String> {
+        let limit = limit.to_string();
+        let body = self
+            .get(
+                &[
+                    ("method", "track.getSimilar"),
+                    ("artist", artist),
+                    ("track", title),
+                    ("autocorrect", "1"),
+                    ("limit", &limit),
+                ],
+                keys,
+            )
+            .await?;
+        Ok(similar_track_pairs(&body))
+    }
+
+    async fn get(&self, query: &[(&str, &str)], keys: &Keys) -> Result<Value, String> {
+        let auth = [("api_key", keys.api_key.as_str()), ("format", "json")];
+        let url = reqwest::Url::parse_with_params(self.base_url, query.iter().chain(&auth))
+            .map_err(|error| error.to_string())?;
+        let response = shared_client()
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| error.without_url().to_string())?;
+        let status = response.status();
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|_| format!("HTTP {status}"))?;
+        match error_code(&body) {
+            Some(code) => Err(format!("Error {code}")),
+            None => Ok(body),
+        }
+    }
+
     async fn post(&self, params: Params, keys: &Keys) -> Result<Value, String> {
         let response = shared_client()
             .post(self.base_url)
@@ -244,6 +345,26 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect()
+    }
+
+    #[test]
+    fn top_artists_and_similar_tracks_read_their_replies() {
+        let top = json!({"topartists": {"artist": [{"name": "A"}, {"name": " "}, {"name": "B"}]}});
+        assert_eq!(top_artist_names(&top), vec!["A", "B"]);
+        assert!(top_artist_names(&json!({"error": 6})).is_empty());
+
+        let similar = json!({"similartracks": {"track": [
+            {"name": "One", "artist": {"name": "A"}},
+            {"name": "", "artist": {"name": "B"}},
+            {"name": "Three"},
+        ]}});
+        assert_eq!(
+            similar_track_pairs(&similar),
+            vec![SimilarTrack {
+                artist: "A".into(),
+                title: "One".into()
+            }]
+        );
     }
 
     #[test]

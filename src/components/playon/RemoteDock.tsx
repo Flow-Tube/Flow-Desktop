@@ -20,11 +20,11 @@ export function RemoteDock() {
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 h-[72px] w-[90%] max-w-5xl -translate-x-1/2">
-      <div className="relative flex h-full items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high pl-3 pr-4">
+      <div className="relative flex h-full items-center overflow-hidden rounded-2xl border border-chrome-neutral-800 bg-surface-container-high ps-3 pe-4">
         <div className="flex w-1/3 min-w-0 items-center gap-3">
           {art && <img src={art} alt="" className="aspect-video h-12 shrink-0 rounded-xl object-cover" />}
           <div className="min-w-0">
-            <div className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">{now.title}</div>
+            <div dir="auto" className="line-clamp-1 text-[15px] font-semibold tracking-tight text-chrome-neutral-100">{now.title}</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-medium text-[var(--color-primary)]">
               <DeviceKindIcon kind={device.kind} className="h-3.5 w-3.5 shrink-0" />
               <span className="line-clamp-1">{getString("play_on_on_device", device.name)}</span>

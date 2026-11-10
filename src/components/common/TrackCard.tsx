@@ -1,3 +1,4 @@
+import { getString } from "../../lib/i18n/index";
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Play, Trash, ListPlus } from "lucide-react";
@@ -71,7 +72,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
 
       {/* Title & Artist info */}
       <div className="flex-grow min-w-0">
-        <h4
+        <h4 dir="auto"
           onClick={() => onPlay(track)}
           className={`text-sm font-semibold truncate cursor-pointer hover:text-chrome-red-400 transition-colors ${
             isActive ? "text-chrome-red-400" : "text-chrome-zinc-100"
@@ -79,7 +80,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
         >
           {track.title}
         </h4>
-        <p 
+        <p dir="auto" 
           onClick={(e) => {
             if (track.channelId) {
               e.stopPropagation();
@@ -104,7 +105,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
           {onAddToQueue && (
             <button
               onClick={() => onAddToQueue(track)}
-              title="Add to queue"
+              title={getString('music_add_to_queue')}
               className="p-1.5 rounded-xl hover:bg-chrome-zinc-800 text-chrome-zinc-400 hover:text-chrome-red-400 transition-colors"
             >
               <ListPlus size={14} />
@@ -114,7 +115,7 @@ export const TrackCard: React.FC<TrackCardProps> = ({
           {onRemoveFromQueue && (
             <button
               onClick={onRemoveFromQueue}
-              title="Remove from queue"
+              title={getString('music_remove_from_queue')}
               className="p-1.5 rounded-xl hover:bg-chrome-zinc-800 text-chrome-zinc-400 hover:text-primary transition-colors"
             >
               <Trash size={14} />

@@ -1,6 +1,6 @@
 use crate::errors::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -249,6 +249,64 @@ pub async fn get_watch_record(
     Ok(record)
 }
 
+/// The rows for `video_ids` that exist.
+pub async fn get_watch_records(
+    pool: &SqlitePool,
+    video_ids: &[String],
+) -> AppResult<Vec<WatchHistoryRecord>> {
+    let mut records = Vec::new();
+    // SQLite limits how many values one statement can bind.
+    for chunk in video_ids.chunks(500) {
+        let mut query = QueryBuilder::<Sqlite>::new(
+            "SELECT id, video_id, title, channel_name, channel_id, watch_date, watch_duration_seconds, total_duration_seconds, is_music, is_short
+             FROM watch_history
+             WHERE video_id IN (",
+        );
+        let mut ids = query.separated(", ");
+        for id in chunk {
+            ids.push_bind(id);
+        }
+        query.push(")");
+        records.extend(
+            query
+                .build_query_as::<WatchHistoryRecord>()
+                .fetch_all(pool)
+                .await
+                .map_err(AppError::from)?,
+        );
+    }
+    Ok(records)
+}
+
+/// The years anything was watched in, newest first.
+pub async fn watch_history_years(pool: &SqlitePool) -> AppResult<Vec<i64>> {
+    sqlx::query_scalar(
+        "SELECT DISTINCT CAST(strftime('%Y', watch_date) AS INTEGER) AS year
+         FROM watch_history
+         WHERE strftime('%Y', watch_date) IS NOT NULL
+         ORDER BY year DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+pub async fn short_video_ids(pool: &SqlitePool) -> AppResult<Vec<String>> {
+    sqlx::query_scalar("SELECT video_id FROM watch_history WHERE is_short")
+        .fetch_all(pool)
+        .await
+        .map_err(AppError::from)
+}
+
+pub async fn delete_short_watch_records(pool: &SqlitePool) -> AppResult<()> {
+    sqlx::query("DELETE FROM watch_history WHERE is_short")
+        .execute(pool)
+        .await
+        .map_err(AppError::from)?;
+
+    Ok(())
+}
+
 pub async fn delete_watch_record(pool: &SqlitePool, video_id: &str) -> AppResult<()> {
     sqlx::query("DELETE FROM watch_history WHERE video_id = ?")
         .bind(video_id)
@@ -362,5 +420,78 @@ mod channel_tests {
         let history = get_watch_history(&pool, 10, 0).await.unwrap();
         assert!(history[0].is_short);
         assert!(history[0].is_short_video());
+    }
+}
+
+#[cfg(test)]
+mod shorts_and_years_tests {
+    use super::*;
+
+    async fn pool() -> SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    fn record(video_id: &str, watch_date: &str, is_short: bool) -> WatchHistoryRecord {
+        WatchHistoryRecord {
+            id: None,
+            video_id: video_id.into(),
+            title: video_id.into(),
+            channel_name: None,
+            channel_id: None,
+            watch_date: watch_date.into(),
+            watch_duration_seconds: 10,
+            total_duration_seconds: Some(20),
+            is_music: false,
+            is_short,
+        }
+    }
+
+    #[tokio::test]
+    async fn lists_the_years_newest_first() {
+        let pool = pool().await;
+        for (id, date) in [
+            ("a", "2024-05-01T10:00:00Z"),
+            ("b", "2026-01-01T10:00:00.000Z"),
+            ("c", "2024-12-31T10:00:00Z"),
+        ] {
+            upsert_watch_record(&pool, &record(id, date, false))
+                .await
+                .unwrap();
+        }
+        assert_eq!(watch_history_years(&pool).await.unwrap(), vec![2026, 2024]);
+    }
+
+    #[tokio::test]
+    async fn deleting_shorts_keeps_other_videos() {
+        let pool = pool().await;
+        upsert_watch_record(&pool, &record("short", "2026-01-01T10:00:00Z", true))
+            .await
+            .unwrap();
+        upsert_watch_record(&pool, &record("video", "2026-01-01T10:00:00Z", false))
+            .await
+            .unwrap();
+        assert_eq!(short_video_ids(&pool).await.unwrap(), vec!["short"]);
+        delete_short_watch_records(&pool).await.unwrap();
+        let left = get_watch_history(&pool, 10, 0).await.unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].video_id, "video");
+    }
+
+    #[tokio::test]
+    async fn finds_rows_by_id() {
+        let pool = pool().await;
+        upsert_watch_record(&pool, &record("a", "2026-01-01T10:00:00Z", false))
+            .await
+            .unwrap();
+        let found = get_watch_records(&pool, &["a".to_string(), "missing".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(found.len(), 1);
     }
 }

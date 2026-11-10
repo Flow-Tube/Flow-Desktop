@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { clearWatchProgress } from "../lib/watchProgress";
 import { create } from "zustand";
 import { getSetting, setSetting, addWatchRecord } from "../lib/api/db";
 import {
@@ -8,6 +9,7 @@ import {
   unblockChannel as apiUnblockChannel,
 } from "../lib/api/recommendation";
 import { shouldRecordWatchHistory } from "../lib/deepFlow";
+import { recapAction } from "../lib/recap/recapQueue";
 import { isKnownShort } from "../lib/videoKind";
 import { isMusicVideo } from "../lib/utils";
 import type { VideoSummary } from "../types/video";
@@ -36,10 +38,12 @@ interface FeedActionsState {
   notInterested: (video: VideoSummary) => Promise<void>;
   /** Hides a video from every feed, e.g. after a thumbs-down on the watch page. */
   hideVideo: (videoId: string) => void;
-  blockChannel: (video: VideoSummary) => Promise<void>;
+  blockChannel: (video: Pick<VideoSummary, "channelId" | "channelName">) => Promise<void>;
   /** Lets a channel back into every feed: unblocked, and no longer set aside by "not interested". */
   unblockChannel: (channelId: string) => Promise<void>;
   markWatched: (video: VideoSummary) => Promise<void>;
+  /** Takes the mark away and clears how far it was watched; the history entry stays. */
+  markUnwatched: (videoId: string) => Promise<void>;
   moreLikeThis: (video: VideoSummary) => Promise<void>;
   addBlockedKeyword: (keyword: string) => void;
   removeBlockedKeyword: (keyword: string) => void;
@@ -189,6 +193,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
           false,
           m.isShort,
         );
+        recapAction("NOT_INTERESTED");
       } catch (e) {
         console.warn("Failed to record not interested", e);
         set(previous);
@@ -210,6 +215,7 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
       persist();
       try {
         await apiBlockChannel(channelId, video.channelName);
+        recapAction("BLOCK_CHANNEL");
       } catch (e) {
         console.warn("Failed to block channel", e);
         set({ blockedChannelIds: previous });
@@ -238,6 +244,21 @@ export const useFeedActionsStore = create<FeedActionsState>((set, get) => {
         set(previous);
         persist();
         throw e;
+      }
+    },
+
+    markUnwatched: async (videoId) => {
+      const previous = get().watchedVideoIds;
+      const next = new Set(previous);
+      next.delete(videoId);
+      set({ watchedVideoIds: next });
+      persist();
+      try {
+        await clearWatchProgress(videoId);
+      } catch (error) {
+        set({ watchedVideoIds: previous });
+        persist();
+        throw error;
       }
     },
 

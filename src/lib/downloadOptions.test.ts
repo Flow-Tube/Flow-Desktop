@@ -5,6 +5,7 @@ import {
   audioSizeEstimate,
   autoCodec,
   defaultRow,
+  displayHeight,
   formatBytes,
   formatTimeLeft,
   preferredCodec,
@@ -71,5 +72,15 @@ describe("download options", () => {
     expect(audioSizeEstimate(243, 128)).toBe(3_888_000);
     expect(formatTimeLeft(46)).toBe("46 s");
     expect(formatTimeLeft(150)).toBe("3 min");
+  });
+
+  it("names a portrait Short by its short side and defaults to it", () => {
+    const portrait = (id: string, width: number, height: number) => ({ ...format(id, height, "H.264"), width });
+    const tall = portrait("tall", 1080, 1920);
+    const small = portrait("small", 720, 1280);
+
+    expect(displayHeight(tall)).toBe(1080);
+    expect(displayHeight(format("wide", 1080, "H.264"))).toBe(1080);
+    expect(defaultRow([tall, small], 1080)).toBe(tall);
   });
 });

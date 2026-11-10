@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ThumbsUp, ThumbsDown, Share2, Bookmark, Download, Check, WandSparkles } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Share2, Bookmark, BookmarkCheck, Download, Check, WandSparkles } from "lucide-react";
 import { Button } from "../ui/Button";
 import { WatchOwner } from "./WatchOwner";
+import { WatchNoteButton } from "../note/WatchNote";
 import { useSettingsStore } from "../../store/useSettingsStore";
 import { usePlaylistModalStore } from "../../store/usePlaylistModalStore";
 import { useDownloadStore } from "../../store/useDownloadStore";
 import { useIsDownloaded } from "../../lib/useDownloads";
 import { useVideoReactions } from "../../lib/useVideoReactions";
+import { useVideoSaved } from "../../lib/useVideoSaved";
 import { formatCount } from "../../lib/utils";
 import { shareLink } from "../../lib/clipboard";
 import { useUiStore } from "../../store/useUiStore";
@@ -28,6 +30,7 @@ export function WatchMetadata({
   const openAddToPlaylist = usePlaylistModalStore((s) => s.openAddToPlaylist);
   const openVideoDownload = useDownloadStore((s) => s.openVideo);
   const isDownloaded = useIsDownloaded(currentVideo.id);
+  const isSaved = useVideoSaved(currentVideo.id);
   const reactions = useVideoReactions(currentVideo, videoData);
   const [showingOriginal, setShowingOriginal] = useState(false);
 
@@ -75,6 +78,7 @@ export function WatchMetadata({
           {hashtags.map((tag) => (
             <button
               key={tag}
+              dir="auto"
               onClick={() => navigate(`/search?q=${encodeURIComponent(tag)}`)}
               className="text-primary transition-opacity hover:opacity-80"
             >
@@ -91,14 +95,14 @@ export function WatchMetadata({
             className="grid cursor-default text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100"
           >
             {/* Both titles are stacked; only the visible one may be selected, or a copy pastes both. */}
-            <span
+            <span dir="auto"
               className={`col-start-1 row-start-1 transition-opacity duration-200 ease-out ${
                 showingOriginal ? "select-none opacity-0" : "select-text opacity-100"
               }`}
             >
               {primaryTitle}
             </span>
-            <span
+            <span dir="auto"
               aria-hidden
               className={`col-start-1 row-start-1 transition-opacity duration-200 ease-out ${
                 showingOriginal ? "select-text opacity-100" : "select-none opacity-0"
@@ -108,7 +112,7 @@ export function WatchMetadata({
             </span>
           </h1>
         ) : primaryTitle ? (
-          <h1 className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
+          <h1 dir="auto" className="select-text text-xl font-bold leading-snug tracking-tight text-chrome-neutral-100">{primaryTitle}</h1>
         ) : (
           // A cold open starts playback from the video id alone; the title lands
           // a moment later. A placeholder bar reads better than an empty heading.
@@ -168,13 +172,14 @@ export function WatchMetadata({
             </button>
           </div>
 
+          <WatchNoteButton video={currentVideo} videoData={videoData} />
           <Button variant="tonal" onClick={() => void shareVideo()}>
             <Share2 size={18} />
             {getString("share")}
           </Button>
           <Button variant="tonal" onClick={() => openAddToPlaylist(saveTarget)}>
-            <Bookmark size={18} />
-            {getString("save")}
+            {isSaved ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+            {getString(isSaved ? "watch_saved" : "save")}
           </Button>
           <Button variant="tonal" onClick={() => openVideoDownload(saveTarget)}>
             {isDownloaded ? <Check size={18} /> : <Download size={18} />}

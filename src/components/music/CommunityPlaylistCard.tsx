@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next';
+import { getString } from '../../lib/i18n/index';
 import { ChevronRight, Play } from 'lucide-react';
 
 import { useProxyImageSrc } from '../../lib/useImageProxy';
@@ -16,23 +16,22 @@ const PREVIEW_ROWS = 3;
 
 /** A playlist sampler: cover mosaic, three playable tracks, then Play and Open. */
 export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPlayPreview }: Props) {
-  const { t } = useTranslation('common');
   const toSrc = useProxyImageSrc();
   const covers = preview.map((track) => track.thumbnail).filter(Boolean).slice(0, 4);
   const byline = playlist.author?.name || playlist.songCountText;
   return (
     <div className="flex w-72 flex-col gap-3 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-4 md:w-80">
-      <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-left">
+      <button type="button" onClick={onOpen} className="group flex items-center gap-3 text-start">
         <div className="grid h-20 w-20 shrink-0 grid-cols-2 overflow-hidden rounded-xl bg-surface-container-high">
           {covers.length === 4
-            ? covers.map((url) => <img key={url} src={toSrc(url)} alt="" loading="lazy" className="h-full w-full object-cover" />)
+            ? covers.map((url, index) => <img key={index} src={toSrc(url)} alt="" loading="lazy" className="h-full w-full object-cover" />)
             : playlist.thumbnail && (
               <img src={toSrc(playlist.thumbnail)} alt="" loading="lazy" className="col-span-2 row-span-2 h-full w-full object-cover" />
             )}
         </div>
         <div className="min-w-0">
-          <p className="line-clamp-2 text-base font-medium text-chrome-neutral-100 group-hover:underline">{playlist.title}</p>
-          {byline && <p className="truncate text-sm text-chrome-neutral-400">{byline}</p>}
+          <p dir="auto" className="line-clamp-2 text-base font-medium text-chrome-neutral-100 group-hover:underline">{playlist.title}</p>
+          {byline && <p dir="auto" className="truncate text-sm text-chrome-neutral-400">{byline}</p>}
         </div>
       </button>
 
@@ -42,12 +41,17 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
             key={track.videoId ?? track.id}
             type="button"
             onClick={() => onPlayPreview(track)}
-            className="flex items-center gap-3 px-1 py-2 text-left transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
+            className="flex items-center gap-3 px-1 py-2 text-start transition-colors duration-200 ease-out hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-[var(--color-primary)]"
           >
             <img src={track.thumbnail} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-md object-cover" />
             <span className="min-w-0 truncate text-sm text-chrome-neutral-200">
-              {track.title}
-              {track.artists[0]?.name && <span className="text-chrome-neutral-400"> · {track.artists[0].name}</span>}
+              <bdi>{track.title}</bdi>
+              {track.artists[0]?.name && (
+                <span className="text-chrome-neutral-400">
+                  {" · "}
+                  <bdi>{track.artists[0].name}</bdi>
+                </span>
+              )}
             </span>
           </button>
         ))}
@@ -60,15 +64,15 @@ export function CommunityPlaylistCard({ playlist, preview, onOpen, onPlay, onPla
           className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] transition-opacity duration-200 ease-out hover:opacity-90"
         >
           <Play className="h-4 w-4" />
-          {t('musicPlay')}
+          {getString('music_play')}
         </button>
         <button
           type="button"
           onClick={onOpen}
           className="inline-flex items-center gap-1 rounded-full bg-surface-container-high px-4 py-2 text-sm font-medium text-chrome-neutral-200 transition-colors duration-200 ease-out hover:bg-surface-container-highest"
         >
-          {t('musicOpen')}
-          <ChevronRight className="h-4 w-4" />
+          {getString('music_open')}
+          <ChevronRight className="h-4 w-4 rtl:-scale-x-100" />
         </button>
       </div>
     </div>

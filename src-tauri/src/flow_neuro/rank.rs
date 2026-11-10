@@ -20,8 +20,8 @@ use crate::flow_neuro::ranker::{
 };
 use crate::flow_neuro::scoring::{
     CHANNEL_SUPPRESSION_DAYS, COLD_START_THRESHOLD, ContentVector, FlowPersona, IdfSnapshot,
-    ONBOARDING_WARMUP_INTERACTIONS, ScoredVideo, TimeBucket, UserBrain, classify_persona,
-    is_known_short, time_bucket_confidence,
+    ONBOARDING_WARMUP_INTERACTIONS, ScoredVideo, TimeBucket, UserBrain,
+    calculate_cosine_similarity, classify_persona, is_known_short, time_bucket_confidence,
 };
 use crate::flow_neuro::specificity::specificity;
 use crate::flow_neuro::vector_math::{RECENT_SHARE, blend};
@@ -280,6 +280,30 @@ pub fn about(
                 .topics
                 .keys()
                 .any(|topic| topics.contains(topic))
+        })
+        .collect()
+}
+
+/// How close each video reads to the viewer's overall taste, from 0 to 1.
+#[must_use]
+pub fn taste_affinity(ctx: &RankContext, videos: &[VideoSummary]) -> HashMap<String, f64> {
+    let brain = ctx.brain;
+    let idf = IdfSnapshot {
+        word_frequencies: brain.idf_word_frequency.clone(),
+        total_documents: brain.idf_total_documents,
+    };
+    let reader = TopicReader {
+        spec: brain.key_spec(),
+        idf: &idf,
+    };
+    videos
+        .iter()
+        .map(|video| {
+            let vector = vector_of(ctx, video, &reader);
+            (
+                video.id.clone(),
+                calculate_cosine_similarity(&brain.global_vector, &vector).clamp(0.0, 1.0),
+            )
         })
         .collect()
 }

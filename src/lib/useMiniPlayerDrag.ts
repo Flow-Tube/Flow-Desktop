@@ -3,6 +3,7 @@ import type React from "react";
 import { setSettingValue, useAppSettingsStore } from "../store/useAppSettingsStore";
 import { DRAG_THRESHOLD_PX } from "./pointerGesture";
 import { SETTINGS } from "./settings/schema";
+import { miniPlayerWidthPx } from "./miniPlayerSize";
 
 export interface MiniPlayerRatios {
   xRatio: number;
@@ -99,6 +100,7 @@ export function useMiniPlayerDrag({
   const [isDragging, setIsDragging] = useState(false);
   const currentPosRef = useRef<{ x: number; y: number } | null>(null);
   const savedPositionSetting = useAppSettingsStore((s) => s.values[SETTINGS.MINI_PLAYER_POSITION]);
+  const miniPlayerSize = useAppSettingsStore((s) => s.values[SETTINGS.MINI_PLAYER_SIZE]);
   const ratiosRef = useRef<MiniPlayerRatios>(parseSavedPosition(savedPositionSetting));
   const pressRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -112,7 +114,7 @@ export function useMiniPlayerDrag({
         return { width: rect.width, height: rect.height };
       }
     }
-    const defaultWidth = Math.min(420, window.innerWidth - 32);
+    const defaultWidth = Math.min(miniPlayerWidthPx(miniPlayerSize), window.innerWidth - 32);
     return { width: defaultWidth, height: (defaultWidth * 9) / 16 };
   };
 
@@ -135,7 +137,7 @@ export function useMiniPlayerDrag({
         syncPositionToDom(pos.x, pos.y);
       }
     }
-  }, [savedPositionSetting, isFloating]);
+  }, [savedPositionSetting, isFloating, miniPlayerSize]);
 
   useLayoutEffect(() => {
     if (!isFloating) {

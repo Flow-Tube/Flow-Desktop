@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { volumeGain } from "./volumeCurve";
 import { musicAudioEngine } from "./musicAudioEngine";
@@ -154,5 +154,86 @@ describe("a song WebKit reports at twice its length", () => {
     reports(pair[0], 245.3, 245.29);
     expect(musicAudioEngine.getDuration()).toBe(245.3);
     expect(musicAudioEngine.takeListedEnd()).toBe(false);
+  });
+});
+
+describe("crossfade without a buffered next song", () => {
+  const playing = (el: HTMLAudioElement) => Object.defineProperty(el, "paused", { value: false, configurable: true });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    musicAudioEngine.setVolume(1);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps the song a skip leaves playing until the next one starts, then fades the two", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/a", null);
+    playing(pair[0]);
+
+    musicAudioEngine.holdForSkip(1);
+    await musicAudioEngine.load("http://127.0.0.1/stream/b", null);
+    expect(musicAudioEngine.getActiveElement()).toBe(pair[1]);
+    expect(pair[0].getAttribute("src")).toBe("http://127.0.0.1/stream/a");
+    expect(pair[1].volume).toBe(0);
+
+    // A second skip before the next song plays only changes what loads.
+    musicAudioEngine.holdForSkip(1);
+    expect(musicAudioEngine.clearPreload()).toBeNull();
+    expect(pair[0].getAttribute("src")).toBe("http://127.0.0.1/stream/a");
+
+    pair[1].dispatchEvent(new Event("playing"));
+    vi.advanceTimersByTime(500);
+    expect(pair[0].volume).toBeGreaterThan(0);
+    expect(pair[0].volume).toBeLessThan(1);
+    expect(pair[1].volume).toBeGreaterThan(0);
+
+    vi.advanceTimersByTime(600);
+    expect(pair[0].getAttribute("src")).toBeNull();
+    expect(pair[1].volume).toBeCloseTo(1);
+  });
+
+  it("lets the old song go when playback pauses, or the next song never starts", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/a", null);
+    playing(pair[0]);
+    musicAudioEngine.holdForSkip(1);
+    musicAudioEngine.pause();
+    expect(pair[0].getAttribute("src")).toBeNull();
+    expect(pair[1].volume).toBeCloseTo(1);
+
+    await musicAudioEngine.load("http://127.0.0.1/stream/b", null);
+    playing(pair[1]);
+    musicAudioEngine.holdForSkip(1);
+    vi.advanceTimersByTime(10_000);
+    expect(pair[1].getAttribute("src")).toBeNull();
+    expect(pair[0].volume).toBeCloseTo(1);
+  });
+
+  it("fades the song out on its own, and brings the next one in quickly", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/a", null);
+    musicAudioEngine.fadeThrough(2);
+    expect(musicAudioEngine.isFadingThrough()).toBe(true);
+    vi.advanceTimersByTime(2_100);
+    expect(pair[0].volume).toBeCloseTo(0);
+
+    await musicAudioEngine.load("http://127.0.0.1/stream/b", null);
+    expect(musicAudioEngine.isFadingThrough()).toBe(false);
+    expect(pair[0].volume).toBe(0);
+    pair[0].dispatchEvent(new Event("playing"));
+    vi.advanceTimersByTime(200);
+    expect(pair[0].volume).toBeGreaterThan(0);
+    expect(pair[0].volume).toBeLessThan(1);
+    vi.advanceTimersByTime(300);
+    expect(pair[0].volume).toBeCloseTo(1);
+  });
+
+  it("puts a song fading on its own back to full on a seek", async () => {
+    await musicAudioEngine.load("http://127.0.0.1/stream/a", null);
+    musicAudioEngine.fadeThrough(2);
+    vi.advanceTimersByTime(1_000);
+    musicAudioEngine.seek(30);
+    expect(pair[0].volume).toBeCloseTo(1);
+
+    await musicAudioEngine.load("http://127.0.0.1/stream/b", null);
+    expect(pair[0].volume).toBeCloseTo(1);
   });
 });

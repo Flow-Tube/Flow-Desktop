@@ -12,9 +12,6 @@ interface HiddenChannelsProps {
 
 /** The channels the viewer blocked, by name where this device knows one. */
 export function HiddenChannels({ channels, resolvingNames, unblocking, onUnblock }: HiddenChannelsProps) {
-  if (channels.length === 0) {
-    return <p className="text-sm text-chrome-neutral-500">{getString("taste_hidden_channels_empty")}</p>;
-  }
   return (
     <ul className="divide-y divide-chrome-neutral-800">
       {channels.map((channel) => (

@@ -1,6 +1,6 @@
+import { getString } from '../../lib/i18n/index';
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 
 import { MusicItemCard } from '../../components/music/MusicItemCard';
 import { Button } from '../../components/ui/Button';
@@ -13,7 +13,6 @@ import { getString } from '../../lib/i18n/index';
 import type { SongItem, YTItem } from '../../types/music';
 
 export default function MusicBrowsePage() {
-  const { t } = useTranslation('common');
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const gridStyle = useGridStyle({ density: 'dense' });
@@ -22,7 +21,7 @@ export default function MusicBrowsePage() {
   const isArtistHidden = useMusicArtistHidden();
   const browseId = params.get('browseId');
   const browseParams = params.get('params');
-  const title = params.get('title') || t('musicBrowse');
+  const title = params.get('title') || getString('music_browse');
   const chip = useMemo(() => browseId ? {
     title, browseId, params: browseParams, orderBy: 0,
   } : null, [browseId, browseParams, title]);
@@ -94,9 +93,9 @@ export default function MusicBrowsePage() {
   };
 
   return <main className="px-6 py-8 lg:px-8">
-    <h1 className="mb-6 text-3xl font-bold tracking-tight text-chrome-neutral-100">{title}</h1>
+    <h1 dir="auto" className="mb-6 text-3xl font-bold tracking-tight text-chrome-neutral-100">{title}</h1>
     {error && <div className="mb-6 flex items-center gap-3 text-sm text-chrome-neutral-400">
-      <span>{error}</span><Button variant="secondary" onClick={reload}>{t('musicRetry')}</Button>
+      <span>{error}</span><Button variant="secondary" onClick={reload}>{getString('music_retry')}</Button>
     </div>}
     {loading && !visible.length ? <div className="flow-grid gap-y-6" style={gridStyle}>
       {Array.from({ length: 12 }).map((_, index) => <div key={index}
@@ -105,15 +104,15 @@ export default function MusicBrowsePage() {
       {sections.map((section, index) => {
         const list = shown(section.items);
         return list.length > 0 ? <section key={`${index}:${section.title}`}>
-          <h2 className="mb-4 text-xl font-bold tracking-tight text-chrome-neutral-100">{section.title}</h2>
+          <h2 dir="auto" className="mb-4 text-xl font-bold tracking-tight text-chrome-neutral-100">{section.title}</h2>
           {renderGrid(list)}
         </section> : null;
       })}
       {moreItems.length > 0 && renderGrid(moreItems)}
     </div> : renderGrid(visible)}
-    {!loading && !error && !visible.length && <p className="py-20 text-center text-sm text-chrome-neutral-400">{t('musicChipEmpty')}</p>}
+    {!loading && !error && !visible.length && <p className="py-20 text-center text-sm text-chrome-neutral-400">{getString('music_chip_empty')}</p>}
     {hasMore && <div className="flex justify-center py-8">
-      <Button variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>{t('musicLoadMore')}</Button>
+      <Button variant="secondary" disabled={loadingMore} onClick={() => void loadMore()}>{getString('music_load_more')}</Button>
     </div>}
   </main>;
 }

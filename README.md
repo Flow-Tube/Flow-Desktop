@@ -19,7 +19,7 @@
   <a href="LICENSE"><picture><source media="(prefers-color-scheme: dark)" srcset="https://assets.flow-tube.org/v1/badges/split/license-dark.svg"><img alt="License: GPL-3.0" src="https://assets.flow-tube.org/v1/badges/split/license-light.svg" height="32"></picture></a>
   </p>
 
-  [**Downloads**](https://github.com/FlowNeuro/Flow-Desktop/releases) · [**Android app**](https://github.com/Flow-Tube/Flow) · [**Community**](https://www.reddit.com/r/Flow_Official/) · [**Support development**](#support--donations)
+  [**Downloads**](https://github.com/Flow-Tube/Flow-Desktop/releases) · [**Android app**](https://github.com/Flow-Tube/Flow) · [**Community**](https://www.reddit.com/r/Flow_Official/) · [**Support development**](#support--donations)
 </div>
 
 > Flow Desktop is under active development. Features and storage formats may change before the first stable release.
@@ -60,11 +60,11 @@ Flow still contacts YouTube and optional services such as SponsorBlock, DeArrow,
 
 ## Downloads and supported systems
 
-Release builds are published through [GitHub Releases](https://github.com/FlowNeuro/Flow-Desktop/releases).
+Release builds are published through [GitHub Releases](https://github.com/Flow-Tube/Flow-Desktop/releases).
 
 - **Stable:** reviewed releases intended for normal use.
 - **Beta / RC:** public GitHub prereleases for wider testing. These install as **Flow Beta** with isolated application data.
-- **Nightly:** automatic snapshots from `main`. These install as **Flow Nightly**, use isolated data, and may be unstable. Download the latest packages from [GitHub Actions](https://github.com/FlowNeuro/Flow-Desktop/actions/workflows/build.yml) or [nightly.link](https://nightly.link/FlowNeuro/Flow-Desktop/workflows/build/main) without a GitHub account.
+- **Nightly:** automatic snapshots from `main`. These install as **Flow Nightly**, use isolated data, and may be unstable. Download the latest packages from [GitHub Actions](https://github.com/Flow-Tube/Flow-Desktop/actions/workflows/build.yml) or [nightly.link](https://nightly.link/Flow-Tube/Flow-Desktop/workflows/build/main) without a GitHub account.
 
 | Platform | Supported versions | Architectures | Packages |
 | --- | --- | --- | --- |

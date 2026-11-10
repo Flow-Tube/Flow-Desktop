@@ -249,6 +249,116 @@ async fn a_removed_device_stops_and_a_new_device_reads_the_old_epoch() {
     assert_eq!(watched(&pool_c).await, ["aaaaaaaaaaa"]);
 }
 
+/// Answers `changes` with one object per page, as a server does past its page limit.
+struct OnePerPage<'a>(&'a MemoryStore);
+
+impl Store for OnePerPage<'_> {
+    async fn roster_after(&self, after: i64) -> Result<Vec<Entry>> {
+        self.0.roster_after(after).await
+    }
+    async fn append_roster(
+        &self,
+        head: &str,
+        entry: &Entry,
+        wraps: &BTreeMap<String, String>,
+        chain: Option<&str>,
+    ) -> Result<Appended> {
+        self.0.append_roster(head, entry, wraps, chain).await
+    }
+    async fn key(&self, epoch: u32, kc: &str, name: &str) -> Result<Option<Vec<u8>>> {
+        self.0.key(epoch, kc, name).await
+    }
+    async fn put_object(&self, path: &str, bytes: Vec<u8>) -> Result<()> {
+        self.0.put_object(path, bytes).await
+    }
+    async fn get_object(&self, path: &str) -> Result<Option<Vec<u8>>> {
+        self.0.get_object(path).await
+    }
+    async fn delete_object(&self, path: &str) -> Result<bool> {
+        self.0.delete_object(path).await
+    }
+    async fn changes(&self, cursor: u64) -> Result<(Vec<ChangedObject>, u64)> {
+        let memory = self.0.0.lock().unwrap();
+        let first = memory
+            .objects
+            .iter()
+            .filter(|(_, (at, _))| *at > cursor)
+            .min_by_key(|(_, (at, _))| *at);
+        Ok(first.map_or((Vec::new(), cursor), |(path, (at, bytes))| {
+            let size = bytes.len() as u64;
+            (
+                vec![ChangedObject {
+                    path: path.clone(),
+                    size,
+                }],
+                *at,
+            )
+        }))
+    }
+}
+
+/// C's first object arrived before anything of A's. Returns the path and C's genuine bytes.
+async fn a_tampered_object_before_another_sender(
+    g: &Group,
+    c: &MemberSecrets,
+    pool_a: &SqlitePool,
+    pool_c: &SqlitePool,
+) -> (String, Vec<u8>) {
+    watch(pool_c, "ccccccccccc").await;
+    sync(pool_c, &g.store, c, "app-c").await.unwrap();
+    let path = log_path(&hex::encode(c.did), 1);
+    let genuine = g.store.tamper(&path);
+    watch(pool_a, "aaaaaaaaaaa").await;
+    sync(pool_a, &g.store, &g.a, "app-a").await.unwrap();
+    (path, genuine)
+}
+
+#[tokio::test]
+async fn a_sender_that_stopped_does_not_hide_others_on_later_pages() {
+    let g = group().await;
+    let c = add_device(&g, 0, &g.epoch_key).await;
+    let (pool_a, pool_b, pool_c) = (
+        device_pool(&g).await,
+        device_pool(&g).await,
+        device_pool(&g).await,
+    );
+    let (path, genuine) = a_tampered_object_before_another_sender(&g, &c, &pool_a, &pool_c).await;
+
+    sync(&pool_b, OnePerPage(&g.store), &g.b, "app-b")
+        .await
+        .unwrap();
+    assert_eq!(watched(&pool_b).await, ["aaaaaaaaaaa"]);
+
+    // Same place in the listing: the next sync has to list that page again.
+    g.store.0.lock().unwrap().objects.get_mut(&path).unwrap().1 = genuine;
+    sync(&pool_b, OnePerPage(&g.store), &g.b, "app-b")
+        .await
+        .unwrap();
+    assert_eq!(watched(&pool_b).await, ["aaaaaaaaaaa", "ccccccccccc"]);
+}
+
+#[tokio::test]
+async fn a_log_listed_backwards_across_pages_is_still_read() {
+    let g = group().await;
+    let (pool_a, pool_b) = (device_pool(&g).await, device_pool(&g).await);
+    watch(&pool_a, "aaaaaaaaaaa").await;
+    sync(&pool_a, &g.store, &g.a, "app-a").await.unwrap();
+    watch(&pool_a, "ccccccccccc").await;
+    sync(&pool_a, &g.store, &g.a, "app-a").await.unwrap();
+
+    let first = log_path(&hex::encode(g.a.did), 1);
+    let bytes = g.store.take(&first);
+    g.store.put(&first, bytes);
+
+    sync(&pool_b, OnePerPage(&g.store), &g.b, "app-b")
+        .await
+        .unwrap();
+    sync(&pool_b, OnePerPage(&g.store), &g.b, "app-b")
+        .await
+        .unwrap();
+    assert_eq!(watched(&pool_b).await, ["aaaaaaaaaaa", "ccccccccccc"]);
+}
+
 /// A store whose change cursor never moves: it hands out every object on each call.
 struct Repeating<'a>(&'a MemoryStore);
 

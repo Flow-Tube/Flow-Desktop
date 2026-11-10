@@ -97,6 +97,14 @@ pub enum AppError {
     #[error("Couldn't copy into the new profile: {0}")]
     ProfileCopyFailed(String),
 
+    /// A library file that is no longer where it was listed.
+    #[error("Local file missing: {0}")]
+    LocalFileMissing(String),
+
+    /// A library file outside the chosen folders, or not a media file.
+    #[error("Local file refused: {0}")]
+    LocalFileRefused(String),
+
     #[error("Streaming error: {0}")]
     #[allow(dead_code)]
     Streaming(String),
@@ -207,6 +215,8 @@ impl From<AppError> for ErrorResponse {
             AppError::ProfileCopyFailed(_) => "profileCopyFailed",
             AppError::ProfileSwitchRefused(_) => "profileSwitchRefused",
             AppError::ProfilePhotoInvalid(_) => "profilePhotoInvalid",
+            AppError::LocalFileMissing(_) => "localFileMissing",
+            AppError::LocalFileRefused(_) => "localFileRefused",
             AppError::Streaming(_) => "streaming",
             AppError::MediaDecode(_) => "mediaDecode",
             AppError::StreamExpired(_) => "streamExpired",
@@ -281,6 +291,8 @@ mod tests {
                 AppError::ProfileSwitchRefused("switching"),
                 "profileSwitchRefused",
             ),
+            (AppError::LocalFileMissing("m".into()), "localFileMissing"),
+            (AppError::LocalFileRefused("r".into()), "localFileRefused"),
             (AppError::Internal("i".into()), "internal"),
         ];
         for (error, expected_kind) in cases {

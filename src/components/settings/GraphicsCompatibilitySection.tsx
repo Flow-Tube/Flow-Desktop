@@ -1,4 +1,6 @@
 import { Select } from '../ui/Select';
+import { SettingItem } from './SettingItem';
+import { SettingsGroup } from './SettingsGroup';
 import { getString } from '../../lib/i18n/index';
 import { useGraphicsMode, type GraphicsMode } from '../../lib/useGraphicsMode';
 import { useUiStore } from '../../store/useUiStore';
@@ -14,22 +16,22 @@ export function GraphicsCompatibilitySection() {
   };
 
   return (
-    <section className="mt-8 flex flex-wrap items-center justify-between gap-6 rounded-2xl border border-chrome-neutral-800 bg-surface-container-low p-5">
-      <div className="min-w-0 flex-1">
-        <h2 className="text-base font-medium text-chrome-neutral-200">{getString('settings_graphics_compat')}</h2>
-        <p className="mt-1 text-sm text-chrome-neutral-400">{getString('settings_graphics_compat_desc')}</p>
-      </div>
-      <Select
-        className="w-44"
-        value={mode}
-        disabled={loading}
-        onChange={(value) => void handleChange(value)}
-        options={[
-          { value: 'automatic', label: getString('settings_graphics_automatic') },
-          { value: 'compatible', label: getString('settings_graphics_compatible') },
-          { value: 'safe', label: getString('settings_graphics_safe') },
-        ]}
-      />
-    </section>
+    <div className="mt-8">
+      <SettingsGroup>
+        <SettingItem title={getString('settings_graphics_compat')} description={getString('settings_graphics_compat_desc')}>
+          <Select
+            className="w-44"
+            value={mode}
+            disabled={loading}
+            onChange={(value) => void handleChange(value)}
+            options={[
+              { value: 'automatic', label: getString('settings_graphics_automatic') },
+              { value: 'compatible', label: getString('settings_graphics_compatible') },
+              { value: 'safe', label: getString('settings_graphics_safe') },
+            ]}
+          />
+        </SettingItem>
+      </SettingsGroup>
+    </div>
   );
 }

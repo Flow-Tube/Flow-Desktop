@@ -1,4 +1,6 @@
-import { useMemo, type ReactNode } from "react";
+import { getString } from "../../lib/i18n/index";
+import { useMemo, useState, type ReactNode } from "react";
+import { ListChecks, Search, X } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -10,7 +12,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { resolveDragMove, sortableRowStyle, useListDragSensors } from "../../lib/sortableList";
+import { SelectableRow } from "../common/SelectableRow";
 import { VideoCard } from "../video/VideoCard";
+import { IconButton } from "../ui/IconButton";
+import { SearchInput } from "../ui/SearchInput";
 import { Select } from "../ui/Select";
 import { playlistSortLabel, showsDateAdded, type PlaylistSortOrder } from "../../lib/playlistSort";
 import type { VideoSummary } from "../../types/video";
@@ -21,11 +26,20 @@ interface PlaylistSortableListProps {
   sortOrder: PlaylistSortOrder;
   sortOptions: PlaylistSortOrder[];
   onSortChange: (order: PlaylistSortOrder) => void;
+  /** What the rows are filtered by; a filter hides rows, so dragging waits until it clears. */
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
   onReorder: (videos: VideoSummary[]) => void;
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
   /** Shown after the last row, such as the next-page loader. */
   footer?: ReactNode;
+  selecting: boolean;
+  selectedIds: ReadonlySet<string>;
+  onToggleSelected: (videoId: string) => void;
+  onStartSelecting: () => void;
+  /** Takes the toolbar's place while rows are being picked. */
+  selectionBar?: ReactNode;
 }
 
 interface SortablePlaylistRowProps {
@@ -79,19 +93,31 @@ function PlaylistVideoRows({
   displayVideos,
   sortEnabled,
   showAddedDate,
+  searchQuery,
+  selecting,
+  selectedIds,
+  onToggleSelected,
   onPlay,
   onAddToQueue,
 }: {
   displayVideos: VideoSummary[];
   sortEnabled: boolean;
   showAddedDate: boolean;
+  searchQuery: string;
+  selecting: boolean;
+  selectedIds: ReadonlySet<string>;
+  onToggleSelected: (videoId: string) => void;
   onPlay: (video: VideoSummary) => void;
   onAddToQueue?: (video: VideoSummary) => void;
 }) {
   if (displayVideos.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-chrome-neutral-800 py-20 text-center">
-        <p className="text-sm font-medium text-chrome-neutral-400">This playlist has no videos yet.</p>
+        <p className="text-sm font-medium text-chrome-neutral-400">
+          {searchQuery.trim()
+            ? getString("playlist_search_no_results", searchQuery.trim())
+            : getString("playlist_this_playlist_has_no_videos_yet")}
+        </p>
       </div>
     );
   }
@@ -115,15 +141,21 @@ function PlaylistVideoRows({
   return (
     <div className="flex flex-col gap-3">
       {displayVideos.map((video) => (
-        <VideoCard
+        <SelectableRow
           key={video.id}
-          variant="list"
-          video={video}
-          onPlay={onPlay}
-          onAddToQueue={onAddToQueue}
-          showDragHandle={false}
-          showAddedDate={showAddedDate}
-        />
+          selecting={selecting}
+          selected={selectedIds.has(video.id)}
+          onToggle={() => onToggleSelected(video.id)}
+        >
+          <VideoCard
+            variant="list"
+            video={video}
+            onPlay={onPlay}
+            onAddToQueue={onAddToQueue}
+            showDragHandle={false}
+            showAddedDate={showAddedDate}
+          />
+        </SelectableRow>
       ))}
     </div>
   );
@@ -135,12 +167,25 @@ export function PlaylistSortableList({
   sortOrder,
   sortOptions,
   onSortChange,
+  searchQuery,
+  onSearchChange,
   onReorder,
   onPlay,
   onAddToQueue,
   footer,
+  selecting,
+  selectedIds,
+  onToggleSelected,
+  onStartSelecting,
+  selectionBar,
 }: PlaylistSortableListProps) {
-  const sortEnabled = sortOrder === "manual";
+  const [searchOpen, setSearchOpen] = useState(false);
+  const sortEnabled = sortOrder === "manual" && !searchOpen && !selecting;
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    onSearchChange("");
+  };
 
   const sensors = useListDragSensors();
 
@@ -165,6 +210,10 @@ export function PlaylistSortableList({
       displayVideos={displayVideos}
       sortEnabled={sortEnabled}
       showAddedDate={showsDateAdded(sortOrder)}
+      searchQuery={searchQuery}
+      selecting={selecting}
+      selectedIds={selectedIds}
+      onToggleSelected={onToggleSelected}
       onPlay={onPlay}
       onAddToQueue={onAddToQueue}
     />
@@ -172,13 +221,47 @@ export function PlaylistSortableList({
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col">
-      <div className="shrink-0 border-b border-chrome-neutral-800/50 bg-background pb-4">
+      <div className="flex shrink-0 items-center gap-2 border-b border-chrome-neutral-800/50 bg-background pb-4">
+        {selecting ? selectionBar : (
+          <>
           <Select
             value={sortOrder}
             onChange={(val) => onSortChange(val as PlaylistSortOrder)}
             options={sortOptions.map((order) => ({ value: order, label: playlistSortLabel(order) }))}
             className="w-full max-w-xs"
           />
+          {searchOpen ? (
+            <>
+              <SearchInput
+                autoFocus
+                value={searchQuery}
+                onChange={(event) => onSearchChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") closeSearch();
+                }}
+                placeholder={getString("playlist_search_in")}
+                aria-label={getString("playlist_search_in")}
+                containerClassName="min-w-0 flex-1"
+              />
+              <IconButton aria-label={getString("playlist_search_close")} onClick={closeSearch}>
+                <X size={18} />
+              </IconButton>
+            </>
+          ) : (
+            <IconButton aria-label={getString("playlist_search_in")} title={getString("playlist_search_in")} onClick={() => setSearchOpen(true)}>
+              <Search size={18} />
+            </IconButton>
+          )}
+          <IconButton
+            aria-label={getString("playlist_select")}
+            title={getString("playlist_select")}
+            disabled={displayVideos.length === 0}
+            onClick={onStartSelecting}
+          >
+            <ListChecks size={18} />
+          </IconButton>
+          </>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pt-4">

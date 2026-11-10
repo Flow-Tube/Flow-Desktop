@@ -12,8 +12,11 @@ PROFILES
 - A new profile starts fresh with a short setup, or copies your settings, subscriptions or recommendations. Profiles are not locked: anyone using the computer can switch.
 - Only the Default profile syncs with your phone. A master backup now holds every profile and restores them all.
 - The recommendation engine's profile is now called your taste profile.
+- With two or more profiles, Flow can ask who's watching when it opens. Turn Ask who's watching off in Settings > Profiles.
+- First-run setup now ends with a summary and adds two steps: Artists, where artists you pick shape your music picks only, and Alerts, for new video alerts.
 
 SYNC
+- Restoring with your recovery key now asks which devices you still have, and signs out the rest before it syncs anything new, so a lost device can't read what comes next.
 - Your recommendations sync with Flow for Android again. Both apps now read Chinese titles the same way, folding Traditional characters into Simplified ones.
 - When something stays on each device, the sync result now says what and why. After receiving, it lists what arrived.
 - SponsorBlock's action for each segment type now syncs with your phone. Synced SponsorBlock and DeArrow switches apply without a restart.
@@ -29,32 +32,112 @@ SYNC
 - On the local network, a device list entry from another device that can't be read is skipped, and the rest of the list still syncs.
 - Linked devices: a device name that can't be read is left out instead of hiding the device list or stopping a rename. The latest readable name is shown.
 - A snapshot, acknowledgement or LAN request that names a log position too large to read exactly is now refused as invalid.
+- Linked devices accept only device keys and signatures that every Flow app reads the same way, so devices can't disagree about who is in a group.
 - A damaged file in a WebDAV folder's roster no longer stops every device from syncing. It is skipped and the rest of the roster is read.
 - Sync no longer hangs on a store that keeps answering with the same page. It stops reading and tries again at the next sync.
 - Sync stops reading an answer larger than it can be, from a Flow server, a WebDAV folder, the live channel or a device on your network, so a broken or hostile store can't use up memory.
 - A damaged or forged object from one device no longer fails the whole sync. Reading that device's changes pauses there, and the other devices' changes still arrive.
+- The same holds for an object or a file in a store's folder that is too large or that the store refuses: only that device's changes pause. A store that is out of reach, refuses your login or asks to slow down still fails the sync.
 - The same holds when a new device starts from a snapshot or a profile starts syncing: a damaged or forged object no longer fails the sync, and the profile is caught up once it can be read.
 - A snapshot or profile name from another device that carries an out-of-range number no longer stops a synced profile from being read.
+- Linked devices accept a synced object's data only in the one form every Flow app writes, so two devices can't read different data from the same object.
 - A malformed roster entry from another device on the local network is refused, so the group stays readable on this computer.
+- Linked devices refuse a device list entry whose sealed device name isn't in the one form every Flow app writes.
 - Joining a group over the local network now refuses a malformed welcome from the other device.
 - Linked devices: Replace recovery words gives your group a new recovery key from any linked device. The old words stop working, and your devices move to a new encryption key.
 - The Sync page now opens on Linked devices, which keep your devices in sync all the time. The one-time transfer to a nearby device moves below them, and Linked devices stay on screen while a transfer runs.
 - On the local network, an object as large as a sync object can be is now passed between devices whole, instead of being refused for its size.
 - Linked devices check for devices asking to join every 5 seconds only while the Sync page is on screen, and the check no longer reads the whole device list from the server.
 - A new device that starts from a snapshot whose data can't be read now starts from an older snapshot instead of failing the sync.
+- Linked devices: allowing or declining remote control now takes effect whichever profile is open.
+- Linked devices reach a Flow server or WebDAV folder on your local network directly, even when a system proxy is set.
+- Linked devices only ever touch files inside the group's own WebDAV folder.
+- One device's unreadable change no longer keeps other devices' changes from arriving, however many are waiting.
+- When the store refuses something this computer wrote, Linked devices keep receiving changes, retry it in order and show the error, instead of stopping the sync.
+- On the local network, a connection that stays silent is dropped after a few seconds, and it no longer stops this computer from meeting your other devices or answering them.
 - Linked devices sign in to your Flow server about once every 15 minutes instead of before every sync.
+- Notes sync with Flow for Android, over the QR code and Linked devices, and are part of backups. Notes your phone sent before this version come back on the next sync, and a device that joins later gets them from this computer.
+- Saved Shorts sync with your phone in both directions, as the same list on each device, once the phone has saved a Short of its own. Saved Shorts that an earlier sync brought in as a playlist move to the Saved Shorts page.
+
+LIBRARY
+- Notes on videos and channels: a Note button on the Watch and Channel pages, a small card that shows the note. Times like 12:34 in a video's note jump there. Settings > Content has the switches.
+- A Notes page in Library and the sidebar: search, filter by videos or channels, sort by edit time, title or your own order, and select notes to copy, delete or reorder. Each note lists its times, and Play from starts the video there.
+- Play on is now in the full music player too. Its list says when playback is moving, links to Manage linked devices, and Flow tells you when another device hands playback to this one.
+- Flow now keeps a private record of what you watch and listen to, month by month, for Recap. It stays on this computer, is part of master backups, never syncs, and records nothing during Deep Flow. Months from before this version start from a rough estimate based on your watch history.
+- Flow Recap: open it from Library or Settings > Taste to see your month, your year or all time, for videos, music or both. It shows time per day, your clock, weekdays, a calendar, top channels, videos, artists and songs, topics, what stood out, and the time SponsorBlock saved you.
+- Play your recap as a full-window story. Each page has its own colours and its figures count up. Click a segment to jump, hold to pause, Space pauses, the arrow keys step and Esc closes. It stops when Flow is in the background and ends on a card you can save as a PNG or copy, with a way to play it again.
+- Global media keys, in Settings > Keyboard Shortcuts, let your keyboard's play, next and previous keys control Flow while it is in the background. It is off by default, and Linux needs an X11 session.
+- Press ? to see every video and music key. The same list is in Settings > Keyboard Shortcuts.
+- Edit a playlist's name and description, and search inside any playlist, even one too long to show at once.
+- Add a whole playlist to one of your own, or merge two of yours, from the playlist's menu. Playlists also sort by Longest and Shortest, and the Playlists page has a Custom order you can drag.
+- A YouTube playlist now says when unavailable videos are hidden from it.
+- Select many videos in a playlist to add them to the queue, add them to another playlist, download them, or remove them with Undo.
+- Save any playlist or music collection as a file from its menu, and import one with Import from file on the Playlists or Albums page. The files are the same ones Flow for Android saves and opens. A music playlist imports into your Albums.
+- Likes has a sort, and you can select many to queue, download or remove them with Undo. Download all and Save as file work on what the page shows. With songs and videos both on show, Play and Save as file take the videos.
+- History has a Shorts tab, Newest and Oldest first, and a year to narrow it to. A removed video can be brought back with Undo, and Delete Shorts from history clears only the Shorts.
+- Hide any Library section in Settings > Content & UI.
+- A new Remove watched videos switch takes videos out of Watch Later once you finish them, and opening Watch Later clears any you watched elsewhere, with Undo.
+- Subscriptions has a Refresh button that refreshes only the group you have open. Refresh subscriptions at startup now works.
+- Manage subscriptions can be sorted by name or latest upload, and shows video channels and music artists apart.
+- Videos a channel you follow made with someone else now reach your subscription feed. Collaborations has its own switch in Settings.
+- The Subscribed menu on a channel can add it to a subscription group and hide that channel's Shorts from your feed. Channel pages have a Share button.
+- Discover channels, opened from Your taste, lists channels like the ones you follow and channels you watch without following, and searches for any channel.
 
 MUSIC
+- Each credited artist on a song with multiple artists now has their own link in the player and track lists, opening their own profile instead of the primary artist's.
+- The volume popover in the music bar and the full player closes by itself after a few idle seconds. Scrolling over the volume button while it is closed shows the new level for a moment.
 - Autoplay radio no longer stops after about 20 songs. A station keeps adding songs while it has more to play.
 - Instrumental songs no longer show KuGou's notice as their lyrics.
 - Clicking an empty part of the music bar now opens the full player. The buttons, the seek line and dragging up work as before.
 - Hiding or showing the Queue or Lyrics pane in the full player no longer stretches the title and controls, and the artwork moves with the text.
 - A new Blur other lines switch in the lyrics menu and Settings keeps every line of synced lyrics sharp. Linux never blurs them, so it doesn't show there.
 - Synced lyrics stay sharp while you scroll them by hand. Lines no longer cross when you click one or seek, and a line you click moves straight into place.
+- Follow on an artist's page now really follows them. It used to forget as soon as you left the page. Artists you follow, here or on an artist card, go to your phone as music artists.
+- A song played from search now plays alone, with radio filling up next, instead of queueing the other results.
+- Album and playlist pages have a search, and each one remembers how you sorted it: title, artist, album, length or, on your own lists, date added.
+- Select songs on an album or playlist to play them next, queue them, add them to an album, download them or take them out of your own list with Undo.
+- Rename your own albums and change their description, download whole YouTube Music playlists, share albums and playlists, and get suggestions under your own lists.
+- Settings > Music has a switch for each music home shelf. New shelves show your own playlists and the artists you follow, plus Live performances and Music videos for you when YouTube offers them.
+- Import your top artists from Last.fm, Libre.fm or ListenBrainz in Settings > Music, so recommendations start from your real listening.
+- If you're signed in to Last.fm, the music home gets a Discover with Last.fm shelf picked from what you have on repeat.
+- Artist pages show how often you've played an artist and whether you liked them, with your most played songs of theirs under Your history.
+- Artist pages also get a Featured on shelf and a Share button.
+- Crossfade now matches Flow for Android: lengths from 250 ms to 12 s (3 s by default), separate switches for fading when a song ends and when you skip, keep albums gapless, and the fade curves Equal power, Smooth, Hold and Gentle.
+- A crossfade is never dropped. When the next song is not ready yet, the current one fades out on its own and the next comes in quickly. Short songs and Repeat one fade too, and the fade lasts the same time at any speed.
+- Next and Previous keep the song playing until the next one starts, then blend the two, even when crossfade is off (a quarter-second blend).
+- Pause crossfade from the music player's menu until Flow restarts, without changing your settings.
+- Animated artwork: turn it on in Settings > Music and albums with motion artwork loop it over the cover in the full player.
+- Romanize on this device, in Settings > Lyrics and the lyrics menu, adds Latin letters under lyrics in other scripts when the source has none. Japanese isn't covered yet.
+- Song menus have Details: title, artist, album, views, likes, length and upload date. Click a line to copy it.
+- Settings > Music can hide the artwork in the full player, change the shape of the music progress bar, and make album art and cards on music pages smaller.
+- YouTube captions are a lyrics source you can turn on in Settings > Lyrics. It is off by default for now, because YouTube currently refuses these requests for every song.
+- New switches: open the full player for new songs, pause music while Flow or your computer is muted (Flow only on Linux), and keep the screen on while lyrics show. Autoplay for the queue is now in Settings > Music too.
+- The Taste tab can export, import and reset your music profile on its own, without touching your video profile.
+- Lyrics appear much faster: sources are asked side by side and the search stops after 9 seconds. Saved line-synced lyrics show at once, and word sync is looked for once a week.
+- Songs use YouTube Music's own timed lyrics first, and two more sources, NetEase and AMLL, help when the others have nothing. The next song's lyrics load ahead of time.
+- Songs with no lyrics are remembered for a week instead of asking every source on each play, and lyrics you pick or edit by hand stay until you press Refresh.
+- Romanization only, in the lyrics menu and Settings > Lyrics, replaces the original script with Latin letters.
+- Lyrics for songs with several artists are matched against every credited artist, and LrcLib, SimpMusic and KuGou no longer return lyrics for a different song or a much longer upload.
+- The lyrics timing you set is kept for each song, through Refresh, another source or an edit.
+- Line-synced lyrics show the dots during long instrumental breaks, including solos the lyrics leave unmarked, and the lyrics wait on the next line instead of jumping back to the top.
+- The glow on long held notes in word-synced lyrics rises and fades smoothly instead of in visible steps.
+- Fit lyrics to music videos, in Settings > Lyrics, uses SponsorBlock to move lyrics past a music video's intro, skits and other parts with no music. It is off by default, and only a short part of a hash of the video id is sent.
+- Lyrics can show on Colorful or Moving backgrounds made from the song's cover, full screen and in the pane beside the song, from the lyrics menu or Settings > Lyrics. Moving isn't offered on Linux.
+- The Up next and lyrics pane in the full player now takes its colour from the song's cover. Side pane colors from the cover, in Settings > Music, turns it back to the theme's colours.
+- The buttons along the top of the full player now sit on their own tinted background as a group, so they stay visible on bright covers. A pressed button widens and squares its corners, as on Android, and switched-on buttons fill with the player's colour.
+- Full-screen lyrics over the Immersive background with the Player lyrics background now sit on a blurred cover instead of the sharp photo, so the lines stay readable.
+- The lyrics menu is shorter and tidier: actions sit in one row of buttons, alignment and background are button groups, and each switch takes one line, with the Romanization options under Romanization. The full explanations stay in Settings > Music.
+- Animated covers show for many more songs: when Apple's first answer is a release with no loop, Flow looks at the song's other releases, a music video is looked up under its song's album, and a busy service is asked again twice. Songs saved as having no animated cover are asked about again.
+- With the Immersive player background, the animated cover now plays as the background, as on Android, instead of never showing. It holds still behind full-screen lyrics.
+- Animated covers play again. Apple names a loop's video segments relative to its playlist, and through Flow's local proxy every one of them was asked for at the wrong address, so no loop ever started.
+- Lyrics in media controls, in Settings > Lyrics, shows the current line as the song title in your system's media controls and lock screen, with long lines in parts, repeats counted and notes during breaks. It is off by default and has its own timing slider.
 - The Podcasts category chip on Music Home now loads podcast shelves and episodes instead of showing an empty result.
 
 PLAYER
+- Live chat and chat replay beside a video can be closed. Show chat brings it back, as does the chat button on the player, which now works outside fullscreen too.
+- The mini player's controls, its move handle and its Expand and Close buttons fade together after a few seconds of playback, as in the full player, instead of staying up while the pointer rests on it.
 - Scroll over any volume control to change the volume: the video player, Shorts, the music bar, the full music player and Play on.
+- Scroll over the ambient mode intensity slider in Settings to adjust it.
 - While muted, scrolling up unmutes to your saved volume and scrolling down leaves it alone.
 - Moving the music volume while muted no longer leaves the song silent.
 - Ambient mode now uses the same glow as Flow for Android, and it moves as one smooth image with no pulsing or lines.
@@ -78,8 +161,101 @@ PLAYER
 - Rewinding to before a skipped segment skips it again, the same as Flow for Android. To watch it, seek inside the segment.
 - A video that falls back to its backup stream now keeps the audio you chose, usually the original, instead of playing an auto-dubbed language. The audio menu works on that stream too.
 - Original titles, in Settings under Content, keeps video titles in the video's own language instead of YouTube's automatic translation, on cards, Shorts, the queue and the watch page. It is off by default, and DeArrow titles still come first when DeArrow is on. A single video you download is named the same way (#377).
+- Audio Track Language in Settings now works. Videos with several audio tracks start in your language, and fall back to the original when it isn't offered. The choice also syncs with your phone.
+- Autoplay is now two switches, as on Android. Autoplay queued videos keeps a playlist or queue going, and Autoplay related videos decides whether a suggestion plays after it, so a queue can run on with no random videos.
+- An optional Autoplay delay shows an Up next card with Cancel, Restart and Play now. It is off by default, and the player's settings menu has an Autoplay switch.
+- Comments now open in the fullscreen side panel, from a new button on the fullscreen controls.
+- Comments can be sorted by Oldest and Timed. Timed lists comments by the moment in the video they point at, and Follow the video moves the list along as it plays.
+- Remember speed per channel starts each channel at the speed you last chose, and Play music at normal speed starts music videos at 1x. A channel's speed comes first, and neither changes the default for the next video.
+- The player's settings menu has Resize with Fit, Fill and Zoom. Shift+N plays the next video and Shift+P the previous one.
+- SponsorBlock has every action Android has: Skip automatically once, Show a skip button, Notify, Mute, Show in seek bar and Disable. Your choices sync with your phone.
+- New SponsorBlock types Hook and Highlight. A highlight is marked on the seek bar and can offer Jump to highlight as the video starts. Segments submitted as a mute are muted instead of skipped.
+- Subtitle timing moves captions earlier or later in steps, for each video. Add an SRT or VTT file from the subtitles menu or by dropping it on the player, and Flow remembers it for that video.
+- Subtitle style adds window color and opacity, edge styles, custom colors and a position for fullscreen.
+- Preferred subtitle language now lists every language and has No preference, which syncs with your phone. The transcript has a search field.
+- Volume boost now works: with it on, the volume slider, wheel and arrow keys go up to 200%. It is off by default and adds no extra sound processing until you pass 100%.
+- Adaptive player size now works: a vertical or narrow video gets a taller player on the watch page, capped to fit the screen. It is on by default, as on Android.
+- The Skip silence row is gone. It never worked here, and a browser player can't remove silence the way Android does.
+- A video picks up where you left it from half a second in, and starts over only in the last 1.5 seconds or past 98%, as on Android.
+- Moving through a queue starts each video from the top. Picking one yourself still resumes it.
+- A queue moves past a video that can't play and tells you, up to 2 in a row, then stops on the error.
+- Flow can offer the last unfinished video when it opens, in a small card that plays it in the mini player or opens it. Continue watching mini player in Settings turns it off.
+- The mini player comes in three sizes. A thin progress bar stays at the bottom of the video when the controls hide, and clicking the time switches to what's left.
+- Optional frame step buttons while paused and a paid promotion label. The Save button shows Saved, Stats for nerds has more rows and Copy, and the description lists its tags and can be copied.
+- An Autoplay switch sits next to the quality on the player bar, and the Queue button only shows when there's a queue.
+
+SETTINGS
+- Settings rows now look like Flow for Android's: each row is its own surface, with a thin gap between rows and rounded group ends. Group titles are colored and no longer in capitals.
+- The FlowNeuro page is now called Your taste, the same name it has on Flow for Android. It stays in the same place and works the same way.
+- Settings has a search box. It finds a setting by its name, description or a related word, the same way Flow for Android ranks them, then opens the right tab and points out the row.
+- A new switch in Appearance, Highlight new settings, puts a dot on settings added in an update and on their tab, for as long as you choose. It is off by default.
+- Settings has new pages for Keyboard Shortcuts, Lyrics, Subscriptions, History & Privacy, Digital Wellbeing and Language & Region, so Player, Music and Content & UI are shorter. Content & UI is split into Watch page, Watched videos, Blocked content and Shorts.
+- Scrollbars are hidden everywhere in the app. Every list still scrolls with the wheel, trackpad, keyboard or touch.
+- Flow can follow your computer's light or dark mode, with its own theme for each mode and a choice of dark or AMOLED, under Follow system in Appearance. It is off by default.
+- Appearance has a Font setting: Inter, or your system's font.
+- Pause watch history stops saving what you watch, in Settings > History & Privacy. Save search history, Search suggestions, Max history size and Auto-delete history live there too, with a button to clear your searches.
+- A new setting, App language, shows Flow in any of the 33 languages Flow for Android ships, using Android's translations. Text that has no translation yet stays in English, and English stays the default. Right-to-left languages mirror the layout outside the player.
+
+DOWNLOADS
+- Sort downloads by Newest, Oldest, Largest, Title or Channel. Each video shows its size and date.
+- New Download videos you open and Download liked songs switches in Settings > Downloads.
+- Find earlier downloads lists files Flow saved that the page has lost, by the tags in them. Tags for older downloads adds tags to MP4 and M4A files saved before Flow wrote them.
+- Deleting a download now offers Undo.
+- Player buttons, in Settings under Player, shows or hides each control on the player bar. The bar looks the same with all of them on, which is the default.
+
+SHORTS
+- Shorts work from the keyboard: Up and Down move between Shorts, Space or K plays and pauses, M mutes, and the arrows, J, L and the number keys seek.
+- A shelf or a channel's Shorts now carries on into more Shorts when it runs out, instead of stopping. Saved Shorts still ends where your list ends.
+- Home has a Shorts shelf, which Home Shorts Shelf in Settings turns off.
+- More like this, in a Short's More menu, teaches your recommendations and puts similar Shorts right after it.
+- A Short that links to a full video shows a chip that opens it. Double-click a Short to like it.
+- A Short with several audio tracks offers them in its settings, and the equalizer now applies to Shorts.
+- Subscriptions shows when the feed last refreshed and how many videos it checked. The count has its own switch.
+- A single Show Shorts switch in Settings hides Shorts everywhere, with an option to keep the Shorts tab on channels. Saved Shorts and history are kept.
+- Hide watched videos is now separate for Home, Subscriptions and Shorts, and you choose when a video counts as watched.
+
+HOME
+- Videos from channels you follow show the channel's name again, and their view count on its own line, instead of the view count where the name belongs. Videos already saved are corrected when Flow updates.
+- Home has three new chips. Mixes builds queues from videos you liked or finished, Live shows streams on now, and Watched brings back videos worth seeing again.
+- A Subscriptions on Home switch keeps channels you follow out of Home. Clicking Home again scrolls to the top, then refreshes, and you can turn the refresh off.
+- Cards from a channel you often watch now say so under the title. Explore says plainly when YouTube is limiting requests.
+- Card menus add Play next, Details and Mark as unwatched.
+
+SEARCH
+- Searching again from your history brings back the filters you used. Shorts is now its own chip, next to All.
+- New Unwatched, Watched and Recently uploaded chips, and 360, VR180, 3D and Location filters. A creator with recent uploads gets one card with their latest videos.
+
+NOTIFICATIONS
+- Remind me on an upcoming video or premiere puts it in your notifications when it starts. A reminder missed while Flow was closed arrives at the next launch.
+- New Shorts from your subscriptions can be left out of alerts, with a Shorts switch in Settings. Several uploads since the last check now each get a notification.
+- In the notifications panel you can save a video to Watch later and undo a removal. New and Last 7 days sections join Today, Yesterday and Earlier.
+- Digital Wellbeing, its own page in Settings: a chart of your watch and listen time over the last week, plus break and bedtime reminders. Reminders are native notifications and only arrive while Flow is running.
+- The tray now shows and controls videos as well as music, and has a Continue watching item for your latest unfinished video.
+- Windows Jump List and macOS Dock menu: Search, Downloads, History and Music are one click away.
+- Downloads show their progress on the taskbar or Dock icon.
+- About has a Changelog with the notes of every release, and Open source notices listing the projects Flow is built on.
+- Flow looks for updates every 12 hours while it stays open, not only when it starts.
+
+LOCAL MEDIA
+- Local media: choose folders and play the videos and music in them. Search, sort, filter by length, quality and Unwatched, browse by folder, Continue watching, New marks, Play all and Shuffle.
+- Folders are rescanned at launch and on Rescan, in the background. Settings > Downloads holds the folder lists, and can hide voice notes and short audio.
+- Files stay on this computer: they don't sync, and playing them teaches no recommendations. A file Flow can't play says why, naming a sound format this computer can't decode.
+- Local songs show the lyrics in a .lrc file beside them or inside the file, and their covers. Local videos pick up subtitle files from their folder, and you can add one yourself.
+- A local video with no picture of its own shows a frame from the video.
+- A local file's menu has Details and Move to trash. A file in the trash can be put back from there.
+- Automatic backups run at launch and on a timer while Flow is open: daily, weekly or monthly, into a folder you pick, with the last run and Back up now in Settings. Each run replaces the last file of its type, as on Android.
+- Master backups are now the same zip Flow for Android makes, so a backup from either app restores on the other, brains and profiles included. Old Flow Desktop .json backups still restore. Proxy credentials and other private settings are never in a backup.
+- Export your watch history as YouTube-history JSON, and your subscriptions in NewPipe format.
+- Import from another app, chosen by the app you are leaving: a Google Takeout export, even split across several zips, with likes, playlists and Watch Later; YouTube Music playlist CSVs; NewPipe history and playlists from its backup; LibreTube subscriptions and playlists; Metrolist music playlists. Imports only teach recommendations the way Android does.
+- The Cache group under Network now shows the real size of artwork, lyrics and network caches, each with a limit and a Clear button. Artwork clears the next time Flow starts. The Media Cache Limit row is gone: Flow never stored streams on disk.
 
 FIXES
+- The rows on the About page that open something, such as Changelog, can be reached and opened with the keyboard.
+- Playlist cards show all four covers when two of the songs share a cover.
+- The onboarding topics and import steps can now be translated, and their wording is plainer.
+- Flow no longer says FlowNeuro anywhere: settings, backups, sync, import and the window title all call it your taste, as Flow for Android does.
+- Saved lyrics show where they came from in the lyrics menu and side pane, instead of an internal name like MemoryCache. Lyrics saved by an older version show no source until they are fetched again.
+- About links to the new website, flow-tube.org, and the Flow-Tube organisation on GitHub. Crash reports open an issue there too.
 - Scrolling up on the music bar can no longer leave an invisible player covering the app until a reload.
 - Cancel on a confirmation now really cancels. Deleting a playlist, deleting a custom theme and resetting SponsorBlock stats no longer go ahead anyway. Every confirmation now opens inside the app, with a clear title and button.
 - Removing a playlist from a card now always asks first. Deleting a playlist you made no longer offers an Undo, which only brought it back empty.
@@ -87,3 +263,16 @@ FIXES
 - Restarting Flow after an update no longer opens the link Flow was first started with a second time.
 - A restarted AppImage starts from your own environment instead of the old bundle's paths.
 - Flow opens in your theme from the first frame, instead of showing the default colours for a moment.
+- Downloading a Short now works, from the Shorts player and from a Shorts card. The download window names portrait videos by their real resolution, so a 1080x1920 Short is 1080p, and starts on it.
+- Search no longer shows videos and Shorts from channels you blocked, the channels themselves, or videos you marked Not interested.
+- Trending Region is now Content country, and search and recommendations follow it as well as trending. Before, only Explore, charts and Shorts did. YouTube Music's home still follows where you connect from.
+- Proxy settings now work. HTTP, SOCKS5 and SOCKS4 proxies, with an optional sign-in, carry video, music, downloads, thumbnails, sync servers and update checks. Devices on your network and YouTube's bot-check token minting stay direct, and changes apply to new connections.
+- DeArrow: a video nobody has submitted a thumbnail for now shows a frame from the video, like Flow for Android. Use a video frame in Integrations turns this off.
+- Retry with Proxy on a video that won't load now really does that, and only shows when you have set a proxy up.
+- The Flow Neuro page can block a channel from its favoured list, and now shows Shorts seen and your recent discovery searches.
+- Links open everything Flow for Android opens: flow://open?url= and a YouTube link on the command line lead to the video, Short, playlist, album, channel or artist. A watch link with a list plays with that playlist as the queue, except mixes and your own Liked and Watch Later lists. /shorts/ links open the Shorts player, and youtube-nocookie.com, piped.video and yewtu.be links work too.
+- When Flow's backend crashes, it keeps a report on your computer and offers it at the next launch, with a GitHub issue filled in if you choose to send it. Secrets and your home folder are taken out first, and the last report stays under Diagnostics.
+- Not interested and Don't recommend show in red in card menus, and Don't recommend names the channel.
+- Arabic, Persian and Urdu lay out properly now. The side rail, the settings drawer, menus, switches, sliders, toasts and the back, forward and see-all arrows all mirror, and menus open toward the page. The video player, every progress bar and the play controls stay left to right, as on Flow for Android.
+- Titles, channel names, descriptions and comments in another script keep their own word order, punctuation and ellipsis, so an Arabic title no longer loses its first word in English, and the reverse. Lines such as views and upload date, or a handle and subscriber count, keep each part in place.
+- Text you type in search and other fields follows the direction of what you type. On Linux, Flow uses Noto's Arabic fonts when they are installed, so Arabic letters keep their dots and joins.

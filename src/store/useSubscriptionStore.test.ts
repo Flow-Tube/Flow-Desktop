@@ -139,3 +139,28 @@ describe("useSubscriptionStore.restoreSubscription", () => {
     expect(await useSubscriptionStore.getState().unsubscribe("UCnone")).toBeNull();
   });
 });
+
+describe("useSubscriptionStore.subscribe", () => {
+  beforeEach(() => {
+    settings.clear();
+    useSubscriptionStore.setState({ subscriptions: [], subscriptionGroups: [], loading: false });
+  });
+
+  it("marks a followed artist as music and keeps it across a reload", async () => {
+    await useSubscriptionStore.getState().subscribe("channel:UCartist", "An Artist", undefined, { isMusic: true });
+
+    useSubscriptionStore.setState({ subscriptions: [] });
+    await useSubscriptionStore.getState().loadSubscriptions();
+
+    expect(useSubscriptionStore.getState().subscriptions).toEqual([
+      expect.objectContaining({ id: "UCartist", name: "An Artist", isMusic: true }),
+    ]);
+    expect(useSubscriptionStore.getState().isSubscribed("UCartist")).toBe(true);
+  });
+
+  it("leaves a video channel unmarked", async () => {
+    await useSubscriptionStore.getState().subscribe("UCvideo", "A Channel");
+
+    expect(useSubscriptionStore.getState().subscriptions[0]).not.toHaveProperty("isMusic");
+  });
+});

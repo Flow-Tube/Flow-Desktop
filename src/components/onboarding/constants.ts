@@ -104,12 +104,5 @@ export const TOPIC_CATEGORIES: TopicCategory[] = [
   }
 ];
 
-export interface CuratedChannel {
-  id: string;
-  name: string;
-  avatar: string;
-  subscribers: string;
-  category: string;
-}
-
-
+/** Channel and artist cards in setup, spaced as they are in search results. */
+export const ONBOARDING_CARD_GRID = "grid grid-cols-2 gap-6 md:grid-cols-4 lg:grid-cols-5";

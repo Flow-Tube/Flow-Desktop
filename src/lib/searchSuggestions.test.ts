@@ -8,6 +8,7 @@ import {
   splitCompletion,
 } from "./searchSuggestions";
 import { getString } from "./i18n/index";
+import { joinIsolated } from "./direction";
 import type { YTItem } from "../types/music";
 
 const history = (...queries: string[]) => queries.map((query, index) => ({ query, at: 1000 - index }));
@@ -87,11 +88,11 @@ describe("music item labels", () => {
   it("tells songs from videos and crops each kind", () => {
     const track = song("a") as Extract<YTItem, { type: "song" }>;
     const video = song("v", "MUSIC_VIDEO_TYPE_UGC") as Extract<YTItem, { type: "song" }>;
-    expect(musicItemSubtitle(track)).toBe(`${getString("search_kind_song")} · The Weeknd`);
-    expect(musicItemSubtitle(video)).toBe(`${getString("search_kind_video")} · The Weeknd`);
+    expect(musicItemSubtitle(track)).toBe(joinIsolated([getString("search_kind_song"), "The Weeknd"], " · "));
+    expect(musicItemSubtitle(video)).toBe(joinIsolated([getString("search_kind_video"), "The Weeknd"], " · "));
     expect(musicItemShape(video)).toBe("wide");
     const unattributed = { ...video, artists: [{ name: "Video", id: null }] };
-    expect(musicItemSubtitle(unattributed)).toBe(getString("search_kind_video"));
+    expect(musicItemSubtitle(unattributed)).toBe(joinIsolated([getString("search_kind_video")]));
     expect(musicItemShape(artist as Extract<YTItem, { type: "artist" }>)).toBe("circle");
   });
 });

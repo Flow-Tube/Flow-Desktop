@@ -5,14 +5,18 @@
 
 /// Device settings defined in `src/lib/settings/schema.ts` (`SETTING_SCOPES`); a test keeps the
 /// two lists equal.
-pub const SCHEMA_DEVICE_KEYS: [&str; 44] = [
+pub const SCHEMA_DEVICE_KEYS: [&str; 58] = [
     "allow_volume_boost",
     "player_volume",
+    "player_volume_boost",
     "player_muted",
     "long_press_playback_speed",
     "double_tap_seek_seconds",
+    "idle_progress_strip_enabled",
+    "frame_step_buttons_enabled",
     "show_region_picker_in_explore",
     "trending_region",
+    "app_language",
     "content_language",
     "default_quality_wifi",
     "default_video_codec",
@@ -26,8 +30,9 @@ pub const SCHEMA_DEVICE_KEYS: [&str; 44] = [
     "max_buffer_ms",
     "buffer_for_playback_ms",
     "buffer_for_playback_after_rebuffer_ms",
-    "media_cache_size_mb",
     "remote_signature_fallback",
+    "highlight_new_settings",
+    "highlight_new_settings_days",
     "proxy_enabled",
     "proxy_type",
     "proxy_host",
@@ -46,18 +51,28 @@ pub const SCHEMA_DEVICE_KEYS: [&str; 44] = [
     "download_concurrency",
     "download_notifications",
     "download_lyrics_file",
+    "auto_download_opened_videos",
+    "auto_download_liked_music",
+    "local_media_hide_recordings",
+    "local_media_min_audio_seconds",
     "auto_backup_frequency",
     "auto_backup_type",
+    "auto_backup_folder",
+    "auto_backup_last_run",
+    "auto_backup_last_error",
     "discord_rpc_mode",
     "music_tray_enabled",
+    "pause_music_when_muted",
+    "global_media_keys_enabled",
 ];
 
-/// Device keys the frontend stores outside the schema.
-pub const OTHER_DEVICE_KEYS: [&str; 4] = [
+/// Device keys kept outside the schema.
+pub const OTHER_DEVICE_KEYS: [&str; 5] = [
     "updater_preferences",
     "donation_first_launch_time",
     "donation_prompt_last_shown_time",
     "donation_prompt_disabled",
+    "local_media_reading",
 ];
 
 pub fn is_device_key(key: &str) -> bool {

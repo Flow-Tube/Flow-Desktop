@@ -5,8 +5,9 @@
 //! `Tracks`, the clusters, then `Cues`, `Chapters`, `Tags` and the cover attachment.
 //! The head and the segment size are filled in once everything else is written.
 
+use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -441,6 +442,85 @@ fn tags_element(metadata: &EmbeddedMetadata) -> MatroskaSpec {
 }
 
 /// `cover.jpg` is the name VLC, mpv, Kodi and Jellyfin look for.
+const TAGS_ID: [u8; 4] = [0x12, 0x54, 0xC3, 0x67];
+const TAG_ID: [u8; 2] = [0x73, 0x73];
+const SIMPLE_TAG_ID: [u8; 2] = [0x67, 0xC8];
+const TAG_NAME_ID: [u8; 2] = [0x45, 0xA3];
+const TAG_STRING_ID: [u8; 2] = [0x44, 0x87];
+/// Tags are written after the clusters and before a cover of at most 1 MB.
+const TAIL_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The `FLOW_*` tags of a Matroska file, by lowercased name without the prefix. Only the end
+/// of the file is read, since the clusters before it can be gigabytes.
+pub fn read_flow_tags(path: &Path) -> Result<HashMap<String, String>, String> {
+    let io = |error: std::io::Error| format!("Could not read the file: {error}");
+    let mut file = File::open(path).map_err(io)?;
+    let len = file.seek(SeekFrom::End(0)).map_err(io)?;
+    file.seek(SeekFrom::Start(len.saturating_sub(TAIL_BYTES)))
+        .map_err(io)?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail).map_err(io)?;
+    Ok(flow_tags_in_tail(&tail))
+}
+
+fn flow_tags_in_tail(tail: &[u8]) -> HashMap<String, String> {
+    // A cover's bytes can happen to look like the Tags id, so the last match holding tags wins.
+    for at in (0..tail.len().saturating_sub(TAGS_ID.len())).rev() {
+        if tail[at..].starts_with(&TAGS_ID) {
+            let mut fields = HashMap::new();
+            if let Some((body, _)) = ebml_body(&tail[at + TAGS_ID.len()..]) {
+                collect_flow_tags(body, &mut fields);
+            }
+            if !fields.is_empty() {
+                return fields;
+            }
+        }
+    }
+    HashMap::new()
+}
+
+/// Splits off an element's body after its size; `None` when the size runs past the bytes.
+fn ebml_body(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
+    let first = *bytes.first()?;
+    if first == 0 {
+        return None;
+    }
+    let width = usize::try_from(first.leading_zeros()).ok()? + 1;
+    let mut size = u64::from(first) & ((1_u64 << (8 - width)) - 1);
+    for byte in bytes.get(1..width)? {
+        size = (size << 8) | u64::from(*byte);
+    }
+    let rest = &bytes[width..];
+    let size = usize::try_from(size).ok()?;
+    (size <= rest.len()).then(|| rest.split_at(size))
+}
+
+fn collect_flow_tags(mut bytes: &[u8], fields: &mut HashMap<String, String>) {
+    let (mut name, mut value) = (None, None);
+    while let Some(first) = bytes.first() {
+        let id_len = usize::try_from(first.leading_zeros()).unwrap_or(8) + 1;
+        let Some(id) = bytes.get(..id_len) else {
+            return;
+        };
+        let Some((body, rest)) = ebml_body(&bytes[id_len..]) else {
+            return;
+        };
+        if id == TAG_ID || id == SIMPLE_TAG_ID {
+            collect_flow_tags(body, fields);
+        } else if id == TAG_NAME_ID {
+            name = Some(String::from_utf8_lossy(body).into_owned());
+        } else if id == TAG_STRING_ID {
+            value = Some(String::from_utf8_lossy(body).into_owned());
+        }
+        bytes = rest;
+    }
+    if let (Some(name), Some(value)) = (name, value)
+        && let Some(key) = name.strip_prefix("FLOW_")
+    {
+        fields.insert(key.to_ascii_lowercase(), value);
+    }
+}
+
 fn attachments_element(cover: &[u8]) -> MatroskaSpec {
     MatroskaSpec::Attachments(Master::Full(vec![MatroskaSpec::AttachedFile(
         Master::Full(vec![
@@ -455,7 +535,40 @@ fn attachments_element(cover: &[u8]) -> MatroskaSpec {
 
 #[cfg(test)]
 mod tests {
+    use super::{EmbeddedMetadata, TAGS_ID, encode, flow_tags_in_tail, tags_element};
     use super::{HEAD_BYTES, sized_header, void_element};
+
+    #[test]
+    fn the_flow_tags_read_back_from_the_tail() {
+        let metadata = EmbeddedMetadata {
+            tags: crate::commands::downloads::tags::DownloadTags {
+                video_id: "dQw4w9WgXcQ".into(),
+                title: "Clip".into(),
+                channel_name: Some("Chan".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut tail = vec![0xAB; 64];
+        tail.extend(encode(&tags_element(&metadata)).expect("encodes"));
+        tail.extend([0xFF; 32]);
+        let fields = flow_tags_in_tail(&tail);
+        assert_eq!(
+            fields.get("videoid").map(String::as_str),
+            Some("dQw4w9WgXcQ")
+        );
+        assert_eq!(fields.get("title").map(String::as_str), Some("Clip"));
+        assert_eq!(fields.get("channelname").map(String::as_str), Some("Chan"));
+        assert!(!fields.contains_key("artist"));
+    }
+
+    #[test]
+    fn a_tail_without_tags_or_with_a_broken_size_reads_as_nothing() {
+        assert!(flow_tags_in_tail(&[0xAB; 128]).is_empty());
+        let mut broken = TAGS_ID.to_vec();
+        broken.extend([0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        assert!(flow_tags_in_tail(&broken).is_empty());
+    }
 
     #[test]
     fn void_elements_have_the_exact_length() {

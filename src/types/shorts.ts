@@ -10,6 +10,9 @@ export interface ShortItem {
   commentCountText?: string | null;
   publishedText?: string | null;
   sequenceParams?: string | null;
+  /** The full video this Short links to. */
+  linkedVideoId?: string | null;
+  linkedVideoTitle?: string | null;
 }
 
 export interface ShortsFeed {

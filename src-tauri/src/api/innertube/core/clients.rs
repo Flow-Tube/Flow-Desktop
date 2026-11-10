@@ -85,12 +85,16 @@ pub struct YouTubeClient {
 impl YouTubeClient {
     /// Build the `context` object for this client.
     ///
-    /// `gl` overrides the region for feeds that are region-scoped (the Shorts reel
-    /// sequence); everything else extracts against `US` so responses are
-    /// deterministic regardless of where the user is.
+    /// `gl` overrides the region for a request that names its own; everything else
+    /// follows the content country the user chose.
     #[must_use]
     pub fn context(&self, visitor_data: Option<&str>, gl: Option<&str>) -> Value {
-        self.context_in(visitor_data, gl, &super::locale::content_language())
+        let country = gl.map_or_else(super::locale::content_country, ToOwned::to_owned);
+        self.context_in(
+            visitor_data,
+            Some(&country),
+            &super::locale::content_language(),
+        )
     }
 
     /// [`Self::context`] in a given host language. Player requests use English,
@@ -288,6 +292,17 @@ pub const ANDROID: YouTubeClient = YouTubeClient {
     original_url: None,
     send_ua_in_context: false,
     remote_signed: false,
+};
+
+/// YouTube Music's Android client, the one that gets timed lyrics. Metadata only, never streams.
+pub const ANDROID_MUSIC: YouTubeClient = YouTubeClient {
+    name: "ANDROID_MUSIC",
+    version: "7.21.50",
+    client_id: "21",
+    user_agent: "com.google.android.apps.youtube.music/7.21.50 (Linux; U; Android 14) gzip",
+    device_make: None,
+    device_model: None,
+    ..ANDROID
 };
 
 pub const ANDROID_CREATOR: YouTubeClient = YouTubeClient {

@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useAlbumLibraryStore } from "../store/useAlbumLibraryStore";
 import { useCollectionDownloadStore, type CollectionMeta } from "../store/useCollectionDownloadStore";
 import { useDownloadCollectionsLibraryStore } from "../store/useDownloadCollectionsLibraryStore";
-import { getMusicAlbumContinuation, getMusicAlbumPage } from "./api/music";
+import { getMusicAlbumContinuation, getMusicAlbumPage, getMusicPlaylistContinuation, getMusicPlaylistPage } from "./api/music";
 import { getPlaylistDetails } from "./api/youtube";
 import { getStoredPlaylistById, isProtectedPlaylistId, normalizePlaylist } from "./playlistLibrary";
 import { loadRemainingPlaylistVideos } from "./playlistPages";
@@ -113,6 +113,21 @@ export async function loadAlbumSongs(album: AlbumItem): Promise<SongItem[]> {
   let guard = 0;
   while (continuation && guard < ALBUM_PAGE_GUARD) {
     const [moreSongs, nextContinuation] = await getMusicAlbumContinuation(continuation);
+    songs.push(...moreSongs);
+    continuation = nextContinuation;
+    guard += 1;
+  }
+  return songs;
+}
+
+/** A YouTube Music playlist's full track list, paged from its first page. */
+export async function loadMusicPlaylistSongs(playlistId: string): Promise<SongItem[]> {
+  const page = await getMusicPlaylistPage(playlistId);
+  const songs = [...page.songs];
+  let continuation = page.continuation;
+  let guard = 0;
+  while (continuation && guard < ALBUM_PAGE_GUARD) {
+    const [moreSongs, nextContinuation] = await getMusicPlaylistContinuation(continuation);
     songs.push(...moreSongs);
     continuation = nextContinuation;
     guard += 1;

@@ -55,7 +55,7 @@ export function LyricsDialog({
             <X size={18} />
           </button>
         </div>
-        <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-chrome-neutral-800 px-6 py-3">{footer}</div>}
       </div>
     </div>,

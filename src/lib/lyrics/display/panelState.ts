@@ -125,6 +125,15 @@ export class LyricsPanelState {
       if (targetToScroll !== -1 && targetToScroll > this.scrollTargetIndex) this.scrollTargetIndex = targetToScroll;
     }
 
+    // Nothing is sung during a break, so a panel opened or moved into one settles on the line coming up.
+    if (scrollActive.size === 0) {
+      const upcoming = lines.findIndex((line) => !line.isBackground && line.time > position);
+      if (upcoming > this.scrollTargetIndex) {
+        this.scrollTargetIndex = upcoming;
+        this.lastMainMaxSeen = upcoming - 1;
+      }
+    }
+
     if (scrollMax > this.lastMainMaxSeen && scrollMax !== -1) this.lastMainMaxSeen = scrollMax;
     this.previousScrollActiveIndices = scrollActive;
     this.activeLineIndices = sameSet(newActive, this.activeLineIndices) ? this.activeLineIndices : newActive;

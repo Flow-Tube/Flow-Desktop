@@ -143,7 +143,7 @@ async fn batches_from_another_device_apply_through_the_merges() {
 async fn unknown_collections_are_consumed_without_effect() {
     let receiver = memory_pool().await;
     let content = format!(
-        "{{\"collection\":\"notes\",\"head\":\"{HEAD}\",\"link\":\"{LINK}\"}}\n{{\"id\":\"n1\"}}"
+        "{{\"collection\":\"future_thing\",\"head\":\"{HEAD}\",\"link\":\"{LINK}\"}}\n{{\"id\":\"n1\"}}"
     );
     let batch = parse_batch(content.as_bytes()).unwrap();
     assert_eq!(batch.collection, None);

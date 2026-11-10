@@ -134,7 +134,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
           <Chip active={!graphic} onClick={() => setMode("PARAMETRIC")} className="h-8 px-3 text-sm">
             {getString("eq_mode_parametric")}
           </Chip>
-          <EqCompareButton className="ml-auto" />
+          <EqCompareButton className="ms-auto" />
         </div>
 
         <section className="flex flex-col gap-2">
@@ -206,7 +206,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
                   aria-label={getString("eq_preamp")}
                   className="flex-1"
                 />
-                <span className="w-16 text-right font-mono text-sm text-chrome-neutral-100">
+                <span className="w-16 text-end font-mono text-sm text-chrome-neutral-100">
                   {getString("eq_db_value", formatDb(active.curve.preamp))}
                 </span>
               </div>
@@ -225,7 +225,7 @@ function EqualizerEditor({ onClose }: { onClose: () => void }) {
                 aria-label={getString("eq_bass_boost")}
                 className="flex-1"
               />
-              <span className="w-16 text-right font-mono text-sm text-chrome-neutral-100">
+              <span className="w-16 text-end font-mono text-sm text-chrome-neutral-100">
                 {getString("eq_db_value", formatDb(state.bassBoost))}
               </span>
             </div>

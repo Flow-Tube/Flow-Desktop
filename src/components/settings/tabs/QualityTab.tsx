@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { SettingsGroup } from '../SettingsGroup';
 import { SettingItem } from '../SettingItem';
 import { Select } from '../../ui/Select';
 import { ToggleSwitch } from '../../ui/ToggleSwitch';
 import { useBoolPref, usePreference } from '../../../lib/usePreference';
-import { getString } from '../../../lib/i18n/index';
+import { APP_LOCALE, getString } from '../../../lib/i18n/index';
 import { SETTINGS } from '../../../lib/settings/schema';
 import { isSettingDisabledUntilWired } from '../../../lib/settings/values';
 import { audioLanguageOptions } from '../../../lib/audioLanguages';
@@ -50,11 +49,10 @@ export function QualityTab() {
     })),
   ], [codecs]);
   const chosenCodecUnavailable = codecs.some((item) => item.value === codec && item.unavailable);
-  const { i18n } = useTranslation();
   const languageOptions = useMemo(() => [
     { value: 'original', label: getString('settings_option_original') },
-    ...audioLanguageOptions(i18n.resolvedLanguage ?? 'en'),
-  ], [i18n.resolvedLanguage]);
+    ...audioLanguageOptions(APP_LOCALE),
+  ], []);
 
   return (
     <div className="space-y-6 pb-8">

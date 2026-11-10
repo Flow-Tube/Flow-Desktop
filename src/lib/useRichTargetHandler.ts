@@ -4,7 +4,7 @@ import { resolveChannelId } from "./api/youtube";
 import { openExternal } from "./openExternal";
 import { seekToTime } from "./playerSeek";
 import { prefetchStreamInfo } from "./streamResolution";
-import { parseYoutubeUrl, routeForYoutubeUrl } from "./youtubeUrl";
+import { channelRoute, parseYoutubeUrl, routeForYoutubeUrl } from "./youtubeUrl";
 import type { RichTarget } from "../types/video";
 
 /**
@@ -31,7 +31,7 @@ export function useRichTargetHandler(): (target: RichTarget) => void {
       if (parsed.kind === "resolveChannel") {
         try {
           const channelId = await resolveChannelId(parsed.url);
-          navigate(parsed.music ? `/music/artist/${channelId}` : `/channel/${channelId}`);
+          navigate(channelRoute(channelId, parsed.music));
         } catch {
           await openExternal(url);
         }

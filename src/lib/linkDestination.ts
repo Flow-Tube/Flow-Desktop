@@ -1,4 +1,5 @@
 import { routeForYoutubeUrl, type ParsedYoutubeUrl } from "./youtubeUrl";
+import { musicEnabledNow } from "./useMusicContent";
 
 /** Where a link opened from outside Flow takes the user, as on Flow for Android. */
 export type LinkDestination =
@@ -29,7 +30,7 @@ export function linkDestination(link: ParsedYoutubeUrl): LinkDestination | null 
   switch (link.kind) {
     case "video": {
       const list = link.playlistId && !(link.playlistId in ACCOUNT_LIST_ROUTES) ? link.playlistId : null;
-      if (link.music) return { kind: "music", videoId: link.videoId, playlistId: list };
+      if (link.music && musicEnabledNow()) return { kind: "music", videoId: link.videoId, playlistId: list };
       return { kind: "video", videoId: link.videoId, playlistId: list && !isMix(list) && QUEUE_ID.test(list) ? list : null };
     }
     case "playlist":

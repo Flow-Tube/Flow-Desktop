@@ -8,6 +8,7 @@ import { useMusicMediaSession } from "../../lib/useMusicMediaSession";
 import { reportMediaPosition } from "../../lib/mediaSessionArbiter";
 import { musicListens, useMusicListenHistory } from "../../lib/useMusicListenHistory";
 import { useMusicQueuePersistence } from "../../lib/useMusicQueuePersistence";
+import { useStopMusicWhenHidden } from "../../lib/useStopMusicWhenHidden";
 import { sleepTimerTakesEnd, tickSleepTimer, useSleepTimerDriver } from "../../lib/useSleepTimerDriver";
 import { useLyricsLookup } from "../../lib/lyrics/useLyrics";
 import { useMediaControlLyrics } from "../../lib/lyrics/useMediaControlLyrics";
@@ -40,6 +41,7 @@ export function GlobalMusicAudio() {
 
   useMusicListenHistory();
   useMusicQueuePersistence();
+  useStopMusicWhenHidden();
   useSleepTimerDriver();
   useMusicMediaSession();
   useMediaControlLyrics();
